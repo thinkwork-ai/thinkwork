@@ -83,6 +83,7 @@ import {
   toRuntimePendingUserQuestions,
   type PendingQuestionAnswersPayload,
 } from "../lib/user-questions/runtime-payload.js";
+import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -1278,13 +1279,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       system_prompt: runtimeConfig.agentSystemPrompt || undefined,
       human_name: humanName || undefined,
       workspace_bucket: workspaceBucket() || undefined,
-      rendered_workspace_prefix: renderedWorkspacePrefix,
-      // Unit 7: container calls /api/workspaces/files at bootstrap via
-      // x-api-key auth. Plumb the API URL + service secret so the
-      // container can set them on os.environ and use them for the
-      // composer fetch.
-      thinkwork_api_url: thinkworkApiUrl() || undefined,
-      thinkwork_api_secret: apiAuthSecret || undefined,
       appsync_endpoint: appsyncEndpoint() || undefined,
       appsync_api_key: appsyncApiKey || undefined,
       computer_id: event.computerId || undefined,
@@ -1323,12 +1317,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           : undefined,
       runtime_type: runtimeType,
       model: agentModel,
-      model_routing_policy: modelRoutingPolicy,
-      approved_model_ids: approvedModelIds,
-      agent_profiles:
-        runtimeConfig.agentProfilesConfig.length > 0
-          ? runtimeConfig.agentProfilesConfig
-          : undefined,
       requested_agent_profile_slug: event.requestedProfileSlug || undefined,
       budget_monthly_cents: runtimeConfig.budgetMonthlyCents,
       budget_paused: runtimeConfig.budgetPaused,
@@ -1352,14 +1340,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         isAnyToolAllowed("browser_automation", "browser")
           ? true
           : undefined,
-      turn_context: spaceId
-        ? {
-            spaceId: renderedWorkspace.activeSpace?.id ?? spaceId,
-            tenantSlug: tenantSlug || undefined,
-            spaceSlug: renderedWorkspace.activeSpace?.slug ?? spaceSlug,
-            renderedWorkspacePrefix,
-          }
-        : undefined,
       // U3 of the finance pilot — the runtime reads message_attachments
       // directly off this dict. Convert camelCase → snake_case at the
       // field-shape boundary so runtime adapters see the stable casing.
@@ -1379,30 +1359,33 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       pending_user_questions: event.pendingQuestionAnswers
         ? toRuntimePendingUserQuestions(event.pendingQuestionAnswers)
         : undefined,
-      // Finalize-callback opt-in (plan 2026-05-22-006 U3). The AgentCore
-      // runtime POSTs its end-of-turn result to this URL with the bearer
-      // secret, so chat-agent-invoke can dispatch Event-mode without
-      // waiting for the AgentCore Lambda response. eval-runner /
-      // agentcore-direct do NOT supply these fields and keep their
-      // synchronous response path.
-      finalize_callback_url:
-        thinkworkApiUrl() && turnId
-          ? `${thinkworkApiUrl().replace(/\/$/, "")}/api/threads/${threadId}/finalize`
-          : undefined,
-      finalize_callback_secret:
-        apiAuthSecret && turnId ? apiAuthSecret : undefined,
-      // Activity-callback opt-in (plan 2026-06-03-001). The Pi runtime POSTs
-      // live mid-turn activity (tool/skill/phase steps, coalesced text deltas)
-      // to this URL with the same bearer secret, so the Spaces thread can
-      // stream steps while the turn runs. Best-effort — never blocks the turn.
-      activity_callback_url:
-        thinkworkApiUrl() && turnId
-          ? `${thinkworkApiUrl().replace(/\/$/, "")}/api/threads/${threadId}/activity`
-          : undefined,
-      activity_callback_secret:
-        apiAuthSecret && turnId ? apiAuthSecret : undefined,
-      thread_turn_id: turnId || undefined,
       cost_owner_user_id: currentUserId || undefined,
+      // Dispatch-control fields shared with both wakeup-processor builders
+      // (plan 2026-06-12-002 U1). Unit 7: thinkwork_api_url/_secret let the
+      // container call /api/workspaces/files at bootstrap. Finalize-callback
+      // opt-in (plan 2026-05-22-006 U3): the runtime POSTs its end-of-turn
+      // result so chat-agent-invoke can dispatch Event-mode; eval-runner /
+      // agentcore-direct keep their synchronous response path. NEVER add a
+      // dispatch-critical field inline here — add it to the helper so the
+      // wakeup paths get it too (the parity test enforces this).
+      ...buildAgentDispatchControlFields({
+        thinkworkApiUrl: thinkworkApiUrl(),
+        apiAuthSecret,
+        threadId,
+        threadTurnId: turnId,
+        agentProfiles: runtimeConfig.agentProfilesConfig,
+        modelRoutingPolicy,
+        approvedModelIds,
+        renderedWorkspacePrefix,
+        turnContext: spaceId
+          ? {
+              spaceId: renderedWorkspace.activeSpace?.id ?? spaceId,
+              tenantSlug: tenantSlug || undefined,
+              spaceSlug: renderedWorkspace.activeSpace?.slug ?? spaceSlug,
+            }
+          : null,
+        includeFinalizeCallback: true,
+      }),
     } as Record<string, unknown>;
 
     if (sandboxPreflight && currentUserId) {

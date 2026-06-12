@@ -91,8 +91,11 @@ import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
 import {
   applyAgentSkillMetadata,
+  loadAgentProfileRuntimeConfigs,
   loadWorkspaceSkillConfigs,
+  type AgentProfileRuntimeConfig,
 } from "../lib/resolve-agent-runtime-config.js";
+import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
 import {
   filterBlockedSkills,
   resolveDispatchPinnedSkills,
@@ -108,6 +111,7 @@ import {
 } from "../lib/thread-goals/storage.js";
 import {
   assertUserModelApproved,
+  listApprovedModelCatalog,
   ModelApprovalError,
 } from "../lib/model-approvals.js";
 import { normalizeRequestedModelId } from "../lib/turn-model-selection.js";
@@ -1720,6 +1724,37 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     effectiveMcpPolicy,
   );
 
+  // Dispatch-control parity with chat-agent-invoke (plan 2026-06-12-002 U1):
+  // agent_profiles / model routing resolve exactly the way the chat path
+  // does — profiles from the tenant's enabled rows (Space-filtered), routing
+  // from the rendered workspace's effective TOOLS.md policy, approved models
+  // for the actual invoker (R15: never the agent's human pair). Profile
+  // loading is best-effort: a resolver failure ships `[]`, not a dead turn.
+  let agentProfilesConfig: AgentProfileRuntimeConfig[] = [];
+  try {
+    agentProfilesConfig = await loadAgentProfileRuntimeConfigs({
+      tenantId: wakeup.tenant_id,
+      spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId ?? null,
+      mcpConfigs: mcpConfigsRaw,
+      logPrefix: "[wakeup-processor]",
+    });
+  } catch (err) {
+    console.error(`[wakeup-processor] Agent profile resolution failed:`, err);
+  }
+  const modelRoutingRoutes = effectiveToolPolicy.modelRouting ?? [];
+  const modelRoutingPolicy =
+    modelRoutingRoutes.length > 0 ? { routes: modelRoutingRoutes } : undefined;
+  const approvedModelIds = modelRoutingPolicy
+    ? invokerUserId
+      ? (
+          await listApprovedModelCatalog({
+            tenantId: wakeup.tenant_id,
+            userId: invokerUserId,
+          })
+        ).map((model) => model.modelId)
+      : []
+    : undefined;
+
   const startMs = Date.now();
   // Generate trace ID for observability correlation (PRD-20)
   const xrayTraceId = process.env._X_AMZN_TRACE_ID;
@@ -1803,17 +1838,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       human_name: humanName || undefined,
       workspace_bucket: workspaceBucket() || undefined,
       workspace_prefix: workspacePrefix,
-      rendered_workspace_prefix: renderedWorkspacePrefix,
       appsync_endpoint: appsyncEndpoint() || undefined,
       appsync_api_key: getAppsyncApiKey() || undefined,
-      // Extension gate parity with chat-agent-invoke: the runtime registers
-      // ask_user_question / task-status only when the payload carries the
-      // API wiring + active turn id. Without these every wakeup-dispatched
-      // turn (question_answer resumes, automations) loses the tool and the
-      // model asks follow-up questions in prose instead of a card.
-      thinkwork_api_url: thinkworkApiUrl() || undefined,
-      thinkwork_api_secret: getApiAuthSecret() || undefined,
-      thread_turn_id: run.id,
       hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: effectiveWebSearchConfig,
       web_extract_config: effectiveWebExtractConfig
@@ -1847,14 +1873,32 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         effectiveBlockedTools.length > 0 ? effectiveBlockedTools : undefined,
       browser_automation_enabled:
         effectiveBrowserAutomationEnabled || undefined,
-      turn_context: runSpaceId
-        ? {
-            spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId,
-            tenantSlug: tenantSlug || undefined,
-            spaceSlug: renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
-            renderedWorkspacePrefix,
-          }
-        : undefined,
+      // Extension gate + model-governance parity with chat-agent-invoke
+      // (#2395 bug class): the runtime registers ask_user_question /
+      // task-status only when the payload carries the API wiring + active
+      // turn id, and model routing/profile delegation need the same fields
+      // the chat path ships. All dispatch-critical fields live in the shared
+      // helper — never inline one here (the parity test enforces this).
+      // includeFinalizeCallback stays false: this path invokes
+      // RequestResponse and owns writeback from the synchronous body.
+      ...buildAgentDispatchControlFields({
+        thinkworkApiUrl: thinkworkApiUrl(),
+        apiAuthSecret: getApiAuthSecret(),
+        threadId: resolvedThreadId || undefined,
+        threadTurnId: run.id,
+        agentProfiles: agentProfilesConfig,
+        modelRoutingPolicy,
+        approvedModelIds,
+        renderedWorkspacePrefix,
+        turnContext: runSpaceId
+          ? {
+              spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId,
+              tenantSlug: tenantSlug || undefined,
+              spaceSlug: renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
+            }
+          : null,
+        includeFinalizeCallback: false,
+      }),
     };
 
     if (wakeup.source === "chat_message" && runThreadId && messageId) {
@@ -2389,7 +2433,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             human_name: humanName || undefined,
             workspace_bucket: workspaceBucket() || undefined,
             workspace_prefix: workspacePrefix,
-            rendered_workspace_prefix: renderedWorkspacePrefix,
             appsync_endpoint: appsyncEndpoint() || undefined,
             appsync_api_key: getAppsyncApiKey() || undefined,
             hindsight_endpoint: hindsightEndpoint() || undefined,
@@ -2431,15 +2474,28 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                 : undefined,
             browser_automation_enabled:
               effectiveBrowserAutomationEnabled || undefined,
-            turn_context: runSpaceId
-              ? {
-                  spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId,
-                  tenantSlug: tenantSlug || undefined,
-                  spaceSlug:
-                    renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
-                  renderedWorkspacePrefix,
-                }
-              : undefined,
+            // Same dispatch-control parity as the primary wakeup payload
+            // above — the re-invoked turn must not lose extension tools or
+            // model governance mid-loop (#2395 bug class).
+            ...buildAgentDispatchControlFields({
+              thinkworkApiUrl: thinkworkApiUrl(),
+              apiAuthSecret: getApiAuthSecret(),
+              threadId: resolvedThreadId || undefined,
+              threadTurnId: run.id,
+              agentProfiles: agentProfilesConfig,
+              modelRoutingPolicy,
+              approvedModelIds,
+              renderedWorkspacePrefix,
+              turnContext: runSpaceId
+                ? {
+                    spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId,
+                    tenantSlug: tenantSlug || undefined,
+                    spaceSlug:
+                      renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
+                  }
+                : null,
+              includeFinalizeCallback: false,
+            }),
           },
           runtimeType,
         );

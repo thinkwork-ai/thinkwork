@@ -723,7 +723,13 @@ export async function resolveAgentRuntimeConfig(
   return overriddenConfig;
 }
 
-async function loadAgentProfileRuntimeConfigs(input: {
+/**
+ * Loads the tenant's enabled Agent Profiles as runtime configs, filtered to
+ * the active Space (space-restricted profiles only ship when their Space is
+ * active). Exported so the wakeup dispatch path resolves `agent_profiles`
+ * exactly the way the chat path does (plan 2026-06-12-002 U1 parity).
+ */
+export async function loadAgentProfileRuntimeConfigs(input: {
   tenantId: string;
   spaceId: string | null;
   mcpConfigs: McpConfig[];
