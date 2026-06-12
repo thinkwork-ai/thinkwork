@@ -4,6 +4,7 @@ import {
   workspacePathContract,
   workspacePathOwner,
   workspaceSourcePath,
+  workspaceSpacesFolder,
 } from "./workspace-lanes.js";
 
 describe("workspace contract v1 lane mapping", () => {
@@ -55,6 +56,30 @@ describe("workspace contract v1 lane mapping", () => {
     // Plan 2026-06-12-002 U2: the generated AGENTS.md routing section
     // supersedes Spaces/INDEX.md, which is no longer rendered.
     expect(isGeneratedWorkspaceProjection("Spaces/INDEX.md")).toBe(false);
+  });
+
+  it("classifies bare top-level folders and empty Spaces source paths as unowned", () => {
+    // Plan 2026-06-12-002 U3: an empty source path under a top-level mount is
+    // not a writable file — a create against it would write to the owner's
+    // bare source prefix (e.g. Spaces/INDEX.md misrouting into the active
+    // Space's source).
+    expect(workspacePathOwner("Agent")).toBe("unowned");
+    expect(workspacePathOwner("User")).toBe("unowned");
+    expect(workspacePathOwner("Space")).toBe("unowned");
+    expect(workspacePathOwner("Spaces")).toBe("unowned");
+    expect(workspacePathOwner("Spaces/INDEX.md")).toBe("unowned");
+    expect(workspacePathOwner("Thread")).toBe("unowned");
+  });
+
+  it("extracts the Spaces folder segment for active-space write guarding", () => {
+    expect(workspaceSpacesFolder("Spaces/board-pack/docs/a.md")).toBe(
+      "board-pack",
+    );
+    expect(workspaceSpacesFolder("Spaces/other-team")).toBe("other-team");
+    expect(workspaceSpacesFolder("Spaces")).toBe(null);
+    expect(workspaceSpacesFolder("Space/docs/a.md")).toBe(null);
+    expect(workspaceSpacesFolder("docs/a.md")).toBe(null);
+    expect(workspaceSpacesFolder("SpacesX/docs/a.md")).toBe(null);
   });
 
   it("returns writable lanes for durable v1 source-backed paths", () => {

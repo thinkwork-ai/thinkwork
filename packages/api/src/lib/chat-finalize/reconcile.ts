@@ -25,6 +25,7 @@ import {
   isVisibleUserContextPath,
   workspacePathOwner,
   workspaceSourcePath,
+  workspaceSpacesFolder,
   type WorkspacePathOwner,
 } from "../workspace-lanes.js";
 
@@ -56,6 +57,8 @@ export type ReconcileFailureCode =
   | "source_not_mounted"
   | "unowned_path"
   | "read_only_status_file"
+  | "read_only_generated_file"
+  | "fetched_path_read_only"
   | "lane_violation"
   | "secret_detected"
   | "base_etag_required"
@@ -534,6 +537,28 @@ async function reconcileOneFile(input: {
   const owner = workspacePathOwner(changedFile.path);
   const sourcePath = workspaceSourcePath(changedFile.path);
 
+  // The hydrate manifest's per-file readOnly/generated flags are the trust
+  // boundary for render-time composed files (e.g. the generated AGENTS.md):
+  // they win over owner-class lane rules, so check them first.
+  const manifestEntry = input.manifest?.files.find(
+    (file) => file.path === changedFile.path,
+  );
+  if (manifestEntry && (manifestEntry.readOnly || manifestEntry.generated)) {
+    logRejectedLane(
+      input.context,
+      changedFile.path,
+      "read_only_generated_file",
+    );
+    return rejected(
+      changedFile,
+      owner,
+      "read_only_generated_file",
+      changedFile.path === "AGENTS.md"
+        ? "AGENTS.md is composed at render time; edit the agent baseline in Settings → Main Agent."
+        : "This file is generated at render time and is read-only. Edit its source surface instead.",
+    );
+  }
+
   if (owner === "scratch") {
     return {
       path: changedFile.path,
@@ -596,6 +621,48 @@ async function reconcileOneFile(input: {
       owner,
       "manifest_invalid",
       "Hydrate manifest source prefix is outside the current tenant.",
+    );
+  }
+
+  if (owner === "space") {
+    // Writes addressed through `Spaces/<folder>/` must target the ACTIVE
+    // Space: the folder segment is stripped when mapping to a source path,
+    // so a write under another Space's folder (e.g. content fetched as
+    // read-only context) would otherwise silently land in the active
+    // Space's source prefix.
+    const pathFolder = workspaceSpacesFolder(changedFile.path);
+    if (pathFolder) {
+      const activeFolder = activeSpaceFolderSegment(sourcePrefix);
+      if (!activeFolder) {
+        return rejected(
+          changedFile,
+          owner,
+          "manifest_invalid",
+          "Hydrate manifest space source prefix does not identify the active Space.",
+        );
+      }
+      if (pathFolder !== activeFolder) {
+        logRejectedLane(
+          input.context,
+          changedFile.path,
+          "fetched_path_read_only",
+        );
+        return rejected(
+          changedFile,
+          owner,
+          "fetched_path_read_only",
+          "Content fetched from another Space is read-only context. Writes must target the active Space folder.",
+        );
+      }
+    }
+  }
+
+  if (changedFile.op === "create" && !sourcePath) {
+    return rejected(
+      changedFile,
+      owner,
+      "unowned_path",
+      "Create path does not resolve to a file under the owner's source folder.",
     );
   }
 
@@ -868,6 +935,20 @@ function lanePolicyFailure(
     };
   }
   return null;
+}
+
+function activeSpaceFolderSegment(spaceSourcePrefix: string): string | null {
+  const marker = "/spaces/";
+  const index = spaceSourcePrefix.indexOf(marker);
+  if (index === -1) return null;
+  const slug = spaceSourcePrefix
+    .slice(index + marker.length)
+    .replace(/\/+$/, "")
+    .trim();
+  if (!slug) return null;
+  // Mirrors the renderer's runtimeFolderSegment(): the rendered Spaces/
+  // folder replaces any internal slashes in the slug with dashes.
+  return slug.replaceAll("/", "-");
 }
 
 function sourcePrefixForOwner(
