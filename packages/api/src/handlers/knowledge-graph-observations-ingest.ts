@@ -37,7 +37,6 @@ import {
 } from "../lib/knowledge-graph/runs.js";
 import { resolveObservationsWorkerFunctionName } from "../lib/knowledge-graph/invoke-worker.js";
 import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
-import { maybeEnqueueGraphWikiCompile } from "../lib/wiki/enqueue.js";
 
 export interface KnowledgeGraphObservationsIngestEvent {
   runId?: string;
@@ -126,9 +125,8 @@ async function selfInvokeObservationsIngest(args: {
       "observations ingest worker function name is not configured (STAGE or KNOWLEDGE_GRAPH_OBSERVATIONS_INGEST_FUNCTION_NAME)",
     );
   }
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   await lambda.send(
     new InvokeCommand({
@@ -428,27 +426,6 @@ async function processTenantObservationsIngest(
       extraWork: async (tx) =>
         upsertObservationCursors(tx, run.tenant_id, source.nextCursors),
     });
-
-    // The mirror just changed — this is THE wiki-compile trigger
-    // (plan 2026-06-09-004 U10/U11). Best-effort fire-and-forget: the
-    // helper never throws, so a wiki enqueue failure can't fail the
-    // ingest run.
-    const wikiEnqueue = await maybeEnqueueGraphWikiCompile({
-      tenantId: run.tenant_id,
-    });
-    if (
-      wikiEnqueue.status === "error" ||
-      wikiEnqueue.status === "enqueued_invoke_failed"
-    ) {
-      console.warn(
-        "[knowledge-graph-observations-ingest] graph wiki-compile enqueue degraded",
-        {
-          tenantId: run.tenant_id,
-          status: wikiEnqueue.status,
-          error: wikiEnqueue.error,
-        },
-      );
-    }
 
     // Backlog drain: when this run hit the per-run candidate cap, more
     // observations are already waiting — re-invoke ourselves (fire-and-

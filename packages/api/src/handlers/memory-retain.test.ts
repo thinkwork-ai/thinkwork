@@ -12,9 +12,14 @@ const retainConversationMock = vi.hoisted(() => vi.fn());
 const retainTurnMock = vi.hoisted(() => vi.fn());
 const retainDailyMemoryMock = vi.hoisted(() => vi.fn());
 const getMemoryServicesMock = vi.hoisted(() => vi.fn());
+const maybeEnqueueMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/memory/index.js", () => ({
   getMemoryServices: getMemoryServicesMock,
+}));
+
+vi.mock("../lib/wiki/enqueue.js", () => ({
+  maybeEnqueuePostTurnCompile: maybeEnqueueMock,
 }));
 
 import { handler, mergeTranscriptSuffix } from "./memory-retain.js";
@@ -164,6 +169,8 @@ describe("memory-retain handler", () => {
     retainTurnMock.mockReset();
     retainDailyMemoryMock.mockReset();
     getMemoryServicesMock.mockReset();
+    maybeEnqueueMock.mockReset();
+    maybeEnqueueMock.mockResolvedValue({ status: "skipped" });
   });
 
   it("rejects events without a tenantId", async () => {
