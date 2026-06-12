@@ -47,6 +47,7 @@ import {
 } from "../lib/cost-recording.js";
 import { checkUserBudgetAndPauseWork } from "../lib/user-budget-enforcement.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
+import { applyWorkspaceMcpPolicyFilter } from "../lib/plugins/gating.js";
 import { loadTenantBuiltinTools } from "./skills.js";
 import {
   applySandboxPayloadFields,
@@ -1712,18 +1713,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     },
     "[wakeup-processor]",
   );
-  const mcpConfigs = mcpConfigsRaw.filter((config: { name: string }) => {
-    if (effectiveMcpPolicy?.mcpBlockedServers.includes(config.name)) {
-      return false;
-    }
-    if (
-      effectiveMcpPolicy?.mcpAllowedServers &&
-      !effectiveMcpPolicy.mcpAllowedServers.includes(config.name)
-    ) {
-      return false;
-    }
-    return true;
-  });
+  // Shared chokepoint (U7): the TOOLS.md MCP policy filter is the same
+  // function chat-agent-invoke applies — the two builders cannot drift.
+  const mcpConfigs = applyWorkspaceMcpPolicyFilter(
+    mcpConfigsRaw,
+    effectiveMcpPolicy,
+  );
 
   const startMs = Date.now();
   // Generate trace ID for observability correlation (PRD-20)
