@@ -2671,6 +2671,91 @@ describe("TaskThreadView", () => {
     expect(screen.queryByText("view console log")).toBeNull();
   });
 
+  it("renders the projected workspace panel for a turn with a projection snapshot", () => {
+    // Plan 2026-06-12-002 U9: the per-turn workspace projection renders a
+    // read-only disclosure inside the turn activity section.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Projected turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Do the thing" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-06-12T08:00:00Z",
+              finishedAt: "2026-06-12T08:00:05Z",
+              contextSnapshot: {
+                workspace_projection: {
+                  renderedPrefix: "tenants/acme/threads/thread-1/",
+                  sources: [
+                    { owner: "agent", prefix: "tenants/acme/agents/main/" },
+                  ],
+                  agentsMdKey: "tenants/acme/threads/thread-1/AGENTS.md",
+                  injectedFiles: ["AGENTS.md"],
+                  generatedAt: "2026-06-12T08:00:00Z",
+                  fetches: [
+                    {
+                      target: { kind: "space", slug: "ops" },
+                      outcome: "denied",
+                      fileCount: 0,
+                      totalBytes: 0,
+                      deniedReason: "not_authorized",
+                      at: "2026-06-12T08:00:02Z",
+                    },
+                  ],
+                  reconcile: {
+                    rejectedCount: 1,
+                    rejections: [
+                      { path: "AGENTS.md", code: "read_only_generated_file" },
+                    ],
+                    updatedAt: "2026-06-12T08:00:05Z",
+                  },
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    openThinkingDisclosure();
+    expect(screen.getByTestId("projected-workspace-panel")).toBeTruthy();
+    expect(screen.getByText("Projected workspace")).toBeTruthy();
+    expect(screen.getByText("tenants/acme/agents/main/")).toBeTruthy();
+    expect(screen.getByText("not_authorized")).toBeTruthy();
+    expect(screen.getByText("read_only_generated_file")).toBeTruthy();
+  });
+
+  it("renders no projected workspace panel for pre-feature turns", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Legacy turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Old work" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              startedAt: "2026-05-09T08:00:00Z",
+              finishedAt: "2026-05-09T08:00:05Z",
+              contextSnapshot: { model: "claude-x" },
+            },
+          ],
+        }}
+      />,
+    );
+
+    openThinkingDisclosure();
+    expect(screen.queryByTestId("projected-workspace-panel")).toBeNull();
+  });
+
   it("expands a failed turn by default with the Run failed row visible", () => {
     // R4: a failed turn defaults open so its error is not hidden behind a
     // success-looking collapsed header. The header reads "Failed after Xs",

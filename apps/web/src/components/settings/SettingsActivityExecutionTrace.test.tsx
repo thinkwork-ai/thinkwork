@@ -66,6 +66,8 @@ import { ExecutionTrace } from "./SettingsActivityExecutionTrace";
 type TurnSeed = {
   id: string;
   systemPrompt: string | null;
+  /** Raw ThreadTurn.contextSnapshot — carries workspace_projection (U9). */
+  contextSnapshot?: unknown;
 };
 
 function makeTurn(seed: TurnSeed) {
@@ -86,6 +88,7 @@ function makeTurn(seed: TurnSeed) {
       duration_ms: 1000,
     }),
     systemPrompt: seed.systemPrompt,
+    contextSnapshot: seed.contextSnapshot,
   };
 }
 
@@ -216,5 +219,65 @@ describe("ExecutionTrace — non-redundant turn metadata", () => {
     expect(
       container.querySelectorAll('[data-timeline-event-type="llm"]').length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("ExecutionTrace — projected workspace panel (U9)", () => {
+  it("renders the per-turn projection disclosure when the snapshot is present", () => {
+    mockUrql([
+      makeTurn({
+        id: "turn-proj",
+        systemPrompt: "P",
+        contextSnapshot: {
+          workspace_projection: {
+            renderedPrefix: "tenants/acme/threads/thread-1/",
+            sources: [{ owner: "agent", prefix: "tenants/acme/agents/main/" }],
+            agentsMdKey: "tenants/acme/threads/thread-1/AGENTS.md",
+            injectedFiles: ["AGENTS.md"],
+            generatedAt: "2026-06-11T10:00:00Z",
+            fetches: [
+              {
+                target: { kind: "space", slug: "finance" },
+                outcome: "denied",
+                fileCount: 0,
+                totalBytes: 0,
+                deniedReason: "revoked",
+                at: "2026-06-11T10:00:10Z",
+              },
+            ],
+            reconcile: {
+              rejectedCount: 1,
+              rejections: [
+                {
+                  path: "fetched/spaces/ops/notes.md",
+                  code: "fetched_path_read_only",
+                },
+              ],
+              updatedAt: "2026-06-11T10:00:30Z",
+            },
+          },
+        },
+      }),
+    ]);
+    render(<ExecutionTrace threadId="thread-1" tenantId="tenant-1" />);
+
+    expect(screen.getByTestId("projected-workspace-panel")).toBeTruthy();
+    expect(screen.getByText("Projected workspace")).toBeTruthy();
+    expect(screen.getByText("tenants/acme/agents/main/")).toBeTruthy();
+    expect(screen.getByText("revoked")).toBeTruthy();
+    expect(screen.getByText("fetched_path_read_only")).toBeTruthy();
+  });
+
+  it("renders no projection disclosure for pre-feature turns", () => {
+    mockUrql([
+      makeTurn({
+        id: "turn-legacy",
+        systemPrompt: "P",
+        contextSnapshot: JSON.stringify({ model: "kimi-k2.5" }),
+      }),
+    ]);
+    render(<ExecutionTrace threadId="thread-1" tenantId="tenant-1" />);
+
+    expect(screen.queryByTestId("projected-workspace-panel")).toBeNull();
   });
 });

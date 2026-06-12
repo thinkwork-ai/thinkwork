@@ -123,6 +123,13 @@ import {
 } from "@/components/workbench/useComposerSkillPins";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 import type { ApprovedModelOption } from "@/lib/approved-model-selection";
+import { ProjectedWorkspacePanel } from "@/components/workbench/ProjectedWorkspacePanel";
+import {
+  agentsMdContentMayDiffer,
+  parseWorkspaceProjection,
+  selectLatestProjection,
+  type LatestProjectionRef,
+} from "@/components/workbench/workspace-projection";
 
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
 const COMPOSER_TRANSCRIPT_GAP_PX = 32;
@@ -199,6 +206,8 @@ export interface TaskThreadTurn {
   error?: string | null;
   errorCode?: string | null;
   systemPrompt?: string | null;
+  /** Raw ThreadTurn.contextSnapshot (AWSJSON) — carries workspace_projection. */
+  contextSnapshot?: unknown;
   events?: TaskThreadEvent[];
 }
 
@@ -426,6 +435,10 @@ export function TaskThreadView({
     transcriptMessages,
     thread.turns ?? [],
   );
+  // Most recent workspace projection across the thread — older turns'
+  // AGENTS.md viewers label their (current-state) content as possibly
+  // differing from that turn's render (plan 2026-06-12-002 U9).
+  const latestProjection = selectLatestProjection(thread.turns ?? []);
   const selectedArtifact =
     artifactPanelState?.artifacts.find(
       (artifact) => artifact.id === artifactPanelState.selectedArtifactId,
@@ -478,6 +491,8 @@ export function TaskThreadView({
                       key={message.id}
                       message={message}
                       turn={turn}
+                      threadId={thread.id}
+                      latestProjection={latestProjection}
                       isLatestUser={index === latestUserIndex}
                       streamingChunks={
                         index === latestUserIndex && showStreamingBuffer
@@ -1524,6 +1539,8 @@ function isTaskQueueAssistantMessage(message: TaskThreadMessage) {
 function TranscriptSegment({
   message,
   turn,
+  threadId,
+  latestProjection,
   isLatestUser,
   streamingChunks,
   streamState,
@@ -1538,6 +1555,8 @@ function TranscriptSegment({
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
+  threadId?: string;
+  latestProjection?: LatestProjectionRef | null;
   isLatestUser: boolean;
   streamingChunks: ComputerThreadChunk[];
   streamState?: UIMessageStreamState;
@@ -1573,7 +1592,14 @@ function TranscriptSegment({
         mentionTargets={mentionTargets}
         skillCatalog={skillCatalog}
       />
-      {turn ? <ThreadTurnActivity turn={turn} message={message} /> : null}
+      {turn ? (
+        <ThreadTurnActivity
+          turn={turn}
+          message={message}
+          threadId={threadId}
+          latestProjection={latestProjection}
+        />
+      ) : null}
       {isLatestUser ? (
         <>
           {hasTypedParts ? (
@@ -1620,9 +1646,13 @@ function normalizeStatus(status: unknown) {
 function ThreadTurnActivity({
   turn,
   message,
+  threadId,
+  latestProjection,
 }: {
   turn?: TaskThreadTurn;
   message?: TaskThreadMessage;
+  threadId?: string;
+  latestProjection?: LatestProjectionRef | null;
 }) {
   const status = normalizeStatus(turn?.status);
   const running = isRunningStatus(status);
@@ -1634,6 +1664,8 @@ function ThreadTurnActivity({
 
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage, message);
+  // Per-turn workspace projection (U9): absent on pre-feature turns.
+  const projection = parseWorkspaceProjection(turn.contextSnapshot);
 
   // Single source of truth for the header label (KTD2): derived from
   // turn.status, never from "assistant message present". skipped → null.
@@ -1680,6 +1712,17 @@ function ThreadTurnActivity({
       ))}
       {turn.error ? (
         <ActionRow title="Run failed" detail={turn.error} kind="tool" />
+      ) : null}
+      {projection ? (
+        <ProjectedWorkspacePanel
+          projection={projection}
+          threadId={threadId}
+          agentsMdMayDiffer={agentsMdContentMayDiffer(
+            turn.id,
+            projection,
+            latestProjection ?? null,
+          )}
+        />
       ) : null}
     </ThinkingRow>
   );

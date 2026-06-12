@@ -2405,6 +2405,9 @@ function toTaskThreadTurnsFromRows(
       error: row.error ?? null,
       errorCode: row.error_code ?? null,
       systemPrompt: row.system_prompt ?? null,
+      // Carries workspace_projection for the per-turn Projected workspace
+      // panel (plan 2026-06-12-002 U9).
+      contextSnapshot: row.context_snapshot,
       events: mergeTaskThreadEvents(
         persistedEventsByRun?.get(row.id),
         liveStepsByRun?.get(row.id),
