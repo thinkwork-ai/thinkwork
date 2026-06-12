@@ -23,16 +23,43 @@ export const DEFAULT_PASS_THRESHOLD = 0.7;
 export const CURRENT_EVAL_SCORING_VERSION = 2;
 
 /**
+ * A result row as the aggregation seam sees it. `override_status` is
+ * the operator verdict override (Trust Core U9): a SEPARATE field that
+ * never mutates `status` — the judge's original verdict stays immutable
+ * on the row while aggregation reads the override last.
+ */
+export interface EvalStatusRow {
+  status: string;
+  /** Operator override ('pass' | 'fail'); null/absent = no override. */
+  override_status?: string | null;
+}
+
+/**
+ * The verdict aggregation counts: the operator override when present,
+ * otherwise the judge's verdict. Overrides are only writable on scored
+ * rows (pass|fail) and only to pass|fail, so an effective status can
+ * never turn an error row scoreable or vice versa.
+ */
+export function effectiveEvalStatus(row: EvalStatusRow): string {
+  return row.override_status ?? row.status;
+}
+
+/**
  * Roll up result-row statuses under the run's stamped scoring semantics.
  * Pass the run's `scoring_version` (null = legacy). Shared by
  * eval-worker finalization, the eval-runs reconciler, and the GraphQL
  * read path so every aggregation site uses one denominator rule.
+ * Override-aware: rows carrying `override_status` are counted under
+ * their effective verdict (override ?? status) regardless of scoring
+ * version — an override corrects legacy runs too, without upgrading
+ * their denominator semantics.
  */
 export function summarizeEvalStatuses(
-  rows: Array<{ status: string }>,
+  rows: EvalStatusRow[],
   scoringVersion: number | null,
 ): EvalStatusSummary {
-  const passed = rows.filter((row) => row.status === "pass").length;
+  const statuses = rows.map(effectiveEvalStatus);
+  const passed = statuses.filter((status) => status === "pass").length;
 
   if (scoringVersion === null) {
     // Legacy (~v1) semantics: anything that isn't a pass counts as
@@ -47,8 +74,8 @@ export function summarizeEvalStatuses(
     };
   }
 
-  const failed = rows.filter((row) => row.status === "fail").length;
-  const errored = rows.filter((row) => row.status === "error").length;
+  const failed = statuses.filter((status) => status === "fail").length;
+  const errored = statuses.filter((status) => status === "error").length;
   const scoreable = passed + failed;
   return {
     completed: rows.length,

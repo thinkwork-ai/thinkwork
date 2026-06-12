@@ -206,6 +206,20 @@ type EvalResult {
   # 'timeout' | 'throttle' | 'evaluator_error' | 'reconciler' |
   # 'infra_other'. Null on pass/fail rows and pre-migration error rows.
   errorCause: String
+  # Operator verdict override (Trust Core U9). The override is a
+  # SEPARATE field, never a mutation of `status` — the judge's original
+  # verdict + rendered rubric stay immutable while aggregation reads the
+  # override last. 'pass' | 'fail'; null = no override.
+  overrideStatus: String
+  # Authenticated caller who wrote the override — derived server-side,
+  # never accepted as an argument.
+  overriddenBy: String
+  overriddenAt: AWSDateTime
+  # Required audit note recorded with the override.
+  overrideReason: String
+  # The verdict aggregation counts: overrideStatus when present,
+  # otherwise status.
+  effectiveStatus: String!
   createdAt: AWSDateTime!
 }
 
@@ -315,6 +329,19 @@ input UpdateEvalDatasetCaseInput {
   enabled: Boolean
 }
 
+input OverrideEvalResultInput {
+  resultId: ID!
+  # 'pass' | 'fail' to set (or re-set — last write wins) an override;
+  # null/omitted CLEARS an existing override, restoring the judge's
+  # verdict to aggregation. Only scored results (status pass|fail) may
+  # be overridden; error rows are rejected.
+  overrideStatus: String
+  # Required non-empty (after trim) when setting an override; ignored
+  # when clearing. The overriding caller's identity is derived from the
+  # authenticated context, never from input.
+  reason: String
+}
+
 input StartEvalRunInput {
   # Optional model override for the direct-AgentCore eval run. Omit to use
   # Kimi K2.5; non-default overrides must be available in model_catalog.
@@ -407,4 +434,10 @@ extend type Mutation {
   # caller must be an operator of that tenant. Copies the flag-time
   # snapshot into the dataset's S3 prefix before the case file lands.
   flagThreadForEval(input: FlagThreadForEvalInput!): FlagThreadForEvalResult!
+  # Operator verdict override (Trust Core U9). Gate is row-derived
+  # (result → run → tenant admin). Writing the override recomputes the
+  # run summary under the run-level advisory lock, preserving the run's
+  # stamped scoring_version (legacy runs recompute under legacy
+  # semantics), and pushes notifyEvalRunUpdate.
+  overrideEvalResult(input: OverrideEvalResultInput!): EvalResult!
 }

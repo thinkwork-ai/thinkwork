@@ -172,10 +172,16 @@ export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
  * semantics (`scoringVersion` null = legacy ~v1: errors fold into
  * `failed`; v2+: `failed` counts only status='fail', errors land in
  * `errored`, and pass_rate = passed / (passed + failed) — null when
- * nothing scoreable, never 0%).
+ * nothing scoreable, never 0%). Override-aware (Trust Core U9): rows
+ * carrying an operator `override_status` count under their effective
+ * verdict (override ?? status).
  */
 export function summarizeEvalResults(
-  rows: Array<{ status: string; evaluator_results: unknown }>,
+  rows: Array<{
+    status: string;
+    override_status?: string | null;
+    evaluator_results: unknown;
+  }>,
   scoringVersion: number | null,
 ): {
   completed: number;
@@ -786,6 +792,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
   const rows = await db
     .select({
       status: evalResults.status,
+      override_status: evalResults.override_status,
       evaluator_results: evalResults.evaluator_results,
     })
     .from(evalResults)

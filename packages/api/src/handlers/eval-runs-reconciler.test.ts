@@ -133,6 +133,24 @@ describe("eval-runs-reconciler summary", () => {
     expect(summary.passRate).toBe(1 / 3);
     expect(summary.totalCostUsd).toBeCloseTo(0.0036);
   });
+
+  it("reconciler finalization counts operator overrides as the effective verdict (U9)", () => {
+    // An override that landed before the reconciler finalizes must
+    // survive finalization — the summary reads override_status last.
+    const summary = summarizeEvalRowsForReconciler(
+      [
+        { status: "fail", override_status: "pass", evaluator_results: [] },
+        { status: "fail", override_status: null, evaluator_results: [] },
+        { status: "error", override_status: null, evaluator_results: [] },
+      ],
+      CURRENT_EVAL_SCORING_VERSION,
+    );
+
+    expect(summary.passed).toBe(1);
+    expect(summary.failed).toBe(1);
+    expect(summary.errored).toBe(1);
+    expect(summary.passRate).toBe(0.5);
+  });
 });
 
 describe("eval-runs-reconciler synthetic rows", () => {

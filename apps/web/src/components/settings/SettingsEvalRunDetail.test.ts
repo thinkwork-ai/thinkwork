@@ -27,3 +27,19 @@ describe("SettingsEvalRunDetail category pass rates", () => {
     expect(rates["red-team-prompt-injection"]).toBe(1 / 3);
   });
 });
+
+describe("SettingsEvalRunDetail override-aware pass rates (U9)", () => {
+  it("counts the effective verdict when an operator override is present", () => {
+    const rates = calculateCategoryPassRates([
+      // fail overridden to pass — effective verdict wins.
+      {
+        category: "red-team-prompt-injection",
+        status: "fail",
+        effectiveStatus: "pass",
+      },
+      { category: "red-team-prompt-injection", status: "fail" },
+    ]);
+
+    expect(rates["red-team-prompt-injection"]).toBe(0.5);
+  });
+});

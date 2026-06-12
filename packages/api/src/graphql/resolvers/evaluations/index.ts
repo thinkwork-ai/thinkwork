@@ -24,11 +24,16 @@ import {
   CURRENT_EVAL_SCORING_VERSION,
   summarizeEvalStatuses,
 } from "@thinkwork/evals-core";
+import { GraphQLError } from "graphql";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
 import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
+import { notifyEvalRunUpdate } from "../../../lib/eval-notify.js";
 import { requireTenantAdmin } from "../core/authz.js";
-import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
+import {
+  resolveCallerTenantId,
+  resolveCallerUserId,
+} from "../core/resolve-auth-user.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -151,13 +156,16 @@ async function loadEvalRunProgress(
   runIds: string[],
 ): Promise<Map<string, EvalRunProgress>> {
   if (runIds.length === 0) return new Map();
+  // Effective verdict = override_status ?? status (Trust Core U9): an
+  // operator override corrects the displayed counters everywhere this
+  // overlay reaches, without ever mutating the judge's verdict.
   const rows = await db
     .select({
       runId: evalResults.run_id,
       completed: sql<number>`COUNT(*)::int`,
-      passed: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} = 'pass')::int`,
-      failed: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} = 'fail')::int`,
-      errored: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} = 'error')::int`,
+      passed: sql<number>`COUNT(*) FILTER (WHERE COALESCE(${evalResults.override_status}, ${evalResults.status}) = 'pass')::int`,
+      failed: sql<number>`COUNT(*) FILTER (WHERE COALESCE(${evalResults.override_status}, ${evalResults.status}) = 'fail')::int`,
+      errored: sql<number>`COUNT(*) FILTER (WHERE COALESCE(${evalResults.override_status}, ${evalResults.status}) = 'error')::int`,
     })
     .from(evalResults)
     .where(inArray(evalResults.run_id, runIds))
@@ -200,6 +208,13 @@ function resultToGraphql(
     assertions: JSON.stringify(row.assertions ?? []),
     errorMessage: row.error_message,
     errorCause: row.error_cause ?? null,
+    // Operator override (Trust Core U9): separate fields beside the
+    // immutable judge verdict; effectiveStatus is what aggregation counts.
+    overrideStatus: row.override_status ?? null,
+    overriddenBy: row.overridden_by ?? null,
+    overriddenAt: row.overridden_at ?? null,
+    overrideReason: row.override_reason ?? null,
+    effectiveStatus: (row.override_status ?? row.status) as string,
     createdAt: row.created_at,
   };
 }
@@ -285,6 +300,11 @@ function plannedResultToGraphql(
     assertions: JSON.stringify(testCase.assertions ?? []),
     errorMessage: null,
     errorCause: null,
+    overrideStatus: null,
+    overriddenBy: null,
+    overriddenAt: null,
+    overrideReason: null,
+    effectiveStatus: placeholderStatusForEvalRun(String(run.status ?? "")),
     createdAt: run.created_at,
   };
 }
@@ -991,7 +1011,10 @@ const cancelEvalRun = async (
   }
 
   const resultRows = await db
-    .select({ status: evalResults.status })
+    .select({
+      status: evalResults.status,
+      override_status: evalResults.override_status,
+    })
     .from(evalResults)
     .where(eq(evalResults.run_id, args.id));
   const counts = summarizeEvalStatuses(
@@ -1177,6 +1200,218 @@ const seedEvalTestCases = async (
   return result.inserted;
 };
 
+interface OverrideEvalResultInput {
+  resultId: string;
+  /**
+   * 'pass' | 'fail' sets (or re-sets — last write wins) the override;
+   * null/omitted clears it, restoring the judge's verdict to
+   * aggregation.
+   */
+  overrideStatus?: string | null;
+  /** Required non-empty (after trim) when setting; ignored on clear. */
+  reason?: string | null;
+}
+
+function evalBadInput(message: string): GraphQLError {
+  return new GraphQLError(message, {
+    extensions: { code: "BAD_USER_INPUT" },
+  });
+}
+
+function evalNotFound(message: string): GraphQLError {
+  return new GraphQLError(message, {
+    extensions: { code: "NOT_FOUND" },
+  });
+}
+
+/**
+ * Recompute a run's summary counters after an override write, under the
+ * SAME run-level advisory lock the reconciler holds while finalizing
+ * (`'eval-run-reconcile'`, runId). An override landing mid-finalize
+ * either waits for the finalizer's transaction (then recomputes over
+ * its synthetic rows too) or commits first (the finalizer's own
+ * override-aware summary then includes it) — the lock means the two
+ * writers can never interleave and clobber each other.
+ *
+ * Counter writes only land on terminal runs (completed/cancelled),
+ * guarded on that same status so a concurrent transition is never
+ * overwritten. In-flight runs are skipped: the worker's (override-
+ * aware) finalization owns their counters and the live read overlay
+ * already computes effective verdicts. The recompute preserves the
+ * run's stamped scoring semantics — legacy runs (null scoring_version)
+ * recompute under legacy math and keep a null summary stamp, never a
+ * silent upgrade.
+ */
+async function recomputeEvalRunSummaryAfterOverride(runId: string): Promise<{
+  run: typeof evalRuns.$inferSelect;
+  summary: ReturnType<typeof summarizeEvalStatuses>;
+} | null> {
+  return await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      SELECT pg_advisory_xact_lock(
+        hashtext('eval-run-reconcile'),
+        hashtext(${runId})
+      )
+    `);
+
+    const [run] = await tx
+      .select()
+      .from(evalRuns)
+      .where(eq(evalRuns.id, runId));
+    if (!run) return null;
+
+    const rows = await tx
+      .select({
+        status: evalResults.status,
+        override_status: evalResults.override_status,
+      })
+      .from(evalResults)
+      .where(eq(evalResults.run_id, runId));
+    const summary = summarizeEvalStatuses(rows, run.scoring_version);
+
+    if (run.status === "completed" || run.status === "cancelled") {
+      await tx
+        .update(evalRuns)
+        .set({
+          passed: summary.passed,
+          failed: summary.failed,
+          errored: summary.errored,
+          pass_rate:
+            summary.passRate === null ? null : summary.passRate.toFixed(4),
+          summary_scoring_version:
+            run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
+        })
+        .where(and(eq(evalRuns.id, runId), eq(evalRuns.status, run.status)));
+    }
+
+    return { run, summary };
+  });
+}
+
+/**
+ * Operator verdict override (Trust Core U9, R16). The override is a
+ * SEPARATE field, never a mutation of `status` — the judge's original
+ * verdict and rendered rubric stay immutable on the row's snapshot
+ * while every aggregation site reads the override last
+ * (effective = override_status ?? status).
+ *
+ * Audit posture: row-derived gate (result → run →
+ * `requireTenantAdmin`), reason required and validated server-side,
+ * `overridden_by` derived from the authenticated caller — never
+ * accepted as an argument. Last-write with actor/reason/timestamp; no
+ * history table in v1. Passing a null overrideStatus clears the
+ * override (the minimal clear path — no second mutation).
+ */
+const overrideEvalResult = async (
+  _p: any,
+  args: { input: OverrideEvalResultInput },
+  ctx: GraphQLContext,
+) => {
+  const resultId = args.input.resultId;
+  const overrideStatus = args.input.overrideStatus ?? null;
+  if (
+    overrideStatus !== null &&
+    overrideStatus !== "pass" &&
+    overrideStatus !== "fail"
+  ) {
+    throw evalBadInput(
+      "overrideStatus must be 'pass' or 'fail' (or null to clear the override).",
+    );
+  }
+  const reason = (args.input.reason ?? "").trim();
+  if (overrideStatus !== null && reason.length === 0) {
+    throw evalBadInput(
+      "A non-empty reason is required to override an eval verdict.",
+    );
+  }
+
+  const [existing] = await db
+    .select({
+      id: evalResults.id,
+      runId: evalResults.run_id,
+      status: evalResults.status,
+    })
+    .from(evalResults)
+    .where(eq(evalResults.id, resultId));
+  if (!existing) throw evalNotFound(`eval result ${resultId} not found`);
+
+  const [run] = await db
+    .select({ tenantId: evalRuns.tenant_id })
+    .from(evalRuns)
+    .where(eq(evalRuns.id, existing.runId));
+  if (!run) throw evalNotFound(`eval run ${existing.runId} not found`);
+
+  // Row-derived gate — fails FORBIDDEN before any write when the result
+  // belongs to another tenant.
+  await requireTenantAdmin(ctx, run.tenantId);
+
+  // Overrides only correct scored verdicts. Error rows are infra noise
+  // with no verdict to overturn — flipping one to pass/fail would smuggle
+  // it into the clean denominator.
+  if (existing.status !== "pass" && existing.status !== "fail") {
+    throw evalBadInput(
+      `Only scored results (status pass|fail) can be overridden; this result has status '${existing.status}'.`,
+    );
+  }
+
+  // The actor is always the authenticated caller — input can't spoof it.
+  const callerUserId = await resolveCallerUserId(ctx);
+  if (!callerUserId) {
+    throw new GraphQLError("Caller identity required", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+
+  const [updated] = await db
+    .update(evalResults)
+    .set(
+      overrideStatus === null
+        ? {
+            override_status: null,
+            overridden_by: null,
+            overridden_at: null,
+            override_reason: null,
+          }
+        : {
+            override_status: overrideStatus,
+            overridden_by: callerUserId,
+            overridden_at: new Date(),
+            override_reason: reason,
+          },
+    )
+    .where(eq(evalResults.id, resultId))
+    .returning();
+  if (!updated) throw evalNotFound(`eval result ${resultId} not found`);
+
+  const recomputed = await recomputeEvalRunSummaryAfterOverride(existing.runId);
+  if (recomputed) {
+    await notifyEvalRunUpdate({
+      runId: existing.runId,
+      tenantId: recomputed.run.tenant_id,
+      agentId: recomputed.run.agent_id,
+      status: recomputed.run.status,
+      totalTests: recomputed.run.total_tests,
+      passed: recomputed.summary.passed,
+      failed: recomputed.summary.failed,
+      passRate: recomputed.summary.passRate ?? undefined,
+    });
+  }
+
+  const updatedRow = updated as unknown as Record<string, unknown>;
+  let testCase: { name: string; category: string } | null = null;
+  if (updatedRow.test_case_id) {
+    const [tc] = await db
+      .select({
+        name: evalTestCases.name,
+        category: evalTestCases.category,
+      })
+      .from(evalTestCases)
+      .where(eq(evalTestCases.id, String(updatedRow.test_case_id)));
+    if (tc) testCase = { name: tc.name, category: tc.category ?? "" };
+  }
+  return resultToGraphql(updatedRow, testCase);
+};
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -1201,4 +1436,5 @@ export const evaluationsMutations = {
   updateEvalTestCase,
   deleteEvalTestCase,
   seedEvalTestCases,
+  overrideEvalResult,
 };
