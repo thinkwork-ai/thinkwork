@@ -83,6 +83,17 @@ type EvalResult {
   # this field shipped, or on Computer-eval rows where the runtime does
   # not surface the composed prompt.
   systemPrompt: String
+  # Thread turn this eval execution corresponds to. Set when the test case
+  # carries workspace-projection assertions targeting a stored turn snapshot
+  # (plan 2026-06-12-002 U10). Null for output-only eval rows and rows from
+  # runs that completed before this field shipped.
+  threadTurnId: ID
+  # Convenience read of the linked turn's stored
+  # `thread_turns.context_snapshot.workspace_projection` (shape documented in
+  # packages/api/src/lib/workspace-projection-snapshot.ts). Resolved lazily
+  # from the STORED snapshot — never re-rendered. Null when no turn is
+  # linked or the turn has no stored projection.
+  workspaceProjection: AWSJSON
   # Per-evaluator scores. JSON because the shape varies by evaluator
   # (Builtin.Helpfulness vs ToolSelectionAccuracy vs custom). Each entry:
   # { evaluatorId, source, value, label, explanation, tokenUsage }

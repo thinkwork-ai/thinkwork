@@ -26,7 +26,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
-import { scheduledJobs } from "./scheduled-jobs";
+import { scheduledJobs, threadTurns } from "./scheduled-jobs";
 
 // ---------------------------------------------------------------------------
 // eval_test_cases — Studio-managed test definitions
@@ -172,6 +172,15 @@ export const evalResults = pgTable(
     // agent_session_id: stable session ID used to invoke the agent under test;
     // also the key for querying CloudWatch spans in the runner
     agent_session_id: text("agent_session_id"),
+    // thread_turn_id: the thread turn this eval execution corresponds to.
+    // Set when the test case carries workspace-projection assertions that
+    // target a stored turn snapshot (plan 2026-06-12-002 U10, origin R17).
+    // Direct eval sessions use synthetic session IDs that never join to
+    // thread_turns, so the linkage is recorded explicitly here. NULL on
+    // output-only eval rows and rows from before this column shipped.
+    thread_turn_id: uuid("thread_turn_id").references(() => threadTurns.id, {
+      onDelete: "set null",
+    }),
     input: text("input"), // the rendered prompt sent to the agent
     // system_prompt: the composed system prompt the agent ran against
     // (workspace files + tool policy + attachment preamble). Captured from
@@ -246,5 +255,9 @@ export const evalResultsRelations = relations(evalResults, ({ one }) => ({
   testCase: one(evalTestCases, {
     fields: [evalResults.test_case_id],
     references: [evalTestCases.id],
+  }),
+  threadTurn: one(threadTurns, {
+    fields: [evalResults.thread_turn_id],
+    references: [threadTurns.id],
   }),
 }));

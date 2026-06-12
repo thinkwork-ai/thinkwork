@@ -30,6 +30,10 @@ import {
   AgentCoreEvalInvocationTimeoutError,
   invokeAgentCoreForEval,
 } from "../lib/evals/agentcore-direct.js";
+import {
+  evaluateWorkspaceProjectionAssertions,
+  partitionEvalAssertions,
+} from "../lib/evals/workspace-projection-assertions.js";
 import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 
@@ -53,6 +57,12 @@ interface CaseOutcome {
   errorMessage: string | null;
   costUsd: number;
   sessionId: string;
+  /**
+   * Thread turn this execution corresponds to — set when the case's
+   * workspace-projection assertions successfully read a stored turn
+   * snapshot (plan 2026-06-12-002 U10). Null otherwise.
+   */
+  threadTurnId: string | null;
 }
 
 export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
@@ -246,6 +256,7 @@ async function executeCase(
   const assertionResults: EvalAssertionResult[] = [];
   const evaluatorResults: EvalEvaluatorResult[] = [];
   let costUsd = 0;
+  let threadTurnId: string | null = null;
 
   try {
     // Belt-and-suspenders: in normal operation the dispatcher (eval-runner
@@ -271,11 +282,24 @@ async function executeCase(
     systemPrompt = inv.composedSystemPrompt;
 
     const assertions = (tc.assertions ?? []) as EvalAssertion[];
+    // `workspace-projection-*` assertions read STORED turn snapshots (never
+    // a re-render); everything else evaluates against the agent output as
+    // before. Plan 2026-06-12-002 U10.
+    const { outputAssertions, projectionAssertions } =
+      partitionEvalAssertions(assertions);
     assertionResults.push(
-      ...(await evaluateAssertions(assertions, actualOutput, tc.query, {
+      ...(await evaluateAssertions(outputAssertions, actualOutput, tc.query, {
         judge: llmJudgeEnabled() ? llmJudge : undefined,
       })),
     );
+    if (projectionAssertions.length > 0) {
+      const projectionOutcome = await evaluateWorkspaceProjectionAssertions(
+        projectionAssertions,
+        { tenantId: run.tenant_id },
+      );
+      assertionResults.push(...projectionOutcome.results);
+      threadTurnId = projectionOutcome.threadTurnId;
+    }
 
     const evaluatorIds = (tc.agentcore_evaluator_ids ?? []) as string[];
     if (evaluatorIds.length > 0) {
@@ -317,6 +341,7 @@ async function executeCase(
     errorMessage,
     costUsd,
     sessionId,
+    threadTurnId,
   };
 }
 
@@ -463,6 +488,7 @@ async function handleMessage(message: EvalWorkerMessage): Promise<void> {
       score: outcome.score === null ? null : outcome.score.toFixed(4),
       duration_ms: outcome.durationMs,
       agent_session_id: outcome.sessionId,
+      thread_turn_id: outcome.threadTurnId,
       input: tc.query,
       expected: null,
       actual_output: outcome.actualOutput,
