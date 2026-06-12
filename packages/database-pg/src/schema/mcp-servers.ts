@@ -28,6 +28,7 @@ import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core.js";
 import { agents } from "./agents.js";
 import { spaces } from "./spaces.js";
+import { pluginInstalls } from "./plugins.js";
 
 // ---------------------------------------------------------------------------
 // tenant_mcp_servers — tenant-level registry of available MCP servers
@@ -67,6 +68,16 @@ export const tenantMcpServers = pgTable(
     management_source: text("management_source").notNull().default("manual"),
     /** Stable managed application key, e.g. "twenty-crm" for the CRM connector. */
     managed_application_key: text("managed_application_key"),
+    /**
+     * Set when this row is owned by an application plugin install
+     * (management_source 'plugin'). The MCP component handler creates and
+     * repairs these rows; uninstall removes them before the install row is
+     * deleted, so ON DELETE SET NULL is a safety net, not the teardown path.
+     */
+    plugin_install_id: uuid("plugin_install_id").references(
+      () => pluginInstalls.id,
+      { onDelete: "set null" },
+    ),
     /**
      * Admin-approval gate for MCP endpoints shipped inside uploaded plugins
      * (plan #007 §R8). 'pending' blocks invocation; 'approved' unlocks it;

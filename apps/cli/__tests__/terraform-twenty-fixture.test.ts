@@ -43,10 +43,6 @@ const LAMBDA_API_HANDLERS = resolve(
   REPO_ROOT,
   "terraform/modules/app/lambda-api/handlers.tf",
 );
-const LAMBDA_API_VARS = resolve(
-  REPO_ROOT,
-  "terraform/modules/app/lambda-api/variables.tf",
-);
 const WWW_DNS_MAIN = resolve(
   REPO_ROOT,
   "terraform/modules/app/www-dns/main.tf",
@@ -429,29 +425,21 @@ describe("U1 - Twenty Terraform app module", () => {
     );
   });
 
-  it("passes compact Twenty deployment status into graphql-http env", () => {
+  it("no longer injects Twenty deployment status into graphql-http config (DB-served — plan 2026-06-12-001 U10)", () => {
     const handlers = read(LAMBDA_API_HANDLERS);
-    const vars = read(LAMBDA_API_VARS);
 
-    expect(vars).toMatch(/variable "twenty_provisioned"/);
-    expect(vars).toMatch(/variable "twenty_runtime_enabled"/);
-    expect(vars).toMatch(/variable "twenty_url"/);
-    expect(handlers).toMatch(/twenty_env = var\.twenty_provisioned \? {/);
-    expect(handlers).toMatch(
-      /TWENTY = "\$\{var\.twenty_provisioned \? "1" : "0"\}\|\$\{var\.twenty_runtime_enabled \? "1" : "0"\}\|\$\{var\.twenty_url\}"/,
-    );
+    // Twenty status is read from managed_applications + deployment jobs in
+    // Aurora; the TWENTY config key and its env/SSM projection are retired.
+    expect(handlers).not.toMatch(/twenty_env/);
+    expect(handlers).not.toMatch(/TWENTY\s*=/);
+    expect(handlers).not.toMatch(/TWENTY_URL\s*=/);
+    // Cognee's compact status projection is intentionally unchanged.
+    expect(handlers).toMatch(/cognee_env = var\.cognee_enabled \? {/);
     expect(handlers).toMatch(/local\.cognee_env,\s*\)/);
-    // TWENTY reaches graphql-http via graphql_http_config_env → the SSM
-    // runtime-config document (plan 2026-06-11-006), no longer Lambda env.
-    expect(handlers).toMatch(/}, local\.twenty_env, local\.kestra_env\)/);
     const runtimeConfig = read(
-      resolve(
-        REPO_ROOT,
-        "terraform/modules/app/lambda-api/runtime-config.tf",
-      ),
+      resolve(REPO_ROOT, "terraform/modules/app/lambda-api/runtime-config.tf"),
     );
     expect(runtimeConfig).toMatch(/local\.graphql_http_config_env/);
-    expect(handlers).not.toMatch(/TWENTY_URL\s*=/);
   });
 
   it("adds crm.<domain> DNS support without rotating the shared site certificate", () => {

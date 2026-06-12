@@ -604,7 +604,7 @@ async function resolveCatalogTarget(
 }
 
 // ---------------------------------------------------------------------------
-// Authz — REST analogue of requireTenantAdmin (mirrors plugin-upload.ts)
+// Authz — REST analogue of requireTenantAdmin
 // ---------------------------------------------------------------------------
 
 const WRITE_ACTIONS = new Set([

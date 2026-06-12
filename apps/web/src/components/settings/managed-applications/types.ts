@@ -4,7 +4,7 @@ import type {
   SettingsManagedApplicationsQuery,
 } from "@/gql/graphql";
 
-export type ManagedAppKey = "cognee" | "twenty" | "kestra";
+export type ManagedAppKey = "cognee" | "twenty";
 
 export type ManagedApplication =
   SettingsManagedApplicationsQuery["managedApplications"][number];
@@ -24,7 +24,6 @@ export interface DataImpact {
 
 export function asManagedAppKey(value: string): ManagedAppKey {
   if (value === "twenty") return "twenty";
-  if (value === "kestra") return "kestra";
   return "cognee";
 }
 
@@ -48,14 +47,16 @@ export function terminalJobStatus(status: string): boolean {
   return ["succeeded", "failed", "rejected"].includes(status);
 }
 
-export function appDisplayName(key: ManagedAppKey): string {
+// Key-agnostic (accepts any app key string): plugin-created deployment jobs
+// flow through the same plan dialog, so these no longer assume the closed
+// ManagedAppKey union. Known keys keep their curated names; unknown keys
+// fall back to the key itself / DESTROY <KEY>.
+export function appDisplayName(key: string): string {
   if (key === "twenty") return "Twenty CRM";
-  if (key === "kestra") return "Kestra";
-  return "Cognee";
+  if (key === "cognee") return "Cognee";
+  return key;
 }
 
-export function destructiveConfirmationFor(key: ManagedAppKey): string {
-  if (key === "twenty") return "DESTROY TWENTY";
-  if (key === "kestra") return "DESTROY KESTRA";
-  return "DESTROY COGNEE";
+export function destructiveConfirmationFor(key: string): string {
+  return `DESTROY ${key.toUpperCase()}`;
 }

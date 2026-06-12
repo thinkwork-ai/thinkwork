@@ -12,7 +12,7 @@
  * Two layers:
  *  - `verifyMagicBytes(buffer, declaredExtension)` — fast prefix check.
  *  - `validateOoxmlSafety(buffer)` — full container walk for .xlsx files.
- *    Reuses the existing `inspectZipBuffer` from `plugin-zip-safety.ts`
+ *    Reuses the existing `inspectZipBuffer` from `zip-safety.ts`
  *    (already covers path-escape, entry-count, decompressed-size, and
  *    symlink defenses) and adds OOXML-specific entry rejections.
  *
@@ -21,7 +21,7 @@
  * still applies.
  */
 
-import { inspectZipBuffer } from "../plugin-zip-safety.js";
+import { inspectZipBuffer } from "../zip-safety.js";
 
 /**
  * Magic-byte prefixes for the pilot's allowed file types. Verified
@@ -144,8 +144,7 @@ export type OoxmlSafetyResult = OoxmlSafetyFailure | OoxmlSafetySuccess;
  *   - `xl/vbaProject.bin` — macros (the #1 vector for malicious workbooks)
  *   - `xl/externalLinks/` — data-exfiltration via cross-workbook references
  *   - Zip-bomb / path-escape / symlink trickery (delegated to
- *     `inspectZipBuffer`, which is the existing repo-wide zip safety
- *     utility used by plugin-upload).
+ *     `inspectZipBuffer`, the repo-wide zip safety utility).
  *
  * Order matters: zip-safety runs first so a malformed or oversized zip
  * fails closed BEFORE we walk entries looking for macro markers.
@@ -156,7 +155,7 @@ export async function validateOoxmlSafety(
   const safety = await inspectZipBuffer(buffer);
   if (!safety.valid) {
     // `inspectZipBuffer` may surface multiple errors; the first one
-    // is the load-bearing rejection. Map the plugin-zip-safety
+    // is the load-bearing rejection. Map the zip-safety
     // kinds onto our finer-grained vocabulary.
     const first = safety.errors[0]!;
     const detail =

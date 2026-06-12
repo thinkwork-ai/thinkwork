@@ -1,9 +1,6 @@
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
-import {
-  reconcileKestraManagedMcp,
-  reconcileTwentyManagedMcp,
-} from "../../../lib/managed-mcp-applications.js";
+import { reconcileTwentyManagedMcp } from "../../../lib/managed-mcp-applications.js";
 import { requirePlatformOperator } from "./setKnowledgeGraphDeployment.mutation.js";
 import {
   normalizeManagedApplicationKey,
@@ -19,7 +16,7 @@ export const installManagedApplicationMcpServer = async (
   await requirePlatformOperator(ctx);
 
   const key = normalizeManagedApplicationKey(args.key);
-  if (key !== "twenty" && key !== "kestra") {
+  if (key !== "twenty") {
     throw new GraphQLError(
       "This managed application does not support MCP install",
       {
@@ -35,19 +32,12 @@ export const installManagedApplicationMcpServer = async (
     });
   }
 
-  const application = readManagedApplication(key);
-  const result =
-    key === "twenty"
-      ? await reconcileTwentyManagedMcp({
-          tenantId,
-          application,
-          mode: "running",
-        })
-      : await reconcileKestraManagedMcp({
-          tenantId,
-          application,
-          mode: "running",
-        });
+  const application = await readManagedApplication(key, tenantId);
+  const result = await reconcileTwentyManagedMcp({
+    tenantId,
+    application,
+    mode: "running",
+  });
 
   return {
     key,

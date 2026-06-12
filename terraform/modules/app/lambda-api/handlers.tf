@@ -15,18 +15,9 @@ locals {
     # status in one compact value; stable names are derived in the resolver.
     COGNEE = "${var.cognee_backend_mode}|${var.cognee_endpoint}"
   } : {}
-  twenty_env = var.twenty_provisioned ? {
-    # Keep Twenty managed-app status compact for graphql-http. The resolver
-    # derives stable ECS service/log identifiers from stage + account instead
-    # of carrying long ARNs in Lambda env vars.
-    TWENTY = "${var.twenty_provisioned ? "1" : "0"}|${var.twenty_runtime_enabled ? "1" : "0"}|${var.twenty_url}"
-  } : {}
-  kestra_env = var.kestra_provisioned ? {
-    # Keep Kestra managed-app status compact for graphql-http. Fields:
-    # provisioned|runtime. graphql-http is close to Lambda's 4 KB environment
-    # ceiling, so the resolver derives stable names/URLs from stage + account.
-    KESTRA = "${var.kestra_provisioned ? "1" : "0"}|${var.kestra_runtime_enabled ? "1" : "0"}"
-  } : {}
+  # Twenty managed-app status is DB-served (managed_applications +
+  # deployment jobs — plan 2026-06-12-001 U10); the TWENTY config key is
+  # retired. Cognee's env-var status projection above is unchanged.
   optional_integration_handler_names = concat(
     trimspace(var.deployment_state_machine_arn) == "" ? [
       # Host-only onboarding/deployment API. Customer foundations disable the
@@ -153,7 +144,7 @@ locals {
   # document. Kept out of config_env so the legacy env copies stay scoped
   # to graphql-http (handler_extra_env below) instead of growing every
   # handler's env during the R8 transition window.
-  graphql_http_config_env = merge({
+  graphql_http_config_env = {
     ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
     ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
     # Settings > General starts release updates from the GraphQL API.
@@ -166,7 +157,7 @@ locals {
     # secretsmanager:GetSecretValue on the thinkwork/* wildcard, so no
     # new IAM resource is needed.
     COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
-  }, local.twenty_env, local.kestra_env)
+  }
 
   # Identity env + the secrets still in their one-release transition
   # window (R8). Config-class keys live ONLY in the SSM runtime-config
@@ -255,7 +246,6 @@ locals {
     "chat-agent-invoke" = {
       KNOWLEDGE_GRAPH_TOOL_ENABLED = tostring(var.knowledge_graph_tool_enabled)
     }
-    "kestra-control-mcp" = local.kestra_env
     # Bedrock KB provisioning. Per-handler (not common_env) so these don't bloat
     # the already-near-4KB graphql-http env. Bedrock's RDS-backed KB needs the
     # cluster ARN + the KB service role (passed at CreateKnowledgeBase time).
@@ -500,10 +490,6 @@ resource "aws_lambda_function" "handler" {
     # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
     # @thinkwork/admin-ops package as MCP tools for managed agents.
     "admin-ops-mcp",
-    # Kestra control MCP — JSON-RPC endpoint at POST /mcp/kestra. Exposes a
-    # narrow, policy-checked tool surface for managed Kestra flows and
-    # executions. Reconciliation of the tenant MCP row lands in the next unit.
-    "kestra-control-mcp",
     # MCP admin key management — per-tenant Bearer tokens for admin-ops.
     # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
     # against tenant_mcp_admin_keys, populated by this handler's routes.
@@ -522,10 +508,6 @@ resource "aws_lambda_function" "handler" {
     # Daily sweeper: auto-rejects MCP servers pending > 30 days. Triggered
     # by EventBridge schedule (mcp-approval-sweeper-daily).
     "mcp-approval-sweeper",
-    # Plugin upload REST handler (plan §U10). Four routes:
-    # POST /api/plugins/presign + /upload, GET /api/plugins (+ /:uploadId).
-    # Cognito JWT; admin-role gated. Needs WORKSPACE_BUCKET env for S3.
-    "plugin-upload",
     # Finance pilot U2 — thread-attachment upload (presign + finalize).
     # presign issues a 5-min PUT URL the end-user client uses to push
     # Excel/CSV bytes directly to S3; finalize sniffs magic bytes, scans
@@ -545,9 +527,6 @@ resource "aws_lambda_function" "handler" {
     # or GitHub ref and the handler normalizes vendor folder layouts into
     # the agent workspace.
     "folder-bundle-import",
-    # Hourly sweeper: reaps orphan S3 staging from failed / interrupted
-    # plugin install sagas + marks matching plugin_uploads rows 'failed'.
-    "plugin-staging-sweeper",
     # Resolved Capability Manifest write endpoint (plan §U15). The runtime
     # POSTs one row per agent-session-start. Shared
     # API_AUTH_SECRET bearer (runtime→API; no tenant OAuth).
@@ -1115,10 +1094,6 @@ locals {
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
 
-      # Kestra control MCP server. Managed agents will call this through a
-      # reconciled tenant_mcp_servers row once U6 wires managed registration.
-      "POST /mcp/kestra" = "kestra-control-mcp"
-
       # MCP admin key management — per-tenant Bearer token CRUD. Tokens
       # are shown ONCE at creation (POST returns raw value); server stores
       # sha256 hash only. These specific routes take precedence over the
@@ -1135,7 +1110,7 @@ locals {
       # any agent that gets it assigned via agent_mcp_servers.
       "POST /api/tenants/{tenantId}/mcp-admin-provision" = "mcp-admin-provision"
 
-      # MCP server admin approval (plan §U11, SI-5). Plugin-uploaded MCP
+      # MCP server admin approval (plan §U11, SI-5). Externally-sourced MCP
       # servers land with status='pending'; these routes flip them to
       # approved/rejected. Cognito JWT only (mcp-approval handler rejects
       # apikey callers) — the admin SPA is the sole UI surface.
@@ -1143,20 +1118,6 @@ locals {
       "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/approve" = "mcp-approval"
       "POST /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"     = "mcp-approval"
       "OPTIONS /api/tenants/{tenantId}/mcp-servers/{serverId}/reject"  = "mcp-approval"
-
-      # Plugin upload admin surface (plan §U10). Web app drives the full
-      # flow: POST /presign → browser PUT to presigned S3 URL → POST /upload
-      # (validator + three-phase install saga). GET routes back the admin's
-      # plugin history view. handleCors() short-circuits OPTIONS before auth
-      # — required for the browser to preflight successfully.
-      "POST /api/plugins/presign"       = "plugin-upload"
-      "OPTIONS /api/plugins/presign"    = "plugin-upload"
-      "POST /api/plugins/upload"        = "plugin-upload"
-      "OPTIONS /api/plugins/upload"     = "plugin-upload"
-      "GET /api/plugins"                = "plugin-upload"
-      "OPTIONS /api/plugins"            = "plugin-upload"
-      "GET /api/plugins/{uploadId}"     = "plugin-upload"
-      "OPTIONS /api/plugins/{uploadId}" = "plugin-upload"
 
       # Finance pilot U2 — thread-attachment upload (presign + finalize).
       # Cognito JWT; tenant pinned via threads.tenant_id lookup. OPTIONS
@@ -1299,31 +1260,6 @@ resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
 
   target {
     arn      = aws_lambda_function.handler["webhook-deliveries-cleanup"].arn
-    role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-# ---------------------------------------------------------------------------
-# Plugin staging sweeper — hourly orphan-S3 cleanup for interrupted install
-# sagas (plan §U10). WORKSPACE_BUCKET env on the Lambda role already grants
-# the list+delete IAM; this schedule is the hourly trigger. The sweeper's
-# own cutoff constant (60 min) is independent of this cron cadence.
-# ---------------------------------------------------------------------------
-
-resource "aws_scheduler_schedule" "plugin_staging_sweeper" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-plugin-staging-sweeper"
-  group_name          = "default"
-  schedule_expression = "rate(1 hour)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["plugin-staging-sweeper"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

@@ -13,18 +13,18 @@
  *     → 200 { id, status: 'approved', url_hash, approved_by, approved_at }
  *     Computes `url_hash = sha256(canonical(url, auth_config))` at decision
  *     time. Any subsequent mutation to either field must revert to pending
- *     (enforced in the update paths in skills.ts / plugin-upload.ts that
- *     route through `applyMcpServerFieldUpdate`).
+ *     (enforced in the update paths in skills.ts that route through
+ *     `applyMcpServerFieldUpdate`).
  *
  *   POST /api/tenants/:tenantId/mcp-servers/:serverId/reject
  *     body: { reason?: string } (≤ 500 chars; echoed in CloudWatch audit log)
  *     → 200 { id, status: 'rejected' }
  *     Clears approval metadata. Rejection is NOT terminal from the API side —
- *     an admin can re-approve a rejected row if the uploaded plugin is
- *     genuinely benign. The audit log is the record of prior decisions.
+ *     an admin can re-approve a rejected row if the server is genuinely
+ *     benign. The audit log is the record of prior decisions.
  *
- * Authz: Cognito JWT, caller must be owner/admin of the target tenant.
- *   Mirrors plugin-upload.ts's REST analogue of `requireTenantAdmin`.
+ * Authz: Cognito JWT, caller must be owner/admin of the target tenant
+ *   (REST analogue of `requireTenantAdmin`).
  *   Tenant isolation: cross-tenant serverId returns 404 (not 403) so
  *   membership shape of another tenant is not leaked.
  *
@@ -225,7 +225,7 @@ export async function rejectMcpServer(
 }
 
 // ---------------------------------------------------------------------------
-// Authz helper — REST analogue of requireTenantAdmin (see plugin-upload.ts)
+// Authz helper — REST analogue of requireTenantAdmin
 // ---------------------------------------------------------------------------
 
 async function callerIsTenantAdmin(

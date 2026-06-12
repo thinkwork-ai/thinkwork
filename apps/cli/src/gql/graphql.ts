@@ -32,6 +32,22 @@ export type Scalars = {
   AWSURL: { input: any; output: any };
 };
 
+export type ActivatePluginInput = {
+  installId: Scalars["ID"]["input"];
+  /** Client path to land on after the OAuth callback (validated server-side). */
+  returnTo?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+/**
+ * Start of the app-level OAuth activation flow. The caller redirects the user
+ * to `authorizeUrl`; the callback upserts the activation and its token records
+ * and returns the user to the plugin detail page.
+ */
+export type ActivatePluginResult = {
+  __typename?: "ActivatePluginResult";
+  authorizeUrl: Scalars["String"]["output"];
+};
+
 export type ActivityLogEntry = {
   __typename?: "ActivityLogEntry";
   action: Scalars["String"]["output"];
@@ -722,6 +738,11 @@ export enum ComplianceEventType {
   McpAdded = "MCP_ADDED",
   McpRemoved = "MCP_REMOVED",
   OutputArtifactProduced = "OUTPUT_ARTIFACT_PRODUCED",
+  PluginActivationGranted = "PLUGIN_ACTIVATION_GRANTED",
+  PluginActivationRevoked = "PLUGIN_ACTIVATION_REVOKED",
+  PluginCutover = "PLUGIN_CUTOVER",
+  PluginInstalled = "PLUGIN_INSTALLED",
+  PluginUninstalled = "PLUGIN_UNINSTALLED",
   PolicyAllowed = "POLICY_ALLOWED",
   PolicyBlocked = "POLICY_BLOCKED",
   PolicyBypassed = "POLICY_BYPASSED",
@@ -1041,6 +1062,10 @@ export type DailyCostPoint = {
   llmUsd: Scalars["Float"]["output"];
   toolsUsd: Scalars["Float"]["output"];
   totalUsd: Scalars["Float"]["output"];
+};
+
+export type DeactivatePluginInput = {
+  installId: Scalars["ID"]["input"];
 };
 
 export type DecideRoutineApprovalInput = {
@@ -1376,6 +1401,13 @@ export type InboxItemStatusEvent = {
   tenantId: Scalars["ID"]["output"];
   title?: Maybe<Scalars["String"]["output"]>;
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type InstallPluginInput = {
+  idempotencyKey: Scalars["String"]["input"];
+  pluginKey: Scalars["String"]["input"];
+  /** Catalog version to pin; defaults to the latest published version. */
+  version?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type InviteMemberInput = {
@@ -2163,6 +2195,11 @@ export type Mutation = {
   __typename?: "Mutation";
   _empty?: Maybe<Scalars["String"]["output"]>;
   acceptAgentWorkspaceReview: AgentWorkspaceRun;
+  /**
+   * Begin app-level OAuth activation for the calling user — one consent
+   * covering all the plugin's MCP servers. Returns the authorize URL.
+   */
+  activatePlugin: ActivatePluginResult;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addSpaceMember: SpaceMember;
@@ -2191,15 +2228,20 @@ export type Mutation = {
   captureMobileMemory: MobileMemoryCapture;
   checkoutThread: Thread;
   /**
-   * Admin-only: enqueue an ad-hoc tenant-level compile job for the graph→wiki
-   * materializer. Returns the job row (newly inserted or the in-flight dedupe
-   * hit).
+   * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
+   * Returns the job row (newly inserted or the in-flight dedupe hit).
    *
-   * Tenant-routed unconditionally since the U11 cutover (plan
-   * 2026-06-09-004): the per-user owner key is ignored and ONE tenant-keyed
-   * compile job (null `userId`) is enqueued. `tenantScope`, `userId`,
-   * `ownerId`, and `modelId` are accepted for contract compatibility but no
-   * longer change behavior (the materializer is deterministic/LLM-free).
+   * When `modelId` is supplied, it is forwarded to the compile Lambda event
+   * payload so a single run can override `BEDROCK_MODEL_ID` without a
+   * redeploy. The override takes effect only on the direct Event-invoke
+   * path; if the invoke fails and a polling worker claims the job later, the
+   * compile falls back to the env-default model.
+   *
+   * Graph mode (plan 2026-06-09-004 U14): when `tenantScope` is true — or
+   * the server's wiki source is `graph` — the per-user owner key is ignored
+   * and ONE tenant-keyed compile job (null `userId`) is enqueued for the
+   * graph→wiki materializer. `modelId` is meaningless on that path (the
+   * materializer is deterministic/LLM-free) and is not forwarded.
    */
   compileWikiNow: WikiCompileJob;
   createAgentProfile: AgentProfile;
@@ -2232,6 +2274,19 @@ export type Mutation = {
   createThreadLabel: ThreadLabel;
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
+  /**
+   * One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
+   * MCP row to plugin ownership (management_source 'plugin' under the
+   * tenant's twenty install) and invalidates per-server user tokens so users
+   * re-activate at app level. Idempotent — a re-run reports a no-op.
+   */
+  cutoverTwentyPlugin: TwentyPluginCutoverResult;
+  /**
+   * Disconnect the calling user's activation: deletes stored token secrets and
+   * marks the activation revoked. Local-only — provider-side grants are not
+   * revoked in v1 (UI copy says "disconnect").
+   */
+  deactivatePlugin: UserPluginActivation;
   decideInboxItem: InboxItem;
   decideRoutineApproval: InboxItem;
   delegateThread: Thread;
@@ -2261,6 +2316,13 @@ export type Mutation = {
   importN8nRoutine: Routine;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
+  /**
+   * Install a catalog plugin tenant-wide (tenant admin). Idempotent per
+   * (tenant, plugin): a concurrent call returns the in-flight install; a
+   * stuck-installing install past the staleness threshold re-drives the
+   * handler sequence.
+   */
+  installPlugin: PluginInstall;
   inviteMember: TenantMember;
   markThreadsRead: MarkThreadsReadResult;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
@@ -2315,6 +2377,8 @@ export type Mutation = {
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   retryKnowledgeBase: KnowledgeBase;
+  /** Re-drive one failed component (failed → pending) and re-run its handler (tenant admin). */
+  retryPluginComponent: PluginInstall;
   reviewGoal: ReviewGoalPayload;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
@@ -2355,6 +2419,13 @@ export type Mutation = {
    */
   testWebhook: WebhookDelivery;
   triggerRoutineRun: RoutineExecution;
+  /**
+   * Tear down every component and derived state (tenant admin): activations +
+   * token secrets, skill folders + seeded catalog prefix, MCP rows, then the
+   * infrastructure destroy job behind the approval gate. Returns the final
+   * install snapshot ('uninstalling' while async teardown runs).
+   */
+  uninstallPlugin: PluginInstall;
   uninstallSlackWorkspace: SlackWorkspace;
   unlinkSlackIdentity: SlackUserLink;
   unpauseAgent: Agent;
@@ -2394,12 +2465,22 @@ export type Mutation = {
   updateUser: User;
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
+  /**
+   * Pin a new catalog version and reconcile the component diff through the
+   * install state machine (tenant admin). Scope/auth-domain changes flip
+   * affected activations to needs_reauth.
+   */
+  upgradePlugin: PluginInstall;
   upsertBudgetPolicy: BudgetPolicy;
 };
 
 export type MutationAcceptAgentWorkspaceReviewArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
   runId: Scalars["ID"]["input"];
+};
+
+export type MutationActivatePluginArgs = {
+  input: ActivatePluginInput;
 };
 
 export type MutationAddInboxItemCommentArgs = {
@@ -2576,6 +2657,10 @@ export type MutationCreateWebhookArgs = {
   input: CreateWebhookInput;
 };
 
+export type MutationDeactivatePluginArgs = {
+  input: DeactivatePluginInput;
+};
+
 export type MutationDecideInboxItemArgs = {
   id: Scalars["ID"]["input"];
   input: InboxItemDecisionInput;
@@ -2698,6 +2783,10 @@ export type MutationImportTenantBedrockModelsArgs = {
 
 export type MutationInstallManagedApplicationMcpServerArgs = {
   key: Scalars["String"]["input"];
+};
+
+export type MutationInstallPluginArgs = {
+  input: InstallPluginInput;
 };
 
 export type MutationInviteMemberArgs = {
@@ -2955,6 +3044,10 @@ export type MutationRetryKnowledgeBaseArgs = {
   id: Scalars["ID"]["input"];
 };
 
+export type MutationRetryPluginComponentArgs = {
+  input: RetryPluginComponentInput;
+};
+
 export type MutationReviewGoalArgs = {
   input: ReviewGoalInput;
 };
@@ -3088,6 +3181,10 @@ export type MutationTestWebhookArgs = {
 export type MutationTriggerRoutineRunArgs = {
   input?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   routineId: Scalars["ID"]["input"];
+};
+
+export type MutationUninstallPluginArgs = {
+  input: UninstallPluginInput;
 };
 
 export type MutationUninstallSlackWorkspaceArgs = {
@@ -3250,6 +3347,10 @@ export type MutationUpdateUserProfileArgs = {
 export type MutationUpdateWebhookArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateWebhookInput;
+};
+
+export type MutationUpgradePluginArgs = {
+  input: UpgradePluginInput;
 };
 
 export type MutationUpsertBudgetPolicyArgs = {
@@ -3548,6 +3649,100 @@ export type PlanRoutineDraftInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+/** Display summary of one manifest component for catalog browse. */
+export type PluginCatalogComponent = {
+  __typename?: "PluginCatalogComponent";
+  /** Display name where the manifest declares one; null → render falls back to key. */
+  displayName?: Maybe<Scalars["String"]["output"]>;
+  key: Scalars["String"]["output"];
+  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
+  type: Scalars["String"]["output"];
+};
+
+/**
+ * Catalog browse entry: the signed-catalog manifest overlaid with the caller
+ * tenant's install state. `install` is null when the plugin is not installed.
+ */
+export type PluginCatalogEntry = {
+  __typename?: "PluginCatalogEntry";
+  description: Scalars["String"]["output"];
+  displayName: Scalars["String"]["output"];
+  /** The caller tenant's install of this plugin, if any. */
+  install?: Maybe<PluginInstall>;
+  latestVersion: Scalars["String"]["output"];
+  pluginKey: Scalars["String"]["output"];
+  /** True when an install exists and a newer catalog version is available. */
+  updateAvailable: Scalars["Boolean"]["output"];
+  /** Published versions, newest first. */
+  versions: Array<PluginCatalogVersion>;
+};
+
+/** One published version of a plugin in the signed catalog. */
+export type PluginCatalogVersion = {
+  __typename?: "PluginCatalogVersion";
+  components: Array<PluginCatalogComponent>;
+  /** sha256 of the version payload (what installs pin). */
+  payloadSha256: Scalars["String"]["output"];
+  /** OAuth scopes this version's MCP servers require at activation. */
+  requiredOauthScopes: Array<Scalars["String"]["output"]>;
+  version: Scalars["String"]["output"];
+};
+
+/**
+ * Application plugins (plan 2026-06-12-001).
+ *
+ * The plugin engine is the canonical record of install, component, and
+ * activation state. Admin mutations (install/upgrade/uninstall/retry) require
+ * tenant admin via resolveCallerTenantId; activation mutations bind the
+ * canonical caller user id. Install/component status reconciles against linked
+ * deployment-job events at read time — no readiness snapshots. Token secret
+ * refs are NEVER exposed through this schema.
+ */
+export type PluginComponent = {
+  __typename?: "PluginComponent";
+  /** Component key from the pinned manifest version (unique within the install). */
+  componentKey: Scalars["String"]["output"];
+  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
+  componentType: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  /**
+   * Handler linkage into real runtime rows, shape by component type:
+   * mcp-server { tenantMcpServerId }, skills { seededCatalogPrefix,
+   * workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId }.
+   */
+  handlerRef: Scalars["AWSJSON"]["output"];
+  id: Scalars["ID"]["output"];
+  lastError?: Maybe<Scalars["String"]["output"]>;
+  /** 'pending' | 'provisioned' | 'failed' (failed → pending on retry). */
+  state: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type PluginInstall = {
+  __typename?: "PluginInstall";
+  /** Count of 'active' user activations — powers the uninstall warning. */
+  activatedUserCount: Scalars["Int"]["output"];
+  components: Array<PluginComponent>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  lastError?: Maybe<Scalars["String"]["output"]>;
+  /** Set on every state transition; staleness re-drive input. */
+  lastTransitionAt: Scalars["AWSDateTime"]["output"];
+  /** sha256 of the pinned version payload. */
+  pinnedPayloadSha256: Scalars["String"]["output"];
+  /** Catalog version pinned at install/upgrade time. */
+  pinnedVersion: Scalars["String"]["output"];
+  /** Plugin key from the signed catalog (e.g. 'lastmile'). */
+  pluginKey: Scalars["String"]["output"];
+  /**
+   * 'installing' | 'awaiting_approval' | 'installed' | 'partially_installed' |
+   * 'failed' | 'uninstalling'.
+   */
+  state: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
 export type PromoteDraftAppletInput = {
   computerId: Scalars["ID"]["input"];
   draftId: Scalars["ID"]["input"];
@@ -3713,6 +3908,8 @@ export type Query = {
   mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
   myApprovedModelCatalog: Array<ModelCatalogEntry>;
+  /** The caller's plugin activations across the tenant's installs. */
+  myPluginActivations: Array<UserPluginActivation>;
   mySlackLinks: Array<SlackUserLink>;
   ontologyChangeSets: Array<OntologyChangeSet>;
   ontologyDefinitions: OntologyDefinitions;
@@ -3721,6 +3918,15 @@ export type Query = {
   pendingSystemReviewsCount: Scalars["Int"]["output"];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
   pinnedThreads: Array<PinnedThread>;
+  /**
+   * Browse the signed plugin catalog overlaid with the caller tenant's install
+   * state. Fails closed (GraphQL error) on catalog signature/digest failure.
+   */
+  pluginCatalog: Array<PluginCatalogEntry>;
+  /** One install by id, with read-time component status reconciliation. */
+  pluginInstall?: Maybe<PluginInstall>;
+  /** The caller tenant's plugin installs (admin status surface). */
+  pluginInstalls: Array<PluginInstall>;
   queuedWakeups: Array<AgentWakeupRequest>;
   /**
    * Newest compiled wiki pages readable by the given user — tenant-shared
@@ -4239,6 +4445,10 @@ export type QueryPinnedThreadsArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type QueryPluginInstallArgs = {
+  id: Scalars["ID"]["input"];
+};
+
 export type QueryQueuedWakeupsArgs = {
   tenantId: Scalars["ID"]["input"];
 };
@@ -4660,6 +4870,12 @@ export type ResubmitInboxItemInput = {
   config?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   description?: InputMaybe<Scalars["String"]["input"]>;
   title?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type RetryPluginComponentInput = {
+  /** Component to re-drive; must be in state 'failed'. */
+  componentKey: Scalars["String"]["input"];
+  installId: Scalars["ID"]["input"];
 };
 
 export enum ReviewGoalAction {
@@ -6165,6 +6381,27 @@ export type TraceEvent = {
   traceId: Scalars["String"]["output"];
 };
 
+/** Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10). */
+export type TwentyPluginCutoverResult = {
+  __typename?: "TwentyPluginCutoverResult";
+  /** True when this run changed ownership (adoption or legacy-row removal). */
+  adopted: Scalars["Boolean"]["output"];
+  /** Per-server user tokens invalidated; affected users re-activate at app level. */
+  invalidatedUserTokenCount: Scalars["Int"]["output"];
+  /** The canonical plugin-owned Twenty MCP server row after the run. */
+  mcpServerId?: Maybe<Scalars["ID"]["output"]>;
+  message: Scalars["String"]["output"];
+};
+
+export type UninstallPluginInput = {
+  /**
+   * Required when the install has an infrastructure component (mirrors the
+   * managed-application destructive confirmation gate).
+   */
+  destructiveConfirmation?: InputMaybe<Scalars["String"]["input"]>;
+  installId: Scalars["ID"]["input"];
+};
+
 export type UpdateAgentProfileInput = {
   description?: InputMaybe<Scalars["String"]["input"]>;
   enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
@@ -6460,6 +6697,13 @@ export type UpdateWebhookInput = {
   targetType?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type UpgradePluginInput = {
+  idempotencyKey: Scalars["String"]["input"];
+  installId: Scalars["ID"]["input"];
+  /** Catalog version to pin (must differ from the pinned version). */
+  version: Scalars["String"]["input"];
+};
+
 export type UpsertBudgetPolicyInput = {
   actionOnExceed?: InputMaybe<Scalars["String"]["input"]>;
   agentId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -6505,6 +6749,28 @@ export type UserModelCatalogEntry = {
   provider: Scalars["String"]["output"];
   supportsTools?: Maybe<Scalars["Boolean"]["output"]>;
   supportsVision?: Maybe<Scalars["Boolean"]["output"]>;
+};
+
+/**
+ * A user's app-level OAuth grant for an installed plugin. One grant covers all
+ * of the plugin's MCP servers; token records (secret refs) are internal and
+ * never exposed here.
+ */
+export type UserPluginActivation = {
+  __typename?: "UserPluginActivation";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  grantedAt: Scalars["AWSDateTime"]["output"];
+  /** OAuth scopes granted at consent time. */
+  grantedScopes: Array<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  pluginInstallId: Scalars["ID"]["output"];
+  /** Plugin key of the underlying install, for display without a second query. */
+  pluginKey: Scalars["String"]["output"];
+  revokedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  /** 'active' | 'needs_reauth' | 'revoked'. */
+  status: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  userId: Scalars["ID"]["output"];
 };
 
 export type UserProfile = {

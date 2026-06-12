@@ -13,10 +13,7 @@ import {
   readManagedApplication,
 } from "./managedApplications.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
-import {
-  reconcileKestraManagedMcp,
-  reconcileTwentyManagedMcp,
-} from "../../../lib/managed-mcp-applications.js";
+import { reconcileTwentyManagedMcp } from "../../../lib/managed-mcp-applications.js";
 
 type DeploymentVariable = {
   name: string;
@@ -109,15 +106,14 @@ async function reconcileManagedMcpAfterDeploymentRequest(
   key: ManagedApplicationKey,
   action: DeploymentAction,
 ) {
-  if (key !== "twenty" && key !== "kestra") return;
+  if (key !== "twenty") return;
 
   const tenantId = await resolveCallerTenantId(ctx);
   if (!tenantId) return;
 
   try {
-    const application = readManagedApplication(key);
-    const reconcile =
-      key === "twenty" ? reconcileTwentyManagedMcp : reconcileKestraManagedMcp;
+    const application = await readManagedApplication(key, tenantId);
+    const reconcile = reconcileTwentyManagedMcp;
     if (action === "PARK") {
       await reconcile({
         tenantId,
@@ -164,20 +160,6 @@ function deploymentVariablesFor(
 
   const enable = action === "ENABLE";
   const park = action === "PARK";
-  if (key === "kestra") {
-    return [
-      { name: "KESTRA_PROVISIONED", value: enable || park ? "true" : "false" },
-      {
-        name: "KESTRA_RUNTIME_ENABLED",
-        value: enable ? "true" : "false",
-      },
-      {
-        name: "KESTRA_DESTROY_DATA",
-        value: action === "DESTROY" ? "true" : "false",
-      },
-    ];
-  }
-
   return [
     { name: "TWENTY_PROVISIONED", value: enable || park ? "true" : "false" },
     {
@@ -211,15 +193,6 @@ function deploymentMessageFor(
 ): string {
   if (key === "cognee") {
     return `Knowledge Graph ${action === "ENABLE" ? "enable" : "disable"} deployment queued.`;
-  }
-  if (key === "kestra") {
-    if (action === "ENABLE") {
-      return "Kestra enable deployment queued.";
-    }
-    if (action === "DESTROY") {
-      return "Kestra destructive cleanup queued; runtime, internal storage, app secrets, and the dedicated database will be removed.";
-    }
-    return "Kestra runtime park deployment queued; flow definitions, execution history, storage, and credentials will be retained.";
   }
   if (action === "ENABLE") {
     return "Twenty CRM enable deployment queued.";

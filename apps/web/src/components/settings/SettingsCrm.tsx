@@ -18,11 +18,14 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { ManagedApplicationLifecycleActions } from "@/components/settings/managed-applications/ManagedApplicationLifecycleActions";
 
 export function SettingsCrm() {
+  // U10: Twenty is reached from its plugin detail page once the plugin
+  // install exists; this page remains the operator deployment detail.
   usePageHeaderActions({
     title: "Twenty CRM",
     breadcrumbs: [
-      { label: "Applications", href: "/settings/managed-applications" },
-      { label: "Twenty CRM" },
+      { label: "Plugins", href: "/settings/plugins" },
+      { label: "Twenty CRM", href: "/settings/plugins/twenty" },
+      { label: "Deployment" },
     ],
     action: <ManagedApplicationLifecycleActions appKey="twenty" />,
     actionKey: "twenty-crm:lifecycle",

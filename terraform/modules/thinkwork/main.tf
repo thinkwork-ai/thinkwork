@@ -61,11 +61,6 @@ locals {
     ? var.twenty_email_from_address
     : local.twenty_email_domain != "" ? "noreply@${local.twenty_email_domain}" : ""
   )
-  kestra_provisioned     = var.kestra_provisioned
-  kestra_runtime_enabled = var.kestra_provisioned && var.kestra_runtime_enabled
-  kestra_domain          = var.kestra_domain != "" ? var.kestra_domain : (var.www_domain != "" ? "orchestrate.${var.www_domain}" : "")
-  kestra_public_url      = var.kestra_public_url != "" ? var.kestra_public_url : (local.kestra_domain != "" ? "https://${local.kestra_domain}" : "")
-  kestra_certificate_arn = var.kestra_certificate_arn != "" ? var.kestra_certificate_arn : var.www_certificate_arn
   cognee_worker_subnet_ids = (
     length(module.vpc.private_subnet_ids) > 0
     ? module.vpc.private_subnet_ids
@@ -359,85 +354,6 @@ resource "terraform_data" "twenty_runtime_state_guardrails" {
     precondition {
       condition     = !var.twenty_runtime_enabled || var.twenty_provisioned
       error_message = "twenty_runtime_enabled requires twenty_provisioned = true."
-    }
-  }
-}
-
-resource "terraform_data" "kestra_configuration_guardrails" {
-  count = local.kestra_provisioned ? 1 : 0
-
-  input = {
-    kestra_runtime_enabled       = local.kestra_runtime_enabled
-    kestra_image_uri             = var.kestra_image_uri
-    kestra_db_name               = var.kestra_db_name
-    kestra_db_username           = var.kestra_db_username
-    kestra_db_password_secret    = var.kestra_db_password_secret_arn
-    kestra_basic_auth_secret_arn = var.kestra_basic_auth_secret_arn
-    kestra_public_url            = local.kestra_public_url
-    kestra_certificate_arn       = local.kestra_certificate_arn
-    public_subnet_count          = length(module.vpc.public_subnet_ids)
-  }
-
-  lifecycle {
-    precondition {
-      condition     = var.kestra_image_uri != ""
-      error_message = "kestra_provisioned requires kestra_image_uri pinned to an immutable digest."
-    }
-
-    precondition {
-      condition     = var.kestra_db_password_secret_arn != ""
-      error_message = "kestra_provisioned requires kestra_db_password_secret_arn for a dedicated Kestra database user."
-    }
-
-    precondition {
-      condition     = var.kestra_basic_auth_secret_arn != ""
-      error_message = "kestra_provisioned requires kestra_basic_auth_secret_arn for the Kestra UI/API service credential."
-    }
-
-    precondition {
-      condition     = var.kestra_db_password_secret_arn != module.database.graphql_db_secret_arn
-      error_message = "kestra_provisioned requires a dedicated Kestra database password secret, not the shared Thinkwork admin database secret."
-    }
-
-    precondition {
-      condition     = var.kestra_db_name != var.database_name
-      error_message = "kestra_db_name must be distinct from the shared Thinkwork database name."
-    }
-
-    precondition {
-      condition     = local.kestra_public_url != ""
-      error_message = "kestra_provisioned requires kestra_public_url or a www_domain-derived orchestrate.<domain> URL."
-    }
-
-    precondition {
-      condition     = local.kestra_certificate_arn != ""
-      error_message = "kestra_provisioned requires kestra_certificate_arn or www_certificate_arn."
-    }
-
-    precondition {
-      condition     = length(module.vpc.public_subnet_ids) > 0
-      error_message = "kestra_provisioned requires at least one public subnet for the public ALB and phase-1 task egress pattern."
-    }
-
-    precondition {
-      condition     = !var.kestra_runtime_enabled || var.kestra_provisioned
-      error_message = "kestra_runtime_enabled requires kestra_provisioned = true."
-    }
-  }
-}
-
-resource "terraform_data" "kestra_runtime_state_guardrails" {
-  count = var.kestra_runtime_enabled && !var.kestra_provisioned ? 1 : 0
-
-  input = {
-    kestra_provisioned     = var.kestra_provisioned
-    kestra_runtime_enabled = var.kestra_runtime_enabled
-  }
-
-  lifecycle {
-    precondition {
-      condition     = !var.kestra_runtime_enabled || var.kestra_provisioned
-      error_message = "kestra_runtime_enabled requires kestra_provisioned = true."
     }
   }
 }
@@ -861,17 +777,6 @@ module "api" {
   twenty_worker_service_name                    = local.twenty_provisioned ? module.twenty[0].twenty_worker_service_name : ""
   twenty_server_log_group_name                  = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : ""
   twenty_worker_log_group_name                  = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : ""
-  kestra_provisioned                            = local.kestra_provisioned
-  kestra_runtime_enabled                        = local.kestra_runtime_enabled
-  kestra_url                                    = local.kestra_provisioned ? module.kestra[0].kestra_url : ""
-  kestra_alb_arn                                = local.kestra_provisioned ? module.kestra[0].kestra_alb_arn : ""
-  kestra_target_group_arn                       = local.kestra_provisioned ? module.kestra[0].kestra_target_group_arn : ""
-  kestra_cluster_arn                            = local.kestra_provisioned ? module.kestra[0].kestra_cluster_arn : ""
-  kestra_service_name                           = local.kestra_provisioned ? module.kestra[0].kestra_service_name : ""
-  kestra_log_group_name                         = local.kestra_provisioned ? module.kestra[0].kestra_log_group_name : ""
-  kestra_storage_bucket_name                    = local.kestra_provisioned ? module.kestra[0].kestra_storage_bucket_name : ""
-  kestra_database_name                          = local.kestra_provisioned ? module.kestra[0].kestra_database_name : ""
-  kestra_basic_auth_secret_arn                  = local.kestra_provisioned ? module.kestra[0].kestra_basic_auth_secret_arn : ""
   admin_url                                     = local.end_user_app_url
   docs_url                                      = "https://${module.docs_site.distribution_domain}"
   www_url                                       = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
@@ -1159,34 +1064,6 @@ module "twenty" {
   kms_key_arns                 = var.twenty_kms_key_arns
 
   depends_on = [terraform_data.twenty_configuration_guardrails]
-}
-
-module "kestra" {
-  count  = local.kestra_provisioned ? 1 : 0
-  source = "../app/kestra"
-
-  stage                = var.stage
-  vpc_id               = module.vpc.vpc_id
-  subnet_ids           = module.vpc.public_subnet_ids
-  db_security_group_id = module.database.db_security_group_id
-  db_host              = module.database.cluster_endpoint
-  db_name              = var.kestra_db_name
-  db_username          = var.kestra_db_username
-
-  db_password_secret_arn = var.kestra_db_password_secret_arn
-  basic_auth_secret_arn  = var.kestra_basic_auth_secret_arn
-  public_url             = local.kestra_public_url
-  certificate_arn        = local.kestra_certificate_arn
-  image_uri              = var.kestra_image_uri
-
-  runtime_enabled            = local.kestra_runtime_enabled
-  desired_count              = var.kestra_desired_count
-  storage_bucket_name        = var.kestra_storage_bucket_name
-  storage_force_destroy      = var.kestra_storage_force_destroy
-  allowed_public_cidr_blocks = var.kestra_allowed_public_cidr_blocks
-  kms_key_arns               = var.kestra_kms_key_arns
-
-  depends_on = [terraform_data.kestra_configuration_guardrails]
 }
 
 module "ses" {

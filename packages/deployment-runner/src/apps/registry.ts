@@ -1,11 +1,10 @@
 import { cogneeAdapter } from "./cognee.js";
-import { kestraAdapter } from "./kestra.js";
 import { twentyAdapter } from "./twenty.js";
 import type { ManagedAppOperation } from "../shared.js";
 
 export type { ManagedAppOperation } from "../shared.js";
 
-export type ManagedAppKey = "cognee" | "kestra" | "twenty";
+export type ManagedAppKey = "cognee" | "twenty";
 
 export interface SmokeContract {
   id: string;
@@ -65,11 +64,7 @@ export interface ManagedAppAdapter {
   extractStatus(terraformOutputs: Record<string, unknown>): ManagedAppStatus;
 }
 
-export const managedAppRegistry = [
-  cogneeAdapter,
-  kestraAdapter,
-  twentyAdapter,
-] as const;
+export const managedAppRegistry = [cogneeAdapter, twentyAdapter] as const;
 
 export function getManagedAppAdapter(appKey: ManagedAppKey): ManagedAppAdapter {
   const adapter = managedAppRegistry.find((candidate) => {

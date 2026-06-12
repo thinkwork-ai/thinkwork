@@ -1,12 +1,14 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { queryDocs, useQueryMock } = vi.hoisted(() => ({
+const { queryDocs, useQueryMock, pluginInstallsHolder } = vi.hoisted(() => ({
   queryDocs: {
     SettingsDeploymentStatusQuery: Symbol("deploymentStatus"),
     SettingsManagedApplicationsQuery: Symbol("managedApplications"),
+    SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
   },
   useQueryMock: vi.fn(),
+  pluginInstallsHolder: { current: [] as Array<{ pluginKey: string }> },
 }));
 
 vi.mock("urql", () => ({
@@ -23,6 +25,7 @@ vi.mock("@/context/PageHeaderContext", () => ({
 import { ManagedApplicationsPage } from "./ManagedApplicationsPage";
 
 beforeEach(() => {
+  pluginInstallsHolder.current = [];
   useQueryMock.mockReset();
   useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
     if (query === queryDocs.SettingsManagedApplicationsQuery) {
@@ -33,6 +36,15 @@ beforeEach(() => {
     }
     if (query === queryDocs.SettingsDeploymentStatusQuery) {
       return [{ data: { deploymentStatus }, fetching: false }, vi.fn()];
+    }
+    if (query === queryDocs.SettingsPluginInstallsQuery) {
+      return [
+        {
+          data: { pluginInstalls: pluginInstallsHolder.current },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
     }
     return [{ fetching: false }, vi.fn()];
   });
@@ -52,9 +64,6 @@ describe("ManagedApplicationsPage", () => {
         .getByRole("link", { name: /open twenty crm/i })
         .getAttribute("href"),
     ).toBe("/settings/crm");
-    expect(
-      screen.getByRole("link", { name: /open kestra/i }).getAttribute("href"),
-    ).toBe("/settings/applications/kestra");
   });
 
   it("does not render row-level lifecycle buttons", () => {
@@ -63,6 +72,27 @@ describe("ManagedApplicationsPage", () => {
     expect(screen.queryByRole("button", { name: /plan deploy/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /plan destroy/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /view plan/i })).toBeNull();
+  });
+
+  it("hides the Twenty row once a twenty plugin install exists (U10) while Cognee is unaffected", () => {
+    pluginInstallsHolder.current = [{ pluginKey: "twenty" }];
+    render(<ManagedApplicationsPage />);
+
+    expect(screen.queryByRole("link", { name: /open twenty crm/i })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /open cognee/i }).getAttribute("href"),
+    ).toBe("/settings/applications/cognee");
+  });
+
+  it("keeps the Twenty row while only OTHER plugins are installed", () => {
+    pluginInstallsHolder.current = [{ pluginKey: "lastmile" }];
+    render(<ManagedApplicationsPage />);
+
+    expect(
+      screen
+        .getByRole("link", { name: /open twenty crm/i })
+        .getAttribute("href"),
+    ).toBe("/settings/crm");
   });
 });
 
@@ -86,18 +116,6 @@ const managedApps = [
     displayName: "Twenty CRM",
     desiredStatus: "disabled",
     currentStatus: "running",
-    selectedReleaseVersion: "2026.06.06",
-    selectedManifestDigest: "sha256:manifest",
-    lastJobId: null,
-    updatedAt: "2026-06-06T12:00:00Z",
-  },
-  {
-    __typename: "ManagedApplication",
-    id: "app-kestra",
-    key: "kestra",
-    displayName: "Kestra",
-    desiredStatus: "disabled",
-    currentStatus: "disabled",
     selectedReleaseVersion: "2026.06.06",
     selectedManifestDigest: "sha256:manifest",
     lastJobId: null,
@@ -163,35 +181,6 @@ const deploymentStatus = {
       managedMcpInstalled: false,
       managedMcpInstallAvailable: false,
       managedMcpMessage: null,
-    },
-    {
-      __typename: "ManagedApplicationDeployment",
-      key: "kestra",
-      displayName: "Kestra",
-      description: "Workflow orchestration runtime managed by ThinkWork.",
-      status: "disabled",
-      enabled: false,
-      provisioned: false,
-      runtimeEnabled: false,
-      url: null,
-      endpoint: null,
-      backendMode: null,
-      logGroupName: null,
-      logGroupNames: [],
-      clusterArn: null,
-      serviceName: null,
-      serviceNames: [],
-      albArn: null,
-      targetGroupArn: null,
-      storageBucketName: null,
-      databaseName: null,
-      message: "Kestra has not been provisioned for this stage.",
-      managedMcpServerId: null,
-      managedMcpStatus: "not_ready",
-      managedMcpInstalled: false,
-      managedMcpInstallAvailable: false,
-      managedMcpMessage:
-        "Kestra control MCP registration requires the runtime to be running.",
     },
   ],
 };

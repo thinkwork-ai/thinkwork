@@ -327,6 +327,53 @@ export const EVENT_PAYLOAD_SHAPES: Record<
       "size_bytes",
     ]),
   },
+
+  // ── Application plugins (U5 of 2026-06-12-001 plan) ──────────
+  //
+  // Identifiers only — manifests, endpoint URLs, and component payloads
+  // stay out of the audit log (the signed catalog is the authority for
+  // what a (pluginKey, version, payloadSha256) tuple contains).
+
+  "plugin.installed": {
+    allowedFields: new Set([
+      "pluginInstallId",
+      "pluginKey",
+      "version",
+      "payloadSha256",
+      "componentCount",
+    ]),
+  },
+  "plugin.uninstalled": {
+    allowedFields: new Set(["pluginInstallId", "pluginKey", "version"]),
+  },
+  "plugin.activation_granted": {
+    // tokenCount = number of resource-bound token records minted under
+    // the grant; sharedAudience flags the documented v1 fallback where
+    // the AS rejected per-resource minting and one token covers all
+    // resource records. Scopes/tokens/secret refs never enter the log.
+    allowedFields: new Set([
+      "pluginInstallId",
+      "pluginKey",
+      "tokenCount",
+      "sharedAudience",
+    ]),
+  },
+  "plugin.activation_revoked": {
+    allowedFields: new Set(["pluginInstallId", "pluginKey"]),
+  },
+  "plugin.cutover": {
+    // U10 Twenty cutover: mode = 'adopted' (legacy row taken over in
+    // place) | 'legacy_row_removed' (plugin row already existed);
+    // invalidatedUserTokenCount = per-server user_mcp_tokens deleted so
+    // users re-activate at app level. Identifiers only — no URLs/tokens.
+    allowedFields: new Set([
+      "pluginInstallId",
+      "pluginKey",
+      "mcpServerId",
+      "mode",
+      "invalidatedUserTokenCount",
+    ]),
+  },
 };
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,

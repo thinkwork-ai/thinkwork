@@ -181,10 +181,6 @@ export default defineConfig({
                       slug: "applications/admin/managed-applications",
                     },
                     {
-                      label: "Kestra",
-                      slug: "applications/admin/kestra",
-                    },
-                    {
                       label: "Artifacts",
                       slug: "applications/admin/artifacts",
                     },

@@ -59,6 +59,7 @@ import {
 } from "../lib/workspace-renderer/index.js";
 import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
+import { applyWorkspaceMcpPolicyFilter } from "../lib/plugins/gating.js";
 // Post-AgentCore helpers — previously inline in this file; lifted into
 // the shared chat-finalize lib so chat-agent-finalize (the new HTTP
 // handler) and chat-agent-invoke (this file, for pre-dispatch error
@@ -1167,19 +1168,14 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     const effectiveMcpPolicy = renderedWorkspace.rendered
       ? (renderedWorkspace.effectivePolicy ?? null)
       : null;
-    const effectiveMcpConfigs = mcpConfigs.filter(
-      (config: { name: string }) => {
-        if (effectiveMcpPolicy?.mcpBlockedServers.includes(config.name)) {
-          return false;
-        }
-        if (
-          effectiveMcpPolicy?.mcpAllowedServers &&
-          !effectiveMcpPolicy.mcpAllowedServers.includes(config.name)
-        ) {
-          return false;
-        }
-        return true;
-      },
+    // Shared chokepoint (U7): the TOOLS.md MCP policy filter is the same
+    // function the wakeup-processor applies — the two builders cannot
+    // drift. Plugin activation gating already happened inside
+    // buildMcpConfigs, keyed on the same currentUserId passed to the
+    // workspace render above.
+    const effectiveMcpConfigs = applyWorkspaceMcpPolicyFilter(
+      mcpConfigs,
+      effectiveMcpPolicy,
     );
     const modelRoutingRoutes = effectiveToolPolicy.modelRouting ?? [];
     const modelRoutingPolicy =

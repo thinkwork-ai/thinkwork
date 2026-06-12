@@ -899,7 +899,7 @@ describe("resolveAgentRuntimeConfig", () => {
     ]);
     expect(mockBuildMcpConfigs).toHaveBeenCalledWith(
       AGENT_ID,
-      null,
+      { humanPairId: null, requesterUserId: null },
       expect.stringContaining("agent-runtime-config"),
     );
   });

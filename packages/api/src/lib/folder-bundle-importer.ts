@@ -5,7 +5,7 @@ import {
   release,
 } from "./agent-builder-lock.js";
 import { fetchGitRefAsFileTree } from "./git-ref-fetcher.js";
-import { inspectZipBuffer } from "./plugin-zip-safety.js";
+import { inspectZipBuffer } from "./zip-safety.js";
 import { isReservedFolderSegment } from "./reserved-folder-names.js";
 import {
   type FileTree,

@@ -15,6 +15,16 @@ import {
 import { DrizzleWorkspaceTupleRepository } from "./repository.js";
 import { S3WorkspaceRendererObjectStore } from "./s3-store.js";
 import {
+  EMPTY_PLUGIN_GATE,
+  filterContextRoutingEntries,
+  isNamespacedPluginSkillPath,
+  pluginGateExcludesWorkspacePath,
+  pluginGateHasExclusions,
+  resolvePluginGate,
+  type PluginActivationGate,
+  type ResolvePluginGateArgs,
+} from "../plugins/gating.js";
+import {
   assertSpaceAccessAllowed,
   type SpaceMembershipRepository,
 } from "./space-membership-check.js";
@@ -47,6 +57,16 @@ export interface RenderWorkspaceTupleDeps {
   objectStore?: WorkspaceRendererObjectStore;
   repository?: WorkspaceTupleRepository;
   spaceMembershipRepository?: SpaceMembershipRepository;
+  /**
+   * Plugin activation gate (plan 2026-06-12-001 U7). Injectable for
+   * tests; defaults to the shared `resolvePluginGate`, which fails
+   * CLOSED (pattern-excludes all plugin-namespaced skill folders) on any
+   * resolution error. Only consulted when the agent source actually
+   * contains plugin-namespaced (`skills/<key>--<slug>/`) folders.
+   */
+  pluginGateResolver?: (
+    args: ResolvePluginGateArgs,
+  ) => Promise<PluginActivationGate>;
 }
 
 interface SourceObject extends WorkspaceObjectMetadata {
@@ -477,6 +497,15 @@ function existingManifestMatchesContract(
       return false;
     }
 
+    // EXACT file-set match, not subset: a cached manifest carrying EXTRA
+    // files must re-render. Without this, a manifest rendered for a
+    // plugin-activated requester (containing plugin skill folders) would
+    // serve a cache hit to a gated requester whose expected manifest is a
+    // strict subset — failing the activation gate open (U7).
+    if (parsed.files.length !== expectedManifest.files.length) {
+      return false;
+    }
+
     for (const source of expectedManifest.sources) {
       if (
         !parsed.sources.some(
@@ -683,6 +712,66 @@ export async function renderWorkspaceTuple(
     );
   }
 
+  // Plugin activation gate (U7): plugin-installed skills materialize into
+  // plugin-namespaced `skills/<key>--<slug>/` folders in the agent
+  // workspace source. Requesters without an ACTIVE activation must not
+  // receive those folders (R14/R15) — and with no resolvable requester
+  // the gate fails closed. The gate is only resolved when namespaced
+  // plugin folders are actually present, so tenants without plugins pay
+  // no extra lookups and behavior is byte-identical.
+  const resolveGate = deps.pluginGateResolver ?? resolvePluginGate;
+  let pluginGate: PluginActivationGate = EMPTY_PLUGIN_GATE;
+  if (
+    agentSource.objects.some((object) =>
+      isNamespacedPluginSkillPath(runtimeSourcePath(object.relPath)),
+    )
+  ) {
+    pluginGate = await resolveGate({
+      tenantId: tuple.tenantId,
+      requesterUserId: tuple.userId ?? null,
+    });
+    if (pluginGateHasExclusions(pluginGate)) {
+      agentSource.objects = agentSource.objects.filter(
+        (object) =>
+          !pluginGateExcludesWorkspacePath(
+            pluginGate,
+            runtimeSourcePath(object.relPath),
+          ),
+      );
+    }
+  }
+
+  // Routing entries for plugin skills are CONTEXT.md lines appended at
+  // install time (not render-generated) — for a gated requester the
+  // blocked lines are filtered into a generated per-thread CONTEXT.md
+  // replacement. See gating.ts module doc for the AGENTS.md finding.
+  let gatedContextFile: GeneratedWorkspaceFile | null = null;
+  if (pluginGateHasExclusions(pluginGate)) {
+    const contextObject = agentSource.objects.find(
+      (object) => runtimeSourcePath(object.relPath) === "CONTEXT.md",
+    );
+    if (contextObject) {
+      const rawContext = await objectStore.getText({
+        bucket,
+        key: contextObject.key,
+      });
+      if (rawContext !== null) {
+        const filteredContext = filterContextRoutingEntries(
+          rawContext,
+          pluginGate,
+        );
+        if (filteredContext.changed) {
+          gatedContextFile = {
+            path: "CONTEXT.md",
+            key: `${renderedPrefix}CONTEXT.md`,
+            content: filteredContext.content,
+            owner: "agent",
+          };
+        }
+      }
+    }
+  }
+
   const sourcePrefixes = [
     agentPrefix,
     spacePrefix,
@@ -703,14 +792,22 @@ export async function renderWorkspaceTuple(
     agentAllowedTools: input.agentAllowedTools,
     modelRoutingSources,
   });
-  const [authorizedSpaces, marker, existingManifest, existingSpaceIndex] =
-    await Promise.all([
-      repository.listAuthorizedSpaces?.(tuple) ??
-        Promise.resolve(fallbackAuthorizedSpaces(tuple)),
-      objectStore.getText({ bucket, key: markerKey }),
-      objectStore.getText({ bucket, key: manifestKey }),
-      objectStore.getText({ bucket, key: spaceIndexKey }),
-    ]);
+  const [
+    authorizedSpaces,
+    marker,
+    existingManifest,
+    existingSpaceIndex,
+    existingGatedContext,
+  ] = await Promise.all([
+    repository.listAuthorizedSpaces?.(tuple) ??
+      Promise.resolve(fallbackAuthorizedSpaces(tuple)),
+    objectStore.getText({ bucket, key: markerKey }),
+    objectStore.getText({ bucket, key: manifestKey }),
+    objectStore.getText({ bucket, key: spaceIndexKey }),
+    gatedContextFile
+      ? objectStore.getText({ bucket, key: gatedContextFile.key })
+      : Promise.resolve(null),
+  ]);
   const spaceIndex = renderSpaceIndexMarkdown({
     tuple,
     spaces: authorizedSpaces,
@@ -722,6 +819,7 @@ export async function renderWorkspaceTuple(
       content: spaceIndex,
       owner: "thread_goal",
     },
+    ...(gatedContextFile ? [gatedContextFile] : []),
   ];
   const sourceLatest = latestMtime([
     agentSource,
@@ -753,6 +851,7 @@ export async function renderWorkspaceTuple(
   const cacheIsFresh =
     existingManifest !== null &&
     existingSpaceIndex === spaceIndex &&
+    (!gatedContextFile || existingGatedContext === gatedContextFile.content) &&
     markerFresh &&
     existingManifestMatchesContract(existingManifest, hydrateManifest);
   if (cacheIsFresh) {
@@ -795,13 +894,18 @@ export async function renderWorkspaceTuple(
           generatedFiles,
           tuple,
         });
-  const writtenFiles = ["Spaces/INDEX.md", HYDRATE_MANIFEST_PATH];
-  await objectStore.putText({
-    bucket,
-    key: spaceIndexKey,
-    content: spaceIndex,
-    contentType: "text/markdown; charset=utf-8",
-  });
+  const writtenFiles = [
+    ...generatedFiles.map((generatedFile) => generatedFile.path),
+    HYDRATE_MANIFEST_PATH,
+  ];
+  for (const generatedFile of generatedFiles) {
+    await objectStore.putText({
+      bucket,
+      key: generatedFile.key,
+      content: generatedFile.content,
+      contentType: "text/markdown; charset=utf-8",
+    });
+  }
   await objectStore.putText({
     bucket,
     key: manifestKey,

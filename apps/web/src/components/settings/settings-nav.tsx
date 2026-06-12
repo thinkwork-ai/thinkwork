@@ -15,7 +15,7 @@ import {
   Webhook,
   Wrench,
 } from "lucide-react";
-import { IconApps, IconPlanet } from "@tabler/icons-react";
+import { IconApps, IconPlanet, IconPlug } from "@tabler/icons-react";
 import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
@@ -27,8 +27,13 @@ export interface SettingsNavItem {
   operatorOnly?: boolean;
   /** When true, only render in the desktop build (needs the local bridge). */
   desktopOnly?: boolean;
-  /** Optional managed app that must be runtime-enabled before the item shows. */
-  managedAppKey?: "cognee" | "twenty" | "kestra";
+  /**
+   * Optional managed app that must be runtime-enabled before the item shows.
+   * Cognee-only since the U10 Twenty plugin migration: Twenty's surfaces
+   * (plugin detail + /settings/crm) gate on plugin/deployment state, not on
+   * a nav-level managed-app guard.
+   */
+  managedAppKey?: "cognee";
 }
 
 // General first (visible to all), then operator-only sections. Appearance is
@@ -82,6 +87,14 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/managed-applications",
     icon: IconApps,
     operatorOnly: true,
+  },
+  // Plugins is deliberately NOT operatorOnly (plan 2026-06-12-001 U8): all
+  // members can browse and connect; install/update/uninstall gate at render
+  // time inside the pages.
+  {
+    label: "Plugins",
+    to: "/settings/plugins",
+    icon: IconPlug,
   },
   {
     label: "Activity",
@@ -142,9 +155,7 @@ export function visibleSettingsNavItems(opts: {
   isOperator: boolean;
   roleResolved: boolean;
   isDesktop: boolean;
-  managedApplications?: Partial<
-    Record<"cognee" | "twenty" | "kestra", boolean>
-  >;
+  managedApplications?: Partial<Record<"cognee", boolean>>;
 }): SettingsNavItem[] {
   return SETTINGS_NAV_ITEMS.filter(
     (item) =>

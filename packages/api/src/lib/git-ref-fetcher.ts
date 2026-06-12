@@ -1,4 +1,4 @@
-import { inspectZipBuffer } from "./plugin-zip-safety.js";
+import { inspectZipBuffer } from "./zip-safety.js";
 
 export interface GitRefFetchInput {
   url: string;

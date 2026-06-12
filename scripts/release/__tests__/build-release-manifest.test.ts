@@ -85,9 +85,6 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
         architecture: "amd64",
       },
       parseRuntimeImageSpec(
-        "name=kestra,uri=kestra/kestra@sha256:4444444444444444444444444444444444444444444444444444444444444444,architecture=amd64",
-      ),
-      parseRuntimeImageSpec(
         "name=twenty,uri=twentycrm/twenty@sha256:5555555555555555555555555555555555555555555555555555555555555555,architecture=amd64",
       ),
     ],
@@ -123,7 +120,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   assert.equal(manifest.artifacts[0]?.sha256.length, 64);
   assert.deepEqual(
     manifest.runtimeImages.map((image) => image.name),
-    ["agentcore-pi-amd64", "agentcore-pi-arm64", "cognee", "kestra", "twenty"],
+    ["agentcore-pi-amd64", "agentcore-pi-arm64", "cognee", "twenty"],
   );
   assert.equal(
     manifest.runtimeImages.find((image) => image.name === "agentcore-pi-amd64")
@@ -136,7 +133,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   );
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "kestra", "twenty"],
+    ["cognee", "twenty"],
   );
   assert.deepEqual(
     Object.fromEntries(
@@ -144,7 +141,6 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     ),
     {
       cognee: ["cognee"],
-      kestra: ["kestra"],
       twenty: ["twenty"],
     },
   );
@@ -304,16 +300,13 @@ test("CLI build script includes default managed apps when no overrides are passe
   ) as ThinkWorkReleaseManifest;
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "kestra", "twenty"],
+    ["cognee", "twenty"],
   );
   assert.deepEqual(
     manifest.managedApps
-      .find((app) => app.id === "kestra")
+      .find((app) => app.id === "twenty")
       ?.smokeContracts?.map((contract) => contract.command),
-    [
-      "scripts/smoke/kestra-managed-app-smoke.mjs",
-      "scripts/smoke/kestra-control-mcp-smoke.mjs",
-    ],
+    ["scripts/smoke/twenty-managed-app-smoke.mjs"],
   );
 });
 

@@ -1,7 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import { LogOut, RefreshCw, Settings, TriangleAlert } from "lucide-react";
+import {
+  LogOut,
+  RefreshCw,
+  Settings,
+  TriangleAlert,
+} from "lucide-react";
+import { IconPlug } from "@tabler/icons-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,7 +42,10 @@ import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 import { rememberSettingsReturnTo } from "@/lib/settings-return";
-import { SidebarDeployedReleaseQuery } from "@/lib/settings-queries";
+import {
+  SettingsMyPluginActivationsQuery,
+  SidebarDeployedReleaseQuery,
+} from "@/lib/settings-queries";
 import { useTenant } from "@/context/TenantContext";
 
 export function SpacesSidebar() {
@@ -63,6 +72,15 @@ export function SpacesSidebar() {
   const deployedReleaseVersion =
     deployedReleaseResult.data?.deploymentStatus?.releaseVersion?.trim() ||
     deploymentProfile.releaseVersion;
+  // Plugin activations that need re-auth surface on the footer health
+  // affordance (plan 2026-06-12-001 U8) — an amber dot on the gear plus a
+  // "Reconnect" entry in the menu, mirroring the sidebar-sync warning.
+  const [pluginActivationsResult] = useQuery({
+    query: SettingsMyPluginActivationsQuery,
+  });
+  const pluginReauthCount = (
+    pluginActivationsResult.data?.myPluginActivations ?? []
+  ).filter((activation) => activation.status === "needs_reauth").length;
 
   return (
     <SidebarHealthProvider>
@@ -109,6 +127,11 @@ export function SpacesSidebar() {
             name={user?.name}
             email={user?.email}
             deployedReleaseVersion={deployedReleaseVersion}
+            pluginReauthCount={pluginReauthCount}
+            onOpenPlugins={() => {
+              rememberSettingsReturnTo(currentPath);
+              navigate({ to: "/settings/plugins" });
+            }}
             onOpenSettings={() => {
               rememberSettingsReturnTo(currentPath);
               navigate({ to: "/settings" });
@@ -132,12 +155,17 @@ function AccountMenu({
   name,
   email,
   deployedReleaseVersion,
+  pluginReauthCount = 0,
+  onOpenPlugins,
   onOpenSettings,
   onSignOut,
 }: {
   name?: string | null;
   email?: string | null;
   deployedReleaseVersion?: string | null;
+  /** Count of the caller's plugin activations in `needs_reauth`. */
+  pluginReauthCount?: number;
+  onOpenPlugins?: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
 }) {
@@ -161,12 +189,14 @@ function AccountMenu({
           aria-label={
             sidebarHealth.hasError
               ? "Open settings menu (sync issue)"
-              : "Open settings menu"
+              : pluginReauthCount > 0
+                ? "Open settings menu (plugin reconnect needed)"
+                : "Open settings menu"
           }
         >
           <span className="relative shrink-0">
             <Settings className="size-4" />
-            {sidebarHealth.hasError ? (
+            {sidebarHealth.hasError || pluginReauthCount > 0 ? (
               <span
                 className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500 ring-2 ring-sidebar"
                 aria-hidden
@@ -217,6 +247,23 @@ function AccountMenu({
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               Retry
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
+        {pluginReauthCount > 0 ? (
+          <>
+            <div className="flex items-start gap-2 px-2 py-1.5 text-xs text-amber-500">
+              <TriangleAlert className="mt-px size-3.5 shrink-0" />
+              <span>
+                {pluginReauthCount === 1
+                  ? "A plugin connection needs to be reconnected."
+                  : `${pluginReauthCount} plugin connections need to be reconnected.`}
+              </span>
+            </div>
+            <DropdownMenuItem onSelect={() => onOpenPlugins?.()}>
+              <IconPlug className="mr-2 h-4 w-4" />
+              Reconnect plugins
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>

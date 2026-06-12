@@ -154,10 +154,17 @@ export async function handler(
     .limit(1);
   if (!agent) return notFound("Agent not found");
 
-  // Resolve the agent's MCP servers, with per-user OAuth scoped to the CALLER.
+  // Resolve the agent's MCP servers, with per-user OAuth scoped to the
+  // CALLER — for both halves of the dispatch identity: direct
+  // per_user_oauth servers resolve user_mcp_tokens by the caller, and
+  // plugin-managed servers resolve activation tokens by the caller.
   let configs: McpServerConfig[];
   try {
-    configs = await buildMcpConfigs(body.agentId, userRow.id, LOG_PREFIX);
+    configs = await buildMcpConfigs(
+      body.agentId,
+      { humanPairId: userRow.id, requesterUserId: userRow.id },
+      LOG_PREFIX,
+    );
   } catch (err) {
     console.error(`${LOG_PREFIX} buildMcpConfigs failed:`, err);
     return error("Failed to resolve MCP servers", 502);

@@ -210,7 +210,7 @@ describe("GET /api/skills/user-mcp-servers", () => {
   });
 
   it("does not expose managed tenant API key servers as user-auth connectors without an agent assignment", async () => {
-    dbState.selectQueue.push([], [managedKestraRow()]);
+    dbState.selectQueue.push([], [managedTenantApiKeyRow()]);
 
     const response = await handler(event());
     const body = JSON.parse(response.body ?? "{}") as { servers: unknown[] };
@@ -284,17 +284,17 @@ function managedTwentyRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function managedKestraRow(overrides: Record<string, unknown> = {}) {
+function managedTenantApiKeyRow(overrides: Record<string, unknown> = {}) {
   return {
-    mcp_server_id: "kestra",
-    name: "Kestra",
-    slug: "kestra-control",
-    url: "https://api.thinkwork.test/mcp/kestra",
+    mcp_server_id: "control-server",
+    name: "Control",
+    slug: "control-server",
+    url: "https://api.thinkwork.test/mcp/control",
     auth_type: "tenant_api_key",
-    tools: [{ name: "kestra_flows_upsert" }],
+    tools: [{ name: "control_tool" }],
     server_enabled: true,
     management_source: "managed_application",
-    managed_application_key: "kestra",
+    managed_application_key: "control-server",
     ...overrides,
   };
 }

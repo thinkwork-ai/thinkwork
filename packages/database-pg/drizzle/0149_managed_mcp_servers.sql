@@ -8,8 +8,8 @@
 -- creates-column: public.tenant_mcp_servers.management_source
 -- creates-column: public.tenant_mcp_servers.managed_application_key
 -- creates: public.uq_tenant_mcp_servers_managed_application
--- creates-constraint: public.tenant_mcp_servers.tenant_mcp_servers_management_source_check
--- creates-constraint: public.tenant_mcp_servers.tenant_mcp_servers_managed_application_shape_check
+-- creates-constraint: public.tenant_mcp_servers.tenant_mcp_servers_management_source_check_v2
+-- creates-constraint: public.tenant_mcp_servers.tenant_mcp_servers_managed_application_shape_check_v2
 
 \set ON_ERROR_STOP on
 

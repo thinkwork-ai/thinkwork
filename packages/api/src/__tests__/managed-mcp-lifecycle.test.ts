@@ -3,11 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { tenantMcpServers } from "@thinkwork/database-pg/schema";
 import {
-  KESTRA_MANAGED_MCP_KEY,
-  KESTRA_MANAGED_MCP_SLUG,
-  reconcileKestraManagedMcp,
   reconcileTwentyManagedMcp,
-  summarizeKestraManagedMcpState,
   summarizeTwentyManagedMcpState,
   twentyMcpUrlFromApplicationUrl,
 } from "../lib/managed-mcp-applications.js";
@@ -132,10 +128,38 @@ describe("Twenty managed MCP lifecycle", () => {
     });
   });
 
+  it("no-ops when a plugin-owned Twenty MCP row exists (U10 ownership guard)", async () => {
+    const writes: Array<Record<string, unknown>> = [];
+    const fakeDb = queueDb({
+      // First select = the plugin-ownership guard lookup.
+      selects: [[{ id: "server-plugin" }]],
+      inserts: writes,
+    });
+
+    await expect(
+      reconcileTwentyManagedMcp({
+        tenantId: "tenant-1",
+        application: runningTwenty(),
+        mode: "destroyed",
+        db: fakeDb as any,
+      }),
+    ).resolves.toMatchObject({
+      serverId: "server-plugin",
+      installed: true,
+      installAvailable: false,
+      status: "plugin_managed",
+    });
+
+    // Nothing written: the legacy reconciler must never fight the plugin row.
+    expect(writes).toHaveLength(0);
+  });
+
   it("assigns the managed Twenty MCP server to the tenant platform default agent on first install", async () => {
     const writes: Array<Record<string, unknown>> = [];
     const fakeDb = queueDb({
-      selects: [[], [], [{ id: "agent-platform" }]],
+      // guard (no plugin row), existing managed row, manual-slug check,
+      // platform agents.
+      selects: [[], [], [], [{ id: "agent-platform" }]],
       inserts: writes,
     });
 
@@ -170,145 +194,6 @@ describe("Twenty managed MCP lifecycle", () => {
   });
 });
 
-describe("Kestra managed MCP lifecycle", () => {
-  it("marks a running Kestra deployment as installable when the managed MCP row is missing", () => {
-    process.env.THINKWORK_API_URL = "https://api.thinkwork.test";
-    const state = summarizeKestraManagedMcpState(runningKestra(), null);
-
-    expect(state).toMatchObject({
-      serverId: null,
-      installed: false,
-      installAvailable: true,
-      status: "missing",
-    });
-  });
-
-  it("recognizes an approved managed Kestra control row as installed", () => {
-    process.env.THINKWORK_API_URL = "https://api.thinkwork.test";
-    const url = "https://api.thinkwork.test/mcp/kestra";
-    const authConfig = {
-      secretRef: "thinkwork/dev/mcp/tenant-1/kestra-control",
-    };
-    const state = summarizeKestraManagedMcpState(runningKestra(), {
-      id: "server-1",
-      slug: KESTRA_MANAGED_MCP_SLUG,
-      url,
-      enabled: true,
-      status: "approved",
-      url_hash: computeMcpUrlHash(url, authConfig),
-      auth_config: authConfig,
-      management_source: "managed_application",
-      managed_application_key: KESTRA_MANAGED_MCP_KEY,
-    });
-
-    expect(state).toMatchObject({
-      serverId: "server-1",
-      installed: true,
-      installAvailable: false,
-      status: "installed",
-    });
-  });
-
-  it("registers Kestra with a Secrets Manager bearer reference and no plaintext token", async () => {
-    process.env.STAGE = "dev";
-    process.env.THINKWORK_API_URL = "https://api.thinkwork.test";
-    const writes: Array<Record<string, unknown>> = [];
-    const fakeDb = queueDb({
-      selects: [[], [], [{ id: "agent-platform" }]],
-      inserts: writes,
-    });
-    const secretWrites: unknown[] = [];
-    const secretsManager = {
-      send: async (command: unknown) => {
-        secretWrites.push(command);
-        return {};
-      },
-    };
-
-    await expect(
-      reconcileKestraManagedMcp({
-        tenantId: "tenant-1",
-        application: runningKestra(),
-        mode: "running",
-        db: fakeDb as any,
-        secretsManager: secretsManager as any,
-      }),
-    ).resolves.toMatchObject({
-      serverId: "server-1",
-      installed: true,
-      status: "installed",
-    });
-
-    expect(writes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          tenant_id: "tenant-1",
-          name: "kestra-control",
-        }),
-        expect.objectContaining({
-          tenant_id: "tenant-1",
-          name: "Kestra",
-          slug: "kestra-control",
-          url: "https://api.thinkwork.test/mcp/kestra",
-          auth_type: "tenant_api_key",
-          auth_config: {
-            secretRef: "thinkwork/dev/mcp/tenant-1/kestra-control",
-          },
-          management_source: "managed_application",
-          managed_application_key: "kestra",
-          status: "approved",
-        }),
-      ]),
-    );
-    const managedRow = writes.find((write) => write.slug === "kestra-control");
-    expect(managedRow?.auth_config).not.toHaveProperty("token");
-    expect(secretWrites).toHaveLength(1);
-  });
-
-  it("repairs Kestra without rotating an existing bearer secret reference", async () => {
-    process.env.THINKWORK_API_URL = "https://api.thinkwork.test";
-    const existingRow = {
-      id: "server-existing",
-      slug: KESTRA_MANAGED_MCP_SLUG,
-      url: "https://old-api.thinkwork.test/mcp/kestra",
-      enabled: true,
-      status: "approved",
-      url_hash: "stale",
-      auth_config: {
-        secretRef: "thinkwork/dev/mcp/tenant-1/kestra-control",
-      },
-      management_source: "managed_application",
-      managed_application_key: KESTRA_MANAGED_MCP_KEY,
-    };
-    const writes: Array<Record<string, unknown>> = [];
-    const fakeDb = queueDb({
-      selects: [[existingRow], [], [{ id: "agent-platform" }]],
-      inserts: writes,
-    });
-    const secretsManager = { send: async () => ({}) };
-
-    await expect(
-      reconcileKestraManagedMcp({
-        tenantId: "tenant-1",
-        application: runningKestra(),
-        mode: "running",
-        db: fakeDb as any,
-        secretsManager: secretsManager as any,
-      }),
-    ).resolves.toMatchObject({
-      serverId: "server-existing",
-      status: "installed",
-    });
-
-    expect(writes).toEqual([
-      expect.objectContaining({
-        agent_id: "agent-platform",
-        mcp_server_id: "server-existing",
-      }),
-    ]);
-  });
-});
-
 function runningTwenty() {
   return {
     key: "twenty" as const,
@@ -330,36 +215,6 @@ function runningTwenty() {
     targetGroupArn: null,
     storageBucketName: null,
     databaseName: null,
-    message: null,
-    managedMcpServerId: null,
-    managedMcpStatus: "missing",
-    managedMcpInstalled: false,
-    managedMcpInstallAvailable: true,
-    managedMcpMessage: null,
-  };
-}
-
-function runningKestra() {
-  return {
-    key: "kestra" as const,
-    displayName: "Kestra",
-    description: "Workflow orchestration runtime managed by ThinkWork.",
-    status: "running" as const,
-    enabled: true,
-    provisioned: true,
-    runtimeEnabled: true,
-    url: "https://orchestrate.thinkwork.ai",
-    endpoint: "https://orchestrate.thinkwork.ai",
-    backendMode: null,
-    logGroupName: null,
-    logGroupNames: [],
-    clusterArn: null,
-    serviceName: null,
-    serviceNames: [],
-    albArn: null,
-    targetGroupArn: null,
-    storageBucketName: "kestra-bucket",
-    databaseName: "thinkwork_kestra",
     message: null,
     managedMcpServerId: null,
     managedMcpStatus: "missing",

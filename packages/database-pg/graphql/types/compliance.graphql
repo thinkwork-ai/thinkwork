@@ -56,6 +56,11 @@ enum ComplianceEventType {
   ATTACHMENT_RECEIVED
   SKILL_ACTIVATED
   OUTPUT_ARTIFACT_PRODUCED
+  PLUGIN_INSTALLED
+  PLUGIN_UNINSTALLED
+  PLUGIN_ACTIVATION_GRANTED
+  PLUGIN_ACTIVATION_REVOKED
+  PLUGIN_CUTOVER
 }
 
 enum ComplianceAnchorState {
@@ -181,7 +186,9 @@ extend type Query {
 }
 
 type ComplianceOperatorCheckResult {
-  """True when the caller's email matches THINKWORK_PLATFORM_OPERATOR_EMAILS."""
+  """
+  True when the caller's email matches THINKWORK_PLATFORM_OPERATOR_EMAILS.
+  """
   isOperator: Boolean!
   """
   True when the env var is non-empty. False means the dev/staging

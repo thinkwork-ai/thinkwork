@@ -58,6 +58,7 @@ import {
   runWebSearch,
 } from "../lib/builtin-tools/web-search.js";
 import { runFirecrawlScrape } from "../lib/builtin-tools/web-extract.js";
+import { pluginOAuthAuthorize, pluginOAuthCallback } from "./plugin-oauth.js";
 
 export { loadTenantBuiltinTools };
 
@@ -102,12 +103,32 @@ export async function handler(
     }
   }
 
+  // Plugin app-level OAuth callback is public (browser redirect from the
+  // AS; the HMAC-signed state is the authenticator — plan U6). The
+  // authorize route is NOT here: it requires the authenticated principal.
+  if (path === "/api/skills/plugin-oauth/callback" && method === "GET") {
+    try {
+      return await pluginOAuthCallback(event);
+    } catch (err) {
+      console.error("Plugin OAuth callback error:", err);
+      return error("Internal server error", 500);
+    }
+  }
+
   // Accept Cognito JWT (admin UI, mobile), Bearer API_AUTH_SECRET (service), or
   // x-api-key (AppSync / app-manager). Validation lives in authenticate().
   const auth = await authenticate(event.headers);
   if (!auth) return unauthorized();
 
   try {
+    // GET /api/skills/plugin-oauth/authorize — app-level plugin activation
+    // (plan U6). Authenticated: the activating user is the CANONICAL
+    // caller bound from the auth principal; a userId query param is never
+    // trusted (unlike the legacy per-server mcp-oauth authorize route).
+    if (path === "/api/skills/plugin-oauth/authorize" && method === "GET") {
+      return pluginOAuthAuthorize(event, auth);
+    }
+
     // --- Catalog routes ---
 
     // GET /api/skills/catalog

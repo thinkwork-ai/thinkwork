@@ -41,20 +41,14 @@ export function SettingsSidebar({
     pause: !showOperator,
   });
   const deployment = deploymentResult.data?.deploymentStatus;
+  // Cognee-only since the U10 Twenty plugin migration — Twenty no longer
+  // has a managed-app-gated nav entry (it lives under Plugins).
   const managedApplications = {
     cognee:
       deployment?.managedApplications.find((app) => app.key === "cognee")
         ?.runtimeEnabled ??
       deployment?.cogneeEnabled ??
       false,
-    twenty:
-      deployment?.managedApplications.find((app) => app.key === "twenty")
-        ?.runtimeEnabled ??
-      deployment?.twentyRuntimeEnabled ??
-      false,
-    kestra:
-      deployment?.managedApplications.find((app) => app.key === "kestra")
-        ?.runtimeEnabled ?? false,
   };
 
   // Hide operator items until the role is known, to avoid a flash of operator

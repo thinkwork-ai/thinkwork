@@ -42,6 +42,7 @@ import { Route as AuthedSettingsUsersIndexRouteImport } from "./routes/_authed/s
 import { Route as AuthedSettingsSpacesIndexRouteImport } from "./routes/_authed/settings.spaces.index";
 import { Route as AuthedSettingsSkillsIndexRouteImport } from "./routes/_authed/settings.skills.index";
 import { Route as AuthedSettingsRoutinesIndexRouteImport } from "./routes/_authed/settings.routines.index";
+import { Route as AuthedSettingsPluginsIndexRouteImport } from "./routes/_authed/settings.plugins.index";
 import { Route as AuthedSettingsMcpServersIndexRouteImport } from "./routes/_authed/settings.mcp-servers.index";
 import { Route as AuthedSettingsKnowledgeBasesIndexRouteImport } from "./routes/_authed/settings.knowledge-bases.index";
 import { Route as AuthedSettingsEvaluationsIndexRouteImport } from "./routes/_authed/settings.evaluations.index";
@@ -60,6 +61,7 @@ import { Route as AuthedSettingsUsersUserIdRouteImport } from "./routes/_authed/
 import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authed/settings.spaces.$spaceId";
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
+import { Route as AuthedSettingsPluginsPluginKeyRouteImport } from "./routes/_authed/settings.plugins.$pluginKey";
 import { Route as AuthedSettingsMemoryWikiRouteImport } from "./routes/_authed/settings.memory.wiki";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
 import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
@@ -68,7 +70,6 @@ import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
 import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
-import { Route as AuthedSettingsApplicationsKestraRouteImport } from "./routes/_authed/settings.applications.kestra";
 import { Route as AuthedSettingsApplicationsCogneeRouteImport } from "./routes/_authed/settings.applications.cognee";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
@@ -264,6 +265,12 @@ const AuthedSettingsRoutinesIndexRoute =
     path: "/routines/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsPluginsIndexRoute =
+  AuthedSettingsPluginsIndexRouteImport.update({
+    id: "/plugins/",
+    path: "/plugins/",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsMcpServersIndexRoute =
   AuthedSettingsMcpServersIndexRouteImport.update({
     id: "/mcp-servers/",
@@ -369,6 +376,12 @@ const AuthedSettingsRoutinesRoutineIdRoute =
     path: "/routines/$routineId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsPluginsPluginKeyRoute =
+  AuthedSettingsPluginsPluginKeyRouteImport.update({
+    id: "/plugins/$pluginKey",
+    path: "/plugins/$pluginKey",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsMemoryWikiRoute =
   AuthedSettingsMemoryWikiRouteImport.update({
     id: "/wiki",
@@ -416,12 +429,6 @@ const AuthedSettingsArtifactsIdRoute =
     id: "/$id",
     path: "/$id",
     getParentRoute: () => AuthedSettingsArtifactsRoute,
-  } as any);
-const AuthedSettingsApplicationsKestraRoute =
-  AuthedSettingsApplicationsKestraRouteImport.update({
-    id: "/applications/kestra",
-    path: "/applications/kestra",
-    getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsApplicationsCogneeRoute =
   AuthedSettingsApplicationsCogneeRouteImport.update({
@@ -593,7 +600,6 @@ export interface FileRoutesByFullPath {
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
-  "/settings/applications/kestra": typeof AuthedSettingsApplicationsKestraRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -602,6 +608,7 @@ export interface FileRoutesByFullPath {
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
+  "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -620,6 +627,7 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
   "/settings/knowledge-bases/": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/settings/mcp-servers/": typeof AuthedSettingsMcpServersIndexRoute;
+  "/settings/plugins/": typeof AuthedSettingsPluginsIndexRoute;
   "/settings/routines/": typeof AuthedSettingsRoutinesIndexRoute;
   "/settings/skills/": typeof AuthedSettingsSkillsIndexRoute;
   "/settings/spaces/": typeof AuthedSettingsSpacesIndexRoute;
@@ -670,7 +678,6 @@ export interface FileRoutesByTo {
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
-  "/settings/applications/kestra": typeof AuthedSettingsApplicationsKestraRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -679,6 +686,7 @@ export interface FileRoutesByTo {
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
+  "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -697,6 +705,7 @@ export interface FileRoutesByTo {
   "/settings/evaluations": typeof AuthedSettingsEvaluationsIndexRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/settings/mcp-servers": typeof AuthedSettingsMcpServersIndexRoute;
+  "/settings/plugins": typeof AuthedSettingsPluginsIndexRoute;
   "/settings/routines": typeof AuthedSettingsRoutinesIndexRoute;
   "/settings/skills": typeof AuthedSettingsSkillsIndexRoute;
   "/settings/spaces": typeof AuthedSettingsSpacesIndexRoute;
@@ -755,7 +764,6 @@ export interface FileRoutesById {
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/_authed/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
-  "/_authed/settings/applications/kestra": typeof AuthedSettingsApplicationsKestraRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -764,6 +772,7 @@ export interface FileRoutesById {
   "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
+  "/_authed/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/_authed/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -782,6 +791,7 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
   "/_authed/settings/knowledge-bases/": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/_authed/settings/mcp-servers/": typeof AuthedSettingsMcpServersIndexRoute;
+  "/_authed/settings/plugins/": typeof AuthedSettingsPluginsIndexRoute;
   "/_authed/settings/routines/": typeof AuthedSettingsRoutinesIndexRoute;
   "/_authed/settings/skills/": typeof AuthedSettingsSkillsIndexRoute;
   "/_authed/settings/spaces/": typeof AuthedSettingsSpacesIndexRoute;
@@ -839,7 +849,6 @@ export interface FileRouteTypes {
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
     | "/settings/applications/cognee"
-    | "/settings/applications/kestra"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -848,6 +857,7 @@ export interface FileRouteTypes {
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/wiki"
+    | "/settings/plugins/$pluginKey"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/spaces/$spaceId"
@@ -866,6 +876,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/"
     | "/settings/knowledge-bases/"
     | "/settings/mcp-servers/"
+    | "/settings/plugins/"
     | "/settings/routines/"
     | "/settings/skills/"
     | "/settings/spaces/"
@@ -916,7 +927,6 @@ export interface FileRouteTypes {
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
     | "/settings/applications/cognee"
-    | "/settings/applications/kestra"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -925,6 +935,7 @@ export interface FileRouteTypes {
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/wiki"
+    | "/settings/plugins/$pluginKey"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/spaces/$spaceId"
@@ -943,6 +954,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations"
     | "/settings/knowledge-bases"
     | "/settings/mcp-servers"
+    | "/settings/plugins"
     | "/settings/routines"
     | "/settings/skills"
     | "/settings/spaces"
@@ -1000,7 +1012,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/activity_/$threadId"
     | "/_authed/settings/agents/$profileId"
     | "/_authed/settings/applications/cognee"
-    | "/_authed/settings/applications/kestra"
     | "/_authed/settings/artifacts/$id"
     | "/_authed/settings/automations/$scheduledJobId"
     | "/_authed/settings/evaluations/$runId"
@@ -1009,6 +1020,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/memory/knowledge-bases"
     | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/wiki"
+    | "/_authed/settings/plugins/$pluginKey"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
     | "/_authed/settings/spaces/$spaceId"
@@ -1027,6 +1039,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/"
     | "/_authed/settings/knowledge-bases/"
     | "/_authed/settings/mcp-servers/"
+    | "/_authed/settings/plugins/"
     | "/_authed/settings/routines/"
     | "/_authed/settings/skills/"
     | "/_authed/settings/spaces/"
@@ -1285,6 +1298,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/plugins/": {
+      id: "/_authed/settings/plugins/";
+      path: "/plugins";
+      fullPath: "/settings/plugins/";
+      preLoaderRoute: typeof AuthedSettingsPluginsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/mcp-servers/": {
       id: "/_authed/settings/mcp-servers/";
       path: "/mcp-servers";
@@ -1411,6 +1431,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesRoutineIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/plugins/$pluginKey": {
+      id: "/_authed/settings/plugins/$pluginKey";
+      path: "/plugins/$pluginKey";
+      fullPath: "/settings/plugins/$pluginKey";
+      preLoaderRoute: typeof AuthedSettingsPluginsPluginKeyRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/memory/wiki": {
       id: "/_authed/settings/memory/wiki";
       path: "/wiki";
@@ -1466,13 +1493,6 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/artifacts/$id";
       preLoaderRoute: typeof AuthedSettingsArtifactsIdRouteImport;
       parentRoute: typeof AuthedSettingsArtifactsRoute;
-    };
-    "/_authed/settings/applications/kestra": {
-      id: "/_authed/settings/applications/kestra";
-      path: "/applications/kestra";
-      fullPath: "/settings/applications/kestra";
-      preLoaderRoute: typeof AuthedSettingsApplicationsKestraRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/applications/cognee": {
       id: "/_authed/settings/applications/cognee";
@@ -1807,11 +1827,11 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsActivityThreadIdRoute: typeof AuthedSettingsActivityThreadIdRoute;
   AuthedSettingsAgentsProfileIdRoute: typeof AuthedSettingsAgentsProfileIdRoute;
   AuthedSettingsApplicationsCogneeRoute: typeof AuthedSettingsApplicationsCogneeRoute;
-  AuthedSettingsApplicationsKestraRoute: typeof AuthedSettingsApplicationsKestraRoute;
   AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   AuthedSettingsMcpServersServerIdRoute: typeof AuthedSettingsMcpServersServerIdRoute;
+  AuthedSettingsPluginsPluginKeyRoute: typeof AuthedSettingsPluginsPluginKeyRoute;
   AuthedSettingsRoutinesRoutineIdRoute: typeof AuthedSettingsRoutinesRoutineIdRoute;
   AuthedSettingsSkillsSkillSlugRoute: typeof AuthedSettingsSkillsSkillSlugRoute;
   AuthedSettingsSpacesSpaceIdRoute: typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -1822,6 +1842,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsIndexRoute: typeof AuthedSettingsEvaluationsIndexRoute;
   AuthedSettingsKnowledgeBasesIndexRoute: typeof AuthedSettingsKnowledgeBasesIndexRoute;
   AuthedSettingsMcpServersIndexRoute: typeof AuthedSettingsMcpServersIndexRoute;
+  AuthedSettingsPluginsIndexRoute: typeof AuthedSettingsPluginsIndexRoute;
   AuthedSettingsRoutinesIndexRoute: typeof AuthedSettingsRoutinesIndexRoute;
   AuthedSettingsSkillsIndexRoute: typeof AuthedSettingsSkillsIndexRoute;
   AuthedSettingsSpacesIndexRoute: typeof AuthedSettingsSpacesIndexRoute;
@@ -1853,12 +1874,12 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsActivityThreadIdRoute: AuthedSettingsActivityThreadIdRoute,
   AuthedSettingsAgentsProfileIdRoute: AuthedSettingsAgentsProfileIdRoute,
   AuthedSettingsApplicationsCogneeRoute: AuthedSettingsApplicationsCogneeRoute,
-  AuthedSettingsApplicationsKestraRoute: AuthedSettingsApplicationsKestraRoute,
   AuthedSettingsAutomationsScheduledJobIdRoute:
     AuthedSettingsAutomationsScheduledJobIdRoute,
   AuthedSettingsEvaluationsRunIdRoute: AuthedSettingsEvaluationsRunIdRoute,
   AuthedSettingsKnowledgeBasesKbIdRoute: AuthedSettingsKnowledgeBasesKbIdRoute,
   AuthedSettingsMcpServersServerIdRoute: AuthedSettingsMcpServersServerIdRoute,
+  AuthedSettingsPluginsPluginKeyRoute: AuthedSettingsPluginsPluginKeyRoute,
   AuthedSettingsRoutinesRoutineIdRoute: AuthedSettingsRoutinesRoutineIdRoute,
   AuthedSettingsSkillsSkillSlugRoute: AuthedSettingsSkillsSkillSlugRoute,
   AuthedSettingsSpacesSpaceIdRoute: AuthedSettingsSpacesSpaceIdRoute,
@@ -1870,6 +1891,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsKnowledgeBasesIndexRoute:
     AuthedSettingsKnowledgeBasesIndexRoute,
   AuthedSettingsMcpServersIndexRoute: AuthedSettingsMcpServersIndexRoute,
+  AuthedSettingsPluginsIndexRoute: AuthedSettingsPluginsIndexRoute,
   AuthedSettingsRoutinesIndexRoute: AuthedSettingsRoutinesIndexRoute,
   AuthedSettingsSkillsIndexRoute: AuthedSettingsSkillsIndexRoute,
   AuthedSettingsSpacesIndexRoute: AuthedSettingsSpacesIndexRoute,

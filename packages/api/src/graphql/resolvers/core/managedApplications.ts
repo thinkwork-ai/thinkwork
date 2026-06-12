@@ -1,6 +1,12 @@
 import { getConfig } from "@thinkwork/runtime-config";
+import { and, desc, eq } from "drizzle-orm";
+import {
+  managedApplicationDeploymentJobs,
+  managedApplications as managedApplicationsTable,
+} from "@thinkwork/database-pg/schema";
+import { db as defaultDb } from "../../utils.js";
 
-export type ManagedApplicationKey = "cognee" | "twenty" | "kestra";
+export type ManagedApplicationKey = "cognee" | "twenty";
 
 export type CogneeStatus = {
   enabled: boolean;
@@ -19,21 +25,6 @@ export type TwentyStatus = {
   workerLogGroupName: string | null;
   albArn: string | null;
   targetGroupArn: string | null;
-  malformed: boolean;
-};
-
-export type KestraStatus = {
-  provisioned: boolean;
-  runtimeEnabled: boolean;
-  url: string | null;
-  clusterArn: string | null;
-  serviceName: string | null;
-  logGroupName: string | null;
-  storageBucketName: string | null;
-  databaseName: string | null;
-  albArn: string | null;
-  targetGroupArn: string | null;
-  malformed: boolean;
 };
 
 export type ManagedApplicationStatus = {
@@ -78,9 +69,6 @@ export function normalizeManagedApplicationKey(
   }
   if (key === "twenty" || key === "crm" || key === "twenty-crm") {
     return "twenty";
-  }
-  if (key === "kestra" || key === "orchestration" || key === "orchestrate") {
-    return "kestra";
   }
   return null;
 }
@@ -140,138 +128,128 @@ export function readCogneeStatus(): CogneeStatus {
   }
 }
 
-export function readTwentyStatus(): TwentyStatus {
-  const raw = getConfig("TWENTY") || process.env.TWENTY_STATUS;
-  const fallbackUrl = process.env.TWENTY_URL || null;
+/**
+ * Injectable DB reads behind the Twenty status projection — unit tests
+ * fake these two lookups instead of a Drizzle handle.
+ */
+export interface TwentyStatusReaderDeps {
+  getManagedApplicationRow(
+    tenantId: string,
+  ): Promise<{ desiredConfig: Record<string, unknown> } | null>;
+  /** Latest SUCCEEDED deployment job for (tenant, 'twenty'), if any. */
+  getLatestSucceededJobOperation(tenantId: string): Promise<string | null>;
+}
 
-  if (!raw) {
-    const provisioned = truthyFlag(process.env.TWENTY_PROVISIONED);
-    const defaults = deriveTwentyDefaults(provisioned);
-    return {
-      provisioned,
-      runtimeEnabled: truthyFlag(process.env.TWENTY_RUNTIME_ENABLED),
-      url: fallbackUrl,
-      clusterArn: process.env.TWENTY_CLUSTER_ARN || defaults.clusterArn,
-      serverServiceName:
-        process.env.TWENTY_SERVER_SERVICE_NAME || defaults.serverServiceName,
-      workerServiceName:
-        process.env.TWENTY_WORKER_SERVICE_NAME || defaults.workerServiceName,
-      serverLogGroupName:
-        process.env.TWENTY_SERVER_LOG_GROUP_NAME || defaults.serverLogGroupName,
-      workerLogGroupName:
-        process.env.TWENTY_WORKER_LOG_GROUP_NAME || defaults.workerLogGroupName,
-      albArn: process.env.TWENTY_ALB_ARN || null,
-      targetGroupArn: process.env.TWENTY_TARGET_GROUP_ARN || null,
-      malformed: false,
-    };
-  }
-
-  const parts = raw.split("|");
-  const malformed = parts.length < 2;
-  const provisioned = truthyFlag(parts[0]);
-  const defaults = deriveTwentyDefaults(provisioned && !malformed);
+export function createDrizzleTwentyStatusReaderDeps(
+  db: typeof defaultDb = defaultDb,
+): TwentyStatusReaderDeps {
   return {
-    provisioned,
-    runtimeEnabled: truthyFlag(parts[1]),
-    url: nonEmpty(parts[2]) ?? fallbackUrl,
-    clusterArn:
-      nonEmpty(parts[3]) ??
-      process.env.TWENTY_CLUSTER_ARN ??
-      defaults.clusterArn,
-    serverServiceName:
-      nonEmpty(parts[4]) ??
-      process.env.TWENTY_SERVER_SERVICE_NAME ??
-      defaults.serverServiceName,
-    workerServiceName:
-      nonEmpty(parts[5]) ??
-      process.env.TWENTY_WORKER_SERVICE_NAME ??
-      defaults.workerServiceName,
-    serverLogGroupName:
-      nonEmpty(parts[6]) ??
-      process.env.TWENTY_SERVER_LOG_GROUP_NAME ??
-      defaults.serverLogGroupName,
-    workerLogGroupName:
-      nonEmpty(parts[7]) ??
-      process.env.TWENTY_WORKER_LOG_GROUP_NAME ??
-      defaults.workerLogGroupName,
-    albArn: nonEmpty(parts[8]) ?? process.env.TWENTY_ALB_ARN ?? null,
-    targetGroupArn:
-      nonEmpty(parts[9]) ?? process.env.TWENTY_TARGET_GROUP_ARN ?? null,
-    malformed,
+    async getManagedApplicationRow(tenantId) {
+      const [row] = await db
+        .select({ desired_config: managedApplicationsTable.desired_config })
+        .from(managedApplicationsTable)
+        .where(
+          and(
+            eq(managedApplicationsTable.tenant_id, tenantId),
+            eq(managedApplicationsTable.key, "twenty"),
+          ),
+        )
+        .limit(1);
+      if (!row) return null;
+      return {
+        desiredConfig: (row.desired_config ?? {}) as Record<string, unknown>,
+      };
+    },
+    async getLatestSucceededJobOperation(tenantId) {
+      const [job] = await db
+        .select({ operation: managedApplicationDeploymentJobs.operation })
+        .from(managedApplicationDeploymentJobs)
+        .where(
+          and(
+            eq(managedApplicationDeploymentJobs.tenant_id, tenantId),
+            eq(managedApplicationDeploymentJobs.app_key, "twenty"),
+            eq(managedApplicationDeploymentJobs.status, "succeeded"),
+          ),
+        )
+        .orderBy(desc(managedApplicationDeploymentJobs.updated_at))
+        .limit(1);
+      return job?.operation ?? null;
+    },
   };
 }
 
-export function readKestraStatus(): KestraStatus {
-  const raw = getConfig("KESTRA") || process.env.KESTRA_STATUS;
-  const fallbackUrl = process.env.KESTRA_URL || deriveKestraUrlFromWwwUrl();
+const DISABLED_TWENTY_STATUS: TwentyStatus = {
+  provisioned: false,
+  runtimeEnabled: false,
+  url: null,
+  clusterArn: null,
+  serverServiceName: null,
+  workerServiceName: null,
+  serverLogGroupName: null,
+  workerLogGroupName: null,
+  albArn: null,
+  targetGroupArn: null,
+};
 
-  if (!raw) {
-    const provisioned = truthyFlag(process.env.KESTRA_PROVISIONED);
-    const defaults = deriveKestraDefaults(provisioned);
-    return {
-      provisioned,
-      runtimeEnabled: truthyFlag(process.env.KESTRA_RUNTIME_ENABLED),
-      url: fallbackUrl,
-      clusterArn: process.env.KESTRA_CLUSTER_ARN || defaults.clusterArn,
-      serviceName: process.env.KESTRA_SERVICE_NAME || defaults.serviceName,
-      logGroupName: process.env.KESTRA_LOG_GROUP_NAME || defaults.logGroupName,
-      storageBucketName:
-        process.env.KESTRA_STORAGE_BUCKET_NAME || defaults.storageBucketName,
-      databaseName: process.env.KESTRA_DATABASE_NAME || defaults.databaseName,
-      albArn: process.env.KESTRA_ALB_ARN || null,
-      targetGroupArn: process.env.KESTRA_TARGET_GROUP_ARN || null,
-      malformed: false,
-    };
-  }
+/**
+ * Twenty status served from Aurora (plan 2026-06-12-001 U10) — the
+ * managed_applications row + its deployment-job history are the canonical
+ * plugin-engine infrastructure state. The TWENTY env/SSM projection is
+ * retired (Cognee's env-var path is intentionally UNCHANGED).
+ *
+ * Applied reality = the LATEST SUCCEEDED deployment job's operation:
+ * ENABLE/UPGRADE → running, PARK → parked, DESTROY (or no succeeded job /
+ * no row) → disabled. An in-flight or failed job never flips the reported
+ * state — the previous applied operation keeps reporting until a new
+ * apply succeeds. The public URL comes from the row's desired_config
+ * (`publicUrl`, echoed verbatim by Terraform as `twenty_url`); ECS
+ * service/log identifiers are stage-derived stable names, as before.
+ */
+export async function readTwentyStatus(
+  tenantId: string | null,
+  deps: TwentyStatusReaderDeps = createDrizzleTwentyStatusReaderDeps(),
+): Promise<TwentyStatus> {
+  if (!tenantId) return DISABLED_TWENTY_STATUS;
+  const row = await deps.getManagedApplicationRow(tenantId);
+  if (!row) return DISABLED_TWENTY_STATUS;
+  const operation = await deps.getLatestSucceededJobOperation(tenantId);
+  if (!operation || operation === "DESTROY") return DISABLED_TWENTY_STATUS;
 
-  const parts = raw.split("|");
-  const malformed = parts.length < 2;
-  const provisioned = truthyFlag(parts[0]);
-  const defaults = deriveKestraDefaults(provisioned && !malformed);
+  const provisioned = true;
+  const runtimeEnabled = operation !== "PARK";
+  const publicUrl = row.desiredConfig.publicUrl;
+  const defaults = deriveTwentyDefaults(provisioned);
   return {
     provisioned,
-    runtimeEnabled: truthyFlag(parts[1]),
-    url: nonEmpty(parts[2]) ?? fallbackUrl,
-    clusterArn:
-      nonEmpty(parts[3]) ??
-      process.env.KESTRA_CLUSTER_ARN ??
-      defaults.clusterArn,
-    serviceName:
-      nonEmpty(parts[4]) ??
-      process.env.KESTRA_SERVICE_NAME ??
-      defaults.serviceName,
-    logGroupName:
-      nonEmpty(parts[5]) ??
-      process.env.KESTRA_LOG_GROUP_NAME ??
-      defaults.logGroupName,
-    storageBucketName:
-      nonEmpty(parts[6]) ??
-      process.env.KESTRA_STORAGE_BUCKET_NAME ??
-      defaults.storageBucketName,
-    databaseName:
-      nonEmpty(parts[7]) ??
-      process.env.KESTRA_DATABASE_NAME ??
-      defaults.databaseName,
-    albArn: process.env.KESTRA_ALB_ARN || null,
-    targetGroupArn: process.env.KESTRA_TARGET_GROUP_ARN || null,
-    malformed,
+    runtimeEnabled,
+    url: typeof publicUrl === "string" && publicUrl.trim() ? publicUrl : null,
+    clusterArn: defaults.clusterArn,
+    serverServiceName: defaults.serverServiceName,
+    workerServiceName: defaults.workerServiceName,
+    serverLogGroupName: defaults.serverLogGroupName,
+    workerLogGroupName: defaults.workerLogGroupName,
+    albArn: null,
+    targetGroupArn: null,
   };
 }
 
-export function readManagedApplications(): ManagedApplicationStatus[] {
+export async function readManagedApplications(
+  tenantId: string | null,
+  deps?: TwentyStatusReaderDeps,
+): Promise<ManagedApplicationStatus[]> {
   return [
     cogneeManagedApplication(),
-    twentyManagedApplication(),
-    kestraManagedApplication(),
+    await twentyManagedApplication(tenantId, deps),
   ];
 }
 
-export function readManagedApplication(
+export async function readManagedApplication(
   key: ManagedApplicationKey,
-): ManagedApplicationStatus {
+  tenantId: string | null,
+  deps?: TwentyStatusReaderDeps,
+): Promise<ManagedApplicationStatus> {
   if (key === "cognee") return cogneeManagedApplication();
-  if (key === "twenty") return twentyManagedApplication();
-  return kestraManagedApplication();
+  return twentyManagedApplication(tenantId, deps);
 }
 
 function cogneeManagedApplication(): ManagedApplicationStatus {
@@ -322,15 +300,16 @@ function cogneeManagedApplication(): ManagedApplicationStatus {
   };
 }
 
-function twentyManagedApplication(): ManagedApplicationStatus {
-  const twenty = readTwentyStatus();
-  const status = twenty.malformed
-    ? "unknown"
-    : twenty.runtimeEnabled
-      ? "running"
-      : twenty.provisioned
-        ? "parked"
-        : "disabled";
+async function twentyManagedApplication(
+  tenantId: string | null,
+  deps?: TwentyStatusReaderDeps,
+): Promise<ManagedApplicationStatus> {
+  const twenty = await readTwentyStatus(tenantId, deps);
+  const status = twenty.runtimeEnabled
+    ? "running"
+    : twenty.provisioned
+      ? "parked"
+      : "disabled";
   const logGroupNames = [
     twenty.serverLogGroupName,
     twenty.workerLogGroupName,
@@ -345,9 +324,9 @@ function twentyManagedApplication(): ManagedApplicationStatus {
     displayName: "Twenty CRM",
     description: "Self-hosted CRM runtime managed by ThinkWork.",
     status,
-    enabled: twenty.runtimeEnabled && !twenty.malformed,
-    provisioned: twenty.provisioned && !twenty.malformed,
-    runtimeEnabled: twenty.runtimeEnabled && !twenty.malformed,
+    enabled: twenty.runtimeEnabled,
+    provisioned: twenty.provisioned,
+    runtimeEnabled: twenty.runtimeEnabled,
     url: twenty.url,
     endpoint: twenty.url,
     backendMode: null,
@@ -373,63 +352,6 @@ function twentyManagedApplication(): ManagedApplicationStatus {
   };
 }
 
-function kestraManagedApplication(): ManagedApplicationStatus {
-  const kestra = readKestraStatus();
-  const status = kestra.malformed
-    ? "unknown"
-    : kestra.runtimeEnabled
-      ? "running"
-      : kestra.provisioned
-        ? "parked"
-        : "disabled";
-
-  return {
-    key: "kestra",
-    displayName: "Kestra",
-    description: "Workflow orchestration runtime managed by ThinkWork.",
-    status,
-    enabled: kestra.runtimeEnabled && !kestra.malformed,
-    provisioned: kestra.provisioned && !kestra.malformed,
-    runtimeEnabled: kestra.runtimeEnabled && !kestra.malformed,
-    url: kestra.url,
-    endpoint: kestra.url,
-    backendMode: null,
-    logGroupName: kestra.logGroupName,
-    logGroupNames: kestra.logGroupName ? [kestra.logGroupName] : [],
-    clusterArn: kestra.clusterArn,
-    serviceName: kestra.serviceName,
-    serviceNames: kestra.serviceName ? [kestra.serviceName] : [],
-    albArn: kestra.albArn,
-    targetGroupArn: kestra.targetGroupArn,
-    storageBucketName: kestra.storageBucketName,
-    databaseName: kestra.databaseName,
-    message: kestraStatusMessage(status),
-    managedMcpServerId: null,
-    managedMcpStatus: kestra.runtimeEnabled ? "missing" : "not_ready",
-    managedMcpInstalled: false,
-    managedMcpInstallAvailable: status === "running" && Boolean(kestra.url),
-    managedMcpMessage:
-      status === "running" && kestra.url
-        ? "Kestra control MCP server has not been registered yet."
-        : "Kestra control MCP registration requires the runtime to be running.",
-  };
-}
-
-function kestraStatusMessage(
-  status: ManagedApplicationStatus["status"],
-): string | null {
-  if (status === "parked") {
-    return "Kestra runtime is parked; flow definitions, execution history, storage, and credentials are retained.";
-  }
-  if (status === "disabled") {
-    return "Kestra has not been provisioned for this stage.";
-  }
-  if (status === "unknown") {
-    return "Kestra deployment status could not be parsed.";
-  }
-  return null;
-}
-
 function twentyStatusMessage(
   status: ManagedApplicationStatus["status"],
 ): string | null {
@@ -443,69 +365,6 @@ function twentyStatusMessage(
     return "Twenty CRM deployment status could not be parsed.";
   }
   return null;
-}
-
-function deriveKestraDefaults(
-  provisioned: boolean,
-): Pick<
-  KestraStatus,
-  | "clusterArn"
-  | "serviceName"
-  | "logGroupName"
-  | "storageBucketName"
-  | "databaseName"
-> {
-  if (!provisioned) {
-    return {
-      clusterArn: null,
-      serviceName: null,
-      logGroupName: null,
-      storageBucketName: null,
-      databaseName: null,
-    };
-  }
-
-  const stage = process.env.STAGE || "unknown";
-  const region = process.env.AWS_REGION || "us-east-1";
-  const accountId = process.env.AWS_ACCOUNT_ID || null;
-
-  return {
-    clusterArn: accountId
-      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-kestra-cluster`
-      : null,
-    serviceName: `thinkwork-${stage}-kestra-service`,
-    logGroupName: `/thinkwork/${stage}/kestra`,
-    storageBucketName: accountId
-      ? `tw-${stage}-kestra-${accountId}`.slice(0, 63)
-      : null,
-    databaseName: "thinkwork_kestra",
-  };
-}
-
-function deriveKestraUrlFromWwwUrl(): string | null {
-  const raw = getConfig("WWW_URL");
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    if (!url.hostname) return null;
-    return `${url.protocol}//orchestrate.${url.hostname}`;
-  } catch {
-    const host = raw
-      .trim()
-      .replace(/^https?:\/\//, "")
-      .replace(/\/.*$/, "");
-    return host ? `https://orchestrate.${host}` : null;
-  }
-}
-
-function truthyFlag(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  const normalized = value.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes";
-}
-
-function nonEmpty(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function deriveTwentyDefaults(

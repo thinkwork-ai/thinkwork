@@ -1,7 +1,10 @@
 ---
 date: 2026-06-08
 topic: kestra-managed-application
+status: superseded
 ---
+
+> Superseded by docs/plans/2026-06-12-001-feat-application-plugins-plan.md — Kestra was removed end-to-end (U1) in favor of the Application Plugin system.
 
 # Kestra Managed Application
 

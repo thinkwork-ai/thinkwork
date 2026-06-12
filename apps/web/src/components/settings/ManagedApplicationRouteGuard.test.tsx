@@ -83,7 +83,7 @@ describe("ManagedApplicationRouteGuard", () => {
           deploymentStatus: {
             managedApplications: [
               {
-                key: "kestra",
+                key: "cognee",
                 provisioned: false,
                 runtimeEnabled: false,
               },
@@ -95,12 +95,12 @@ describe("ManagedApplicationRouteGuard", () => {
     ]);
 
     render(
-      <ManagedApplicationRouteGuard appKey="kestra" allowDisabled>
-        <div>Kestra settings</div>
+      <ManagedApplicationRouteGuard appKey="cognee" allowDisabled>
+        <div>Cognee settings</div>
       </ManagedApplicationRouteGuard>,
     );
 
-    expect(screen.getByText("Kestra settings")).toBeTruthy();
+    expect(screen.getByText("Cognee settings")).toBeTruthy();
     expect(screen.queryByText("Navigate to /settings/general")).toBeNull();
   });
 });

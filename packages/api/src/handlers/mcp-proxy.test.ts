@@ -128,10 +128,12 @@ describe("mcp-proxy handler", () => {
         inputSchema: { type: "object" },
       },
     ]);
-    // buildMcpConfigs keyed by (agentId, caller's users.id).
+    // buildMcpConfigs keyed by (agentId, caller's users.id) for BOTH
+    // halves of the dispatch identity (direct per_user_oauth AND
+    // plugin-managed servers resolve by the caller in mcp-proxy).
     expect(mockBuildMcpConfigs).toHaveBeenCalledWith(
       "ag1",
-      "u1",
+      { humanPairId: "u1", requesterUserId: "u1" },
       expect.any(String),
     );
   });
