@@ -144,7 +144,9 @@ function shouldRenderAgentBaselinePath(relPath: string): boolean {
   );
 }
 
-function shouldRenderSpaceSourcePath(relPath: string): boolean {
+// Exported so the workspace-fetch-source handler (plan 2026-06-12-002 U4)
+// returns exactly the renderable set composition would include.
+export function shouldRenderSpaceSourcePath(relPath: string): boolean {
   const sourcePath = runtimeSourcePath(relPath);
   return (
     sourcePath !== "effective-policy.json" &&
@@ -153,7 +155,8 @@ function shouldRenderSpaceSourcePath(relPath: string): boolean {
   );
 }
 
-function shouldRenderUserSourcePath(relPath: string): boolean {
+// Exported for the workspace-fetch-source handler — see note above.
+export function shouldRenderUserSourcePath(relPath: string): boolean {
   const sourcePath = runtimeSourcePath(relPath);
   if (sourcePath === "USER.md" || sourcePath === "knowledge-pack.md") {
     return true;

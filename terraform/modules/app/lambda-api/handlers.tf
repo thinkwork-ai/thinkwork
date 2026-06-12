@@ -416,6 +416,10 @@ resource "aws_lambda_function" "handler" {
     "webhook-crm-opportunity",
     "webhook-task-event",
     "workspace-files",
+    # Workspace source fetch authorization (dynamic workspace plan
+    # 2026-06-12-002 U4). Bearer API_AUTH_SECRET + x-tenant-id; the runtime
+    # fetch tool authorizes here, then downloads the returned S3 keys itself.
+    "workspace-fetch-source",
     "knowledge-base-manager",
     "knowledge-base-files",
     "email-send",
@@ -1009,6 +1013,13 @@ locals {
       # Webhooks admin
       "ANY /api/webhooks/{proxy+}" = "webhooks-admin"
       "ANY /api/webhooks"          = "webhooks-admin"
+
+      # Workspace source fetch authorization (dynamic workspace U4).
+      # Registered before the /api/workspaces/{proxy+} catch-all — API
+      # Gateway HTTP APIs route to the most specific match, so these two
+      # take precedence over the workspace-files proxy route.
+      "POST /api/workspaces/fetch-source"    = "workspace-fetch-source"
+      "OPTIONS /api/workspaces/fetch-source" = "workspace-fetch-source"
 
       # Workspace files
       "ANY /api/workspaces/{proxy+}" = "workspace-files"
