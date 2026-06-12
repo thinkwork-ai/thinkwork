@@ -84,6 +84,11 @@ import {
   type PendingQuestionAnswersPayload,
 } from "../lib/user-questions/runtime-payload.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import {
+  isWorkspaceProjectionManifestLike,
+  recordDispatchWorkspaceProjectionSnapshot,
+  type WorkspaceProjectionManifestLike,
+} from "../lib/workspace-projection-snapshot.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -233,6 +238,11 @@ export interface RenderWorkspaceTupleForInvokeResult {
     isDefault: boolean;
   };
   effectivePolicy?: EffectiveWorkspacePolicy;
+  /**
+   * Hydrate manifest from the renderer Lambda — feeds the per-turn
+   * workspace projection snapshot (plan 2026-06-12-002 U6).
+   */
+  hydrateManifest?: WorkspaceProjectionManifestLike;
   errorCode?: string;
   statusCode?: number;
   reason?: string;
@@ -309,6 +319,9 @@ export async function renderWorkspaceTupleForInvoke(
       : undefined,
     effectivePolicy: isEffectiveWorkspacePolicy(parsed.effectivePolicy)
       ? parsed.effectivePolicy
+      : undefined,
+    hydrateManifest: isWorkspaceProjectionManifestLike(parsed.hydrateManifest)
+      ? parsed.hydrateManifest
       : undefined,
     cacheStatus:
       parsed.cacheStatus === "hit" || parsed.cacheStatus === "miss"
@@ -1029,6 +1042,18 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           effectiveBlockedTools =
             renderedWorkspace.effectivePolicy?.blockedTools ??
             runtimeConfig.blockedTools;
+          // U6 (plan 2026-06-12-002): record the dispatch-time workspace
+          // projection BEFORE the agent invoke so a crashed turn still
+          // carries it. Never fails dispatch — the recorder swallows errors.
+          if (turnId && renderedWorkspacePrefix) {
+            await recordDispatchWorkspaceProjectionSnapshot({
+              threadTurnId: turnId,
+              tenantId,
+              renderedPrefix: renderedWorkspacePrefix,
+              hydrateManifest: renderedWorkspace.hydrateManifest,
+              source: "chat-agent-invoke",
+            });
+          }
           console.log(
             `[chat-agent-invoke] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? spaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"} duration_ms=${Date.now() - workspaceRenderStart}`,
           );

@@ -69,6 +69,11 @@ import {
 } from "../lib/thread-dispatch.js";
 import { promoteNextDeferredWakeup } from "../lib/wakeup-defer.js";
 import {
+  isWorkspaceProjectionManifestLike,
+  recordDispatchWorkspaceProjectionSnapshot,
+  type WorkspaceProjectionManifestLike,
+} from "../lib/workspace-projection-snapshot.js";
+import {
   resolveWorkflowConfig,
   renderPromptTemplate,
 } from "../lib/orchestration/index.js";
@@ -272,6 +277,11 @@ interface RenderWorkspaceTupleForWakeupResult {
     isDefault: boolean;
   };
   effectivePolicy?: EffectiveWorkspacePolicy;
+  /**
+   * Hydrate manifest from the renderer Lambda — feeds the per-turn
+   * workspace projection snapshot (plan 2026-06-12-002 U6).
+   */
+  hydrateManifest?: WorkspaceProjectionManifestLike;
   errorCode?: string;
   statusCode?: number;
   reason?: string;
@@ -383,6 +393,9 @@ export async function renderWorkspaceTupleForWakeup(input: {
     activeSpace,
     effectivePolicy: isEffectiveWorkspacePolicy(parsed.effectivePolicy)
       ? parsed.effectivePolicy
+      : undefined,
+    hydrateManifest: isWorkspaceProjectionManifestLike(parsed.hydrateManifest)
+      ? parsed.hydrateManifest
       : undefined,
   };
 }
@@ -1574,6 +1587,19 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           renderedWorkspace.effectivePolicy ?? effectiveToolPolicy;
         effectiveBlockedTools =
           renderedWorkspace.effectivePolicy?.blockedTools ?? blockedTools;
+        // U6 (plan 2026-06-12-002): record the dispatch-time workspace
+        // projection BEFORE the agent invoke — same shape as the
+        // chat-agent-invoke path (dispatch parity). Never fails dispatch —
+        // the recorder swallows errors.
+        if (renderedWorkspacePrefix) {
+          await recordDispatchWorkspaceProjectionSnapshot({
+            threadTurnId: run.id,
+            tenantId: wakeup.tenant_id,
+            renderedPrefix: renderedWorkspacePrefix,
+            hydrateManifest: renderedWorkspace.hydrateManifest,
+            source: "wakeup-processor",
+          });
+        }
         console.log(
           `[wakeup-processor] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? runSpaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"}`,
         );
@@ -2413,6 +2439,20 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           .update(threadTurns)
           .set({ last_activity_at: new Date() })
           .where(eq(threadTurns.id, run.id));
+
+        // U6 (plan 2026-06-12-002): the turn-loop RE-dispatch reuses the same
+        // thread_turn_id, so re-record the dispatch-time projection. The
+        // writer's object-merge semantics preserve any `fetches` events the
+        // agent appended earlier this turn — never a clobber.
+        if (renderedWorkspace.rendered && renderedWorkspacePrefix) {
+          await recordDispatchWorkspaceProjectionSnapshot({
+            threadTurnId: run.id,
+            tenantId: wakeup.tenant_id,
+            renderedPrefix: renderedWorkspacePrefix,
+            hydrateManifest: renderedWorkspace.hydrateManifest,
+            source: "wakeup-processor",
+          });
+        }
 
         const loopResponse = await invokeAgentCore(
           {

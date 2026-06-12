@@ -51,6 +51,10 @@ import {
   drizzleThreadTurnEventStore,
 } from "../thread-turn-events.js";
 import { promoteNextDeferredWakeup } from "../wakeup-defer.js";
+import {
+  buildWorkspaceProjectionReconcileSummary,
+  mergeWorkspaceProjectionReconcileSummary,
+} from "../workspace-projection-snapshot.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
   GENERIC_AGENT_ERROR_MESSAGE,
@@ -194,6 +198,20 @@ export async function processFinalize(
       status: "complete",
       report: reconcileReport,
     });
+    // U6 (plan 2026-06-12-002): merge a compact reconcile summary into the
+    // dispatch-time workspace projection — additive (only the `reconcile`
+    // key) and never blocking: a merge failure must not fail finalize.
+    try {
+      await mergeWorkspaceProjectionReconcileSummary(
+        turnId,
+        buildWorkspaceProjectionReconcileSummary(reconcileReport),
+      );
+    } catch (mergeErr) {
+      console.error(
+        `[chat-finalize] workspace projection reconcile merge failed (finalize proceeds):`,
+        mergeErr,
+      );
+    }
   } catch (err) {
     reconcileDurationMs = Math.max(0, Date.now() - reconcileStartedAt);
     await recordWorkspaceReconcileStatus(turnId, {

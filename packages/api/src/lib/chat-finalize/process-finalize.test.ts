@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   refreshCustomerOnboardingGoalFolderSafely: vi.fn(),
   recordGuardrailBlock: vi.fn(),
   promoteNextDeferredWakeup: vi.fn(),
+  mergeWorkspaceProjectionReconcileSummary: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -106,6 +107,18 @@ vi.mock("../wakeup-defer.js", () => ({
   promoteNextDeferredWakeup: mocks.promoteNextDeferredWakeup,
 }));
 
+vi.mock("../workspace-projection-snapshot.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../workspace-projection-snapshot.js")
+    >();
+  return {
+    ...actual,
+    mergeWorkspaceProjectionReconcileSummary:
+      mocks.mergeWorkspaceProjectionReconcileSummary,
+  };
+});
+
 import {
   capturedSystemPromptFromFinalizePayload,
   collectAgentProfileRuns,
@@ -160,6 +173,8 @@ beforeEach(() => {
   mocks.refreshCustomerOnboardingGoalFolderSafely.mockResolvedValue(undefined);
   mocks.recordGuardrailBlock.mockResolvedValue(undefined);
   mocks.promoteNextDeferredWakeup.mockResolvedValue(null);
+  mocks.mergeWorkspaceProjectionReconcileSummary.mockReset();
+  mocks.mergeWorkspaceProjectionReconcileSummary.mockResolvedValue(undefined);
 });
 
 describe("capturedSystemPromptFromFinalizePayload", () => {
@@ -1189,6 +1204,86 @@ describe("turnAskedUserQuestion", () => {
       }),
     ).toBe(false);
     expect(turnAskedUserQuestion({})).toBe(false);
+  });
+});
+
+describe("processFinalize workspace projection reconcile merge (plan 2026-06-12-002 U6)", () => {
+  const payload = {
+    thread_turn_id: TURN_ID,
+    tenant_id: TENANT_ID,
+    agent_id: AGENT_ID,
+    thread_id: THREAD_ID,
+    duration_ms: 25,
+    status: "completed" as const,
+    response: { content: "done" },
+  };
+
+  it("merges a compact reconcile summary into the projection after reconcile completes", async () => {
+    mocks.reconcileChangedFiles.mockResolvedValue({
+      status: "partial_success",
+      files: [
+        {
+          path: "AGENTS.md",
+          op: "modify",
+          owner: "agent",
+          status: "written",
+          sourceKey: "tenants/acme/agents/marco/AGENTS.md",
+          etag: '"new"',
+        },
+        {
+          path: "Spaces/other/file.md",
+          op: "modify",
+          owner: "space",
+          status: "rejected",
+          code: "lane_violation",
+          message: "foreign space",
+        },
+      ],
+    });
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+    });
+
+    expect(
+      mocks.mergeWorkspaceProjectionReconcileSummary,
+    ).toHaveBeenCalledTimes(1);
+    expect(mocks.mergeWorkspaceProjectionReconcileSummary).toHaveBeenCalledWith(
+      TURN_ID,
+      expect.objectContaining({
+        rejectedCount: 1,
+        rejections: [{ path: "Spaces/other/file.md", code: "lane_violation" }],
+        updatedAt: expect.any(String),
+      }),
+    );
+  });
+
+  it("finalize succeeds even when the projection merge fails (additive, never blocking)", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    mocks.mergeWorkspaceProjectionReconcileSummary.mockRejectedValue(
+      new Error("aurora hiccup"),
+    );
+
+    await expect(processFinalize(payload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("workspace projection reconcile merge failed"),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
+  });
+
+  it("skips the merge when reconcile itself fails — the dispatch-time snapshot stays as-is", async () => {
+    mocks.reconcileChangedFiles.mockRejectedValue(new Error("s3 down"));
+
+    await expect(processFinalize(payload)).rejects.toThrow("s3 down");
+    expect(
+      mocks.mergeWorkspaceProjectionReconcileSummary,
+    ).not.toHaveBeenCalled();
   });
 });
 
