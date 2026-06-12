@@ -38,6 +38,46 @@ describe("release command registration", () => {
   });
 });
 
+describe("release flag parsing", () => {
+  // Regression: -s/--yes/--no-wait are declared on BOTH the release group
+  // and the deploy subcommand; commander parses post-subcommand duplicates
+  // onto the PARENT, so the action must read command.optsWithGlobals().
+  // The first real TEI deploy fell back to stage "dev" because of this.
+  it("delivers -s/--yes placed after `deploy` to the handler", async () => {
+    const deploySpy = vi.fn().mockResolvedValue(undefined);
+    const program = new Command();
+    registerReleaseCommand(program, deploySpy);
+
+    await program.parseAsync(
+      ["release", "deploy", "v0.1.0-canary.174", "-s", "tei-e2e", "--yes"],
+      { from: "user" },
+    );
+
+    expect(deploySpy).toHaveBeenCalledTimes(1);
+    const [version, opts] = deploySpy.mock.calls[0];
+    expect(version).toBe("v0.1.0-canary.174");
+    expect(opts.stage).toBe("tei-e2e");
+    expect(opts.yes).toBe(true);
+    expect(opts.wait).not.toBe(false);
+  });
+
+  it("delivers --no-wait and bare-group flags to the handler", async () => {
+    const deploySpy = vi.fn().mockResolvedValue(undefined);
+    const program = new Command();
+    registerReleaseCommand(program, deploySpy);
+
+    await program.parseAsync(["release", "-s", "tei-e2e", "--no-wait"], {
+      from: "user",
+    });
+
+    expect(deploySpy).toHaveBeenCalledTimes(1);
+    const [version, opts] = deploySpy.mock.calls[0];
+    expect(version).toBeUndefined();
+    expect(opts.stage).toBe("tei-e2e");
+    expect(opts.wait).toBe(false);
+  });
+});
+
 describe("fetchRecentReleases", () => {
   const gh = (overrides: Partial<Record<string, unknown>>[]) =>
     vi.fn().mockResolvedValue({
