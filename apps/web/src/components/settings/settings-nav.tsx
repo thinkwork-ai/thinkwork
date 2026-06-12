@@ -5,7 +5,6 @@ import {
   Brain,
   Clock,
   Cpu,
-  FolderTree,
   History,
   Repeat,
   Settings as SettingsIcon,
@@ -47,14 +46,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
-  {
-    // The Agent-source file editor (baseline AGENTS.md + skills/ + agents/).
-    // Replaced the consolidated "Workspace" page; /settings/local-workspace
-    // redirects here. Visible to all roles — editing is read-only gated inside.
-    label: "Main Agent",
-    to: "/settings/main-agent",
-    icon: FolderTree,
-  },
   {
     label: "Evaluations",
     to: "/settings/evaluations",

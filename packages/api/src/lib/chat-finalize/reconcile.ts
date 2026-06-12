@@ -554,7 +554,7 @@ async function reconcileOneFile(input: {
       owner,
       "read_only_generated_file",
       changedFile.path === "AGENTS.md"
-        ? "AGENTS.md is composed at render time; edit the agent baseline in Settings → Main Agent."
+        ? "AGENTS.md is composed at render time; edit the agent baseline in Settings → Agents (Workspace files)."
         : "This file is generated at render time and is read-only. Edit its source surface instead.",
     );
   }

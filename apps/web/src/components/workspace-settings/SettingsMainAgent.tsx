@@ -2,7 +2,6 @@
 
 import { useQuery } from "urql";
 import { Loader2Icon } from "lucide-react";
-import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { ScopedWorkspaceEditor } from "./ScopedWorkspaceEditor";
@@ -16,10 +15,12 @@ function Centered({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Settings → Main Agent: the S3-backed editor over the tenant Agent source —
- * the baseline AGENTS.md plus its `skills/` and `agents/` folders (one source,
- * one tree). This surface is the canonical edit point reconcile rejections
- * refer to as "Settings → Main Agent". It replaces the Agent slice of the
+ * The S3-backed editor over the tenant Agent source — the baseline AGENTS.md
+ * plus its `skills/` and `agents/` folders (one source, one tree). Rendered as
+ * the workspace view of Settings → Agents (`?view=workspace`); the host page
+ * owns the page header, so this component only renders the editor body. This
+ * surface is the canonical edit point reconcile rejections refer to as
+ * "Settings → Agents (Workspace files)". It replaces the Agent slice of the
  * retired consolidated Settings → Workspace page; the Spaces and User slices
  * moved to the per-Space and per-user settings pages. Editing is gated to
  * owner/admin via `readOnly`; everyone else sees the same files read-only.
@@ -35,12 +36,6 @@ export function SettingsMainAgent({
     query: SettingsTenantAgentQuery,
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
-  });
-
-  usePageHeaderActions({
-    title: "Main Agent",
-    breadcrumbs: [{ label: "Main Agent" }],
-    actionKey: "main-agent-settings",
   });
 
   const agentId = agentResult.data?.agent?.id ?? null;

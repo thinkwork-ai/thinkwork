@@ -438,7 +438,7 @@ describe("reconcileChangedFiles", () => {
         status: "rejected",
         code: "read_only_generated_file",
         message:
-          "AGENTS.md is composed at render time; edit the agent baseline in Settings → Main Agent.",
+          "AGENTS.md is composed at render time; edit the agent baseline in Settings → Agents (Workspace files).",
       }),
     ]);
     expect(store.puts).toEqual([]);

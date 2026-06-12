@@ -40,15 +40,67 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain('label="Default Agent"');
     expect(agentsSource).toContain("SettingsTenantAgentQuery");
     expect(agentsSource).toContain("SettingsUpdateTenantAgentMutation");
-    expect(agentsSource).toContain('to="/settings/main-agent"');
-    expect(agentsSource).toContain('search={{ file: "AGENTS.md" }}');
     expect(agentsSource).not.toContain("/settings/local-workspace");
-    expect(agentsSource).toContain('aria-label="Open AGENTS.md"');
+    expect(agentsSource).not.toContain("/settings/main-agent");
     expect(agentsSource).not.toContain("Edit AGENTS.md");
 
     expect(generalSource).not.toContain("AgentConfigSection");
     expect(generalSource).not.toContain("SettingsTenantAgentQuery");
     expect(generalSource).not.toContain("Default model");
+  });
+
+  it("toggles between config and workspace views via the header icon", () => {
+    // The header icon flips the page between the config view (Default Agent +
+    // Agent Profiles) and the workspace view (main-agent source editor),
+    // persisting the active view in the ?view= search param for deep links.
+    expect(agentsSource).toContain(
+      'useSearch({ from: "/_authed/settings/agents/" })',
+    );
+    expect(agentsSource).toContain('view === "workspace"');
+    expect(agentsSource).toContain('search={{ view: "workspace" }}');
+    expect(agentsSource).toContain("search={{}}");
+    expect(agentsSource).toContain(
+      'aria-label={workspaceView ? "Agent config" : "Workspace files"}',
+    );
+    // Icon swaps per state: file icon opens the workspace view, sliders icon
+    // returns to the config view.
+    expect(agentsSource).toContain("FileCode");
+    expect(agentsSource).toContain("SlidersHorizontal");
+    // The workspace view reuses the main-agent editor component (AGENTS.md
+    // default-open) and forwards the optional ?file= deep link.
+    expect(agentsSource).toContain("SettingsMainAgent");
+    expect(agentsSource).toContain(
+      "<SettingsMainAgent defaultOpenFile={file} />",
+    );
+    // The route validates both search params.
+    expect(routeSource).toContain("validateSearch");
+    expect(routeSource).toContain('search.view === "workspace"');
+    expect(routeSource).toContain("isSafeWorkspaceFile(search.file)");
+  });
+
+  it("publishes the real header-bar breadcrumb for both views", () => {
+    // The page drives SettingsHeaderBar via usePageHeaderActions: config view
+    // is a single "Agents" crumb; workspace view reads "Agents > Workspace"
+    // with "Agents" clickable to return to the config view (empty search
+    // clears ?view=). No SettingsHeader wrapper — the page owns the header.
+    expect(agentsSource).toContain("usePageHeaderActions({");
+    expect(agentsSource).toContain(
+      '{ label: "Agents", href: "/settings/agents", search: {} }',
+    );
+    expect(agentsSource).toContain('{ label: "Workspace" }');
+    expect(agentsSource).toContain('[{ label: "Agents" }]');
+    expect(agentsSource).not.toContain("<SettingsHeader");
+  });
+
+  it("renders the workspace view full-bleed without the in-body title block", () => {
+    // No SettingsPageTitle/description in workspace view — the editor fills
+    // the full content pane directly under the breadcrumb bar.
+    expect(agentsSource).not.toContain("Edit the main Agent source");
+    expect(agentsSource).toContain('<div className="h-full min-h-0">');
+    // The config view keeps its normal in-body page title.
+    expect(agentsSource).toContain(
+      "Configure the default Agent and reusable task profiles",
+    );
   });
 
   it("renders Agent Profiles with model, capability, Space, and execution controls", () => {
@@ -163,7 +215,11 @@ describe("SettingsAgents page", () => {
     expect(detailRouteSource).toContain(
       '"/_authed/settings/agents/$profileId"',
     );
-    expect(mainAgentRouteSource).toContain("validateSearch");
-    expect(mainAgentRouteSource).toContain("defaultOpenFile={file}");
+    // The old standalone Main Agent route now redirects into the Agents
+    // workspace view, preserving ?file=.
+    expect(mainAgentRouteSource).toContain("throw redirect(");
+    expect(mainAgentRouteSource).toContain('to: "/settings/agents"');
+    expect(mainAgentRouteSource).toContain('view: "workspace"');
+    expect(mainAgentRouteSource).toContain("file: search.file");
   });
 });

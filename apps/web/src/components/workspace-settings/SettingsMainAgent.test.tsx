@@ -1,27 +1,23 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { editorSpy, tenant, agentQuery, usePageHeaderActions } = vi.hoisted(
-  () => ({
-    editorSpy: vi.fn(),
-    tenant: {
-      tenantId: "tenant-1" as string | null,
-      isLoading: false,
-    },
-    agentQuery: {
-      data: { agent: { id: "agent-1" } } as Record<string, unknown> | null,
-      fetching: false,
-      error: null as Error | null,
-    },
-    usePageHeaderActions: vi.fn(),
-  }),
-);
+const { editorSpy, tenant, agentQuery } = vi.hoisted(() => ({
+  editorSpy: vi.fn(),
+  tenant: {
+    tenantId: "tenant-1" as string | null,
+    isLoading: false,
+  },
+  agentQuery: {
+    data: { agent: { id: "agent-1" } } as Record<string, unknown> | null,
+    fetching: false,
+    error: null as Error | null,
+  },
+}));
 
 vi.mock("urql", () => ({
   useQuery: () => [agentQuery, vi.fn()],
 }));
 vi.mock("@/context/TenantContext", () => ({ useTenant: () => tenant }));
-vi.mock("@/context/PageHeaderContext", () => ({ usePageHeaderActions }));
 vi.mock("@/lib/settings-queries", () => ({
   SettingsTenantAgentQuery: Symbol("agent"),
 }));
@@ -55,17 +51,17 @@ describe("SettingsMainAgent", () => {
     expect(props.targetKey).toBe("agent:agent-1");
   });
 
-  it("opens a requested file for deep links (legacy ?file= mapping)", () => {
+  it("opens a requested file for deep links (?file= passthrough)", () => {
     render(<SettingsMainAgent defaultOpenFile="agents/research.md" />);
     const props = editorSpy.mock.calls.at(-1)![0];
     expect(props.defaultOpenFile).toBe("agents/research.md");
   });
 
-  it("publishes the Main Agent page header", () => {
-    render(<SettingsMainAgent />);
-    expect(usePageHeaderActions).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Main Agent" }),
-    );
+  it("does not publish a page header — the hosting Agents page owns it", () => {
+    // Rendered as the workspace view of Settings → Agents; a header publication
+    // here would clobber the Agents breadcrumb/title. PageHeaderContext is not
+    // mocked, so an accidental usePageHeaderActions call would throw here.
+    expect(() => render(<SettingsMainAgent />)).not.toThrow();
   });
 
   it("shows a loader while the agent resolves", () => {

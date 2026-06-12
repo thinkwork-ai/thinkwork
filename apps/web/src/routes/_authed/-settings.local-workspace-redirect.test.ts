@@ -15,9 +15,10 @@ const mainAgentRouteSource = fs.readFileSync(
 );
 
 describe("legacy /settings/local-workspace route", () => {
-  it("redirects to the Main Agent surface instead of rendering the consolidated view", () => {
+  it("redirects to the Agents workspace view instead of rendering the consolidated view", () => {
     expect(legacyRouteSource).toContain("beforeLoad");
-    expect(legacyRouteSource).toContain('to: "/settings/main-agent"');
+    expect(legacyRouteSource).toContain('to: "/settings/agents"');
+    expect(legacyRouteSource).toContain('view: "workspace"');
     expect(legacyRouteSource).toContain("throw redirect(");
     // The consolidated editor no longer mounts from this route.
     expect(legacyRouteSource).not.toContain("WorkspaceSettingsView");
@@ -45,6 +46,10 @@ describe("mapLegacyWorkspaceFile", () => {
     expect(mapLegacyWorkspaceFile("Spaces/finance/GOAL.md")).toBeUndefined();
   });
 
+  it("keeps Agent/X → X mapping intact for the new redirect target", () => {
+    expect(mapLegacyWorkspaceFile("Agent/AGENTS.md")).toBe("AGENTS.md");
+  });
+
   it("drops empty, bare-root, and unsafe values", () => {
     expect(mapLegacyWorkspaceFile(undefined)).toBeUndefined();
     expect(mapLegacyWorkspaceFile("")).toBeUndefined();
@@ -55,12 +60,16 @@ describe("mapLegacyWorkspaceFile", () => {
 });
 
 describe("/settings/main-agent route", () => {
-  it("validates the ?file= search param and opens it in the scoped editor", () => {
+  it("redirects to the Agents workspace view, preserving the ?file= param", () => {
     expect(mainAgentRouteSource).toContain(
       'createFileRoute("/_authed/settings/main-agent")',
     );
     expect(mainAgentRouteSource).toContain("validateSearch");
-    expect(mainAgentRouteSource).toContain("defaultOpenFile={file}");
-    expect(mainAgentRouteSource).toContain("SettingsMainAgent");
+    expect(mainAgentRouteSource).toContain("throw redirect(");
+    expect(mainAgentRouteSource).toContain('to: "/settings/agents"');
+    expect(mainAgentRouteSource).toContain('view: "workspace"');
+    expect(mainAgentRouteSource).toContain("file: search.file");
+    // It no longer mounts the editor itself.
+    expect(mainAgentRouteSource).not.toContain("SettingsMainAgent");
   });
 });
