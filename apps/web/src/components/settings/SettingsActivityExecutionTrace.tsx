@@ -16,6 +16,13 @@ import {
   DialogTitle,
 } from "@thinkwork/ui";
 import { SystemPromptViewer } from "@/components/workbench/SystemPromptViewer";
+import { ProjectedWorkspacePanel } from "@/components/workbench/ProjectedWorkspacePanel";
+import {
+  agentsMdContentMayDiffer,
+  parseWorkspaceProjection,
+  selectLatestProjection,
+  type LatestProjectionRef,
+} from "@/components/workbench/workspace-projection";
 import { formatCost } from "@/lib/settings-activity";
 import { extractSkillName } from "./skill-row-label";
 import { SettingsTenantModelCatalogQuery } from "@/lib/settings-queries";
@@ -2020,11 +2027,15 @@ function ExecutionTimeline({
 
 function TurnRow({
   turn,
+  threadId,
+  latestProjection,
   agentName,
   modelDisplayNames,
   modelRouteTraces,
 }: {
   turn: any;
+  threadId?: string;
+  latestProjection?: LatestProjectionRef | null;
   agentName?: string | null;
   modelDisplayNames?: ModelDisplayNames;
   modelRouteTraces?: ExecutionTraceModelRouteTrace[];
@@ -2077,6 +2088,9 @@ function TurnRow({
     turn.triggerName || turn.invocationSource,
   );
   const statusColorClass = cfg.color;
+  // Per-turn workspace projection (plan 2026-06-12-002 U9); null on
+  // pre-feature turns → no panel.
+  const workspaceProjection = parseWorkspaceProjection(turn.contextSnapshot);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -2165,6 +2179,21 @@ function TurnRow({
           {turn.error && (
             <div className="px-3 py-2 rounded bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-mono">
               {turn.error}
+            </div>
+          )}
+
+          {/* Projected workspace (U9) — what was composed/injected/fetched */}
+          {workspaceProjection && (
+            <div className="px-3">
+              <ProjectedWorkspacePanel
+                projection={workspaceProjection}
+                threadId={threadId}
+                agentsMdMayDiffer={agentsMdContentMayDiffer(
+                  turn.id,
+                  workspaceProjection,
+                  latestProjection ?? null,
+                )}
+              />
             </div>
           )}
 
@@ -2497,6 +2526,9 @@ export function ExecutionTrace({
   }, [turnSub.data, threadId, reexecuteTurns]);
 
   const turns = (result.data as any)?.threadTurns ?? [];
+  // Latest workspace projection across the thread (U9): older turns'
+  // AGENTS.md viewers label their best-effort current-state content.
+  const latestProjection = selectLatestProjection(turns);
   const modelDisplayNames = useMemo(() => {
     const names: ModelDisplayNames = new Map();
     for (const model of modelCatalogResult.data?.tenantModelCatalog ?? []) {
@@ -2592,6 +2624,8 @@ export function ExecutionTrace({
               <TurnRow
                 key={item.turn.id}
                 turn={item.turn}
+                threadId={threadId}
+                latestProjection={latestProjection}
                 modelRouteTraces={modelRouteTraces}
                 agentName={
                   item.turn.agentId

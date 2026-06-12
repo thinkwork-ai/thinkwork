@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   buildWorkspaceBaseline,
   computeWorkspaceChangedFiles,
+  normalizeWorkspaceDiffPath,
   type FinalizeChangedFile,
   type WorkspaceBaseline,
   type WorkspaceSnapshot,
@@ -46,6 +47,48 @@ export async function collectLocalWorkspaceChangedFiles(input: {
       runtimeToManifestPathMap(hydrateManifest),
     ),
   });
+}
+
+/**
+ * A file mounted mid-turn by `fetch_workspace_source` (plan 2026-06-12-002
+ * U5). Paths are workspace-relative RUNTIME paths (e.g. `Spaces/b/notes.md`)
+ * — fetched files have no hydrate-manifest entry, so the end-of-turn snapshot
+ * keys them by their on-disk relative path directly.
+ */
+export interface FetchedWorkspaceBaselineFile {
+  path: string;
+  bytes: Uint8Array;
+  etag?: string;
+}
+
+/**
+ * Append fetched, read-only files to an existing turn baseline so the
+ * end-of-turn diff reports zero changes for them (no phantom creates).
+ *
+ * Mirrors the snapshot reader's own filters exactly: a file the snapshot
+ * would skip (oversized or binary) must ALSO be skipped here, otherwise the
+ * baseline gains an entry the snapshot never produces and the diff reports a
+ * phantom delete. Re-appending the same path overwrites in place — an
+ * idempotent re-fetch creates no duplicate entries. Returns the number of
+ * baseline entries written.
+ */
+export function appendFetchedFilesToWorkspaceBaseline(
+  baseline: WorkspaceBaseline,
+  files: readonly FetchedWorkspaceBaselineFile[],
+): number {
+  let appended = 0;
+  for (const file of files) {
+    const normalizedPath = normalizeWorkspaceDiffPath(file.path);
+    if (!normalizedPath) continue;
+    if (file.bytes.byteLength > MAX_WORKSPACE_DIFF_FILE_BYTES) continue;
+    if (file.bytes.includes(0)) continue;
+    baseline[normalizedPath] = {
+      content: new TextDecoder().decode(file.bytes),
+      etag: file.etag?.trim() || undefined,
+    };
+    appended += 1;
+  }
+  return appended;
 }
 
 async function readHydrateManifest(
@@ -138,7 +181,6 @@ function runtimeWorkspacePath(manifestPath: string): string {
     return `Thread/${clean.slice("Thread/".length)}`;
   }
   if (clean.startsWith("Spaces/")) {
-    if (clean === "Spaces/INDEX.md") return clean;
     const [, spaceFolder, ...rest] = clean.split("/");
     return ["Spaces", spaceFolder, rest.join("/")].join("/");
   }

@@ -10,12 +10,18 @@ const {
   mockGetTenantModelCatalogEntry,
   mockListTenantModelCatalog,
   mockSnakeToCamel,
+  mockWriteAgentProfileFile,
+  mockDeleteAgentProfileFile,
+  mockSerializeAgentProfileFile,
   tables,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
   mockInsert: vi.fn(),
   mockUpdate: vi.fn(),
   mockDelete: vi.fn(),
+  mockWriteAgentProfileFile: vi.fn(),
+  mockDeleteAgentProfileFile: vi.fn(),
+  mockSerializeAgentProfileFile: vi.fn(),
   mockRequireAdminOrServiceCaller: vi.fn(),
   mockAssertTenantModelAvailable: vi.fn(),
   mockGetTenantModelCatalogEntry: vi.fn(),
@@ -35,6 +41,7 @@ const {
       name: "agent_profiles.name",
       enabled: "agent_profiles.enabled",
       built_in_key: "agent_profiles.built_in_key",
+      source_space_id: "agent_profiles.source_space_id",
     },
     agentProfileSpaceAssignments: {
       profile_id: "agent_profile_space_assignments.profile_id",
@@ -73,6 +80,7 @@ vi.mock("../../utils.js", () => ({
     delete: mockDelete,
   },
   eq: vi.fn((left: unknown, right: unknown) => ({ type: "eq", left, right })),
+  isNull: vi.fn((column: unknown) => ({ type: "isNull", column })),
   inArray: vi.fn((left: unknown, right: unknown[]) => ({
     type: "inArray",
     left,
@@ -85,6 +93,12 @@ vi.mock("../core/authz.js", () => ({
   requireAdminOrServiceCaller: mockRequireAdminOrServiceCaller,
 }));
 
+vi.mock("../../../lib/agent-profile-workspace-files.js", () => ({
+  writeAgentProfileFileForTenant: mockWriteAgentProfileFile,
+  deleteAgentProfileFileForTenant: mockDeleteAgentProfileFile,
+  serializeAgentProfileFile: mockSerializeAgentProfileFile,
+}));
+
 vi.mock("../../../lib/model-catalog/tenant-catalog.js", () => ({
   assertTenantModelAvailable: mockAssertTenantModelAvailable,
   getTenantModelCatalogEntry: mockGetTenantModelCatalogEntry,
@@ -92,6 +106,7 @@ vi.mock("../../../lib/model-catalog/tenant-catalog.js", () => ({
 }));
 
 let listMod: typeof import("./agentProfiles.query.js");
+let profileMod: typeof import("./agentProfile.query.js");
 let createMod: typeof import("./createAgentProfile.mutation.js");
 let updateMod: typeof import("./updateAgentProfile.mutation.js");
 let deleteMod: typeof import("./deleteAgentProfile.mutation.js");
@@ -102,6 +117,12 @@ beforeEach(async () => {
   mockInsert.mockReset();
   mockUpdate.mockReset();
   mockDelete.mockReset();
+  mockWriteAgentProfileFile.mockReset();
+  mockWriteAgentProfileFile.mockResolvedValue(true);
+  mockDeleteAgentProfileFile.mockReset();
+  mockDeleteAgentProfileFile.mockResolvedValue(true);
+  mockSerializeAgentProfileFile.mockReset();
+  mockSerializeAgentProfileFile.mockReturnValue("serialized-profile");
   mockRequireAdminOrServiceCaller.mockReset();
   mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
   mockAssertTenantModelAvailable.mockReset();
@@ -112,6 +133,7 @@ beforeEach(async () => {
   mockListTenantModelCatalog.mockResolvedValue([{ modelId: "model-fast" }]);
   mockSnakeToCamel.mockClear();
   listMod = await import("./agentProfiles.query.js");
+  profileMod = await import("./agentProfile.query.js");
   createMod = await import("./createAgentProfile.mutation.js");
   updateMod = await import("./updateAgentProfile.mutation.js");
   deleteMod = await import("./deleteAgentProfile.mutation.js");
@@ -422,7 +444,144 @@ describe("Agent Profile resolvers", () => {
     ).rejects.toThrow("Built-in Agent Profiles can be disabled");
     expect(mockDelete).not.toHaveBeenCalled();
   });
+
+  it("scopes single-profile slug lookups to central profiles", async () => {
+    mockSelect
+      .mockReturnValueOnce(queryRows(builtInKeyRows()))
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-central",
+            tenant_id: "tenant-1",
+            slug: "fast-research",
+            source_space_id: null,
+          },
+        ]),
+      );
+
+    const result = await profileMod.agentProfile(
+      null,
+      { tenantId: "tenant-1", slug: "fast-research" },
+      ctx(),
+    );
+
+    const utils = await import("../../utils.js");
+    // The slug selector must exclude space-local rows: a space-local profile
+    // can legally share the slug (partial unique indexes split on
+    // source_space_id), so an unscoped match is nondeterministic.
+    expect(vi.mocked(utils.isNull)).toHaveBeenCalledWith(
+      tables.agentProfiles.source_space_id,
+    );
+    expect(result).toMatchObject({
+      id: "profile-central",
+      slug: "fast-research",
+    });
+  });
+
+  it("refuses to update space-local profiles from central settings", async () => {
+    mockSelect
+      .mockReturnValueOnce(queryRows(builtInKeyRows()))
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-local",
+            tenant_id: "tenant-1",
+            slug: "fast-research",
+            built_in_key: null,
+            source_space_id: "space-1",
+          },
+        ]),
+      );
+
+    await expect(
+      updateMod.updateAgentProfile(
+        null,
+        {
+          tenantId: "tenant-1",
+          id: "profile-local",
+          input: { name: "Renamed" },
+        },
+        ctx(),
+      ),
+    ).rejects.toThrow(
+      "Space-local Agent Profiles are managed from their Space's workspace files",
+    );
+    expect(mockUpdate).not.toHaveBeenCalled();
+    // The central agents/<slug>.md must never be written for a space-local
+    // row — that would mint a phantom central profile via the put hook.
+    expect(mockWriteAgentProfileFile).not.toHaveBeenCalled();
+    expect(mockDeleteAgentProfileFile).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete space-local profiles from central settings", async () => {
+    mockSelect
+      .mockReturnValueOnce(queryRows(builtInKeyRows()))
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-local",
+            tenant_id: "tenant-1",
+            slug: "fast-research",
+            built_in_key: null,
+            source_space_id: "space-1",
+          },
+        ]),
+      );
+
+    await expect(
+      deleteMod.deleteAgentProfile(
+        null,
+        { tenantId: "tenant-1", id: "profile-local" },
+        ctx(),
+      ),
+    ).rejects.toThrow(
+      "Space-local Agent Profiles are managed from their Space's workspace files",
+    );
+    expect(mockDelete).not.toHaveBeenCalled();
+    // Deleting the central agents/<slug>.md would kill a same-slug central
+    // profile that the space-local row legally shadows.
+    expect(mockDeleteAgentProfileFile).not.toHaveBeenCalled();
+  });
+
+  it("still deletes custom central profiles and their central file", async () => {
+    mockSelect
+      .mockReturnValueOnce(queryRows(builtInKeyRows()))
+      .mockReturnValueOnce(
+        queryRows([
+          {
+            id: "profile-custom",
+            tenant_id: "tenant-1",
+            slug: "fast-research",
+            built_in_key: null,
+            source_space_id: null,
+          },
+        ]),
+      );
+    mockDelete.mockReturnValueOnce(deleteRows());
+
+    const result = await deleteMod.deleteAgentProfile(
+      null,
+      { tenantId: "tenant-1", id: "profile-custom" },
+      ctx(),
+    );
+
+    expect(result).toBe(true);
+    expect(mockDelete).toHaveBeenCalledTimes(1);
+    expect(mockDeleteAgentProfileFile).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      slug: "fast-research",
+    });
+  });
 });
+
+function builtInKeyRows() {
+  return [
+    { builtInKey: "research" },
+    { builtInKey: "coding" },
+    { builtInKey: "analyst" },
+    { builtInKey: "reviewer" },
+  ];
+}
 
 function ctx() {
   return { auth: { authType: "cognito" } } as any;

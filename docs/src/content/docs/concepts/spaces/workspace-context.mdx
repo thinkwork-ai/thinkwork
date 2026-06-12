@@ -34,7 +34,7 @@ Tenant platform agent
   = turn context
 ```
 
-In the rendered `/workspace` sandbox, the active Space appears under `Spaces/<active-space>/`. `Spaces/INDEX.md` lists other authorized Spaces, but those Space folders are not hydrated into the turn by default.
+In the rendered `/workspace` sandbox, the active Space appears under `Spaces/<active-space>/`. Other authorized Spaces are listed in the generated Workspace Routing section of `AGENTS.md`, composed at render time from authorization state (active Space, other authorized Spaces, acting user, participants, and Agent Profiles). Their folders are not hydrated into the turn by default; the agent reaches them read-only with the `fetch_workspace_source` tool.
 
 <Aside type="tip">
   Keep tenant-agent files broad and stable. Put local procedures in the Space

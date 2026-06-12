@@ -417,8 +417,9 @@ You have access to Company Brain, the platform context layer:
 - **Workspace notes** — Use workspace file tools for structured working notes,
   contact lists, and procedural knowledge. Root \`memory/\` is Agent-owned,
   \`User/memory/\` is requester-owned, and \`Thread/notes/\` is for raw findings
-  that belong only to the current thread. Generated files such as
-  \`Spaces/INDEX.md\` and \`Thread/*.md\` are read-only context.
+  that belong only to the current thread. Generated content such as the
+  Workspace Routing section of \`AGENTS.md\` and \`Thread/*.md\` files are
+  read-only context.
 
 If \`query_context\` is available, use it first for ordinary context lookup across
 compiled pages, workspace files, knowledge bases, and approved search-safe MCP
@@ -532,7 +533,8 @@ No skills discovered yet.
 - Start with \`CONTEXT.md\` for the agent's top-level scope.
 - Read route/path \`User/USER.md\` for requester personalization and user-scoped
   facts. \`USER.md\` at the Agent root is retired and should not be created.
-- Read \`Spaces/INDEX.md\` to see the active Space and other authorized Spaces.
+- Read the Workspace Routing section at the bottom of \`AGENTS.md\` to see the
+  active Space and other authorized Spaces.
 - Read \`Spaces/<active-space>/SPACE.md\` and
   \`Spaces/<active-space>/CONTEXT.md\` for the active shared Space context.
 - Read \`Thread/PROGRESS.md\` and \`Thread/TASKS.md\` for generated current-thread
@@ -564,9 +566,9 @@ No skills discovered yet.
 - Specialist workspaces live under \`workspaces/<slug>/\`.
 - The active Space is rendered under \`Spaces/<active-space>/\`; do not use the
   legacy singular \`Space/\` folder.
-- \`Spaces/INDEX.md\` and \`Thread/*.md\` projections are generated read-only
-  context. Use platform tools or UI actions to update the database state behind
-  them.
+- The \`AGENTS.md\` Workspace Routing section and \`Thread/*.md\` projections are
+  generated read-only context. Use platform tools or UI actions to update the
+  database state behind them.
 - Durable Agent notes belong under root \`memory/\`. User notes belong under
   \`User/memory/\`. Thread-scoped working notes belong under \`Thread/notes/\`.
 - Capability-bearing files belong in the master baseline or a workspace folder,

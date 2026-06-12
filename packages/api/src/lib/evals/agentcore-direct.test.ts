@@ -106,6 +106,36 @@ describe("direct AgentCore eval payload", () => {
     expect(payload.eval_mode).toBe(true);
     expect(payload.user_id).toBeUndefined();
   });
+
+  it("never enables the workspace fetch tool for eval sessions (plan 2026-06-12-002 U10; gating implemented runtime-side under eval_mode)", () => {
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "hello",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig,
+    });
+
+    // Eval payloads must always run with eval_mode so the runtime's
+    // extension gates (task-status, ask_user_question, fetch_workspace_source)
+    // all stay closed.
+    expect(payload.eval_mode).toBe(true);
+    expect(payload.eval_tools_enabled).toBe(false);
+    // Written loosely against the payload-builder contract so it holds
+    // regardless of when U5's enable-flag name lands: no key that could
+    // enable the workspace-source fetch tool may ever be truthy on an eval
+    // payload.
+    expect(payload.fetch_workspace_source_enabled).toBeUndefined();
+    for (const [key, value] of Object.entries(payload)) {
+      if (/fetch/i.test(key)) {
+        expect(value, `eval payload key "${key}" must not be enabled`).not.toBe(
+          true,
+        );
+      }
+    }
+  });
 });
 
 describe("direct AgentCore eval helpers", () => {

@@ -98,6 +98,16 @@ describe("reconcileChangedFiles", () => {
     ],
     files: [
       {
+        path: "AGENTS.md",
+        owner: "agent",
+        sourceKey: "tenants/acme/threads/thread-1/AGENTS.md",
+        sourcePrefix: "tenants/acme/threads/thread-1/",
+        sourcePath: "AGENTS.md",
+        etag: '"agents-generated"',
+        readOnly: true,
+        generated: true,
+      },
+      {
         path: "User/memory/preferences.md",
         owner: "user",
         sourceKey: "tenants/acme/users/eric/memory/preferences.md",
@@ -105,6 +115,16 @@ describe("reconcileChangedFiles", () => {
         sourcePath: "memory/preferences.md",
         etag: '"user-old"',
         readOnly: false,
+      },
+      {
+        path: "User/memory/digest.md",
+        owner: "user",
+        sourceKey: "tenants/acme/users/eric/memory/digest.md",
+        sourcePrefix: "tenants/acme/users/eric/",
+        sourcePath: "memory/digest.md",
+        etag: '"digest-generated"',
+        readOnly: false,
+        generated: true,
       },
       {
         path: "Spaces/board-pack/docs/brief.md",
@@ -362,12 +382,6 @@ describe("reconcileChangedFiles", () => {
           content: "# Edited progress\n",
           base_etag: '"progress-db"',
         },
-        {
-          path: "Spaces/INDEX.md",
-          op: "modify",
-          content: "# Spaces\n\n- changed\n",
-          base_etag: '"spaces-index"',
-        },
       ],
     });
 
@@ -385,15 +399,311 @@ describe("reconcileChangedFiles", () => {
         status: "rejected",
         code: "read_only_status_file",
       }),
-      expect.objectContaining({
-        path: "Spaces/INDEX.md",
-        owner: "status",
-        status: "rejected",
-        code: "read_only_status_file",
-      }),
     ]);
     expect(store.puts).toEqual([]);
     expect(store.deletes).toEqual([]);
+  });
+
+  it("rejects writes to the generated AGENTS.md with a settings-baseline pointer", async () => {
+    // Plan 2026-06-12-002 U3: the manifest readOnly/generated flags are the
+    // trust boundary for render-time composed files; an agent self-edit of
+    // AGENTS.md is rejected first-class with a pointer at the operator
+    // baseline surface.
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "AGENTS.md",
+          op: "modify",
+          content: "# Edited routing\n",
+          base_etag: '"agents-generated"',
+        },
+      ],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "AGENTS.md",
+        owner: "agent",
+        status: "rejected",
+        code: "read_only_generated_file",
+        message:
+          "AGENTS.md is composed at render time; edit the agent baseline in Settings → Agents (Workspace files).",
+      }),
+    ]);
+    expect(store.puts).toEqual([]);
+  });
+
+  it("honors the manifest generated flag for any generated file", async () => {
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "User/memory/digest.md",
+          op: "modify",
+          content: "# Edited digest\n",
+          base_etag: '"digest-generated"',
+        },
+      ],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "User/memory/digest.md",
+        owner: "user",
+        status: "rejected",
+        code: "read_only_generated_file",
+        message:
+          "This file is generated at render time and is read-only. Edit its source surface instead.",
+      }),
+    ]);
+    expect(store.puts).toEqual([]);
+  });
+
+  it("rejects modify and delete under a non-active Space folder as fetched read-only context", async () => {
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "Spaces/other-team/docs/brief.md",
+          op: "modify",
+          content: "# Edited foreign brief\n",
+          base_etag: '"foreign-old"',
+        },
+        {
+          path: "Spaces/other-team/docs/stale.md",
+          op: "delete",
+          base_etag: '"foreign-stale"',
+        },
+        {
+          path: "User/memory/new.md",
+          op: "create",
+          content: "# New\n",
+        },
+      ],
+    });
+
+    // Covers AE2: foreign-Space writes appear as per-file rejections in the
+    // partial-success report instead of silently misrouting or being lost.
+    expect(result.status).toBe("partial_success");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "Spaces/other-team/docs/brief.md",
+        owner: "space",
+        status: "rejected",
+        code: "fetched_path_read_only",
+        message:
+          "Content fetched from another Space is read-only context. Writes must target the active Space folder.",
+      }),
+      expect.objectContaining({
+        path: "Spaces/other-team/docs/stale.md",
+        owner: "space",
+        status: "rejected",
+        code: "fetched_path_read_only",
+      }),
+      expect.objectContaining({
+        path: "User/memory/new.md",
+        status: "written",
+      }),
+    ]);
+    expect(store.deletes).toEqual([]);
+    expect(store.puts.map((put) => put.key)).toEqual([
+      "tenants/acme/users/eric/memory/new.md",
+    ]);
+  });
+
+  it("rejects a create under a non-active Space folder without misrouting into the active Space source", async () => {
+    // Regression: stripTopLevelWorkspaceFolder discards the Spaces/<folder>
+    // segment, so before the active-Space guard a create under Spaces/B/
+    // silently built sourceKey = activeSpacePrefix + sourcePath and wrote
+    // foreign-addressed content into the ACTIVE Space's source.
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "Spaces/other-team/docs/new.md",
+          op: "create",
+          content: "# Foreign create\n",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "Spaces/other-team/docs/new.md",
+        owner: "space",
+        status: "rejected",
+        code: "fetched_path_read_only",
+      }),
+    ]);
+    expect(store.puts).toEqual([]);
+    expect(
+      store.puts.filter((put) =>
+        put.key.startsWith("tenants/acme/spaces/board-pack/"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("still writes creates addressed to the active Space folder", async () => {
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "Spaces/board-pack/docs/new-note.md",
+          op: "create",
+          content: "# In-lane note\n",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("complete");
+    expect(store.puts).toEqual([
+      {
+        key: "tenants/acme/spaces/board-pack/docs/new-note.md",
+        content: "# In-lane note\n",
+        ifNoneMatch: "*",
+      },
+    ]);
+  });
+
+  it("resolves the active Space folder for a tenant whose slug is literally 'spaces'", async () => {
+    // Regression: activeSpaceFolderSegment used indexOf('/spaces/') on the
+    // source prefix, so `tenants/spaces/spaces/board-pack/` matched at the
+    // tenant segment and extracted "spaces/board-pack" → "spaces-board-pack",
+    // bricking EVERY active-space write as fetched_path_read_only. Parsing
+    // by known structure (tenants/<tenant>/spaces/<slug>/) fixes it.
+    const spacesTenantContext = { ...context, tenantSlug: "spaces" };
+    const spacesTenantManifest = JSON.parse(
+      JSON.stringify(hydrateManifest).replaceAll(
+        "tenants/acme/",
+        "tenants/spaces/",
+      ),
+    ) as WorkspaceHydrateManifest;
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context: spacesTenantContext,
+      hydrateManifest: spacesTenantManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "Spaces/board-pack/docs/new-note.md",
+          op: "create",
+          content: "# Active-space note\n",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("complete");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "Spaces/board-pack/docs/new-note.md",
+        status: "written",
+      }),
+    ]);
+    expect(store.puts).toEqual([
+      {
+        key: "tenants/spaces/spaces/board-pack/docs/new-note.md",
+        content: "# Active-space note\n",
+        ifNoneMatch: "*",
+      },
+    ]);
+  });
+
+  it("rejects bare Spaces paths with an empty source path instead of misrouting", async () => {
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context,
+      hydrateManifest,
+      objectStore: store,
+      changedFiles: [
+        { path: "Spaces/INDEX.md", op: "create", content: "# Index\n" },
+        {
+          path: "Spaces/INDEX.md",
+          op: "modify",
+          content: "# Index\n",
+          base_etag: '"index-old"',
+        },
+      ],
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "Spaces/INDEX.md",
+        op: "create",
+        owner: "unowned",
+        status: "rejected",
+        code: "unowned_path",
+      }),
+      expect.objectContaining({
+        path: "Spaces/INDEX.md",
+        op: "modify",
+        owner: "unowned",
+        status: "rejected",
+        code: "unowned_path",
+      }),
+    ]);
+    expect(store.puts).toEqual([]);
   });
 
   it("reconciles narrative goal files through the thread goal lane", async () => {

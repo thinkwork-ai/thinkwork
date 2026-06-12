@@ -12,6 +12,7 @@ import {
   and,
   db,
   eq,
+  isNull,
   modelCatalog,
   spaces,
   tenants,
@@ -66,6 +67,24 @@ export function agentProfileSlugFromWorkspacePath(path: string): string | null {
 
 export function isAgentProfileWorkspacePath(path: string): boolean {
   return agentProfileSlugFromWorkspacePath(path) !== null;
+}
+
+/**
+ * Space-local profile files (plan 2026-06-12-002 U7) live under a Space
+ * source's `agents/` folder. The workspace-files API addresses Space targets
+ * with source-relative paths, so the on-the-wire shape is identical to the
+ * central form (`agents/<slug>.md`) — the Space scope comes from the request
+ * target, not the path. Separate helpers keep call sites explicit about which
+ * origin they are projecting.
+ */
+export function spaceAgentProfileSlugFromWorkspacePath(
+  path: string,
+): string | null {
+  return agentProfileSlugFromWorkspacePath(path);
+}
+
+export function isSpaceAgentProfileWorkspacePath(path: string): boolean {
+  return spaceAgentProfileSlugFromWorkspacePath(path) !== null;
 }
 
 export function serializeAgentProfileFile(
@@ -184,6 +203,9 @@ export async function upsertAgentProfileProjectionFromFile(input: {
       and(
         eq(agentProfiles.tenant_id, input.tenantId),
         eq(agentProfiles.slug, parsed.slug),
+        // Central projection only ever touches central rows — a space-local
+        // profile with the same slug is a distinct row (U7 shadowing).
+        isNull(agentProfiles.source_space_id),
       ),
     );
 
@@ -220,6 +242,74 @@ export async function upsertAgentProfileProjectionFromFile(input: {
   return row;
 }
 
+/**
+ * Projects a Space source `agents/<slug>.md` put into a space-local
+ * agent_profiles row (plan 2026-06-12-002 U7). The row is scoped to the
+ * Space via `source_space_id` and assigned to exactly that Space through
+ * agent_profile_space_assignments, so the existing space-availability
+ * filtering in loadAgentProfileRuntimeConfigs / listRoutableAgentProfiles
+ * picks it up without extra wiring. Frontmatter `spaces:` refs are ignored —
+ * folder placement is the scope. `builtInKey` is forced null: built-in
+ * identity belongs to central profiles only.
+ */
+export async function upsertSpaceAgentProfileProjectionFromFile(input: {
+  tenantId: string;
+  spaceId: string;
+  path: string;
+  content: string;
+}) {
+  const parsed = parseAgentProfileFile({
+    path: input.path,
+    content: input.content,
+  });
+  if (!parsed) return null;
+  await assertProfileModelAvailable(parsed.modelId);
+
+  const [existing] = await db
+    .select()
+    .from(agentProfiles)
+    .where(
+      and(
+        eq(agentProfiles.tenant_id, input.tenantId),
+        eq(agentProfiles.slug, parsed.slug),
+        eq(agentProfiles.source_space_id, input.spaceId),
+      ),
+    );
+
+  const values = {
+    tenant_id: input.tenantId,
+    slug: parsed.slug,
+    name: parsed.name,
+    description: parsed.description,
+    routing_guidance: parsed.routingGuidance,
+    instructions: parsed.instructions,
+    model_id: parsed.modelId,
+    enabled: parsed.enabled,
+    built_in_key: null,
+    source_space_id: input.spaceId,
+    tool_policy: parsed.toolPolicy,
+    skill_policy: parsed.skillPolicy,
+    execution_controls: parsed.executionControls,
+    updated_at: new Date(),
+  };
+
+  const [row] = existing
+    ? await db
+        .update(agentProfiles)
+        .set(values)
+        .where(eq(agentProfiles.id, existing.id))
+        .returning()
+    : await db.insert(agentProfiles).values(values).returning();
+
+  await replaceProjectionSpaceAssignments({
+    tenantId: input.tenantId,
+    profileId: row.id,
+    spaceIds: [input.spaceId],
+  });
+
+  return row;
+}
+
 export async function deleteAgentProfileProjectionForFile(input: {
   tenantId: string;
   path: string;
@@ -232,6 +322,31 @@ export async function deleteAgentProfileProjectionForFile(input: {
       and(
         eq(agentProfiles.tenant_id, input.tenantId),
         eq(agentProfiles.slug, slug),
+        isNull(agentProfiles.source_space_id),
+      ),
+    );
+  return true;
+}
+
+/**
+ * Removes the space-local projection row for a deleted Space source
+ * `agents/<slug>.md` file. Mirrors the central delete (hard delete — the
+ * file is the source of truth; assignments cascade with the row).
+ */
+export async function deleteSpaceAgentProfileProjectionForFile(input: {
+  tenantId: string;
+  spaceId: string;
+  path: string;
+}) {
+  const slug = spaceAgentProfileSlugFromWorkspacePath(input.path);
+  if (!slug) return false;
+  await db
+    .delete(agentProfiles)
+    .where(
+      and(
+        eq(agentProfiles.tenant_id, input.tenantId),
+        eq(agentProfiles.slug, slug),
+        eq(agentProfiles.source_space_id, input.spaceId),
       ),
     );
   return true;

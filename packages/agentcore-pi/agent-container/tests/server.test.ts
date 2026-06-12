@@ -27,7 +27,10 @@ import {
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { DelegationProvider } from "@thinkwork/pi-runtime-core";
+import {
+  buildToolAllowlist,
+  type DelegationProvider,
+} from "@thinkwork/pi-runtime-core";
 
 // ---------------------------------------------------------------------------
 // Test fixtures.
@@ -1939,6 +1942,107 @@ describe("buildInvocationResources — bearer never reaches the connect factory"
     expect(serialised).not.toContain("FakeJwt");
     expect(serialised).not.toContain("DoNotEcho");
     bundle.handleStore.clear();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetch_workspace_source gating (plan 2026-06-12-002 U5) — the allowlist
+// burn pattern: an extension tool missing from extensionToolNames registers
+// but never reaches the model, so the gate is asserted on the bundle output.
+// ---------------------------------------------------------------------------
+
+describe("buildInvocationResources — fetch_workspace_source gating", () => {
+  const fetchHost = {
+    workspaceDir: "/tmp/workspace",
+    downloadObject: async () => new Uint8Array(),
+    appendToBaseline: () => {},
+  };
+
+  async function buildFetchBundle(overrides: {
+    payload?: Record<string, unknown>;
+    host?: typeof fetchHost | undefined;
+  }) {
+    return await buildInvocationResources({
+      payload: {
+        fetch_workspace_source_enabled: true,
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "test-secret",
+        thread_turn_id: "turn-1",
+        turn_context: { spaceSlug: "research-a" },
+        ...overrides.payload,
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+      fetchWorkspaceSourceHost:
+        "host" in overrides ? overrides.host : fetchHost,
+    });
+  }
+
+  it("folds fetch_workspace_source into the createAgentSession allowlist when the flag + host are present", async () => {
+    const bundle = await buildFetchBundle({ host: fetchHost });
+    expect(bundle.extensionToolNames).toContain("fetch_workspace_source");
+    // The agent loop merges extensionToolNames into the allowlist — assert
+    // the same assembly it performs so a silently-gated tool fails here.
+    const allowlist = buildToolAllowlist([], bundle.extensionToolNames);
+    expect(allowlist).toContain("fetch_workspace_source");
+  });
+
+  it("never registers in eval mode", async () => {
+    const bundle = await buildFetchBundle({
+      payload: { eval_mode: true },
+      host: fetchHost,
+    });
+    expect(bundle.extensionToolNames).not.toContain("fetch_workspace_source");
+  });
+
+  it("absent without the dispatch payload flag", async () => {
+    const bundle = await buildFetchBundle({
+      payload: { fetch_workspace_source_enabled: undefined },
+      host: fetchHost,
+    });
+    expect(bundle.extensionToolNames).not.toContain("fetch_workspace_source");
+  });
+
+  it("absent without the host seam (no workspace bucket/baseline)", async () => {
+    const bundle = await buildFetchBundle({ host: undefined });
+    expect(bundle.extensionToolNames).not.toContain("fetch_workspace_source");
+  });
+
+  it("absent without the API wiring (mirrors task-status gating)", async () => {
+    const bundle = await buildFetchBundle({
+      payload: { thinkwork_api_secret: "" },
+      host: fetchHost,
+    });
+    expect(bundle.extensionToolNames).not.toContain("fetch_workspace_source");
   });
 });
 

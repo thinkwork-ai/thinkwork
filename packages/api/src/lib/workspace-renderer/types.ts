@@ -70,6 +70,12 @@ export interface WorkspaceTupleRepository {
   listAuthorizedSpaces?(
     tuple: ResolvedWorkspaceRenderTuple,
   ): Promise<WorkspaceSpaceIndexEntry[]>;
+  listSpaceParticipants?(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceSpaceParticipantEntry[]>;
+  listRoutableAgentProfiles?(
+    tuple: ResolvedWorkspaceRenderTuple,
+  ): Promise<WorkspaceAgentProfileRoutingEntry[]>;
 }
 
 export type WorkspaceRenderCacheStatus = "hit" | "miss";
@@ -128,6 +134,24 @@ export interface WorkspaceSpaceIndexEntry {
   name: string;
   accessMode: string;
   isActive: boolean;
+}
+
+export interface WorkspaceSpaceParticipantEntry {
+  id: string;
+  name: string;
+  /**
+   * The participant's user workspace folder name
+   * (`workspace_folder_name ?? derived user slug`) — the segment the routing
+   * section renders as the fetchable `Users/<slug>/` path.
+   */
+  slug: string;
+}
+
+export interface WorkspaceAgentProfileRoutingEntry {
+  id: string;
+  slug: string;
+  name: string;
+  routingGuidance: string | null;
 }
 
 export interface RenderedWorkspaceTuple {

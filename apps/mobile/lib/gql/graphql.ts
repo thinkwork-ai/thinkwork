@@ -1215,6 +1215,8 @@ export type EvalResult = {
   systemPrompt?: Maybe<Scalars["String"]["output"]>;
   testCaseId?: Maybe<Scalars["ID"]["output"]>;
   testCaseName?: Maybe<Scalars["String"]["output"]>;
+  threadTurnId?: Maybe<Scalars["ID"]["output"]>;
+  workspaceProjection?: Maybe<Scalars["AWSJSON"]["output"]>;
 };
 
 export type EvalRun = {

@@ -80,7 +80,11 @@ describe("MOBILE_PI_COMPATIBILITY_CONTRACT", () => {
         "mobile-native-host-extensions",
       ]),
     );
-    expect(deferredPiCompatibilityFeatureIds()).toEqual([]);
+    // fetch_workspace_source (plan 2026-06-12-002 U5) is cloud-only until a
+    // Cognito-authed content-streaming facade exists for the mobile host.
+    expect(deferredPiCompatibilityFeatureIds()).toEqual([
+      "fetch-workspace-source-tool",
+    ]);
     expect(piCompatibilityStatus("upstream-sdk-on-ios")).toBe("out_of_scope");
   });
 });

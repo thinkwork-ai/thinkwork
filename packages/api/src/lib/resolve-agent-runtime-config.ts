@@ -162,6 +162,17 @@ export interface AgentProfileRuntimeConfig {
     scope: "global" | "space_restricted";
     spaceIds: string[];
   };
+  /**
+   * Space that owns this profile when it was projected from a Space source's
+   * `agents/` folder (plan 2026-06-12-002 U7). Null for central profiles.
+   */
+  sourceSpaceId: string | null;
+  /**
+   * When a space-local profile shadows a central profile with the same slug
+   * for the active Space, the shadowed central profile's id is recorded here
+   * on the winning space-local config (diagnostic — dispatch sites may log).
+   */
+  shadowedCentralProfileId: string | null;
   builtInTools: string[];
   mcpServers: AgentProfileRuntimeMcpServer[];
   mcpToolAllowlist: Record<string, string[]>;
@@ -723,7 +734,19 @@ export async function resolveAgentRuntimeConfig(
   return overriddenConfig;
 }
 
-async function loadAgentProfileRuntimeConfigs(input: {
+/**
+ * Loads the tenant's enabled Agent Profiles as runtime configs, filtered to
+ * the active Space (space-restricted profiles only ship when their Space is
+ * active). Exported so the wakeup dispatch path resolves `agent_profiles`
+ * exactly the way the chat path does (plan 2026-06-12-002 U1 parity).
+ *
+ * Space-local profiles (U7): rows with `source_space_id` set ship only when
+ * that Space is the active Space. On slug collision the space-local profile
+ * wins while its Space is active — the central profile is dropped for that
+ * thread and its id is surfaced as `shadowedCentralProfileId` on the winning
+ * config. Central profiles resolve alone everywhere else.
+ */
+export async function loadAgentProfileRuntimeConfigs(input: {
   tenantId: string;
   spaceId: string | null;
   mcpConfigs: McpConfig[];
@@ -744,6 +767,7 @@ async function loadAgentProfileRuntimeConfigs(input: {
       tool_policy: agentProfiles.tool_policy,
       skill_policy: agentProfiles.skill_policy,
       execution_controls: agentProfiles.execution_controls,
+      source_space_id: agentProfiles.source_space_id,
     })
     .from(agentProfiles)
     .where(
@@ -803,6 +827,29 @@ async function loadAgentProfileRuntimeConfigs(input: {
     input.mcpConfigs.map((cfg) => [cfg.name, cfg]),
   );
 
+  // U7 shadowing pre-pass: slugs of space-local profiles that will actually
+  // ship for the active Space (model must be available). A central profile
+  // with the same slug is shadowed for this thread.
+  const activeSpaceLocalSlugs = new Set<string>();
+  const eligibleCentralIdBySlug = new Map<string, string>();
+  for (const profile of profileRows) {
+    if (profile.enabled !== true) continue;
+    if (!availableModelIds.has(profile.model_id)) continue;
+    if (profile.source_space_id) {
+      if (input.spaceId && profile.source_space_id === input.spaceId) {
+        activeSpaceLocalSlugs.add(profile.slug);
+      }
+    } else {
+      const assigned = spaceIdsByProfileId.get(profile.id) ?? [];
+      if (
+        assigned.length === 0 ||
+        (input.spaceId && assigned.includes(input.spaceId))
+      ) {
+        eligibleCentralIdBySlug.set(profile.slug, profile.id);
+      }
+    }
+  }
+
   const configs: AgentProfileRuntimeConfig[] = [];
   for (const profile of profileRows) {
     if (profile.enabled !== true) continue;
@@ -812,10 +859,32 @@ async function loadAgentProfileRuntimeConfigs(input: {
       );
       continue;
     }
+    if (profile.source_space_id) {
+      // Space-local profile: ships only while its Space is active.
+      if (!input.spaceId || profile.source_space_id !== input.spaceId) {
+        continue;
+      }
+    } else if (activeSpaceLocalSlugs.has(profile.slug)) {
+      // Central profile shadowed by an active space-local profile (U7).
+      console.warn(
+        `${input.logPrefix} Agent Profile ${profile.slug} (central ${profile.id}) shadowed by space-local profile for space ${input.spaceId}`,
+      );
+      continue;
+    }
     const assignedSpaceIds = [
-      ...new Set(spaceIdsByProfileId.get(profile.id) ?? []),
+      ...new Set(
+        profile.source_space_id
+          ? // Space-local rows are scoped by their origin Space regardless of
+            // assignment-row drift.
+            [
+              profile.source_space_id,
+              ...(spaceIdsByProfileId.get(profile.id) ?? []),
+            ]
+          : (spaceIdsByProfileId.get(profile.id) ?? []),
+      ),
     ];
     if (
+      !profile.source_space_id &&
       assignedSpaceIds.length > 0 &&
       (!input.spaceId || !assignedSpaceIds.includes(input.spaceId))
     ) {
@@ -871,6 +940,10 @@ async function loadAgentProfileRuntimeConfigs(input: {
         scope: assignedSpaceIds.length > 0 ? "space_restricted" : "global",
         spaceIds: assignedSpaceIds,
       },
+      sourceSpaceId: profile.source_space_id ?? null,
+      shadowedCentralProfileId: profile.source_space_id
+        ? (eligibleCentralIdBySlug.get(profile.slug) ?? null)
+        : null,
       builtInTools,
       mcpServers,
       mcpToolAllowlist,

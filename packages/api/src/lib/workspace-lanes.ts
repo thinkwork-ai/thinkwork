@@ -27,8 +27,13 @@ export interface WorkspacePathContract {
   generated: boolean;
 }
 
+// Root AGENTS.md is also generated in the rendered workspace (baseline +
+// routing section) and arrives in the hydrate manifest readOnly+generated,
+// but its write-back classification stays `agent_source` here: the manifest
+// flag is the trust boundary (reconcile enforcement lands in plan
+// 2026-06-12-002 U3) and the workspace-files API remains the operator edit
+// path for the baseline.
 const GENERATED_WORKSPACE_PROJECTION_PATHS = new Set([
-  "Spaces/INDEX.md",
   "Thread/THREAD.md",
   "Thread/GOAL.md",
   "Thread/PROGRESS.md",
@@ -83,6 +88,18 @@ export function workspaceSourcePath(path: string): string {
   return stripTopLevelWorkspaceFolder(path).sourcePath;
 }
 
+/**
+ * Returns the `<folder>` segment of a `Spaces/<folder>/...` workspace path,
+ * or null when the path is not addressed through the plural Spaces mount
+ * (legacy bare/`Space/` forms implicitly target the active Space).
+ */
+export function workspaceSpacesFolder(path: string): string | null {
+  const clean = path.replace(/^\/+/, "");
+  if (clean !== "Spaces" && !clean.startsWith("Spaces/")) return null;
+  const [, folder] = clean.split("/");
+  return folder || null;
+}
+
 export function isGeneratedWorkspaceProjection(path: string): boolean {
   const clean = path.replace(/^\/+/, "");
   return GENERATED_WORKSPACE_PROJECTION_PATHS.has(clean);
@@ -96,7 +113,12 @@ export function workspacePathOwner(path: string): WorkspacePathOwner {
   const topLevel = stripTopLevelWorkspaceFolder(clean);
   const sourcePath = topLevel.sourcePath;
   if (!sourcePath && topLevel.owner) {
-    return topLevel.owner === "thread" ? "unowned" : topLevel.owner;
+    // Bare top-level folders ("Agent", "User", "Spaces", "Spaces/<folder>")
+    // resolve to an empty source path. They are not writable files: a create
+    // against an empty source path would otherwise write to the owner's bare
+    // source prefix (e.g. `Spaces/INDEX.md` misrouting into the active
+    // Space's source). Classify them unowned so reconcile rejects cleanly.
+    return "unowned";
   }
   if (topLevel.owner === "thread") {
     if (sourcePath.startsWith("notes/") && sourcePath !== "notes/") {

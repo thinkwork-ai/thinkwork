@@ -235,8 +235,16 @@ describe("chat-agent-invoke runtime routing", () => {
       finalize_callback_url:
         "https://api.example.com/api/threads/thread-1/finalize",
       finalize_callback_secret: "test-secret",
+      activity_callback_url:
+        "https://api.example.com/api/threads/thread-1/activity",
+      activity_callback_secret: "test-secret",
+      thinkwork_api_url: "https://api.example.com",
+      thinkwork_api_secret: "test-secret",
       cost_owner_user_id: "user-1",
     });
+    // Wakeup parity (plan 2026-06-12-002 U1): a tenant with no profiles
+    // ships agent_profiles as [] on the wire, never absent.
+    expect(body.agent_profiles).toEqual([]);
   });
 
   it("blocks dispatch when the initiating user is already over budget", async () => {

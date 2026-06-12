@@ -1,6 +1,12 @@
 import type { MentionableWorkspaces } from "./space-md-parser.js";
 
 export const ACTIVE_SPACE_MARKER = "<!-- RENDERED:ACTIVE_SPACE -->";
+export const WORKSPACE_ROUTING_MARKER = "<!-- RENDERED:WORKSPACE_ROUTING -->";
+
+const GENERATED_SECTION_MARKERS = [
+  WORKSPACE_ROUTING_MARKER,
+  ACTIVE_SPACE_MARKER,
+] as const;
 
 const RESERVED_TOP_LEVEL_FOLDERS = new Set([
   "events",
@@ -188,4 +194,134 @@ export function composeAgentsMd(input: ComposeAgentsMdInput): string {
     return `${baseline.slice(0, baseline.indexOf(ACTIVE_SPACE_MARKER)).trimEnd()}\n\n${renderedSection}`;
   }
   return `${baseline.trimEnd()}\n\n${renderedSection}`;
+}
+
+export interface AgentsMdRoutingSpaceEntry {
+  name: string;
+  folderPath: string;
+  accessMode: string;
+  isActive: boolean;
+}
+
+export interface AgentsMdRoutingUserEntry {
+  name: string | null;
+  folderPath: string;
+}
+
+export interface AgentsMdRoutingProfileEntry {
+  name: string;
+  routingGuidance?: string | null;
+}
+
+/**
+ * An Active Space participant routing entry. `folderPath` is the fetchable
+ * mount path (`Users/<slug>/` — the top-level plural root, distinct from the
+ * acting user's writable `User/` folder) the agent passes to
+ * `fetch_workspace_source` to hydrate this participant's context read-only.
+ */
+export interface AgentsMdRoutingParticipantEntry {
+  name: string;
+  folderPath: string;
+}
+
+export interface ComposeAgentsMdRoutingInput {
+  baseline: string;
+  spaces: AgentsMdRoutingSpaceEntry[];
+  user?: AgentsMdRoutingUserEntry | null;
+  participants?: AgentsMdRoutingParticipantEntry[];
+  agentProfiles?: AgentsMdRoutingProfileEntry[];
+}
+
+/**
+ * Removes any rendered (marker-delimited) generated section from an
+ * AGENTS.md document. Source baselines must never persist generated
+ * sections — an operator pasting a composed file back into settings would
+ * otherwise nest routing sections on the next render. Returns the input
+ * unchanged when no marker is present.
+ */
+export function stripGeneratedAgentsMdSections(markdown: string): string {
+  let earliest = -1;
+  for (const marker of GENERATED_SECTION_MARKERS) {
+    const index = markdown.indexOf(marker);
+    if (index !== -1 && (earliest === -1 || index < earliest)) {
+      earliest = index;
+    }
+  }
+  if (earliest === -1) return markdown;
+  const baseline = markdown.slice(0, earliest).trimEnd();
+  return baseline ? `${baseline}\n` : "";
+}
+
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Composes the rendered AGENTS.md: agent-source baseline followed by a
+ * marker-delimited, generated routing-tree section. Recomposing is
+ * idempotent — any previously rendered section is truncated at its marker
+ * first. The section is deliberately timestamp-free and deterministically
+ * ordered so the render cache's regenerate-and-compare freshness check
+ * only busts when routing data actually changes.
+ */
+export function composeAgentsMdWithRouting(
+  input: ComposeAgentsMdRoutingInput,
+): string {
+  const baseline = stripGeneratedAgentsMdSections(input.baseline).trimEnd();
+  const participants = input.participants ?? [];
+  const agentProfiles = input.agentProfiles ?? [];
+
+  const lines: string[] = [
+    WORKSPACE_ROUTING_MARKER,
+    "",
+    "## Workspace Routing",
+    "",
+    "Generated at render time — do not edit. Folder-level routing for this workspace.",
+    "",
+    "### Spaces",
+    "",
+  ];
+  for (const space of input.spaces) {
+    lines.push(
+      space.isActive
+        ? `- ${space.name} — \`${space.folderPath}\` (active, hydrated)`
+        : `- ${space.name} — \`${space.folderPath}\` (${space.accessMode}; not currently hydrated)`,
+    );
+  }
+  if (input.spaces.some((space) => !space.isActive)) {
+    lines.push(
+      "",
+      "Only the active Space is hydrated in this workspace. Other authorized Spaces are listed for routing context and are not currently hydrated.",
+    );
+  }
+  if (input.user) {
+    lines.push(
+      "",
+      "### User",
+      "",
+      `- ${input.user.name?.trim() || "Acting user"} — \`${input.user.folderPath}\` (acting user, hydrated)`,
+    );
+  }
+  if (participants.length > 0) {
+    lines.push("", "### Active Space Participants", "");
+    for (const participant of participants) {
+      lines.push(
+        `- ${collapseWhitespace(participant.name)} — \`${participant.folderPath}\` (not currently hydrated)`,
+      );
+    }
+  }
+  if (agentProfiles.length > 0) {
+    lines.push("", "### Agent Profiles", "");
+    for (const profile of agentProfiles) {
+      const guidance = profile.routingGuidance
+        ? collapseWhitespace(profile.routingGuidance)
+        : "";
+      lines.push(
+        guidance ? `- ${profile.name} — ${guidance}` : `- ${profile.name}`,
+      );
+    }
+  }
+
+  const renderedSection = `${lines.join("\n")}\n`;
+  return baseline ? `${baseline}\n\n${renderedSection}` : renderedSection;
 }

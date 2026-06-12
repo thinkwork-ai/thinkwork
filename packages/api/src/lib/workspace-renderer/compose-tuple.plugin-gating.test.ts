@@ -200,7 +200,7 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     expect(context.sourceKey).toBe(`${AGENT_PREFIX}CONTEXT.md`);
     expect(context.generated).toBeUndefined();
     expect(result.writtenFiles).toEqual([
-      "Spaces/INDEX.md",
+      "AGENTS.md",
       ".hydrate_manifest.json",
     ]);
   });
@@ -229,7 +229,7 @@ describe("renderWorkspaceTuple — plugin activation gating", () => {
     expect(generatedContext).not.toContain("lastmile--crm-basics");
     expect(generatedContext).toContain("skills/notes-helper/SKILL.md");
     expect(result.writtenFiles).toEqual([
-      "Spaces/INDEX.md",
+      "AGENTS.md",
       "CONTEXT.md",
       ".hydrate_manifest.json",
     ]);

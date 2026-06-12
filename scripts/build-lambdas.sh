@@ -465,6 +465,9 @@ build_handler "knowledge-base-files" \
 build_handler "workspace-files" \
   "$REPO_ROOT/packages/api/workspace-files.ts"
 
+build_handler "workspace-fetch-source" \
+  "$REPO_ROOT/packages/api/src/handlers/workspace-fetch-source.ts"
+
 build_handler "agent-skills-list" \
   "$REPO_ROOT/packages/api/agent-skills-list.ts"
 

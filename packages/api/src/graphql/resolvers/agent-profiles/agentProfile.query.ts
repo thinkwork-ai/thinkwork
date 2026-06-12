@@ -1,5 +1,5 @@
 import type { GraphQLContext } from "../../context.js";
-import { agentProfiles, and, db, eq } from "../../utils.js";
+import { agentProfiles, and, db, eq, isNull } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import {
   badInput,
@@ -21,9 +21,15 @@ export async function agentProfile(
     throw badInput("Either id or slug is required");
   }
 
+  // Slug lookups resolve the CENTRAL profile only: a space-local profile may
+  // share the slug (partial unique indexes split by source_space_id), so an
+  // unscoped slug match would return one of the two nondeterministically.
   const selector = args.id
     ? eq(agentProfiles.id, args.id)
-    : eq(agentProfiles.slug, normalizeProfileSlug(args.slug ?? ""));
+    : and(
+        eq(agentProfiles.slug, normalizeProfileSlug(args.slug ?? "")),
+        isNull(agentProfiles.source_space_id),
+      );
   const [row] = await db
     .select()
     .from(agentProfiles)

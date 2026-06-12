@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, FileCode, Plus, Trash2 } from "lucide-react";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import {
+  ChevronRight,
+  FileCode,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearch,
+} from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
@@ -21,6 +32,8 @@ import { AgentRuntime } from "@/gql/graphql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { ScopedWorkspaceEditor } from "@/components/workspace-settings/ScopedWorkspaceEditor";
+import { SettingsMainAgent } from "@/components/workspace-settings/SettingsMainAgent";
 import {
   SettingsAgentProfilesQuery,
   SettingsCreateAgentProfileMutation,
@@ -31,7 +44,6 @@ import {
   SettingsUpdateTenantAgentMutation,
 } from "@/lib/settings-queries";
 import {
-  SettingsHeader,
   SettingsPageTitle,
   SettingsPane,
   SettingsRow,
@@ -146,6 +158,8 @@ const LOOP_FAIL_BEHAVIOR_OPTIONS: Array<{
 export function SettingsAgents() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
+  const { view, file } = useSearch({ from: "/_authed/settings/agents/" });
+  const workspaceView = view === "workspace";
   const [profilesResult, refetchProfiles] = useQuery({
     query: SettingsAgentProfilesQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -203,30 +217,65 @@ export function SettingsAgents() {
     }
   }
 
+  // Header icon toggles between the two views of this page: the config view
+  // (Default Agent + Agent Profiles) and the workspace view (the main-agent
+  // source editor). The active view is encoded in `?view=` so deep links work.
+  const viewToggle = (
+    <Button
+      asChild
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      className="text-muted-foreground hover:text-foreground"
+      aria-label={workspaceView ? "Agent config" : "Workspace files"}
+      title={workspaceView ? "Agent config" : "Workspace files"}
+    >
+      {workspaceView ? (
+        <Link to="/settings/agents" search={{}}>
+          <SlidersHorizontal className="h-4 w-4" />
+          <span className="sr-only">Agent config</span>
+        </Link>
+      ) : (
+        <Link to="/settings/agents" search={{ view: "workspace" }}>
+          <FileCode className="h-4 w-4" />
+          <span className="sr-only">Workspace files</span>
+        </Link>
+      )}
+    </Button>
+  );
+
+  // Both views publish the slim settings header bar (SettingsHeaderBar)
+  // directly: the config view is a single "Agents" crumb; the workspace view
+  // reads "Agents > Workspace" with the "Agents" crumb clickable to return to
+  // the config view (clearing ?view= via empty search).
+  usePageHeaderActions({
+    title: "Agents",
+    breadcrumbs: workspaceView
+      ? [
+          { label: "Agents", href: "/settings/agents", search: {} },
+          { label: "Workspace" },
+        ]
+      : [{ label: "Agents" }],
+    action: viewToggle,
+    actionKey: `settings-agents:${workspaceView ? "workspace" : "config"}`,
+  });
+
+  if (workspaceView) {
+    // Full-bleed editor: the file tree + editor fill the entire content pane
+    // directly under the breadcrumb bar — no in-body title/description block
+    // and no SettingsPane padding.
+    return (
+      <div className="h-full min-h-0">
+        <SettingsMainAgent defaultOpenFile={file} />
+      </div>
+    );
+  }
+
   return (
     <SettingsPane className="max-w-none">
-      <SettingsHeader
+      <SettingsPageTitle
         title="Agents"
         description="Configure the default Agent and reusable task profiles delegated through Pi subagents."
-        actions={
-          <Button
-            asChild
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Open AGENTS.md"
-            title="Open AGENTS.md"
-          >
-            <Link
-              to="/settings/local-workspace"
-              search={{ file: "Agent/AGENTS.md" }}
-            >
-              <FileCode className="h-4 w-4" />
-              <span className="sr-only">Open AGENTS.md</span>
-            </Link>
-          </Button>
-        }
       />
 
       <AgentConfigSection />
@@ -305,26 +354,6 @@ export function SettingsAgentProfileDetail() {
       { label: "Agents", href: "/settings/agents" },
       { label: profile?.name ?? "Agent Profile" },
     ],
-    action: profile ? (
-      <Button
-        asChild
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="text-muted-foreground hover:text-foreground"
-        aria-label="Open Agent Profile markdown"
-        title="Open Agent Profile markdown"
-      >
-        <Link
-          to="/settings/local-workspace"
-          search={{ file: agentProfileWorkspacePath(profile) }}
-        >
-          <FileCode className="h-4 w-4" />
-          <span className="sr-only">Open Agent Profile markdown</span>
-        </Link>
-      </Button>
-    ) : undefined,
-    actionKey: profile ? `agent-profile-editor:${profile.id}` : undefined,
   });
 
   async function onDeleteProfile(profile: AgentProfileRow) {
@@ -409,7 +438,40 @@ export function SettingsAgentProfileDetail() {
         onSaved={() => refetchProfiles({ requestPolicy: "network-only" })}
         onDelete={() => onDeleteProfile(profile)}
       />
+      <ProfileWorkspaceSection profileSlug={profile.slug} />
     </SettingsPane>
+  );
+}
+
+/**
+ * Embedded file editor over the agent source's `agents/` subtree — the
+ * profile markdown files the composed routing section is derived from. Scoped
+ * via `pathPrefix` so the editor only lists/writes `agents/*`; replaces the
+ * old deep link into the retired consolidated workspace page.
+ */
+function ProfileWorkspaceSection({ profileSlug }: { profileSlug: string }) {
+  const { tenantId } = useTenant();
+  const [agentResult] = useQuery({
+    query: SettingsTenantAgentQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const agentId = agentResult.data?.agent?.id ?? null;
+  if (!agentId) return null;
+
+  return (
+    <SettingsSection label="Profile files">
+      <div className="h-[28rem]">
+        <ScopedWorkspaceEditor
+          target={{ agentId }}
+          targetKey={`agent-profiles:${agentId}`}
+          pathPrefix="agents/"
+          defaultOpenFile={`${profileSlug}.md`}
+          bordered={false}
+          className="h-full"
+        />
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -524,10 +586,6 @@ function AgentConfigSection() {
       </SettingsRow>
     </SettingsSection>
   );
-}
-
-function agentProfileWorkspacePath(profile: AgentProfileRow): string {
-  return `Agent/agents/${profile.slug}.md`;
 }
 
 function ProfileListItem({

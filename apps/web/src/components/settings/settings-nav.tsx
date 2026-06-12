@@ -5,7 +5,6 @@ import {
   Brain,
   Clock,
   Cpu,
-  FolderTree,
   History,
   Repeat,
   Settings as SettingsIcon,
@@ -47,11 +46,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
-  {
-    label: "Workspace",
-    to: "/settings/local-workspace",
-    icon: FolderTree,
-  },
   {
     label: "Evaluations",
     to: "/settings/evaluations",
@@ -147,9 +141,8 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
 
 /**
  * Visible settings sections for the current caller. Operator-only sections need
- * a resolved operator role; desktop-only sections (the local-workspace
- * inspector) need the desktop bridge build. Pure so it can be unit-tested
- * without rendering the sidebar.
+ * a resolved operator role; desktop-only sections need the desktop bridge
+ * build. Pure so it can be unit-tested without rendering the sidebar.
  */
 export function visibleSettingsNavItems(opts: {
   isOperator: boolean;

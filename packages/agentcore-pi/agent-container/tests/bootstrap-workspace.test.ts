@@ -318,12 +318,15 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
       ],
       files: [
         {
+          // Generated at render time: agent baseline + routing section,
+          // shadowing the agent-source AGENTS.md (plan 2026-06-12-002 U2).
           path: "AGENTS.md",
           owner: "agent",
-          sourceKey: `${SOURCE_PREFIX}AGENTS.md`,
-          sourcePrefix: SOURCE_PREFIX,
+          sourceKey: `${THREAD_PREFIX}AGENTS.md`,
+          sourcePrefix: THREAD_PREFIX,
           sourcePath: "AGENTS.md",
-          readOnly: false,
+          readOnly: true,
+          generated: true,
         },
         {
           path: "skills/research/SKILL.md",
@@ -340,15 +343,6 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
           sourcePrefix: SOURCE_PREFIX,
           sourcePath: "workspace-archives/old/AGENTS.md",
           readOnly: false,
-        },
-        {
-          path: "Spaces/INDEX.md",
-          owner: "thread_goal",
-          sourceKey: `${THREAD_PREFIX}Spaces/INDEX.md`,
-          sourcePrefix: THREAD_PREFIX,
-          sourcePath: "Spaces/INDEX.md",
-          readOnly: true,
-          generated: true,
         },
         {
           path: "User/USER.md",
@@ -399,10 +393,9 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
       `${THREAD_PREFIX}.hydrate_manifest.json`,
       JSON.stringify(manifest),
     );
-    stubObject(`${SOURCE_PREFIX}AGENTS.md`, "# Agent");
+    stubObject(`${THREAD_PREFIX}AGENTS.md`, "# Agent\n\n## Workspace Routing");
     stubObject(`${SOURCE_PREFIX}skills/research/SKILL.md`, "# Skill");
     stubObject(`${SOURCE_PREFIX}workspace-archives/old/AGENTS.md`, "# Old");
-    stubObject(`${THREAD_PREFIX}Spaces/INDEX.md`, "# Spaces");
     stubObject("tenants/acme/users/eric/USER.md", "# User");
     stubObject("tenants/acme/spaces/default/CONTEXT.md", "# Space");
     stubObject("tenants/acme/spaces/default/plans/plan.md", "# Plan");
@@ -412,18 +405,18 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
       workspacePrefix: THREAD_PREFIX,
     });
 
-    expect(result).toMatchObject({ synced: 7, total: 7 });
+    expect(result).toMatchObject({ synced: 6, total: 6 });
     const files = await readFiles(tmp);
     expect(files).toMatchObject({
-      "AGENTS.md": "# Agent",
+      "AGENTS.md": "# Agent\n\n## Workspace Routing",
       "skills/research/SKILL.md": "# Skill",
-      "Spaces/INDEX.md": "# Spaces",
       "User/USER.md": "# User",
       "Spaces/default/CONTEXT.md": "# Space",
       "Spaces/default/plans/plan.md": "# Plan",
       "Thread/GOAL.md": "# Goal",
     });
     expect(files["Agent/workspace/AGENTS.md"]).toBeUndefined();
+    expect(files["Spaces/INDEX.md"]).toBeUndefined();
     expect(files["Spaces/default/source/CONTEXT.md"]).toBeUndefined();
     expect(files["workspace-archives/old/AGENTS.md"]).toBeUndefined();
     expectNoForbiddenRuntimeRoots(files);

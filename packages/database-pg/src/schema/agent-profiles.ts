@@ -4,6 +4,13 @@
  * Agent Profiles are tenant-global Pi subagent definitions. A profile can be
  * assigned to zero or more Spaces; when assigned, the same global definition is
  * available in those Spaces without per-Space edits.
+ *
+ * Space-local profiles (plan 2026-06-12-002 U7): a profile file under a Space
+ * source's `agents/` folder projects into this table with `source_space_id`
+ * set to that Space. `source_space_id IS NULL` means a central (agent-source)
+ * profile. Slugs are unique per tenant within each origin scope, so a
+ * space-local profile may intentionally collide with a central slug — the
+ * space-local row shadows the central one while its Space is active.
  */
 
 import {
@@ -37,6 +44,12 @@ export const agentProfiles = pgTable(
     model_id: text("model_id").notNull(),
     enabled: boolean("enabled").notNull().default(true),
     built_in_key: text("built_in_key"),
+    // Origin discriminator: NULL = central profile (AGENT source `agents/`),
+    // non-NULL = space-local profile projected from that Space source's
+    // `agents/` folder. Cascade with the Space.
+    source_space_id: uuid("source_space_id").references(() => spaces.id, {
+      onDelete: "cascade",
+    }),
     tool_policy: jsonb("tool_policy")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -57,10 +70,12 @@ export const agentProfiles = pgTable(
       .default(sql`now()`),
   },
   (table) => [
-    uniqueIndex("uq_agent_profiles_tenant_slug").on(
-      table.tenant_id,
-      table.slug,
-    ),
+    uniqueIndex("uq_agent_profiles_tenant_slug")
+      .on(table.tenant_id, table.slug)
+      .where(sql`${table.source_space_id} IS NULL`),
+    uniqueIndex("uq_agent_profiles_tenant_slug_source_space")
+      .on(table.tenant_id, table.slug, table.source_space_id)
+      .where(sql`${table.source_space_id} IS NOT NULL`),
     uniqueIndex("uq_agent_profiles_tenant_built_in_key")
       .on(table.tenant_id, table.built_in_key)
       .where(sql`${table.built_in_key} IS NOT NULL`),
@@ -105,6 +120,10 @@ export const agentProfilesRelations = relations(
     tenant: one(tenants, {
       fields: [agentProfiles.tenant_id],
       references: [tenants.id],
+    }),
+    sourceSpace: one(spaces, {
+      fields: [agentProfiles.source_space_id],
+      references: [spaces.id],
     }),
     spaceAssignments: many(agentProfileSpaceAssignments),
   }),

@@ -123,6 +123,13 @@ import {
 } from "@/components/workbench/useComposerSkillPins";
 import type { ComputerThreadChunk } from "@/lib/use-computer-thread-chunks";
 import type { ApprovedModelOption } from "@/lib/approved-model-selection";
+import { ProjectedWorkspacePanel } from "@/components/workbench/ProjectedWorkspacePanel";
+import {
+  agentsMdContentMayDiffer,
+  parseWorkspaceProjection,
+  selectLatestProjection,
+  type LatestProjectionRef,
+} from "@/components/workbench/workspace-projection";
 
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
 const COMPOSER_TRANSCRIPT_GAP_PX = 32;
@@ -199,6 +206,8 @@ export interface TaskThreadTurn {
   error?: string | null;
   errorCode?: string | null;
   systemPrompt?: string | null;
+  /** Raw ThreadTurn.contextSnapshot (AWSJSON) — carries workspace_projection. */
+  contextSnapshot?: unknown;
   events?: TaskThreadEvent[];
 }
 
@@ -400,6 +409,17 @@ export function TaskThreadView({
     };
   }, []);
 
+  // Most recent workspace projection across the thread — older turns'
+  // AGENTS.md viewers label their (current-state) content as possibly
+  // differing from that turn's render (plan 2026-06-12-002 U9). Memoized:
+  // selecting re-parses every turn's contextSnapshot, which would otherwise
+  // run on every streaming chunk render.
+  const turns = thread?.turns;
+  const latestProjection = useMemo(
+    () => selectLatestProjection(turns ?? []),
+    [turns],
+  );
+
   if (isLoading) {
     return <TaskThreadState label="Loading..." />;
   }
@@ -478,6 +498,8 @@ export function TaskThreadView({
                       key={message.id}
                       message={message}
                       turn={turn}
+                      threadId={thread.id}
+                      latestProjection={latestProjection}
                       isLatestUser={index === latestUserIndex}
                       streamingChunks={
                         index === latestUserIndex && showStreamingBuffer
@@ -1524,6 +1546,8 @@ function isTaskQueueAssistantMessage(message: TaskThreadMessage) {
 function TranscriptSegment({
   message,
   turn,
+  threadId,
+  latestProjection,
   isLatestUser,
   streamingChunks,
   streamState,
@@ -1538,6 +1562,8 @@ function TranscriptSegment({
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
+  threadId?: string;
+  latestProjection?: LatestProjectionRef | null;
   isLatestUser: boolean;
   streamingChunks: ComputerThreadChunk[];
   streamState?: UIMessageStreamState;
@@ -1573,7 +1599,14 @@ function TranscriptSegment({
         mentionTargets={mentionTargets}
         skillCatalog={skillCatalog}
       />
-      {turn ? <ThreadTurnActivity turn={turn} message={message} /> : null}
+      {turn ? (
+        <ThreadTurnActivity
+          turn={turn}
+          message={message}
+          threadId={threadId}
+          latestProjection={latestProjection}
+        />
+      ) : null}
       {isLatestUser ? (
         <>
           {hasTypedParts ? (
@@ -1620,15 +1653,27 @@ function normalizeStatus(status: unknown) {
 function ThreadTurnActivity({
   turn,
   message,
+  threadId,
+  latestProjection,
 }: {
   turn?: TaskThreadTurn;
   message?: TaskThreadMessage;
+  threadId?: string;
+  latestProjection?: LatestProjectionRef | null;
 }) {
   const status = normalizeStatus(turn?.status);
   const running = isRunningStatus(status);
   // One hook per turn surface (KTD3): live-elapsed only ticks while running,
   // freezes on terminal status, and is null for not-yet-started turns.
   const elapsedMs = useTurnElapsed(displayStartedAtForTurn(turn), running);
+  // Per-turn workspace projection (U9): absent on pre-feature turns.
+  // Memoized on the snapshot value (an AWSJSON string) so streaming chunk
+  // re-renders don't re-JSON.parse every turn's snapshot.
+  const contextSnapshot = turn?.contextSnapshot;
+  const projection = useMemo(
+    () => parseWorkspaceProjection(contextSnapshot),
+    [contextSnapshot],
+  );
 
   if (!turn) return null;
 
@@ -1680,6 +1725,17 @@ function ThreadTurnActivity({
       ))}
       {turn.error ? (
         <ActionRow title="Run failed" detail={turn.error} kind="tool" />
+      ) : null}
+      {projection ? (
+        <ProjectedWorkspacePanel
+          projection={projection}
+          threadId={threadId}
+          agentsMdMayDiffer={agentsMdContentMayDiffer(
+            turn.id,
+            projection,
+            latestProjection ?? null,
+          )}
+        />
       ) : null}
     </ThinkingRow>
   );

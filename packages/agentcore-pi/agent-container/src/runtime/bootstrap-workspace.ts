@@ -270,7 +270,6 @@ function runtimeWorkspacePath(relPath: string): string | null {
     return `Thread/${threadPath}`;
   }
   if (clean.startsWith("Spaces/")) {
-    if (clean === "Spaces/INDEX.md") return clean;
     const [, spaceFolder, ...rest] = clean.split("/");
     if (rest.length === 0) return null;
     const spacePath = rest.join("/");

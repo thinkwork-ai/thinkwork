@@ -389,6 +389,7 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
         name: agentProfiles.name,
         description: agentProfiles.description,
         routingGuidance: agentProfiles.routing_guidance,
+        sourceSpaceId: agentProfiles.source_space_id,
       })
       .from(agentProfiles)
       .where(
@@ -413,14 +414,24 @@ class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepos
       assignments.set(row.profileId, existing);
     }
 
-    for (const row of profileRows) {
+    const eligibleRows = profileRows.filter((row) => {
       const spacesForProfile = assignments.get(row.profileId);
-      const availableInSpace =
+      return (
         input.includeAllProfiles ||
         !spacesForProfile ||
         spacesForProfile.size === 0 ||
-        (input.spaceId ? spacesForProfile.has(input.spaceId) : false);
-      if (!availableInSpace) continue;
+        (input.spaceId ? spacesForProfile.has(input.spaceId) : false)
+      );
+    });
+    // A space-local profile shadows a same-slug central profile while its
+    // Space is active (mirrors loadAgentProfileRuntimeConfigs).
+    const shadowedSlugs = new Set(
+      eligibleRows
+        .filter((row) => input.spaceId && row.sourceSpaceId === input.spaceId)
+        .map((row) => row.slug),
+    );
+    for (const row of eligibleRows) {
+      if (row.sourceSpaceId === null && shadowedSlugs.has(row.slug)) continue;
       addTarget(byKey, {
         id: `agent_profile:${row.profileId}`,
         targetType: "agent_profile",

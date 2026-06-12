@@ -53,6 +53,15 @@ export async function updateAgentProfile(
   await ensureBuiltInAgentProfiles(args.tenantId);
 
   const existing = await loadAgentProfileRow(args.tenantId, args.id);
+  // Space-local rows (source_space_id set) are projections of a Space's
+  // workspace files. Updating one here would write the profile file into the
+  // CENTRAL agent source (agents/<slug>.md), minting a phantom central
+  // profile via the put hook.
+  if (existing.source_space_id != null) {
+    throw badInput(
+      "Space-local Agent Profiles are managed from their Space's workspace files (Settings → Spaces → the owning Space → Workspace files)",
+    );
+  }
   const input = args.input ?? {};
   const updates: Record<string, unknown> = { updated_at: new Date() };
 

@@ -90,6 +90,21 @@ vi.mock("@/context/PageHeaderContext", () => ({
 
 vi.mock("@/lib/settings-queries", () => queryDocs);
 
+vi.mock("@/components/workspace-settings/ScopedWorkspaceEditor", () => ({
+  ScopedWorkspaceEditor: (props: {
+    target: Record<string, string>;
+    targetKey: string;
+    defaultOpenFile?: string;
+  }) => (
+    <div
+      data-testid="space-workspace-editor"
+      data-target={JSON.stringify(props.target)}
+      data-targetkey={props.targetKey}
+      data-default-open={props.defaultOpenFile}
+    />
+  ),
+}));
+
 import { SettingsSpaceConfig } from "./SettingsSpaceConfig";
 
 beforeEach(() => {
@@ -115,6 +130,20 @@ describe("SettingsSpaceConfig", () => {
     expect(screen.getByText("finance-audit-xls")).toBeTruthy();
     expect(screen.getByText("Review required")).toBeTruthy();
     expect(screen.getByText("Bash restricted")).toBeTruthy();
+  });
+
+  it("embeds the workspace editor scoped to this Space's source", () => {
+    render(<SettingsSpaceConfig />);
+
+    const editor = screen.getByTestId("space-workspace-editor");
+    // Single spaceId target — the tree lists only this Space's files, never
+    // the agent or user sources.
+    expect(JSON.parse(editor.getAttribute("data-target")!)).toEqual({
+      spaceId: "space-1",
+    });
+    expect(editor.getAttribute("data-targetkey")).toBe("space:space-1");
+    expect(editor.getAttribute("data-default-open")).toBe("SPACE.md");
+    expect(screen.getByText("Workspace files")).toBeTruthy();
   });
 
   it("publishes the SPACE.md shortcut as a page-header action", () => {

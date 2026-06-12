@@ -28,7 +28,9 @@ import {
   assertSpaceAccessAllowed,
   type SpaceMembershipRepository,
 } from "./space-membership-check.js";
+import { composeAgentsMdWithRouting } from "./agents-md-composer.js";
 import type {
+  WorkspaceAgentProfileRoutingEntry,
   WorkspaceHydrateFile,
   WorkspaceHydrateManifest,
   WorkspaceHydrateOwner,
@@ -37,6 +39,7 @@ import type {
   RenderedWorkspaceTuple,
   ResolvedWorkspaceRenderTuple,
   WorkspaceSpaceIndexEntry,
+  WorkspaceSpaceParticipantEntry,
   WorkspaceObjectMetadata,
   WorkspaceRendererObjectStore,
   WorkspaceRenderTupleInput,
@@ -141,7 +144,9 @@ function shouldRenderAgentBaselinePath(relPath: string): boolean {
   );
 }
 
-function shouldRenderSpaceSourcePath(relPath: string): boolean {
+// Exported so the workspace-fetch-source handler (plan 2026-06-12-002 U4)
+// returns exactly the renderable set composition would include.
+export function shouldRenderSpaceSourcePath(relPath: string): boolean {
   const sourcePath = runtimeSourcePath(relPath);
   return (
     sourcePath !== "effective-policy.json" &&
@@ -150,7 +155,8 @@ function shouldRenderSpaceSourcePath(relPath: string): boolean {
   );
 }
 
-function shouldRenderUserSourcePath(relPath: string): boolean {
+// Exported for the workspace-fetch-source handler — see note above.
+export function shouldRenderUserSourcePath(relPath: string): boolean {
   const sourcePath = runtimeSourcePath(relPath);
   if (sourcePath === "USER.md" || sourcePath === "knowledge-pack.md") {
     return true;
@@ -569,32 +575,43 @@ function fallbackAuthorizedSpaces(
   ];
 }
 
-function renderSpaceIndexMarkdown(input: {
+function renderGeneratedAgentsMd(input: {
   tuple: ResolvedWorkspaceRenderTuple;
+  baseline: string;
   spaces: WorkspaceSpaceIndexEntry[];
+  participants: WorkspaceSpaceParticipantEntry[];
+  agentProfiles: WorkspaceAgentProfileRoutingEntry[];
+  userHydrated: boolean;
 }): string {
   const normalizedSpaces = input.spaces.length
     ? input.spaces
     : fallbackAuthorizedSpaces(input.tuple);
-  const active =
-    normalizedSpaces.find((space) => space.isActive) ??
-    fallbackAuthorizedSpaces(input.tuple)[0];
-  const lines = [
-    "# Spaces",
-    "",
-    `Active Space: ${active.name} (${active.slug})`,
-    "",
-    "Only the active Space is fully hydrated in this workspace. Other authorized Spaces are listed here for routing context.",
-    "",
-    "## Authorized Spaces",
-    "",
-  ];
-  for (const space of normalizedSpaces) {
-    const marker = space.isActive ? "active" : space.accessMode;
-    lines.push(`- ${space.name} (${space.slug}) - ${marker}`);
-  }
-  lines.push("");
-  return `${lines.join("\n")}`;
+  return composeAgentsMdWithRouting({
+    baseline: input.baseline,
+    spaces: normalizedSpaces.map((space) => ({
+      name: space.name,
+      folderPath: `Spaces/${runtimeFolderSegment(space.slug)}/`,
+      accessMode: space.accessMode,
+      isActive: space.isActive,
+    })),
+    user: input.userHydrated
+      ? {
+          name: input.tuple.userName ?? input.tuple.userSlug,
+          folderPath: "User/",
+        }
+      : null,
+    // Participants carry their fetchable mount path: fetched participant
+    // folders mount at the top-level plural `Users/<slug>/` root — never
+    // inside the acting user's writable `User/` tree.
+    participants: input.participants.map((participant) => ({
+      name: participant.name,
+      folderPath: `Users/${runtimeFolderSegment(participant.slug)}/`,
+    })),
+    agentProfiles: input.agentProfiles.map((profile) => ({
+      name: profile.name,
+      routingGuidance: profile.routingGuidance,
+    })),
+  });
 }
 
 export async function renderWorkspaceTuple(
@@ -633,7 +650,7 @@ export async function renderWorkspaceTuple(
     deps.objectStore ?? new S3WorkspaceRendererObjectStore(s3);
   const renderedPrefix = threadRuntimePrefix(tuple);
   const manifestKey = `${renderedPrefix}${HYDRATE_MANIFEST_PATH}`;
-  const spaceIndexKey = `${renderedPrefix}Spaces/INDEX.md`;
+  const agentsMdKey = `${renderedPrefix}AGENTS.md`;
   const markerKey = `${renderedPrefix}.rendered_at`;
   const agentPrefix = agentWorkspacePrefix(tuple);
   const spacePrefix = spaceSourcePrefix(tuple);
@@ -794,30 +811,40 @@ export async function renderWorkspaceTuple(
   });
   const [
     authorizedSpaces,
+    spaceParticipants,
+    routableAgentProfiles,
+    agentsMdBaseline,
     marker,
     existingManifest,
-    existingSpaceIndex,
+    existingAgentsMd,
     existingGatedContext,
   ] = await Promise.all([
     repository.listAuthorizedSpaces?.(tuple) ??
       Promise.resolve(fallbackAuthorizedSpaces(tuple)),
+    repository.listSpaceParticipants?.(tuple) ?? Promise.resolve([]),
+    repository.listRoutableAgentProfiles?.(tuple) ?? Promise.resolve([]),
+    objectStore.getText({ bucket, key: `${agentPrefix}AGENTS.md` }),
     objectStore.getText({ bucket, key: markerKey }),
     objectStore.getText({ bucket, key: manifestKey }),
-    objectStore.getText({ bucket, key: spaceIndexKey }),
+    objectStore.getText({ bucket, key: agentsMdKey }),
     gatedContextFile
       ? objectStore.getText({ bucket, key: gatedContextFile.key })
       : Promise.resolve(null),
   ]);
-  const spaceIndex = renderSpaceIndexMarkdown({
+  const agentsMd = renderGeneratedAgentsMd({
     tuple,
+    baseline: agentsMdBaseline ?? "",
     spaces: authorizedSpaces,
+    participants: spaceParticipants,
+    agentProfiles: routableAgentProfiles,
+    userHydrated: Boolean(userPrefix),
   });
   const generatedFiles: GeneratedWorkspaceFile[] = [
     {
-      path: "Spaces/INDEX.md",
-      key: spaceIndexKey,
-      content: spaceIndex,
-      owner: "thread_goal",
+      path: "AGENTS.md",
+      key: agentsMdKey,
+      content: agentsMd,
+      owner: "agent",
     },
     ...(gatedContextFile ? [gatedContextFile] : []),
   ];
@@ -848,9 +875,12 @@ export async function renderWorkspaceTuple(
     generatedFiles,
     tuple,
   });
+  // The routing data behind the generated AGENTS.md is DB-derived and never
+  // bumps an S3 mtime, so freshness is regenerate-and-compare: a membership,
+  // participant, or profile change busts the cache through content drift.
   const cacheIsFresh =
     existingManifest !== null &&
-    existingSpaceIndex === spaceIndex &&
+    existingAgentsMd === agentsMd &&
     (!gatedContextFile || existingGatedContext === gatedContextFile.content) &&
     markerFresh &&
     existingManifestMatchesContract(existingManifest, hydrateManifest);

@@ -14,6 +14,7 @@ import {
   evalResults,
   evalTestCases,
   agents,
+  threadTurns,
 } from "@thinkwork/database-pg/schema";
 import {
   fetchSpansForSession,
@@ -138,6 +139,7 @@ function resultToGraphql(
     score: row.score ? Number(row.score) : null,
     durationMs: row.duration_ms,
     agentSessionId: row.agent_session_id,
+    threadTurnId: row.thread_turn_id ?? null,
     input: row.input,
     expected: row.expected,
     actualOutput: row.actual_output,
@@ -148,6 +150,42 @@ function resultToGraphql(
     createdAt: row.created_at,
   };
 }
+
+/**
+ * Field resolvers for EvalResult (plan 2026-06-12-002 U10).
+ *
+ * `workspaceProjection` lazily reads the linked turn's STORED
+ * `context_snapshot.workspace_projection` — only when the field is selected,
+ * so list queries pay nothing. The join goes through the parent run's tenant
+ * so an eval result can never surface another tenant's turn snapshot.
+ */
+export const evalResultTypeResolvers = {
+  workspaceProjection: async (parent: {
+    threadTurnId?: string | null;
+    runId?: string | null;
+  }): Promise<string | null> => {
+    if (!parent.threadTurnId || !parent.runId) return null;
+    const rows = await db
+      .select({ context_snapshot: threadTurns.context_snapshot })
+      .from(threadTurns)
+      .innerJoin(
+        evalRuns,
+        and(
+          eq(evalRuns.id, parent.runId),
+          eq(evalRuns.tenant_id, threadTurns.tenant_id),
+        ),
+      )
+      .where(eq(threadTurns.id, parent.threadTurnId))
+      .limit(1);
+    const snapshot = rows[0]?.context_snapshot as Record<
+      string,
+      unknown
+    > | null;
+    const projection = snapshot?.workspace_projection;
+    if (projection === undefined || projection === null) return null;
+    return JSON.stringify(projection);
+  },
+};
 
 export function placeholderStatusForEvalRun(runStatus: string) {
   if (runStatus === "pending") return "pending";
@@ -185,6 +223,7 @@ function plannedResultToGraphql(
     score: null,
     durationMs: null,
     agentSessionId: null,
+    threadTurnId: null,
     input: testCase.query,
     expected: null,
     actualOutput: null,

@@ -5,6 +5,7 @@ import {
   asc,
   db,
   eq,
+  isNull,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { ensureBuiltInAgentProfiles, toAgentProfileGraphql } from "./shared.js";
@@ -17,7 +18,12 @@ export async function agentProfiles(
   await requireAdminOrServiceCaller(ctx, args.tenantId, "agent_profiles:read");
   await ensureBuiltInAgentProfiles(args.tenantId);
 
-  const conditions = [eq(agentProfilesTable.tenant_id, args.tenantId)];
+  // Central settings list only; space-local profiles are edited from their
+  // Space's workspace surface.
+  const conditions = [
+    eq(agentProfilesTable.tenant_id, args.tenantId),
+    isNull(agentProfilesTable.source_space_id),
+  ];
   if (args.includeDisabled === false) {
     conditions.push(eq(agentProfilesTable.enabled, true));
   }

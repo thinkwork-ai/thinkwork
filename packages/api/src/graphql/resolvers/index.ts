@@ -43,6 +43,7 @@ import { webhookMutations } from "./webhooks/index.js";
 import {
   evaluationsQueries,
   evaluationsMutations,
+  evalResultTypeResolvers,
 } from "./evaluations/index.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
@@ -178,6 +179,7 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   Message: messageTypeResolvers,
   MessageMention: messageMentionTypeResolvers,
   MemoryRecord: memoryRecordTypeResolvers,
+  EvalResult: evalResultTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
   Space: spaceTypeResolvers,

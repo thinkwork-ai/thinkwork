@@ -72,7 +72,7 @@ describe("wakeup processor system prompt capture", () => {
     expect(source).toContain("checkUserBudgetAndPauseWork");
     expect(source).toContain("userId: costOwnerUserId ?? null");
     expect(source).toContain("user_id: costOwnerUserId || undefined");
-    expect(source.indexOf("turn_context: runSpaceId")).toBeGreaterThan(-1);
+    expect(source.indexOf("turnContext: runSpaceId")).toBeGreaterThan(-1);
   });
 
   it("passes the extension gate fields so ask_user_question registers on wakeup turns", () => {
@@ -85,14 +85,12 @@ describe("wakeup processor system prompt capture", () => {
     // extensions only when the invoke payload carries the API wiring plus
     // the active turn id (server.ts gate). chat-agent-invoke passes these;
     // the wakeup path must too, or every question_answer resume /
-    // automation turn silently loses the tool and asks in prose.
-    expect(source).toContain(
-      "thinkwork_api_url: thinkworkApiUrl() || undefined",
-    );
-    expect(source).toContain(
-      "thinkwork_api_secret: getApiAuthSecret() || undefined",
-    );
-    expect(source).toContain("thread_turn_id: run.id");
+    // automation turn silently loses the tool and asks in prose. The fields
+    // now flow through the shared dispatch helper (plan 2026-06-12-002 U1);
+    // wakeup-processor.dispatch-parity.test.ts holds the full contract.
+    expect(source).toContain("thinkworkApiUrl: thinkworkApiUrl()");
+    expect(source).toContain("apiAuthSecret: getApiAuthSecret()");
+    expect(source).toContain("threadTurnId: run.id");
   });
 
   it("excludes every source-specific message branch from the catch-all assistant insert", () => {

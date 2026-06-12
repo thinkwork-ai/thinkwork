@@ -115,8 +115,11 @@ import {
 } from "./src/lib/agents-md-persona-surgery.js";
 import {
   deleteAgentProfileProjectionForFile,
+  deleteSpaceAgentProfileProjectionForFile,
   isAgentProfileWorkspacePath,
+  isSpaceAgentProfileWorkspacePath,
   upsertAgentProfileProjectionFromFile,
+  upsertSpaceAgentProfileProjectionFromFile,
 } from "./src/lib/agent-profile-workspace-files.js";
 import {
   isProtectedOrchestrationWritePath,
@@ -124,6 +127,7 @@ import {
   isVisibleUserContextPath,
 } from "./src/lib/workspace-lanes.js";
 import { buildSpaceManifestProjection } from "./src/lib/workspace-renderer/space-md-parser.js";
+import { stripGeneratedAgentsMdSections } from "./src/lib/workspace-renderer/agents-md-composer.js";
 
 // ---------------------------------------------------------------------------
 // API Gateway shims
@@ -1112,6 +1116,15 @@ async function handlePut(
     });
   }
 
+  if (cleanPath === "AGENTS.md" || cleanPath.endsWith("/AGENTS.md")) {
+    // The rendered workspace appends a marker-delimited generated routing
+    // section to AGENTS.md. Strip it on baseline puts so an operator pasting
+    // a composed file back through settings cannot nest generated sections
+    // (plan 2026-06-12-002 U2). Runs before the derived-section and
+    // derive-agent-skills hooks, which operate on the persisted baseline.
+    content = stripGeneratedAgentsMdSections(content);
+  }
+
   if (target.kind === "space") {
     const rejection = rejectSpaceCapabilityWrite(cleanPath);
     if (rejection) return rejection;
@@ -1203,6 +1216,27 @@ async function handlePut(
         content,
       );
       if (refreshError) return refreshError;
+    }
+    if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
+      // Space-local Agent Profile projection (plan 2026-06-12-002 U7):
+      // operator puts to a Space source's agents/<slug>.md project into a
+      // space-scoped agent_profiles row. Mirrors the central agent-target
+      // hook below — S3 is committed first, a projection failure surfaces
+      // as 400 so the operator sees the validation error.
+      try {
+        await upsertSpaceAgentProfileProjectionFromFile({
+          tenantId,
+          spaceId: target.spaceId,
+          path: cleanPath,
+          content,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return json(400, {
+          ok: false,
+          error: `Agent Profile file saved but projection refresh failed: ${message}`,
+        });
+      }
     }
     return json(200, { ok: true });
   }
@@ -1543,6 +1577,16 @@ async function handleDelete(
     }
     const refreshError = await refreshAgentAgentsMdSections(target, "DELETE");
     if (refreshError) return refreshError;
+  } else if (target.kind === "space") {
+    if (isSpaceAgentProfileWorkspacePath(cleanPath)) {
+      // Mirror the central agents/<slug>.md delete: removing the file
+      // removes the space-local projection row (plan 2026-06-12-002 U7).
+      await deleteSpaceAgentProfileProjectionForFile({
+        tenantId,
+        spaceId: target.spaceId,
+        path: cleanPath,
+      });
+    }
   } else if (target.kind === "catalog") {
     // Re-index the affected slug: deleting one file of a multi-file skill
     // refreshes its sha; deleting the last file removes the row.

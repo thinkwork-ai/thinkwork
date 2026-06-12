@@ -277,6 +277,39 @@ vi.mock("../lib/catalog-index.js", () => ({
   listIndexedSkills: listIndexedSkillsMock,
 }));
 
+// ─── Mock the Agent Profile projection functions (U7). Path predicates stay
+// real (isGovernanceFilePath depends on them); only the DB-touching
+// projection entry points are spied so the handler wiring can be asserted
+// without the agent_profiles drizzle chain. Row-scoping behavior is
+// unit-tested in src/lib/agent-profile-workspace-files.test.ts.
+const {
+  upsertAgentProfileProjectionMock,
+  deleteAgentProfileProjectionMock,
+  upsertSpaceAgentProfileProjectionMock,
+  deleteSpaceAgentProfileProjectionMock,
+} = vi.hoisted(() => ({
+  upsertAgentProfileProjectionMock: vi.fn(),
+  deleteAgentProfileProjectionMock: vi.fn(),
+  upsertSpaceAgentProfileProjectionMock: vi.fn(),
+  deleteSpaceAgentProfileProjectionMock: vi.fn(),
+}));
+
+vi.mock("../lib/agent-profile-workspace-files.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../lib/agent-profile-workspace-files.js")
+    >();
+  return {
+    ...actual,
+    upsertAgentProfileProjectionFromFile: upsertAgentProfileProjectionMock,
+    deleteAgentProfileProjectionForFile: deleteAgentProfileProjectionMock,
+    upsertSpaceAgentProfileProjectionFromFile:
+      upsertSpaceAgentProfileProjectionMock,
+    deleteSpaceAgentProfileProjectionForFile:
+      deleteSpaceAgentProfileProjectionMock,
+  };
+});
+
 // ─── S3 mock ─────────────────────────────────────────────────────────────────
 
 const s3Mock = mockClient(S3Client);
@@ -445,6 +478,16 @@ beforeEach(() => {
     agentsMdPathsScanned: [],
     warnings: [],
   });
+  upsertAgentProfileProjectionMock.mockReset();
+  upsertAgentProfileProjectionMock.mockResolvedValue({ id: "profile-row" });
+  deleteAgentProfileProjectionMock.mockReset();
+  deleteAgentProfileProjectionMock.mockResolvedValue(true);
+  upsertSpaceAgentProfileProjectionMock.mockReset();
+  upsertSpaceAgentProfileProjectionMock.mockResolvedValue({
+    id: "space-profile-row",
+  });
+  deleteSpaceAgentProfileProjectionMock.mockReset();
+  deleteSpaceAgentProfileProjectionMock.mockResolvedValue(true);
   refreshAgentsMdSectionsMock.mockReset();
   refreshAgentsMdSectionsMock.mockResolvedValue(undefined);
   normalizeAgentsMdMock.mockReset();
@@ -2460,6 +2503,35 @@ describe("pinned-file write guard", () => {
       }),
     );
     expect(refreshAgentsMdSectionsMock).toHaveBeenCalledWith(AGENT_ID);
+  });
+
+  it("strips generated routing sections from AGENTS.md baseline puts", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    // An operator pasting a rendered AGENTS.md back into settings must not
+    // persist the marker-delimited generated section (plan 2026-06-12-002 U2).
+    const baseline = "# AGENTS.md\n\nOperator routing prose.\n";
+    const pasted = `${baseline}\n<!-- RENDERED:WORKSPACE_ROUTING -->\n\n## Workspace Routing\n\n- Board Pack — \`Spaces/board-pack/\` (active, hydrated)\n`;
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "AGENTS.md",
+          content: pasted,
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Key: "tenants/acme/agents/marco/AGENTS.md",
+      Body: baseline,
+    });
   });
 
   it("rejects writes to built-in tool workspace skill paths", async () => {
@@ -4669,5 +4741,143 @@ describe("workspace skills → AGENTS.md refresh wiring", () => {
     expect(res.statusCode).toBe(200);
     expect(deriveMockImpl).not.toHaveBeenCalled();
     expect(refreshAgentsMdSectionsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("space-local agent profiles (plan 2026-06-12-002 U7)", () => {
+  const PROFILE_CONTENT =
+    "---\nname: Research\nmodel: claude-haiku-4-5\nenabled: true\n---\n\n# Instructions\n\nDo research.\n";
+
+  it("PUT to a Space target agents/<slug>.md is allowed and projects a space-scoped profile", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          spaceId: SPACE_ID,
+          path: "agents/research.md",
+          content: PROFILE_CONTENT,
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Bucket: "test-bucket",
+      Key: "tenants/acme/spaces/engineering/agents/research.md",
+      Body: PROFILE_CONTENT,
+    });
+    expect(upsertSpaceAgentProfileProjectionMock).toHaveBeenCalledWith({
+      tenantId: TENANT_A,
+      spaceId: SPACE_ID,
+      path: "agents/research.md",
+      content: PROFILE_CONTENT,
+    });
+    expect(upsertAgentProfileProjectionMock).not.toHaveBeenCalled();
+  });
+
+  it("PUT returns 400 with the validation error when the space projection fails (file already saved)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+    upsertSpaceAgentProfileProjectionMock.mockRejectedValueOnce(
+      new Error("Model is not available: bogus-model"),
+    );
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          spaceId: SPACE_ID,
+          path: "agents/research.md",
+          content: PROFILE_CONTENT,
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/projection refresh failed/);
+    expect(res.body.error).toMatch(/Model is not available/);
+    // S3 commit happens before projection (mirrors the central path).
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(1);
+  });
+
+  it("DELETE of a Space target agents/<slug>.md removes the space-local projection", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "delete",
+          spaceId: SPACE_ID,
+          path: "agents/research.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      s3Mock.commandCalls(DeleteObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Key: "tenants/acme/spaces/engineering/agents/research.md",
+    });
+    expect(deleteSpaceAgentProfileProjectionMock).toHaveBeenCalledWith({
+      tenantId: TENANT_A,
+      spaceId: SPACE_ID,
+      path: "agents/research.md",
+    });
+    expect(deleteAgentProfileProjectionMock).not.toHaveBeenCalled();
+  });
+
+  it("Space puts/deletes of non-profile paths do not touch the projection", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminSpaceTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          spaceId: SPACE_ID,
+          path: "knowledge/notes.md",
+          content: "# Notes\n",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(upsertSpaceAgentProfileProjectionMock).not.toHaveBeenCalled();
+  });
+
+  it("central agent-target agents/<slug>.md still routes through the central projection (regression)", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          agentId: AGENT_ID,
+          path: "agents/research.md",
+          content: PROFILE_CONTENT,
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(upsertAgentProfileProjectionMock).toHaveBeenCalledWith({
+      tenantId: TENANT_A,
+      path: "agents/research.md",
+      content: PROFILE_CONTENT,
+    });
+    expect(upsertSpaceAgentProfileProjectionMock).not.toHaveBeenCalled();
   });
 });
