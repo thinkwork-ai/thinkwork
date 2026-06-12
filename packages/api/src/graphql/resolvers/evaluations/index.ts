@@ -20,7 +20,10 @@ import {
   fetchSpansForSession,
   type AgentCoreSpanRecord,
 } from "../../../lib/agentcore-spans.js";
-import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
+import {
+  CURRENT_EVAL_SCORING_VERSION,
+  summarizeEvalStatuses,
+} from "@thinkwork/evals-core";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
 import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
@@ -61,6 +64,11 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     model: row.model,
     categories: row.categories,
     selectedTestCaseIds: row.selected_test_case_ids ?? [],
+    // Dataset pinning (Trust Core U6): dataset launches record the id at
+    // creation; the eval-runner stamps the version when it captures the
+    // run snapshot. Null on legacy category/test-case launches.
+    datasetId: row.dataset_id ?? null,
+    datasetVersion: row.dataset_version ?? null,
     totalTests: row.total_tests,
     passed: row.passed,
     failed: row.failed,
@@ -344,6 +352,8 @@ function testCaseToGraphql(row: Record<string, unknown>) {
     tags: row.tags ?? [],
     enabled: row.enabled,
     source: row.source,
+    datasetId: row.dataset_id ?? null,
+    datasetCaseId: row.dataset_case_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -506,6 +516,13 @@ const evalRunResults = async (
     eq(evalTestCases.tenant_id, run.tenant_id),
     eq(evalTestCases.enabled, true),
   ];
+  // Dataset runs (Trust Core U6): before the runner pins the scope
+  // (pending window), placeholder rows are restricted to the dataset's
+  // cases instead of the whole tenant; after pinning,
+  // selected_test_case_ids carries the resolved scope.
+  if (run.dataset_id) {
+    caseConditions.push(eq(evalTestCases.dataset_id, run.dataset_id));
+  }
   if (run.selected_test_case_ids.length > 0) {
     caseConditions.push(inArray(evalTestCases.id, run.selected_test_case_ids));
   } else if (run.categories.length > 0) {
@@ -640,7 +657,12 @@ const evalTimeSeries = async (
 
 const evalTestCasesQuery = async (
   _p: any,
-  args: { tenantId: string; category?: string | null; search?: string | null },
+  args: {
+    tenantId: string;
+    category?: string | null;
+    search?: string | null;
+    datasetId?: string | null;
+  },
   ctx: GraphQLContext,
 ) => {
   // Seeding is a write triggered by a read — never let it land in a
@@ -649,15 +671,19 @@ const evalTestCasesQuery = async (
   const tenantId = await resolveReadTenantId(ctx);
   if (!tenantId || tenantId !== args.tenantId) return [];
 
-  // Auto-seed the Thinkwork starter pack on first visit. We check for the
-  // presence of ANY yaml-seed row for this tenant — if zero, run the seed.
-  // The partial unique index makes this idempotent on the off-chance two
-  // concurrent first-visit queries race. Seeded rows then show up
-  // immediately in the same response.
+  // Auto-seed the baseline red-team dataset on first visit (dataset-based
+  // since Trust Core U5: S3 materialization + index sync + re-home of
+  // legacy yaml-seed rows). The S3 version marker and the partial unique
+  // index keep this idempotent if two first-visit queries race. Seeded
+  // rows then show up immediately in the same response.
   await ensureTenantSeeded(tenantId);
 
   const conditions = [eq(evalTestCases.tenant_id, tenantId)];
   if (args.category) conditions.push(eq(evalTestCases.category, args.category));
+  // Dataset filter (Trust Core U4): restricts to one dataset's index rows
+  // (live + tombstoned — the enabled flag distinguishes them).
+  if (args.datasetId)
+    conditions.push(eq(evalTestCases.dataset_id, args.datasetId));
   if (args.search)
     conditions.push(
       sql`${evalTestCases.name} ILIKE ${"%" + args.search + "%"}`,
@@ -673,48 +699,29 @@ const evalTestCasesQuery = async (
 };
 
 /**
- * Lazy-seed the Thinkwork starter pack on a tenant's first visit to the
- * Studio. Cached in-memory per Lambda container so subsequent queries
- * for the same tenant skip the COUNT(*) probe.
+ * Lazy-seed the baseline red-team dataset on a tenant's first visit to
+ * the Studio. Cached in-memory per Lambda container; the cache key is
+ * versioned with BASELINE_DATASET_VERSION so warm containers re-seed
+ * when a deploy bumps the baseline version (the S3 marker keeps the
+ * re-run itself a cheap no-op for already-current tenants).
  */
 const _seededTenants = new Set<string>();
 async function ensureTenantSeeded(tenantId: string): Promise<void> {
-  if (_seededTenants.has(tenantId)) return;
-  const [{ count }] = await db
-    .select({
-      count: sql<number>`COUNT(*) FILTER (WHERE source = 'yaml-seed')::int`,
-    })
-    .from(evalTestCases)
-    .where(eq(evalTestCases.tenant_id, tenantId));
-  if (count > 0) {
-    _seededTenants.add(tenantId);
-    return;
+  const { baselineSeedCacheKey, ensureBaselineDatasetSeeded } =
+    await import("../../../lib/evals/baseline-dataset.js");
+  const cacheKey = baselineSeedCacheKey(tenantId);
+  if (_seededTenants.has(cacheKey)) return;
+  try {
+    await ensureBaselineDatasetSeeded(tenantId);
+    _seededTenants.add(cacheKey);
+  } catch (err) {
+    // A read-triggered seed must never take down the Studio listing;
+    // the cache only records success so the next query retries.
+    console.warn("[evalTestCases] baseline dataset seeding failed", {
+      tenantId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
-  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } =
-    await import("../../../lib/eval-seeds.js");
-  if (EVAL_SEEDS.length === 0) {
-    _seededTenants.add(tenantId);
-    return;
-  }
-  await db
-    .insert(evalTestCases)
-    .values(
-      EVAL_SEEDS.map((s) => ({
-        tenant_id: tenantId,
-        name: s.name,
-        category: s.category,
-        query: s.query,
-        assertions: s.assertions,
-        source: BUILT_IN_EVAL_SEED_SOURCE,
-        tags: seedTags(s),
-        agentcore_evaluator_ids:
-          s.agentcore_evaluator_ids && s.agentcore_evaluator_ids.length > 0
-            ? s.agentcore_evaluator_ids
-            : ["Builtin.Helpfulness"],
-      })),
-    )
-    .onConflictDoNothing();
-  _seededTenants.add(tenantId);
 }
 
 const evalTestCase = async (
@@ -773,6 +780,12 @@ interface StartEvalRunInput {
   model?: string | null;
   categories?: string[] | null;
   testCaseIds?: string[] | null;
+  /**
+   * Dataset launch (Trust Core U6): the run pins the dataset version +
+   * case scope at launch and executes run-scoped copies. Mutually
+   * exclusive with categories/testCaseIds; legacy launches unchanged.
+   */
+  datasetSlug?: string | null;
 }
 
 async function resolveEvalModelId(
@@ -817,6 +830,28 @@ const startEvalRun = async (
 
   const model = await resolveEvalModelId(args.tenantId, args.input.model);
 
+  // Dataset launch (Trust Core U6): resolve the dataset BEFORE the run
+  // row exists — readEvalDataset drift-checks the index manifest_sha
+  // against S3 and re-syncs on mismatch, so the runner fans out from a
+  // current index. The eval-runner then captures the run snapshot
+  // (copy-at-launch) and pins dataset_version + pinned_case_ids.
+  let datasetId: string | null = null;
+  if (args.input.datasetSlug) {
+    if (
+      (args.input.categories?.length ?? 0) > 0 ||
+      (args.input.testCaseIds?.length ?? 0) > 0
+    ) {
+      throw new Error(
+        "datasetSlug cannot be combined with categories or testCaseIds.",
+      );
+    }
+    const { resolveDatasetForLaunch } =
+      await import("../../../lib/evals/run-launch.js");
+    datasetId = (
+      await resolveDatasetForLaunch(args.tenantId, args.input.datasetSlug)
+    ).id;
+  }
+
   // Insert a pending row up front so the failure path (e.g. tenant has no
   // platform agent yet) still surfaces in the runs list with a recoverable
   // error_message. Plan R6 mandates the failed-row trail.
@@ -832,6 +867,7 @@ const startEvalRun = async (
       model,
       categories: args.input.categories ?? [],
       selected_test_case_ids: args.input.testCaseIds ?? [],
+      dataset_id: datasetId,
       // Scoring semantics are stamped at run creation — never inferred
       // later — so post-deploy code can't silently upgrade older runs.
       scoring_version: CURRENT_EVAL_SCORING_VERSION,
@@ -915,26 +951,91 @@ async function invokeEvalRunner(
   );
 }
 
+/**
+ * Cancel finalizes a PARTIAL summary (Trust Core U6): counts over the
+ * result rows written so far under the run's stamped scoring semantics,
+ * explicit `cancelled` status preserved, completed_at set. In-flight
+ * workers may still finish executing — their late rows are simply not
+ * written (the worker re-checks status before the insert) and
+ * maybeFinalizeRun only ever updates `running` runs, so a late writer
+ * can never resurrect a cancelled run. Cross-run aggregates
+ * (evalSummary/evalTimeSeries) already exclude cancelled runs via their
+ * status='completed' filter (U2).
+ */
 const cancelEvalRun = async (
   _p: any,
   args: { id: string },
   ctx: GraphQLContext,
 ) => {
   const [existing] = await db
-    .select({ tenantId: evalRuns.tenant_id })
+    .select({
+      tenantId: evalRuns.tenant_id,
+      status: evalRuns.status,
+      scoringVersion: evalRuns.scoring_version,
+    })
     .from(evalRuns)
     .where(eq(evalRuns.id, args.id));
   if (!existing) throw new Error(`run ${args.id} not found`);
   // Row-derived gate — fails FORBIDDEN before the status write when the
   // run belongs to another tenant.
   await requireTenantAdmin(ctx, existing.tenantId);
+
+  // Terminal runs are immutable: cancelling a completed/failed/cancelled
+  // run is a no-op that returns the current row.
+  if (["completed", "failed", "cancelled"].includes(existing.status ?? "")) {
+    const [current] = await db
+      .select()
+      .from(evalRuns)
+      .where(eq(evalRuns.id, args.id));
+    return runToGraphql(current as unknown as Record<string, unknown>, null);
+  }
+
+  const resultRows = await db
+    .select({ status: evalResults.status })
+    .from(evalResults)
+    .where(eq(evalResults.run_id, args.id));
+  const counts = summarizeEvalStatuses(
+    resultRows,
+    existing.scoringVersion ?? null,
+  );
+
   const [row] = await db
     .update(evalRuns)
-    .set({ status: "cancelled", completed_at: new Date() })
-    .where(eq(evalRuns.id, args.id))
+    .set({
+      status: "cancelled",
+      completed_at: new Date(),
+      passed: counts.passed,
+      failed: counts.failed,
+      errored: counts.errored,
+      // The partial clean denominator: pass/(pass+fail) over written
+      // rows; null when nothing scoreable was written before the cancel.
+      pass_rate:
+        counts.completed === 0 || counts.passRate === null
+          ? null
+          : counts.passRate.toFixed(4),
+      summary_scoring_version:
+        existing.scoringVersion === null ? null : CURRENT_EVAL_SCORING_VERSION,
+    })
+    // Guarded on non-terminal status so a concurrent finalizer (worker /
+    // reconciler) winning the race is never overwritten.
+    .where(
+      and(
+        eq(evalRuns.id, args.id),
+        inArray(evalRuns.status, ["pending", "running"]),
+      ),
+    )
     .returning();
-  if (!row) throw new Error(`run ${args.id} not found`);
-  return runToGraphql(row as unknown as Record<string, unknown>, null);
+  if (row) {
+    return runToGraphql(row as unknown as Record<string, unknown>, null);
+  }
+  // Race: the run finalized between the gate and the update — return the
+  // winner's terminal state.
+  const [fresh] = await db
+    .select()
+    .from(evalRuns)
+    .where(eq(evalRuns.id, args.id));
+  if (!fresh) throw new Error(`run ${args.id} not found`);
+  return runToGraphql(fresh as unknown as Record<string, unknown>, null);
 };
 
 const deleteEvalRun = async (
@@ -943,12 +1044,25 @@ const deleteEvalRun = async (
   ctx: GraphQLContext,
 ) => {
   const [existing] = await db
-    .select({ tenantId: evalRuns.tenant_id })
+    .select({
+      tenantId: evalRuns.tenant_id,
+      datasetId: evalRuns.dataset_id,
+      pinnedCaseIds: evalRuns.pinned_case_ids,
+    })
     .from(evalRuns)
     .where(eq(evalRuns.id, args.id));
   // Deleting a missing row stays an idempotent no-op (prior behavior).
   if (!existing) return true;
   await requireTenantAdmin(ctx, existing.tenantId);
+  // Dataset-pinned runs own a snapshot prefix in S3
+  // (tenants/<slug>/eval-datasets/.runs/<run-id>/) — sweep it before the
+  // row goes away. An S3 failure surfaces (row kept) so the operator can
+  // retry; tenant teardown sweeps eval-datasets/ as the backstop.
+  if (existing.datasetId || existing.pinnedCaseIds) {
+    const { deleteRunSnapshotForTenant } =
+      await import("../../../lib/evals/run-launch.js");
+    await deleteRunSnapshotForTenant(existing.tenantId, args.id);
+  }
   await db.delete(evalRuns).where(eq(evalRuns.id, args.id));
   return true;
 };
@@ -1049,54 +1163,19 @@ const seedEvalTestCases = async (
 ) => {
   // Arg-derived gate — seeding writes rows into the named tenant.
   await requireTenantAdmin(ctx, args.tenantId);
-  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } =
-    await import("../../../lib/eval-seeds.js");
-  const filtered =
-    args.categories && args.categories.length > 0
-      ? EVAL_SEEDS.filter((s) => args.categories!.includes(s.category))
-      : EVAL_SEEDS;
-  if (filtered.length === 0) return 0;
-
-  // Idempotent insert. We deliberately skip on (tenant_id, name)
-  // conflict — the partial unique index added in migration 0011 enforces
-  // this only for source='yaml-seed' rows so user-created tests with
-  // the same name are unaffected.
-  const values = filtered.map((s) => ({
-    tenant_id: args.tenantId,
-    name: s.name,
-    category: s.category,
-    query: s.query,
-    assertions: s.assertions,
-    source: BUILT_IN_EVAL_SEED_SOURCE,
-    tags: seedTags(s),
-    agentcore_evaluator_ids:
-      s.agentcore_evaluator_ids && s.agentcore_evaluator_ids.length > 0
-        ? s.agentcore_evaluator_ids
-        : ["Builtin.Helpfulness"],
-  }));
-  // onConflictDoNothing() with no `target` triggers Postgres's generic
-  // "any unique violation" handling, which catches the partial index
-  // uq_eval_test_cases_tenant_seed_name without needing to spell out the
-  // WHERE clause (drizzle doesn't support partial-index ON CONFLICT).
-  const inserted = await db
-    .insert(evalTestCases)
-    .values(values)
-    .onConflictDoNothing()
-    .returning({ id: evalTestCases.id });
-  return inserted.length;
+  // Dataset-based since Trust Core U5: materialize the baseline dataset
+  // into the tenant's S3 prefix, re-home legacy yaml-seed rows in place
+  // (same row ids, source unchanged), and sync the index. The legacy
+  // direct DB-insert path is retired; the S3 version marker plus the
+  // partial unique index uq_eval_test_cases_tenant_seed_name keep the
+  // mutation idempotent across deploy windows and rollbacks.
+  const { ensureBaselineDatasetSeeded } =
+    await import("../../../lib/evals/baseline-dataset.js");
+  const result = await ensureBaselineDatasetSeeded(args.tenantId, {
+    categories: args.categories ?? null,
+  });
+  return result.inserted;
 };
-
-function seedTags(seed: {
-  target_surface?: string;
-  target_skill?: string;
-  threshold?: number;
-}) {
-  return [
-    seed.target_surface ? `surface:${seed.target_surface}` : null,
-    seed.target_skill ? `skill:${seed.target_skill}` : null,
-    typeof seed.threshold === "number" ? `threshold:${seed.threshold}` : null,
-  ].filter((tag): tag is string => Boolean(tag));
-}
 
 // ---------------------------------------------------------------------------
 // Exports

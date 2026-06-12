@@ -36,6 +36,14 @@ type EvalRunCandidate = {
   status: string;
   categories: string[];
   selected_test_case_ids: string[];
+  /**
+   * Dataset-pinned runs (Trust Core U6): the expected case set is
+   * reconstructed from the launch-time pinned_case_ids — NEVER the live
+   * table's enabled=true filter, which would wedge a run whose case was
+   * tombstoned mid-run via the count-mismatch skip.
+   */
+  dataset_id: string | null;
+  pinned_case_ids: string[] | null;
   total_tests: number;
   scoring_version: number | null;
   started_at: Date | null;
@@ -99,7 +107,18 @@ export function missingEvalTestCaseIds(
  */
 export function buildReconcilerErrorRow(
   runId: string,
-  testCase: { id: string; query: string; assertions: unknown },
+  testCase: {
+    /**
+     * eval_test_cases row uuid; null only for a pinned case whose index
+     * row was hard-deleted mid-run (legacy deleteEvalTestCase) — the
+     * synthetic row still terminates the run, just without the FK.
+     */
+    id: string | null;
+    query: string;
+    assertions: unknown;
+    /** dataset_case_id, when the case came from a pinned run scope. */
+    pinnedCaseId?: string | null;
+  },
   staleMessage: string,
 ) {
   return {
@@ -109,7 +128,7 @@ export function buildReconcilerErrorRow(
     error_cause: "reconciler",
     score: null,
     duration_ms: 0,
-    agent_session_id: `reconciler:${runId}:${testCase.id}`,
+    agent_session_id: `reconciler:${runId}:${testCase.id ?? testCase.pinnedCaseId ?? "unknown"}`,
     input: testCase.query,
     expected: null,
     actual_output: "",
@@ -277,6 +296,8 @@ async function selectReconciliationCandidates(): Promise<EvalRunCandidate[]> {
       run.status,
       run.categories,
       run.selected_test_case_ids,
+      run.dataset_id,
+      run.pinned_case_ids,
       run.total_tests,
       run.scoring_version,
       run.started_at,
@@ -304,6 +325,11 @@ async function selectReconciliationCandidates(): Promise<EvalRunCandidate[]> {
       selected_test_case_ids: Array.isArray(record.selected_test_case_ids)
         ? record.selected_test_case_ids.map(String)
         : [],
+      dataset_id:
+        typeof record.dataset_id === "string" ? record.dataset_id : null,
+      pinned_case_ids: Array.isArray(record.pinned_case_ids)
+        ? record.pinned_case_ids.map(String)
+        : null,
       total_tests: Number(record.total_tests) || 0,
       scoring_version:
         record.scoring_version === null || record.scoring_version === undefined
@@ -326,9 +352,73 @@ async function selectReconciliationCandidates(): Promise<EvalRunCandidate[]> {
   });
 }
 
-async function reconcileRun(
+type ExpectedReconcileCase = {
+  id: string | null;
+  query: string;
+  assertions: unknown;
+  pinnedCaseId?: string | null;
+};
+
+/**
+ * Reconstruct the run's expected case set.
+ *
+ * Pinned runs (Trust Core U6): the launch-time pinned_case_ids list is
+ * the truth — joined to the dataset's index rows by
+ * (dataset_id, dataset_case_id) with NO enabled filter, so a case
+ * tombstoned mid-run still resolves and can never wedge the run via a
+ * count mismatch. A pinned id whose index row was hard-deleted (legacy
+ * deleteEvalTestCase) still synthesizes a terminating row (null FK).
+ *
+ * Legacy runs: reconstructed from selected_test_case_ids / categories
+ * against enabled=true rows, with the historical count-mismatch skip.
+ */
+async function expectedCasesForCandidate(
   candidate: EvalRunCandidate,
-): Promise<ReconciledRun | null> {
+): Promise<ExpectedReconcileCase[] | null> {
+  const db = getDb();
+
+  if (candidate.pinned_case_ids !== null && candidate.dataset_id) {
+    const rows = await db
+      .select({
+        id: evalTestCases.id,
+        query: evalTestCases.query,
+        assertions: evalTestCases.assertions,
+        dataset_case_id: evalTestCases.dataset_case_id,
+      })
+      .from(evalTestCases)
+      .where(
+        and(
+          eq(evalTestCases.tenant_id, candidate.tenant_id),
+          eq(evalTestCases.dataset_id, candidate.dataset_id),
+          candidate.pinned_case_ids.length > 0
+            ? inArray(evalTestCases.dataset_case_id, candidate.pinned_case_ids)
+            : sql`false`,
+        ),
+      );
+    const byCaseId = new Map(
+      rows
+        .filter((r): r is typeof r & { dataset_case_id: string } =>
+          Boolean(r.dataset_case_id),
+        )
+        .map((r) => [r.dataset_case_id, r]),
+    );
+    return candidate.pinned_case_ids.map((caseId) => {
+      const row = byCaseId.get(caseId);
+      if (!row) {
+        console.warn(
+          `[eval-runs-reconciler] runId=${candidate.id}: pinned case ${caseId} has no index row; synthesizing without FK`,
+        );
+        return { id: null, query: "", assertions: [], pinnedCaseId: caseId };
+      }
+      return {
+        id: row.id,
+        query: row.query,
+        assertions: row.assertions,
+        pinnedCaseId: caseId,
+      };
+    });
+  }
+
   if (
     candidate.categories.length === 0 &&
     candidate.selected_test_case_ids.length === 0
@@ -339,7 +429,6 @@ async function reconcileRun(
     return null;
   }
 
-  const db = getDb();
   const testCases = await db
     .select({
       id: evalTestCases.id,
@@ -364,6 +453,15 @@ async function reconcileRun(
     );
     return null;
   }
+  return testCases;
+}
+
+async function reconcileRun(
+  candidate: EvalRunCandidate,
+): Promise<ReconciledRun | null> {
+  const db = getDb();
+  const testCases = await expectedCasesForCandidate(candidate);
+  if (testCases === null) return null;
 
   const staleMessage = `Reconciler recorded missing eval result after ${STALE_AFTER_MINUTES} minutes without run progress`;
   const result = await db.transaction(async (tx) => {
@@ -387,15 +485,17 @@ async function reconcileRun(
       .select({ testCaseId: evalResults.test_case_id })
       .from(evalResults)
       .where(eq(evalResults.run_id, candidate.id));
-    const missingIds = new Set(
-      missingEvalTestCaseIds(
-        testCases.map((testCase) => testCase.id),
-        existingRows.map((row) => row.testCaseId),
-      ),
+    const existingIds = new Set(
+      existingRows
+        .map((row) => row.testCaseId)
+        .filter((id): id is string => Boolean(id)),
     );
 
-    const missingCases = testCases.filter((testCase) =>
-      missingIds.has(testCase.id),
+    // A null-id expected case (pinned id whose index row vanished) can
+    // never have a worker-written result row — workers FK the row uuid —
+    // so it is always missing.
+    const missingCases = testCases.filter(
+      (testCase) => testCase.id === null || !existingIds.has(testCase.id),
     );
     if (missingCases.length > 0) {
       await tx

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  mockEnsureBaselineDatasetSeeded,
+  mockResolveDatasetForLaunch,
+  mockDeleteRunSnapshotForTenant,
   selectQueue,
   selectWheres,
   selectFields,
@@ -43,6 +46,9 @@ const {
     mockGetTenantModelCatalogEntry: vi.fn(),
     mockResolveTenantPlatformAgent: vi.fn(),
     mockLambdaSend: vi.fn(),
+    mockEnsureBaselineDatasetSeeded: vi.fn(),
+    mockResolveDatasetForLaunch: vi.fn(),
+    mockDeleteRunSnapshotForTenant: vi.fn(),
     resetState: () => {
       selectQueue.length = 0;
       selectWheres.length = 0;
@@ -163,16 +169,22 @@ vi.mock("../../../lib/agents/tenant-platform-agent.js", () => ({
   resolveTenantPlatformAgent: mockResolveTenantPlatformAgent,
 }));
 
-vi.mock("../../../lib/eval-seeds.js", () => ({
-  BUILT_IN_EVAL_SEED_SOURCE: "yaml-seed",
-  EVAL_SEEDS: [
-    {
-      name: "seed-case-1",
-      category: "safety",
-      query: "Try to exfiltrate secrets",
-      assertions: [],
-    },
-  ],
+// Both seed entry points route through the U5 baseline-dataset seeder;
+// the heavy S3/index logic is unit-tested in
+// ../../../lib/evals/baseline-dataset.test.ts against fakes.
+vi.mock("../../../lib/evals/baseline-dataset.js", () => ({
+  BASELINE_DATASET_VERSION: 7,
+  baselineSeedCacheKey: (tenantId: string, version = 7) =>
+    `${tenantId}@baseline-v${version}`,
+  ensureBaselineDatasetSeeded: mockEnsureBaselineDatasetSeeded,
+}));
+
+// startEvalRun/deleteEvalRun dynamic-import the U6 run-launch module;
+// the snapshot/capture logic itself is unit-tested in
+// ../../../lib/evals/run-launch.test.ts against fakes.
+vi.mock("../../../lib/evals/run-launch.js", () => ({
+  resolveDatasetForLaunch: mockResolveDatasetForLaunch,
+  deleteRunSnapshotForTenant: mockDeleteRunSnapshotForTenant,
 }));
 
 vi.mock("@aws-sdk/client-lambda", () => ({
@@ -219,6 +231,14 @@ beforeEach(() => {
   mockGetTenantModelCatalogEntry.mockResolvedValue({ model_id: "model-1" });
   mockResolveTenantPlatformAgent.mockResolvedValue({ id: "agent-1" });
   mockLambdaSend.mockResolvedValue({});
+  mockEnsureBaselineDatasetSeeded.mockResolvedValue({
+    action: "seeded",
+    addedCaseIds: [],
+    rehomed: 0,
+    inserted: 0,
+  });
+  mockResolveDatasetForLaunch.mockResolvedValue({ id: "ds-1", version: 7 });
+  mockDeleteRunSnapshotForTenant.mockResolvedValue(0);
 });
 
 describe("placeholderStatusForEvalRun", () => {
@@ -573,15 +593,15 @@ describe("eval query tenant scoping", () => {
       adminCtx,
     );
     expect(result).toEqual([]);
+    expect(mockEnsureBaselineDatasetSeeded).not.toHaveBeenCalled();
     expect(insertValues).toHaveLength(0);
     expect(selectWheres).toHaveLength(0);
   });
 
-  it("evalTestCases seeds the caller's own tenant on first visit", async () => {
+  it("evalTestCases seeds the caller's own tenant on first visit via the dataset seeder", async () => {
     const ctx = {
       auth: { authType: "cognito", tenantId: "tenant-seed-1" },
     } as any;
-    selectQueue.push([{ count: 0 }]); // yaml-seed probe: nothing seeded yet
     selectQueue.push([]); // final test-case listing
     const result = await evaluationsQueries.evalTestCases(
       {},
@@ -589,9 +609,72 @@ describe("eval query tenant scoping", () => {
       ctx,
     );
     expect(result).toEqual([]);
-    expect(insertValues).toHaveLength(1);
-    const seeded = insertValues[0] as Array<Record<string, unknown>>;
-    expect(seeded[0].tenant_id).toBe("tenant-seed-1");
+    expect(mockEnsureBaselineDatasetSeeded).toHaveBeenCalledWith(
+      "tenant-seed-1",
+    );
+  });
+
+  it("evalTestCases caches successful seeds per warm container (versioned key)", async () => {
+    const ctx = {
+      auth: { authType: "cognito", tenantId: "tenant-seed-cache" },
+    } as any;
+    selectQueue.push([]); // listing, first call
+    selectQueue.push([]); // listing, second call
+    await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-seed-cache" },
+      ctx,
+    );
+    await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-seed-cache" },
+      ctx,
+    );
+    expect(mockEnsureBaselineDatasetSeeded).toHaveBeenCalledTimes(1);
+  });
+
+  it("evalTestCases retries seeding on the next query when the seeder fails", async () => {
+    const ctx = {
+      auth: { authType: "cognito", tenantId: "tenant-seed-retry" },
+    } as any;
+    mockEnsureBaselineDatasetSeeded.mockRejectedValueOnce(
+      new Error("S3 unavailable"),
+    );
+    selectQueue.push([]); // listing still served on seed failure
+    selectQueue.push([]); // listing, second call
+    const first = await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-seed-retry" },
+      ctx,
+    );
+    expect(first).toEqual([]); // seed failure never takes down the listing
+    await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-seed-retry" },
+      ctx,
+    );
+    // Failure was not cached — the second query re-attempted the seed.
+    expect(mockEnsureBaselineDatasetSeeded).toHaveBeenCalledTimes(2);
+  });
+
+  it("evalTestCases pins the datasetId filter into the row conditions", async () => {
+    const ctx = {
+      auth: { authType: "cognito", tenantId: "tenant-ds-filter" },
+    } as any;
+    selectQueue.push([]); // filtered test-case listing
+    await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-ds-filter", datasetId: "ds-1" },
+      ctx,
+    );
+    const clause = selectWheres[selectWheres.length - 1] as any;
+    const conditions = clause.and as Array<{ eq?: unknown[] }>;
+    expect(
+      conditions.some(
+        (c) =>
+          c.eq?.[0] === evalTestCasesTable.dataset_id && c.eq?.[1] === "ds-1",
+      ),
+    ).toBe(true);
   });
 
   it("resolves Google-federated callers via the fallback and scopes them", async () => {
@@ -734,7 +817,41 @@ describe("eval mutation gating", () => {
         adminCtx,
       ),
     ).rejects.toThrow("Tenant admin role required");
+    expect(mockEnsureBaselineDatasetSeeded).not.toHaveBeenCalled();
     expect(insertValues).toHaveLength(0);
+  });
+
+  it("seedEvalTestCases routes through the dataset seeder and returns the inserted count", async () => {
+    mockEnsureBaselineDatasetSeeded.mockResolvedValue({
+      action: "seeded",
+      addedCaseIds: ["case-a"],
+      rehomed: 3,
+      inserted: 12,
+    });
+    const inserted = await evaluationsMutations.seedEvalTestCases(
+      {},
+      { tenantId: "tenant-1", categories: ["red-team-tool-misuse"] },
+      adminCtx,
+    );
+    expect(inserted).toBe(12);
+    expect(mockEnsureBaselineDatasetSeeded).toHaveBeenCalledWith("tenant-1", {
+      categories: ["red-team-tool-misuse"],
+    });
+    // The retired direct DB-insert path stays retired.
+    expect(insertValues).toHaveLength(0);
+  });
+
+  it("seedEvalTestCases surfaces seeder failures (explicit mutation, no swallow)", async () => {
+    mockEnsureBaselineDatasetSeeded.mockRejectedValue(
+      new Error("WORKSPACE_BUCKET environment variable is required"),
+    );
+    await expect(
+      evaluationsMutations.seedEvalTestCases(
+        {},
+        { tenantId: "tenant-1" },
+        adminCtx,
+      ),
+    ).rejects.toThrow("WORKSPACE_BUCKET");
   });
 
   it("admin in own tenant: startEvalRun inserts, resolves the agent, and invokes the runner", async () => {
@@ -926,6 +1043,254 @@ describe("eval run scoring-version surfacing", () => {
       adminCtx,
     );
     expect(run).toMatchObject({ errored: 2, passRate: null });
+  });
+});
+
+describe("run scope pinning + cancel semantics (U6)", () => {
+  const runRow = {
+    id: "run-1",
+    tenant_id: "tenant-1",
+    agent_id: null,
+    status: "pending",
+    model: "model-1",
+    categories: [],
+    selected_test_case_ids: [],
+    dataset_id: "ds-1",
+    dataset_version: null,
+    pinned_case_ids: null,
+  };
+
+  it("startEvalRun with datasetSlug resolves the dataset and pins dataset_id on the run row", async () => {
+    insertResults.push([runRow]);
+    updateResults.push([{ ...runRow, agent_id: "agent-1" }]);
+
+    const result = await evaluationsMutations.startEvalRun(
+      {},
+      { tenantId: "tenant-1", input: { datasetSlug: "baseline-red-team" } },
+      adminCtx,
+    );
+
+    // Drift-heal resolution ran against the caller's tenant + slug.
+    expect(mockResolveDatasetForLaunch).toHaveBeenCalledWith(
+      "tenant-1",
+      "baseline-red-team",
+    );
+    expect(insertValues).toHaveLength(1);
+    const inserted = insertValues[0] as Record<string, unknown>;
+    expect(inserted.dataset_id).toBe("ds-1");
+    expect(inserted.scoring_version).toBe(CURRENT_EVAL_SCORING_VERSION);
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ id: "run-1", datasetId: "ds-1" });
+  });
+
+  it("startEvalRun rejects combining datasetSlug with categories or testCaseIds", async () => {
+    await expect(
+      evaluationsMutations.startEvalRun(
+        {},
+        {
+          tenantId: "tenant-1",
+          input: { datasetSlug: "ds", categories: ["red-team"] },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/cannot be combined/);
+    await expect(
+      evaluationsMutations.startEvalRun(
+        {},
+        {
+          tenantId: "tenant-1",
+          input: { datasetSlug: "ds", testCaseIds: ["tc-1"] },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/cannot be combined/);
+    expect(insertValues).toHaveLength(0);
+    expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+
+  it("startEvalRun surfaces dataset resolution failures before any row exists", async () => {
+    mockResolveDatasetForLaunch.mockRejectedValue(
+      new Error("Dataset nope not found."),
+    );
+    await expect(
+      evaluationsMutations.startEvalRun(
+        {},
+        { tenantId: "tenant-1", input: { datasetSlug: "nope" } },
+        adminCtx,
+      ),
+    ).rejects.toThrow("Dataset nope not found.");
+    expect(insertValues).toHaveLength(0);
+  });
+
+  it("legacy category launch is unchanged (no dataset resolution, null dataset_id)", async () => {
+    insertResults.push([{ ...runRow, dataset_id: null }]);
+    updateResults.push([{ ...runRow, dataset_id: null, agent_id: "agent-1" }]);
+
+    const result = await evaluationsMutations.startEvalRun(
+      {},
+      { tenantId: "tenant-1", input: { categories: ["red-team"] } },
+      adminCtx,
+    );
+
+    expect(mockResolveDatasetForLaunch).not.toHaveBeenCalled();
+    const inserted = insertValues[0] as Record<string, unknown>;
+    expect(inserted.dataset_id).toBeNull();
+    expect(result).toMatchObject({ id: "run-1", datasetId: null });
+  });
+
+  it("cancelEvalRun finalizes a partial summary over the written rows", async () => {
+    selectQueue.push([
+      {
+        tenantId: "tenant-1",
+        status: "running",
+        scoringVersion: CURRENT_EVAL_SCORING_VERSION,
+      },
+    ]);
+    // Partial rows written before the cancel: 2 pass, 1 fail, 1 error.
+    selectQueue.push([
+      { status: "pass" },
+      { status: "pass" },
+      { status: "fail" },
+      { status: "error" },
+    ]);
+    updateResults.push([
+      { ...runRow, status: "cancelled", passed: 2, failed: 1, errored: 1 },
+    ]);
+
+    const result = await evaluationsMutations.cancelEvalRun(
+      {},
+      { id: "run-1" },
+      adminCtx,
+    );
+
+    const set = updateSets.at(-1) as Record<string, unknown>;
+    expect(set.status).toBe("cancelled");
+    expect(set.completed_at).toBeInstanceOf(Date);
+    expect(set.passed).toBe(2);
+    expect(set.failed).toBe(1);
+    expect(set.errored).toBe(1);
+    // Partial clean denominator: 2/(2+1) — errors stay out.
+    expect(set.pass_rate).toBe("0.6667");
+    expect(set.summary_scoring_version).toBe(CURRENT_EVAL_SCORING_VERSION);
+    expect(result).toMatchObject({ id: "run-1", status: "cancelled" });
+  });
+
+  it("cancelEvalRun on a pending run with no rows yet records no score (null pass rate)", async () => {
+    selectQueue.push([
+      {
+        tenantId: "tenant-1",
+        status: "pending",
+        scoringVersion: CURRENT_EVAL_SCORING_VERSION,
+      },
+    ]);
+    selectQueue.push([]); // no result rows written yet
+    updateResults.push([{ ...runRow, status: "cancelled" }]);
+
+    await evaluationsMutations.cancelEvalRun({}, { id: "run-1" }, adminCtx);
+
+    const set = updateSets.at(-1) as Record<string, unknown>;
+    expect(set.status).toBe("cancelled");
+    expect(set.passed).toBe(0);
+    expect(set.pass_rate).toBeNull();
+  });
+
+  it("cancelEvalRun on a terminal run is a no-op returning the current row", async () => {
+    selectQueue.push([
+      {
+        tenantId: "tenant-1",
+        status: "completed",
+        scoringVersion: CURRENT_EVAL_SCORING_VERSION,
+      },
+    ]);
+    selectQueue.push([
+      {
+        ...runRow,
+        status: "completed",
+        passed: 5,
+        failed: 1,
+        pass_rate: "0.8333",
+      },
+    ]);
+
+    const result = await evaluationsMutations.cancelEvalRun(
+      {},
+      { id: "run-1" },
+      adminCtx,
+    );
+
+    expect(updateSets).toHaveLength(0);
+    expect(result).toMatchObject({ id: "run-1", status: "completed" });
+  });
+
+  it("cancelEvalRun losing the race to a finalizer returns the winner's state untouched", async () => {
+    selectQueue.push([
+      {
+        tenantId: "tenant-1",
+        status: "running",
+        scoringVersion: CURRENT_EVAL_SCORING_VERSION,
+      },
+    ]);
+    selectQueue.push([{ status: "pass" }]);
+    // The status-guarded update matched nothing: a worker completed the
+    // run between the gate and the write.
+    updateResults.push([]);
+    selectQueue.push([
+      { ...runRow, status: "completed", passed: 1, failed: 0 },
+    ]);
+
+    const result = await evaluationsMutations.cancelEvalRun(
+      {},
+      { id: "run-1" },
+      adminCtx,
+    );
+
+    expect(result).toMatchObject({ id: "run-1", status: "completed" });
+  });
+
+  it("deleteEvalRun on a dataset-pinned run sweeps the snapshot prefix before the row delete", async () => {
+    selectQueue.push([
+      {
+        tenantId: "tenant-1",
+        datasetId: "ds-1",
+        pinnedCaseIds: ["case-a", "case-b"],
+      },
+    ]);
+
+    await expect(
+      evaluationsMutations.deleteEvalRun({}, { id: "run-1" }, adminCtx),
+    ).resolves.toBe(true);
+
+    expect(mockDeleteRunSnapshotForTenant).toHaveBeenCalledWith(
+      "tenant-1",
+      "run-1",
+    );
+    expect(deleteWheres).toHaveLength(1);
+  });
+
+  it("deleteEvalRun keeps the row when the snapshot sweep fails (operator retries)", async () => {
+    selectQueue.push([
+      { tenantId: "tenant-1", datasetId: "ds-1", pinnedCaseIds: ["case-a"] },
+    ]);
+    mockDeleteRunSnapshotForTenant.mockRejectedValue(
+      new Error("S3 unavailable"),
+    );
+
+    await expect(
+      evaluationsMutations.deleteEvalRun({}, { id: "run-1" }, adminCtx),
+    ).rejects.toThrow("S3 unavailable");
+    expect(deleteWheres).toHaveLength(0);
+  });
+
+  it("deleteEvalRun on a legacy run never touches S3", async () => {
+    selectQueue.push([
+      { tenantId: "tenant-1", datasetId: null, pinnedCaseIds: null },
+    ]);
+
+    await expect(
+      evaluationsMutations.deleteEvalRun({}, { id: "run-1" }, adminCtx),
+    ).resolves.toBe(true);
+    expect(mockDeleteRunSnapshotForTenant).not.toHaveBeenCalled();
+    expect(deleteWheres).toHaveLength(1);
   });
 });
 

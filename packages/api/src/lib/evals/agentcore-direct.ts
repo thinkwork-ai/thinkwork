@@ -1,4 +1,8 @@
-import { getConfig, getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
+import {
+  getConfig,
+  getApiAuthSecret,
+  getAppsyncApiKey,
+} from "@thinkwork/runtime-config";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import {
   resolveAgentRuntimeConfig,

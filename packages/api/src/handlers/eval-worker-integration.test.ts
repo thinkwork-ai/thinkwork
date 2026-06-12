@@ -1,20 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SQSEvent } from "aws-lambda";
 import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
   evalResults,
   evalRuns,
   evalTestCases,
+  tenants,
 } from "@thinkwork/database-pg/schema";
 import {
   buildEvalWorkerMessages,
   chunkEvalWorkerMessages,
 } from "./eval-runner.js";
 import {
+  _setSnapshotStorageForTests,
   handler,
   parseEvalWorkerMessage,
   summarizeEvalResults,
 } from "./eval-worker.js";
+import {
+  evalRunSnapshotCaseKey,
+  serializeEvalDatasetCase,
+  sha256Hex,
+  type DatasetStorage,
+} from "../lib/evals/dataset-store.js";
 // The vi.mock factory below spreads the actual module, so this class is
 // the real AgentCoreEvalInvocationTimeoutError (identity matches what
 // eval-worker's instanceof checks see).
@@ -86,6 +94,7 @@ function createFakeDb(dbState: FakeDbState) {
       where: async () => {
         if (table === evalRuns) return [dbState.run];
         if (table === evalTestCases) return [dbState.testCase];
+        if (table === tenants) return [{ slug: "acme" }];
         if (table === evalResults) {
           return dbState.insertedResults.map((row, index) => ({
             id: `result-${index + 1}`,
@@ -138,6 +147,50 @@ function sqsEvent(receiveCount: string): SQSEvent {
       },
     ],
   } as unknown as SQSEvent;
+}
+
+function pinnedSqsEvent(extra: Record<string, unknown>): SQSEvent {
+  return {
+    Records: [
+      {
+        messageId: "msg-1",
+        body: JSON.stringify({
+          runId: "run-1",
+          testCaseId: "tc-1",
+          index: 0,
+          ...extra,
+        }),
+        attributes: { ApproximateReceiveCount: "1" },
+      },
+    ],
+  } as unknown as SQSEvent;
+}
+
+interface MemoryStorage extends DatasetStorage {
+  objects: Map<string, string>;
+  reads: string[];
+}
+
+function makeMemoryStorage(): MemoryStorage {
+  const objects = new Map<string, string>();
+  const storage: MemoryStorage = {
+    objects,
+    reads: [],
+    async read(key) {
+      storage.reads.push(key);
+      return objects.has(key) ? (objects.get(key) as string) : null;
+    },
+    async write(key, content) {
+      objects.set(key, content);
+    },
+    async delete(key) {
+      objects.delete(key);
+    },
+    async list(prefix) {
+      return [...objects.keys()].filter((k) => k.startsWith(prefix));
+    },
+  };
+  return storage;
 }
 
 beforeEach(() => {
@@ -347,6 +400,203 @@ describe("eval-worker non-throttle infrastructure errors", () => {
     const finalize = state.runUpdates.at(-1)!;
     expect(finalize.failed).toBe(1);
     expect(finalize.pass_rate).toBe("0.0000");
+  });
+});
+
+describe("eval-worker dataset-pinned execution (U6)", () => {
+  let storage: MemoryStorage;
+  const SNAPSHOT_KEY = evalRunSnapshotCaseKey("acme", "run-1", "case-a");
+  // The pinned (launch-time) content deliberately DIVERGES from the live
+  // eval_test_cases row to prove the worker executes the copy.
+  const pinnedContent = serializeEvalDatasetCase(
+    {
+      case_id: "case-a",
+      name: "case-a",
+      category: "red-team",
+      query: "PINNED launch-time query",
+      system_prompt: "pinned system prompt",
+      expected_behavior: null,
+      assertions: [{ type: "icontains", value: "pinned" }],
+      tags: [],
+      enabled: true,
+    },
+    { agentcore: { evaluator_ids: ["Builtin.ToolSelectionAccuracy"] } },
+  );
+
+  beforeEach(() => {
+    storage = makeMemoryStorage();
+    storage.objects.set(SNAPSHOT_KEY, pinnedContent);
+    _setSnapshotStorageForTests(storage);
+    // The live row was edited mid-run; the worker must not see it.
+    state.testCase.query = "LIVE edited query";
+    state.testCase.assertions = [{ type: "icontains", value: "live" }];
+  });
+
+  afterEach(() => {
+    _setSnapshotStorageForTests(undefined);
+  });
+
+  it("executes the launch-time copy, not the live row (mid-run edit invisible)", async () => {
+    invokeMock.mockResolvedValueOnce({
+      output: "Understood — pinned behavior verified.",
+      durationMs: 800,
+      composedSystemPrompt: null,
+    });
+
+    const response = await handler(
+      pinnedSqsEvent({
+        snapshotKey: SNAPSHOT_KEY,
+        contentSha: sha256Hex(pinnedContent),
+      }),
+    );
+
+    expect(response.batchItemFailures).toEqual([]);
+    // The agent was invoked with the pinned content.
+    expect(invokeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "PINNED launch-time query",
+        systemPrompt: "pinned system prompt",
+      }),
+    );
+    expect(state.insertedResults).toHaveLength(1);
+    const row = state.insertedResults[0];
+    expect(row.status).toBe("pass"); // pinned assertion: icontains "pinned"
+    expect(row.input).toBe("PINNED launch-time query");
+    expect(row.test_case_id).toBe("tc-1");
+  });
+
+  it("survives the live dataset object being deleted mid-run (copy persists)", async () => {
+    // Only the run-scoped copy exists in storage — the live dataset
+    // prefix has nothing. The worker never asks for the live key.
+    invokeMock.mockResolvedValueOnce({
+      output: "pinned",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    await handler(
+      pinnedSqsEvent({
+        snapshotKey: SNAPSHOT_KEY,
+        contentSha: sha256Hex(pinnedContent),
+      }),
+    );
+
+    expect(storage.reads).toEqual([SNAPSHOT_KEY]);
+    expect(state.insertedResults[0].status).toBe("pass");
+  });
+
+  it("rejects a snapshot key outside the run's guarded tenant prefix without fetching", async () => {
+    const hostileKeys = [
+      // Another tenant's snapshot.
+      evalRunSnapshotCaseKey("evil-corp", "run-1", "case-a"),
+      // Another run's snapshot.
+      evalRunSnapshotCaseKey("acme", "run-2", "case-a"),
+      // The live dataset prefix.
+      "tenants/acme/eval-datasets/baseline-red-team/cases/case-a.json",
+      // A workspace family.
+      "tenants/acme/agents/marco/AGENTS.md",
+    ];
+    for (const snapshotKey of hostileKeys) {
+      state.insertedResults.length = 0;
+      storage.reads.length = 0;
+
+      const response = await handler(
+        pinnedSqsEvent({ snapshotKey, contentSha: "0".repeat(64) }),
+      );
+
+      expect(response.batchItemFailures).toEqual([]);
+      // NO S3 fetch happened.
+      expect(storage.reads).toEqual([]);
+      expect(invokeMock).not.toHaveBeenCalled();
+      const row = state.insertedResults[0];
+      expect(row.status).toBe("error");
+      expect(row.error_cause).toBe("infra_other");
+      expect(row.error_message).toMatch(/outside run snapshot prefix/);
+    }
+  });
+
+  it("records error/infra_other on a snapshot content sha mismatch", async () => {
+    const response = await handler(
+      pinnedSqsEvent({
+        snapshotKey: SNAPSHOT_KEY,
+        contentSha: sha256Hex("some other content"),
+      }),
+    );
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(invokeMock).not.toHaveBeenCalled();
+    const row = state.insertedResults[0];
+    expect(row.status).toBe("error");
+    expect(row.error_cause).toBe("infra_other");
+    expect(row.error_message).toMatch(/sha mismatch/);
+  });
+
+  it("records error/infra_other when the snapshot object is missing", async () => {
+    storage.objects.delete(SNAPSHOT_KEY);
+
+    const response = await handler(
+      pinnedSqsEvent({
+        snapshotKey: SNAPSHOT_KEY,
+        contentSha: sha256Hex(pinnedContent),
+      }),
+    );
+
+    expect(response.batchItemFailures).toEqual([]);
+    const row = state.insertedResults[0];
+    expect(row.status).toBe("error");
+    expect(row.error_cause).toBe("infra_other");
+    expect(row.error_message).toMatch(/snapshot object missing/);
+  });
+
+  it("legacy messages (no snapshotKey) keep reading the live row unchanged", async () => {
+    invokeMock.mockResolvedValueOnce({
+      output: "this matches the live assertion",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "LIVE edited query" }),
+    );
+    expect(storage.reads).toEqual([]);
+    expect(state.insertedResults[0].input).toBe("LIVE edited query");
+    expect(state.insertedResults[0].status).toBe("pass");
+  });
+});
+
+describe("eval-worker cancel semantics (U6)", () => {
+  it("a late in-flight worker writes nothing once the run is cancelled", async () => {
+    // The run is cancelled WHILE the case executes: the post-execution
+    // status re-check must drop the row so a late writer can never
+    // resurrect or mutate a cancelled run.
+    invokeMock.mockImplementationOnce(async () => {
+      state.run.status = "cancelled";
+      return {
+        output: "I refuse to do that.",
+        durationMs: 500,
+        composedSystemPrompt: null,
+      };
+    });
+
+    const response = await handler(sqsEvent("1"));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(state.insertedResults).toHaveLength(0);
+    // No finalize update either — cancelled is terminal.
+    expect(state.runUpdates).toHaveLength(0);
+  });
+
+  it("a message for an already-cancelled run is acknowledged without execution", async () => {
+    state.run.status = "cancelled";
+
+    const response = await handler(sqsEvent("1"));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(state.insertedResults).toHaveLength(0);
+    expect(state.runUpdates).toHaveLength(0);
   });
 });
 

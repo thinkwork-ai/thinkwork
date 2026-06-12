@@ -872,6 +872,12 @@ export type CreateArtifactInput = {
   type: ArtifactType;
 };
 
+export type CreateEvalDatasetInput = {
+  kind?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  slug: Scalars["String"]["input"];
+};
+
 export type CreateEvalTestCaseInput = {
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars["String"]["input"]>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
@@ -1196,6 +1202,33 @@ export type EvalAssertionInput = {
   value?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type EvalDataset = {
+  __typename?: "EvalDataset";
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  kind: Scalars["String"]["output"];
+  manifestSha?: Maybe<Scalars["String"]["output"]>;
+  name?: Maybe<Scalars["String"]["output"]>;
+  slug: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  version: Scalars["Int"]["output"];
+};
+
+export type EvalDatasetCaseInput = {
+  agentcoreEvaluatorIds?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  assertions?: InputMaybe<Array<EvalAssertionInput>>;
+  caseId: Scalars["String"]["input"];
+  category: Scalars["String"]["input"];
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  expectedBehavior?: InputMaybe<Scalars["String"]["input"]>;
+  name: Scalars["String"]["input"];
+  query: Scalars["String"]["input"];
+  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
+};
+
 export type EvalResult = {
   __typename?: "EvalResult";
   actualOutput?: Maybe<Scalars["String"]["output"]>;
@@ -1228,6 +1261,8 @@ export type EvalRun = {
   completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   costUsd?: Maybe<Scalars["Float"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
+  datasetId?: Maybe<Scalars["ID"]["output"]>;
+  datasetVersion?: Maybe<Scalars["Int"]["output"]>;
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   errored?: Maybe<Scalars["Int"]["output"]>;
   executionTarget: Scalars["String"]["output"];
@@ -1289,6 +1324,8 @@ export type EvalTestCase = {
   assertions: Scalars["AWSJSON"]["output"];
   category: Scalars["String"]["output"];
   createdAt: Scalars["AWSDateTime"]["output"];
+  datasetCaseId?: Maybe<Scalars["String"]["output"]>;
+  datasetId?: Maybe<Scalars["ID"]["output"]>;
   enabled: Scalars["Boolean"]["output"];
   id: Scalars["ID"]["output"];
   name: Scalars["String"]["output"];
@@ -2206,6 +2243,7 @@ export type Mutation = {
    * covering all the plugin's MCP servers. Returns the authorize URL.
    */
   activatePlugin: ActivatePluginResult;
+  addEvalDatasetCase: EvalTestCase;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addSpaceMember: SpaceMember;
@@ -2216,6 +2254,7 @@ export type Mutation = {
   approveInboxItem: InboxItem;
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   approveOntologyChangeSet: OntologyChangeSet;
+  archiveEvalDataset: EvalDataset;
   assignThreadLabel: ThreadLabelAssignment;
   /**
    * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
@@ -2266,6 +2305,7 @@ export type Mutation = {
    * with jobError set.
    */
   createComplianceExport: ComplianceExport;
+  createEvalDataset: EvalDataset;
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
@@ -2364,6 +2404,7 @@ export type Mutation = {
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
   releaseThread: Thread;
+  removeEvalDatasetCase: EvalDataset;
   removeInboxItemLink: Scalars["Boolean"]["output"];
   removeSpaceMember: Scalars["Boolean"]["output"];
   /** Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey. */
@@ -2440,6 +2481,8 @@ export type Mutation = {
   unregisterPushToken: Scalars["Boolean"]["output"];
   updateAgentProfile: AgentProfile;
   updateArtifact: Artifact;
+  updateEvalDataset: EvalDataset;
+  updateEvalDatasetCase: EvalTestCase;
   updateEvalTestCase: EvalTestCase;
   updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
@@ -2489,6 +2532,12 @@ export type MutationActivatePluginArgs = {
   input: ActivatePluginInput;
 };
 
+export type MutationAddEvalDatasetCaseArgs = {
+  datasetSlug: Scalars["String"]["input"];
+  input: EvalDatasetCaseInput;
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type MutationAddInboxItemCommentArgs = {
   input: AddInboxItemCommentInput;
 };
@@ -2532,6 +2581,11 @@ export type MutationApproveManagedApplicationDeploymentArgs = {
 
 export type MutationApproveOntologyChangeSetArgs = {
   input: ApproveOntologyChangeSetInput;
+};
+
+export type MutationArchiveEvalDatasetArgs = {
+  slug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationAssignThreadLabelArgs = {
@@ -2604,6 +2658,11 @@ export type MutationCreateArtifactArgs = {
 export type MutationCreateComplianceExportArgs = {
   filter: ComplianceEventFilter;
   format: ComplianceExportFormat;
+};
+
+export type MutationCreateEvalDatasetArgs = {
+  input: CreateEvalDatasetInput;
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationCreateEvalTestCaseArgs = {
@@ -2984,6 +3043,12 @@ export type MutationReleaseThreadArgs = {
   input: ReleaseThreadInput;
 };
 
+export type MutationRemoveEvalDatasetCaseArgs = {
+  caseId: Scalars["String"]["input"];
+  datasetSlug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type MutationRemoveInboxItemLinkArgs = {
   id: Scalars["ID"]["input"];
 };
@@ -3228,6 +3293,19 @@ export type MutationUpdateAgentProfileArgs = {
 export type MutationUpdateArtifactArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateArtifactInput;
+};
+
+export type MutationUpdateEvalDatasetArgs = {
+  input: UpdateEvalDatasetInput;
+  slug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationUpdateEvalDatasetCaseArgs = {
+  caseId: Scalars["String"]["input"];
+  datasetSlug: Scalars["String"]["input"];
+  input: UpdateEvalDatasetCaseInput;
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationUpdateEvalTestCaseArgs = {
@@ -3858,6 +3936,8 @@ export type Query = {
   deploymentEvidence: DeploymentEvidence;
   deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
+  evalDataset?: Maybe<EvalDataset>;
+  evalDatasets: Array<EvalDataset>;
   evalResultSpans: Array<EvalSpan>;
   evalRun?: Maybe<EvalRun>;
   evalRunResults: Array<EvalResult>;
@@ -4240,6 +4320,16 @@ export type QueryDeploymentReleasesArgs = {
   limit?: InputMaybe<Scalars["Int"]["input"]>;
 };
 
+export type QueryEvalDatasetArgs = {
+  slug: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryEvalDatasetsArgs = {
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
 export type QueryEvalResultSpansArgs = {
   runId: Scalars["ID"]["input"];
   testCaseId: Scalars["ID"]["input"];
@@ -4274,6 +4364,7 @@ export type QueryEvalTestCaseHistoryArgs = {
 
 export type QueryEvalTestCasesArgs = {
   category?: InputMaybe<Scalars["String"]["input"]>;
+  datasetId?: InputMaybe<Scalars["ID"]["input"]>;
   search?: InputMaybe<Scalars["String"]["input"]>;
   tenantId: Scalars["ID"]["input"];
 };
@@ -5631,6 +5722,7 @@ export type StartDeploymentReleaseUpdateInput = {
 
 export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  datasetSlug?: InputMaybe<Scalars["String"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
   testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
 };
@@ -6431,6 +6523,22 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars["String"]["input"]>;
   title?: InputMaybe<Scalars["String"]["input"]>;
   type?: InputMaybe<ArtifactType>;
+};
+
+export type UpdateEvalDatasetCaseInput = {
+  agentcoreEvaluatorIds?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  assertions?: InputMaybe<Array<EvalAssertionInput>>;
+  category?: InputMaybe<Scalars["String"]["input"]>;
+  enabled?: InputMaybe<Scalars["Boolean"]["input"]>;
+  expectedBehavior?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  query?: InputMaybe<Scalars["String"]["input"]>;
+  systemPrompt?: InputMaybe<Scalars["String"]["input"]>;
+  tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
+};
+
+export type UpdateEvalDatasetInput = {
+  name?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type UpdateEvalTestCaseInput = {

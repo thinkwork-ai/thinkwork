@@ -108,6 +108,9 @@ import {
   tenantWorkflowCatalog,
   // Skills settings list — per-tenant index of the S3 skill catalog
   skillCatalog,
+  // Eval datasets — derived index of the S3-canonical dataset artifacts
+  evalDatasets,
+  evalTestCases,
   slackWorkspaces,
   slackUserLinks,
   spaces,
@@ -204,6 +207,8 @@ export {
   tenantBuiltinTools,
   tenantWorkflowCatalog,
   skillCatalog,
+  evalDatasets,
+  evalTestCases,
   slackWorkspaces,
   slackUserLinks,
   spaces,

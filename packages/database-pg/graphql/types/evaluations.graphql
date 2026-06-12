@@ -26,6 +26,39 @@ type EvalTestCase {
   tags: [String!]!
   enabled: Boolean!
   source: String!
+  # Linkage into the S3-canonical dataset substrate (Trust Core U4).
+  # Null on pre-dataset rows. datasetCaseId is the case's stable identity
+  # within its dataset — it survives dataset version bumps so trend
+  # history spans edits.
+  datasetId: ID
+  datasetCaseId: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Datasets — versioned per-tenant S3 artifacts (Trust Core U4)
+#
+# S3 is canonical (tenants/<slug>/eval-datasets/<dataset-slug>/);
+# this type projects the derived eval_datasets index row. The index is
+# fully reconstructible from S3; reads drift-check manifestSha and
+# re-sync on mismatch.
+# ────────────────────────────────────────────────────────────────────
+
+type EvalDataset {
+  id: ID!
+  tenantId: ID!
+  slug: String!
+  name: String
+  # 'baseline' (seeded red-team suite) | 'custom' (operator-curated).
+  kind: String!
+  # Monotonically bumped on every dataset mutation; runs pin it (U6).
+  version: Int!
+  # sha256 of the S3 dataset.json — the index drift detector.
+  manifestSha: String
+  # Soft archive: archived datasets hide from the default listing but
+  # stay queryable (history intact). Never hard-deleted while referenced.
+  archivedAt: AWSDateTime
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -48,6 +81,13 @@ type EvalRun {
   model: String
   categories: [String!]!
   selectedTestCaseIds: [ID!]!
+  # Run scope pinning (Trust Core U6). Dataset launches record the
+  # dataset id at creation; the eval-runner pins the manifest version
+  # when it captures the run snapshot (copy-at-launch), so the run
+  # executes exactly the dataset version it was launched with. Both null
+  # on legacy category/test-case launches.
+  datasetId: ID
+  datasetVersion: Int
   totalTests: Int!
   passed: Int!
   failed: Int!
@@ -183,6 +223,50 @@ input UpdateEvalTestCaseInput {
   enabled: Boolean
 }
 
+input CreateEvalDatasetInput {
+  # Validated against ^[a-z][a-z0-9-]{0,63}$ — used verbatim as the S3
+  # key segment under tenants/<tenant-slug>/eval-datasets/.
+  slug: String!
+  name: String
+  # 'baseline' | 'custom'; defaults to 'custom'.
+  kind: String
+}
+
+input UpdateEvalDatasetInput {
+  name: String
+}
+
+input EvalDatasetCaseInput {
+  # Stable case identity within the dataset (^[a-z][a-z0-9-]{0,63}$).
+  caseId: String!
+  name: String!
+  category: String!
+  query: String!
+  systemPrompt: String
+  # Informational expected-answer text; stored only in the S3 case file
+  # (the canonical artifact), not projected into the index row.
+  expectedBehavior: String
+  assertions: [EvalAssertionInput!]
+  # Engine-specific evaluator selections. Stored in the case file's
+  # namespaced `engines.agentcore.evaluator_ids` extension block — the
+  # canonical core format never references engine vocabulary.
+  agentcoreEvaluatorIds: [String!]
+  tags: [String!]
+  enabled: Boolean
+}
+
+input UpdateEvalDatasetCaseInput {
+  name: String
+  category: String
+  query: String
+  systemPrompt: String
+  expectedBehavior: String
+  assertions: [EvalAssertionInput!]
+  agentcoreEvaluatorIds: [String!]
+  tags: [String!]
+  enabled: Boolean
+}
+
 input StartEvalRunInput {
   # Optional model override for the direct-AgentCore eval run. Omit to use
   # Kimi K2.5; non-default overrides must be available in model_catalog.
@@ -191,6 +275,11 @@ input StartEvalRunInput {
   categories: [String!]
   # Subset of test case IDs to run; empty = use the categories filter above.
   testCaseIds: [ID!]
+  # Dataset launch (Trust Core U6): the run pins the dataset version +
+  # case scope at launch and executes run-scoped copies — mid-run dataset
+  # edits cannot change what the run scores. Mutually exclusive with
+  # categories/testCaseIds.
+  datasetSlug: String
 }
 
 # ────────────────────────────────────────────────────────────────────
@@ -208,9 +297,17 @@ extend type Query {
     tenantId: ID!
     category: String
     search: String
+    # Restrict to the index rows of one dataset (live + tombstoned).
+    datasetId: ID
   ): [EvalTestCase!]!
   evalTestCase(id: ID!): EvalTestCase
   evalTestCaseHistory(testCaseId: ID!, limit: Int): [EvalResult!]!
+  # Datasets (Trust Core U4). Default listing hides archived datasets;
+  # pass includeArchived to see them (history stays intact either way).
+  evalDatasets(tenantId: ID!, includeArchived: Boolean): [EvalDataset!]!
+  # Single-dataset read. Drift-checks the index manifestSha against S3
+  # and re-syncs on mismatch before returning the row.
+  evalDataset(tenantId: ID!, slug: String!): EvalDataset
 }
 
 extend type Mutation {
@@ -227,4 +324,34 @@ extend type Mutation {
   # level via INSERT ON CONFLICT DO NOTHING. Returns count of new rows inserted
   # (existing rows skipped).
   seedEvalTestCases(tenantId: ID!, categories: [String!]): Int!
+  # Dataset CRUD (Trust Core U4). All mutations are operator-gated, write
+  # S3 first, then re-sync the derived index under an advisory lock.
+  createEvalDataset(tenantId: ID!, input: CreateEvalDatasetInput!): EvalDataset!
+  updateEvalDataset(
+    tenantId: ID!
+    slug: String!
+    input: UpdateEvalDatasetInput!
+  ): EvalDataset!
+  # Soft archive — hides the dataset from default listings; result history
+  # and index rows stay intact. Idempotent.
+  archiveEvalDataset(tenantId: ID!, slug: String!): EvalDataset!
+  addEvalDatasetCase(
+    tenantId: ID!
+    datasetSlug: String!
+    input: EvalDatasetCaseInput!
+  ): EvalTestCase!
+  updateEvalDatasetCase(
+    tenantId: ID!
+    datasetSlug: String!
+    caseId: String!
+    input: UpdateEvalDatasetCaseInput!
+  ): EvalTestCase!
+  # Case removal = manifest tombstone + enabled=false on the index row
+  # (never a row delete — historical results FK the case); the S3 case
+  # payload object IS deleted. Returns the updated dataset.
+  removeEvalDatasetCase(
+    tenantId: ID!
+    datasetSlug: String!
+    caseId: String!
+  ): EvalDataset!
 }
