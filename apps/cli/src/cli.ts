@@ -11,6 +11,7 @@ import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerOutputsCommand } from "./commands/outputs.js";
 import { registerConfigCommand } from "./commands/config.js";
 import { registerBootstrapCommand } from "./commands/bootstrap.js";
+import { registerReleaseCommand } from "./commands/release.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerLogoutCommand } from "./commands/logout.js";
 import { registerInitCommand } from "./commands/init.js";
@@ -102,6 +103,7 @@ registerMeCommand(program);
 registerPlanCommand(program);
 registerDeployCommand(program);
 registerBootstrapCommand(program);
+registerReleaseCommand(program);
 registerDestroyCommand(program);
 
 // Manage
