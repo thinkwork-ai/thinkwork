@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
-import { Download, Loader2, Plus, Trash2 } from "lucide-react";
+import { Database, Download, Loader2, Plus, Trash2 } from "lucide-react";
 import { type ColumnDef } from "@tanstack/react-table";
 import { Badge, Button, DataTable, Input } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -183,6 +183,18 @@ export function SettingsEvalStudio() {
     ],
     action: tenantId ? (
       <div className={cn("flex items-center", desktopToolbarGapClassName)}>
+        <Button
+          asChild
+          variant="ghost"
+          size="icon-sm"
+          title="Datasets"
+          aria-label="Datasets"
+          className={desktopToolbarButtonClassName}
+        >
+          <Link to="/settings/evaluations/datasets">
+            <Database className="size-4" />
+          </Link>
+        </Button>
         <Button
           variant="ghost"
           size="icon-sm"

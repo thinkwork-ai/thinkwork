@@ -27,6 +27,11 @@ export const EvalRunsQuery = graphql(`
         totalTests
         passed
         failed
+        errored
+        scoringVersion
+        isLegacyScoring
+        datasetId
+        datasetVersion
         passRate
         regression
         costUsd
@@ -54,6 +59,11 @@ export const EvalRunQuery = graphql(`
       totalTests
       passed
       failed
+      errored
+      scoringVersion
+      isLegacyScoring
+      datasetId
+      datasetVersion
       passRate
       regression
       costUsd
@@ -87,6 +97,7 @@ export const EvalRunResultsQuery = graphql(`
       evaluatorResults
       assertions
       errorMessage
+      errorCause
       overrideStatus
       overriddenBy
       overriddenAt
@@ -298,6 +309,149 @@ export const EvalDatasetsForFlagQuery = graphql(`
       name
       kind
       archivedAt
+    }
+  }
+`);
+
+// ────────────────────────────────────────────────────────────────────
+// Datasets UI (Trust Core U11) — list/detail + CRUD over the U4
+// substrate. S3 is canonical; these read the derived index.
+// ────────────────────────────────────────────────────────────────────
+
+export const EvalDatasetsQuery = graphql(`
+  query EvalDatasets($tenantId: ID!, $includeArchived: Boolean) {
+    evalDatasets(tenantId: $tenantId, includeArchived: $includeArchived) {
+      id
+      slug
+      name
+      kind
+      version
+      archivedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const EvalDatasetQuery = graphql(`
+  query EvalDataset($tenantId: ID!, $slug: String!) {
+    evalDataset(tenantId: $tenantId, slug: $slug) {
+      id
+      slug
+      name
+      kind
+      version
+      archivedAt
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+// Lightweight index read used to count cases per dataset on the list
+// page (one query, grouped client-side — no N+1).
+export const EvalDatasetCaseIndexQuery = graphql(`
+  query EvalDatasetCaseIndex($tenantId: ID!) {
+    evalTestCases(tenantId: $tenantId) {
+      id
+      datasetId
+      enabled
+    }
+  }
+`);
+
+export const EvalDatasetCasesQuery = graphql(`
+  query EvalDatasetCases($tenantId: ID!, $datasetId: ID) {
+    evalTestCases(tenantId: $tenantId, datasetId: $datasetId) {
+      id
+      name
+      category
+      tags
+      enabled
+      source
+      datasetId
+      datasetCaseId
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const CreateEvalDatasetMutation = graphql(`
+  mutation CreateEvalDataset($tenantId: ID!, $input: CreateEvalDatasetInput!) {
+    createEvalDataset(tenantId: $tenantId, input: $input) {
+      id
+      slug
+      name
+      kind
+      version
+      archivedAt
+    }
+  }
+`);
+
+export const UpdateEvalDatasetMutation = graphql(`
+  mutation UpdateEvalDataset(
+    $tenantId: ID!
+    $slug: String!
+    $input: UpdateEvalDatasetInput!
+  ) {
+    updateEvalDataset(tenantId: $tenantId, slug: $slug, input: $input) {
+      id
+      slug
+      name
+      kind
+      version
+      archivedAt
+    }
+  }
+`);
+
+export const ArchiveEvalDatasetMutation = graphql(`
+  mutation ArchiveEvalDataset($tenantId: ID!, $slug: String!) {
+    archiveEvalDataset(tenantId: $tenantId, slug: $slug) {
+      id
+      slug
+      archivedAt
+    }
+  }
+`);
+
+export const UpdateEvalDatasetCaseMutation = graphql(`
+  mutation UpdateEvalDatasetCase(
+    $tenantId: ID!
+    $datasetSlug: String!
+    $caseId: String!
+    $input: UpdateEvalDatasetCaseInput!
+  ) {
+    updateEvalDatasetCase(
+      tenantId: $tenantId
+      datasetSlug: $datasetSlug
+      caseId: $caseId
+      input: $input
+    ) {
+      id
+      datasetCaseId
+      enabled
+      updatedAt
+    }
+  }
+`);
+
+export const RemoveEvalDatasetCaseMutation = graphql(`
+  mutation RemoveEvalDatasetCase(
+    $tenantId: ID!
+    $datasetSlug: String!
+    $caseId: String!
+  ) {
+    removeEvalDatasetCase(
+      tenantId: $tenantId
+      datasetSlug: $datasetSlug
+      caseId: $caseId
+    ) {
+      id
+      slug
+      version
     }
   }
 `);

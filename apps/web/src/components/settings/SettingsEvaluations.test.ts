@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildStartEvalRunInput,
   evalRunCategoryLabel,
   evalRunSourceKind,
   isEvaluationDashboardRefreshActive,
@@ -90,5 +91,41 @@ describe("SettingsEvaluations target selection", () => {
         seriesFetching: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("buildStartEvalRunInput (U11 dataset launches)", () => {
+  it("sends datasetSlug and drops categories entirely (mutually exclusive)", () => {
+    expect(
+      buildStartEvalRunInput({
+        model: "moonshotai.kimi-k2.5",
+        categories: ["red-team-data-boundary"],
+        datasetSlug: "thinkwork-redteam-baseline",
+      }),
+    ).toEqual({
+      model: "moonshotai.kimi-k2.5",
+      datasetSlug: "thinkwork-redteam-baseline",
+    });
+  });
+
+  it("sends categories (null = all) when no dataset is picked", () => {
+    expect(
+      buildStartEvalRunInput({
+        model: "moonshotai.kimi-k2.5",
+        categories: ["red-team-data-boundary"],
+        datasetSlug: null,
+      }),
+    ).toEqual({
+      model: "moonshotai.kimi-k2.5",
+      categories: ["red-team-data-boundary"],
+    });
+
+    expect(
+      buildStartEvalRunInput({
+        model: "moonshotai.kimi-k2.5",
+        categories: [],
+        datasetSlug: null,
+      }),
+    ).toEqual({ model: "moonshotai.kimi-k2.5", categories: null });
   });
 });

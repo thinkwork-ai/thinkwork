@@ -16,15 +16,17 @@ describe("SettingsEvalRunDetail category pass rates", () => {
     expect(rates["red-team-prompt-injection"]).toBe(1);
   });
 
-  it("keeps terminal failures and errors in the scored denominator", () => {
+  it("keeps terminal failures in the denominator but excludes errors (clean executions only)", () => {
     const rates = calculateCategoryPassRates([
       { category: "red-team-prompt-injection", status: "pass" },
       { category: "red-team-prompt-injection", status: "fail" },
+      // Errors never score (Trust Core U2): infra noise stays out of
+      // the per-category denominator, matching the run-level pass rate.
       { category: "red-team-prompt-injection", status: "error" },
       { category: "red-team-prompt-injection", status: "running" },
     ]);
 
-    expect(rates["red-team-prompt-injection"]).toBe(1 / 3);
+    expect(rates["red-team-prompt-injection"]).toBe(1 / 2);
   });
 });
 

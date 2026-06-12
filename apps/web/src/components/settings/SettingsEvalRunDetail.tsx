@@ -10,8 +10,11 @@ import { useMutation, useQuery, useSubscription } from "urql";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   Activity,
+  AlertTriangle,
   ChevronDown,
+  Database,
   FileText,
+  GitCompareArrows,
   History,
   Loader2,
   Pencil,
@@ -48,9 +51,11 @@ import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
   CancelEvalRunMutation,
   DeleteEvalRunMutation,
+  EvalDatasetsQuery,
   EvalResultSpansQuery,
   EvalRunQuery,
   EvalRunResultsQuery,
+  EvalRunsQuery,
   EvalTestCaseQuery,
   OnEvalRunUpdatedSubscription,
   OverrideEvalResultMutation,
@@ -58,9 +63,17 @@ import {
 import { cn, relativeTime } from "@/lib/utils";
 import {
   canEditEvalResult,
+  computeEvalRunComparison,
+  countEvalVerdictGroups,
   deriveEvalFailureMode,
+  evalErrorCauseBreakdown,
+  evalErrorCauseDescription,
+  evalErrorCauseLabel,
   evalFailureModeDescription,
   evalFailureModeLabel,
+  evalResultVerdictGroup,
+  evalRunPassRateDisplay,
+  evalRunTransitionLabel,
   evaluatorDisplayStatus,
   expectedSummary,
   openEvalResultEditor,
@@ -69,7 +82,9 @@ import {
   parseEvaluatorResults,
   parseSpanAttributes,
   sortEvalSpans,
+  type EvalRunTransition,
   type EvalSpanRow,
+  type EvalVerdictGroup,
 } from "@/components/settings/eval-result-detail";
 
 const EVAL_RESULT_SHEET_WIDTH_CLASS = "data-[side=right]:max-w-none";
@@ -94,6 +109,10 @@ interface EvalResultRow {
   assertions: unknown;
   evaluatorResults: unknown;
   errorMessage: string | null;
+  // Why an error-status row errored (Trust Core U2): timeout | throttle |
+  // evaluator_error | reconciler | infra_other. Error rows render by
+  // cause, never by score.
+  errorCause: string | null;
   // Operator verdict override (Trust Core U9). The judge's verdict stays
   // in `status`; `effectiveStatus` (override ?? status) is what
   // aggregation counts and what the UI displays.
@@ -109,8 +128,11 @@ type CategoryPassRateResult = Pick<EvalResultRow, "category" | "status"> & {
   effectiveStatus?: string | null;
 };
 
+// Errors never score (Trust Core U2): error rows are infra noise and
+// stay out of the per-category denominators, matching the run-level
+// clean-execution pass rate.
 function isScoredResultStatus(status: string): boolean {
-  return ["pass", "fail", "completed", "failed", "error"].includes(status);
+  return ["pass", "fail", "completed", "failed"].includes(status);
 }
 
 function isPassingResultStatus(status: string): boolean {
@@ -173,6 +195,27 @@ function statusBadge(status: string) {
           waiting
         </Badge>
       );
+    case "error":
+      // Infra noise, not behavior — visually distinct from fail and
+      // excluded from the score.
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400"
+        >
+          <AlertTriangle className="h-3 w-3" />
+          error
+        </Badge>
+      );
+    case "cancelled":
+      return (
+        <Badge
+          variant="outline"
+          className="text-muted-foreground line-through decoration-1"
+        >
+          cancelled
+        </Badge>
+      );
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
@@ -225,13 +268,24 @@ const resultColumns: ColumnDef<EvalResultRow>[] = [
     accessorKey: "score",
     header: "Score",
     size: 70,
-    cell: ({ row }) => (
-      <span className="text-right tabular-nums">
-        {row.original.score != null
-          ? Number(row.original.score).toFixed(2)
-          : "—"}
-      </span>
-    ),
+    cell: ({ row }) => {
+      // Error rows render by cause, never by score — the stored score on
+      // an error row is a pinned quirk, not a verdict.
+      if (row.original.status === "error") {
+        return (
+          <span className="text-xs text-amber-600 dark:text-amber-400 whitespace-nowrap">
+            {evalErrorCauseLabel(row.original.errorCause)}
+          </span>
+        );
+      }
+      return (
+        <span className="text-right tabular-nums">
+          {row.original.score != null
+            ? Number(row.original.score).toFixed(2)
+            : "—"}
+        </span>
+      );
+    },
   },
   {
     accessorKey: "durationMs",
@@ -256,6 +310,12 @@ export function SettingsEvalRunDetail() {
     null,
   );
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  // Verdict filter (Trust Core U11): errors grouped apart from
+  // behavioral failures. Combines with the category filter.
+  const [verdictFilter, setVerdictFilter] = useState<EvalVerdictGroup | null>(
+    null,
+  );
+  const [compareOpen, setCompareOpen] = useState(false);
 
   const [, deleteRun] = useMutation(DeleteEvalRunMutation);
   const [{ fetching: cancelling }, cancelRun] = useMutation(
@@ -323,9 +383,20 @@ export function SettingsEvalRunDetail() {
     return calculateCategoryPassRates(runResults);
   }, [runResults]);
 
-  const filteredResults = categoryFilter
-    ? runResults.filter((r) => r.category === categoryFilter)
-    : runResults;
+  const verdictCounts = useMemo(
+    () => countEvalVerdictGroups(runResults),
+    [runResults],
+  );
+  const errorBreakdown = useMemo(
+    () => evalErrorCauseBreakdown(runResults),
+    [runResults],
+  );
+
+  const filteredResults = runResults.filter(
+    (r) =>
+      (!categoryFilter || r.category === categoryFilter) &&
+      (!verdictFilter || evalResultVerdictGroup(r) === verdictFilter),
+  );
 
   const handleDelete = useCallback(async () => {
     const result = await deleteRun({ id: runId });
@@ -342,11 +413,22 @@ export function SettingsEvalRunDetail() {
     else toast.success("Evaluation cancelled");
   }, [cancelRun, runId]);
 
-  const completed = (runDetail?.passed ?? 0) + (runDetail?.failed ?? 0);
-  const passRate =
-    completed > 0
-      ? `${(((runDetail?.passed ?? 0) / completed) * 100).toFixed(1)}%`
-      : "—";
+  // Score over clean executions (server-computed, override-corrected).
+  // Null pass rate on a terminal run renders "No score" — never 0%.
+  const passRate = runDetail ? evalRunPassRateDisplay(runDetail) : "—";
+  // Dataset-pinned runs (Trust Core U6) show the dataset name + pinned
+  // version in the header. includeArchived so archived datasets still
+  // label their historical runs.
+  const [datasetsResult] = useQuery({
+    query: EvalDatasetsQuery,
+    variables: { tenantId: tenantId ?? "", includeArchived: true },
+    pause: !tenantId || !runDetail?.datasetId,
+  });
+  const runDataset = runDetail?.datasetId
+    ? (datasetsResult.data?.evalDatasets ?? []).find(
+        (dataset) => dataset.id === runDetail.datasetId,
+      )
+    : undefined;
   const dateLabel = runDetail?.completedAt
     ? relativeTime(runDetail.completedAt)
     : runDetail?.startedAt
@@ -362,7 +444,9 @@ export function SettingsEvalRunDetail() {
     subtitle: runDetail
       ? [
           runDetail.agentName,
-          `${runDetail.passed ?? 0} passed, ${runDetail.failed ?? 0} failed of ${runDetail.totalTests ?? 0} tests`,
+          `${runDetail.passed ?? 0} passed, ${runDetail.failed ?? 0} failed${
+            (runDetail.errored ?? 0) > 0 ? `, ${runDetail.errored} errored` : ""
+          } of ${runDetail.totalTests ?? 0} tests`,
         ]
           .filter(Boolean)
           .join(" — ")
@@ -379,9 +463,49 @@ export function SettingsEvalRunDetail() {
             Legacy run
           </Badge>
         )}
+        {runDetail.isLegacyScoring && (
+          <Badge
+            variant="outline"
+            className="text-muted-foreground"
+            title="Scored before scoring v2: errors counted as failures. Not comparable to current pass rates."
+          >
+            legacy scoring
+          </Badge>
+        )}
+        {runDataset && (
+          <Badge variant="secondary" className="gap-1">
+            <Database className="h-3 w-3" />
+            {runDataset.name ?? runDataset.slug}
+            {runDetail.datasetVersion != null &&
+              ` · v${runDetail.datasetVersion}`}
+          </Badge>
+        )}
         <span className="text-sm text-muted-foreground tabular-nums">
-          {passRate} pass rate
+          {passRate}
+          {passRate.endsWith("%") ? " pass rate" : ""}
         </span>
+        {(runDetail.errored ?? 0) > 0 && (
+          <Badge
+            variant="outline"
+            className="gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400 tabular-nums"
+            title="Infra/judge errors — excluded from the score."
+          >
+            <AlertTriangle className="h-3 w-3" />
+            {runDetail.errored} errored
+          </Badge>
+        )}
+        {runDetail.datasetId && !isRunning && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-muted-foreground h-8 w-8"
+            title="Compare with previous run"
+            aria-label="Compare with previous run"
+            onClick={() => setCompareOpen(true)}
+          >
+            <GitCompareArrows className="h-4 w-4" />
+          </Button>
+        )}
         {runDetail.costUsd != null && Number(runDetail.costUsd) > 0 && (
           <span className="text-xs text-muted-foreground tabular-nums">
             ${Number(runDetail.costUsd).toFixed(4)}
@@ -437,7 +561,7 @@ export function SettingsEvalRunDetail() {
         )}
       </div>
     ) : undefined,
-    actionKey: `eval-run:${runId}:${runDetail?.status ?? "loading"}:${cancelling}`,
+    actionKey: `eval-run:${runId}:${runDetail?.status ?? "loading"}:${cancelling}:${passRate}:${runDetail?.errored ?? ""}:${runDataset?.slug ?? ""}`,
   });
 
   if (runResult.fetching && !runDetail) {
@@ -457,6 +581,66 @@ export function SettingsEvalRunDetail() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
+      {/* Verdict filter — errors grouped apart from behavioral failures.
+          Error rows are infra noise excluded from the score; the chips
+          carry the per-cause breakdown. */}
+      {runResults.length > 0 && (
+        <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
+          <Badge
+            variant={verdictFilter === null ? "default" : "outline"}
+            className="cursor-pointer"
+            onClick={() => setVerdictFilter(null)}
+          >
+            All {runResults.length}
+          </Badge>
+          <Badge
+            variant={verdictFilter === "pass" ? "default" : "outline"}
+            className={cn(
+              "cursor-pointer",
+              verdictFilter !== "pass" && "border-green-600 text-green-500",
+            )}
+            onClick={() =>
+              setVerdictFilter((cur) => (cur === "pass" ? null : "pass"))
+            }
+          >
+            Passed {verdictCounts.pass}
+          </Badge>
+          <Badge
+            variant={verdictFilter === "fail" ? "default" : "outline"}
+            className={cn(
+              "cursor-pointer",
+              verdictFilter !== "fail" && "border-red-600 text-red-500",
+            )}
+            onClick={() =>
+              setVerdictFilter((cur) => (cur === "fail" ? null : "fail"))
+            }
+          >
+            Behavioral failures {verdictCounts.fail}
+          </Badge>
+          <Badge
+            variant={verdictFilter === "error" ? "default" : "outline"}
+            className={cn(
+              "cursor-pointer",
+              verdictFilter !== "error" &&
+                "border-amber-500/60 text-amber-600 dark:text-amber-400",
+            )}
+            title="Infra/judge errors — excluded from the score"
+            onClick={() =>
+              setVerdictFilter((cur) => (cur === "error" ? null : "error"))
+            }
+          >
+            Errors {verdictCounts.error}
+          </Badge>
+          {errorBreakdown.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {errorBreakdown
+                .map((entry) => `${entry.label} ${entry.count}`)
+                .join(" · ")}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Category filter badges — color-coded by per-category pass rate */}
       {categories.length > 0 && (
         <div className="mb-4 flex shrink-0 flex-wrap gap-2">
@@ -538,7 +722,182 @@ export function SettingsEvalRunDetail() {
           silentRefetch();
         }}
       />
+      {runDetail.datasetId && tenantId && (
+        <RunComparisonSheet
+          tenantId={tenantId}
+          run={{
+            id: runDetail.id,
+            datasetId: runDetail.datasetId,
+            createdAt: runDetail.createdAt,
+          }}
+          currentResults={runResults}
+          datasetLabel={
+            runDataset ? (runDataset.name ?? runDataset.slug) : undefined
+          }
+          open={compareOpen}
+          onOpenChange={setCompareOpen}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Run comparison (Trust Core R13): for a dataset-pinned run, find the
+ * previous completed run of the same dataset and list per-case verdict
+ * transitions (fail→pass, pass→fail, new errors). Covers AE4: a case
+ * failing in run N-1 and passing in run N shows as fail→pass.
+ */
+function RunComparisonSheet({
+  tenantId,
+  run,
+  currentResults,
+  datasetLabel,
+  open,
+  onOpenChange,
+}: {
+  tenantId: string;
+  run: { id: string; datasetId: string; createdAt: string };
+  currentResults: EvalResultRow[];
+  datasetLabel?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [runsResult] = useQuery({
+    query: EvalRunsQuery,
+    variables: { tenantId, limit: 50, offset: 0 },
+    pause: !open,
+    requestPolicy: "cache-and-network",
+  });
+
+  // Previous completed run of the same dataset (client-side filter —
+  // the runs list is small and already tenant-scoped).
+  const previousRun = useMemo(() => {
+    const items = runsResult.data?.evalRuns?.items ?? [];
+    return items
+      .filter(
+        (candidate) =>
+          candidate.id !== run.id &&
+          candidate.datasetId === run.datasetId &&
+          candidate.status === "completed" &&
+          Date.parse(candidate.createdAt) < Date.parse(run.createdAt),
+      )
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  }, [runsResult.data, run.id, run.datasetId, run.createdAt]);
+
+  const [previousResults] = useQuery({
+    query: EvalRunResultsQuery,
+    variables: { runId: previousRun?.id ?? "" },
+    pause: !open || !previousRun,
+    requestPolicy: "cache-and-network",
+  });
+
+  const transitions: EvalRunTransition[] = useMemo(() => {
+    if (!previousRun || !previousResults.data?.evalRunResults) return [];
+    return computeEvalRunComparison(
+      previousResults.data.evalRunResults as EvalResultRow[],
+      currentResults,
+    );
+  }, [previousRun, previousResults.data, currentResults]);
+
+  const loading =
+    runsResult.fetching || (Boolean(previousRun) && previousResults.fetching);
+
+  const transitionBadge = (transition: EvalRunTransition) => {
+    switch (transition.kind) {
+      case "fail-to-pass":
+        return (
+          <Badge className="bg-green-600 hover:bg-green-600 text-white shrink-0">
+            {evalRunTransitionLabel(transition.kind)}
+          </Badge>
+        );
+      case "pass-to-fail":
+        return (
+          <Badge variant="destructive" className="shrink-0">
+            {evalRunTransitionLabel(transition.kind)}
+          </Badge>
+        );
+      case "new-error":
+        return (
+          <Badge
+            variant="outline"
+            className="shrink-0 border-amber-500/50 text-amber-600 dark:text-amber-400"
+          >
+            {evalRunTransitionLabel(transition.kind)}
+          </Badge>
+        );
+      case "error-resolved":
+        return (
+          <Badge variant="secondary" className="shrink-0">
+            {evalRunTransitionLabel(transition.kind)}
+          </Badge>
+        );
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        className={`${EVAL_RESULT_SHEET_WIDTH_CLASS} overflow-y-auto`}
+        style={EVAL_RESULT_SHEET_STYLE}
+      >
+        <SheetHeader className="px-6 pt-6 pr-14">
+          <SheetTitle className="text-base leading-snug">
+            Compare with previous run
+          </SheetTitle>
+          <SheetDescription>
+            Per-case verdict transitions
+            {datasetLabel ? ` for dataset "${datasetLabel}"` : ""} against the
+            previous completed run of the same dataset.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="space-y-4 px-6 pb-6">
+          {loading ? (
+            <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading comparison
+            </div>
+          ) : !previousRun ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+              No previous completed run of this dataset to compare against.
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Previous run: {previousRun.id.slice(0, 8)} ·{" "}
+                {relativeTime(previousRun.createdAt)}
+                {previousRun.datasetVersion != null &&
+                  ` · dataset v${previousRun.datasetVersion}`}
+              </p>
+              {transitions.length === 0 ? (
+                <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  No verdict changes between these runs.
+                </div>
+              ) : (
+                <div className="space-y-2" data-testid="run-comparison-list">
+                  {transitions.map((transition) => (
+                    <div
+                      key={transition.key}
+                      className="flex items-center justify-between gap-3 rounded-md border bg-background p-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {transition.name ?? "(unnamed)"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {transition.from} → {transition.to}
+                        </p>
+                      </div>
+                      {transitionBadge(transition)}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -605,7 +964,10 @@ function ResultDetailSheet({
 
   const assertions = parseAssertions(result.assertions);
   const evaluatorResults = parseEvaluatorResults(result.evaluatorResults);
-  const failureMode = deriveEvalFailureMode(result);
+  // Error rows render by error_cause, never by score or failure-mode
+  // heuristics — they are infra noise excluded from the run's score.
+  const isErrorRow = result.status === "error";
+  const failureMode = isErrorRow ? null : deriveEvalFailureMode(result);
   const failureModeLabel = evalFailureModeLabel(failureMode);
   const failureModeDescription = evalFailureModeDescription(failureMode);
   const expected = expectedSummary(assertions);
@@ -661,6 +1023,15 @@ function ResultDetailSheet({
             {result.category && (
               <Badge variant="outline">{result.category}</Badge>
             )}
+            {isErrorRow && (
+              <Badge
+                variant="outline"
+                className="gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {evalErrorCauseLabel(result.errorCause)}
+              </Badge>
+            )}
             {failureMode && (
               <Badge
                 variant={failureMode === "timeout" ? "outline" : "destructive"}
@@ -668,7 +1039,7 @@ function ResultDetailSheet({
                 {failureMode}
               </Badge>
             )}
-            {result.score != null && (
+            {!isErrorRow && result.score != null && (
               <span className="text-sm text-muted-foreground tabular-nums">
                 Score: {Number(result.score).toFixed(2)}
               </span>
@@ -679,6 +1050,17 @@ function ResultDetailSheet({
               </span>
             )}
           </div>
+
+          {isErrorRow && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+              <h4 className="text-sm font-medium">
+                {evalErrorCauseLabel(result.errorCause)}
+              </h4>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {evalErrorCauseDescription(result.errorCause)}
+              </p>
+            </div>
+          )}
 
           {failureModeLabel && failureModeDescription && (
             <div className="rounded-md border border-border bg-muted/30 p-3">

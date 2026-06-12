@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CalendarClock,
   Cloud,
+  Database,
   History,
   Loader2,
   Play,
@@ -51,6 +52,7 @@ import {
 } from "@/components/settings/SettingsContent";
 import { EVAL_CATEGORIES as CATEGORIES } from "@/lib/evaluation-options";
 import {
+  EvalDatasetsQuery,
   EvalRunsQuery,
   EvalSummaryQuery,
   EvalTimeSeriesQuery,
@@ -58,7 +60,10 @@ import {
   StartEvalRunMutation,
 } from "@/lib/evaluation-queries";
 import { cn, relativeTime } from "@/lib/utils";
-import { isDesktopPiEvalRunProvenance } from "@/components/settings/eval-result-detail";
+import {
+  evalRunPassRateDisplay,
+  isDesktopPiEvalRunProvenance,
+} from "@/components/settings/eval-result-detail";
 import {
   desktopToolbarButtonClassName,
   desktopToolbarGapClassName,
@@ -96,6 +101,17 @@ function statusBadge(status: string) {
           pending
         </Badge>
       );
+    case "cancelled":
+      // Cancelled runs stay visible in the list but are excluded from
+      // the summary cards and the trend (server-side filter).
+      return (
+        <Badge
+          variant="outline"
+          className="text-muted-foreground line-through decoration-1"
+        >
+          cancelled
+        </Badge>
+      );
     default:
       return <Badge variant="secondary">{status.toLowerCase()}</Badge>;
   }
@@ -110,6 +126,12 @@ type RunRow = {
   scheduledJobId: string | null;
   passed: number | null;
   failed: number | null;
+  // Infra/judge errors (Trust Core U2) — excluded from the score; null
+  // on legacy runs where errors were folded into `failed`.
+  errored: number | null;
+  isLegacyScoring: boolean;
+  datasetId: string | null;
+  datasetVersion: number | null;
   totalTests: number | null;
   passRate: number | null;
   costUsd: number | null;
@@ -125,6 +147,30 @@ export function isStartEvaluationDisabled(input: {
   selectedModel: string;
 }): boolean {
   return input.submitting || !input.selectedModel;
+}
+
+/**
+ * startEvalRun input builder: a dataset launch (Trust Core U6) is
+ * mutually exclusive with the categories filter — picking a dataset
+ * drops the category selection from the payload entirely.
+ */
+export function buildStartEvalRunInput(opts: {
+  model: string;
+  categories: string[];
+  datasetSlug: string | null;
+}): {
+  model: string;
+  categories?: string[] | null;
+  datasetSlug?: string;
+} {
+  if (opts.datasetSlug) {
+    return { model: opts.model, datasetSlug: opts.datasetSlug };
+  }
+  return {
+    model: opts.model,
+    // Empty selection = "All Categories" (run everything).
+    categories: opts.categories.length > 0 ? opts.categories : null,
+  };
 }
 
 export function isEvaluationDashboardRefreshActive(input: {
@@ -256,20 +302,49 @@ const runsColumns: ColumnDef<RunRow>[] = [
     accessorKey: "passRate",
     header: "Pass Rate",
     cell: ({ row }) => {
-      const { passed, failed, passRate } = row.original;
-      const completed = (passed ?? 0) + (failed ?? 0);
-      const pct =
-        completed > 0
-          ? ((passed ?? 0) / completed) * 100
-          : passRate != null
-            ? passRate * 100
-            : null;
+      // Score over clean executions (errors excluded, overrides applied
+      // server-side). Null pass rate renders "No score" — never 0%.
+      const display = evalRunPassRateDisplay(row.original);
+      const pct = display.endsWith("%") ? parseFloat(display) : null;
       return (
-        <span
-          className={`text-sm font-medium tabular-nums ${passRateColor(pct ?? 0)}`}
-        >
-          {pct != null ? `${pct.toFixed(1)}%` : "—"}
+        <span className="flex items-center gap-1.5 whitespace-nowrap">
+          <span
+            className={cn(
+              "text-sm font-medium tabular-nums",
+              pct != null ? passRateColor(pct) : "text-muted-foreground",
+            )}
+          >
+            {display}
+          </span>
+          {row.original.isLegacyScoring && (
+            <Badge
+              variant="outline"
+              className="text-[10px] text-muted-foreground"
+              title="Scored before scoring v2: errors counted as failures. Not comparable to current pass rates."
+            >
+              legacy scoring
+            </Badge>
+          )}
         </span>
+      );
+    },
+  },
+  {
+    accessorKey: "errored",
+    header: "Errors",
+    cell: ({ row }) => {
+      const errored = row.original.errored ?? 0;
+      if (errored <= 0)
+        return <span className="text-xs text-muted-foreground">—</span>;
+      return (
+        <Badge
+          variant="outline"
+          className="gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400 tabular-nums"
+          title="Infra/judge errors — excluded from the score. Open the run for the cause breakdown."
+        >
+          <AlertTriangle className="h-3 w-3" />
+          {errored}
+        </Badge>
       );
     },
   },
@@ -423,6 +498,18 @@ export function SettingsEvaluations() {
           asChild
           variant="ghost"
           size="icon-sm"
+          title="Datasets"
+          aria-label="Datasets"
+          className={desktopToolbarButtonClassName}
+        >
+          <Link to="/settings/evaluations/datasets">
+            <Database className="size-4" />
+          </Link>
+        </Button>
+        <Button
+          asChild
+          variant="ghost"
+          size="icon-sm"
           title="Studio"
           aria-label="Studio"
           className={desktopToolbarButtonClassName}
@@ -468,13 +555,27 @@ export function SettingsEvaluations() {
           />
           <MetricCard
             label="Latest Pass Rate"
-            value={`${((s?.latestPassRate ?? 0) * 100).toFixed(1)}%`}
+            value={
+              s?.latestPassRate != null
+                ? `${(s.latestPassRate * 100).toFixed(1)}%`
+                : "No score"
+            }
+            subtitle="Over clean executions — errors excluded"
             icon={<ShieldCheck className="h-4 w-4" />}
-            className={passRateColor((s?.latestPassRate ?? 0) * 100)}
+            className={
+              s?.latestPassRate != null
+                ? passRateColor(s.latestPassRate * 100)
+                : "text-muted-foreground"
+            }
           />
           <MetricCard
             label="Average Score"
-            value={`${((s?.avgPassRate ?? 0) * 100).toFixed(1)}%`}
+            value={
+              s?.avgPassRate != null
+                ? `${(s.avgPassRate * 100).toFixed(1)}%`
+                : "No score"
+            }
+            subtitle="Over clean executions — errors excluded"
             icon={<ShieldCheck className="h-4 w-4" />}
           />
           <MetricCard
@@ -489,7 +590,11 @@ export function SettingsEvaluations() {
         <Card>
           <CardHeader>
             <CardTitle>Pass Rate Trend</CardTitle>
-            <CardDescription>Last 30 days</CardDescription>
+            <CardDescription>
+              Last 30 days · scoring v2 — pass rate over clean executions;
+              errors and cancelled runs excluded. Runs scored under legacy
+              semantics are not plotted.
+            </CardDescription>
           </CardHeader>
           <CardContent style={{ height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -552,14 +657,30 @@ function RunEvaluationButton({
 }) {
   const [open, setOpen] = useState(false);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState(DEFAULT_EVAL_MODEL_ID);
   const [submitting, setSubmitting] = useState(false);
   const [, startEvalRun] = useMutation(StartEvalRunMutation);
 
+  // Dataset launches (Trust Core U6) are mutually exclusive with the
+  // categories filter — picking one clears the other.
+  const [datasetsResult] = useQuery({
+    query: EvalDatasetsQuery,
+    variables: { tenantId },
+    pause: !open,
+  });
+  const datasets = datasetsResult.data?.evalDatasets ?? [];
+
   function toggleCat(id: string) {
+    setSelectedDataset(null);
     setSelectedCats((cur) =>
       cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
     );
+  }
+
+  function pickDataset(slug: string | null) {
+    setSelectedDataset(slug);
+    if (slug) setSelectedCats([]);
   }
 
   async function handleStart() {
@@ -567,11 +688,11 @@ function RunEvaluationButton({
     try {
       const res = await startEvalRun({
         tenantId,
-        input: {
+        input: buildStartEvalRunInput({
           model: selectedModel,
-          // Empty selection = "All Categories" (run everything).
-          categories: selectedCats.length > 0 ? selectedCats : null,
-        },
+          categories: selectedCats,
+          datasetSlug: selectedDataset,
+        }),
       });
       if (res.error) {
         alert(`Run failed: ${res.error.message}`);
@@ -620,8 +741,11 @@ function RunEvaluationButton({
             <Label>Categories</Label>
             <div className="flex flex-wrap gap-2">
               <Chip
-                selected={selectedCats.length === 0}
-                onClick={() => setSelectedCats([])}
+                selected={selectedDataset === null && selectedCats.length === 0}
+                onClick={() => {
+                  setSelectedDataset(null);
+                  setSelectedCats([]);
+                }}
               >
                 All Categories
               </Chip>
@@ -636,6 +760,35 @@ function RunEvaluationButton({
               ))}
             </div>
           </div>
+
+          {datasets.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label>Dataset</Label>
+              <p className="text-xs text-muted-foreground">
+                Run one dataset instead of categories. The run pins the
+                dataset&apos;s current version — mid-run edits can&apos;t change
+                what it scores.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {datasets.map((dataset) => (
+                  <Chip
+                    key={dataset.slug}
+                    selected={selectedDataset === dataset.slug}
+                    onClick={() =>
+                      pickDataset(
+                        selectedDataset === dataset.slug ? null : dataset.slug,
+                      )
+                    }
+                  >
+                    {dataset.name ?? dataset.slug}
+                    <span className="ml-1 text-xs opacity-70">
+                      {dataset.kind} · v{dataset.version}
+                    </span>
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button
