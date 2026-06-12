@@ -499,6 +499,22 @@ retirement (section 9).
 
 All three must pass before declaring the domain live.
 
+> **Two user-facing gotchas observed on the TEI cutover (2026-06-12):**
+>
+> - **Negative DNS caching.** Anyone who visited the name before delegation
+>   (including your own probe commands) has NXDOMAIN cached for up to the
+>   parent zone's negative TTL (~30 min) — the browser shows
+>   `DNS_PROBE_*` while fresh resolvers answer fine. Verify with
+>   `dig @1.1.1.1`, not the browser; flush with
+>   `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder`
+>   (plus the browser's own host cache, e.g. `brave://net-internals/#dns`).
+>   Best practice: don't visit the name before running set-targets.
+> - **Saved passwords are keyed to the old domain.** Browser password
+>   managers will not autofill credentials saved under the legacy domain on
+>   `<name>.thinkwork.ai`. Tell users to retrieve the entry under the old
+>   domain in their password manager and re-save it after first login on
+>   the new one.
+
 **Web TLS:**
 
 ```sh
