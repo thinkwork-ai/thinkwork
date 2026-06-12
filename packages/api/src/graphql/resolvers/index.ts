@@ -58,6 +58,7 @@ import {
   tenantCredentialQueries,
 } from "./tenant-credentials/index.js";
 import { deploymentMutations, deploymentQueries } from "./deployments/index.js";
+import { pluginMutations, pluginQueries } from "./plugins/index.js";
 import {
   quickActionQueries,
   quickActionMutations,
@@ -109,6 +110,7 @@ export const queryResolvers: Record<string, any> = {
   ...routineQueries,
   ...tenantCredentialQueries,
   ...deploymentQueries,
+  ...pluginQueries,
   ...quickActionQueries,
   ...customizeQueries,
   ...complianceQueries,
@@ -146,6 +148,7 @@ export const mutationResolvers: Record<string, any> = {
   ...routineMutations,
   ...tenantCredentialMutations,
   ...deploymentMutations,
+  ...pluginMutations,
   ...quickActionMutations,
   ...customizeMutations,
   ...complianceMutations,

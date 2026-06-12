@@ -775,6 +775,9 @@ importers:
       '@thinkwork/pi-runtime-core':
         specifier: workspace:*
         version: link:../pi-runtime-core
+      '@thinkwork/plugin-catalog':
+        specifier: workspace:*
+        version: link:../plugin-catalog
       '@thinkwork/runtime-config':
         specifier: workspace:*
         version: link:../runtime-config

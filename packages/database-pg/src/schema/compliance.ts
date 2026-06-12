@@ -99,10 +99,11 @@ export const auditOutbox = compliance.table(
       table.enqueued_at,
     ),
     check(
-      // _v2 — extended in drizzle/0088_compliance_event_types_finance_pilot.sql
-      // to include attachment|skill|output prefixes for the finance pilot.
-      "audit_outbox_event_type_prefix_v2",
-      sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output)\\.'`,
+      // _v3 — extended in drizzle/0160_compliance_event_types_plugins.sql
+      // to include the plugin prefix for the application-plugin engine
+      // (previously _v2: attachment|skill|output for the finance pilot).
+      "audit_outbox_event_type_prefix_v3",
+      sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output|plugin)\\.'`,
     ),
   ],
 );
@@ -177,10 +178,11 @@ export const auditEvents = compliance.table(
       sql`${table.actor_type} IN ('user','system','agent')`,
     ),
     check(
-      // _v2 — extended in drizzle/0088_compliance_event_types_finance_pilot.sql
-      // to include attachment|skill|output prefixes for the finance pilot.
-      "audit_events_event_type_prefix_v2",
-      sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output)\\.'`,
+      // _v3 — extended in drizzle/0160_compliance_event_types_plugins.sql
+      // to include the plugin prefix for the application-plugin engine
+      // (previously _v2: attachment|skill|output for the finance pilot).
+      "audit_events_event_type_prefix_v3",
+      sql`${table.event_type} ~ '^(auth|user|agent|mcp|workspace|data|policy|approval|attachment|skill|output|plugin)\\.'`,
     ),
   ],
 );
@@ -335,6 +337,11 @@ export const COMPLIANCE_EVENT_TYPES = [
   "attachment.received",
   "skill.activated",
   "output.artifact_produced",
+  // Application plugins (U5 of 2026-06-12-001-feat-application-plugins-plan).
+  // Activation events (plugin.activation_granted / plugin.activation_revoked)
+  // land with the OAuth activation flow in U6.
+  "plugin.installed",
+  "plugin.uninstalled",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

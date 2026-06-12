@@ -327,6 +327,25 @@ export const EVENT_PAYLOAD_SHAPES: Record<
       "size_bytes",
     ]),
   },
+
+  // ── Application plugins (U5 of 2026-06-12-001 plan) ──────────
+  //
+  // Identifiers only — manifests, endpoint URLs, and component payloads
+  // stay out of the audit log (the signed catalog is the authority for
+  // what a (pluginKey, version, payloadSha256) tuple contains).
+
+  "plugin.installed": {
+    allowedFields: new Set([
+      "pluginInstallId",
+      "pluginKey",
+      "version",
+      "payloadSha256",
+      "componentCount",
+    ]),
+  },
+  "plugin.uninstalled": {
+    allowedFields: new Set(["pluginInstallId", "pluginKey", "version"]),
+  },
 };
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,
