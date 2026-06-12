@@ -118,7 +118,24 @@ export const evalRuns = pgTable(
     total_tests: integer("total_tests").notNull().default(0),
     passed: integer("passed").notNull().default(0),
     failed: integer("failed").notNull().default(0),
-    // pass_rate: 0.0–1.0 fraction; null while pending/running
+    // errored: count of status='error' result rows. Only written under
+    // versioned scoring semantics (scoring_version >= 2); null on legacy
+    // runs where errors stay folded into `failed`. Nullable, no default —
+    // a null-errored discriminator must never be used to infer semantics.
+    errored: integer("errored"),
+    // scoring_version: scoring-semantics version stamped at run creation
+    // (CURRENT_EVAL_SCORING_VERSION in @thinkwork/evals-core). Null =
+    // legacy run (~v1: errors count as failed); legacy runs are labeled
+    // in the API and never recomputed under new semantics.
+    scoring_version: integer("scoring_version"),
+    // summary_scoring_version: the semantics version the finalizing
+    // summarizer actually computed under. Diverges from scoring_version
+    // during a deploy window (old warm worker finalizes a new-stamped
+    // run); the read path/reconciler recompute on divergence.
+    summary_scoring_version: integer("summary_scoring_version"),
+    // pass_rate: 0.0–1.0 fraction; null while pending/running. Under
+    // scoring_version >= 2 also null on completed runs with no clean
+    // scoreable execution (all-error / zero-case) — "no score", never 0%.
     pass_rate: numeric("pass_rate", { precision: 5, scale: 4 }),
     regression: boolean("regression").notNull().default(false),
     cost_usd: numeric("cost_usd", { precision: 12, scale: 6 }),
@@ -203,6 +220,11 @@ export const evalResults = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
     error_message: text("error_message"),
+    // error_cause: why a status='error' row errored. Enum-by-comment:
+    // 'timeout' | 'throttle' | 'evaluator_error' | 'reconciler' |
+    // 'infra_other'. Null on pass/fail rows and on legacy error rows
+    // written before this column existed.
+    error_cause: text("error_cause"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

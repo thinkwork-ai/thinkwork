@@ -43,6 +43,7 @@ import {
 import { json, error, notFound } from "../lib/response.js";
 import { ensureThreadForWork } from "../lib/thread-helpers.js";
 import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
+import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
 const THREAD_IDLE_MEMORY_LEARNING_TRIGGER_TYPE = "thread_idle_memory_learning";
@@ -738,6 +739,10 @@ async function fireScheduledJob(
         status: "pending",
         model: DEFAULT_EVAL_MODEL_ID,
         categories: cfg.categories ?? [],
+        // Scoring semantics are stamped at run creation (Trust Core U2);
+        // unstamped rows are treated as legacy and excluded from
+        // current-version aggregates.
+        scoring_version: CURRENT_EVAL_SCORING_VERSION,
       })
       .returning();
 

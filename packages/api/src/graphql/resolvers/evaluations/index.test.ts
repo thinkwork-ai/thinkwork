@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   selectQueue,
   selectWheres,
+  selectFields,
   insertValues,
   insertResults,
   updateSets,
@@ -19,6 +20,7 @@ const {
 } = vi.hoisted(() => {
   const selectQueue: unknown[][] = [];
   const selectWheres: unknown[] = [];
+  const selectFields: unknown[] = [];
   const insertValues: unknown[] = [];
   const insertResults: unknown[][] = [];
   const updateSets: unknown[] = [];
@@ -28,6 +30,7 @@ const {
   return {
     selectQueue,
     selectWheres,
+    selectFields,
     insertValues,
     insertResults,
     updateSets,
@@ -43,6 +46,7 @@ const {
     resetState: () => {
       selectQueue.length = 0;
       selectWheres.length = 0;
+      selectFields.length = 0;
       insertValues.length = 0;
       insertResults.length = 0;
       updateSets.length = 0;
@@ -78,7 +82,10 @@ vi.mock("../../utils.js", () => {
   };
   return {
     db: {
-      select: () => makeSelectChain(),
+      select: (fields?: unknown) => {
+        selectFields.push(fields);
+        return makeSelectChain();
+      },
       insert: () => ({
         values: (v: unknown) => {
           insertValues.push(v);
@@ -180,6 +187,7 @@ vi.mock("@aws-sdk/client-lambda", () => ({
   },
 }));
 
+import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
   evalRuns as evalRunsTable,
   evalTestCases as evalTestCasesTable,
@@ -248,41 +256,129 @@ describe("placeholderStatusForEvalRun", () => {
 });
 
 describe("withLiveProgress", () => {
-  it("overlays running eval run counters from completed result rows", () => {
+  it("overlays running stamped runs excluding errors from the denominator", () => {
     expect(
       withLiveProgress(
         {
           id: "run-1",
           status: "running",
+          scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          passed: 0,
+          failed: 0,
+          errored: 0,
+          pass_rate: null,
+        },
+        { runId: "run-1", completed: 6, passed: 3, failed: 1, errored: 2 },
+      ),
+    ).toMatchObject({
+      passed: 3,
+      failed: 1,
+      errored: 2,
+      pass_rate: "0.7500",
+    });
+  });
+
+  it("shows no score (null) while every completed case so far errored", () => {
+    expect(
+      withLiveProgress(
+        {
+          id: "run-1",
+          status: "running",
+          scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          passed: 0,
+          failed: 0,
+          errored: 0,
+          pass_rate: null,
+        },
+        { runId: "run-1", completed: 2, passed: 0, failed: 0, errored: 2 },
+      ),
+    ).toMatchObject({ passed: 0, failed: 0, errored: 2, pass_rate: null });
+  });
+
+  it("keeps legacy errors-count-as-failed math for unstamped in-flight runs", () => {
+    expect(
+      withLiveProgress(
+        {
+          id: "run-1",
+          status: "running",
+          scoring_version: null,
           passed: 0,
           failed: 0,
           pass_rate: null,
         },
-        { runId: "run-1", completed: 40, passed: 39, failed: 1 },
+        { runId: "run-1", completed: 40, passed: 39, failed: 0, errored: 1 },
       ),
     ).toMatchObject({
       passed: 39,
-      failed: 1,
+      failed: 1, // the error folds into failed under legacy semantics
       pass_rate: "0.9750",
     });
   });
 
-  it("leaves completed eval run counters untouched", () => {
+  it("leaves completed eval run counters untouched when summaries agree", () => {
     expect(
       withLiveProgress(
         {
           id: "run-1",
           status: "completed",
+          scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          summary_scoring_version: CURRENT_EVAL_SCORING_VERSION,
           passed: 40,
           failed: 1,
           pass_rate: "0.9756",
         },
-        { runId: "run-1", completed: 40, passed: 39, failed: 1 },
+        { runId: "run-1", completed: 40, passed: 39, failed: 1, errored: 0 },
       ),
     ).toMatchObject({
       passed: 40,
       failed: 1,
       pass_rate: "0.9756",
+    });
+  });
+
+  it("recomputes a stamped run finalized by an old summarizer (deploy window)", () => {
+    // Stamped current, but an old warm worker finalized it under legacy
+    // semantics (errors folded into failed, no summary version written).
+    expect(
+      withLiveProgress(
+        {
+          id: "run-1",
+          status: "completed",
+          scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          summary_scoring_version: null,
+          passed: 3,
+          failed: 3,
+          errored: null,
+          pass_rate: "0.5000",
+        },
+        { runId: "run-1", completed: 6, passed: 3, failed: 1, errored: 2 },
+      ),
+    ).toMatchObject({
+      passed: 3,
+      failed: 1,
+      errored: 2,
+      pass_rate: "0.7500",
+    });
+  });
+
+  it("never recomputes legacy (unstamped) completed runs", () => {
+    expect(
+      withLiveProgress(
+        {
+          id: "run-1",
+          status: "completed",
+          scoring_version: null,
+          summary_scoring_version: null,
+          passed: 3,
+          failed: 3,
+          pass_rate: "0.5000",
+        },
+        { runId: "run-1", completed: 6, passed: 3, failed: 1, errored: 2 },
+      ),
+    ).toMatchObject({
+      passed: 3,
+      failed: 3,
+      pass_rate: "0.5000",
     });
   });
 });
@@ -669,6 +765,10 @@ describe("eval mutation gating", () => {
     expect((insertValues[0] as Record<string, unknown>).tenant_id).toBe(
       "tenant-1",
     );
+    // Scoring semantics are stamped at run creation, never inferred later.
+    expect((insertValues[0] as Record<string, unknown>).scoring_version).toBe(
+      CURRENT_EVAL_SCORING_VERSION,
+    );
     expect(mockLambdaSend).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ id: "run-1", tenantId: "tenant-1" });
   });
@@ -721,5 +821,150 @@ describe("eval mutation gating", () => {
     );
     expect(result).toMatchObject({ id: "case-1", tenantId: "tenant-1" });
     expect(insertValues).toHaveLength(1);
+  });
+});
+
+describe("eval run scoring-version surfacing", () => {
+  it("evalRun labels legacy runs and surfaces errored on stamped runs", async () => {
+    selectQueue.push([
+      {
+        run: {
+          id: "run-legacy",
+          tenant_id: "tenant-1",
+          status: "completed",
+          scoring_version: null,
+          summary_scoring_version: null,
+          categories: [],
+          selected_test_case_ids: [],
+          total_tests: 6,
+          passed: 3,
+          failed: 3,
+          errored: null,
+          pass_rate: "0.5000",
+        },
+        agentName: "Agent",
+      },
+    ]);
+    selectQueue.push([]); // loadEvalRunProgress
+
+    const legacy = await evaluationsQueries.evalRun(
+      {},
+      { id: "run-legacy" },
+      adminCtx,
+    );
+    expect(legacy).toMatchObject({
+      isLegacyScoring: true,
+      scoringVersion: null,
+      errored: null,
+      passed: 3,
+      failed: 3,
+      passRate: 0.5,
+    });
+
+    resetState();
+    selectQueue.push([
+      {
+        run: {
+          id: "run-v2",
+          tenant_id: "tenant-1",
+          status: "completed",
+          scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          summary_scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          categories: [],
+          selected_test_case_ids: [],
+          total_tests: 6,
+          passed: 3,
+          failed: 1,
+          errored: 2,
+          pass_rate: "0.7500",
+        },
+        agentName: "Agent",
+      },
+    ]);
+    selectQueue.push([]); // loadEvalRunProgress
+
+    const stamped = await evaluationsQueries.evalRun(
+      {},
+      { id: "run-v2" },
+      adminCtx,
+    );
+    expect(stamped).toMatchObject({
+      isLegacyScoring: false,
+      scoringVersion: CURRENT_EVAL_SCORING_VERSION,
+      errored: 2,
+      passed: 3,
+      failed: 1,
+      passRate: 0.75,
+    });
+  });
+
+  it("evalRun surfaces a completed all-error run as no score, never 0%", async () => {
+    selectQueue.push([
+      {
+        run: {
+          id: "run-all-error",
+          tenant_id: "tenant-1",
+          status: "completed",
+          scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          summary_scoring_version: CURRENT_EVAL_SCORING_VERSION,
+          categories: [],
+          selected_test_case_ids: [],
+          total_tests: 2,
+          passed: 0,
+          failed: 0,
+          errored: 2,
+          pass_rate: null,
+        },
+        agentName: "Agent",
+      },
+    ]);
+    selectQueue.push([]); // loadEvalRunProgress
+
+    const run = await evaluationsQueries.evalRun(
+      {},
+      { id: "run-all-error" },
+      adminCtx,
+    );
+    expect(run).toMatchObject({ errored: 2, passRate: null });
+  });
+});
+
+describe("cross-run aggregates scoring-version hygiene", () => {
+  it("evalSummary averages only current-version completed runs", async () => {
+    selectQueue.push([
+      {
+        totalRuns: 5,
+        latestPassRate: 0.9,
+        avgPassRate: 0.8,
+        regressionCount: 0,
+      },
+    ]);
+    await evaluationsQueries.evalSummary(
+      {},
+      { tenantId: "tenant-1" },
+      adminCtx,
+    );
+
+    const fields = JSON.stringify(selectFields[0]);
+    // Both rate aggregates pin status='completed' (excludes cancelled)
+    // and the current scoring_version (excludes legacy denominators).
+    expect(fields).toContain("scoring_version =");
+    expect(fields).toContain("status = 'completed'");
+    expect(fields).toContain(String(CURRENT_EVAL_SCORING_VERSION));
+  });
+
+  it("evalTimeSeries filters to current-version completed runs", async () => {
+    await evaluationsQueries.evalTimeSeries(
+      {},
+      { tenantId: "tenant-1", days: 30 },
+      adminCtx,
+    );
+
+    expect(executeCalls).toHaveLength(1);
+    const query = JSON.stringify(executeCalls[0]);
+    expect(query).toContain("status = 'completed'");
+    expect(query).toContain("scoring_version =");
+    const values = (executeCalls[0] as { sql: unknown[] }).sql.slice(1);
+    expect(values).toContain(CURRENT_EVAL_SCORING_VERSION);
   });
 });

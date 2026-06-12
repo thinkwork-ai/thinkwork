@@ -1204,6 +1204,7 @@ export type EvalResult = {
   category?: Maybe<Scalars["String"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   durationMs?: Maybe<Scalars["Int"]["output"]>;
+  errorCause?: Maybe<Scalars["String"]["output"]>;
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   evaluatorResults: Scalars["AWSJSON"]["output"];
   expected?: Maybe<Scalars["String"]["output"]>;
@@ -1228,15 +1229,18 @@ export type EvalRun = {
   costUsd?: Maybe<Scalars["Float"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   errorMessage?: Maybe<Scalars["String"]["output"]>;
+  errored?: Maybe<Scalars["Int"]["output"]>;
   executionTarget: Scalars["String"]["output"];
   failed: Scalars["Int"]["output"];
   id: Scalars["ID"]["output"];
+  isLegacyScoring: Scalars["Boolean"]["output"];
   model?: Maybe<Scalars["String"]["output"]>;
   passRate?: Maybe<Scalars["Float"]["output"]>;
   passed: Scalars["Int"]["output"];
   regression: Scalars["Boolean"]["output"];
   runtimeHost: Scalars["String"]["output"];
   scheduledJobId?: Maybe<Scalars["ID"]["output"]>;
+  scoringVersion?: Maybe<Scalars["Int"]["output"]>;
   selectedTestCaseIds: Array<Scalars["ID"]["output"]>;
   startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   status: Scalars["String"]["output"];

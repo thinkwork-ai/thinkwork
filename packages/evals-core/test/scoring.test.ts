@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CURRENT_EVAL_SCORING_VERSION,
   evaluateAssertion,
   evaluateAssertions,
   includesUnsafeOperationalGuidance,
@@ -8,6 +9,7 @@ import {
   looksLikeSafeRefusal,
   scoreEvalOutcome,
   softenEchoedForbiddenPhraseAssertions,
+  summarizeEvalStatuses,
 } from "../src/index.js";
 
 describe("eval scoring assertions", () => {
@@ -278,6 +280,7 @@ describe("eval outcome scoring", () => {
       score: 0.9,
       assertionsPassed: true,
       evaluatorsPassed: true,
+      errorCause: null,
     });
   });
 
@@ -288,6 +291,78 @@ describe("eval outcome scoring", () => {
         evaluatorResults: [],
         errorMessage: "Agent failed",
       }),
-    ).toMatchObject({ status: "error", score: 1 });
+    ).toMatchObject({ status: "error", score: 1, errorCause: "infra_other" });
+  });
+
+  it("propagates an explicit error cause and never sets one on clean cases", () => {
+    expect(
+      scoreEvalOutcome({
+        assertionResults: [],
+        evaluatorResults: [],
+        errorMessage: "took too long",
+        errorCause: "timeout",
+      }),
+    ).toMatchObject({ status: "error", errorCause: "timeout" });
+
+    expect(
+      scoreEvalOutcome({
+        assertionResults: [
+          { type: "contains", passed: false, reason: "missing" },
+        ],
+        evaluatorResults: [],
+        // A cause without an error message must not invent an error.
+        errorCause: "timeout",
+      }),
+    ).toMatchObject({ status: "fail", errorCause: null });
+  });
+});
+
+describe("eval status summarization", () => {
+  const rows = [
+    { status: "pass" },
+    { status: "pass" },
+    { status: "pass" },
+    { status: "fail" },
+    { status: "error" },
+    { status: "error" },
+  ];
+
+  it("excludes errors from the pass-rate denominator under current scoring", () => {
+    expect(summarizeEvalStatuses(rows, CURRENT_EVAL_SCORING_VERSION)).toEqual({
+      completed: 6,
+      passed: 3,
+      failed: 1,
+      errored: 2,
+      passRate: 0.75,
+    });
+  });
+
+  it("returns no score (null) for all-error and zero-case runs", () => {
+    expect(
+      summarizeEvalStatuses(
+        [{ status: "error" }, { status: "error" }],
+        CURRENT_EVAL_SCORING_VERSION,
+      ),
+    ).toEqual({
+      completed: 2,
+      passed: 0,
+      failed: 0,
+      errored: 2,
+      passRate: null,
+    });
+    expect(
+      summarizeEvalStatuses([], CURRENT_EVAL_SCORING_VERSION),
+    ).toMatchObject({ passRate: null });
+  });
+
+  it("preserves legacy semantics for unstamped (null scoring_version) runs", () => {
+    expect(summarizeEvalStatuses(rows, null)).toEqual({
+      completed: 6,
+      passed: 3,
+      failed: 3, // errors fold into failed under legacy semantics
+      errored: null,
+      passRate: 0.5,
+    });
+    expect(summarizeEvalStatuses([], null)).toMatchObject({ passRate: 0 });
   });
 });

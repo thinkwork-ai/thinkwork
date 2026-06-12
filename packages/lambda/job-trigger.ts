@@ -34,6 +34,10 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 
 const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
+// Mirrors CURRENT_EVAL_SCORING_VERSION in @thinkwork/evals-core (this
+// package follows the local-constant pattern, like DEFAULT_EVAL_MODEL_ID
+// above). Stamped at eval-run creation; unstamped rows are legacy.
+const CURRENT_EVAL_SCORING_VERSION = 2;
 
 // Module-scope SFN client so warm Lambda invocations reuse the TCP pool.
 const _SFN_CLIENT = new SFNClient({
@@ -673,6 +677,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           status: "pending",
           model: DEFAULT_EVAL_MODEL_ID,
           categories: cfg.categories ?? [],
+          // Scoring semantics are stamped at run creation (Trust Core
+          // U2); unstamped rows are treated as legacy.
+          scoring_version: CURRENT_EVAL_SCORING_VERSION,
         })
         .returning();
       console.log(

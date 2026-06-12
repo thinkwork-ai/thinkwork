@@ -313,6 +313,11 @@ locals {
     "eval-worker" = {
       EVAL_FANOUT_QUEUE_URL     = local.eval_fanout_queue_url
       EVAL_AGENTCORE_EVALUATORS = "disabled"
+      # Mirrors the fan-out queue's redrive maxReceiveCount (same local in
+      # eval-fanout.tf — no drift possible) so the worker can detect the
+      # final SQS receive and record error/throttle instead of letting the
+      # case vanish into the DLQ without a result row.
+      EVAL_FANOUT_MAX_RECEIVE_COUNT = tostring(local.eval_fanout_max_receive_count)
     }
     # job-trigger's thinkwork-<stage>-api-* worker function names are
     # derived from STAGE at call time (runtimeFunctionName — R7), and
