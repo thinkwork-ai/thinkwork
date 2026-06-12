@@ -164,14 +164,9 @@ jobs:
             echo "::error::TWENTY_IMAGE_URI repository variable must be set to a pinned image URI before publishing managed-app release manifests."
             exit 1
           fi
-          if [[ -z "${KESTRA_IMAGE_URI:-}" ]]; then
-            echo "::error::KESTRA_IMAGE_URI repository variable must be set to a pinned image URI before publishing managed-app release manifests."
-            exit 1
-          fi
           MANAGED_APP_IMAGE_ARGS=(
             --image "name=cognee,repository=${COGNEE_REPOSITORY},tag=${RELEASE_REF_NAME}-cognee-amd64,digest=${{ steps.cognee-amd64.outputs.digest }},architecture=amd64"
             --image "name=twenty,uri=${TWENTY_IMAGE_URI},architecture=amd64"
-            --image "name=kestra,uri=${KESTRA_IMAGE_URI},architecture=amd64"
           )
           pnpm exec tsx scripts/release/build-release-manifest.ts \
             --version "${{ steps.release.outputs.version }}" \
@@ -190,7 +185,6 @@ jobs:
           RELEASE_MANIFEST_KEY_ID: ${{ secrets.RELEASE_MANIFEST_KEY_ID }}
           RELEASE_MANIFEST_PRIVATE_KEY: ${{ secrets.RELEASE_MANIFEST_PRIVATE_KEY }}
           TWENTY_IMAGE_URI: ${{ vars.TWENTY_IMAGE_URI || '' }}
-          KESTRA_IMAGE_URI: ${{ vars.KESTRA_IMAGE_URI || '' }}
 
       - name: Upload deployable release assets
         uses: actions/upload-artifact@v4

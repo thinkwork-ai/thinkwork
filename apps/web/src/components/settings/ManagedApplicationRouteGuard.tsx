@@ -10,7 +10,7 @@ export function ManagedApplicationRouteGuard({
   allowDisabled,
   children,
 }: {
-  appKey: "cognee" | "twenty" | "kestra";
+  appKey: "cognee" | "twenty";
   requireProvisioned?: boolean;
   allowDisabled?: boolean;
   children: ReactNode;

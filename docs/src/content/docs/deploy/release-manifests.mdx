@@ -73,7 +73,7 @@ non-deployable instead of presenting an old manifest digest with newer assets.
 Managed-app descriptors and runtime images are one contract. If a release
 manifest advertises a managed app with `requiredImages`, every required image
 name must appear in `runtimeImages` as an immutable `@sha256:` URI. The release
-publisher builds the ThinkWork-owned Cognee image and reads pinned Twenty/Kestra
+publisher builds the ThinkWork-owned Cognee image and reads pinned Twenty
 image URIs from repository variables so the controller can fail before
 Terraform when an optional app cannot be deployed from the selected release.
 

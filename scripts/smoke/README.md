@@ -35,8 +35,6 @@ This kit fills the gap.
 | `twenty-managed-app-smoke.mjs`               | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                    |
 | `managed-app-controller-readiness-smoke.mjs` | Read-only managed-app controller readiness smoke. Verifies selected release manifest descriptors, smoke contracts, and required runtime images for Cognee/Twenty without starting any managed-app job.                                      |
 | `deployment-teardown-readiness-smoke.mjs`    | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                    |
-| `kestra-managed-app-smoke.mjs`               | Kestra managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public authenticated endpoint when Kestra is running.                  |
-| `kestra-control-mcp-smoke.mjs`               | Kestra control MCP smoke. Dry-run reports live-mode requirements; live mode verifies managed MCP registration, lists curated tools, validates safe/unsafe flows, and can upsert/start/poll a safe smoke flow.                               |
 
 ## Quick start — run the full smoke suite
 
@@ -104,74 +102,6 @@ Passing live mode means:
 - parked Twenty stages skip with an explicit retained-runtime message;
 - running Twenty stages expose an HTTPS URL;
 - the public `https://.../healthz` endpoint returns a successful response.
-
-## Kestra managed-app smoke
-
-The Kestra managed-app smoke is dry-run by default:
-
-```sh
-node scripts/smoke/kestra-managed-app-smoke.mjs
-
-SMOKE_ENABLE_KESTRA_MANAGED_APP=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  node scripts/smoke/kestra-managed-app-smoke.mjs
-```
-
-Live mode reads `terraform/examples/greenfield` outputs unless
-`SMOKE_TERRAFORM_DIR` points elsewhere. `SMOKE_KESTRA_URL` can supply the public
-URL directly when Terraform outputs are unavailable. GraphQL deployment status
-and managed-app health are checked when API credentials are available from
-`apps/web/.env` or equivalent `VITE_GRAPHQL_HTTP_URL` plus
-`API_AUTH_SECRET`/`THINKWORK_API_SECRET` or an API key.
-
-Passing live mode means:
-
-- unprovisioned Kestra stages skip with an explicit message;
-- parked Kestra stages skip with an explicit retained-runtime message;
-- running Kestra stages expose an HTTPS URL;
-- the public `https://.../` endpoint returns success or an authentication
-  challenge.
-
-After destructive destroy, the expected managed-app proof is an explicit
-unprovisioned skip plus deployment evidence showing Kestra retained state,
-storage, credentials, and managed MCP configuration were removed.
-
-## Kestra control MCP smoke
-
-The Kestra control MCP smoke is dry-run by default:
-
-```sh
-node scripts/smoke/kestra-control-mcp-smoke.mjs
-
-SMOKE_ENABLE_KESTRA_CONTROL_MCP=1 \
-  SMOKE_API_BASE_URL=https://api.example.com \
-  SMOKE_KESTRA_MCP_BEARER=<tenant-control-mcp-token-or-service-secret> \
-  SMOKE_TENANT_ID=<tenant-id> \
-  node scripts/smoke/kestra-control-mcp-smoke.mjs
-```
-
-Live mode talks directly to `POST /mcp/kestra`. The bearer can be the
-app-owned Kestra control MCP token or the service `API_AUTH_SECRET`/
-`THINKWORK_API_SECRET` fallback accepted by the endpoint. When GraphQL
-credentials are available, the smoke first verifies `deploymentStatus` reports
-Kestra running with the managed MCP row installed.
-
-By default, the live smoke mutates only the ThinkWork-owned namespace
-`thinkwork.smoke`: it validates a Fargate-safe flow, validates that a Docker task
-class is rejected, upserts the safe flow, starts one execution, polls it to a
-terminal state, and records a logs preview. Set `SMOKE_KESTRA_CONTROL_MUTATE=0`
-to keep the live smoke to `initialize`, `tools/list`, and validation-only MCP
-calls.
-
-Use this smoke for the customer Kestra control plane only. Public Kestra
-catalog/docs MCP servers are read-only authoring context and are not proof that
-the customer's managed Kestra runtime can validate, upsert, execute, or inspect
-flows.
-
-After destructive destroy, the control MCP smoke should not be treated as a
-healthy-runtime check. The expected cleanup proof is that Settings -> MCP
-Servers no longer has the system-managed Kestra Control row and the app-owned
-MCP bearer token/configuration are removed.
 
 ## GitHub-free foundation smoke
 

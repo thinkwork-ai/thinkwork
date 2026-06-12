@@ -21,12 +21,6 @@ locals {
     # of carrying long ARNs in Lambda env vars.
     TWENTY = "${var.twenty_provisioned ? "1" : "0"}|${var.twenty_runtime_enabled ? "1" : "0"}|${var.twenty_url}"
   } : {}
-  kestra_env = var.kestra_provisioned ? {
-    # Keep Kestra managed-app status compact for graphql-http. Fields:
-    # provisioned|runtime. graphql-http is close to Lambda's 4 KB environment
-    # ceiling, so the resolver derives stable names/URLs from stage + account.
-    KESTRA = "${var.kestra_provisioned ? "1" : "0"}|${var.kestra_runtime_enabled ? "1" : "0"}"
-  } : {}
   optional_integration_handler_names = concat(
     trimspace(var.deployment_state_machine_arn) == "" ? [
       # Host-only onboarding/deployment API. Customer foundations disable the
@@ -166,7 +160,7 @@ locals {
     # secretsmanager:GetSecretValue on the thinkwork/* wildcard, so no
     # new IAM resource is needed.
     COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
-  }, local.twenty_env, local.kestra_env)
+  }, local.twenty_env)
 
   # Identity env + the secrets still in their one-release transition
   # window (R8). Config-class keys live ONLY in the SSM runtime-config
@@ -255,7 +249,6 @@ locals {
     "chat-agent-invoke" = {
       KNOWLEDGE_GRAPH_TOOL_ENABLED = tostring(var.knowledge_graph_tool_enabled)
     }
-    "kestra-control-mcp" = local.kestra_env
     # Bedrock KB provisioning. Per-handler (not common_env) so these don't bloat
     # the already-near-4KB graphql-http env. Bedrock's RDS-backed KB needs the
     # cluster ARN + the KB service role (passed at CreateKnowledgeBase time).
@@ -500,10 +493,6 @@ resource "aws_lambda_function" "handler" {
     # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
     # @thinkwork/admin-ops package as MCP tools for managed agents.
     "admin-ops-mcp",
-    # Kestra control MCP — JSON-RPC endpoint at POST /mcp/kestra. Exposes a
-    # narrow, policy-checked tool surface for managed Kestra flows and
-    # executions. Reconciliation of the tenant MCP row lands in the next unit.
-    "kestra-control-mcp",
     # MCP admin key management — per-tenant Bearer tokens for admin-ops.
     # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
     # against tenant_mcp_admin_keys, populated by this handler's routes.
@@ -1114,10 +1103,6 @@ locals {
       # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
-
-      # Kestra control MCP server. Managed agents will call this through a
-      # reconciled tenant_mcp_servers row once U6 wires managed registration.
-      "POST /mcp/kestra" = "kestra-control-mcp"
 
       # MCP admin key management — per-tenant Bearer token CRUD. Tokens
       # are shown ONCE at creation (POST returns raw value); server stores

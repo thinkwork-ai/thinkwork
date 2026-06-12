@@ -1,11 +1,13 @@
 ---
 title: "feat: Add Kestra as a managed application"
 type: feat
-status: active
+status: superseded
 date: 2026-06-08
 origin: docs/brainstorms/2026-06-08-kestra-managed-application-requirements.md
 deepened: 2026-06-08
 ---
+
+> Superseded by docs/plans/2026-06-12-001-feat-application-plugins-plan.md — Kestra was removed end-to-end (U1) in favor of the Application Plugin system.
 
 # feat: Add Kestra as a Managed Application
 

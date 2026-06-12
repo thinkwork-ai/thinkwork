@@ -4,7 +4,7 @@ import type {
   SettingsManagedApplicationsQuery,
 } from "@/gql/graphql";
 
-export type ManagedAppKey = "cognee" | "twenty" | "kestra";
+export type ManagedAppKey = "cognee" | "twenty";
 
 export type ManagedApplication =
   SettingsManagedApplicationsQuery["managedApplications"][number];
@@ -24,7 +24,6 @@ export interface DataImpact {
 
 export function asManagedAppKey(value: string): ManagedAppKey {
   if (value === "twenty") return "twenty";
-  if (value === "kestra") return "kestra";
   return "cognee";
 }
 
@@ -50,12 +49,10 @@ export function terminalJobStatus(status: string): boolean {
 
 export function appDisplayName(key: ManagedAppKey): string {
   if (key === "twenty") return "Twenty CRM";
-  if (key === "kestra") return "Kestra";
   return "Cognee";
 }
 
 export function destructiveConfirmationFor(key: ManagedAppKey): string {
   if (key === "twenty") return "DESTROY TWENTY";
-  if (key === "kestra") return "DESTROY KESTRA";
   return "DESTROY COGNEE";
 }

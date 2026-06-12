@@ -182,9 +182,6 @@ build_handler "task-status-tool" \
 build_handler "mcp-proxy" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-proxy.ts"
 
-build_handler "kestra-control-mcp" \
-  "$REPO_ROOT/packages/lambda/kestra-control-mcp.ts"
-
 build_handler "chat-agent-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-finalize.ts"
 

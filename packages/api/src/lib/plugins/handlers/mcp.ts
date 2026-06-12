@@ -5,7 +5,7 @@
  * `mcp-server` manifest component, owned by the plugin install:
  *
  *   - `management_source: 'plugin'` + `plugin_install_id` are the
- *     ownership markers (generalizing the per-app Twenty/Kestra branches
+ *     ownership markers (generalizing the per-app Twenty branch
  *     in `managed-mcp-applications.ts`).
  *   - Plugin rows land `approved` with a url_hash pin, exactly like
  *     managed-application rows — the admin approved the plugin install,

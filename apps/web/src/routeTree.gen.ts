@@ -70,7 +70,6 @@ import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
 import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./routes/_authed/settings.automations.$scheduledJobId";
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
-import { Route as AuthedSettingsApplicationsKestraRouteImport } from "./routes/_authed/settings.applications.kestra";
 import { Route as AuthedSettingsApplicationsCogneeRouteImport } from "./routes/_authed/settings.applications.cognee";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
@@ -431,12 +430,6 @@ const AuthedSettingsArtifactsIdRoute =
     path: "/$id",
     getParentRoute: () => AuthedSettingsArtifactsRoute,
   } as any);
-const AuthedSettingsApplicationsKestraRoute =
-  AuthedSettingsApplicationsKestraRouteImport.update({
-    id: "/applications/kestra",
-    path: "/applications/kestra",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsApplicationsCogneeRoute =
   AuthedSettingsApplicationsCogneeRouteImport.update({
     id: "/applications/cognee",
@@ -607,7 +600,6 @@ export interface FileRoutesByFullPath {
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
-  "/settings/applications/kestra": typeof AuthedSettingsApplicationsKestraRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -686,7 +678,6 @@ export interface FileRoutesByTo {
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
-  "/settings/applications/kestra": typeof AuthedSettingsApplicationsKestraRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -773,7 +764,6 @@ export interface FileRoutesById {
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/_authed/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
-  "/_authed/settings/applications/kestra": typeof AuthedSettingsApplicationsKestraRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
   "/_authed/settings/automations/$scheduledJobId": typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
@@ -859,7 +849,6 @@ export interface FileRouteTypes {
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
     | "/settings/applications/cognee"
-    | "/settings/applications/kestra"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -938,7 +927,6 @@ export interface FileRouteTypes {
     | "/settings/activity/$threadId"
     | "/settings/agents/$profileId"
     | "/settings/applications/cognee"
-    | "/settings/applications/kestra"
     | "/settings/artifacts/$id"
     | "/settings/automations/$scheduledJobId"
     | "/settings/evaluations/$runId"
@@ -1024,7 +1012,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/activity_/$threadId"
     | "/_authed/settings/agents/$profileId"
     | "/_authed/settings/applications/cognee"
-    | "/_authed/settings/applications/kestra"
     | "/_authed/settings/artifacts/$id"
     | "/_authed/settings/automations/$scheduledJobId"
     | "/_authed/settings/evaluations/$runId"
@@ -1507,13 +1494,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsArtifactsIdRouteImport;
       parentRoute: typeof AuthedSettingsArtifactsRoute;
     };
-    "/_authed/settings/applications/kestra": {
-      id: "/_authed/settings/applications/kestra";
-      path: "/applications/kestra";
-      fullPath: "/settings/applications/kestra";
-      preLoaderRoute: typeof AuthedSettingsApplicationsKestraRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
     "/_authed/settings/applications/cognee": {
       id: "/_authed/settings/applications/cognee";
       path: "/applications/cognee";
@@ -1847,7 +1827,6 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsActivityThreadIdRoute: typeof AuthedSettingsActivityThreadIdRoute;
   AuthedSettingsAgentsProfileIdRoute: typeof AuthedSettingsAgentsProfileIdRoute;
   AuthedSettingsApplicationsCogneeRoute: typeof AuthedSettingsApplicationsCogneeRoute;
-  AuthedSettingsApplicationsKestraRoute: typeof AuthedSettingsApplicationsKestraRoute;
   AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
@@ -1895,7 +1874,6 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsActivityThreadIdRoute: AuthedSettingsActivityThreadIdRoute,
   AuthedSettingsAgentsProfileIdRoute: AuthedSettingsAgentsProfileIdRoute,
   AuthedSettingsApplicationsCogneeRoute: AuthedSettingsApplicationsCogneeRoute,
-  AuthedSettingsApplicationsKestraRoute: AuthedSettingsApplicationsKestraRoute,
   AuthedSettingsAutomationsScheduledJobIdRoute:
     AuthedSettingsAutomationsScheduledJobIdRoute,
   AuthedSettingsEvaluationsRunIdRoute: AuthedSettingsEvaluationsRunIdRoute,

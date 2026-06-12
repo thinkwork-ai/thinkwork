@@ -72,7 +72,9 @@ beforeEach(async () => {
   mockSsmSend.mockReset().mockResolvedValue({ Parameter: { Value: "{}" } });
   mockS3Send
     .mockReset()
-    .mockRejectedValue(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
+    .mockRejectedValue(
+      Object.assign(new Error("missing"), { name: "NoSuchKey" }),
+    );
   deploymentStatusMod = await import("./deploymentStatus.query.js");
   tenantMod = await import("./tenant.query.js");
   tenantMembersMod = await import("./tenantMembers.query.js");
@@ -129,12 +131,6 @@ describe("deploymentStatus authz", () => {
         expect.objectContaining({ key: "cognee", enabled: false }),
         expect.objectContaining({
           key: "twenty",
-          status: "disabled",
-          enabled: false,
-          managedMcpStatus: "not_ready",
-        }),
-        expect.objectContaining({
-          key: "kestra",
           status: "disabled",
           enabled: false,
           managedMcpStatus: "not_ready",
@@ -199,7 +195,8 @@ describe("deploymentStatus authz", () => {
       deploymentControllerArn:
         "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
       deploymentRunnerProjectName: "thinkwork-tei-e2e-deployment-runner",
-      deploymentEvidenceBucket: "thinkwork-tei-e2e-637423202447-deploy-evidence",
+      deploymentEvidenceBucket:
+        "thinkwork-tei-e2e-637423202447-deploy-evidence",
     });
   });
 
@@ -256,7 +253,8 @@ describe("deploymentStatus authz", () => {
       deploymentControllerArn:
         "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
       deploymentRunnerProjectName: "thinkwork-tei-e2e-deployment-runner",
-      deploymentEvidenceBucket: "thinkwork-tei-e2e-637423202447-deploy-evidence",
+      deploymentEvidenceBucket:
+        "thinkwork-tei-e2e-637423202447-deploy-evidence",
     });
   });
 
@@ -360,51 +358,6 @@ describe("deploymentStatus authz", () => {
           enabled: false,
           provisioned: false,
           runtimeEnabled: false,
-        }),
-      ]),
-    );
-  });
-
-  it("expands Kestra compact deployment status into managed app fields", async () => {
-    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
-    vi.stubEnv(
-      "KESTRA",
-      [
-        "1",
-        "1",
-        "https://orchestrate.example.com",
-        "cluster-arn",
-        "kestra-service",
-        "/thinkwork/dev/kestra",
-        "kestra-bucket",
-        "thinkwork_kestra",
-        "secret-arn",
-      ].join("|"),
-    );
-    vi.stubEnv("THINKWORK_API_URL", "https://api.thinkwork.test");
-
-    const result = await deploymentStatusMod.deploymentStatus(
-      null,
-      {},
-      service,
-    );
-
-    expect(result.managedApplications).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "kestra",
-          displayName: "Kestra",
-          status: "running",
-          enabled: true,
-          provisioned: true,
-          runtimeEnabled: true,
-          url: "https://orchestrate.example.com",
-          logGroupNames: ["/thinkwork/dev/kestra"],
-          serviceNames: ["kestra-service"],
-          storageBucketName: "kestra-bucket",
-          databaseName: "thinkwork_kestra",
-          managedMcpStatus: "missing",
-          managedMcpInstallAvailable: true,
         }),
       ]),
     );

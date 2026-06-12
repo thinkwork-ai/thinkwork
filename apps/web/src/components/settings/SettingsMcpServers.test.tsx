@@ -72,15 +72,15 @@ describe("SettingsMcpServers", () => {
           managedApplicationKey: "twenty-crm",
         },
         {
-          id: "kestra",
-          name: "Kestra",
-          slug: "kestra-control",
-          url: "https://api.thinkwork.test/mcp/kestra",
+          id: "control",
+          name: "Control",
+          slug: "control-server",
+          url: "https://api.thinkwork.test/mcp/control",
           enabled: true,
           authType: "tenant_api_key",
           status: "approved",
           managementSource: "managed_application",
-          managedApplicationKey: "kestra",
+          managedApplicationKey: "control-server",
         },
         {
           id: "manual",
@@ -102,7 +102,7 @@ describe("SettingsMcpServers", () => {
     render(<SettingsMcpServers />);
 
     expect(await screen.findByText("Twenty CRM")).toBeTruthy();
-    expect(screen.getByText("Kestra")).toBeTruthy();
+    expect(screen.getByText("Control")).toBeTruthy();
     expect(screen.getAllByText("managed")).toHaveLength(2);
     // The inline Remove/System column is gone — removal lives in the detail view.
     expect(screen.queryByText("System")).toBeNull();

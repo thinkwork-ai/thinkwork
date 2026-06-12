@@ -41,27 +41,6 @@ database_engine = "rds-postgres"
 # twenty_email_from_address         = "" # empty derives noreply@ses_inbound_domain for SES SMTP
 # twenty_email_from_name            = "ThinkWork CRM"
 #
-#   Kestra is optional. First enable should set both booleans true after the
-#   deployment workflow has created the dedicated database password secret and
-#   basic-auth service credential. Later disable should leave
-#   kestra_provisioned=true and set kestra_runtime_enabled=false so
-#   database/storage/secrets/ALB are retained. Full cleanup should set both
-#   booleans false through the Managed Applications Destroy action so the
-#   deploy workflow can also drop the dedicated database and delete Kestra
-#   secrets after Terraform teardown.
-#
-# kestra_provisioned                = false
-# kestra_runtime_enabled            = false
-# kestra_image_uri                  = "kestra/kestra@sha256:..."
-# kestra_db_username                = "thinkwork_kestra"
-# kestra_db_name                    = "thinkwork_kestra"
-# kestra_db_password_secret_arn     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/kestra/db-password-..."
-# kestra_basic_auth_secret_arn      = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/kestra/basic-auth-..."
-# kestra_public_url                 = "" # empty derives https://orchestrate.<www_domain>
-# kestra_certificate_arn            = "" # empty creates a dedicated orchestrate.<www_domain> certificate
-# kestra_storage_bucket_name        = "" # empty derives a per-stage bucket name
-# kestra_storage_force_destroy      = false
-# kestra_allowed_public_cidr_blocks = ["0.0.0.0/0"]
 
 # Database master password — use a strong password
 db_password = "CHANGE_ME_strong_password_here"

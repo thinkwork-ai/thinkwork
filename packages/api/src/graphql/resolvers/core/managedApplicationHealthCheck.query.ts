@@ -34,11 +34,7 @@ export const managedApplicationHealthCheck = async (
     return { key, ...result };
   }
 
-  if (key === "twenty") {
-    return twentyHealthCheck();
-  }
-
-  return kestraHealthCheck();
+  return twentyHealthCheck();
 };
 
 async function twentyHealthCheck() {
@@ -101,82 +97,6 @@ async function twentyHealthCheck() {
         : "Twenty CRM health check could not be completed.";
     return {
       key: "twenty",
-      healthy: false,
-      statusCode: null,
-      latencyMs,
-      endpoint,
-      checkedAt,
-      message,
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function kestraHealthCheck() {
-  const application = readManagedApplication("kestra");
-  const startedAt = Date.now();
-  const checkedAt = new Date(startedAt).toISOString();
-  const endpoint = application.url;
-
-  if (!application.provisioned || !endpoint) {
-    return {
-      key: "kestra",
-      healthy: false,
-      statusCode: null,
-      latencyMs: 0,
-      endpoint,
-      checkedAt,
-      message: "Kestra is not provisioned for this stage.",
-    };
-  }
-
-  if (!application.runtimeEnabled) {
-    return {
-      key: "kestra",
-      healthy: false,
-      statusCode: 503,
-      latencyMs: 0,
-      endpoint,
-      checkedAt,
-      message:
-        "Kestra runtime is parked; flow definitions, execution history, storage, and credentials are retained.",
-    };
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    MANAGED_APPLICATION_HEALTH_TIMEOUT_MS,
-  );
-  try {
-    const response = await fetch(healthUrl(endpoint, "/"), {
-      method: "GET",
-      signal: controller.signal,
-    });
-    const latencyMs = Date.now() - startedAt;
-    const healthy = response.ok || response.status === 401;
-    return {
-      key: "kestra",
-      healthy,
-      statusCode: response.status,
-      latencyMs,
-      endpoint,
-      checkedAt,
-      message: response.ok
-        ? "Kestra public endpoint is reachable."
-        : response.status === 401
-          ? "Kestra public endpoint is reachable and requires authentication."
-          : `Kestra public endpoint returned ${response.status}.`,
-    };
-  } catch (error) {
-    const latencyMs = Date.now() - startedAt;
-    const message =
-      error instanceof Error && error.name === "AbortError"
-        ? "Kestra health check timed out."
-        : "Kestra health check could not be completed.";
-    return {
-      key: "kestra",
       healthy: false,
       statusCode: null,
       latencyMs,
