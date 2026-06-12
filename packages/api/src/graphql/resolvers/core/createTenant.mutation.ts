@@ -17,7 +17,7 @@ export const createTenant = async (
 ) => {
   const i = args.input;
   const slug = i.slug ?? generateSlug();
-  validateTenantSlug(slug);
+  await validateTenantSlug(slug);
 
   let row;
   try {

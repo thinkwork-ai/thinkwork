@@ -5,7 +5,7 @@
  * email heal path.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockDb,
@@ -112,6 +112,12 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
 }));
 
 import { bootstrapUser } from "./bootstrapUser.mutation.js";
+import { __setNamespaceCheckDepsForTests } from "./tenantSlugValidation.js";
+
+// Namespace-check injection (plan 2026-06-12-002 U5): the default
+// new-tenant path validates the generated slug through the same
+// validateTenantSlug pipeline as createTenant.
+const namespaceListRecords = vi.fn();
 
 beforeEach(() => {
   insertCalls.length = 0;
@@ -120,6 +126,15 @@ beforeEach(() => {
   returningQueue.length = 0;
   bootstrapDefaultCalls.length = 0;
   bootstrapDefaultFailures.length = 0;
+  namespaceListRecords.mockReset().mockResolvedValue([]);
+  __setNamespaceCheckDepsForTests({
+    resolveToken: async () => "cf-token",
+    createDns: () => ({ listRecords: namespaceListRecords }),
+  });
+});
+
+afterEach(() => {
+  __setNamespaceCheckDepsForTests(null);
 });
 
 describe("bootstrapUser", () => {
@@ -147,6 +162,10 @@ describe("bootstrapUser", () => {
       { tenantId: "tenant-1", userId: "user-1" },
     ]);
     expect(result.isNew).toBe(true);
+    // The generated slug went through the namespace check (U5).
+    expect(namespaceListRecords).toHaveBeenCalledWith(
+      "happy-otter.thinkwork.ai",
+    );
   });
 
   it("repairs tenant bootstrap defaults for existing users", async () => {

@@ -769,6 +769,9 @@ importers:
       '@thinkwork/lambda':
         specifier: workspace:*
         version: link:../lambda
+      '@thinkwork/namespace-registry':
+        specifier: workspace:*
+        version: link:../namespace-registry
       '@thinkwork/pi-runtime-core':
         specifier: workspace:*
         version: link:../pi-runtime-core

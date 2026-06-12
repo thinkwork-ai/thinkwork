@@ -119,6 +119,14 @@ locals {
       # path — which doesn't load messages_history from Aurora. That's why
       # multi-turn chat was losing prior context: history was only loaded on
       # the direct path, which never ran.
+      #
+      # This stage-wide grant also covers the customer-domain namespace
+      # token at /thinkwork/${stage}/cloudflare-namespace-token (plan
+      # 2026-06-12-002 U5/KTD7, declared in handlers.tf): tenant slug
+      # validation reads it to run the read-only Cloudflare availability
+      # check. A read failure there fails CLOSED (signup rejects with
+      # SLUG_VALIDATION_UNAVAILABLE), so narrowing this wildcard later must
+      # keep that path or tenant creation breaks.
       {
         Effect = "Allow"
         Action = [
