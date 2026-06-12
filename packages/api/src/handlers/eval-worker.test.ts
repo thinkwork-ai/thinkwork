@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
   agentCoreBudgetExceededAssertion,
   agentCoreEvaluatorsEnabled,
@@ -24,27 +25,63 @@ describe("eval-worker message parsing", () => {
 });
 
 describe("eval-worker finalization summary", () => {
-  it("aggregates pass/fail totals and input/output evaluator token cost", () => {
-    const summary = summarizeEvalResults([
-      {
-        status: "pass",
-        evaluator_results: [
-          { token_usage: { inputTokens: 1000, outputTokens: 100 } },
-          { token_usage: { inputTokens: 500, outputTokens: 50 } },
-        ],
-      },
-      {
-        status: "fail",
-        evaluator_results: [
-          { token_usage: { totalTokens: 250 } },
-          { skipped: true },
-        ],
-      },
-      { status: "error", evaluator_results: [] },
-    ]);
+  const costRows = [
+    {
+      status: "pass",
+      evaluator_results: [
+        { token_usage: { inputTokens: 1000, outputTokens: 100 } },
+        { token_usage: { inputTokens: 500, outputTokens: 50 } },
+      ],
+    },
+    {
+      status: "fail",
+      evaluator_results: [
+        { token_usage: { totalTokens: 250 } },
+        { skipped: true },
+      ],
+    },
+    { status: "error", evaluator_results: [] },
+  ];
+
+  it("excludes errors from the pass rate under current scoring semantics", () => {
+    const summary = summarizeEvalResults(
+      [
+        ...costRows,
+        { status: "pass", evaluator_results: [] },
+        { status: "pass", evaluator_results: [] },
+        { status: "error", evaluator_results: [] },
+      ],
+      CURRENT_EVAL_SCORING_VERSION,
+    );
+
+    // 3 pass / 1 fail / 2 error → errors leave the denominator.
+    expect(summary.passed).toBe(3);
+    expect(summary.failed).toBe(1);
+    expect(summary.errored).toBe(2);
+    expect(summary.passRate).toBe(0.75);
+    expect(summary.totalCostUsd).toBeCloseTo(0.0084);
+  });
+
+  it("yields no score (null pass rate) for an all-error run", () => {
+    const summary = summarizeEvalResults(
+      [
+        { status: "error", evaluator_results: [] },
+        { status: "error", evaluator_results: [] },
+      ],
+      CURRENT_EVAL_SCORING_VERSION,
+    );
+    expect(summary.passed).toBe(0);
+    expect(summary.failed).toBe(0);
+    expect(summary.errored).toBe(2);
+    expect(summary.passRate).toBeNull();
+  });
+
+  it("keeps legacy errors-count-as-failed math for unstamped runs", () => {
+    const summary = summarizeEvalResults(costRows, null);
 
     expect(summary.passed).toBe(1);
     expect(summary.failed).toBe(2);
+    expect(summary.errored).toBeNull();
     expect(summary.passRate).toBe(1 / 3);
     expect(summary.totalCostUsd).toBeCloseTo(0.0084);
   });

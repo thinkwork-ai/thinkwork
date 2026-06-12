@@ -20,6 +20,7 @@ import {
   fetchSpansForSession,
   type AgentCoreSpanRecord,
 } from "../../../lib/agentcore-spans.js";
+import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
 import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
@@ -63,6 +64,12 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     totalTests: row.total_tests,
     passed: row.passed,
     failed: row.failed,
+    errored: row.errored ?? null,
+    // Legacy runs predate scoring_version stamping: errors were folded
+    // into `failed` and pass_rate used the old denominator. Surface the
+    // label so UIs never blend the two scales silently.
+    scoringVersion: row.scoring_version ?? null,
+    isLegacyScoring: row.scoring_version == null,
     passRate: row.pass_rate ? Number(row.pass_rate) : null,
     regression: row.regression,
     costUsd: row.cost_usd ? Number(row.cost_usd) : null,
@@ -77,24 +84,59 @@ type EvalRunProgress = {
   runId: string;
   completed: number;
   passed: number;
+  /** Count of status='fail' rows only — errors are tallied separately. */
   failed: number;
+  errored: number;
 };
+
+function progressOverlay(
+  row: Record<string, unknown>,
+  progress: EvalRunProgress,
+): Record<string, unknown> {
+  if (row.scoring_version == null) {
+    // Legacy semantics: errors fold into `failed`, old denominator.
+    return {
+      ...row,
+      passed: progress.passed,
+      failed: progress.completed - progress.passed,
+      pass_rate: (progress.passed / progress.completed).toFixed(4),
+    };
+  }
+
+  const scoreable = progress.passed + progress.failed;
+  return {
+    ...row,
+    passed: progress.passed,
+    failed: progress.failed,
+    errored: progress.errored,
+    // No clean scoreable execution yet (or ever) → "no score", not 0%.
+    pass_rate: scoreable > 0 ? (progress.passed / scoreable).toFixed(4) : null,
+  };
+}
 
 export function withLiveProgress(
   row: Record<string, unknown>,
   progress: EvalRunProgress | undefined,
 ): Record<string, unknown> {
   const status = String(row.status ?? "");
-  if (!["pending", "running"].includes(status) || !progress?.completed) {
-    return row;
+  if (["pending", "running"].includes(status) && progress?.completed) {
+    return progressOverlay(row, progress);
   }
 
-  return {
-    ...row,
-    passed: progress.passed,
-    failed: progress.failed,
-    pass_rate: (progress.passed / progress.completed).toFixed(4),
-  };
+  // Deploy-window guard: a run stamped with the current scoring version
+  // but finalized by an old warm worker carries a divergent (null/stale)
+  // summary_scoring_version. Re-present its summary under the stamped
+  // semantics; the reconciler persists the correction.
+  if (
+    status === "completed" &&
+    row.scoring_version === CURRENT_EVAL_SCORING_VERSION &&
+    row.summary_scoring_version !== row.scoring_version &&
+    progress
+  ) {
+    return progressOverlay(row, progress);
+  }
+
+  return row;
 }
 
 async function loadEvalRunProgress(
@@ -106,7 +148,8 @@ async function loadEvalRunProgress(
       runId: evalResults.run_id,
       completed: sql<number>`COUNT(*)::int`,
       passed: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} = 'pass')::int`,
-      failed: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} <> 'pass')::int`,
+      failed: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} = 'fail')::int`,
+      errored: sql<number>`COUNT(*) FILTER (WHERE ${evalResults.status} = 'error')::int`,
     })
     .from(evalResults)
     .where(inArray(evalResults.run_id, runIds))
@@ -120,6 +163,7 @@ async function loadEvalRunProgress(
         completed: Number(row.completed),
         passed: Number(row.passed),
         failed: Number(row.failed),
+        errored: Number(row.errored),
       },
     ]),
   );
@@ -147,6 +191,7 @@ function resultToGraphql(
     evaluatorResults: JSON.stringify(row.evaluator_results ?? []),
     assertions: JSON.stringify(row.assertions ?? []),
     errorMessage: row.error_message,
+    errorCause: row.error_cause ?? null,
     createdAt: row.created_at,
   };
 }
@@ -231,6 +276,7 @@ function plannedResultToGraphql(
     evaluatorResults: JSON.stringify([]),
     assertions: JSON.stringify(testCase.assertions ?? []),
     errorMessage: null,
+    errorCause: null,
     createdAt: run.created_at,
   };
 }
@@ -321,13 +367,20 @@ const evalSummary = async (
       regressionCount: 0,
     };
   }
+  // Headline numbers never blend denominators: latest/avg pass rates
+  // only aggregate non-cancelled completed runs stamped with the current
+  // scoring version. Legacy runs (null scoring_version) used a different
+  // denominator (errors counted as failed) and are excluded; AVG ignores
+  // null pass_rate (all-error / zero-case runs) by construction.
   const [agg] = await db
     .select({
       totalRuns: sql<number>`COUNT(*)::int`,
       latestPassRate: sql<
         number | null
-      >`(SELECT pass_rate::float FROM eval_runs WHERE tenant_id = ${tenantId} AND status = 'completed' ORDER BY completed_at DESC LIMIT 1)`,
-      avgPassRate: sql<number | null>`AVG(pass_rate)::float`,
+      >`(SELECT pass_rate::float FROM eval_runs WHERE tenant_id = ${tenantId} AND status = 'completed' AND scoring_version = ${CURRENT_EVAL_SCORING_VERSION} ORDER BY completed_at DESC LIMIT 1)`,
+      avgPassRate: sql<
+        number | null
+      >`(AVG(pass_rate) FILTER (WHERE status = 'completed' AND scoring_version = ${CURRENT_EVAL_SCORING_VERSION}))::float`,
       regressionCount: sql<number>`COUNT(*) FILTER (WHERE regression = true)::int`,
     })
     .from(evalRuns)
@@ -570,6 +623,7 @@ const evalTimeSeries = async (
 		FROM eval_runs
 		WHERE tenant_id = ${tenantId}
 		  AND status = 'completed'
+		  AND scoring_version = ${CURRENT_EVAL_SCORING_VERSION}
 		  AND completed_at >= NOW() - (${days} || ' days')::interval
 		GROUP BY 1
 		ORDER BY 1 ASC
@@ -778,6 +832,9 @@ const startEvalRun = async (
       model,
       categories: args.input.categories ?? [],
       selected_test_case_ids: args.input.testCaseIds ?? [],
+      // Scoring semantics are stamped at run creation — never inferred
+      // later — so post-deploy code can't silently upgrade older runs.
+      scoring_version: CURRENT_EVAL_SCORING_VERSION,
     })
     .returning();
   const runId = (run as { id: string }).id;

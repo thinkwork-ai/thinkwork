@@ -17,11 +17,14 @@ import {
   evalTestCases,
 } from "@thinkwork/database-pg/schema";
 import {
+  CURRENT_EVAL_SCORING_VERSION,
   evaluateAssertions,
   llmRubricHeuristic,
   scoreEvalOutcome,
+  summarizeEvalStatuses,
   type EvalAssertion,
   type EvalAssertionResult,
+  type EvalErrorCause,
   type EvalEvaluatorResult,
   type EvalJudgeResult,
 } from "@thinkwork/evals-core";
@@ -48,6 +51,7 @@ export interface EvalWorkerMessage {
 
 interface CaseOutcome {
   status: "pass" | "fail" | "error";
+  errorCause: EvalErrorCause | null;
   score: number | null;
   assertionResults: EvalAssertionResult[];
   evaluatorResults: EvalEvaluatorResult[];
@@ -77,28 +81,30 @@ export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
   };
 }
 
+/**
+ * Summarize a run's result rows under the run's stamped scoring
+ * semantics (`scoringVersion` null = legacy ~v1: errors fold into
+ * `failed`; v2+: `failed` counts only status='fail', errors land in
+ * `errored`, and pass_rate = passed / (passed + failed) — null when
+ * nothing scoreable, never 0%).
+ */
 export function summarizeEvalResults(
   rows: Array<{ status: string; evaluator_results: unknown }>,
+  scoringVersion: number | null,
 ): {
   completed: number;
   passed: number;
   failed: number;
-  passRate: number;
+  errored: number | null;
+  passRate: number | null;
   totalCostUsd: number;
 } {
-  const passed = rows.filter((row) => row.status === "pass").length;
-  const failed = rows.length - passed;
+  const counts = summarizeEvalStatuses(rows, scoringVersion);
   const totalCostUsd = rows.reduce(
     (total, row) => total + evaluatorCostUsd(row.evaluator_results),
     0,
   );
-  return {
-    completed: rows.length,
-    passed,
-    failed,
-    passRate: rows.length > 0 ? passed / rows.length : 0,
-    totalCostUsd,
-  };
+  return { ...counts, totalCostUsd };
 }
 
 export function estimateAgentCoreEvaluatorCostUsd(
@@ -332,6 +338,7 @@ async function executeCase(
 
   return {
     status: scoredOutcome.status,
+    errorCause: scoredOutcome.errorCause,
     score: scoredOutcome.score,
     assertionResults,
     evaluatorResults,
@@ -357,7 +364,7 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
     })
     .from(evalResults)
     .where(eq(evalResults.run_id, runId));
-  const summary = summarizeEvalResults(rows);
+  const summary = summarizeEvalResults(rows, run.scoring_version);
   const isComplete = summary.completed >= run.total_tests;
   const completedAt = new Date();
 
@@ -368,8 +375,16 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
       completed_at: isComplete ? completedAt : null,
       passed: summary.passed,
       failed: summary.failed,
-      pass_rate: summary.passRate.toFixed(4),
+      errored: summary.errored,
+      pass_rate: summary.passRate === null ? null : summary.passRate.toFixed(4),
       cost_usd: summary.totalCostUsd.toFixed(6),
+      // Record the semantics this summary was computed under. Legacy
+      // runs (null stamp) keep a null summary version; stamped runs get
+      // the version this code actually knows — if the run was stamped by
+      // newer code, the divergence makes the reconciler/read path
+      // recompute once that code is warm (deploy-window guard).
+      summary_scoring_version:
+        run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
     })
     .where(and(eq(evalRuns.id, runId), eq(evalRuns.status, "running")))
     .returning({ id: evalRuns.id });
@@ -401,10 +416,10 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
     totalTests: run.total_tests,
     passed: summary.passed,
     failed: summary.failed,
-    passRate: summary.passRate,
+    passRate: summary.passRate ?? undefined,
   });
   console.log(
-    `[eval-worker] progress runId=${runId}: ${summary.passed} passed, ${summary.failed} failed of ${run.total_tests}`,
+    `[eval-worker] progress runId=${runId}: ${summary.passed} passed, ${summary.failed} failed, ${summary.errored ?? 0} errored of ${run.total_tests}`,
   );
 }
 
@@ -485,6 +500,7 @@ async function handleMessage(message: EvalWorkerMessage): Promise<void> {
       run_id: message.runId,
       test_case_id: message.testCaseId,
       status: outcome.status,
+      error_cause: outcome.errorCause,
       score: outcome.score === null ? null : outcome.score.toFixed(4),
       duration_ms: outcome.durationMs,
       agent_session_id: outcome.sessionId,

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
+  buildReconcilerErrorRow,
   missingEvalTestCaseIds,
   shouldReconcileEvalRun,
   summarizeEvalRowsForReconciler,
@@ -85,21 +87,78 @@ describe("eval-runs-reconciler missing result selection", () => {
 });
 
 describe("eval-runs-reconciler summary", () => {
-  it("counts error rows as failed and preserves evaluator cost accounting", () => {
-    const summary = summarizeEvalRowsForReconciler([
-      {
-        status: "pass",
-        evaluator_results: [
-          { token_usage: { inputTokens: 1000, outputTokens: 100 } },
-        ],
-      },
-      { status: "fail", evaluator_results: [] },
-      { status: "error", evaluator_results: [] },
-    ]);
+  const rows = [
+    {
+      status: "pass",
+      evaluator_results: [
+        { token_usage: { inputTokens: 1000, outputTokens: 100 } },
+      ],
+    },
+    { status: "fail", evaluator_results: [] },
+    { status: "error", evaluator_results: [] },
+  ];
+
+  it("excludes errors from the pass rate under current scoring semantics", () => {
+    const summary = summarizeEvalRowsForReconciler(
+      rows,
+      CURRENT_EVAL_SCORING_VERSION,
+    );
 
     expect(summary.passed).toBe(1);
+    expect(summary.failed).toBe(1);
+    expect(summary.errored).toBe(1);
+    expect(summary.passRate).toBe(0.5);
+    expect(summary.totalCostUsd).toBeCloseTo(0.0036);
+  });
+
+  it("yields no score for a run whose remaining rows are all errors", () => {
+    const summary = summarizeEvalRowsForReconciler(
+      [
+        { status: "error", evaluator_results: [] },
+        { status: "error", evaluator_results: [] },
+      ],
+      CURRENT_EVAL_SCORING_VERSION,
+    );
+    expect(summary.passRate).toBeNull();
+    expect(summary.errored).toBe(2);
+  });
+
+  it("keeps a pre-migration stale run on legacy semantics (never upgraded)", () => {
+    const summary = summarizeEvalRowsForReconciler(rows, null);
+
+    // Legacy: errors fold into failed; old denominator; no errored count.
+    expect(summary.passed).toBe(1);
     expect(summary.failed).toBe(2);
+    expect(summary.errored).toBeNull();
     expect(summary.passRate).toBe(1 / 3);
     expect(summary.totalCostUsd).toBeCloseTo(0.0036);
+  });
+});
+
+describe("eval-runs-reconciler synthetic rows", () => {
+  it("tags synthesized rows as error/reconciler so they never read as failures", () => {
+    const row = buildReconcilerErrorRow(
+      "run-1",
+      { id: "case-1", query: "q", assertions: [] },
+      "Reconciler recorded missing eval result",
+    );
+
+    expect(row.status).toBe("error");
+    expect(row.error_cause).toBe("reconciler");
+    expect(row.run_id).toBe("run-1");
+    expect(row.test_case_id).toBe("case-1");
+    expect(row.error_message).toMatch(/missing eval result/);
+
+    // And the summary keeps them out of `failed`.
+    const summary = summarizeEvalRowsForReconciler(
+      [
+        { status: "pass", evaluator_results: [] },
+        { status: row.status, evaluator_results: row.evaluator_results },
+      ],
+      CURRENT_EVAL_SCORING_VERSION,
+    );
+    expect(summary.failed).toBe(0);
+    expect(summary.errored).toBe(1);
+    expect(summary.passRate).toBe(1);
   });
 });

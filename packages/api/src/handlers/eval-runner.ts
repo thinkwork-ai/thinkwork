@@ -9,6 +9,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { evalRuns, evalTestCases } from "@thinkwork/database-pg/schema";
+import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
   SendMessageBatchCommand,
   SQSClient,
@@ -172,6 +173,8 @@ export async function handler(event: EvalRunnerEvent): Promise<{
 
     const startedAt = new Date();
     if (cases.length === 0) {
+      // Zero matching cases means there is nothing to score: the run
+      // completes with a null pass_rate ("no score"), never 0%.
       await db
         .update(evalRuns)
         .set({
@@ -181,7 +184,10 @@ export async function handler(event: EvalRunnerEvent): Promise<{
           total_tests: 0,
           passed: 0,
           failed: 0,
-          pass_rate: "0.0000",
+          errored: run.scoring_version === null ? null : 0,
+          pass_rate: null,
+          summary_scoring_version:
+            run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
           cost_usd: "0.000000",
         })
         .where(eq(evalRuns.id, runId));
@@ -193,7 +199,6 @@ export async function handler(event: EvalRunnerEvent): Promise<{
         totalTests: 0,
         passed: 0,
         failed: 0,
-        passRate: 0,
       });
       return { ok: true, runId, dispatched: 0, totalTests: 0 };
     }
@@ -216,7 +221,9 @@ export async function handler(event: EvalRunnerEvent): Promise<{
         total_tests: cases.length,
         passed: 0,
         failed: 0,
+        errored: run.scoring_version === null ? null : 0,
         pass_rate: null,
+        summary_scoring_version: null,
         cost_usd: "0.000000",
         error_message: null,
       })

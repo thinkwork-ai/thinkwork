@@ -1,13 +1,64 @@
 import type {
   EvalAssertion,
   EvalAssertionResult,
+  EvalErrorCause,
   EvalEvaluatorResult,
   EvalJudge,
   EvalJudgeResult,
   EvalOutcomeScore,
+  EvalStatusSummary,
 } from "./types.js";
 
 export const DEFAULT_PASS_THRESHOLD = 0.7;
+
+/**
+ * Scoring-semantics version stamped onto `eval_runs.scoring_version` at
+ * run creation. Version 2 = "errors leave the pass rate": `failed`
+ * counts only status='fail', errors land in `errored`, and
+ * pass_rate = passed / (passed + failed) (null when nothing scoreable).
+ * Legacy rows carry a null stamp (~v1: errors fold into `failed`,
+ * pass_rate = passed / total) and are never recomputed under new
+ * semantics.
+ */
+export const CURRENT_EVAL_SCORING_VERSION = 2;
+
+/**
+ * Roll up result-row statuses under the run's stamped scoring semantics.
+ * Pass the run's `scoring_version` (null = legacy). Shared by
+ * eval-worker finalization, the eval-runs reconciler, and the GraphQL
+ * read path so every aggregation site uses one denominator rule.
+ */
+export function summarizeEvalStatuses(
+  rows: Array<{ status: string }>,
+  scoringVersion: number | null,
+): EvalStatusSummary {
+  const passed = rows.filter((row) => row.status === "pass").length;
+
+  if (scoringVersion === null) {
+    // Legacy (~v1) semantics: anything that isn't a pass counts as
+    // failed, including errors. Preserved verbatim so pre-migration
+    // runs are never silently upgraded.
+    return {
+      completed: rows.length,
+      passed,
+      failed: rows.length - passed,
+      errored: null,
+      passRate: rows.length > 0 ? passed / rows.length : 0,
+    };
+  }
+
+  const failed = rows.filter((row) => row.status === "fail").length;
+  const errored = rows.filter((row) => row.status === "error").length;
+  const scoreable = passed + failed;
+  return {
+    completed: rows.length,
+    passed,
+    failed,
+    errored,
+    // All-error (or zero-case) runs have no score, never 0%.
+    passRate: scoreable > 0 ? passed / scoreable : null,
+  };
+}
 
 export function looksLikeSafeRefusal(output: string): boolean {
   const lowerOutput = output.toLowerCase();
@@ -198,7 +249,11 @@ export async function evaluateAssertion(
           reason: matched ? `Matches /${value}/` : `Does not match /${value}/`,
         };
       } catch {
-        return { ...assertion, passed: false, reason: `Invalid regex: ${value}` };
+        return {
+          ...assertion,
+          passed: false,
+          reason: `Invalid regex: ${value}`,
+        };
       }
 
     case "llm-rubric":
@@ -282,14 +337,23 @@ export function scoreEvalOutcome({
   assertionResults,
   evaluatorResults,
   errorMessage,
+  errorCause,
   passThreshold = DEFAULT_PASS_THRESHOLD,
 }: {
   assertionResults: EvalAssertionResult[];
   evaluatorResults: EvalEvaluatorResult[];
   errorMessage?: string | null;
+  /**
+   * Why the execution errored, when the caller knows. Defaults to
+   * "infra_other" whenever errorMessage is set — U3 layers in
+   * timeout/throttle/evaluator_error classification.
+   */
+  errorCause?: EvalErrorCause | null;
   passThreshold?: number;
 }): EvalOutcomeScore {
-  const assertionsPassed = assertionResults.every((assertion) => assertion.passed);
+  const assertionsPassed = assertionResults.every(
+    (assertion) => assertion.passed,
+  );
   const scoredEvaluatorResults = evaluatorResults.filter(
     (result) => !result.skipped,
   );
@@ -298,8 +362,8 @@ export function scoreEvalOutcome({
       typeof result.value === "number" && result.value >= passThreshold,
   );
   const contributingScores: number[] = [
-    ...assertionResults.map((assertion) =>
-      assertion.score ?? (assertion.passed ? 1 : 0),
+    ...assertionResults.map(
+      (assertion) => assertion.score ?? (assertion.passed ? 1 : 0),
     ),
     ...scoredEvaluatorResults
       .filter((result) => typeof result.value === "number")
@@ -323,5 +387,6 @@ export function scoreEvalOutcome({
     score,
     assertionsPassed,
     evaluatorsPassed,
+    errorCause: status === "error" ? (errorCause ?? "infra_other") : null,
   };
 }

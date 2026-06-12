@@ -51,6 +51,19 @@ type EvalRun {
   totalTests: Int!
   passed: Int!
   failed: Int!
+  # Count of error-status results (infra noise — excluded from passRate).
+  # Null on legacy runs, where errors are folded into `failed`.
+  errored: Int
+  # Scoring-semantics version stamped at run creation
+  # (CURRENT_EVAL_SCORING_VERSION in @thinkwork/evals-core). Null = legacy
+  # run scored under the old denominator (errors counted as failed).
+  scoringVersion: Int
+  # True when scoringVersion is null: the run's passRate is on the legacy
+  # scale and must not be blended with current-version numbers.
+  isLegacyScoring: Boolean!
+  # pass / (pass + fail) under current scoring; null while pending/running
+  # and on completed runs with nothing scoreable (all-error / zero-case) —
+  # "no score", never 0%.
   passRate: Float
   regression: Boolean!
   costUsd: Float
@@ -101,6 +114,10 @@ type EvalResult {
   # Snapshot of which deterministic assertions passed at run time.
   assertions: AWSJSON!
   errorMessage: String
+  # Why an error-status row errored. Enum-by-comment:
+  # 'timeout' | 'throttle' | 'evaluator_error' | 'reconciler' |
+  # 'infra_other'. Null on pass/fail rows and pre-migration error rows.
+  errorCause: String
   createdAt: AWSDateTime!
 }
 

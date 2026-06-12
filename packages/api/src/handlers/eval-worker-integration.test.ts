@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
   buildEvalWorkerMessages,
   chunkEvalWorkerMessages,
@@ -29,6 +30,7 @@ describe("eval fan-out integration shape", () => {
         status: index % 3 === 0 ? "fail" : "pass",
         evaluator_results: [],
       })),
+      CURRENT_EVAL_SCORING_VERSION,
     );
     expect(summary.completed).toBe(120);
     expect(summary.passed).toBe(80);
