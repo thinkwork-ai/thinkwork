@@ -7819,6 +7819,18 @@ export type SettingsTenantDetailQuery = {
   } | null;
 };
 
+export type SidebarDeployedReleaseQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type SidebarDeployedReleaseQuery = {
+  __typename?: "Query";
+  deploymentStatus: {
+    __typename?: "DeploymentStatus";
+    releaseVersion?: string | null;
+  };
+};
+
 export type SettingsDeploymentStatusQueryVariables = Exact<{
   [key: string]: never;
 }>;
@@ -12862,6 +12874,37 @@ export const SettingsTenantDetailDocument = {
 } as unknown as DocumentNode<
   SettingsTenantDetailQuery,
   SettingsTenantDetailQueryVariables
+>;
+export const SidebarDeployedReleaseDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SidebarDeployedRelease" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "deploymentStatus" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "releaseVersion" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SidebarDeployedReleaseQuery,
+  SidebarDeployedReleaseQueryVariables
 >;
 export const SettingsDeploymentStatusDocument = {
   kind: "Document",

@@ -24,6 +24,17 @@ export const SettingsTenantDetailQuery = graphql(`
   }
 `);
 
+// Minimal release-label read for the sidebar account menu. Kept separate
+// from SettingsDeploymentStatusQuery so the always-mounted sidebar doesn't
+// drag the full infrastructure payload on every load.
+export const SidebarDeployedReleaseQuery = graphql(`
+  query SidebarDeployedRelease {
+    deploymentStatus {
+      releaseVersion
+    }
+  }
+`);
+
 export const SettingsDeploymentStatusQuery = graphql(`
   query SettingsDeploymentStatus {
     deploymentStatus {
