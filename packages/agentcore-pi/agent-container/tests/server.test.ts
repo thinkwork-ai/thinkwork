@@ -2637,6 +2637,64 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("web_extract");
   });
 
+  it("never registers send_email / web_search / web_extract in eval mode, even when their configs are present (U8 side-effect kill list)", async () => {
+    // Defense in depth: the eval payload builder strips these configs,
+    // but a replayed flagged thread must stay side-effect-free even if
+    // a payload regression lets one through.
+    const bundle = await buildInvocationResources({
+      payload: {
+        eval_mode: true,
+        send_email_config: {
+          apiUrl: "https://api.example.com",
+          apiSecret: "test-secret",
+          agentId: "agent-1",
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+        },
+        web_search_config: { provider: "exa", apiKey: "exa-key" },
+        web_extract_config: { provider: "firecrawl", apiKey: "fc-key" },
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(bundle.extensionToolNames).not.toEqual(
+      expect.arrayContaining(["send_email", "web_search", "web_extract"]),
+    );
+    expect(bundle.extensionToolNames).not.toContain("send_email");
+    expect(bundle.extensionToolNames).not.toContain("web_search");
+    expect(bundle.extensionToolNames).not.toContain("web_extract");
+  });
+
   it("registers workspace_skill as an extension tool when workspace skills exist", async () => {
     const bundle = await buildInvocationResources({
       payload: {},

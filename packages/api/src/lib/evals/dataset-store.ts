@@ -202,6 +202,21 @@ export function evalRunSnapshotCaseKey(
 }
 
 /**
+ * Run-scoped copy of a flagged-thread case's payload object (U8).
+ * Mirrors the live-dataset `cases/<id>/payload/<name>.json` layout so
+ * the run snapshot is self-contained: workers replay from the RUN
+ * prefix only — the live dataset payload is never read after launch.
+ */
+export function evalRunSnapshotCasePayloadKey(
+  tenantSlug: string,
+  runId: string,
+  caseId: string,
+  name: EvalCasePayloadName,
+): string {
+  return `${evalRunSnapshotPrefix(tenantSlug, runId)}cases/${caseId}/payload/${name}.json`;
+}
+
+/**
  * Strict worker-side guard for snapshot references arriving on SQS
  * messages (untrusted by policy): the key must sit exactly inside THIS
  * run's snapshot prefix for THIS tenant and name a valid case file —
@@ -217,6 +232,20 @@ export function isEvalRunSnapshotKeyForRun(
   const rel = key.slice(prefix.length);
   const match = rel.match(/^cases\/([a-z][a-z0-9-]{0,127})\.json$/);
   return match !== null && EVAL_DATASET_CASE_ID_RE.test(match[1]);
+}
+
+/**
+ * The case-id segment of an already-guard-validated run snapshot case
+ * key. The worker derives payload keys from THIS (key-derived) id, not
+ * the case file's `case_id` field, so a hostile case_id inside a
+ * sha-matching file can never steer a read outside the run prefix.
+ */
+export function caseIdFromRunSnapshotKey(key: string): string {
+  const match = key.match(/\/cases\/([a-z][a-z0-9-]{0,127})\.json$/);
+  if (!match) {
+    throw new Error(`not a run snapshot case key: ${key}`);
+  }
+  return match[1];
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +282,13 @@ export interface EvalDatasetManifest {
 
 /** Outcome classification stamped on flagged-thread cases (Trust Core U7). */
 export type EvalCaseOutcomeKind = "security" | "quality";
+
+/**
+ * Category stamped on thread-derived cases by the flag-thread snapshot
+ * builder (U7). U8's replay path keys off it: flagged cases load their
+ * recorded history payload and replay it as `messages_history`.
+ */
+export const FLAGGED_THREAD_CATEGORY = "flagged-thread";
 
 /**
  * What the flag-time snapshot actually captured. Surfaced as badges so

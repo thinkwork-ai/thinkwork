@@ -94,6 +94,17 @@ export function extractAgentCoreResponseText(data: unknown): string {
   return JSON.stringify(data);
 }
 
+/**
+ * Replay history row shape (U8): identical to the `messages_history`
+ * rows chat-agent-invoke ships to the Pi runtime, which normalizes them
+ * via `normalizeHistory` (role 'user' | 'assistant' + non-empty string
+ * content; everything else is dropped).
+ */
+export interface EvalReplayHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export function buildEvalAgentCorePayload(input: {
   tenantId: string;
   agentId: string;
@@ -102,6 +113,12 @@ export function buildEvalAgentCorePayload(input: {
   model: string | null | undefined;
   systemPrompt: string | null | undefined;
   runtimeConfig: AgentRuntimeConfig;
+  /**
+   * Flagged-thread replay (U8): the recorded conversation strictly
+   * BEFORE the flagged turn. Synthetic cases omit this (single-message
+   * replay, history []).
+   */
+  messagesHistory?: EvalReplayHistoryMessage[];
 }): Record<string, unknown> {
   const runtimeConfig = input.runtimeConfig;
 
@@ -112,7 +129,7 @@ export function buildEvalAgentCorePayload(input: {
     thread_id: input.sessionId,
     trace_id: input.sessionId,
     message: input.message,
-    messages_history: [],
+    messages_history: input.messagesHistory ?? [],
     eval_mode: true,
     eval_tools_enabled: false,
     use_memory: false,
@@ -128,9 +145,15 @@ export function buildEvalAgentCorePayload(input: {
     appsync_endpoint: appsyncEndpoint() || undefined,
     appsync_api_key: getAppsyncApiKey() || undefined,
     hindsight_endpoint: hindsightEndpoint() || undefined,
-    web_search_config: runtimeConfig.webSearchConfig,
-    web_extract_config: runtimeConfig.webExtractConfig,
-    send_email_config: runtimeConfig.sendEmailConfig || undefined,
+    // Side-effect kill list (U8 replay KTD, layer 1 of 2): eval
+    // invocations must never carry outbound side-effect tool configs —
+    // replaying a real flagged thread could otherwise send real email
+    // or burn external API quota. The Pi server additionally gates
+    // these extension registrations on eval_mode (layer 2), so a
+    // regression here is still inert.
+    web_search_config: undefined,
+    web_extract_config: undefined,
+    send_email_config: undefined,
     context_engine_enabled: false,
     context_engine_config: undefined,
     runtime_type: runtimeConfig.runtimeType,
@@ -161,6 +184,8 @@ export async function invokeAgentCoreForEval(input: {
   message: string;
   model: string | null | undefined;
   systemPrompt?: string | null;
+  /** Flagged-thread replay history (U8) — see buildEvalAgentCorePayload. */
+  messagesHistory?: EvalReplayHistoryMessage[];
 }): Promise<{
   output: string;
   durationMs: number;
@@ -206,6 +231,7 @@ async function invokeAgentCoreForEvalOnce(input: {
   message: string;
   model: string | null | undefined;
   systemPrompt?: string | null;
+  messagesHistory?: EvalReplayHistoryMessage[];
 }): Promise<{
   output: string;
   durationMs: number;

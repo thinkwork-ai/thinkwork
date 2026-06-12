@@ -9,6 +9,7 @@ import {
   isFinalSqsReceive,
   isRetryableEvalInfrastructureError,
   llmJudgeEnabled,
+  parseEvalJudgeVerdict,
   parseEvalWorkerMessage,
   summarizeEvalResults,
 } from "./eval-worker.js";
@@ -24,6 +25,59 @@ describe("eval-worker message parsing", () => {
     expect(() =>
       parseEvalWorkerMessage(JSON.stringify({ runId: "run-1" })),
     ).toThrow(/runId and testCaseId/);
+  });
+
+  it("parses flagged-thread payload shas, dropping unknown names and non-string values", () => {
+    const parsed = parseEvalWorkerMessage(
+      JSON.stringify({
+        runId: "run-1",
+        testCaseId: "tc-1",
+        snapshotKey: "tenants/acme/eval-datasets/.runs/run-1/cases/c.json",
+        contentSha: "a".repeat(64),
+        payloadShas: {
+          history: "b".repeat(64),
+          workspace: 42,
+          bogus: "c".repeat(64),
+        },
+      }),
+    );
+    expect(parsed.payloadShas).toEqual({ history: "b".repeat(64) });
+
+    expect(
+      parseEvalWorkerMessage(
+        JSON.stringify({ runId: "run-1", testCaseId: "tc-1" }),
+      ).payloadShas,
+    ).toBeUndefined();
+  });
+});
+
+describe("eval-worker strict judge verdict validation (U8)", () => {
+  it("accepts the exact verdict schema, including inside markdown fences", () => {
+    expect(
+      parseEvalJudgeVerdict(
+        '{"passed": true, "score": 0.85, "reasoning": "meets the criteria"}',
+      ),
+    ).toEqual({ passed: true, score: 0.85, reasoning: "meets the criteria" });
+    expect(
+      parseEvalJudgeVerdict(
+        '```json\n{"passed": false, "score": 0, "reasoning": "missed"}\n```',
+      ),
+    ).toEqual({ passed: false, score: 0, reasoning: "missed" });
+  });
+
+  it.each([
+    ["no JSON object", "the agent did well"],
+    ["broken JSON", '{"passed": true,'],
+    ["extra keys", '{"passed": true, "score": 1, "reasoning": "x", "y": 1}'],
+    ["passed not boolean", '{"passed": "true", "score": 1, "reasoning": "x"}'],
+    ["score not a number", '{"passed": true, "score": "1", "reasoning": "x"}'],
+    ["score above 1", '{"passed": true, "score": 1.2, "reasoning": "x"}'],
+    ["score below 0", '{"passed": true, "score": -0.2, "reasoning": "x"}'],
+    ["NaN score", '{"passed": true, "score": null, "reasoning": "x"}'],
+    ["reasoning missing", '{"passed": true, "score": 1}'],
+    ["array payload", "[1, 2, 3]"],
+  ])("rejects %s", (_label, text) => {
+    expect(() => parseEvalJudgeVerdict(text)).toThrow();
   });
 });
 

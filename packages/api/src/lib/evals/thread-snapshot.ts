@@ -28,6 +28,7 @@
 
 import {
   evalDatasetCasePayloadKey,
+  FLAGGED_THREAD_CATEGORY,
   type DatasetContext,
   type DatasetStorage,
   type EvalCaseCompleteness,
@@ -407,7 +408,7 @@ export function buildFlaggedCaseCore(opts: {
   return {
     case_id: opts.caseId,
     name,
-    category: "flagged-thread",
+    category: FLAGGED_THREAD_CATEGORY,
     query: opts.snapshot.query || "(no user message captured)",
     system_prompt: null,
     expected_behavior: opts.resolutionTarget,
