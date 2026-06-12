@@ -1,11 +1,13 @@
 /**
- * Plugin engine state-machine tests (plan 2026-06-12-001 U5).
+ * Plugin engine state-machine tests (plan 2026-06-12-001 U5 + U11).
  *
  * Runs the engine against the in-memory store fake + recording handler
- * fakes — no DB, no AWS. Covers: install happy path, infra rejection,
- * idempotent concurrency, staleness re-drive, partial failure + retry,
- * upgrade diff (add/remove/change), the scope/auth-domain re-auth rule,
- * uninstall teardown ordering, and read-time reconciliation.
+ * fakes — no DB, no AWS. Covers: install happy path, idempotent
+ * concurrency, staleness re-drive, partial failure + retry, upgrade diff
+ * (add/remove/change), the scope/auth-domain re-auth rule, uninstall
+ * teardown ordering, read-time reconciliation, and the U11 infrastructure
+ * lifecycle (awaiting_approval parking, deployment-job status mapping,
+ * async uninstall via destroy jobs).
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -80,6 +82,21 @@ function lastmileVersion(
   };
 }
 
+/** lastmile manifest + a Twenty-shaped infrastructure component (U11). */
+function withInfraVersion(): PluginVersion {
+  return lastmileVersion({
+    components: [
+      ...lastmileVersion().components,
+      {
+        type: "infrastructure",
+        key: "infra",
+        managedAppKey: "twenty",
+        terraformInputs: {},
+      },
+    ],
+  });
+}
+
 function resolution(payload: PluginVersion): PluginVersionResolution {
   return {
     plugin: {
@@ -101,15 +118,43 @@ interface Harness {
   calls: string[];
   deletedSecrets: string[][];
   failSkillsOnce: () => void;
+  /** Ids of deployment jobs the infra handler fakes created, in order. */
+  infraJobs: string[];
 }
 
 function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
   const store = createInMemoryPluginEngineStore();
   const calls: string[] = [];
   const deletedSecrets: string[][] = [];
+  const infraJobs: string[] = [];
   const byVersion = new Map(versions.map((v) => [v.version, v]));
   const latest = versions[versions.length - 1]!;
   let skillsFailures = 0;
+  let jobCounter = 0;
+
+  const IN_FLIGHT = new Set(["planning", "awaiting_approval", "applying"]);
+
+  function newJob(args: {
+    tenantId: string;
+    operation: string;
+    appKey: string;
+    status?: string;
+  }): string {
+    jobCounter += 1;
+    const id = `job-${jobCounter}`;
+    store.seedDeploymentJob({
+      id,
+      tenantId: args.tenantId,
+      status: args.status ?? "planning",
+      operation: args.operation,
+      appKey: args.appKey,
+      applicationId: "app-1",
+      evidenceBucket: "evidence-bucket",
+      evidencePrefix: `t/${args.appKey}/${id}/plan`,
+    });
+    infraJobs.push(id);
+    return id;
+  }
 
   const deps: PluginEngineDeps = {
     store,
@@ -145,6 +190,80 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
       teardownMcp: async ({ handlerRef }) => {
         calls.push(`teardown:mcp:${String(handlerRef.tenantMcpServerId)}`);
       },
+      // Mirrors the real handler's reuse semantics: an in-flight (or
+      // succeeded) provision job is reused; failed/rejected drives a
+      // fresh one.
+      provisionInfra: async ({ tenantId, component, handlerRef }) => {
+        calls.push(`provision:infra:${component.key}`);
+        const priorJobId =
+          typeof handlerRef.deploymentJobId === "string"
+            ? handlerRef.deploymentJobId
+            : null;
+        if (priorJobId) {
+          const job = store.deploymentJobs.get(priorJobId);
+          if (
+            job &&
+            job.operation !== "DESTROY" &&
+            (IN_FLIGHT.has(job.status) || job.status === "succeeded")
+          ) {
+            return handlerRef;
+          }
+        }
+        const attempt =
+          (typeof handlerRef.attempt === "number" ? handlerRef.attempt : 0) + 1;
+        const id = newJob({
+          tenantId,
+          operation: "ENABLE",
+          appKey: component.managedAppKey,
+        });
+        return {
+          managedAppKey: component.managedAppKey,
+          managedApplicationId: "app-1",
+          deploymentJobId: id,
+          operation: "ENABLE",
+          attempt,
+        };
+      },
+      teardownInfra: async ({ tenantId, handlerRef }) => {
+        calls.push("teardown:infra");
+        const priorJobId =
+          typeof handlerRef.deploymentJobId === "string"
+            ? handlerRef.deploymentJobId
+            : null;
+        const appKey =
+          typeof handlerRef.managedAppKey === "string"
+            ? handlerRef.managedAppKey
+            : null;
+        if (!priorJobId && !appKey) {
+          return { handlerRef, complete: true };
+        }
+        if (handlerRef.operation === "DESTROY" && priorJobId) {
+          const job = store.deploymentJobs.get(priorJobId);
+          if (job?.status === "succeeded") {
+            return { handlerRef, complete: true };
+          }
+          if (job && IN_FLIGHT.has(job.status)) {
+            return { handlerRef, complete: false };
+          }
+        }
+        const attempt =
+          (typeof handlerRef.attempt === "number" ? handlerRef.attempt : 0) + 1;
+        const id = newJob({
+          tenantId,
+          operation: "DESTROY",
+          appKey: appKey ?? "twenty",
+          status: "awaiting_approval",
+        });
+        return {
+          handlerRef: {
+            ...handlerRef,
+            deploymentJobId: id,
+            operation: "DESTROY",
+            attempt,
+          },
+          complete: false,
+        };
+      },
     },
     deleteSecrets: async (refs) => {
       deletedSecrets.push(refs);
@@ -157,6 +276,7 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
     store,
     calls,
     deletedSecrets,
+    infraJobs,
     failSkillsOnce: () => {
       skillsFailures += 1;
     },
@@ -232,25 +352,28 @@ describe("installPlugin", () => {
     });
   });
 
-  it("rejects manifests containing infrastructure components before any component runs", async () => {
-    const infraVersion = lastmileVersion({
-      components: [
-        ...lastmileVersion().components,
-        {
-          type: "infrastructure",
-          key: "infra",
-          managedAppKey: "twenty",
-          terraformInputs: {},
-        },
-      ],
+  it("runs infrastructure LAST and parks the install at awaiting_approval with the job linked", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installPlugin(installArgs(), h.deps);
+
+    expect(install.state).toBe("awaiting_approval");
+    expect(h.calls).toEqual([
+      "provision:skills:skills",
+      "provision:mcp:crm",
+      "provision:mcp:tasks",
+      "provision:infra:infra",
+    ]);
+    const components = await h.deps.store.listComponents(install.id);
+    const infra = components.find((c) => c.component_key === "infra")!;
+    expect(infra.state).toBe("pending");
+    expect(infra.handler_ref).toMatchObject({
+      managedAppKey: "twenty",
+      deploymentJobId: "job-1",
+      operation: "ENABLE",
+      attempt: 1,
     });
-    const h = harness([infraVersion]);
-    await expectCode(
-      installPlugin(installArgs(), h.deps),
-      "PLUGIN_INFRASTRUCTURE_UNSUPPORTED",
-    );
-    expect(h.calls).toEqual([]);
-    expect(h.store.installs.size).toBe(0);
+    // Not installed yet — no plugin.installed audit.
+    expect(h.store.audits).toHaveLength(0);
   });
 
   it("throws a structured ALREADY_INSTALLED error for an installed plugin", async () => {
@@ -806,6 +929,245 @@ describe("reconcileInstallStatus", () => {
     });
     const reconciled = await reconcileInstallStatus(install, h.deps);
     expect(reconciled.state).toBe("uninstalling");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U11 — infrastructure component lifecycle
+// ---------------------------------------------------------------------------
+
+describe("infrastructure components (U11)", () => {
+  function setJobStatus(
+    h: ReturnType<typeof harness>,
+    jobId: string,
+    status: string,
+    extra: Partial<{ errorMessage: string | null }> = {},
+  ) {
+    const job = h.store.deploymentJobs.get(jobId)!;
+    h.store.deploymentJobs.set(jobId, { ...job, status, ...extra });
+  }
+
+  async function installWithInfra(h: ReturnType<typeof harness>) {
+    const install = await installPlugin(installArgs(), h.deps);
+    expect(install.state).toBe("awaiting_approval");
+    return install;
+  }
+
+  it("is idempotent while awaiting approval: re-install reuses the in-flight job", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installWithInfra(h);
+    h.calls.length = 0;
+
+    const again = await installPlugin(installArgs(), h.deps);
+    expect(again.id).toBe(install.id);
+    expect(again.state).toBe("awaiting_approval");
+    // No handler re-run, no second job.
+    expect(h.calls).toEqual([]);
+    expect(h.infraJobs).toEqual(["job-1"]);
+  });
+
+  it("maps approved+applying → installing on reconcile", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installWithInfra(h);
+
+    setJobStatus(h, "job-1", "applying");
+    const reconciled = await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    expect(reconciled.state).toBe("installing");
+  });
+
+  it("maps apply succeeded → component provisioned, install installed", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installWithInfra(h);
+
+    setJobStatus(h, "job-1", "succeeded");
+    const reconciled = await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    expect(reconciled.state).toBe("installed");
+    const components = await h.deps.store.listComponents(install.id);
+    const infra = components.find((c) => c.component_key === "infra")!;
+    expect(infra.state).toBe("provisioned");
+    expect(infra.last_error).toBeNull();
+  });
+
+  it("maps apply failed → component failed with the job error + evidence ref; retry creates a FRESH job", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installWithInfra(h);
+
+    setJobStatus(h, "job-1", "failed", {
+      errorMessage: "terraform apply exploded",
+    });
+    const reconciled = await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    expect(reconciled.state).toBe("partially_installed");
+    let infra = (await h.deps.store.listComponents(install.id)).find(
+      (c) => c.component_key === "infra",
+    )!;
+    expect(infra.state).toBe("failed");
+    expect(infra.last_error).toContain("terraform apply exploded");
+    expect(infra.handler_ref.evidence).toMatchObject({
+      bucket: "evidence-bucket",
+    });
+
+    h.calls.length = 0;
+    const retried = await retryPluginComponent(
+      {
+        tenantId: TENANT,
+        installId: install.id,
+        componentKey: "infra",
+        actor: ACTOR,
+      },
+      h.deps,
+    );
+    expect(h.calls).toContain("provision:infra:infra");
+    expect(retried.state).toBe("awaiting_approval");
+    infra = (await h.deps.store.listComponents(install.id)).find(
+      (c) => c.component_key === "infra",
+    )!;
+    // Fresh job, bumped attempt — not the failed job-1.
+    expect(infra.handler_ref.deploymentJobId).toBe("job-2");
+    expect(infra.handler_ref.attempt).toBe(2);
+  });
+
+  it("maps plan rejection → component failed and install failed, with evidence linked", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installWithInfra(h);
+
+    setJobStatus(h, "job-1", "rejected", {
+      errorMessage: "Rejected by admin",
+    });
+    const reconciled = await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    expect(reconciled.state).toBe("failed");
+    const infra = (await h.deps.store.listComponents(install.id)).find(
+      (c) => c.component_key === "infra",
+    )!;
+    expect(infra.state).toBe("failed");
+    expect(infra.last_error).toContain("rejected");
+    expect(infra.handler_ref.evidence).toMatchObject({
+      bucket: "evidence-bucket",
+    });
+  });
+
+  it("uninstall is async: sync components tear down, the destroy job gates, reconcile completes the deletion", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installWithInfra(h);
+    setJobStatus(h, "job-1", "succeeded");
+    await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    h.calls.length = 0;
+
+    // 1. Uninstall: skills/MCP teardown runs synchronously; the install
+    //    HOLDS at uninstalling with only the infra row left.
+    const held = await uninstallPlugin(
+      {
+        tenantId: TENANT,
+        installId: install.id,
+        destructiveConfirmation: "lastmile",
+        actor: ACTOR,
+      },
+      h.deps,
+    );
+    expect(held.state).toBe("uninstalling");
+    expect(h.calls).toContain("teardown:infra");
+    expect(h.store.installs.size).toBe(1);
+    const remaining = await h.deps.store.listComponents(install.id);
+    expect(remaining.map((c) => c.component_key)).toEqual(["infra"]);
+    expect(remaining[0]!.handler_ref).toMatchObject({
+      operation: "DESTROY",
+      deploymentJobId: "job-2",
+    });
+    expect(
+      h.store.audits.filter((a) => a.eventType === "plugin.uninstalled"),
+    ).toHaveLength(0);
+
+    // 2. Destroy job still gated: reconcile holds.
+    let reconciled = await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    expect(reconciled.state).toBe("uninstalling");
+    expect(h.store.installs.size).toBe(1);
+
+    // 3. Destroy succeeds: the next reconcile deletes the component AND
+    //    the install row, emitting plugin.uninstalled.
+    setJobStatus(h, "job-2", "succeeded");
+    reconciled = await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    expect(reconciled.state).toBe("uninstalling");
+    expect(h.store.installs.size).toBe(0);
+    expect(h.store.components.size).toBe(0);
+    expect(
+      h.store.audits.filter((a) => a.eventType === "plugin.uninstalled"),
+    ).toHaveLength(1);
+  });
+
+  it("a failed destroy job surfaces on reconcile and re-running uninstall re-drives a fresh destroy job", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installWithInfra(h);
+    setJobStatus(h, "job-1", "succeeded");
+    await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    await uninstallPlugin(
+      {
+        tenantId: TENANT,
+        installId: install.id,
+        destructiveConfirmation: "lastmile",
+        actor: ACTOR,
+      },
+      h.deps,
+    );
+
+    setJobStatus(h, "job-2", "failed", { errorMessage: "destroy exploded" });
+    await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    const infra = (await h.deps.store.listComponents(install.id)).find(
+      (c) => c.component_key === "infra",
+    )!;
+    expect(infra.state).toBe("failed");
+    expect(infra.last_error).toContain("destroy exploded");
+    expect(h.store.installs.size).toBe(1);
+
+    // Re-drive: a FRESH destroy job is created behind the gate.
+    await uninstallPlugin(
+      {
+        tenantId: TENANT,
+        installId: install.id,
+        destructiveConfirmation: "lastmile",
+        actor: ACTOR,
+      },
+      h.deps,
+    );
+    const redriven = (await h.deps.store.listComponents(install.id)).find(
+      (c) => c.component_key === "infra",
+    )!;
+    expect(redriven.handler_ref.deploymentJobId).toBe("job-3");
+
+    setJobStatus(h, "job-3", "succeeded");
+    await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    expect(h.store.installs.size).toBe(0);
+    expect(
+      h.store.audits.filter((a) => a.eventType === "plugin.uninstalled"),
+    ).toHaveLength(1);
   });
 });
 

@@ -3,13 +3,21 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Badge, Button } from "@thinkwork/ui";
-import { ArrowDownToLine, LogIn, LogOut, RotateCw, Trash2 } from "lucide-react";
+import {
+  ArrowDownToLine,
+  LogIn,
+  LogOut,
+  RotateCw,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsActivatePluginMutation,
   SettingsDeactivatePluginMutation,
   SettingsInstallPluginMutation,
+  SettingsManagedApplicationDeploymentQuery,
   SettingsMyPluginActivationsQuery,
   SettingsPluginCatalogQuery,
   SettingsPluginInstallsQuery,
@@ -21,6 +29,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { ManagedApplicationPlanDialog } from "@/components/settings/managed-applications/ManagedApplicationPlanDialog";
 import { UninstallPluginDialog } from "./UninstallPluginDialog";
 import {
   broadenedScopes,
@@ -301,15 +310,11 @@ export function PluginDetail() {
         ) : null}
 
         {install?.state === "awaiting_approval" ? (
-          // TODO(U11): wire the deployment plan review dialog
-          // (ManagedApplicationPlanDialog) once the infrastructure component
-          // handler lands. v1 plugins reject infrastructure components, so
-          // this state is unreachable until then.
-          <SettingsSection label="Pending approval">
-            <div className="p-4 text-sm text-muted-foreground">
-              This install is pending deployment approval.
-            </div>
-          </SettingsSection>
+          <PluginPendingApprovalSection
+            deploymentJobId={findPluginDeploymentJobId(install.components)}
+            showOperatorActions={showOperatorActions}
+            onJobChanged={refreshAll}
+          />
         ) : null}
 
         {!install && entry && showOperatorActions ? (
@@ -494,5 +499,87 @@ export function PluginDetail() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * handler_ref of an infrastructure component carries the linked deployment
+ * job ({ managedApplicationId, deploymentJobId, ... }). AWSJSON may arrive
+ * as an object or a JSON string depending on the transport.
+ */
+function findPluginDeploymentJobId(
+  components: Array<{ componentType: string; handlerRef?: unknown }>,
+): string | null {
+  for (const component of components) {
+    if (component.componentType !== "infrastructure") continue;
+    let ref = component.handlerRef;
+    if (typeof ref === "string") {
+      try {
+        ref = JSON.parse(ref);
+      } catch {
+        continue;
+      }
+    }
+    if (ref && typeof ref === "object" && !Array.isArray(ref)) {
+      const jobId = (ref as Record<string, unknown>).deploymentJobId;
+      if (typeof jobId === "string" && jobId) return jobId;
+    }
+  }
+  return null;
+}
+
+/**
+ * U11 handoff: an install parked at awaiting_approval links its infra
+ * component's deployment plan job — review/approve/reject happens in the
+ * EXISTING ManagedApplicationPlanDialog (no plugin-specific approval
+ * surface).
+ */
+function PluginPendingApprovalSection({
+  deploymentJobId,
+  showOperatorActions,
+  onJobChanged,
+}: {
+  deploymentJobId: string | null;
+  showOperatorActions: boolean;
+  onJobChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [jobResult, refetchJob] = useQuery({
+    query: SettingsManagedApplicationDeploymentQuery,
+    variables: { jobId: deploymentJobId ?? "" },
+    pause: !deploymentJobId,
+    requestPolicy: "cache-and-network",
+  });
+  const job = jobResult.data?.managedApplicationDeployment ?? null;
+
+  return (
+    <SettingsSection label="Pending approval">
+      <SettingsRow
+        label="Deployment plan awaiting approval"
+        description={
+          showOperatorActions
+            ? "This plugin provisions managed infrastructure. Review the Terraform plan, data impact, and evidence before approving."
+            : "This plugin provisions managed infrastructure. An operator must review and approve the deployment plan."
+        }
+      >
+        {showOperatorActions && deploymentJobId ? (
+          <Button type="button" size="sm" onClick={() => setOpen(true)}>
+            <ShieldCheck className="mr-2 size-4" />
+            Review deployment plan
+          </Button>
+        ) : null}
+      </SettingsRow>
+      {showOperatorActions && deploymentJobId ? (
+        <ManagedApplicationPlanDialog
+          job={job}
+          open={open}
+          onOpenChange={setOpen}
+          onJobChanged={() => {
+            refetchJob({ requestPolicy: "network-only" });
+            onJobChanged();
+          }}
+        />
+      ) : null}
+    </SettingsSection>
   );
 }

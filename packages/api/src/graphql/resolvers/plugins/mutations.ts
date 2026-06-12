@@ -2,9 +2,11 @@
  * Plugin mutations (plan 2026-06-12-001 U5 + U6).
  *
  * install/upgrade/uninstall/retry are tenant-admin gated and run the
- * engine synchronously inside the GraphQL request (v1 plugins have no
- * infrastructure components, so teardown/provisioning completes in-line;
- * errors surface to the caller — never fire-and-forget).
+ * engine synchronously inside the GraphQL request (errors surface to the
+ * caller — never fire-and-forget). Infrastructure components are the
+ * async exception: their deployment jobs complete behind the EXISTING
+ * deployment approve/reject mutations, and install/uninstall completion
+ * is learned by read-time reconciliation on the status queries (U11).
  *
  * activatePlugin / deactivatePlugin (U6) are MEMBER-level: any
  * authenticated tenant member activates for THEMSELF. The acting user is

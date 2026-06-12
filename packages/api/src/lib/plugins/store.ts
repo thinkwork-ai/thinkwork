@@ -29,6 +29,10 @@ import {
   emitAuditEvent,
   type EmitAuditEventInput,
 } from "../compliance/emit.js";
+import {
+  readDeploymentJobSnapshot,
+  type PluginDeploymentJobSnapshot,
+} from "./deployment-job-read.js";
 
 type DbLike = typeof defaultDb;
 
@@ -152,6 +156,16 @@ export interface PluginEngineStore {
   ): Promise<void>;
   deleteActivationTokens(activationId: string): Promise<void>;
   deleteActivation(activationId: string): Promise<void>;
+
+  /**
+   * Read one managed-application deployment job + its latest event (U11
+   * read-time reconciliation input for infrastructure components). Pure
+   * read — all job writes go through the deployment mutations.
+   */
+  getDeploymentJob(
+    tenantId: string,
+    jobId: string,
+  ): Promise<PluginDeploymentJobSnapshot | null>;
 }
 
 export function createDrizzlePluginEngineStore(
@@ -451,6 +465,10 @@ export function createDrizzlePluginEngineStore(
       await db
         .delete(userPluginActivations)
         .where(eq(userPluginActivations.id, activationId));
+    },
+
+    getDeploymentJob(tenantId, jobId) {
+      return readDeploymentJobSnapshot(tenantId, jobId, db);
     },
   };
 }

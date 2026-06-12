@@ -1349,6 +1349,7 @@ export const SettingsPluginCatalogQuery = graphql(`
           componentKey
           componentType
           state
+          handlerRef
           lastError
         }
       }
@@ -1371,6 +1372,7 @@ export const SettingsPluginInstallsQuery = graphql(`
         componentKey
         componentType
         state
+        handlerRef
         lastError
       }
     }

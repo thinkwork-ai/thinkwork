@@ -16,7 +16,6 @@ import { ManagedApplicationJobTimeline } from "./ManagedApplicationJobTimeline";
 import { ManagedApplicationEvidenceLinks } from "./ManagedApplicationEvidenceLinks";
 import {
   appDisplayName,
-  asManagedAppKey,
   destructiveConfirmationFor,
   parseDataImpact,
   type ManagedApplicationJob,
@@ -51,7 +50,9 @@ export function ManagedApplicationPlanDialog({
     () => parseDataImpact(job?.dataImpact),
     [job?.dataImpact],
   );
-  const key = asManagedAppKey(job?.appKey ?? "cognee");
+  // Raw string key: plugin-created jobs reuse this dialog, so the key is
+  // no longer coerced into the closed ManagedAppKey union.
+  const key = job?.appKey ?? "cognee";
   const destructiveConfirmation = destructiveConfirmationFor(key);
   const ready = !!job?.planDigest && job.status === "awaiting_approval";
   const destructiveReady =

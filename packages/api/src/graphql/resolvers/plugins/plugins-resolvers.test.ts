@@ -137,6 +137,11 @@ function buildDeps(): PluginEngineDeps {
         agentSlug: "agent-1",
       }),
       teardownSkills: async () => undefined,
+      provisionInfra: async ({ handlerRef }) => handlerRef,
+      teardownInfra: async ({ handlerRef }) => ({
+        handlerRef,
+        complete: true,
+      }),
     },
     deleteSecrets: async () => undefined,
   };

@@ -5,39 +5,53 @@
  * The engine owns orchestration state ONLY (plugin_installs /
  * plugin_components / user_plugin_activations); component handlers
  * reconcile the real runtime rows (tenant_mcp_servers, seeded skill
- * catalog prefixes + workspace folders). v1 supports `mcp-server`,
- * `skills`, and `ui-surface` (recorded no-op) components — manifests
- * containing `infrastructure` components are rejected with a structured
- * error until U11 wires the deployment-job handler.
+ * catalog prefixes + workspace folders, managed_applications +
+ * deployment jobs).
  *
- * State machine (v1, no infra):
+ * State machine:
  *
  *   installing → installed            all components provisioned
- *   installing → partially_installed  a component handler failed
+ *   installing → awaiting_approval    an infra plan job is in flight
+ *   awaiting_approval → installing    job approved (apply running)
+ *   awaiting_approval → failed        plan rejected
+ *   installing → partially_installed  a component handler/apply failed
  *   installing → installing           staleness re-drive (idempotent)
  *   partially_installed → installing  retryPluginComponent
  *   installed → installing            upgradePlugin (component diff)
- *   * → uninstalling → (row deleted)  uninstallPlugin (sync in v1)
+ *   * → uninstalling → (row deleted)  uninstallPlugin (async when infra
+ *                                     components exist — the destroy job
+ *                                     completes via read-time reconcile)
  *
- * Handlers run skills → mcp-server → ui-surface and MUST be idempotent
- * (create-or-repair) so a crash mid-sequence converges on re-drive. A
- * component failure aborts the sequence: later components stay `pending`,
- * the failed one records `last_error`, and the install holds at
+ * Handlers run skills → mcp-server → ui-surface → infrastructure and MUST
+ * be idempotent (create-or-repair) so a crash mid-sequence converges on
+ * re-drive. A component failure aborts the sequence: later components stay
+ * `pending`, the failed one records `last_error`, and the install holds at
  * `partially_installed` with per-component retry — no rollback-all.
+ * Infrastructure components are different: their handler returns with the
+ * component still IN-FLIGHT (pending, deployment job linked in handler_ref)
+ * and the install parks at `awaiting_approval`; the EXISTING deployment
+ * approve/reject mutations gate the apply — no new approval surface.
  *
  * Read-time reconciliation: `reconcileInstallStatus` recomputes the
- * install state from component states (v1). U11 extends this hook with
- * deployment-job joins for async infrastructure completion.
+ * install state from component states and joins each infrastructure
+ * component's linked deployment job (store port): approved+applying →
+ * installing, apply succeeded → provisioned, apply failed → component
+ * failed (job error + evidence ref), rejected → component failed +
+ * install failed. For `uninstalling` installs it completes the deferred
+ * deletion once the destroy job succeeds.
  *
  * Compliance: `plugin.installed` is emitted transactionally with the
  * transition into `installed`; `plugin.uninstalled` transactionally with
  * the install-row delete (both via the store's audit-coupled writes).
- * Read-time reconciliation never emits.
+ * Read-time reconciliation never emits — with one exception: completing
+ * an async uninstall deletes the install row and emits
+ * `plugin.uninstalled` (the deferred tail of the uninstall mutation).
  */
 
 import { GraphQLError } from "graphql";
 import { createHash } from "node:crypto";
 import type {
+  InfrastructureComponent,
   McpServerComponent,
   PluginComponent,
   PluginVersion,
@@ -45,6 +59,11 @@ import type {
 } from "@thinkwork/plugin-catalog";
 import type { EmitAuditEventInput } from "../compliance/emit.js";
 import { getPluginVersion } from "./catalog-source.js";
+import type { PluginDeploymentJobSnapshot } from "./deployment-job-read.js";
+import {
+  provisionPluginInfraComponent,
+  teardownPluginInfraComponent,
+} from "./handlers/infra.js";
 import {
   provisionPluginMcpComponent,
   teardownPluginMcpComponent,
@@ -122,6 +141,31 @@ export interface PluginEngineDeps {
       component: SkillsComponent | null;
       handlerRef: Record<string, unknown>;
     }) => Promise<void>;
+    /**
+     * Ensure the managed_applications row + deployment PLAN job (U11).
+     * Returns the updated handler_ref; the component stays IN-FLIGHT
+     * (pending) — completion is learned by read-time reconciliation.
+     */
+    provisionInfra: (args: {
+      tenantId: string;
+      pluginInstallId: string;
+      pluginKey: string;
+      component: InfrastructureComponent;
+      handlerRef: Record<string, unknown>;
+      requestedByUserId: string | null;
+    }) => Promise<Record<string, unknown>>;
+    /**
+     * Create (or re-drive) the DESTROY plan job behind the approval gate.
+     * `complete: true` means nothing is left to destroy and the engine may
+     * delete the component row.
+     */
+    teardownInfra: (args: {
+      tenantId: string;
+      pluginInstallId: string;
+      componentKey: string;
+      handlerRef: Record<string, unknown>;
+      requestedByUserId: string | null;
+    }) => Promise<{ handlerRef: Record<string, unknown>; complete: boolean }>;
   };
   deleteSecrets: DeleteSecretsPort;
   now?: () => Date;
@@ -137,6 +181,8 @@ export function createDefaultPluginEngineDeps(): PluginEngineDeps {
       teardownMcp: (args) => teardownPluginMcpComponent(args),
       provisionSkills: (args) => provisionPluginSkillsComponent(args),
       teardownSkills: (args) => teardownPluginSkillsComponent(args),
+      provisionInfra: (args) => provisionPluginInfraComponent(args),
+      teardownInfra: (args) => teardownPluginInfraComponent(args),
     },
     deleteSecrets: createSecretsManagerDeleteSecrets(),
   };
@@ -154,7 +200,11 @@ export function pluginEngineError(code: string, message: string): GraphQLError {
 // Manifest helpers
 // ---------------------------------------------------------------------------
 
-/** Provision order. Teardown runs the same order (skills before MCP rows). */
+/**
+ * Provision order: skills → mcp-server → ui-surface → infrastructure.
+ * Teardown runs the same order (skills before MCP rows, infra destroy
+ * jobs last).
+ */
 const COMPONENT_RUN_ORDER: Record<string, number> = {
   skills: 0,
   "mcp-server": 1,
@@ -164,23 +214,6 @@ const COMPONENT_RUN_ORDER: Record<string, number> = {
 
 function runOrder(componentType: string): number {
   return COMPONENT_RUN_ORDER[componentType] ?? 99;
-}
-
-export function assertNoInfrastructureComponents(
-  pluginKey: string,
-  payload: PluginVersion,
-): void {
-  const infra = payload.components.filter(
-    (component) => component.type === "infrastructure",
-  );
-  if (infra.length > 0) {
-    throw pluginEngineError(
-      "PLUGIN_INFRASTRUCTURE_UNSUPPORTED",
-      `Plugin ${pluginKey}@${payload.version} declares infrastructure ` +
-        `component(s) ${infra.map((c) => c.key).join(", ")}; infrastructure ` +
-        "components are not supported until the deployment handler ships (plan U11).",
-    );
-  }
 }
 
 /** Stable content hash of one manifest component (upgrade diff input). */
@@ -257,26 +290,203 @@ export function computeInstallStateFromComponents(
   return "installed";
 }
 
+/** Per-infra-component gate derived from the linked deployment job. */
+type InfraGate = "awaiting" | "applying" | "rejected";
+
+interface InfraReconcileResult {
+  components: PluginComponentRow[];
+  gates: Map<string, InfraGate>;
+}
+
+function infraJobFailureMessage(job: PluginDeploymentJobSnapshot): string {
+  return (
+    job.errorMessage ||
+    job.latestEvent?.message ||
+    `Deployment job ${job.id} ${job.status}`
+  );
+}
+
+function infraEvidencePatch(
+  handlerRef: Record<string, unknown>,
+  job: PluginDeploymentJobSnapshot,
+): Record<string, unknown> {
+  if (!job.evidenceBucket) return handlerRef;
+  return {
+    ...handlerRef,
+    evidence: { bucket: job.evidenceBucket, prefix: job.evidencePrefix },
+  };
+}
+
 /**
- * Read-time reconciliation seam. v1 recomputes the install state from
- * component states; U11 extends this with deployment-job event joins for
- * async infrastructure completion. Never emits compliance events — those
- * belong to the mutation-driven transitions.
+ * Join each infrastructure component's linked deployment job and apply the
+ * U11 status mapping:
+ *
+ *   planning / awaiting_approval → gate 'awaiting'  (install awaiting_approval)
+ *   applying                     → gate 'applying'  (install installing)
+ *   succeeded                    → component provisioned
+ *   failed                       → component failed (job error + evidence ref)
+ *   rejected                     → component failed + gate 'rejected'
+ *                                  (install failed)
+ *
+ * DESTROY-mode refs (in-flight teardown during upgrade/uninstall) are
+ * skipped — `reconcileUninstall` owns those.
+ */
+async function reconcileInfraComponents(
+  install: PluginInstallRow,
+  components: PluginComponentRow[],
+  deps: PluginEngineDeps,
+): Promise<InfraReconcileResult> {
+  const gates = new Map<string, InfraGate>();
+  const updated: PluginComponentRow[] = [];
+
+  for (const row of components) {
+    if (row.component_type !== "infrastructure") {
+      updated.push(row);
+      continue;
+    }
+    const handlerRef = row.handler_ref ?? {};
+    const jobId =
+      typeof handlerRef.deploymentJobId === "string"
+        ? handlerRef.deploymentJobId
+        : null;
+    if (!jobId) {
+      // No job yet — provision hasn't run for this row.
+      updated.push(row);
+      continue;
+    }
+    if (handlerRef.operation === "DESTROY") {
+      // Removed-in-upgrade teardown in flight: release the row when the
+      // destroy job succeeds; surface failures for retry; never gate the
+      // install state on a removal.
+      const job = await deps.store.getDeploymentJob(install.tenant_id, jobId);
+      if (job?.status === "succeeded") {
+        await deps.store.deleteComponent(row.id);
+        continue;
+      }
+      if (job && (job.status === "failed" || job.status === "rejected")) {
+        const message = `Teardown ${job.status}: ${infraJobFailureMessage(job)}`;
+        if (row.state !== "failed" || row.last_error !== message) {
+          const failed = await deps.store.updateComponent(row.id, {
+            state: "failed",
+            handlerRef: infraEvidencePatch(handlerRef, job),
+            lastError: message,
+          });
+          updated.push(failed ?? { ...row, state: "failed" });
+          continue;
+        }
+      }
+      updated.push(row);
+      continue;
+    }
+    const job = await deps.store.getDeploymentJob(install.tenant_id, jobId);
+    if (!job) {
+      const failed = await deps.store.updateComponent(row.id, {
+        state: "failed",
+        lastError: `Linked deployment job ${jobId} was not found`,
+      });
+      updated.push(failed ?? { ...row, state: "failed" });
+      continue;
+    }
+    switch (job.status) {
+      case "succeeded": {
+        if (row.state !== "provisioned") {
+          const provisioned = await deps.store.updateComponent(row.id, {
+            state: "provisioned",
+            handlerRef: infraEvidencePatch(handlerRef, job),
+            lastError: null,
+          });
+          updated.push(provisioned ?? { ...row, state: "provisioned" });
+        } else {
+          updated.push(row);
+        }
+        break;
+      }
+      case "failed":
+      case "rejected": {
+        const message =
+          job.status === "rejected"
+            ? `Deployment plan rejected: ${infraJobFailureMessage(job)}`
+            : infraJobFailureMessage(job);
+        if (row.state !== "failed" || row.last_error !== message) {
+          const failed = await deps.store.updateComponent(row.id, {
+            state: "failed",
+            handlerRef: infraEvidencePatch(handlerRef, job),
+            lastError: message,
+          });
+          updated.push(failed ?? { ...row, state: "failed" });
+        } else {
+          updated.push(row);
+        }
+        if (job.status === "rejected") gates.set(row.id, "rejected");
+        break;
+      }
+      case "applying": {
+        gates.set(row.id, "applying");
+        updated.push(row);
+        break;
+      }
+      default: {
+        // planning / awaiting_approval: the approval gate is in front.
+        gates.set(row.id, "awaiting");
+        updated.push(row);
+        break;
+      }
+    }
+  }
+  return { components: updated, gates };
+}
+
+function computeInstallState(
+  components: Pick<PluginComponentRow, "state">[],
+  gates: Map<string, InfraGate>,
+):
+  | "installed"
+  | "partially_installed"
+  | "installing"
+  | "awaiting_approval"
+  | "failed" {
+  const gateValues = [...gates.values()];
+  if (gateValues.includes("rejected")) return "failed";
+  if (components.some((component) => component.state === "failed")) {
+    return "partially_installed";
+  }
+  if (gateValues.includes("awaiting")) return "awaiting_approval";
+  if (components.some((component) => component.state === "pending")) {
+    return "installing";
+  }
+  return "installed";
+}
+
+/**
+ * Read-time reconciliation seam. Recomputes the install state from
+ * component states joined with each infra component's deployment job;
+ * for `uninstalling` installs, completes the deferred deletion once the
+ * destroy job succeeds.
  */
 export async function reconcileInstallStatus(
   install: PluginInstallRow,
   deps: PluginEngineDeps = createDefaultPluginEngineDeps(),
 ): Promise<PluginInstallRow> {
+  if (install.state === "uninstalling") {
+    return reconcileUninstall(install, deps);
+  }
   if (
     install.state !== "installing" &&
+    install.state !== "awaiting_approval" &&
     install.state !== "partially_installed" &&
-    install.state !== "installed"
+    install.state !== "installed" &&
+    install.state !== "failed"
   ) {
     return install;
   }
   const components = await deps.store.listComponents(install.id);
   if (components.length === 0) return install;
-  const computed = computeInstallStateFromComponents(components);
+  const { components: reconciled, gates } = await reconcileInfraComponents(
+    install,
+    components,
+    deps,
+  );
+  const computed = computeInstallState(reconciled, gates);
   if (computed === install.state) return install;
   const updated = await deps.store.updateInstall(install.id, {
     state: computed,
@@ -285,37 +495,144 @@ export async function reconcileInstallStatus(
   return updated ?? install;
 }
 
+const SYSTEM_ACTOR: PluginEngineActor = {
+  actorId: "system",
+  actorType: "system",
+};
+
+/**
+ * Deferred tail of an async uninstall: destroy jobs that succeeded release
+ * their component rows; once nothing remains, the install row is deleted
+ * (emitting plugin.uninstalled). Failed/rejected destroy jobs mark the
+ * component failed — re-running the uninstall mutation re-drives them.
+ * Never creates jobs (read path).
+ */
+async function reconcileUninstall(
+  install: PluginInstallRow,
+  deps: PluginEngineDeps,
+): Promise<PluginInstallRow> {
+  const components = await deps.store.listComponents(install.id);
+  let blocked = false;
+  for (const row of components) {
+    const handlerRef = row.handler_ref ?? {};
+    const jobId =
+      typeof handlerRef.deploymentJobId === "string"
+        ? handlerRef.deploymentJobId
+        : null;
+    if (
+      row.component_type !== "infrastructure" ||
+      handlerRef.operation !== "DESTROY" ||
+      !jobId
+    ) {
+      // Leftover non-infra rows (failed sync teardown) or infra rows whose
+      // destroy job hasn't been created — the uninstall mutation re-drives.
+      blocked = true;
+      continue;
+    }
+    const job = await deps.store.getDeploymentJob(install.tenant_id, jobId);
+    if (!job) {
+      blocked = true;
+      continue;
+    }
+    if (job.status === "succeeded") {
+      await deps.store.deleteComponent(row.id);
+      continue;
+    }
+    if (job.status === "failed" || job.status === "rejected") {
+      const message =
+        job.status === "rejected"
+          ? `Destroy plan rejected: ${infraJobFailureMessage(job)}`
+          : infraJobFailureMessage(job);
+      if (row.state !== "failed" || row.last_error !== message) {
+        await deps.store.updateComponent(row.id, {
+          state: "failed",
+          handlerRef: infraEvidencePatch(handlerRef, job),
+          lastError: message,
+        });
+      }
+      blocked = true;
+      continue;
+    }
+    blocked = true; // planning / awaiting_approval / applying
+  }
+
+  if (!blocked) {
+    const remaining = await deps.store.listComponents(install.id);
+    if (remaining.length === 0) {
+      await deps.store.deleteInstall(
+        install.id,
+        uninstalledAudit(install, SYSTEM_ACTOR),
+      );
+    }
+  }
+  return install;
+}
+
 // ---------------------------------------------------------------------------
 // Component handler dispatch
 // ---------------------------------------------------------------------------
 
+interface ProvisionOutcome {
+  handlerRef: Record<string, unknown>;
+  /**
+   * False for infrastructure components: the deployment job is in flight
+   * and the component stays `pending` until reconciliation sees the apply
+   * succeed.
+   */
+  provisioned: boolean;
+}
+
 async function provisionComponent(
   install: PluginInstallRow,
+  row: PluginComponentRow,
   component: PluginComponent,
+  actor: PluginEngineActor,
   deps: PluginEngineDeps,
-): Promise<Record<string, unknown>> {
+): Promise<ProvisionOutcome> {
   switch (component.type) {
     case "skills":
-      return deps.handlers.provisionSkills({
-        tenantId: install.tenant_id,
-        component,
-      });
+      return {
+        handlerRef: await deps.handlers.provisionSkills({
+          tenantId: install.tenant_id,
+          component,
+        }),
+        provisioned: true,
+      };
     case "mcp-server":
-      return deps.handlers.provisionMcp({
-        tenantId: install.tenant_id,
-        pluginInstallId: install.id,
-        pluginKey: install.plugin_key,
-        component,
-      });
+      return {
+        handlerRef: await deps.handlers.provisionMcp({
+          tenantId: install.tenant_id,
+          pluginInstallId: install.id,
+          pluginKey: install.plugin_key,
+          component,
+        }),
+        provisioned: true,
+      };
+    case "infrastructure":
+      return {
+        handlerRef: await deps.handlers.provisionInfra({
+          tenantId: install.tenant_id,
+          pluginInstallId: install.id,
+          pluginKey: install.plugin_key,
+          component,
+          handlerRef: row.handler_ref ?? {},
+          requestedByUserId: requestedByUserIdFor(actor),
+        }),
+        provisioned: false,
+      };
     case "ui-surface":
       // Declared-only in v1: recorded as a provisioned no-op.
-      return {};
+      return { handlerRef: {}, provisioned: true };
     default:
       throw pluginEngineError(
         "PLUGIN_COMPONENT_UNSUPPORTED",
-        `Component type ${component.type} has no v1 handler`,
+        `Component type ${(component as PluginComponent).type} has no handler`,
       );
   }
+}
+
+function requestedByUserIdFor(actor: PluginEngineActor): string | null {
+  return actor.actorType === "user" ? actor.actorId : null;
 }
 
 async function teardownComponent(
@@ -345,13 +662,53 @@ async function teardownComponent(
 }
 
 /**
- * Run handlers over every non-provisioned component row, in order. Aborts
- * on the first failure (later components stay `pending`); the failure is
- * recorded on the component row, never thrown.
+ * Tear down ONE component row and delete it when teardown completed.
+ * Infrastructure rows are async: their DESTROY plan job goes through the
+ * approval gate, the handler_ref is updated to point at it, and the row
+ * survives (`in_flight`) until reconciliation sees the job succeed.
+ */
+async function removeComponentRow(
+  install: PluginInstallRow,
+  row: PluginComponentRow,
+  manifestComponent: PluginComponent | null,
+  actor: PluginEngineActor,
+  deps: PluginEngineDeps,
+): Promise<"deleted" | "in_flight"> {
+  if (row.component_type === "infrastructure") {
+    const result = await deps.handlers.teardownInfra({
+      tenantId: install.tenant_id,
+      pluginInstallId: install.id,
+      componentKey: row.component_key,
+      handlerRef: row.handler_ref ?? {},
+      requestedByUserId: requestedByUserIdFor(actor),
+    });
+    if (result.complete) {
+      await deps.store.deleteComponent(row.id);
+      return "deleted";
+    }
+    await deps.store.updateComponent(row.id, {
+      handlerRef: result.handlerRef,
+      lastError: null,
+    });
+    return "in_flight";
+  }
+  await teardownComponent(install, row, manifestComponent, deps);
+  await deps.store.deleteComponent(row.id);
+  return "deleted";
+}
+
+/**
+ * Run handlers over every non-provisioned component row, in order
+ * (skills → mcp-server → ui-surface → infrastructure). Aborts on the
+ * first failure (later components stay `pending`); the failure is
+ * recorded on the component row, never thrown. Infrastructure handlers
+ * return with the row still `pending` (job in flight) — that is not a
+ * failure and does not abort.
  */
 async function runComponentSequence(
   install: PluginInstallRow,
   payload: PluginVersion,
+  actor: PluginEngineActor,
   deps: PluginEngineDeps,
 ): Promise<void> {
   const rows = await deps.store.listComponents(install.id);
@@ -362,6 +719,14 @@ async function runComponentSequence(
     if (row.state === "provisioned") continue;
     const manifestComponent = findManifestComponent(payload, row.component_key);
     if (!manifestComponent) {
+      if (
+        row.component_type === "infrastructure" &&
+        (row.handler_ref ?? {}).operation === "DESTROY"
+      ) {
+        // Removed-in-upgrade infra row with its destroy job in flight —
+        // reconciliation releases it when the job succeeds.
+        continue;
+      }
       await deps.store.updateComponent(row.id, {
         state: "failed",
         lastError: `Component ${row.component_key} is not declared by the pinned manifest version ${install.pinned_version}`,
@@ -369,14 +734,16 @@ async function runComponentSequence(
       break;
     }
     try {
-      const handlerRef = await provisionComponent(
+      const outcome = await provisionComponent(
         install,
+        row,
         manifestComponent,
+        actor,
         deps,
       );
       await deps.store.updateComponent(row.id, {
-        state: "provisioned",
-        handlerRef,
+        ...(outcome.provisioned ? { state: "provisioned" as const } : {}),
+        handlerRef: outcome.handlerRef,
         lastError: null,
       });
     } catch (error) {
@@ -458,17 +825,23 @@ function uninstalledAudit(
 }
 
 /**
- * Recompute the install state from components and persist the transition.
- * Emits `plugin.installed` transactionally when (and only when) the
- * install transitions INTO `installed`.
+ * Recompute the install state from components (joining infra deployment
+ * jobs) and persist the transition. Emits `plugin.installed`
+ * transactionally when (and only when) the install transitions INTO
+ * `installed`.
  */
 async function finalizeInstallState(
   install: PluginInstallRow,
   actor: PluginEngineActor,
   deps: PluginEngineDeps,
 ): Promise<PluginInstallRow> {
-  const components = await deps.store.listComponents(install.id);
-  const next = computeInstallStateFromComponents(components);
+  const listed = await deps.store.listComponents(install.id);
+  const { components, gates } = await reconcileInfraComponents(
+    install,
+    listed,
+    deps,
+  );
+  const next = computeInstallState(components, gates);
   if (next === install.state) return install;
   const audit =
     next === "installed"
@@ -554,10 +927,6 @@ export async function installPlugin(
     args.version,
     deps,
   );
-  assertNoInfrastructureComponents(
-    args.pluginKey,
-    requested.versionEntry.payload,
-  );
 
   let install = await deps.store.getInstallByTenantAndKey(
     args.tenantId,
@@ -605,6 +974,11 @@ export async function installPlugin(
         `Plugin ${args.pluginKey} is uninstalling; retry the uninstall or wait for it to finish`,
       );
     }
+    if (install.state === "awaiting_approval") {
+      // Infra plan job in flight — nothing to drive; reconcile picks up
+      // approval/rejection transitions on this read.
+      return reconcileInstallStatus(install, deps);
+    }
     if (install.state === "installing") {
       const ageMs =
         now().getTime() - new Date(install.last_transition_at).getTime();
@@ -627,7 +1001,12 @@ export async function installPlugin(
   const pinned = await resolvePinnedVersion(install, deps);
   await deps.store.updateInstall(install.id, { touchTransition: true });
   await ensureComponentRows(install, pinned.versionEntry.payload, deps);
-  await runComponentSequence(install, pinned.versionEntry.payload, deps);
+  await runComponentSequence(
+    install,
+    pinned.versionEntry.payload,
+    args.actor,
+    deps,
+  );
   return finalizeInstallState(install, args.actor, deps);
 }
 
@@ -681,8 +1060,7 @@ export async function retryPluginComponent(
   );
   if (!manifestComponent) {
     // Orphan left by a failed upgrade removal: finish the teardown.
-    await teardownComponent(install, row, null, deps);
-    await deps.store.deleteComponent(row.id);
+    await removeComponentRow(install, row, null, args.actor, deps);
     return finalizeInstallState(install, args.actor, deps);
   }
   await deps.store.updateComponent(row.id, {
@@ -694,7 +1072,12 @@ export async function retryPluginComponent(
       state: "installing",
       touchTransition: true,
     })) ?? ({ ...install, state: "installing" } as PluginInstallRow);
-  await runComponentSequence(reDriving, pinned.versionEntry.payload, deps);
+  await runComponentSequence(
+    reDriving,
+    pinned.versionEntry.payload,
+    args.actor,
+    deps,
+  );
   return finalizeInstallState(reDriving, args.actor, deps);
 }
 
@@ -736,10 +1119,6 @@ export async function upgradePlugin(
     args.toVersion,
     deps,
   );
-  assertNoInfrastructureComponents(
-    install.plugin_key,
-    next.versionEntry.payload,
-  );
 
   // Old payload is diff input only — a pruned old version degrades to
   // "treat every surviving component as changed".
@@ -765,15 +1144,16 @@ export async function upgradePlugin(
     newPayload.components.map((component) => [component.key, component]),
   );
 
-  // Removed components: teardown then delete the row.
+  // Removed components: teardown then delete the row. Infra removals are
+  // async — the row survives with its DESTROY job in flight and is
+  // released by read-time reconciliation when the job succeeds.
   for (const row of rows) {
     if (newByKey.has(row.component_key)) continue;
     const oldComponent = oldPayload
       ? findManifestComponent(oldPayload, row.component_key)
       : null;
     try {
-      await teardownComponent(install, row, oldComponent, deps);
-      await deps.store.deleteComponent(row.id);
+      await removeComponentRow(install, row, oldComponent, args.actor, deps);
     } catch (error) {
       await deps.store.updateComponent(row.id, {
         state: "failed",
@@ -811,7 +1191,7 @@ export async function upgradePlugin(
     }
   }
 
-  await runComponentSequence(install, newPayload, deps);
+  await runComponentSequence(install, newPayload, args.actor, deps);
 
   // Re-auth rule: scope broadening or a new auth domain invalidates
   // existing app-level grants. The engine owns this transition; U6 owns
@@ -888,19 +1268,30 @@ export async function uninstallPlugin(
     await deps.store.deleteActivation(activation.id);
   }
 
-  // 2./3. Components, skills before MCP rows (teardown order).
+  // 2./3. Components, skills before MCP rows, infra destroy jobs last
+  // (teardown order). Infra teardown is ASYNC: the DESTROY plan job goes
+  // through the existing approval gate, the component row survives with
+  // the job linked, and read-time reconciliation deletes the rows (and
+  // the install) once the job succeeds. Re-running uninstall re-drives.
   const rows = await deps.store.listComponents(install.id);
   const ordered = [...rows].sort(
     (a, b) => runOrder(a.component_type) - runOrder(b.component_type),
   );
   const failures: string[] = [];
+  let infraInFlight = false;
   for (const row of ordered) {
     const manifestComponent = pinnedPayload
       ? findManifestComponent(pinnedPayload, row.component_key)
       : null;
     try {
-      await teardownComponent(install, row, manifestComponent, deps);
-      await deps.store.deleteComponent(row.id);
+      const outcome = await removeComponentRow(
+        install,
+        row,
+        manifestComponent,
+        args.actor,
+        deps,
+      );
+      if (outcome === "in_flight") infraInFlight = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${row.component_key}: ${message}`);
@@ -916,6 +1307,15 @@ export async function uninstallPlugin(
     // uninstall mutation re-drives the remaining teardown idempotently.
     const updated = await deps.store.updateInstall(install.id, {
       lastError: `Uninstall incomplete: ${failures.join("; ")}`,
+    });
+    return updated ?? install;
+  }
+
+  if (infraInFlight) {
+    // Destroy job(s) pending approval/apply — hold at 'uninstalling';
+    // reconcileInstallStatus completes the deletion when they succeed.
+    const updated = await deps.store.updateInstall(install.id, {
+      lastError: null,
     });
     return updated ?? install;
   }

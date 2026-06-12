@@ -47,12 +47,16 @@ export function terminalJobStatus(status: string): boolean {
   return ["succeeded", "failed", "rejected"].includes(status);
 }
 
-export function appDisplayName(key: ManagedAppKey): string {
+// Key-agnostic (accepts any app key string): plugin-created deployment jobs
+// flow through the same plan dialog, so these no longer assume the closed
+// ManagedAppKey union. Known keys keep their curated names; unknown keys
+// fall back to the key itself / DESTROY <KEY>.
+export function appDisplayName(key: string): string {
   if (key === "twenty") return "Twenty CRM";
-  return "Cognee";
+  if (key === "cognee") return "Cognee";
+  return key;
 }
 
-export function destructiveConfirmationFor(key: ManagedAppKey): string {
-  if (key === "twenty") return "DESTROY TWENTY";
-  return "DESTROY COGNEE";
+export function destructiveConfirmationFor(key: string): string {
+  return `DESTROY ${key.toUpperCase()}`;
 }

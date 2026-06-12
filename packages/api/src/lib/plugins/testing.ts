@@ -9,6 +9,7 @@
  */
 
 import type { EmitAuditEventInput } from "../compliance/emit.js";
+import type { PluginDeploymentJobSnapshot } from "./deployment-job-read.js";
 import type { PluginSecretsClient } from "./secrets.js";
 import type {
   CreateInstallInput,
@@ -53,6 +54,11 @@ export interface InMemoryPluginEngineStore extends PluginEngineStore {
   components: Map<string, PluginComponentRow>;
   activations: Map<string, UserPluginActivationRow>;
   tokens: Map<string, UserPluginActivationTokenRow>;
+  /** Deployment-job snapshots keyed by job id (U11 infra reconciliation). */
+  deploymentJobs: Map<
+    string,
+    PluginDeploymentJobSnapshot & { tenantId: string }
+  >;
   /** Audit events written "transactionally" with install writes. */
   audits: EmitAuditEventInput[];
   seedInstall(
@@ -78,6 +84,13 @@ export interface InMemoryPluginEngineStore extends PluginEngineStore {
       secret_ref: string;
     },
   ): UserPluginActivationTokenRow;
+  seedDeploymentJob(
+    partial: Partial<PluginDeploymentJobSnapshot> & {
+      id: string;
+      tenantId: string;
+      status: string;
+    },
+  ): PluginDeploymentJobSnapshot & { tenantId: string };
 }
 
 interface CreateInstallSeed {
@@ -96,6 +109,10 @@ export function createInMemoryPluginEngineStore(): InMemoryPluginEngineStore {
   const components = new Map<string, PluginComponentRow>();
   const activations = new Map<string, UserPluginActivationRow>();
   const tokens = new Map<string, UserPluginActivationTokenRow>();
+  const deploymentJobs = new Map<
+    string,
+    PluginDeploymentJobSnapshot & { tenantId: string }
+  >();
   const audits: EmitAuditEventInput[] = [];
 
   function installRow(
@@ -124,6 +141,7 @@ export function createInMemoryPluginEngineStore(): InMemoryPluginEngineStore {
     components,
     activations,
     tokens,
+    deploymentJobs,
     audits,
 
     seedInstall(partial) {
@@ -388,6 +406,28 @@ export function createInMemoryPluginEngineStore(): InMemoryPluginEngineStore {
 
     async deleteActivation(activationId) {
       activations.delete(activationId);
+    },
+
+    seedDeploymentJob(partial) {
+      const row: PluginDeploymentJobSnapshot & { tenantId: string } = {
+        operation: "ENABLE",
+        appKey: "twenty",
+        applicationId: null,
+        errorMessage: null,
+        evidenceBucket: null,
+        evidencePrefix: null,
+        latestEvent: null,
+        ...partial,
+      };
+      deploymentJobs.set(row.id, row);
+      return row;
+    },
+
+    async getDeploymentJob(tenantId, jobId) {
+      const row = deploymentJobs.get(jobId);
+      if (!row || row.tenantId !== tenantId) return null;
+      const { tenantId: _tenantId, ...snapshot } = row;
+      return { ...snapshot };
     },
   };
 

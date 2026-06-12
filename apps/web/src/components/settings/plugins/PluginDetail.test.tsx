@@ -23,6 +23,9 @@ const { mocks, queryDocs, tenantState } = vi.hoisted(() => ({
     SettingsActivatePluginMutation: Symbol("activatePlugin"),
     SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
     SettingsInstallPluginMutation: Symbol("installPlugin"),
+    SettingsManagedApplicationDeploymentQuery: Symbol(
+      "managedApplicationDeployment",
+    ),
     SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
     SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
     SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
@@ -73,6 +76,25 @@ vi.mock("@tanstack/react-router", () => ({
   useParams: () => ({ pluginKey: "lastmile" }),
 }));
 
+// The plan dialog is the EXISTING managed-applications approval surface —
+// PluginDetail only hands the linked job to it. Stubbed here so the test
+// asserts the handoff (job id + open state), not the dialog internals.
+vi.mock(
+  "@/components/settings/managed-applications/ManagedApplicationPlanDialog",
+  () => ({
+    ManagedApplicationPlanDialog: ({
+      job,
+      open,
+    }: {
+      job?: { id: string } | null;
+      open: boolean;
+    }) =>
+      open ? (
+        <div data-testid="plan-dialog">{job ? job.id : "no-job"}</div>
+      ) : null,
+  }),
+);
+
 import { PluginDetail } from "./PluginDetail";
 
 const refreshCatalog = vi.fn();
@@ -108,6 +130,15 @@ function mockQueries({
       return [
         { data: { myPluginActivations: activations }, fetching: false },
         refreshActivations,
+      ];
+    }
+    if (query === queryDocs.SettingsManagedApplicationDeploymentQuery) {
+      return [
+        {
+          data: { managedApplicationDeployment: deploymentJob },
+          fetching: false,
+        },
+        vi.fn(),
       ];
     }
     return [{ fetching: false }, vi.fn()];
@@ -265,6 +296,38 @@ describe("PluginDetail", () => {
       });
     });
   });
+
+  it("renders the Review-deployment-plan handoff for awaiting_approval and opens the dialog with the linked job", async () => {
+    mockQueries({ install: awaitingApprovalInstall });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("Awaiting approval")).toBeTruthy();
+    const review = screen.getByRole("button", {
+      name: /review deployment plan/i,
+    });
+    expect(review).toBeTruthy();
+    expect(screen.queryByTestId("plan-dialog")).toBeNull();
+
+    fireEvent.click(review);
+
+    // The dialog receives the deployment job linked from the infra
+    // component's handler_ref.
+    const dialog = await screen.findByTestId("plan-dialog");
+    expect(dialog.textContent).toBe("job-77");
+  });
+
+  it("non-operators see the pending-approval explanation without the review button", () => {
+    tenantState.isOperator = false;
+    mockQueries({ install: awaitingApprovalInstall, activations: [] });
+    render(<PluginDetail />);
+
+    expect(
+      screen.getByText(/an operator must review and approve/i),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /review deployment plan/i }),
+    ).toBeNull();
+  });
 });
 
 const baseInstall = {
@@ -294,6 +357,41 @@ const baseInstall = {
       lastError: "S3 prefix seed failed",
     },
   ],
+};
+
+const awaitingApprovalInstall = {
+  ...baseInstall,
+  state: "awaiting_approval",
+  components: [
+    ...baseInstall.components.map((component) => ({
+      ...component,
+      state: "provisioned",
+      lastError: null,
+    })),
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-3",
+      componentKey: "twenty-infra",
+      componentType: "infrastructure",
+      state: "pending",
+      handlerRef: {
+        managedAppKey: "twenty",
+        managedApplicationId: "app-1",
+        deploymentJobId: "job-77",
+        operation: "ENABLE",
+        attempt: 1,
+      },
+      lastError: null,
+    },
+  ],
+};
+
+const deploymentJob = {
+  __typename: "ManagedApplicationDeploymentJob" as const,
+  id: "job-77",
+  appKey: "twenty",
+  operation: "ENABLE",
+  status: "awaiting_approval",
 };
 
 const needsReauthActivation = {
