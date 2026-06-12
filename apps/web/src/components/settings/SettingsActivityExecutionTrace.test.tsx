@@ -77,6 +77,7 @@ function makeTurn(seed: TurnSeed) {
     finishedAt: "2026-06-11T10:00:30Z",
     totalCost: 0.01,
     runtimeType: "Pi",
+    invocationSource: "chat_message",
     resultJson: null,
     usageJson: JSON.stringify({
       model: "kimi-k2.5",
@@ -180,5 +181,40 @@ describe("ExecutionTrace — Agent step system prompt", () => {
       /No system prompt was captured for this turn/i,
     );
     expect(screen.queryByTestId("codemirror")).toBeNull();
+  });
+});
+
+describe("ExecutionTrace — non-redundant turn metadata", () => {
+  it("drops the entire expanded metadata block (ID/Started/Finished/Source/Runtime)", () => {
+    mockUrql([makeTurn({ id: "turn-meta", systemPrompt: "P" })]);
+    const { container } = render(
+      <ExecutionTrace threadId="thread-1" tenantId="tenant-1" />,
+    );
+
+    const text = container.textContent ?? "";
+    // The whole metadata row was redundant with the collapsed header, so the
+    // expanded view no longer repeats any of it.
+    expect(text).not.toContain("ID:");
+    expect(text).not.toContain("Started:");
+    expect(text).not.toContain("Finished:");
+    expect(text).not.toContain("Source:");
+    expect(text).not.toContain("Runtime:");
+  });
+
+  it("drops the Execution label but still renders the step timeline", () => {
+    mockUrql([makeTurn({ id: "turn-exec", systemPrompt: "P" })]);
+    const { container } = render(
+      <ExecutionTrace threadId="thread-1" tenantId="tenant-1" />,
+    );
+
+    const text = container.textContent ?? "";
+    // The "Execution (N steps)" label and the duplicated token/cost suffix
+    // are both gone — the timeline rows speak for themselves.
+    expect(text).not.toMatch(/Execution \(/i);
+    expect(text).not.toContain("in +");
+    // The timeline itself still renders (one LLM/agent step for this turn).
+    expect(
+      container.querySelectorAll('[data-timeline-event-type="llm"]').length,
+    ).toBeGreaterThan(0);
   });
 });
