@@ -22,10 +22,26 @@ import {
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
 import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
+import { requireTenantAdmin } from "../core/authz.js";
+import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Resolve the caller's tenant for read-path scoping. `ctx.auth.tenantId`
+ * is null for Google-federated users until the Cognito pre-token trigger
+ * lands, so fall back to the DB-backed resolver
+ * (docs/solutions/best-practices/every-admin-mutation-requires-requiretenantadmin-2026-04-22.md).
+ * Returns null when no tenant resolves; callers must fail closed
+ * (empty/null result, no side effects).
+ */
+async function resolveReadTenantId(
+  ctx: GraphQLContext,
+): Promise<string | null> {
+  return ctx.auth?.tenantId ?? (await resolveCallerTenantId(ctx));
+}
 
 // Convert PG row → GraphQL camelCase. Drizzle returns snake_case columns;
 // GraphQL schema uses camelCase. Keep this surgical (not a generic util).
@@ -255,19 +271,28 @@ function testCaseToGraphql(row: Record<string, unknown>) {
 const evalSummary = async (
   _p: any,
   args: { tenantId: string },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId || tenantId !== args.tenantId) {
+    return {
+      totalRuns: 0,
+      latestPassRate: null,
+      avgPassRate: null,
+      regressionCount: 0,
+    };
+  }
   const [agg] = await db
     .select({
       totalRuns: sql<number>`COUNT(*)::int`,
       latestPassRate: sql<
         number | null
-      >`(SELECT pass_rate::float FROM eval_runs WHERE tenant_id = ${args.tenantId} AND status = 'completed' ORDER BY completed_at DESC LIMIT 1)`,
+      >`(SELECT pass_rate::float FROM eval_runs WHERE tenant_id = ${tenantId} AND status = 'completed' ORDER BY completed_at DESC LIMIT 1)`,
       avgPassRate: sql<number | null>`AVG(pass_rate)::float`,
       regressionCount: sql<number>`COUNT(*) FILTER (WHERE regression = true)::int`,
     })
     .from(evalRuns)
-    .where(eq(evalRuns.tenant_id, args.tenantId));
+    .where(eq(evalRuns.tenant_id, tenantId));
   return {
     totalRuns: agg?.totalRuns ?? 0,
     latestPassRate: agg?.latestPassRate ?? null,
@@ -283,11 +308,15 @@ const evalRunsQuery = async (
     limit?: number | null;
     offset?: number | null;
   },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId || tenantId !== args.tenantId) {
+    return { items: [], totalCount: 0 };
+  }
   const limit = Math.min(args.limit ?? 25, 100);
   const offset = args.offset ?? 0;
-  const where = eq(evalRuns.tenant_id, args.tenantId);
+  const where = eq(evalRuns.tenant_id, tenantId);
 
   const [{ totalCount }] = await db
     .select({ totalCount: sql<number>`COUNT(*)::int` })
@@ -322,7 +351,9 @@ const evalRunsQuery = async (
   };
 };
 
-const evalRun = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
+const evalRun = async (_p: any, args: { id: string }, ctx: GraphQLContext) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId) return null;
   const [row] = await db
     .select({
       run: evalRuns,
@@ -330,7 +361,7 @@ const evalRun = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
     })
     .from(evalRuns)
     .leftJoin(agents, eq(evalRuns.agent_id, agents.id))
-    .where(eq(evalRuns.id, args.id));
+    .where(and(eq(evalRuns.id, args.id), eq(evalRuns.tenant_id, tenantId)));
   if (!row) return null;
   const progressByRunId = await loadEvalRunProgress([args.id]);
   return runToGraphql(
@@ -345,12 +376,14 @@ const evalRun = async (_p: any, args: { id: string }, _ctx: GraphQLContext) => {
 const evalRunResults = async (
   _p: any,
   args: { runId: string },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId) return [];
   const [run] = await db
     .select()
     .from(evalRuns)
-    .where(eq(evalRuns.id, args.runId));
+    .where(and(eq(evalRuns.id, args.runId), eq(evalRuns.tenant_id, tenantId)));
   if (!run) return [];
 
   const rows = await db
@@ -432,8 +465,20 @@ const evalRunResults = async (
 export const evalResultSpans = async (
   _p: any,
   args: { runId: string; testCaseId: string },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  // The resolver row lookup is the only tenant boundary here — the
+  // downstream CloudWatch span fetch has no tenant dimension. Refuse to
+  // resolve a session id (and never issue the fetch) unless the run
+  // belongs to the caller's tenant.
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId) return [];
+  const [run] = await db
+    .select({ id: evalRuns.id })
+    .from(evalRuns)
+    .where(and(eq(evalRuns.id, args.runId), eq(evalRuns.tenant_id, tenantId)));
+  if (!run) return [];
+
   const [row] = await db
     .select({ agentSessionId: evalResults.agent_session_id })
     .from(evalResults)
@@ -471,8 +516,10 @@ export const evalResultSpans = async (
 const evalTimeSeries = async (
   _p: any,
   args: { tenantId: string; days?: number | null },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId || tenantId !== args.tenantId) return [];
   const days = args.days ?? 30;
   const points = await db.execute(sql`
 		SELECT
@@ -482,7 +529,7 @@ const evalTimeSeries = async (
 			SUM(passed)::int AS passed,
 			SUM(failed)::int AS failed
 		FROM eval_runs
-		WHERE tenant_id = ${args.tenantId}
+		WHERE tenant_id = ${tenantId}
 		  AND status = 'completed'
 		  AND completed_at >= NOW() - (${days} || ' days')::interval
 		GROUP BY 1
@@ -501,16 +548,22 @@ const evalTimeSeries = async (
 const evalTestCasesQuery = async (
   _p: any,
   args: { tenantId: string; category?: string | null; search?: string | null },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  // Seeding is a write triggered by a read — never let it land in a
+  // foreign tenant. Resolve the caller's tenant first and refuse (empty
+  // result, no seed) on mismatch.
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId || tenantId !== args.tenantId) return [];
+
   // Auto-seed the Thinkwork starter pack on first visit. We check for the
   // presence of ANY yaml-seed row for this tenant — if zero, run the seed.
   // The partial unique index makes this idempotent on the off-chance two
   // concurrent first-visit queries race. Seeded rows then show up
   // immediately in the same response.
-  await ensureTenantSeeded(args.tenantId);
+  await ensureTenantSeeded(tenantId);
 
-  const conditions = [eq(evalTestCases.tenant_id, args.tenantId)];
+  const conditions = [eq(evalTestCases.tenant_id, tenantId)];
   if (args.category) conditions.push(eq(evalTestCases.category, args.category));
   if (args.search)
     conditions.push(
@@ -574,12 +627,16 @@ async function ensureTenantSeeded(tenantId: string): Promise<void> {
 const evalTestCase = async (
   _p: any,
   args: { id: string },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId) return null;
   const [row] = await db
     .select({ tc: evalTestCases })
     .from(evalTestCases)
-    .where(eq(evalTestCases.id, args.id));
+    .where(
+      and(eq(evalTestCases.id, args.id), eq(evalTestCases.tenant_id, tenantId)),
+    );
   return row
     ? testCaseToGraphql(row.tc as unknown as Record<string, unknown>)
     : null;
@@ -588,8 +645,20 @@ const evalTestCase = async (
 const evalTestCaseHistory = async (
   _p: any,
   args: { testCaseId: string; limit?: number | null },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId) return [];
+  const [testCase] = await db
+    .select({ id: evalTestCases.id })
+    .from(evalTestCases)
+    .where(
+      and(
+        eq(evalTestCases.id, args.testCaseId),
+        eq(evalTestCases.tenant_id, tenantId),
+      ),
+    );
+  if (!testCase) return [];
   const limit = Math.min(args.limit ?? 20, 100);
   const rows = await db
     .select({ result: evalResults })
@@ -641,8 +710,12 @@ async function resolveRunTarget(args: {
 const startEvalRun = async (
   _p: any,
   args: { tenantId: string; input: StartEvalRunInput },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  // Gate before ANY side effect — a denied caller must leave zero rows
+  // and never reach the model-catalog probe (arg-derived: no row yet).
+  await requireTenantAdmin(ctx, args.tenantId);
+
   if (args.input.computerId) {
     throw new Error(
       "Computer eval targets are no longer supported. Evals run directly against AgentCore Agents.",
@@ -749,8 +822,16 @@ async function invokeEvalRunner(
 const cancelEvalRun = async (
   _p: any,
   args: { id: string },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const [existing] = await db
+    .select({ tenantId: evalRuns.tenant_id })
+    .from(evalRuns)
+    .where(eq(evalRuns.id, args.id));
+  if (!existing) throw new Error(`run ${args.id} not found`);
+  // Row-derived gate — fails FORBIDDEN before the status write when the
+  // run belongs to another tenant.
+  await requireTenantAdmin(ctx, existing.tenantId);
   const [row] = await db
     .update(evalRuns)
     .set({ status: "cancelled", completed_at: new Date() })
@@ -763,8 +844,15 @@ const cancelEvalRun = async (
 const deleteEvalRun = async (
   _p: any,
   args: { id: string },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const [existing] = await db
+    .select({ tenantId: evalRuns.tenant_id })
+    .from(evalRuns)
+    .where(eq(evalRuns.id, args.id));
+  // Deleting a missing row stays an idempotent no-op (prior behavior).
+  if (!existing) return true;
+  await requireTenantAdmin(ctx, existing.tenantId);
   await db.delete(evalRuns).where(eq(evalRuns.id, args.id));
   return true;
 };
@@ -787,8 +875,10 @@ interface CreateTestCaseInput {
 const createEvalTestCase = async (
   _p: any,
   args: { tenantId: string; input: CreateTestCaseInput },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  // Arg-derived gate — no row exists yet.
+  await requireTenantAdmin(ctx, args.tenantId);
   const [row] = await db
     .insert(evalTestCases)
     .values({
@@ -811,8 +901,14 @@ interface UpdateTestCaseInput extends Partial<CreateTestCaseInput> {}
 const updateEvalTestCase = async (
   _p: any,
   args: { id: string; input: UpdateTestCaseInput },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const [existing] = await db
+    .select({ tenantId: evalTestCases.tenant_id })
+    .from(evalTestCases)
+    .where(eq(evalTestCases.id, args.id));
+  if (!existing) throw new Error(`test case ${args.id} not found`);
+  await requireTenantAdmin(ctx, existing.tenantId);
   const update: Record<string, unknown> = { updated_at: new Date() };
   if (args.input.name !== undefined) update.name = args.input.name;
   if (args.input.category !== undefined) update.category = args.input.category;
@@ -837,8 +933,15 @@ const updateEvalTestCase = async (
 const deleteEvalTestCase = async (
   _p: any,
   args: { id: string },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const [existing] = await db
+    .select({ tenantId: evalTestCases.tenant_id })
+    .from(evalTestCases)
+    .where(eq(evalTestCases.id, args.id));
+  // Deleting a missing row stays an idempotent no-op (prior behavior).
+  if (!existing) return true;
+  await requireTenantAdmin(ctx, existing.tenantId);
   await db.delete(evalTestCases).where(eq(evalTestCases.id, args.id));
   return true;
 };
@@ -846,8 +949,10 @@ const deleteEvalTestCase = async (
 const seedEvalTestCases = async (
   _p: any,
   args: { tenantId: string; categories?: string[] | null },
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  // Arg-derived gate — seeding writes rows into the named tenant.
+  await requireTenantAdmin(ctx, args.tenantId);
   const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } =
     await import("../../../lib/eval-seeds.js");
   const filtered =
