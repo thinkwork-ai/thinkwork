@@ -184,6 +184,15 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
         "Mobile exposes one default `mcp` gateway for list/search/call over tenant MCP tools; direct per-tool registration is opt-in by allowlist.",
     },
     {
+      id: "fetch-workspace-source-tool",
+      status: "deferred",
+      upstreamSurface: "fetch_workspace_source platform extension",
+      mobileSurface: "apps/mobile/lib/agent/workspace-cache.ts",
+      ownerUnit: "2026-06-12-002 U5",
+      notes:
+        "TODO: cloud-only for now. The U4 fetch-source endpoint authenticates with the platform bearer secret and returns raw S3 keys the runtime downloads itself; the mobile host signs in with per-user Cognito tokens (the platform secret must never ship on-device) and holds no S3 credentials, so it needs a Cognito-authed platform facade that streams file content (the platform-tools-client pattern) before it can mount fetched folders read-only into the workspace cache partition and append the local diff baseline.",
+    },
+    {
       id: "extension-lifecycle-loop-dispatch",
       status: "implemented",
       upstreamSurface: "agent/tool lifecycle extension events",

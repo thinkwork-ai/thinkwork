@@ -50,6 +50,7 @@ import {
   createBrowserAutomationExtension,
   createContextEngineExtension,
   createDelegationExtension,
+  createFetchWorkspaceSourceExtension,
   createKnowledgeGraphExtension,
   createSkillsExtension,
   createMemoryExtension,
@@ -62,6 +63,7 @@ import {
   formatWorkspaceSkills,
   toExtensionFactory,
   type ExtensionFactory,
+  type FetchWorkspaceSourceHost,
   type ProviderBundle,
   type ThinkworkExtension,
 } from "@thinkwork/pi-extensions";
@@ -71,7 +73,7 @@ import {
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import { LambdaClient } from "@aws-sdk/client-lambda";
-import { S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   BUILTIN_TOOL_NAMES,
   collectToolCosts,
@@ -148,6 +150,7 @@ import {
 import { resolveSandboxFactory } from "./runtime/sandbox-factory.js";
 import { bootstrapWorkspace } from "./runtime/bootstrap-workspace.js";
 import {
+  appendFetchedFilesToWorkspaceBaseline,
   collectLocalWorkspaceChangedFiles,
   createLocalWorkspaceBaseline,
 } from "./runtime/workspace-diff.js";
@@ -968,6 +971,14 @@ export interface BuildInvocationResourcesArgs {
   delegationProvider?: DelegationProvider;
   /** Optional host seam for TOOLS.md model-routed child execution. */
   childModelCaller?: ChildModelCaller;
+  /**
+   * Plan 2026-06-12-002 U5 — host seam for `fetch_workspace_source`:
+   * workspace root + S3 download closure + diff-baseline append. Built by
+   * `handleInvocation` AFTER the workspace bootstrap/baseline exist, so the
+   * extension can mount fetched folders without polluting the turn diff.
+   * Absent (e.g. no workspace bucket) → the tool is not registered.
+   */
+  fetchWorkspaceSourceHost?: FetchWorkspaceSourceHost;
 }
 
 /**
@@ -989,6 +1000,24 @@ export class DirectToolsValidationError extends Error {
     super(`directTools_validation_failed: ${summary}`);
     this.name = "DirectToolsValidationError";
   }
+}
+
+/**
+ * The ACTIVE space's runtime folder segment, derived from the dispatch
+ * payload's `turn_context.spaceSlug` exactly like the renderer's
+ * `runtimeFolderSegment` (slashes collapse to dashes). The fetch tool uses it
+ * to refuse remounting the already-hydrated active Space folder read-only.
+ */
+function activeSpaceFolderSegment(turnContext: unknown): string {
+  const record =
+    turnContext &&
+    typeof turnContext === "object" &&
+    !Array.isArray(turnContext)
+      ? (turnContext as Record<string, unknown>)
+      : {};
+  const slug = asString(record.spaceSlug);
+  if (!slug) return "";
+  return slug.replace(/^\/+|\/+$/g, "").replaceAll("/", "-");
 }
 
 /**
@@ -1110,6 +1139,40 @@ export async function buildInvocationResources(
           threadId: args.identity.threadId,
           threadTurnId: asString(args.payload.thread_turn_id),
         },
+      }),
+    );
+  }
+
+  // fetch_workspace_source — mid-turn read-only workspace navigation (plan
+  // 2026-06-12-002 U5). Gated on the dispatch payload flag (U1 parity lib
+  // emits it on all three builders) AND the task-status-style wiring gate
+  // (never in eval mode; requires the API url/secret + active turn id) AND
+  // the host seam built by handleInvocation once a workspace bucket +
+  // baseline exist. `addExtension` folds the tool name into the allowlist —
+  // omit that and the tool registers but is silently gated from the model.
+  if (
+    args.payload.fetch_workspace_source_enabled === true &&
+    args.payload.eval_mode !== true &&
+    args.identity.tenantId &&
+    args.identity.threadId &&
+    asString(args.payload.thinkwork_api_url) &&
+    asString(args.payload.thinkwork_api_secret) &&
+    asString(args.payload.thread_turn_id) &&
+    args.fetchWorkspaceSourceHost
+  ) {
+    addExtension(
+      createFetchWorkspaceSourceExtension({
+        fetchSourceConfig: {
+          apiUrl: asString(args.payload.thinkwork_api_url),
+          apiSecret: asString(args.payload.thinkwork_api_secret),
+          tenantId: args.identity.tenantId,
+          threadId: args.identity.threadId,
+          threadTurnId: asString(args.payload.thread_turn_id),
+          activeSpaceFolder: activeSpaceFolderSegment(
+            args.payload.turn_context,
+          ),
+        },
+        host: args.fetchWorkspaceSourceHost,
       }),
     );
   }
@@ -2068,6 +2131,34 @@ export async function handleInvocation(
     deps.connectMcpServerFactory ??
     createConnectMcpServer({ cleanup, fetch: scrubbingFetch });
 
+  // fetch_workspace_source host seam (plan 2026-06-12-002 U5) — only when a
+  // workspace bucket + turn baseline exist (the tool mounts into the local
+  // workspace and appends fetched contents to the diff baseline so the
+  // end-of-turn diff reports zero changes for fetched paths).
+  const fetchWorkspaceSourceHost: FetchWorkspaceSourceHost | undefined =
+    workspaceBucket && workspaceBaseline
+      ? (() => {
+          const fetchSourceS3 = deps.s3ClientFactory(env.awsRegion);
+          return {
+            workspaceDir: env.workspaceDir,
+            downloadObject: async (key: string) => {
+              const object = await fetchSourceS3.send(
+                new GetObjectCommand({ Bucket: workspaceBucket, Key: key }),
+              );
+              const bytes = await object.Body?.transformToByteArray();
+              if (!bytes) {
+                throw new Error(`Empty S3 body for workspace source ${key}`);
+              }
+              return bytes;
+            },
+            appendToBaseline: (files) => {
+              if (!workspaceBaseline) return;
+              appendFetchedFilesToWorkspaceBaseline(workspaceBaseline, files);
+            },
+          };
+        })()
+      : undefined;
+
   // Build tools last so any setup failure above short-circuits before
   // we touch the HandleStore.
   let bundle: InvocationResourceBundle;
@@ -2085,6 +2176,7 @@ export async function handleInvocation(
       handleStore,
       mcpJsonConfig,
       mcpRegistry,
+      fetchWorkspaceSourceHost,
       childModelCaller:
         deps.childModelCaller ??
         createBedrockChildModelCaller(

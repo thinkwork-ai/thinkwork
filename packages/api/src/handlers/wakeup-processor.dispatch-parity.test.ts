@@ -187,6 +187,28 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(withoutSpace.turn_context).toBeUndefined();
   });
 
+  it("enables fetch_workspace_source when the API wiring + turn + rendered workspace are present (plan 2026-06-12-002 U5)", () => {
+    const fields = buildAgentDispatchControlFields(baseArgs());
+    expect(fields.fetch_workspace_source_enabled).toBe(true);
+  });
+
+  it("disables fetch_workspace_source without a rendered workspace prefix or active turn", () => {
+    const withoutPrefix = buildAgentDispatchControlFields(
+      baseArgs({ renderedWorkspacePrefix: undefined }),
+    );
+    expect(withoutPrefix.fetch_workspace_source_enabled).toBe(false);
+
+    const withoutTurn = buildAgentDispatchControlFields(
+      baseArgs({ threadTurnId: undefined }),
+    );
+    expect(withoutTurn.fetch_workspace_source_enabled).toBe(false);
+
+    const withoutSecret = buildAgentDispatchControlFields(
+      baseArgs({ apiAuthSecret: "" }),
+    );
+    expect(withoutSecret.fetch_workspace_source_enabled).toBe(false);
+  });
+
   it("passes model routing policy and approved model ids through unchanged", () => {
     const routes = [
       {

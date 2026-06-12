@@ -35,6 +35,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "approved_model_ids",
   "rendered_workspace_prefix",
   "turn_context",
+  "fetch_workspace_source_enabled",
   "finalize_callback_url",
   "finalize_callback_secret",
   "activity_callback_url",
@@ -85,9 +86,7 @@ export function buildAgentDispatchControlFields(
   const apiBase = args.thinkworkApiUrl
     ? args.thinkworkApiUrl.replace(/\/$/, "")
     : "";
-  const callbacksReady = Boolean(
-    apiBase && args.threadId && args.threadTurnId,
-  );
+  const callbacksReady = Boolean(apiBase && args.threadId && args.threadTurnId);
 
   return {
     // Extension gate: the runtime registers ask_user_question / task-status
@@ -107,6 +106,19 @@ export function buildAgentDispatchControlFields(
           renderedWorkspacePrefix: args.renderedWorkspacePrefix,
         }
       : undefined,
+    // fetch_workspace_source gate (plan 2026-06-12-002 U5). Derived HERE so
+    // every dispatch builder ships it identically: the runtime additionally
+    // gates on eval_mode and on its own workspace-bucket host seam, so the
+    // flag only asserts the API-side wiring is complete — bearer wiring, an
+    // active turn for fetch-event snapshots, and a rendered (projected)
+    // workspace for the routing tree the tool navigates.
+    fetch_workspace_source_enabled: Boolean(
+      args.thinkworkApiUrl &&
+      args.apiAuthSecret &&
+      args.threadId &&
+      args.threadTurnId &&
+      args.renderedWorkspacePrefix,
+    ),
     // Finalize-callback opt-in (plan 2026-05-22-006 U3) — chat-path only,
     // see `includeFinalizeCallback`.
     finalize_callback_url:
