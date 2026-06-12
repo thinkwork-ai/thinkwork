@@ -1144,7 +1144,17 @@ variable "company_brain_source_agent_model_id" {
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
+variable "wiki_aggregation_pass_enabled" {
+  description = "Feature flag for the wiki aggregation pass (parent section rollups + section promotion). 'true' to enable, anything else disables. Pinned in terraform so unrelated deploys don't reset it."
+  type        = string
+  default     = "true"
+}
 
+variable "wiki_deterministic_linking_enabled" {
+  description = "Feature flag for deterministic compile-time link emission — parent-expander-derived city/journal links plus entity↔entity co-mention links. 'true' to enable, anything else disables. Precision-bounded: rollback is `DELETE FROM wiki_page_links WHERE context LIKE 'deterministic:%' OR context LIKE 'co_mention:%'`."
+  type        = string
+  default     = "true"
+}
 
 variable "google_places_api_key" {
   description = "Google Places API (New) key used by wiki-compile for POI → city/state/country hierarchy enrichment. Stored as SSM SecureString at /thinkwork/<stage>/google-places/api-key. Empty string = parameter created with a placeholder; operator populates via `aws ssm put-parameter --overwrite`. Compile gracefully degrades to metadata-only rows when the key is absent — never fails compile."

@@ -159,6 +159,7 @@ beforeEach(() => {
   mockLambdaSend.mockResolvedValue({});
   delete process.env.WIKI_COMPILE_FN;
   delete process.env.STAGE;
+  delete process.env.WIKI_SOURCE;
 });
 
 function decodePayload(cmd: unknown): { jobId: string; modelId?: string } {
@@ -281,9 +282,162 @@ describe("assertCanAdminWikiScope", () => {
   });
 });
 
-// ─── compileWikiNow (tenant-routed unconditionally — U11 cutover) ───────────
+// ─── compileWikiNow ──────────────────────────────────────────────────────────
 
 describe("compileWikiNow", () => {
+  function makeJobRow(id: string) {
+    return {
+      id,
+      tenant_id: "t1",
+      owner_id: "a1",
+      dedupe_key: "t1:a1:1",
+      status: "pending",
+      trigger: "admin",
+      attempt: 0,
+      claimed_at: null,
+      started_at: null,
+      finished_at: null,
+      error: null,
+      metrics: null,
+      created_at: new Date("2026-04-18T00:00:00Z"),
+    };
+  }
+
+  it("enqueues the compile job and fire-and-forget invokes wiki-compile when admin", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-1"),
+    });
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(out.id).toBe("job-1");
+    expect(out.status).toBe("pending");
+    expect(out.trigger).toBe("admin");
+    expect(mockEnqueue).toHaveBeenCalledWith({
+      tenantId: "t1",
+      ownerId: "a1",
+      trigger: "admin",
+    });
+    await waitForLambdaSend();
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({ jobId: "job-1" });
+  });
+
+  it("refuses a cognito (end-user) caller with admin-only error", async () => {
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    await expect(
+      compileWikiNow(
+        {},
+        { tenantId: "t1", userId: "a1" },
+        makeCtx({ authType: "cognito" }),
+      ),
+    ).rejects.toThrow(/Admin-only/);
+    expect(mockEnqueue).not.toHaveBeenCalled();
+    expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+
+  it("forwards modelId in the Lambda payload when supplied", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-2"),
+    });
+    await compileWikiNow(
+      {},
+      {
+        tenantId: "t1",
+        userId: "a1",
+        modelId: "anthropic.claude-sonnet-4-6-v1:0",
+      },
+      makeCtx({ authType: "apikey" }),
+    );
+    await waitForLambdaSend();
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({
+      jobId: "job-2",
+      modelId: "anthropic.claude-sonnet-4-6-v1:0",
+    });
+  });
+
+  it("omits modelId from the Lambda payload when not supplied", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-3"),
+    });
+    await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    await waitForLambdaSend();
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({ jobId: "job-3" });
+  });
+
+  it("treats empty-string modelId as not provided", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-4"),
+    });
+    await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1", modelId: "" },
+      makeCtx({ authType: "apikey" }),
+    );
+    await waitForLambdaSend();
+    const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
+    expect(payload).toEqual({ jobId: "job-4" });
+  });
+
+  it("returns the job row even when the Lambda invoke fails (fire-and-forget)", async () => {
+    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
+    mockLambdaSend.mockRejectedValueOnce(new Error("Lambda throttled"));
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-5"),
+    });
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(out.id).toBe("job-5");
+    // The dedupe job row is the idempotency guarantee — the worker can pick
+    // it up via claimNextCompileJob if the Event-invoke fails.
+    await waitForLambdaSend();
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips the Lambda invoke when WIKI_COMPILE_FN and STAGE are both unset", async () => {
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: makeJobRow("job-6"),
+    });
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(out.id).toBe("job-6");
+    expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+});
+
+// ─── compileWikiNow — tenant scope / graph routing (plan 2026-06-09-004 U14) ─
+
+describe("compileWikiNow tenantScope", () => {
   function makeTenantJobRow(id: string) {
     return {
       id,
@@ -310,7 +464,7 @@ describe("compileWikiNow", () => {
     });
     const out = await compileWikiNow(
       {},
-      { tenantId: "t1" },
+      { tenantId: "t1", tenantScope: true },
       makeCtx({ authType: "apikey" }),
     );
     // Null owner round-trips without null-propagation — this is the
@@ -318,8 +472,6 @@ describe("compileWikiNow", () => {
     expect(out.id).toBe("tjob-1");
     expect(out.userId).toBeNull();
     expect(out.ownerId).toBeNull();
-    expect(out.status).toBe("pending");
-    expect(out.trigger).toBe("admin");
     expect(mockGraphEnqueue).toHaveBeenCalledWith({
       tenantId: "t1",
       trigger: "admin",
@@ -327,48 +479,62 @@ describe("compileWikiNow", () => {
     });
     expect(mockEnqueue).not.toHaveBeenCalled();
     await waitForLambdaSend();
-    // modelId never forwards — the materializer is deterministic.
+    // modelId never forwards on the graph path (deterministic compile).
     const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
     expect(payload).toEqual({ jobId: "tjob-1" });
   });
 
-  it("tenant-routes legacy per-owner client args (userId/ownerId/modelId ignored)", async () => {
+  it("ignores modelId and ownerId on the tenant-scope path", async () => {
     process.env.WIKI_COMPILE_FN = "wiki-compile-test";
     mockGraphEnqueue.mockResolvedValueOnce({
       inserted: true,
       job: makeTenantJobRow("tjob-2"),
     });
-    // Old client shape: per-owner args, no tenantScope.
-    const out = await compileWikiNow(
+    await compileWikiNow(
       {},
       {
         tenantId: "t1",
         ownerId: "a1",
-        userId: "a1",
         modelId: "anthropic.claude-sonnet-4-6-v1:0",
+        tenantScope: true,
       },
       makeCtx({ authType: "apikey" }),
     );
-    expect(out.ownerId).toBeNull();
-    expect(mockGraphEnqueue).toHaveBeenCalledTimes(1);
-    expect(mockEnqueue).not.toHaveBeenCalled();
     await waitForLambdaSend();
     const payload = decodePayload(mockLambdaSend.mock.calls[0][0]);
     expect(payload).toEqual({ jobId: "tjob-2" });
   });
 
-  it("tenant-routes with tenantScope explicitly set (back-compat)", async () => {
+  it("auto-routes EVERY compile tenant-level when WIKI_SOURCE=graph", async () => {
+    process.env.WIKI_SOURCE = "graph";
     mockGraphEnqueue.mockResolvedValueOnce({
       inserted: true,
       job: makeTenantJobRow("tjob-3"),
     });
+    // Old client shape: per-owner args, no tenantScope.
     const out = await compileWikiNow(
       {},
-      { tenantId: "t1", tenantScope: true },
+      { tenantId: "t1", ownerId: "a1" },
       makeCtx({ authType: "apikey" }),
     );
-    expect(out.id).toBe("tjob-3");
+    expect(out.ownerId).toBeNull();
     expect(mockGraphEnqueue).toHaveBeenCalledTimes(1);
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("keeps the per-owner planner path byte-identical when WIKI_SOURCE is unset", async () => {
+    mockAgentsRow.mockReturnValue([{ id: "a1", tenant_id: "t1" }]);
+    mockEnqueue.mockResolvedValueOnce({
+      inserted: true,
+      job: { ...makeTenantJobRow("job-7"), owner_id: "a1" },
+    });
+    const out = await compileWikiNow(
+      {},
+      { tenantId: "t1", userId: "a1" },
+      makeCtx({ authType: "apikey" }),
+    );
+    expect(out.id).toBe("job-7");
+    expect(mockGraphEnqueue).not.toHaveBeenCalled();
   });
 
   it("forwards forceNew as a dedupe discriminator", async () => {
@@ -378,7 +544,7 @@ describe("compileWikiNow", () => {
     });
     await compileWikiNow(
       {},
-      { tenantId: "t1", forceNew: true },
+      { tenantId: "t1", tenantScope: true, forceNew: true },
       makeCtx({ authType: "apikey" }),
     );
     expect(mockGraphEnqueue).toHaveBeenCalledWith(
@@ -388,52 +554,22 @@ describe("compileWikiNow", () => {
     );
   });
 
-  it("returns the job row even when the Lambda invoke fails (fire-and-forget)", async () => {
-    process.env.WIKI_COMPILE_FN = "wiki-compile-test";
-    mockLambdaSend.mockRejectedValueOnce(new Error("Lambda throttled"));
-    mockGraphEnqueue.mockResolvedValueOnce({
-      inserted: true,
-      job: makeTenantJobRow("tjob-5"),
-    });
-    const out = await compileWikiNow(
-      {},
-      { tenantId: "t1" },
-      makeCtx({ authType: "apikey" }),
-    );
-    expect(out.id).toBe("tjob-5");
-    // The dedupe job row is the idempotency guarantee — the worker can pick
-    // it up via claimNextCompileJob if the Event-invoke fails.
-    await waitForLambdaSend();
-    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
-  });
-
-  it("skips the Lambda invoke when WIKI_COMPILE_FN and STAGE are both unset", async () => {
-    mockGraphEnqueue.mockResolvedValueOnce({
-      inserted: true,
-      job: makeTenantJobRow("tjob-6"),
-    });
-    const out = await compileWikiNow(
-      {},
-      { tenantId: "t1" },
-      makeCtx({ authType: "apikey" }),
-    );
-    expect(out.id).toBe("tjob-6");
-    expect(mockLambdaSend).not.toHaveBeenCalled();
-  });
-
   it("refuses cognito (end-user) callers", async () => {
     await expect(
-      compileWikiNow({}, { tenantId: "t1" }, makeCtx({ authType: "cognito" })),
+      compileWikiNow(
+        {},
+        { tenantId: "t1", tenantScope: true },
+        makeCtx({ authType: "cognito" }),
+      ),
     ).rejects.toThrow(/Admin-only/);
     expect(mockGraphEnqueue).not.toHaveBeenCalled();
-    expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 
   it("refuses cross-tenant service callers", async () => {
     await expect(
       compileWikiNow(
         {},
-        { tenantId: "t-other" },
+        { tenantId: "t-other", tenantScope: true },
         makeCtx({ authType: "apikey", tenantId: "t1" }),
       ),
     ).rejects.toThrow(/tenant mismatch/);

@@ -15,9 +15,12 @@ import {
 } from "../brain/facet-types.js";
 import {
   composeTenantEntityPageBody,
+  findOrCreateTenantEntityPage,
   syncTenantEntityPageBodyFromSections,
   writeFacetSection,
 } from "../brain/repository.js";
+import type { OntologyCompileSnapshot } from "./compile-snapshot.js";
+import { facetTemplateKey } from "./compile-snapshot.js";
 import {
   resolveOntologyTemplates,
   type OntologyEntityPageTemplate,
@@ -69,6 +72,30 @@ export interface MaterializedSectionDraft {
   content: string;
   sources: FactCitation[];
   existingSection: MaterializerSection | null;
+}
+
+export interface PlannerBrainPageInput {
+  type: "entity" | "topic" | "decision";
+  entityTypeSlug?: string | null;
+  slug: string;
+  title: string;
+  aliases?: string[];
+  summary?: string | null;
+  source_refs?: string[];
+  sections: Array<{
+    slug: string;
+    facetSlug?: string | null;
+    heading: string;
+    body_md: string;
+    source_refs?: string[];
+  }>;
+}
+
+export interface PlannerBrainMaterializationResult {
+  pageId: string | null;
+  pageUpserted: boolean;
+  facetsWritten: number;
+  sourcesRetained: number;
 }
 
 const EMPTY_SUMMARY: OntologyMaterializationSummary = {
@@ -152,6 +179,85 @@ export async function materializeOntologyTemplatesForImpact(args: {
     }
   }
   return summary;
+}
+
+export async function materializePlannerPageToBrain(args: {
+  tenantId: string;
+  page: PlannerBrainPageInput;
+  snapshot: OntologyCompileSnapshot;
+  db?: DbLike;
+}): Promise<PlannerBrainMaterializationResult> {
+  if (!args.page.entityTypeSlug) {
+    return {
+      pageId: null,
+      pageUpserted: false,
+      facetsWritten: 0,
+      sourcesRetained: 0,
+    };
+  }
+
+  const db = args.db ?? defaultDb;
+  const page = await findOrCreateTenantEntityPage(
+    {
+      tenantId: args.tenantId,
+      type: args.page.type,
+      subtype: args.page.entityTypeSlug,
+      slug: args.page.slug,
+      title: args.page.title,
+      summary: args.page.summary ?? null,
+      aliases: args.page.aliases ?? [],
+    },
+    db,
+  );
+
+  let facetsWritten = 0;
+  let sourcesRetained = 0;
+  for (const section of args.page.sections) {
+    const facetSlug = section.facetSlug ?? section.slug;
+    const template = args.snapshot.facetTemplatesByKey.get(
+      facetTemplateKey({
+        entityTypeSlug: args.page.entityTypeSlug,
+        facetSlug,
+      }),
+    );
+    if (!template) continue;
+    const sourceRefs =
+      section.source_refs && section.source_refs.length > 0
+        ? section.source_refs
+        : (args.page.source_refs ?? []);
+    const sources: FactCitation[] = [...new Set(sourceRefs)]
+      .filter(Boolean)
+      .map((ref) => ({ kind: "hindsight_memory_unit", ref }));
+    if (sources.length === 0) continue;
+
+    await writeFacetSection(
+      {
+        tenantId: args.tenantId,
+        pageId: page.id,
+        facetType: template.facetType,
+        sectionSlug: template.slug,
+        heading: template.heading,
+        content: section.body_md,
+        sources,
+        position: template.position,
+        allowPromotion: true,
+      },
+      db,
+    );
+    facetsWritten += 1;
+    sourcesRetained += sources.length;
+  }
+
+  if (facetsWritten > 0) {
+    await syncTenantEntityPageBodyFromSections({ pageId: page.id, db });
+  }
+
+  return {
+    pageId: page.id,
+    pageUpserted: true,
+    facetsWritten,
+    sourcesRetained,
+  };
 }
 
 export async function materializeOntologyPage(args: {

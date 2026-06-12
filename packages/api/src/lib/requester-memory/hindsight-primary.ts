@@ -1,6 +1,10 @@
 import { getConfig } from "@thinkwork/runtime-config";
 import type { MemoryAdapter } from "../memory/adapter.js";
 import { HindsightAdapter } from "../memory/adapters/hindsight-adapter.js";
+import {
+  maybeEnqueuePostTurnCompile,
+  type PostTurnCompileResult,
+} from "../wiki/enqueue.js";
 
 export const REQUESTER_THREAD_DIGEST_CONTEXT =
   "thinkwork_requester_thread_digest";
@@ -8,6 +12,7 @@ export const REQUESTER_THREAD_DIGEST_CONTEXT =
 export type RequesterThreadDigestRetainResult = {
   status: "upserted" | "skipped" | "failed";
   documentId: string;
+  compileEnqueue?: PostTurnCompileResult;
   error?: string;
 };
 
@@ -23,6 +28,11 @@ export type RetainRequesterThreadMemoryDigestInput = {
 
 export type RetainRequesterThreadMemoryDigestDeps = {
   adapter?: Pick<MemoryAdapter, "kind" | "upsertMarkdownMemoryDocument"> | null;
+  enqueueCompile?: (input: {
+    tenantId: string;
+    ownerId: string;
+    adapterKind: string;
+  }) => Promise<PostTurnCompileResult>;
 };
 
 export async function retainRequesterThreadMemoryDigest(
@@ -70,12 +80,25 @@ export async function retainRequesterThreadMemoryDigest(
     };
   }
 
-  // No post-digest wiki-compile enqueue: retired at the U11 cutover (plan
-  // 2026-06-09-004) — the wiki compiles from the knowledge-graph mirror
-  // after each observations ingest run.
+  const enqueueCompile =
+    deps.enqueueCompile ??
+    ((args: { tenantId: string; ownerId: string; adapterKind: string }) =>
+      maybeEnqueuePostTurnCompile(args));
+  const compileEnqueue = await enqueueCompile({
+    tenantId: input.tenantId,
+    ownerId: input.userId,
+    adapterKind: adapter.kind,
+  }).catch(
+    (err): PostTurnCompileResult => ({
+      status: "error",
+      error: err instanceof Error ? err.message : String(err),
+    }),
+  );
+
   return {
     status: "upserted",
     documentId,
+    compileEnqueue,
   };
 }
 
