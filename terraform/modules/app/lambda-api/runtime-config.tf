@@ -74,11 +74,13 @@ resource "aws_secretsmanager_secret_version" "api_auth" {
   secret_id     = aws_secretsmanager_secret.api_auth.id
   secret_string = var.api_auth_secret
 
-  # Operator rotations via console/CLI shouldn't be clobbered on apply —
-  # same pattern as oauth-secrets.tf.
-  lifecycle {
-    ignore_changes = [secret_string]
-  }
+  # Track the var (no ignore_changes): var.api_auth_secret is authoritative
+  # — tfvars on dev, the controller runner on customer environments (which
+  # itself reuses this secret's previous value). Pinning the first value
+  # here let a runner-side rotation drift env away from Secrets Manager on
+  # TEI (v174 apply), which becomes a fleet-wide 401 once the env copy
+  # drops (R8). Rotation goes through tfvars / runner secrets, not the
+  # console.
 }
 
 resource "aws_secretsmanager_secret" "appsync_api_key" {
