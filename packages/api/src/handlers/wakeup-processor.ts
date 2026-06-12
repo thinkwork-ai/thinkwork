@@ -1803,6 +1803,14 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       rendered_workspace_prefix: renderedWorkspacePrefix,
       appsync_endpoint: appsyncEndpoint() || undefined,
       appsync_api_key: getAppsyncApiKey() || undefined,
+      // Extension gate parity with chat-agent-invoke: the runtime registers
+      // ask_user_question / task-status only when the payload carries the
+      // API wiring + active turn id. Without these every wakeup-dispatched
+      // turn (question_answer resumes, automations) loses the tool and the
+      // model asks follow-up questions in prose instead of a card.
+      thinkwork_api_url: thinkworkApiUrl() || undefined,
+      thinkwork_api_secret: getApiAuthSecret() || undefined,
+      thread_turn_id: run.id,
       hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: effectiveWebSearchConfig,
       web_extract_config: effectiveWebExtractConfig
