@@ -322,14 +322,6 @@ build_handler "brain-agent-write" \
 build_handler "agents-runtime-config" \
   "$REPO_ROOT/packages/api/src/handlers/agents-runtime-config.ts"
 
-# Plugin upload handler (V1 agent-architecture plan §U10). Four routes:
-#   POST /api/plugins/presign    → presigned PUT URL for the zip
-#   POST /api/plugins/upload     → validator + three-phase install saga
-#   GET  /api/plugins            → list recent uploads for the tenant
-#   GET  /api/plugins/:uploadId  → detail for a single upload
-build_handler "plugin-upload" \
-  "$REPO_ROOT/packages/api/src/handlers/plugin-upload.ts"
-
 # U2 of finance pilot — thread-attachment upload (presign + finalize).
 # presign issues a 5-min PUT URL; finalize sniffs magic bytes + scans
 # OOXML containers (macros, external links) before inserting a
@@ -348,11 +340,6 @@ build_handler "thread-attachment-download" \
 
 build_handler "folder-bundle-import" \
   "$REPO_ROOT/packages/api/src/handlers/folder-bundle-import.ts"
-
-# Hourly sweeper — reaps orphan S3 staging (> 1h) from failed or interrupted
-# plugin upload sagas (plan §U10). Triggered by EventBridge.
-build_handler "plugin-staging-sweeper" \
-  "$REPO_ROOT/packages/api/src/handlers/plugin-staging-sweeper.ts"
 
 build_handler "activity" \
   "$REPO_ROOT/packages/api/src/handlers/activity.ts"

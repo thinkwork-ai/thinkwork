@@ -1,13 +1,13 @@
 /**
- * Security invariant SI-4: plugin zip archives get vetted BEFORE any byte
- * hits S3 or the filesystem. The attack surface for plugin uploads is the
- * widest in the V1 plan — arbitrary tenant admins POSTing zip bytes — so
- * every known class of zip-bomb / path-traversal / symlink shenanigans
- * has to fail closed here.
+ * Security invariant SI-4: untrusted zip archives get vetted BEFORE any
+ * byte hits S3 or the filesystem. Consumers: folder-bundle import, git-ref
+ * fetch, and thread-attachment content validation — arbitrary tenant
+ * admins/users posting zip bytes — so every known class of zip-bomb /
+ * path-traversal / symlink shenanigans has to fail closed here.
  *
  * Rejection classes, mirrored 1:1 with the plan's SI-4 checks:
  *
- *   - ZipPathEscape         — entry path resolves outside the plugin root
+ *   - ZipPathEscape         — entry path resolves outside the archive root
  *                              after normalisation (`..` segments, absolute
  *                              paths, NUL injection).
  *   - ZipDecompressedTooLarge — summed uncompressed sizes > MAX_DECOMPRESSED_BYTES.
@@ -17,16 +17,16 @@
  *                              "million tiny files" denial-of-service.
  *   - ZipSymlinkNotAllowed  — entry external attributes encode symlink
  *                              (Unix mode & 0o170000 === 0o120000). A
- *                              symlink that passes through the plugin
- *                              installer could point into the host FS.
+ *                              symlink that passes through an importer
+ *                              could point into the host FS.
  *   - ZipMalformed          — the archive itself is corrupt. Not an
  *                              attack per se, but we don't proceed past
  *                              the point of failure.
  *
- * The module operates on an in-memory Buffer. The plan's upload handler
- * hands us the bytes the tenant admin posted; Lambda request bodies are
- * capped, so bounding by buffer size is the outer ring. Per-entry budgets
- * below are the inner rings.
+ * The module operates on an in-memory Buffer. Callers hand us the bytes
+ * the client posted; Lambda request bodies are capped, so bounding by
+ * buffer size is the outer ring. Per-entry budgets below are the inner
+ * rings.
  *
  * Notes on jszip:
  *   jszip's `loadAsync` parses the zip central directory and holds the

@@ -230,13 +230,13 @@ describe("stub registration (taxonomy smoke test)", () => {
   });
 
   it("retired verbs exit with code 2 and explain the supported alternative", async () => {
-    // All Phase-3 scaffolded verbs are real now. `skill create` and
-    // `skill update` were retired (not shipped) because the underlying
-    // model — tenant-uploaded custom skills — has its real authoring
-    // surface via `skill push <folder>`, not a metadata CRUD. The CLI
-    // still registers the verbs so the help text is complete, but
-    // `.action()` prints a clear "retired — use skill push" message
-    // and exits 2.
+    // All Phase-3 scaffolded verbs are real now. `skill create`,
+    // `skill update`, and `skill push` are retired — the tenant
+    // zip-upload plugin flow was removed (plan 2026-06-12-001 U2) and
+    // custom skills are authored directly in the agent workspace
+    // `skills/` folder. The CLI still registers the verbs so the help
+    // text is complete, but `.action()` prints a clear retirement
+    // message and exits 2.
     const program = new Command();
     registerSkillCommand(program);
 
@@ -250,17 +250,25 @@ describe("stub registration (taxonomy smoke test)", () => {
 
     program.exitOverride();
 
-    await program
-      .parseAsync(["node", "thinkwork", "skill", "create", "fake-slug"])
-      .catch(() => undefined);
+    const invocations = [
+      ["skill", "create", "fake-slug"],
+      ["skill", "update", "fake-slug"],
+      ["skill", "push", "./fake-folder"],
+    ];
+    for (const args of invocations) {
+      await program
+        .parseAsync(["node", "thinkwork", ...args])
+        .catch(() => undefined);
+    }
 
+    expect(exitSpy).toHaveBeenCalledTimes(invocations.length);
     expect(exitSpy).toHaveBeenCalledWith(2);
 
     const combinedLog = [...errSpy.mock.calls, ...logSpy.mock.calls]
       .map((c) => c.map(String).join(" "))
       .join("\n");
     expect(combinedLog).toContain("retired");
-    expect(combinedLog).toContain("skill push");
+    expect(combinedLog).toContain("agent workspace");
 
     vi.restoreAllMocks();
   });

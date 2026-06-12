@@ -16,13 +16,13 @@ import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core.js";
 
 // ---------------------------------------------------------------------------
-// plugin_uploads — audit trail for tenant self-serve plugin uploads
-// (plan #007 §R1, R2; schema landed in migration 0025).
+// plugin_uploads — LEGACY audit trail for the retired tenant zip-upload
+// plugin flow (plan #007 §R1, R2; schema landed in migration 0025).
 //
-// Each POST /api/plugins/upload writes a row in phase 1 of the three-phase
-// saga (plan §U10). Survives later-phase failures as a durable record; a
-// hourly sweeper reaps orphan staging > 1h. The U10 handler is the only
-// writer; read-only from GraphQL.
+// The upload handler + sweeper were removed in plan 2026-06-12-001 U2;
+// nothing reads or writes this table anymore. The export stays so drizzle
+// stays consistent with the deployed schema — the DROP TABLE is a deferred
+// follow-up per migration ordering rules (#1618).
 // ---------------------------------------------------------------------------
 
 export const pluginUploads = pgTable(
