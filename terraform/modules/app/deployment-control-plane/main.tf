@@ -313,6 +313,7 @@ resource "aws_iam_role_policy" "codebuild" {
           "lambda:*",
           "logs:*",
           "rds:*",
+          "route53:*",
           "scheduler:*",
           "secretsmanager:*",
           "ses:*",
