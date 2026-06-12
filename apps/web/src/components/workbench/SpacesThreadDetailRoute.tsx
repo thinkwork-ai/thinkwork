@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
 import { Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
-import { IconFiles } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Button } from "@thinkwork/ui";
 import {
@@ -25,7 +24,6 @@ import {
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
-import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import type { UserQuestionRecord } from "@/lib/ui-message-types";
 import { toUserQuestionStatus } from "@/lib/user-question-record";
@@ -372,7 +370,6 @@ export function SpacesThreadDetailRoute({
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
   const [artifactFullscreen, setArtifactFullscreen] = useState(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
-  const [filesModeOpen, setFilesModeOpen] = useState(false);
   // Hide the "…" actions menu while the title is being renamed — leaving the
   // trigger mounted lets Radix's focus-restore steal focus back from the
   // rename input on menu close, cancelling the edit.
@@ -1193,7 +1190,6 @@ export function SpacesThreadDetailRoute({
         }
         if (open) {
           setThreadInfoOpen(false);
-          setFilesModeOpen(false);
         }
       },
       onSelectArtifact: (artifactId: string) => {
@@ -1260,7 +1256,6 @@ export function SpacesThreadDetailRoute({
         if (open) {
           setArtifactPanelOpen(false);
           setArtifactFullscreen(false);
-          setFilesModeOpen(false);
         }
       },
       threadId: routeThread?.id ?? threadId,
@@ -1433,31 +1428,6 @@ export function SpacesThreadDetailRoute({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label={
-            filesModeOpen ? "Close thread files" : "Open thread files"
-          }
-          title={filesModeOpen ? "Close thread files" : "Open thread files"}
-          className={
-            filesModeOpen
-              ? desktopToolbarActiveButtonClassName
-              : desktopToolbarButtonClassName
-          }
-          onClick={() => {
-            const nextOpen = !filesModeOpen;
-            setFilesModeOpen(nextOpen);
-            if (nextOpen) {
-              setThreadInfoOpen(false);
-              setArtifactPanelOpen(false);
-              setArtifactFullscreen(false);
-            }
-          }}
-        >
-          <IconFiles className="size-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
           aria-label={threadInfoOpen ? "Close thread info" : "Open thread info"}
           title={threadInfoOpen ? "Close thread info" : "Open thread info"}
           className={
@@ -1469,7 +1439,6 @@ export function SpacesThreadDetailRoute({
             const nextOpen = !threadInfoOpen;
             setThreadInfoOpen(nextOpen);
             if (nextOpen) {
-              setFilesModeOpen(false);
               setArtifactPanelOpen(false);
               setArtifactFullscreen(false);
             }
@@ -1536,7 +1505,6 @@ export function SpacesThreadDetailRoute({
               }
               if (nextOpen) {
                 setThreadInfoOpen(false);
-                setFilesModeOpen(false);
               }
             }}
           >
@@ -1545,7 +1513,7 @@ export function SpacesThreadDetailRoute({
         ) : null}
       </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${filesModeOpen ? "files-open" : "files-closed"}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}:${artifactFullscreen ? "fullscreen" : "normal"}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}:${artifactFullscreen ? "fullscreen" : "normal"}`,
   });
 
   useEffect(() => {
@@ -1579,12 +1547,7 @@ export function SpacesThreadDetailRoute({
     reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
   }
 
-  const threadView = filesModeOpen ? (
-    <ThreadWorkspaceView
-      threadId={threadId}
-      goalFiles={goalFiles?.files ?? []}
-    />
-  ) : (
+  const threadView = (
     <TaskThreadView
       thread={visibleThread}
       isLoading={

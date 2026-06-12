@@ -6,11 +6,13 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronRight, ExternalLink, FileText, Info } from "lucide-react";
+import { IconFiles } from "@tabler/icons-react";
 import { useQuery, useSubscription } from "urql";
 import { Badge, Button, cn } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
+import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import {
   InlineShortcutText,
   shortcutDisplayText,
@@ -168,6 +170,7 @@ export function SettingsActivityThreadDetail({
   const { tenantId } = useTenant();
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [filesModeOpen, setFilesModeOpen] = useState(false);
 
   const [
     { data: threadData, fetching: threadFetching, error: threadError },
@@ -230,6 +233,12 @@ export function SettingsActivityThreadDetail({
     if (turnSub.data?.onThreadTurnUpdated?.threadId === threadId) refetchAll();
   }, [refetchAll, threadId, turnSub.data]);
 
+  // Reset the workspace view when switching threads so a new thread opens on
+  // its execution trace rather than inheriting the previous files-mode state.
+  useEffect(() => {
+    setFilesModeOpen(false);
+  }, [threadId]);
+
   const thread = threadData?.thread ?? null;
   const turns = useMemo(
     () => [...(turnsData?.threadTurns ?? [])].sort(compareTurns),
@@ -266,7 +275,8 @@ export function SettingsActivityThreadDetail({
       .find((message) => message.role.toUpperCase() === "USER")
       ?.content?.trim() ?? "";
   const title =
-    storedTitle && !(looksTruncatedTitle(storedTitle) && firstUserMessageContent)
+    storedTitle &&
+    !(looksTruncatedTitle(storedTitle) && firstUserMessageContent)
       ? storedTitle
       : firstUserMessageContent || thread?.identifier || "Thread";
   const displayTitle = shortcutDisplayText(title, {
@@ -281,28 +291,56 @@ export function SettingsActivityThreadDetail({
     documentTitle: `Activity Thread · ${displayTitle}`,
     breadcrumbs: [...breadcrumbParents, { label: displayTitle }],
     action: (
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-8 w-8",
-          propertiesOpen
-            ? "text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        aria-label={
-          propertiesOpen ? "Close thread properties" : "Open thread properties"
-        }
-        title={
-          propertiesOpen ? "Close thread properties" : "Open thread properties"
-        }
-        onClick={() => setPropertiesOpen((open) => !open)}
-      >
-        <Info className="h-4 w-4" />
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-8 w-8",
+            filesModeOpen
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          aria-label={
+            filesModeOpen ? "Close thread files" : "Open thread files"
+          }
+          title={filesModeOpen ? "Close thread files" : "Open thread files"}
+          onClick={() => {
+            const nextOpen = !filesModeOpen;
+            setFilesModeOpen(nextOpen);
+            if (nextOpen) setPropertiesOpen(false);
+          }}
+        >
+          <IconFiles className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-8 w-8",
+            propertiesOpen
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          aria-label={
+            propertiesOpen
+              ? "Close thread properties"
+              : "Open thread properties"
+          }
+          title={
+            propertiesOpen
+              ? "Close thread properties"
+              : "Open thread properties"
+          }
+          onClick={() => setPropertiesOpen((open) => !open)}
+        >
+          <Info className="h-4 w-4" />
+        </Button>
+      </div>
     ),
-    actionKey: `thread-properties-${propertiesOpen ? "open" : "closed"}`,
+    actionKey: `thread-actions-${filesModeOpen ? "files" : "trace"}-${propertiesOpen ? "props-open" : "props-closed"}`,
   });
 
   if (threadFetching && !thread) {
@@ -322,6 +360,14 @@ export function SettingsActivityThreadDetail({
   if (!thread) {
     return (
       <div className="p-6 text-sm text-muted-foreground">Thread not found.</div>
+    );
+  }
+
+  if (filesModeOpen) {
+    return (
+      <div className="h-full min-h-0 w-full bg-background">
+        <ThreadWorkspaceView threadId={threadId} />
+      </div>
     );
   }
 

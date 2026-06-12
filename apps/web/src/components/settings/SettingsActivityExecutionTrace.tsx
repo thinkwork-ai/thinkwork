@@ -25,7 +25,7 @@ import {
   TurnInvocationLogsQuery,
   ThreadTurnUpdatedSubscription,
 } from "@/lib/graphql-queries";
-import { formatDateTime, relativeTime } from "@/lib/utils";
+import { relativeTime } from "@/lib/utils";
 import {
   Activity,
   AlertCircle,
@@ -1644,27 +1644,6 @@ function ExecutionTimeline({
     modelDisplayNames,
   );
   const hasMixedModels = timelineModelNames.length > 1;
-  const totalCost = !shouldUseUsageTimeline
-    ? invocations.reduce((sum: number, inv: any) => sum + (inv.costUsd || 0), 0)
-    : (totalCostFromTurn ?? 0);
-  const totalInputTokens =
-    summaryInputTokens != null
-      ? summaryInputTokens
-      : !shouldUseUsageTimeline
-        ? invocations.reduce(
-            (sum: number, inv: any) => sum + (inv.inputTokenCount || 0),
-            0,
-          )
-        : (inputTokens ?? 0);
-  const totalOutputTokens =
-    summaryOutputTokens != null
-      ? summaryOutputTokens
-      : !shouldUseUsageTimeline
-        ? invocations.reduce(
-            (sum: number, inv: any) => sum + (inv.outputTokenCount || 0),
-            0,
-          )
-        : (outputTokens ?? 0);
   const svgHeight = events.length * ROW_H;
 
   const branches = buildBranches(events);
@@ -1683,11 +1662,7 @@ function ExecutionTimeline({
     : -1;
 
   return (
-    <div className="px-3 space-y-2">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-        Execution ({events.length} steps) · {formatTokens(totalInputTokens)} in
-        + {formatTokens(totalOutputTokens)} out · {formatCost(totalCost)}
-      </p>
+    <div className="px-3">
       <div className="relative" style={{ paddingLeft: contentPadding }}>
         {/* SVG branch lines */}
         <svg
@@ -2185,22 +2160,7 @@ function TurnRow({
       </CollapsibleTrigger>
 
       <CollapsibleContent>
-        <div className="ml-7 pl-2 py-2 space-y-3">
-          {/* Summary info at top */}
-          <div className="px-3 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground font-mono">
-            <span>ID: {turn.id.slice(0, 8)}</span>
-            {turn.startedAt && (
-              <span>Started: {formatDateTime(turn.startedAt)}</span>
-            )}
-            {turn.finishedAt && (
-              <span>Finished: {formatDateTime(turn.finishedAt)}</span>
-            )}
-            {turn.invocationSource && (
-              <span>Source: {turn.invocationSource}</span>
-            )}
-            {runtimeLabel && <span>Runtime: {runtimeLabel}</span>}
-          </div>
-
+        <div className="ml-7 pl-2 pb-2 space-y-3">
           {/* Error */}
           {turn.error && (
             <div className="px-3 py-2 rounded bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-mono">
