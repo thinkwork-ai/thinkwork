@@ -34,6 +34,15 @@ text. Same family as the known AgentCore deploy race that strands env vars.
 
 ## How to tell this apart from a real regression
 
+**First check whether the policy is in the prompt at all.** If
+`position('ask_user_question' in system_prompt) > 0` is FALSE and the turn
+was wakeup-dispatched (`agent_wakeup_requests.source` is set), it is NOT
+this race — it's the structural dispatch-parity gap (payload gate fields
+missing on that path), fixed for the wakeup processor in #2395. See
+`docs/solutions/architecture-patterns/wakeup-processor-payload-parity-with-chat-agent-invoke-2026-06-12.md`.
+
+The deploy-race signature is:
+
 1. `select usage_json->'tools_called'` for the turn — empty, AND
 2. `position('ask_user_question' in system_prompt) > 0` — the policy block IS
    present (so prompt composition is fine), AND
