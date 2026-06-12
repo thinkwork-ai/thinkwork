@@ -128,10 +128,38 @@ describe("Twenty managed MCP lifecycle", () => {
     });
   });
 
+  it("no-ops when a plugin-owned Twenty MCP row exists (U10 ownership guard)", async () => {
+    const writes: Array<Record<string, unknown>> = [];
+    const fakeDb = queueDb({
+      // First select = the plugin-ownership guard lookup.
+      selects: [[{ id: "server-plugin" }]],
+      inserts: writes,
+    });
+
+    await expect(
+      reconcileTwentyManagedMcp({
+        tenantId: "tenant-1",
+        application: runningTwenty(),
+        mode: "destroyed",
+        db: fakeDb as any,
+      }),
+    ).resolves.toMatchObject({
+      serverId: "server-plugin",
+      installed: true,
+      installAvailable: false,
+      status: "plugin_managed",
+    });
+
+    // Nothing written: the legacy reconciler must never fight the plugin row.
+    expect(writes).toHaveLength(0);
+  });
+
   it("assigns the managed Twenty MCP server to the tenant platform default agent on first install", async () => {
     const writes: Array<Record<string, unknown>> = [];
     const fakeDb = queueDb({
-      selects: [[], [], [{ id: "agent-platform" }]],
+      // guard (no plugin row), existing managed row, manual-slug check,
+      // platform agents.
+      selects: [[], [], [], [{ id: "agent-platform" }]],
       inserts: writes,
     });
 

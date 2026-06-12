@@ -47,6 +47,7 @@ function queryRows(rows: unknown[]) {
   const chain = {
     from: () => chain,
     where: () => chain,
+    orderBy: () => chain,
     limit: () => Promise.resolve(rows),
     then: (
       resolve: (value: unknown[]) => unknown,
@@ -280,23 +281,24 @@ describe("deploymentStatus authz", () => {
     });
   });
 
-  it("expands Twenty compact deployment status into managed app fields", async () => {
+  it("serves Twenty managed app fields from DB state (plan 2026-06-12-001 U10)", async () => {
     mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
-    vi.stubEnv(
-      "TWENTY",
-      [
-        "1",
-        "1",
-        "https://crm.example.com",
-        "cluster-arn",
-        "server-service",
-        "worker-service",
-        "/thinkwork/dev/twenty/server",
-        "/thinkwork/dev/twenty/worker",
-        "alb-arn",
-        "target-group-arn",
-      ].join("|"),
-    );
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
+
+    const appRow = [
+      { desired_config: { publicUrl: "https://crm.example.com" } },
+    ];
+    const succeededJob = [{ operation: "ENABLE" }];
+    // readTwentyStatus (top-level twenty* fields) reads the row + latest
+    // succeeded job; twentyManagedApplication reads them again; the managed
+    // MCP enrichment select falls through to the default [] mock.
+    mockSelect
+      .mockReturnValueOnce(queryRows(appRow))
+      .mockReturnValueOnce(queryRows(succeededJob))
+      .mockReturnValueOnce(queryRows(appRow))
+      .mockReturnValueOnce(queryRows(succeededJob));
 
     const result = await deploymentStatusMod.deploymentStatus(
       null,
@@ -308,13 +310,16 @@ describe("deploymentStatus authz", () => {
       twentyProvisioned: true,
       twentyRuntimeEnabled: true,
       twentyUrl: "https://crm.example.com",
-      twentyClusterArn: "cluster-arn",
-      twentyServerServiceName: "server-service",
-      twentyWorkerServiceName: "worker-service",
+      // ECS identifiers are stage-derived stable names; ALB/target-group
+      // ARNs are not DB-projected (null).
+      twentyClusterArn:
+        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-twenty-cluster",
+      twentyServerServiceName: "thinkwork-dev-twenty-server",
+      twentyWorkerServiceName: "thinkwork-dev-twenty-worker",
       twentyServerLogGroupName: "/thinkwork/dev/twenty/server",
       twentyWorkerLogGroupName: "/thinkwork/dev/twenty/worker",
-      twentyAlbArn: "alb-arn",
-      twentyTargetGroupArn: "target-group-arn",
+      twentyAlbArn: null,
+      twentyTargetGroupArn: null,
     });
     expect(result.managedApplications).toEqual(
       expect.arrayContaining([
@@ -330,7 +335,10 @@ describe("deploymentStatus authz", () => {
             "/thinkwork/dev/twenty/server",
             "/thinkwork/dev/twenty/worker",
           ],
-          serviceNames: ["server-service", "worker-service"],
+          serviceNames: [
+            "thinkwork-dev-twenty-server",
+            "thinkwork-dev-twenty-worker",
+          ],
           managedMcpStatus: "missing",
           managedMcpInstallAvailable: true,
         }),
@@ -338,9 +346,11 @@ describe("deploymentStatus authz", () => {
     );
   });
 
-  it("reports malformed Twenty compact status as unknown without throwing", async () => {
+  it("ignores the retired TWENTY env projection: no DB state means disabled", async () => {
     mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
-    vi.stubEnv("TWENTY", "not-a-compact-status");
+    // The legacy compact env value must have NO effect — U10 removed the
+    // env-var status path for Twenty (Cognee's stays).
+    vi.stubEnv("TWENTY", "1|1|https://crm.example.com");
 
     const result = await deploymentStatusMod.deploymentStatus(
       null,
@@ -350,11 +360,12 @@ describe("deploymentStatus authz", () => {
 
     expect(result.twentyProvisioned).toBe(false);
     expect(result.twentyRuntimeEnabled).toBe(false);
+    expect(result.twentyUrl).toBeNull();
     expect(result.managedApplications).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           key: "twenty",
-          status: "unknown",
+          status: "disabled",
           enabled: false,
           provisioned: false,
           runtimeEnabled: false,

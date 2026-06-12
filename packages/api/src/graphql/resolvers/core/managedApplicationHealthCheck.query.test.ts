@@ -1,10 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockRequireAdminOrServiceCaller, mockResolveCallerTenantId } =
-  vi.hoisted(() => ({
+const {
+  mockRequireAdminOrServiceCaller,
+  mockResolveCallerTenantId,
+  selectQueue,
+  mockDb,
+} = vi.hoisted(() => {
+  const selectQueue: unknown[][] = [];
+  // Chain-mock Drizzle db: Twenty status is DB-served (U10) — the reads
+  // are select().from().where().limit(1) pairs (managed_applications row,
+  // then latest succeeded deployment job).
+  const mockDb = {
+    select: () => {
+      const chain: any = {
+        from: () => chain,
+        where: () => chain,
+        orderBy: () => chain,
+        limit: async () => selectQueue.shift() ?? [],
+      };
+      return chain;
+    },
+  };
+  return {
     mockRequireAdminOrServiceCaller: vi.fn(),
     mockResolveCallerTenantId: vi.fn(),
-  }));
+    selectQueue,
+    mockDb,
+  };
+});
 
 vi.mock("./authz.js", () => ({
   requireAdminOrServiceCaller: mockRequireAdminOrServiceCaller,
@@ -14,12 +37,15 @@ vi.mock("./resolve-auth-user.js", () => ({
   resolveCallerTenantId: mockResolveCallerTenantId,
 }));
 
+vi.mock("../../utils.js", () => ({ db: mockDb }));
+
 let mod: typeof import("./managedApplicationHealthCheck.query.js");
 
 beforeEach(async () => {
   vi.resetModules();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  selectQueue.length = 0;
   mockRequireAdminOrServiceCaller.mockReset();
   mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
   mockResolveCallerTenantId.mockReset();
@@ -50,6 +76,7 @@ describe("managedApplicationHealthCheck", () => {
   });
 
   it("returns unhealthy without fetching when Twenty is not provisioned", async () => {
+    selectQueue.push([]); // no managed_applications row
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -71,7 +98,10 @@ describe("managedApplicationHealthCheck", () => {
   });
 
   it("returns parked status without fetching when Twenty runtime is disabled", async () => {
-    vi.stubEnv("TWENTY", "1|0|https://crm.example.com");
+    selectQueue.push([
+      { desired_config: { publicUrl: "https://crm.example.com" } },
+    ]);
+    selectQueue.push([{ operation: "PARK" }]); // latest succeeded apply
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -93,7 +123,10 @@ describe("managedApplicationHealthCheck", () => {
   });
 
   it("probes Twenty public /healthz when the runtime is enabled", async () => {
-    vi.stubEnv("TWENTY", "1|1|https://crm.example.com/");
+    selectQueue.push([
+      { desired_config: { publicUrl: "https://crm.example.com/" } },
+    ]);
+    selectQueue.push([{ operation: "ENABLE" }]); // latest succeeded apply
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal("fetch", fetchMock);
 

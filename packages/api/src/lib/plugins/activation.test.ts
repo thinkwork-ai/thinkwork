@@ -705,3 +705,152 @@ describe("resourceKeyFor", () => {
     expect(a).not.toBe(resourceKeyFor("https://tasks.lastmile.invalid"));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Per-instance OAuth (U10 Twenty): derived auth domain + resource
+// ---------------------------------------------------------------------------
+
+describe("startActivation with oauth-per-instance components (U10)", () => {
+  const INSTANCE = "https://crm.tenant.invalid";
+
+  function twentyVersion(): PluginVersion {
+    return {
+      version: "0.1.0",
+      requiredOauthScopes: [],
+      components: [
+        {
+          type: "mcp-server" as const,
+          key: "crm",
+          displayName: "Twenty CRM",
+          endpointFrom: {
+            managedApp: "twenty",
+            configKey: "publicUrl",
+            path: "/mcp",
+          },
+          auth: { mode: "oauth-per-instance" as const },
+        },
+        {
+          type: "infrastructure" as const,
+          key: "runtime",
+          managedAppKey: "twenty",
+          terraformInputs: {},
+        },
+      ],
+    };
+  }
+
+  function buildTwentyHarness(opts: { resolvedEndpoint?: string | null } = {}) {
+    const store = createInMemoryPluginEngineStore();
+    const secrets = createInMemoryPluginSecrets();
+    const fetchCalls: Array<{ url: string }> = [];
+    const resolvedEndpoint =
+      opts.resolvedEndpoint === undefined
+        ? `${INSTANCE}/mcp`
+        : opts.resolvedEndpoint;
+
+    const install = store.seedInstall({
+      tenant_id: TENANT,
+      plugin_key: "twenty",
+      pinned_version: "0.1.0",
+      pinned_payload_sha256: "sha-0.1.0",
+      state: "installed",
+    });
+    store.seedComponent({
+      plugin_install_id: install.id,
+      component_key: "crm",
+      component_type: "mcp-server",
+      state: resolvedEndpoint ? "provisioned" : "pending",
+      handler_ref: resolvedEndpoint
+        ? {
+            tenantMcpServerId: "srv-twenty",
+            resolvedEndpointUrl: resolvedEndpoint,
+          }
+        : {},
+    });
+
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+
+    const fetchFn = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      fetchCalls.push({ url });
+      // RFC 9728 protected-resource metadata on the Twenty instance.
+      if (url === `${INSTANCE}/.well-known/oauth-protected-resource/mcp`) {
+        return json({ authorization_servers: [INSTANCE] });
+      }
+      // RFC 8414 discovery against the derived (instance) auth domain.
+      if (url === `${INSTANCE}/.well-known/oauth-authorization-server`) {
+        return json({
+          authorization_endpoint: `${INSTANCE}/authorize`,
+          token_endpoint: `${INSTANCE}/token`,
+          registration_endpoint: `${INSTANCE}/register`,
+        });
+      }
+      if (url === `${INSTANCE}/register`) {
+        return json({ client_id: "twenty-client-1" });
+      }
+      return json({ error: "unexpected_request" }, 500);
+    }) as typeof fetch;
+
+    const deps: PluginActivationDeps = {
+      store,
+      secrets,
+      resolveVersion: async (pluginKey, version) =>
+        pluginKey === "twenty" && (!version || version === "0.1.0")
+          ? {
+              plugin: { pluginKey: "twenty" },
+              versionEntry: {
+                version: "0.1.0",
+                payloadSha256: "sha-0.1.0",
+                payload: twentyVersion(),
+              },
+            }
+          : null,
+      fetchFn,
+      stateSecret: () => STATE_SECRET,
+      apiBaseUrl: () => API_BASE,
+      stage: () => "test",
+      now: () => new Date(),
+    };
+
+    return { deps, fetchCalls, installId: install.id };
+  }
+
+  it("derives the auth domain from RFC 9728 metadata and the resource from the resolved endpoint", async () => {
+    const h = buildTwentyHarness();
+    const { authorizeUrl } = await startActivation(
+      { userId: USER, tenantId: TENANT, pluginInstallId: h.installId },
+      h.deps,
+    );
+    const url = new URL(authorizeUrl);
+    // DCR ran against the Twenty INSTANCE itself (per-instance auth domain).
+    expect(url.origin + url.pathname).toBe(`${INSTANCE}/authorize`);
+    expect(url.searchParams.get("client_id")).toBe("twenty-client-1");
+    expect(url.searchParams.getAll("resource")).toEqual([`${INSTANCE}/mcp`]);
+    // Empty manifest scopes degrade to the activation default scope set.
+    expect(url.searchParams.get("scope")).toBe(
+      "openid email profile offline_access",
+    );
+    expect(
+      h.fetchCalls.some(
+        (call) =>
+          call.url === `${INSTANCE}/.well-known/oauth-protected-resource/mcp`,
+      ),
+    ).toBe(true);
+  });
+
+  it("fails closed with a readable error when the component has no resolved endpoint yet", async () => {
+    const h = buildTwentyHarness({ resolvedEndpoint: null });
+    await expect(
+      startActivation(
+        { userId: USER, tenantId: TENANT, pluginInstallId: h.installId },
+        h.deps,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "PLUGIN_COMPONENT_NOT_PROVISIONED" },
+    });
+  });
+});

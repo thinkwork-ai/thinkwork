@@ -156,6 +156,19 @@ type ActivatePluginResult {
   authorizeUrl: String!
 }
 
+"""
+Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10).
+"""
+type TwentyPluginCutoverResult {
+  "True when this run changed ownership (adoption or legacy-row removal)."
+  adopted: Boolean!
+  "The canonical plugin-owned Twenty MCP server row after the run."
+  mcpServerId: ID
+  "Per-server user tokens invalidated; affected users re-activate at app level."
+  invalidatedUserTokenCount: Int!
+  message: String!
+}
+
 extend type Query {
   """
   Browse the signed plugin catalog overlaid with the caller tenant's install
@@ -204,4 +217,11 @@ extend type Mutation {
   revoked in v1 (UI copy says "disconnect").
   """
   deactivatePlugin(input: DeactivatePluginInput!): UserPluginActivation!
+  """
+  One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
+  MCP row to plugin ownership (management_source 'plugin' under the
+  tenant's twenty install) and invalidates per-server user tokens so users
+  re-activate at app level. Idempotent — a re-run reports a no-op.
+  """
+  cutoverTwentyPlugin: TwentyPluginCutoverResult!
 }

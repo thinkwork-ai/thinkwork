@@ -42,7 +42,10 @@ const THINKWORK_OUTPUTS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/outputs.tf",
 );
-const GREENFIELD_MAIN = resolve(REPO_ROOT, "terraform/examples/greenfield/main.tf");
+const GREENFIELD_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/examples/greenfield/main.tf",
+);
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -178,8 +181,9 @@ describe("deployment control plane Terraform fixture", () => {
     );
 
     // Deployment controller config rides graphql_http_config_env → the SSM
-    // runtime-config document (plan 2026-06-11-006), not Lambda env.
-    expect(lambdaHandlers).toMatch(/graphql_http_config_env\s*=\s*merge/);
+    // runtime-config document (plan 2026-06-11-006), not Lambda env. (Plain
+    // map since the U10 Twenty cutover removed the twenty_env merge.)
+    expect(lambdaHandlers).toMatch(/graphql_http_config_env\s*=\s*\{/);
     expect(lambdaHandlers).toMatch(
       /DEPLOYMENT_STATE_MACHINE_ARN\s*=\s*var\.deployment_state_machine_arn/,
     );
@@ -191,12 +195,17 @@ describe("deployment control plane Terraform fixture", () => {
 
   it("preserves externally bootstrapped deployment controller identity during release updates", () => {
     const runner = read(
-      resolve(REPO_ROOT, "terraform/modules/app/deployment-control-plane/runner.py"),
+      resolve(
+        REPO_ROOT,
+        "terraform/modules/app/deployment-control-plane/runner.py",
+      ),
     );
     const thinkworkMain = read(THINKWORK_MAIN);
     const thinkworkVariables = read(THINKWORK_VARS);
 
-    expect(thinkworkVariables).toMatch(/variable "deployment_state_machine_arn"/);
+    expect(thinkworkVariables).toMatch(
+      /variable "deployment_state_machine_arn"/,
+    );
     expect(thinkworkMain).toMatch(
       /deployment_state_machine_arn\s*=\s*var\.enable_deployment_control_plane \? module\.deployment_control_plane\[0\]\.state_machine_arn : var\.deployment_state_machine_arn/,
     );

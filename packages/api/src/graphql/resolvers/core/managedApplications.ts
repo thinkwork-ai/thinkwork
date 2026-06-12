@@ -1,4 +1,10 @@
 import { getConfig } from "@thinkwork/runtime-config";
+import { and, desc, eq } from "drizzle-orm";
+import {
+  managedApplicationDeploymentJobs,
+  managedApplications as managedApplicationsTable,
+} from "@thinkwork/database-pg/schema";
+import { db as defaultDb } from "../../utils.js";
 
 export type ManagedApplicationKey = "cognee" | "twenty";
 
@@ -19,7 +25,6 @@ export type TwentyStatus = {
   workerLogGroupName: string | null;
   albArn: string | null;
   targetGroupArn: string | null;
-  malformed: boolean;
 };
 
 export type ManagedApplicationStatus = {
@@ -123,76 +128,128 @@ export function readCogneeStatus(): CogneeStatus {
   }
 }
 
-export function readTwentyStatus(): TwentyStatus {
-  const raw = getConfig("TWENTY") || process.env.TWENTY_STATUS;
-  const fallbackUrl = process.env.TWENTY_URL || null;
+/**
+ * Injectable DB reads behind the Twenty status projection — unit tests
+ * fake these two lookups instead of a Drizzle handle.
+ */
+export interface TwentyStatusReaderDeps {
+  getManagedApplicationRow(
+    tenantId: string,
+  ): Promise<{ desiredConfig: Record<string, unknown> } | null>;
+  /** Latest SUCCEEDED deployment job for (tenant, 'twenty'), if any. */
+  getLatestSucceededJobOperation(tenantId: string): Promise<string | null>;
+}
 
-  if (!raw) {
-    const provisioned = truthyFlag(process.env.TWENTY_PROVISIONED);
-    const defaults = deriveTwentyDefaults(provisioned);
-    return {
-      provisioned,
-      runtimeEnabled: truthyFlag(process.env.TWENTY_RUNTIME_ENABLED),
-      url: fallbackUrl,
-      clusterArn: process.env.TWENTY_CLUSTER_ARN || defaults.clusterArn,
-      serverServiceName:
-        process.env.TWENTY_SERVER_SERVICE_NAME || defaults.serverServiceName,
-      workerServiceName:
-        process.env.TWENTY_WORKER_SERVICE_NAME || defaults.workerServiceName,
-      serverLogGroupName:
-        process.env.TWENTY_SERVER_LOG_GROUP_NAME || defaults.serverLogGroupName,
-      workerLogGroupName:
-        process.env.TWENTY_WORKER_LOG_GROUP_NAME || defaults.workerLogGroupName,
-      albArn: process.env.TWENTY_ALB_ARN || null,
-      targetGroupArn: process.env.TWENTY_TARGET_GROUP_ARN || null,
-      malformed: false,
-    };
-  }
-
-  const parts = raw.split("|");
-  const malformed = parts.length < 2;
-  const provisioned = truthyFlag(parts[0]);
-  const defaults = deriveTwentyDefaults(provisioned && !malformed);
+export function createDrizzleTwentyStatusReaderDeps(
+  db: typeof defaultDb = defaultDb,
+): TwentyStatusReaderDeps {
   return {
-    provisioned,
-    runtimeEnabled: truthyFlag(parts[1]),
-    url: nonEmpty(parts[2]) ?? fallbackUrl,
-    clusterArn:
-      nonEmpty(parts[3]) ??
-      process.env.TWENTY_CLUSTER_ARN ??
-      defaults.clusterArn,
-    serverServiceName:
-      nonEmpty(parts[4]) ??
-      process.env.TWENTY_SERVER_SERVICE_NAME ??
-      defaults.serverServiceName,
-    workerServiceName:
-      nonEmpty(parts[5]) ??
-      process.env.TWENTY_WORKER_SERVICE_NAME ??
-      defaults.workerServiceName,
-    serverLogGroupName:
-      nonEmpty(parts[6]) ??
-      process.env.TWENTY_SERVER_LOG_GROUP_NAME ??
-      defaults.serverLogGroupName,
-    workerLogGroupName:
-      nonEmpty(parts[7]) ??
-      process.env.TWENTY_WORKER_LOG_GROUP_NAME ??
-      defaults.workerLogGroupName,
-    albArn: nonEmpty(parts[8]) ?? process.env.TWENTY_ALB_ARN ?? null,
-    targetGroupArn:
-      nonEmpty(parts[9]) ?? process.env.TWENTY_TARGET_GROUP_ARN ?? null,
-    malformed,
+    async getManagedApplicationRow(tenantId) {
+      const [row] = await db
+        .select({ desired_config: managedApplicationsTable.desired_config })
+        .from(managedApplicationsTable)
+        .where(
+          and(
+            eq(managedApplicationsTable.tenant_id, tenantId),
+            eq(managedApplicationsTable.key, "twenty"),
+          ),
+        )
+        .limit(1);
+      if (!row) return null;
+      return {
+        desiredConfig: (row.desired_config ?? {}) as Record<string, unknown>,
+      };
+    },
+    async getLatestSucceededJobOperation(tenantId) {
+      const [job] = await db
+        .select({ operation: managedApplicationDeploymentJobs.operation })
+        .from(managedApplicationDeploymentJobs)
+        .where(
+          and(
+            eq(managedApplicationDeploymentJobs.tenant_id, tenantId),
+            eq(managedApplicationDeploymentJobs.app_key, "twenty"),
+            eq(managedApplicationDeploymentJobs.status, "succeeded"),
+          ),
+        )
+        .orderBy(desc(managedApplicationDeploymentJobs.updated_at))
+        .limit(1);
+      return job?.operation ?? null;
+    },
   };
 }
 
-export function readManagedApplications(): ManagedApplicationStatus[] {
-  return [cogneeManagedApplication(), twentyManagedApplication()];
+const DISABLED_TWENTY_STATUS: TwentyStatus = {
+  provisioned: false,
+  runtimeEnabled: false,
+  url: null,
+  clusterArn: null,
+  serverServiceName: null,
+  workerServiceName: null,
+  serverLogGroupName: null,
+  workerLogGroupName: null,
+  albArn: null,
+  targetGroupArn: null,
+};
+
+/**
+ * Twenty status served from Aurora (plan 2026-06-12-001 U10) — the
+ * managed_applications row + its deployment-job history are the canonical
+ * plugin-engine infrastructure state. The TWENTY env/SSM projection is
+ * retired (Cognee's env-var path is intentionally UNCHANGED).
+ *
+ * Applied reality = the LATEST SUCCEEDED deployment job's operation:
+ * ENABLE/UPGRADE → running, PARK → parked, DESTROY (or no succeeded job /
+ * no row) → disabled. An in-flight or failed job never flips the reported
+ * state — the previous applied operation keeps reporting until a new
+ * apply succeeds. The public URL comes from the row's desired_config
+ * (`publicUrl`, echoed verbatim by Terraform as `twenty_url`); ECS
+ * service/log identifiers are stage-derived stable names, as before.
+ */
+export async function readTwentyStatus(
+  tenantId: string | null,
+  deps: TwentyStatusReaderDeps = createDrizzleTwentyStatusReaderDeps(),
+): Promise<TwentyStatus> {
+  if (!tenantId) return DISABLED_TWENTY_STATUS;
+  const row = await deps.getManagedApplicationRow(tenantId);
+  if (!row) return DISABLED_TWENTY_STATUS;
+  const operation = await deps.getLatestSucceededJobOperation(tenantId);
+  if (!operation || operation === "DESTROY") return DISABLED_TWENTY_STATUS;
+
+  const provisioned = true;
+  const runtimeEnabled = operation !== "PARK";
+  const publicUrl = row.desiredConfig.publicUrl;
+  const defaults = deriveTwentyDefaults(provisioned);
+  return {
+    provisioned,
+    runtimeEnabled,
+    url: typeof publicUrl === "string" && publicUrl.trim() ? publicUrl : null,
+    clusterArn: defaults.clusterArn,
+    serverServiceName: defaults.serverServiceName,
+    workerServiceName: defaults.workerServiceName,
+    serverLogGroupName: defaults.serverLogGroupName,
+    workerLogGroupName: defaults.workerLogGroupName,
+    albArn: null,
+    targetGroupArn: null,
+  };
 }
 
-export function readManagedApplication(
+export async function readManagedApplications(
+  tenantId: string | null,
+  deps?: TwentyStatusReaderDeps,
+): Promise<ManagedApplicationStatus[]> {
+  return [
+    cogneeManagedApplication(),
+    await twentyManagedApplication(tenantId, deps),
+  ];
+}
+
+export async function readManagedApplication(
   key: ManagedApplicationKey,
-): ManagedApplicationStatus {
+  tenantId: string | null,
+  deps?: TwentyStatusReaderDeps,
+): Promise<ManagedApplicationStatus> {
   if (key === "cognee") return cogneeManagedApplication();
-  return twentyManagedApplication();
+  return twentyManagedApplication(tenantId, deps);
 }
 
 function cogneeManagedApplication(): ManagedApplicationStatus {
@@ -243,15 +300,16 @@ function cogneeManagedApplication(): ManagedApplicationStatus {
   };
 }
 
-function twentyManagedApplication(): ManagedApplicationStatus {
-  const twenty = readTwentyStatus();
-  const status = twenty.malformed
-    ? "unknown"
-    : twenty.runtimeEnabled
-      ? "running"
-      : twenty.provisioned
-        ? "parked"
-        : "disabled";
+async function twentyManagedApplication(
+  tenantId: string | null,
+  deps?: TwentyStatusReaderDeps,
+): Promise<ManagedApplicationStatus> {
+  const twenty = await readTwentyStatus(tenantId, deps);
+  const status = twenty.runtimeEnabled
+    ? "running"
+    : twenty.provisioned
+      ? "parked"
+      : "disabled";
   const logGroupNames = [
     twenty.serverLogGroupName,
     twenty.workerLogGroupName,
@@ -266,9 +324,9 @@ function twentyManagedApplication(): ManagedApplicationStatus {
     displayName: "Twenty CRM",
     description: "Self-hosted CRM runtime managed by ThinkWork.",
     status,
-    enabled: twenty.runtimeEnabled && !twenty.malformed,
-    provisioned: twenty.provisioned && !twenty.malformed,
-    runtimeEnabled: twenty.runtimeEnabled && !twenty.malformed,
+    enabled: twenty.runtimeEnabled,
+    provisioned: twenty.provisioned,
+    runtimeEnabled: twenty.runtimeEnabled,
     url: twenty.url,
     endpoint: twenty.url,
     backendMode: null,
@@ -307,16 +365,6 @@ function twentyStatusMessage(
     return "Twenty CRM deployment status could not be parsed.";
   }
   return null;
-}
-
-function truthyFlag(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  const normalized = value.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes";
-}
-
-function nonEmpty(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function deriveTwentyDefaults(

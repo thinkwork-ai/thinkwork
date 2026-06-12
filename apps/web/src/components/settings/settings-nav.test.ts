@@ -115,6 +115,17 @@ describe("visibleSettingsNavItems", () => {
     );
   });
 
+  it("carries no twenty managed-app nav guard (U10: Twenty lives under Plugins)", () => {
+    // The managedAppKey guard mechanism is Cognee-only now; a stale
+    // 'twenty' guard would go permanently false once the env-served
+    // runtime flag retired, silently hiding its section.
+    for (const item of SETTINGS_NAV_ITEMS) {
+      expect(
+        item.managedAppKey === undefined || item.managedAppKey === "cognee",
+      ).toBe(true);
+    }
+  });
+
   it("no longer lists standalone CRM or Knowledge Bases nav entries", () => {
     // CRM is reached by drilling in from Applications; Knowledge Bases is a tab
     // of the Memory page.

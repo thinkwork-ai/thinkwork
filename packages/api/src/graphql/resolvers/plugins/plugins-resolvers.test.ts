@@ -16,6 +16,7 @@ const {
   mockResolveCallerUserId,
   mockStartActivation,
   mockDeactivateActivation,
+  mockCutoverTwenty,
   depsHolder,
   activationDepsHolder,
 } = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ const {
   mockResolveCallerUserId: vi.fn(),
   mockStartActivation: vi.fn(),
   mockDeactivateActivation: vi.fn(),
+  mockCutoverTwenty: vi.fn(),
   depsHolder: { current: null as unknown },
   activationDepsHolder: { current: null as unknown },
 }));
@@ -68,6 +70,17 @@ vi.mock("../../../lib/plugins/activation.js", async (importOriginal) => {
   };
 });
 
+vi.mock("../../../lib/plugins/twenty-cutover.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../../lib/plugins/twenty-cutover.js")
+    >();
+  return {
+    ...actual,
+    cutoverTwentyPluginForTenant: mockCutoverTwenty,
+  };
+});
+
 import type { PluginVersion } from "@thinkwork/plugin-catalog";
 import type { PluginEngineDeps } from "../../../lib/plugins/engine.js";
 import {
@@ -76,6 +89,7 @@ import {
 } from "../../../lib/plugins/testing.js";
 import {
   activatePlugin,
+  cutoverTwentyPlugin,
   deactivatePlugin,
   installPlugin,
   uninstallPlugin,
@@ -387,5 +401,40 @@ describe("myPluginActivations", () => {
     });
     // Member-level query: no admin check.
     expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+  });
+});
+
+describe("cutoverTwentyPlugin (U10)", () => {
+  it("is tenant-admin gated and runs the cutover with the canonical caller actor", async () => {
+    mockCutoverTwenty.mockResolvedValue({
+      adopted: true,
+      mcpServerId: "server-1",
+      invalidatedUserTokenCount: 2,
+      message: "Adopted.",
+    });
+
+    const result = await cutoverTwentyPlugin(null, {}, CTX);
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(CTX, "tenant-1");
+    expect(mockCutoverTwenty).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      actorId: "user-1",
+      actorType: "user",
+    });
+    expect(result).toMatchObject({
+      adopted: true,
+      mcpServerId: "server-1",
+      invalidatedUserTokenCount: 2,
+    });
+  });
+
+  it("a non-admin caller is rejected before the cutover runs", async () => {
+    mockRequireTenantAdmin.mockRejectedValue(
+      new GraphQLError("Forbidden", { extensions: { code: "FORBIDDEN" } }),
+    );
+    await expect(cutoverTwentyPlugin(null, {}, CTX)).rejects.toMatchObject({
+      extensions: { code: "FORBIDDEN" },
+    });
+    expect(mockCutoverTwenty).not.toHaveBeenCalled();
   });
 });

@@ -7,7 +7,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mocks, queryDocs, tenantState } = vi.hoisted(() => ({
+const { mocks, queryDocs, tenantState, paramsState } = vi.hoisted(() => ({
+  paramsState: { pluginKey: "lastmile" },
   mocks: {
     activate: vi.fn(),
     deactivate: vi.fn(),
@@ -73,7 +74,19 @@ vi.mock("@/context/TenantContext", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
-  useParams: () => ({ pluginKey: "lastmile" }),
+  useParams: () => ({ pluginKey: paramsState.pluginKey }),
+  Link: ({
+    to,
+    children,
+    ...rest
+  }: {
+    to: string;
+    children?: unknown;
+  } & Record<string, unknown>) => (
+    <a href={to} {...rest}>
+      {children as never}
+    </a>
+  ),
 }));
 
 // The plan dialog is the EXISTING managed-applications approval surface —
@@ -168,6 +181,7 @@ beforeEach(() => {
     data: { deactivatePlugin: { id: "act-1", status: "revoked" } },
   });
   mockQueries();
+  paramsState.pluginKey = "lastmile";
   window.history.replaceState({}, "", "/settings/plugins/lastmile");
 });
 
@@ -326,6 +340,34 @@ describe("PluginDetail", () => {
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: /review deployment plan/i }),
+    ).toBeNull();
+  });
+
+  it("links operators on the twenty plugin to the deployment detail page (U10)", () => {
+    paramsState.pluginKey = "twenty";
+    mockQueries({
+      install: { ...baseInstall, pluginKey: "twenty" },
+      activations: [],
+    });
+    render(<PluginDetail />);
+
+    const link = screen.getByRole("link", {
+      name: /open deployment details/i,
+    });
+    expect(link.getAttribute("href")).toBe("/settings/crm");
+  });
+
+  it("hides the twenty deployment link from non-operators", () => {
+    paramsState.pluginKey = "twenty";
+    tenantState.isOperator = false;
+    mockQueries({
+      install: { ...baseInstall, pluginKey: "twenty" },
+      activations: [],
+    });
+    render(<PluginDetail />);
+
+    expect(
+      screen.queryByRole("link", { name: /open deployment details/i }),
     ).toBeNull();
   });
 });

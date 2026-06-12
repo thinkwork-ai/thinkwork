@@ -80,6 +80,7 @@ import type { McpServerComponent } from "@thinkwork/plugin-catalog";
 import {
   pluginMcpServerSlug,
   provisionPluginMcpComponent,
+  resolvePluginMcpEndpoint,
   teardownPluginMcpComponent,
 } from "./mcp.js";
 
@@ -117,7 +118,10 @@ describe("provisionPluginMcpComponent", () => {
       db: mockDb as never,
     });
 
-    expect(ref).toEqual({ tenantMcpServerId: "server-1" });
+    expect(ref).toEqual({
+      tenantMcpServerId: "server-1",
+      resolvedEndpointUrl: "https://crm.example.invalid/mcp",
+    });
     expect(insertCalls[0]).toMatchObject({
       tenant_id: "tenant-1",
       name: "LastMile CRM",
@@ -176,7 +180,10 @@ describe("provisionPluginMcpComponent", () => {
       db: mockDb as never,
     });
 
-    expect(ref).toEqual({ tenantMcpServerId: "server-9" });
+    expect(ref).toEqual({
+      tenantMcpServerId: "server-9",
+      resolvedEndpointUrl: "https://crm-v2.example.invalid/mcp",
+    });
     expect(updateCalls[0]).toMatchObject({
       url: "https://crm-v2.example.invalid/mcp",
       auth_type: "none",
@@ -192,6 +199,103 @@ describe("provisionPluginMcpComponent", () => {
 
   it("namespaces slugs as <pluginKey>--<componentKey>", () => {
     expect(pluginMcpServerSlug("lastmile", "crm")).toBe("lastmile--crm");
+  });
+});
+
+// U10: the one allowed endpoint indirection — tenant-specific endpoints
+// resolve from the managed_applications row at provision time.
+const endpointFromComponent: McpServerComponent = {
+  type: "mcp-server",
+  key: "crm",
+  displayName: "Twenty CRM",
+  endpointFrom: { managedApp: "twenty", configKey: "publicUrl", path: "/mcp" },
+  auth: { mode: "oauth-per-instance" },
+};
+
+describe("endpointFrom resolution (U10)", () => {
+  it("resolves the endpoint from the managed app's desired_config and derives per-instance oauth", async () => {
+    selectQueue.push([
+      {
+        desired_config: { publicUrl: "https://crm.tenant.example.com/welcome" },
+      },
+    ]); // managed_applications row
+    selectQueue.push([]); // no existing plugin row
+    returningQueue.push([{ id: "server-7" }]);
+    selectQueue.push([]); // no platform agents
+
+    const ref = await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(ref).toEqual({
+      tenantMcpServerId: "server-7",
+      resolvedEndpointUrl: "https://crm.tenant.example.com/mcp",
+    });
+    expect(insertCalls[0]).toMatchObject({
+      slug: "twenty--crm",
+      url: "https://crm.tenant.example.com/mcp",
+      auth_type: "oauth",
+      // Mirrors the legacy managedTwentyAuthConfig shape exactly.
+      auth_config: { oauth_resource: "https://crm.tenant.example.com/mcp" },
+      management_source: "plugin",
+      plugin_install_id: "install-1",
+      status: "approved",
+    });
+  });
+
+  it("fails with a readable error when the managed app row does not exist yet", async () => {
+    selectQueue.push([]); // no managed_applications row
+
+    await expect(
+      provisionPluginMcpComponent({
+        tenantId: "tenant-1",
+        pluginInstallId: "install-1",
+        pluginKey: "twenty",
+        component: endpointFromComponent,
+        db: mockDb as never,
+      }),
+    ).rejects.toThrow(/managed application "twenty" has no row/);
+    expect(insertCalls).toHaveLength(0);
+  });
+
+  it("fails with a readable error when desired_config lacks the configKey", async () => {
+    selectQueue.push([{ desired_config: { imageUri: "img@sha256:x" } }]);
+
+    await expect(
+      resolvePluginMcpEndpoint({
+        tenantId: "tenant-1",
+        component: endpointFromComponent,
+        db: mockDb as never,
+      }),
+    ).rejects.toThrow(/has no "publicUrl" value yet/);
+  });
+
+  it("rejects a non-URL publicUrl value", async () => {
+    selectQueue.push([{ desired_config: { publicUrl: "not a url" } }]);
+
+    await expect(
+      resolvePluginMcpEndpoint({
+        tenantId: "tenant-1",
+        component: endpointFromComponent,
+        db: mockDb as never,
+      }),
+    ).rejects.toThrow(/is not a valid URL/);
+  });
+
+  it("strips query/hash and trailing slash from the resolved endpoint", async () => {
+    selectQueue.push([
+      { desired_config: { publicUrl: "https://crm.example.com/?utm=1#top" } },
+    ]);
+    const resolved = await resolvePluginMcpEndpoint({
+      tenantId: "tenant-1",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+    expect(resolved).toBe("https://crm.example.com/mcp");
   });
 });
 

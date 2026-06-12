@@ -105,9 +105,7 @@ describe("R1/R10 — Lambda env stays identity-only", () => {
 describe("R2 — terraform-owned runtime-config document", () => {
   it("provisions one advanced-tier SSM parameter per stage with a 7KB plan-time ceiling", () => {
     const source = read(RUNTIME_CONFIG);
-    expect(source).toMatch(
-      /resource "aws_ssm_parameter" "runtime_config"/,
-    );
+    expect(source).toMatch(/resource "aws_ssm_parameter" "runtime_config"/);
     expect(source).toMatch(
       /name = "\/thinkwork\/\$\{var\.stage\}\/runtime-config"/,
     );
@@ -181,7 +179,8 @@ describe("R10 — every document-only key has zero remaining direct process.env 
     const handlers = read(HANDLERS);
     const docKeys = [
       ...literalKeys(handlers, "config_env = merge({"),
-      ...literalKeys(handlers, "graphql_http_config_env = merge({"),
+      // Plain map since the U10 Twenty cutover removed the twenty_env merge.
+      ...literalKeys(handlers, "graphql_http_config_env = {"),
     ];
     expect(docKeys.length).toBeGreaterThan(20);
 
@@ -192,17 +191,25 @@ describe("R10 — every document-only key has zero remaining direct process.env 
     );
 
     const offenders: string[] = [];
-    for (const pkg of ["packages/api", "packages/lambda", "packages/database-pg/src"]) {
+    for (const pkg of [
+      "packages/api",
+      "packages/lambda",
+      "packages/database-pg/src",
+    ]) {
       for (const file of walkTs(resolve(REPO_ROOT, pkg))) {
         const rel = relative(REPO_ROOT, file);
         if (/\.test\.(ts|tsx)$/.test(file)) continue;
-        if (/(^|\/)(__tests__|__smoke__|test|tests|scripts)\//.test(rel)) continue;
+        if (/(^|\/)(__tests__|__smoke__|test|tests|scripts)\//.test(rel))
+          continue;
         const src = readFileSync(file, "utf8");
         for (const match of src.matchAll(readRe)) {
           const key = match[1];
           if (ALLOWED[rel]?.includes(key)) continue;
           // writes / deletes are test-setup style mutations, not reads
-          const after = src.slice(match.index! + match[0].length, match.index! + match[0].length + 4);
+          const after = src.slice(
+            match.index! + match[0].length,
+            match.index! + match[0].length + 4,
+          );
           const before = src.slice(Math.max(0, match.index! - 8), match.index!);
           if (/delete\s+$/.test(before) || /^\s*=[^=]/.test(after)) continue;
           offenders.push(`${rel}: process.env.${key}`);

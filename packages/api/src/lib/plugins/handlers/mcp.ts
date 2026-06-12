@@ -18,6 +18,17 @@
  * left untouched and the plugin row is created anyway — dispatch-time
  * dedupe-by-URL is U6/U7's concern.
  *
+ * `endpointFrom` (U10, the ONE allowed endpoint indirection): a component
+ * whose endpoint is tenant-specific (Twenty CRM) resolves it at provision
+ * time from the tenant's `managed_applications` row — `desired_config
+ * [configKey]` carries the application's public URL and `path` replaces
+ * the URL path. The resolved URL is recorded on the handler_ref
+ * (`resolvedEndpointUrl`) so activation can derive per-instance auth.
+ * When the managed app row (or its config key) does not exist yet — a
+ * fresh install whose infrastructure component has not been configured —
+ * provisioning fails with a readable error and the engine's per-component
+ * retry re-drives it after the infra deploy lands.
+ *
  * Teardown follows the managed-mcp destroy inventory: user tokens (and
  * their secrets), context tools, agent/template/space assignments, then
  * the server row itself.
@@ -32,6 +43,7 @@ import {
   agentMcpServers,
   agents,
   agentTemplateMcpServers,
+  managedApplications,
   spaceMcpServers,
   tenantMcpContextTools,
   tenantMcpServers,
@@ -46,6 +58,8 @@ type DbLike = typeof defaultDb;
 /** handler_ref shape recorded on `mcp-server` component rows. */
 export interface McpHandlerRef extends Record<string, unknown> {
   tenantMcpServerId: string;
+  /** The endpoint the row was provisioned with (resolved for endpointFrom). */
+  resolvedEndpointUrl: string;
 }
 
 export function pluginMcpServerSlug(
@@ -55,7 +69,10 @@ export function pluginMcpServerSlug(
   return `${pluginKey}--${componentKey}`;
 }
 
-function pluginMcpAuthFields(component: McpServerComponent): {
+function pluginMcpAuthFields(
+  component: McpServerComponent,
+  endpointUrl: string,
+): {
   auth_type: string;
   auth_config: Record<string, unknown> | null;
 } {
@@ -65,7 +82,78 @@ function pluginMcpAuthFields(component: McpServerComponent): {
       auth_config: { oauth_resource: component.auth.resourceIndicator },
     };
   }
+  if (component.auth.mode === "oauth-per-instance") {
+    // Per-instance OAuth (Twenty): the RFC 8707 resource indicator IS the
+    // resolved endpoint — same shape the legacy managed-application row
+    // carried (`managedTwentyAuthConfig`).
+    return {
+      auth_type: "oauth",
+      auth_config: { oauth_resource: endpointUrl },
+    };
+  }
   return { auth_type: "none", auth_config: null };
+}
+
+/**
+ * Resolve the component's endpoint: static `endpointUrl`, or the U10
+ * `endpointFrom` indirection against the tenant's managed_applications
+ * row (`desired_config[configKey]` + path replacement).
+ */
+export async function resolvePluginMcpEndpoint(args: {
+  tenantId: string;
+  component: McpServerComponent;
+  db?: DbLike;
+}): Promise<string> {
+  const { component } = args;
+  if (component.endpointUrl) return component.endpointUrl;
+  const endpointFrom = component.endpointFrom;
+  if (!endpointFrom) {
+    throw new Error(
+      `MCP component "${component.key}" declares neither endpointUrl nor endpointFrom`,
+    );
+  }
+
+  const db = args.db ?? defaultDb;
+  const [row] = (await db
+    .select({ desired_config: managedApplications.desired_config })
+    .from(managedApplications)
+    .where(
+      and(
+        eq(managedApplications.tenant_id, args.tenantId),
+        eq(managedApplications.key, endpointFrom.managedApp),
+      ),
+    )
+    .limit(1)) as { desired_config: unknown }[];
+  if (!row) {
+    throw new Error(
+      `MCP component "${component.key}": managed application "${endpointFrom.managedApp}" has no row for this tenant yet — retry after its infrastructure component is configured and deployed`,
+    );
+  }
+  const desiredConfig = (row.desired_config ?? {}) as Record<string, unknown>;
+  const baseUrl = desiredConfig[endpointFrom.configKey];
+  if (typeof baseUrl !== "string" || baseUrl.trim() === "") {
+    throw new Error(
+      `MCP component "${component.key}": managed application "${endpointFrom.managedApp}" desired_config has no "${endpointFrom.configKey}" value yet — retry after the deployment configuration lands`,
+    );
+  }
+
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error(
+      `MCP component "${component.key}": "${endpointFrom.configKey}" value "${baseUrl}" is not a valid URL`,
+    );
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(
+      `MCP component "${component.key}": "${endpointFrom.configKey}" value must be an http(s) URL`,
+    );
+  }
+  if (endpointFrom.path) url.pathname = endpointFrom.path;
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/, "");
 }
 
 export async function provisionPluginMcpComponent(args: {
@@ -77,8 +165,16 @@ export async function provisionPluginMcpComponent(args: {
 }): Promise<McpHandlerRef> {
   const db = args.db ?? defaultDb;
   const slug = pluginMcpServerSlug(args.pluginKey, args.component.key);
-  const { auth_type, auth_config } = pluginMcpAuthFields(args.component);
-  const urlHash = computeMcpUrlHash(args.component.endpointUrl, auth_config);
+  const endpointUrl = await resolvePluginMcpEndpoint({
+    tenantId: args.tenantId,
+    component: args.component,
+    db,
+  });
+  const { auth_type, auth_config } = pluginMcpAuthFields(
+    args.component,
+    endpointUrl,
+  );
+  const urlHash = computeMcpUrlHash(endpointUrl, auth_config);
 
   const [existing] = (await db
     .select({ id: tenantMcpServers.id })
@@ -95,7 +191,7 @@ export async function provisionPluginMcpComponent(args: {
   const rowValues = {
     name: args.component.displayName,
     slug,
-    url: args.component.endpointUrl,
+    url: endpointUrl,
     transport: "streamable-http",
     auth_type,
     auth_config,
@@ -117,7 +213,7 @@ export async function provisionPluginMcpComponent(args: {
       args.tenantId,
       existing.id,
     );
-    return { tenantMcpServerId: existing.id };
+    return { tenantMcpServerId: existing.id, resolvedEndpointUrl: endpointUrl };
   }
 
   const [inserted] = (await db
@@ -130,7 +226,7 @@ export async function provisionPluginMcpComponent(args: {
     );
   }
   await ensurePluginMcpDefaultAgentAssignments(db, args.tenantId, inserted.id);
-  return { tenantMcpServerId: inserted.id };
+  return { tenantMcpServerId: inserted.id, resolvedEndpointUrl: endpointUrl };
 }
 
 export async function teardownPluginMcpComponent(args: {

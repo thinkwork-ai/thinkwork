@@ -3,7 +3,7 @@ import {
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
 import { GraphQLError } from "graphql";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import {
   agentMcpServers,
   agents,
@@ -173,6 +173,34 @@ export function summarizeTwentyManagedMcpState(
   };
 }
 
+/**
+ * The plugin-ownership guard (plan 2026-06-12-001 U10): once a Twenty MCP
+ * row is owned by the `twenty` plugin install (management_source
+ * 'plugin' — either created by the plugin MCP handler under the
+ * `twenty--crm` slug or adopted from the legacy managed row by the
+ * cutover helper), the legacy reconciler must never fight it.
+ */
+export async function findPluginOwnedTwentyMcpRow(
+  tenantId: string,
+  db: DbLike = defaultDb,
+): Promise<{ id: string } | null> {
+  const [row] = (await db
+    .select({ id: tenantMcpServers.id })
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.tenant_id, tenantId),
+        eq(tenantMcpServers.management_source, "plugin"),
+        or(
+          eq(tenantMcpServers.slug, "twenty--crm"),
+          eq(tenantMcpServers.managed_application_key, TWENTY_MANAGED_MCP_KEY),
+        ),
+      ),
+    )
+    .limit(1)) as { id: string }[];
+  return row ?? null;
+}
+
 export async function reconcileTwentyManagedMcp(args: {
   tenantId: string;
   application: ManagedApplicationStatus;
@@ -182,6 +210,21 @@ export async function reconcileTwentyManagedMcp(args: {
   secretsManager?: Pick<SecretsManagerClient, "send">;
 }): Promise<ManagedMcpDeploymentState> {
   const db = args.db ?? defaultDb;
+
+  // Plugin ownership wins: the twenty PLUGIN install owns its MCP row
+  // (provision/teardown through the plugin engine). The legacy reconciler
+  // no-ops so it can never repair/park/destroy a plugin-owned row.
+  const pluginOwned = await findPluginOwnedTwentyMcpRow(args.tenantId, db);
+  if (pluginOwned) {
+    return {
+      serverId: pluginOwned.id,
+      installed: true,
+      installAvailable: false,
+      status: "plugin_managed",
+      message:
+        "Twenty CRM MCP server is managed by the twenty plugin; the legacy managed-application reconciler left it untouched.",
+    };
+  }
 
   if (args.mode === "destroyed") {
     await destroyTwentyManagedMcp(args.tenantId, db, args.secretsManager);

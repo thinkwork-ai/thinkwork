@@ -346,6 +346,9 @@ export const COMPLIANCE_EVENT_TYPES = [
   "plugin.uninstalled",
   "plugin.activation_granted",
   "plugin.activation_revoked",
+  // U10 Twenty cutover: one-time adoption of the legacy managed MCP row
+  // into plugin ownership (same plugin.* prefix — no constraint change).
+  "plugin.cutover",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

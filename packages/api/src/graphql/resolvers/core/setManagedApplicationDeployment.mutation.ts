@@ -112,7 +112,7 @@ async function reconcileManagedMcpAfterDeploymentRequest(
   if (!tenantId) return;
 
   try {
-    const application = readManagedApplication(key);
+    const application = await readManagedApplication(key, tenantId);
     const reconcile = reconcileTwentyManagedMcp;
     if (action === "PARK") {
       await reconcile({

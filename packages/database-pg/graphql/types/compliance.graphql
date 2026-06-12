@@ -60,6 +60,7 @@ enum ComplianceEventType {
   PLUGIN_UNINSTALLED
   PLUGIN_ACTIVATION_GRANTED
   PLUGIN_ACTIVATION_REVOKED
+  PLUGIN_CUTOVER
 }
 
 enum ComplianceAnchorState {

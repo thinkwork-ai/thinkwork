@@ -32,7 +32,7 @@ export const installManagedApplicationMcpServer = async (
     });
   }
 
-  const application = readManagedApplication(key);
+  const application = await readManagedApplication(key, tenantId);
   const result = await reconcileTwentyManagedMcp({
     tenantId,
     application,

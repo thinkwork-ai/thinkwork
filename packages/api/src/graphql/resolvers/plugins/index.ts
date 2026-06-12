@@ -6,6 +6,7 @@ import {
 } from "./queries.js";
 import {
   activatePlugin,
+  cutoverTwentyPlugin,
   deactivatePlugin,
   installPlugin,
   retryPluginComponent,
@@ -27,4 +28,5 @@ export const pluginMutations = {
   retryPluginComponent,
   activatePlugin,
   deactivatePlugin,
+  cutoverTwentyPlugin,
 };

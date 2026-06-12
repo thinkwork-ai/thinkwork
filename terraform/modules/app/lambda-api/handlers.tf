@@ -15,12 +15,9 @@ locals {
     # status in one compact value; stable names are derived in the resolver.
     COGNEE = "${var.cognee_backend_mode}|${var.cognee_endpoint}"
   } : {}
-  twenty_env = var.twenty_provisioned ? {
-    # Keep Twenty managed-app status compact for graphql-http. The resolver
-    # derives stable ECS service/log identifiers from stage + account instead
-    # of carrying long ARNs in Lambda env vars.
-    TWENTY = "${var.twenty_provisioned ? "1" : "0"}|${var.twenty_runtime_enabled ? "1" : "0"}|${var.twenty_url}"
-  } : {}
+  # Twenty managed-app status is DB-served (managed_applications +
+  # deployment jobs — plan 2026-06-12-001 U10); the TWENTY config key is
+  # retired. Cognee's env-var status projection above is unchanged.
   optional_integration_handler_names = concat(
     trimspace(var.deployment_state_machine_arn) == "" ? [
       # Host-only onboarding/deployment API. Customer foundations disable the
@@ -147,7 +144,7 @@ locals {
   # document. Kept out of config_env so the legacy env copies stay scoped
   # to graphql-http (handler_extra_env below) instead of growing every
   # handler's env during the R8 transition window.
-  graphql_http_config_env = merge({
+  graphql_http_config_env = {
     ROUTINES_EXECUTION_ROLE_ARN = var.routines_execution_role_arn
     ROUTINES_LOG_GROUP_ARN      = var.routines_log_group_arn
     # Settings > General starts release updates from the GraphQL API.
@@ -160,7 +157,7 @@ locals {
     # secretsmanager:GetSecretValue on the thinkwork/* wildcard, so no
     # new IAM resource is needed.
     COMPLIANCE_READER_SECRET_ARN = var.compliance_reader_secret_arn
-  }, local.twenty_env)
+  }
 
   # Identity env + the secrets still in their one-release transition
   # window (R8). Config-class keys live ONLY in the SSM runtime-config

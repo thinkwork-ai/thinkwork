@@ -361,6 +361,19 @@ export const EVENT_PAYLOAD_SHAPES: Record<
   "plugin.activation_revoked": {
     allowedFields: new Set(["pluginInstallId", "pluginKey"]),
   },
+  "plugin.cutover": {
+    // U10 Twenty cutover: mode = 'adopted' (legacy row taken over in
+    // place) | 'legacy_row_removed' (plugin row already existed);
+    // invalidatedUserTokenCount = per-server user_mcp_tokens deleted so
+    // users re-activate at app level. Identifiers only — no URLs/tokens.
+    allowedFields: new Set([
+      "pluginInstallId",
+      "pluginKey",
+      "mcpServerId",
+      "mode",
+      "invalidatedUserTokenCount",
+    ]),
+  },
 };
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,

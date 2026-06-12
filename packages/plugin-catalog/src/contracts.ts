@@ -41,14 +41,47 @@ export type McpServerAuth =
       /** RFC 8707 resource indicator the minted token must be bound to. */
       resourceIndicator: string;
     }
+  | {
+      /**
+       * Per-instance OAuth (e.g. Twenty CRM): the server endpoint is
+       * tenant-specific (`endpointFrom`), and both the resource indicator
+       * AND the authorization server are derived from the RESOLVED
+       * endpoint at provision/activation time — the resource indicator is
+       * the resolved endpoint URL, and the auth domain comes from the
+       * endpoint's RFC 9728 protected-resource metadata. Requires
+       * `endpointFrom` on the component.
+       */
+      mode: "oauth-per-instance";
+    }
   | { mode: "none" };
+
+/**
+ * The ONE allowed endpoint indirection (plan 2026-06-12-001 U10): a
+ * manifest cannot carry a tenant-specific URL, so the MCP handler resolves
+ * the endpoint at provision time from the tenant's `managed_applications`
+ * row for `managedApp` — `desired_config[configKey]` holds the
+ * application's public URL (for Twenty, `publicUrl`, which the adapter
+ * echoes verbatim as the `twenty_url` Terraform output), and `path`
+ * replaces the URL path (e.g. `/mcp`).
+ */
+export interface McpEndpointFrom {
+  /** Managed-app adapter key whose managed_applications row carries the URL. */
+  managedApp: string;
+  /** `desired_config` key holding the application's public http(s) URL. */
+  configKey: string;
+  /** Replacement URL path for the MCP endpoint (must start with `/`). */
+  path?: string;
+}
 
 export interface McpServerComponent {
   type: "mcp-server";
   key: string;
   displayName: string;
   description?: string;
-  endpointUrl: string;
+  /** Static endpoint URL. Exactly one of `endpointUrl` / `endpointFrom`. */
+  endpointUrl?: string;
+  /** Provision-time endpoint resolution from a managed-app row. */
+  endpointFrom?: McpEndpointFrom;
   auth: McpServerAuth;
   /** Optional human notes about the tools the server exposes. */
   toolNotes?: string[];
@@ -255,7 +288,10 @@ function validatePluginVersion(value: unknown, pluginKey: string): void {
   }
 
   // OAuth servers without declared scopes would mint an unauditable grant —
-  // the activation flow needs the scope set up front.
+  // the activation flow needs the scope set up front. Per-instance OAuth
+  // servers are exempt: their authorization server (and its supported
+  // scopes) are only discoverable per tenant instance, so an empty scope
+  // list degrades to the activation flow's default scope set.
   if (hasOauthServer && version.requiredOauthScopes!.length === 0) {
     throw new PluginManifestError(
       `${label}: OAuth mcp-server components require non-empty requiredOauthScopes`,
@@ -263,7 +299,7 @@ function validatePluginVersion(value: unknown, pluginKey: string): void {
   }
 }
 
-/** Returns true when the component uses OAuth. */
+/** Returns true when the component uses static (plugin-wide) OAuth. */
 function validateMcpServerComponent(
   component: Partial<McpServerComponent>,
   label: string,
@@ -276,8 +312,20 @@ function validateMcpServerComponent(
   ) {
     throw new PluginManifestError(`${prefix}.description must be a string`);
   }
-  requireString(component.endpointUrl, `${prefix}.endpointUrl`);
-  requireHttpUrl(component.endpointUrl, `${prefix}.endpointUrl`);
+  if (
+    (component.endpointUrl === undefined) ===
+    (component.endpointFrom === undefined)
+  ) {
+    throw new PluginManifestError(
+      `${prefix} must declare exactly one of endpointUrl / endpointFrom`,
+    );
+  }
+  if (component.endpointUrl !== undefined) {
+    requireString(component.endpointUrl, `${prefix}.endpointUrl`);
+    requireHttpUrl(component.endpointUrl, `${prefix}.endpointUrl`);
+  } else {
+    validateEndpointFrom(component.endpointFrom!, prefix);
+  }
   if (component.toolNotes !== undefined) {
     if (
       !Array.isArray(component.toolNotes) ||
@@ -293,9 +341,17 @@ function validateMcpServerComponent(
     throw new PluginManifestError(`${prefix}.auth is required`);
   }
   if (auth.mode === "none") return false;
+  if (auth.mode === "oauth-per-instance") {
+    if (component.endpointFrom === undefined) {
+      throw new PluginManifestError(
+        `${prefix}.auth.mode "oauth-per-instance" requires endpointFrom (the resolved endpoint anchors the per-instance auth)`,
+      );
+    }
+    return false;
+  }
   if (auth.mode !== "oauth") {
     throw new PluginManifestError(
-      `${prefix}.auth.mode must be "oauth" or "none"`,
+      `${prefix}.auth.mode must be "oauth", "oauth-per-instance", or "none"`,
     );
   }
   const oauth = auth as Partial<Extract<McpServerAuth, { mode: "oauth" }>>;
@@ -303,6 +359,37 @@ function validateMcpServerComponent(
   requireHttpUrl(oauth.authDomain, `${prefix}.auth.authDomain`);
   requireString(oauth.resourceIndicator, `${prefix}.auth.resourceIndicator`);
   return true;
+}
+
+function validateEndpointFrom(
+  endpointFrom: Partial<McpEndpointFrom>,
+  prefix: string,
+): void {
+  if (
+    !endpointFrom ||
+    typeof endpointFrom !== "object" ||
+    Array.isArray(endpointFrom)
+  ) {
+    throw new PluginManifestError(`${prefix}.endpointFrom must be an object`);
+  }
+  requireString(endpointFrom.managedApp, `${prefix}.endpointFrom.managedApp`);
+  if (!SLUG_RE.test(endpointFrom.managedApp)) {
+    throw new PluginManifestError(
+      `${prefix}.endpointFrom.managedApp "${endpointFrom.managedApp}" must match ${SLUG_RE.source}`,
+    );
+  }
+  requireString(endpointFrom.configKey, `${prefix}.endpointFrom.configKey`);
+  if (endpointFrom.path !== undefined) {
+    if (
+      typeof endpointFrom.path !== "string" ||
+      !endpointFrom.path.startsWith("/") ||
+      /[?#]/.test(endpointFrom.path)
+    ) {
+      throw new PluginManifestError(
+        `${prefix}.endpointFrom.path must start with "/" and carry no query/fragment`,
+      );
+    }
+  }
 }
 
 function validateSkillsComponent(

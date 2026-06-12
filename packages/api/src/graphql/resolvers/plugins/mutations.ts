@@ -34,6 +34,7 @@ import {
 } from "../../../lib/plugins/engine.js";
 import type { PluginEngineDeps } from "../../../lib/plugins/engine.js";
 import type { PluginInstallRow } from "../../../lib/plugins/store.js";
+import { cutoverTwentyPluginForTenant } from "../../../lib/plugins/twenty-cutover.js";
 import {
   pluginActorFor,
   requirePluginTenantAdmin,
@@ -140,6 +141,26 @@ export async function retryPluginComponent(
     deps,
   );
   return installResultPayload(install, deps);
+}
+
+/**
+ * One-time U10 Twenty cutover (tenant admin, RequestResponse — runs
+ * synchronously inside the GraphQL request and surfaces errors to the
+ * caller). The validation session runs this once per tenant after the
+ * twenty plugin install exists; re-runs are idempotent no-ops.
+ */
+export async function cutoverTwentyPlugin(
+  _parent: unknown,
+  _args: Record<string, never>,
+  ctx: GraphQLContext,
+) {
+  const { tenantId, callerUserId } = await requirePluginTenantAdmin(ctx);
+  const actor = pluginActorFor(callerUserId);
+  return cutoverTwentyPluginForTenant({
+    tenantId,
+    actorId: actor.actorId,
+    actorType: actor.actorType,
+  });
 }
 
 async function requireActivationCaller(

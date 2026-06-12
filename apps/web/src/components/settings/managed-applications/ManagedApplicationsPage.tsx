@@ -6,6 +6,7 @@ import { ManagedApplicationRow } from "./ManagedApplicationRow";
 import {
   SettingsDeploymentStatusQuery,
   SettingsManagedApplicationsQuery,
+  SettingsPluginInstallsQuery,
 } from "@/lib/settings-queries";
 import {
   SettingsHeader,
@@ -22,8 +23,23 @@ export function ManagedApplicationsPage() {
     query: SettingsDeploymentStatusQuery,
     requestPolicy: "cache-and-network",
   });
+  const [installsResult] = useQuery({
+    query: SettingsPluginInstallsQuery,
+    requestPolicy: "cache-and-network",
+  });
 
-  const apps = appsResult.data?.managedApplications ?? [];
+  // Transition IA (plan 2026-06-12-001 U10): once the tenant has a `twenty`
+  // PLUGIN install, Twenty is managed from Settings > Plugins — hide its row
+  // here so the Applications page is Cognee-only. The query failing (or the
+  // install not existing) keeps the legacy row visible.
+  const twentyPluginInstalled = (
+    installsResult.data?.pluginInstalls ?? []
+  ).some((install) => install.pluginKey === "twenty");
+
+  const allApps = appsResult.data?.managedApplications ?? [];
+  const apps = twentyPluginInstalled
+    ? allApps.filter((app) => app.key !== "twenty")
+    : allApps;
   const runtimeApps =
     statusResult.data?.deploymentStatus.managedApplications ?? [];
   const loading = appsResult.fetching && apps.length === 0;
@@ -50,7 +66,7 @@ export function ManagedApplicationsPage() {
     <SettingsPane className="max-w-none">
       <SettingsHeader
         title="Applications"
-        description="Plan, approve, monitor, and tear down customer-owned Cognee and Twenty deployments."
+        description="Plan, approve, monitor, and tear down the customer-owned Cognee deployment. Twenty CRM is managed from Plugins once its plugin is installed."
         actions={
           <Button
             type="button"

@@ -52,10 +52,12 @@ export const deploymentStatus = async (
     configuredDeploymentProfile,
   );
   const cognee = readCogneeStatus();
-  const twenty = readTwentyStatus();
+  // Twenty status is DB-served (managed_applications + deployment jobs);
+  // the TWENTY env/SSM projection is retired (plan 2026-06-12-001 U10).
+  const twenty = await readTwentyStatus(tenantId);
   const managedApplications = await enrichManagedApplicationsWithMcpState(
     tenantId,
-    readManagedApplications(),
+    await readManagedApplications(tenantId),
   );
   const cogneeServiceName =
     process.env.COGNEE_SERVICE_NAME ||
@@ -77,7 +79,8 @@ export const deploymentStatus = async (
     deploymentControllerArn: deploymentProfile.stateMachineArn,
     deploymentRunnerProjectName: deploymentProfile.runnerProjectName,
     deploymentEvidenceBucket: deploymentProfile.evidenceBucket,
-    bucketName: process.env.BUCKET_NAME || getConfig("WORKSPACE_BUCKET") || null,
+    bucketName:
+      process.env.BUCKET_NAME || getConfig("WORKSPACE_BUCKET") || null,
     databaseEndpoint: getConfig("DATABASE_HOST") || null,
     ecrUrl: getConfig("ECR_REPOSITORY_URL") || null,
     adminUrl: getConfig("ADMIN_URL") || null,
@@ -99,8 +102,8 @@ export const deploymentStatus = async (
     cogneeBackendMode: cognee.backendMode,
     cogneeClusterArn,
     cogneeServiceName,
-    twentyProvisioned: twenty.provisioned && !twenty.malformed,
-    twentyRuntimeEnabled: twenty.runtimeEnabled && !twenty.malformed,
+    twentyProvisioned: twenty.provisioned,
+    twentyRuntimeEnabled: twenty.runtimeEnabled,
     twentyUrl: twenty.url,
     twentyClusterArn: twenty.clusterArn,
     twentyServerServiceName: twenty.serverServiceName,

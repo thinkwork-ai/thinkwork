@@ -247,8 +247,100 @@ export function pluginTokenSecretName(args: {
 function oauthMcpComponents(payload: PluginVersion): McpServerComponent[] {
   return payload.components.filter(
     (component): component is McpServerComponent =>
-      component.type === "mcp-server" && component.auth.mode === "oauth",
+      component.type === "mcp-server" &&
+      (component.auth.mode === "oauth" ||
+        component.auth.mode === "oauth-per-instance"),
   );
+}
+
+/**
+ * Per-component OAuth binding: the auth domain to run discovery/DCR
+ * against and the RFC 8707 resource indicator to mint for.
+ *
+ *   - `mode: "oauth"` — both come straight from the manifest.
+ *   - `mode: "oauth-per-instance"` (U10, Twenty) — the resource is the
+ *     provisioned row's resolved endpoint (component handler_ref
+ *     `resolvedEndpointUrl`) and the auth domain is discovered from that
+ *     endpoint's RFC 9728 protected-resource metadata
+ *     (`authorization_servers[0]`) — exactly how the legacy per-server
+ *     connect flow resolved Twenty's authorization server.
+ */
+export async function resolveOauthComponentBindings(args: {
+  pluginKey: string;
+  components: McpServerComponent[];
+  componentRows: Array<{
+    component_key: string;
+    handler_ref: Record<string, unknown> | null;
+  }>;
+  fetchFn: typeof fetch;
+}): Promise<Array<{ authDomain: string; resource: string }>> {
+  const bindings: Array<{ authDomain: string; resource: string }> = [];
+  for (const component of args.components) {
+    if (component.auth.mode === "oauth") {
+      bindings.push({
+        authDomain: component.auth.authDomain,
+        resource: normalizeResource(component.auth.resourceIndicator),
+      });
+      continue;
+    }
+    if (component.auth.mode !== "oauth-per-instance") continue;
+    const row = args.componentRows.find(
+      (candidate) => candidate.component_key === component.key,
+    );
+    const resolved = (row?.handler_ref ?? {}).resolvedEndpointUrl;
+    if (typeof resolved !== "string" || !resolved) {
+      throw pluginEngineError(
+        "PLUGIN_COMPONENT_NOT_PROVISIONED",
+        `Plugin ${args.pluginKey} MCP component "${component.key}" has no resolved endpoint yet; finish the install before activating`,
+      );
+    }
+    bindings.push({
+      authDomain: await discoverResourceAuthDomain(resolved, args.fetchFn),
+      resource: normalizeResource(resolved),
+    });
+  }
+  return bindings;
+}
+
+/**
+ * RFC 9728 protected-resource discovery: fetch
+ * `<origin>/.well-known/oauth-protected-resource[/<path>]` for the
+ * resolved endpoint and return its first authorization server.
+ */
+async function discoverResourceAuthDomain(
+  endpointUrl: string,
+  fetchFn: typeof fetch,
+): Promise<string> {
+  const endpoint = new URL(endpointUrl);
+  const path = endpoint.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
+  const metadataUrl = path
+    ? `${endpoint.origin}/.well-known/oauth-protected-resource/${path}`
+    : `${endpoint.origin}/.well-known/oauth-protected-resource`;
+  const response = await fetchFn(metadataUrl, {
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => null);
+  if (!response?.ok) {
+    throw pluginEngineError(
+      "PLUGIN_OAUTH_DISCOVERY_FAILED",
+      `Protected-resource metadata discovery failed for ${endpointUrl}${response ? ` (${response.status})` : ""}`,
+    );
+  }
+  const metadata = (await response.json()) as {
+    authorization_servers?: unknown;
+  };
+  const servers = Array.isArray(metadata.authorization_servers)
+    ? metadata.authorization_servers.filter(
+        (server): server is string =>
+          typeof server === "string" && server.length > 0,
+      )
+    : [];
+  if (servers.length === 0) {
+    throw pluginEngineError(
+      "PLUGIN_OAUTH_DISCOVERY_FAILED",
+      `Protected-resource metadata for ${endpointUrl} declares no authorization server`,
+    );
+  }
+  return servers[0]!.replace(/\/+$/, "");
 }
 
 async function resolvePinnedPayload(
@@ -413,12 +505,14 @@ export async function startActivation(
     );
   }
 
+  const bindings = await resolveOauthComponentBindings({
+    pluginKey: install.plugin_key,
+    components: oauthComponents,
+    componentRows: await deps.store.listComponents(install.id),
+    fetchFn: deps.fetchFn,
+  });
   const authDomains = [
-    ...new Set(
-      oauthComponents.map((component) =>
-        component.auth.mode === "oauth" ? component.auth.authDomain : "",
-      ),
-    ),
+    ...new Set(bindings.map((binding) => binding.authDomain)),
   ];
   if (authDomains.length !== 1) {
     throw pluginEngineError(
@@ -430,10 +524,8 @@ export async function startActivation(
 
   // Distinct resource indicators, in manifest order.
   const resources: string[] = [];
-  for (const component of oauthComponents) {
-    if (component.auth.mode !== "oauth") continue;
-    const resource = normalizeResource(component.auth.resourceIndicator);
-    if (!resources.includes(resource)) resources.push(resource);
+  for (const binding of bindings) {
+    if (!resources.includes(binding.resource)) resources.push(binding.resource);
   }
 
   const apiBaseUrl = (args.apiBaseUrl ?? deps.apiBaseUrl())?.replace(

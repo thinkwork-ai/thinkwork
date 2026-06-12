@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Badge, Button } from "@thinkwork/ui";
@@ -8,6 +8,7 @@ import {
   LogIn,
   LogOut,
   RotateCw,
+  Settings2,
   ShieldCheck,
   Trash2,
 } from "lucide-react";
@@ -416,6 +417,27 @@ export function PluginDetail() {
                 ))}
               </div>
             )}
+          </SettingsSection>
+        ) : null}
+
+        {pluginKey === "twenty" && install && showOperatorActions ? (
+          // U10 IA decision: SettingsCrm stays a standalone operator
+          // deployment-detail page (service details, health checks,
+          // lifecycle actions), reachable from here rather than folded
+          // into PluginDetail — the smallest correct change while the
+          // plugin and managed-application surfaces coexist.
+          <SettingsSection label="Deployment">
+            <SettingsRow
+              label="Twenty CRM deployment"
+              description="Runtime status, service details, health checks, and lifecycle actions for the deployed CRM."
+            >
+              <Button asChild type="button" variant="outline" size="sm">
+                <Link to="/settings/crm">
+                  <Settings2 className="size-4" />
+                  Open deployment details
+                </Link>
+              </Button>
+            </SettingsRow>
           </SettingsSection>
         ) : null}
 

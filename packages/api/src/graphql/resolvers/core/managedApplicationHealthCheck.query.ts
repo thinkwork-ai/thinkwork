@@ -34,11 +34,11 @@ export const managedApplicationHealthCheck = async (
     return { key, ...result };
   }
 
-  return twentyHealthCheck();
+  return twentyHealthCheck(tenantId);
 };
 
-async function twentyHealthCheck() {
-  const application = readManagedApplication("twenty");
+async function twentyHealthCheck(tenantId: string | null) {
+  const application = await readManagedApplication("twenty", tenantId);
   const startedAt = Date.now();
   const checkedAt = new Date(startedAt).toISOString();
   const endpoint = application.url;

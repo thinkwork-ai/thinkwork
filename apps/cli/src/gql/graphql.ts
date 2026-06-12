@@ -740,6 +740,7 @@ export enum ComplianceEventType {
   OutputArtifactProduced = "OUTPUT_ARTIFACT_PRODUCED",
   PluginActivationGranted = "PLUGIN_ACTIVATION_GRANTED",
   PluginActivationRevoked = "PLUGIN_ACTIVATION_REVOKED",
+  PluginCutover = "PLUGIN_CUTOVER",
   PluginInstalled = "PLUGIN_INSTALLED",
   PluginUninstalled = "PLUGIN_UNINSTALLED",
   PolicyAllowed = "POLICY_ALLOWED",
@@ -2273,6 +2274,13 @@ export type Mutation = {
   createThreadLabel: ThreadLabel;
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
+  /**
+   * One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
+   * MCP row to plugin ownership (management_source 'plugin' under the
+   * tenant's twenty install) and invalidates per-server user tokens so users
+   * re-activate at app level. Idempotent — a re-run reports a no-op.
+   */
+  cutoverTwentyPlugin: TwentyPluginCutoverResult;
   /**
    * Disconnect the calling user's activation: deletes stored token secrets and
    * marks the activation revoked. Local-only — provider-side grants are not
@@ -6371,6 +6379,18 @@ export type TraceEvent = {
   toolCallId?: Maybe<Scalars["String"]["output"]>;
   toolName?: Maybe<Scalars["String"]["output"]>;
   traceId: Scalars["String"]["output"];
+};
+
+/** Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10). */
+export type TwentyPluginCutoverResult = {
+  __typename?: "TwentyPluginCutoverResult";
+  /** True when this run changed ownership (adoption or legacy-row removal). */
+  adopted: Scalars["Boolean"]["output"];
+  /** Per-server user tokens invalidated; affected users re-activate at app level. */
+  invalidatedUserTokenCount: Scalars["Int"]["output"];
+  /** The canonical plugin-owned Twenty MCP server row after the run. */
+  mcpServerId?: Maybe<Scalars["ID"]["output"]>;
+  message: Scalars["String"]["output"];
 };
 
 export type UninstallPluginInput = {
