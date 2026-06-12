@@ -213,11 +213,22 @@ export interface AgentsMdRoutingProfileEntry {
   routingGuidance?: string | null;
 }
 
+/**
+ * An Active Space participant routing entry. `folderPath` is the fetchable
+ * mount path (`Users/<slug>/` — the top-level plural root, distinct from the
+ * acting user's writable `User/` folder) the agent passes to
+ * `fetch_workspace_source` to hydrate this participant's context read-only.
+ */
+export interface AgentsMdRoutingParticipantEntry {
+  name: string;
+  folderPath: string;
+}
+
 export interface ComposeAgentsMdRoutingInput {
   baseline: string;
   spaces: AgentsMdRoutingSpaceEntry[];
   user?: AgentsMdRoutingUserEntry | null;
-  participants?: string[];
+  participants?: AgentsMdRoutingParticipantEntry[];
   agentProfiles?: AgentsMdRoutingProfileEntry[];
 }
 
@@ -294,7 +305,9 @@ export function composeAgentsMdWithRouting(
   if (participants.length > 0) {
     lines.push("", "### Active Space Participants", "");
     for (const participant of participants) {
-      lines.push(`- ${collapseWhitespace(participant)}`);
+      lines.push(
+        `- ${collapseWhitespace(participant.name)} — \`${participant.folderPath}\` (not currently hydrated)`,
+      );
     }
   }
   if (agentProfiles.length > 0) {

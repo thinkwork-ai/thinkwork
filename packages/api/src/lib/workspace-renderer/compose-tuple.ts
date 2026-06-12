@@ -600,7 +600,13 @@ function renderGeneratedAgentsMd(input: {
           folderPath: "User/",
         }
       : null,
-    participants: input.participants.map((participant) => participant.name),
+    // Participants carry their fetchable mount path: fetched participant
+    // folders mount at the top-level plural `Users/<slug>/` root — never
+    // inside the acting user's writable `User/` tree.
+    participants: input.participants.map((participant) => ({
+      name: participant.name,
+      folderPath: `Users/${runtimeFolderSegment(participant.slug)}/`,
+    })),
     agentProfiles: input.agentProfiles.map((profile) => ({
       name: profile.name,
       routingGuidance: profile.routingGuidance,

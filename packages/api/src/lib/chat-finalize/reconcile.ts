@@ -938,13 +938,14 @@ function lanePolicyFailure(
 }
 
 function activeSpaceFolderSegment(spaceSourcePrefix: string): string | null {
-  const marker = "/spaces/";
-  const index = spaceSourcePrefix.indexOf(marker);
-  if (index === -1) return null;
-  const slug = spaceSourcePrefix
-    .slice(index + marker.length)
-    .replace(/\/+$/, "")
-    .trim();
+  // Parse by known structure — `tenants/<tenant-slug>/spaces/<space-slug>/`
+  // — never by searching for a "/spaces/" marker: a tenant whose slug is
+  // literally "spaces" (prefix `tenants/spaces/spaces/<slug>/`) would match
+  // the marker at the wrong position and extract garbage, rejecting every
+  // active-space write as fetched_path_read_only.
+  const segments = spaceSourcePrefix.replace(/\/+$/, "").split("/");
+  if (segments[0] !== "tenants" || segments[2] !== "spaces") return null;
+  const slug = segments.slice(3).join("/").trim();
   if (!slug) return null;
   // Mirrors the renderer's runtimeFolderSegment(): the rendered Spaces/
   // folder replaces any internal slashes in the slug with dashes.

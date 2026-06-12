@@ -15,7 +15,7 @@
  * Request body:
  *   {
  *     kind: "space" | "user",
- *     slug: string,              // workspace folder name (Spaces/<slug> | User/<slug>)
+ *     slug: string,              // workspace folder name (Spaces/<slug> | Users/<slug>)
  *     threadId: string,
  *     threadTurnId: string,
  *     listedInRouting?: boolean  // caller hint: turn's rendered routing listed
@@ -25,6 +25,10 @@
  * Responses:
  *   200 { outcome: "success", files: [{ key, etag, relPath, size }] }
  *   200 { outcome: "partial", partial: true, files: [...] }   // caps hit
+ *   200 { outcome: "denied", deniedReason: "already_hydrated", files: [] }
+ *       // identity-based: the target IS the thread's active Space (under any
+ *       // of its identifiers) or the acting user — already mounted writable;
+ *       // a remount would destroy the hydrated lane. Informative, not 403.
  *   403 { outcome: "denied", deniedReason: "not_authorized" | "revoked", files: [] }
  *   400/401/403/404 { error }                                  // shape errors
  *
@@ -192,13 +196,34 @@ export async function handler(
     });
     return json({ outcome: "denied", deniedReason, files: [] }, 403);
   };
+  // Identity-based "already mounted writable" denial (FIX-1b / FIX-3): the
+  // target is the thread's active Space or the acting user. 200, not 403 —
+  // the agent should simply read the hydrated folder directly.
+  const denyAlreadyHydrated =
+    async (): Promise<APIGatewayProxyStructuredResultV2> => {
+      await recordFetchEvent(threadTurnId, tenantId, {
+        target,
+        outcome: "denied",
+        fileCount: 0,
+        totalBytes: 0,
+        deniedReason: "already_hydrated",
+        at: new Date().toISOString(),
+      });
+      return json(
+        { outcome: "denied", deniedReason: "already_hydrated", files: [] },
+        200,
+      );
+    };
 
   // --- Authorize + resolve the source prefix ------------------------------
   let prefix: string;
   let includePath: (relPath: string) => boolean;
 
   if (kind === "space") {
-    const [space] = await db
+    // Both identifiers can match different rows; prefer the
+    // workspace_folder_name match deterministically (routing entries list
+    // folder names) before falling back to the slug match (FIX-6).
+    const candidates = await db
       .select({
         id: spaces.id,
         slug: spaces.slug,
@@ -211,9 +236,18 @@ export async function handler(
           eq(spaces.tenant_id, tenantId),
           or(eq(spaces.workspace_folder_name, slug), eq(spaces.slug, slug)),
         ),
-      )
-      .limit(1);
+      );
+    const space =
+      candidates.find((candidate) => candidate.workspaceFolderName === slug) ??
+      candidates.find((candidate) => candidate.slug === slug) ??
+      candidates[0];
     if (!space) return notFound("Space not found");
+
+    // FIX-3 (identity-based): the thread's ACTIVE space is already hydrated
+    // writable — fetching it under ANY identifier (folder name or slug) must
+    // not destructively remount it read-only. The extension's client-side
+    // guard only compares folder segments; this check closes the alias hole.
+    if (space.id === thread.spaceId) return await denyAlreadyHydrated();
 
     const spaceFolderName = space.workspaceFolderName ?? space.slug;
     try {
@@ -254,6 +288,10 @@ export async function handler(
       (row) => userWorkspaceSlug(row) === slug,
     );
     if (!participant) return await deny();
+
+    // FIX-1b: the acting/thread user's own folder is already hydrated
+    // writable at User/ — never authorize a read-only remount of it.
+    if (participant.id === thread.userId) return await denyAlreadyHydrated();
 
     prefix = userWorkspacePrefix({ tenantSlug, userSlug: slug });
     includePath = shouldRenderUserSourcePath;
@@ -333,7 +371,7 @@ async function recordFetchEvent(
 
 /**
  * Mirror of workspace-files.ts resolveUserContextTarget's slug derivation so
- * a routing entry like `User/<slug>/` resolves to the same user folder here.
+ * a routing entry like `Users/<slug>/` resolves to the same user folder here.
  */
 function userWorkspaceSlug(user: {
   workspaceFolderName: string | null;

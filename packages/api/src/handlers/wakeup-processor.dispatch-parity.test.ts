@@ -209,6 +209,36 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(withoutSecret.fetch_workspace_source_enabled).toBe(false);
   });
 
+  it("ships neither model_routing_policy nor approved_model_ids on the wire when both are omitted (system-actor wakeups)", () => {
+    // System/agent-actor wakeups (scheduled jobs, automations) have no
+    // invoking user, so no approval list can be resolved. The runtime's
+    // assertModelRouteApproved throws MODEL_ROUTE_UNAPPROVED for any routed
+    // model missing from approved_model_ids — shipping the policy with []
+    // approvals would fail every routed skill/MCP call on automation turns.
+    // The wakeup builder therefore passes BOTH as undefined for non-user
+    // actors, and they must drop off the wire entirely.
+    const fields = buildAgentDispatchControlFields(
+      baseArgs({ modelRoutingPolicy: undefined, approvedModelIds: undefined }),
+    );
+    const wire = JSON.parse(JSON.stringify(fields)) as Record<string, unknown>;
+    expect("model_routing_policy" in wire).toBe(false);
+    expect("approved_model_ids" in wire).toBe(false);
+  });
+
+  it("wakeup-processor gates the routing policy on a user-actor invoker", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    // The policy only ships when the wakeup has a real human invoker
+    // (requested_by_actor_type === 'user' → invokerUserId defined)…
+    expect(wakeupSource).toContain(
+      "invokerUserId && modelRoutingRoutes.length > 0",
+    );
+    // …and the approvals catalog resolves for that invoker, never the
+    // agent's human pair (R15).
+    expect(wakeupSource).toMatch(
+      /listApprovedModelCatalog\(\{\s*tenantId: wakeup\.tenant_id,\s*userId: invokerUserId,/,
+    );
+  });
+
   it("passes model routing policy and approved model ids through unchanged", () => {
     const routes = [
       {

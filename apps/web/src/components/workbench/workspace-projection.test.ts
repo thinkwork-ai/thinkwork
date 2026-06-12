@@ -18,6 +18,7 @@ const FULL_SNAPSHOT = {
       { owner: "space:revenue", prefix: "tenants/acme/spaces/revenue/" },
     ],
     agentsMdKey: "tenants/acme/threads/thread-1/AGENTS.md",
+    agentsMdEtag: "etag-render-1",
     injectedFiles: ["AGENTS.md", "CONTEXT.md"],
     generatedAt: "2026-06-12T10:00:00.000Z",
     fetches: [
@@ -63,6 +64,7 @@ describe("parseWorkspaceProjection", () => {
     expect(projection!.agentsMdKey).toBe(
       "tenants/acme/threads/thread-1/AGENTS.md",
     );
+    expect(projection!.agentsMdEtag).toBe("etag-render-1");
     expect(projection!.injectedFiles).toEqual(["AGENTS.md", "CONTEXT.md"]);
     expect(projection!.generatedAt).toBe("2026-06-12T10:00:00.000Z");
     expect(projection!.fetches).toHaveLength(2);
@@ -109,6 +111,7 @@ describe("parseWorkspaceProjection", () => {
     expect(projection).not.toBeNull();
     expect(projection!.renderedPrefix).toBeNull();
     expect(projection!.agentsMdKey).toBeNull();
+    expect(projection!.agentsMdEtag).toBeNull();
     expect(projection!.generatedAt).toBeNull();
     // Entries with no owner/prefix are dropped; valid partials kept.
     expect(projection!.sources).toEqual([
@@ -144,13 +147,18 @@ describe("parseWorkspaceProjection", () => {
 });
 
 describe("selectLatestProjection", () => {
-  function turnWith(id: string, generatedAt: string | null) {
+  function turnWith(
+    id: string,
+    generatedAt: string | null,
+    agentsMdEtag?: string,
+  ) {
     return {
       id,
       contextSnapshot: {
         workspace_projection: {
           generatedAt,
           agentsMdKey: `prefix/${id}/AGENTS.md`,
+          ...(agentsMdEtag ? { agentsMdEtag } : {}),
         },
       },
     };
@@ -158,12 +166,13 @@ describe("selectLatestProjection", () => {
 
   it("picks the projection with the newest generatedAt", () => {
     const latest = selectLatestProjection([
-      turnWith("turn-new", "2026-06-12T12:00:00Z"),
-      turnWith("turn-old", "2026-06-12T09:00:00Z"),
+      turnWith("turn-new", "2026-06-12T12:00:00Z", "etag-new"),
+      turnWith("turn-old", "2026-06-12T09:00:00Z", "etag-old"),
       { id: "turn-none", contextSnapshot: {} },
     ]);
     expect(latest?.turnId).toBe("turn-new");
     expect(latest?.agentsMdKey).toBe("prefix/turn-new/AGENTS.md");
+    expect(latest?.agentsMdEtag).toBe("etag-new");
   });
 
   it("returns null when no turn carries a projection", () => {
@@ -192,18 +201,65 @@ describe("agentsMdContentMayDiffer", () => {
         turnId: "turn-1",
         generatedAt: projection.generatedAt,
         agentsMdKey: projection.agentsMdKey,
+        agentsMdEtag: projection.agentsMdEtag,
       }),
     ).toBe(false);
   });
 
-  it("is true when a later turn re-rendered the workspace", () => {
+  it("is true when a later turn re-rendered the workspace (no etags)", () => {
+    // latest carries no etag, so the heuristic decides.
     expect(
       agentsMdContentMayDiffer("turn-1", projection, {
         turnId: "turn-2",
         generatedAt: "2026-06-12T12:00:00Z",
         agentsMdKey: projection.agentsMdKey,
+        agentsMdEtag: null,
       }),
     ).toBe(true);
+  });
+
+  it("is false when a later render produced the same etag (fact beats heuristic)", () => {
+    // The heuristic alone would flag this (different turn, different key),
+    // but equal etags prove the rendered bytes are identical.
+    expect(
+      agentsMdContentMayDiffer("turn-1", projection, {
+        turnId: "turn-2",
+        generatedAt: "2026-06-12T12:00:00Z",
+        agentsMdKey: "prefix/turn-2/AGENTS.md",
+        agentsMdEtag: projection.agentsMdEtag,
+      }),
+    ).toBe(false);
+  });
+
+  it("is true when etags are present on both sides and differ", () => {
+    expect(
+      agentsMdContentMayDiffer("turn-1", projection, {
+        turnId: "turn-1",
+        generatedAt: projection.generatedAt,
+        agentsMdKey: projection.agentsMdKey,
+        agentsMdEtag: "etag-render-2",
+      }),
+    ).toBe(true);
+  });
+
+  it("falls back to the heuristic when this turn's snapshot has no etag", () => {
+    const noEtagProjection = { ...projection, agentsMdEtag: null };
+    expect(
+      agentsMdContentMayDiffer("turn-1", noEtagProjection, {
+        turnId: "turn-2",
+        generatedAt: "2026-06-12T12:00:00Z",
+        agentsMdKey: projection.agentsMdKey,
+        agentsMdEtag: "etag-render-2",
+      }),
+    ).toBe(true);
+    expect(
+      agentsMdContentMayDiffer("turn-1", noEtagProjection, {
+        turnId: "turn-1",
+        generatedAt: projection.generatedAt,
+        agentsMdKey: projection.agentsMdKey,
+        agentsMdEtag: "etag-render-2",
+      }),
+    ).toBe(false);
   });
 
   it("is false when no projection exists anywhere", () => {

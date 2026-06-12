@@ -40,7 +40,6 @@ The runtime downloads the manifest-backed workspace into `/workspace`.
 ├── skills/
 ├── workspaces/
 ├── Spaces/
-│   ├── INDEX.md
 │   └── board-pack/
 │       ├── SPACE.md
 │       ├── CONTEXT.md
@@ -60,7 +59,7 @@ The runtime downloads the manifest-backed workspace into `/workspace`.
     └── notes/
 ```
 
-The Agent source becomes the root of `/workspace`. The User source remains under `User/`. The active Space is mounted under `Spaces/<active-space>/`, and `Spaces/INDEX.md` lists other authorized Spaces without hydrating all of them. The runtime should not have a top-level `Agent/`, singular `Space/`, root `USER.md`, `workspace/`, `source/`, or `workspace-archives/`.
+The Agent source becomes the root of `/workspace`. The User source remains under `User/`. The active Space is mounted under `Spaces/<active-space>/`. Other authorized Spaces are not hydrated; the compose step lists them in the generated Workspace Routing section of `AGENTS.md` (built from authorization state: active Space, other authorized Spaces, acting user, participants, and Agent Profiles — replacing the former `Spaces/INDEX.md`), and the agent reads them read-only with the `fetch_workspace_source` tool. The runtime should not have a top-level `Agent/`, singular `Space/`, root `USER.md`, `workspace/`, `source/`, or `workspace-archives/`.
 
 `Thread/GOAL.md`, `Thread/PROGRESS.md`, and `Thread/TASKS.md` are mounted read-only because they describe database state. Narrative files under `Thread/notes/` are writable Thread-scoped working files.
 

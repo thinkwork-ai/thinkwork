@@ -655,8 +655,8 @@ describe("renderWorkspaceTuple", () => {
             },
           ],
           participants: [
-            { id: "user-2", name: "Alice" },
-            { id: "user-1", name: "Eric" },
+            { id: "user-2", name: "Alice", slug: "alice" },
+            { id: "user-1", name: "Eric", slug: "eric" },
           ],
           agentProfiles: [
             {
@@ -687,8 +687,15 @@ describe("renderWorkspaceTuple", () => {
     );
     expect(composed).not.toContain("secret-space");
     expect(composed).toContain("### Active Space Participants");
-    expect(composed).toContain("- Alice");
-    expect(composed).toContain("- Eric");
+    // Participants render with their fetchable Users/<slug>/ mount path —
+    // the top-level plural root, never the acting user's writable User/.
+    expect(composed).toContain(
+      "- Alice — `Users/alice/` (not currently hydrated)",
+    );
+    expect(composed).toContain(
+      "- Eric — `Users/eric/` (not currently hydrated)",
+    );
+    expect(composed).not.toContain("`User/alice/`");
     expect(composed).toContain("- Researcher — Deep research tasks");
     expect(composed).toContain("- Writer");
   });

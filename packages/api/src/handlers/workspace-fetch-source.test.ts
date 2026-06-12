@@ -103,7 +103,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.rowsByTable = {
     tenants: [{ slug: "acme" }],
-    threads: [{ id: "thread-1", spaceId: "space-1", userId: "user-1" }],
+    // The thread's ACTIVE space is space-active; the canned `spaces` row
+    // (space-1/growth) is a DIFFERENT, non-hydrated space so success-path
+    // fetches stay authorized (fetching the active space itself is denied
+    // already_hydrated — covered explicitly below).
+    threads: [{ id: "thread-1", spaceId: "space-active", userId: "user-1" }],
     spaces: [
       {
         id: "space-1",
@@ -270,6 +274,121 @@ describe("space fetch authorization (scenarios 1 + 2)", () => {
   });
 });
 
+describe("active-space identity denial (FIX-3)", () => {
+  it("denies fetching the thread's active space under its ALIAS identifier with 200 already_hydrated", async () => {
+    // The active space's folder name is 'research-a' but it is fetched under
+    // its other identifier (the row slug). Identity (space id), not the
+    // requested string, drives the denial.
+    mocks.rowsByTable.spaces = [
+      {
+        id: "space-active",
+        slug: "research-a-alias",
+        workspaceFolderName: "research-a",
+        accessMode: "private",
+      },
+    ];
+
+    const res = await handler(
+      event(spaceRequest({ slug: "research-a-alias" })),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(parse(res)).toEqual({
+      outcome: "denied",
+      deniedReason: "already_hydrated",
+      files: [],
+    });
+    expect(mocks.assertSpaceAccessAllowed).not.toHaveBeenCalled();
+    expect(mocks.listObjects).not.toHaveBeenCalled();
+    expect(mocks.appendEvent).toHaveBeenCalledWith(
+      "turn-1",
+      expect.objectContaining({
+        target: { kind: "space", slug: "research-a-alias" },
+        outcome: "denied",
+        deniedReason: "already_hydrated",
+        fileCount: 0,
+        totalBytes: 0,
+      }),
+      { tenantId: "tenant-1" },
+    );
+  });
+
+  it("denies fetching the active space under its folder name too", async () => {
+    mocks.rowsByTable.spaces = [
+      {
+        id: "space-active",
+        slug: "research-a-alias",
+        workspaceFolderName: "research-a",
+        accessMode: "private",
+      },
+    ];
+
+    const res = await handler(event(spaceRequest({ slug: "research-a" })));
+
+    expect(res.statusCode).toBe(200);
+    expect(parse(res).deniedReason).toBe("already_hydrated");
+    expect(mocks.listObjects).not.toHaveBeenCalled();
+  });
+});
+
+describe("ambiguous space resolution (FIX-6)", () => {
+  it("prefers the workspace_folder_name match over a slug match deterministically", async () => {
+    // One space's SLUG collides with another space's FOLDER NAME. Routing
+    // entries list folder names, so the folder-name match must win
+    // regardless of row order.
+    mocks.rowsByTable.spaces = [
+      {
+        id: "space-by-slug",
+        slug: "growth",
+        workspaceFolderName: "something-else",
+        accessMode: "private",
+      },
+      {
+        id: "space-by-folder",
+        slug: "unrelated",
+        workspaceFolderName: "growth",
+        accessMode: "private",
+      },
+    ];
+
+    const res = await handler(event(spaceRequest()));
+
+    expect(res.statusCode).toBe(200);
+    expect(parse(res).outcome).toBe("success");
+    expect(mocks.assertSpaceAccessAllowed).toHaveBeenCalledWith(
+      expect.objectContaining({ spaceId: "space-by-folder" }),
+    );
+    expect(mocks.listObjects).toHaveBeenCalledWith({
+      bucket: "test-bucket",
+      prefix: SPACE_PREFIX,
+    });
+  });
+
+  it("falls back to the slug match when no folder name matches", async () => {
+    mocks.rowsByTable.spaces = [
+      {
+        id: "space-by-slug",
+        slug: "growth",
+        workspaceFolderName: "growth-folder",
+        accessMode: "private",
+      },
+    ];
+    mocks.listObjects.mockResolvedValue([]);
+
+    const res = await handler(event(spaceRequest()));
+
+    expect(res.statusCode).toBe(200);
+    expect(mocks.assertSpaceAccessAllowed).toHaveBeenCalledWith(
+      expect.objectContaining({ spaceId: "space-by-slug" }),
+    );
+    // The space's canonical folder name drives the source prefix.
+    expect(mocks.listObjects).toHaveBeenCalledWith({
+      bucket: "test-bucket",
+      prefix: "tenants/acme/spaces/growth-folder/",
+    });
+  });
+});
+
 describe("per-fetch caps (scenario 3)", () => {
   it("truncates at the file cap with sorted-by-key determinism and outcome partial", async () => {
     // Listed deliberately out of order to prove server-side sorting.
@@ -382,6 +501,38 @@ describe("user-folder fetch (scenario 4)", () => {
         target: { kind: "user", slug: "intruder" },
         outcome: "denied",
         deniedReason: "not_authorized",
+      }),
+      { tenantId: "tenant-1" },
+    );
+  });
+
+  it("denies fetching the acting/thread user's own folder with 200 already_hydrated (FIX-1b)", async () => {
+    // user-1 IS the thread's acting user — their folder is already mounted
+    // writable at User/; a read-only remount must never be authorized.
+    mocks.rowsByTable.space_members = [
+      {
+        id: "user-1",
+        workspaceFolderName: "eric",
+        email: "eric@example.com",
+        name: "Eric",
+      },
+    ];
+
+    const res = await handler(event(userRequest("eric")));
+
+    expect(res.statusCode).toBe(200);
+    expect(parse(res)).toEqual({
+      outcome: "denied",
+      deniedReason: "already_hydrated",
+      files: [],
+    });
+    expect(mocks.listObjects).not.toHaveBeenCalled();
+    expect(mocks.appendEvent).toHaveBeenCalledWith(
+      "turn-1",
+      expect.objectContaining({
+        target: { kind: "user", slug: "eric" },
+        outcome: "denied",
+        deniedReason: "already_hydrated",
       }),
       { tenantId: "tenant-1" },
     );

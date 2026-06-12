@@ -409,6 +409,17 @@ export function TaskThreadView({
     };
   }, []);
 
+  // Most recent workspace projection across the thread — older turns'
+  // AGENTS.md viewers label their (current-state) content as possibly
+  // differing from that turn's render (plan 2026-06-12-002 U9). Memoized:
+  // selecting re-parses every turn's contextSnapshot, which would otherwise
+  // run on every streaming chunk render.
+  const turns = thread?.turns;
+  const latestProjection = useMemo(
+    () => selectLatestProjection(turns ?? []),
+    [turns],
+  );
+
   if (isLoading) {
     return <TaskThreadState label="Loading..." />;
   }
@@ -435,10 +446,6 @@ export function TaskThreadView({
     transcriptMessages,
     thread.turns ?? [],
   );
-  // Most recent workspace projection across the thread — older turns'
-  // AGENTS.md viewers label their (current-state) content as possibly
-  // differing from that turn's render (plan 2026-06-12-002 U9).
-  const latestProjection = selectLatestProjection(thread.turns ?? []);
   const selectedArtifact =
     artifactPanelState?.artifacts.find(
       (artifact) => artifact.id === artifactPanelState.selectedArtifactId,
@@ -1659,13 +1666,19 @@ function ThreadTurnActivity({
   // One hook per turn surface (KTD3): live-elapsed only ticks while running,
   // freezes on terminal status, and is null for not-yet-started turns.
   const elapsedMs = useTurnElapsed(displayStartedAtForTurn(turn), running);
+  // Per-turn workspace projection (U9): absent on pre-feature turns.
+  // Memoized on the snapshot value (an AWSJSON string) so streaming chunk
+  // re-renders don't re-JSON.parse every turn's snapshot.
+  const contextSnapshot = turn?.contextSnapshot;
+  const projection = useMemo(
+    () => parseWorkspaceProjection(contextSnapshot),
+    [contextSnapshot],
+  );
 
   if (!turn) return null;
 
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage, message);
-  // Per-turn workspace projection (U9): absent on pre-feature turns.
-  const projection = parseWorkspaceProjection(turn.contextSnapshot);
 
   // Single source of truth for the header label (KTD2): derived from
   // turn.status, never from "assistant message present". skipped → null.

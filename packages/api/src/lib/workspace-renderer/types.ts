@@ -139,6 +139,12 @@ export interface WorkspaceSpaceIndexEntry {
 export interface WorkspaceSpaceParticipantEntry {
   id: string;
   name: string;
+  /**
+   * The participant's user workspace folder name
+   * (`workspace_folder_name ?? derived user slug`) — the segment the routing
+   * section renders as the fetchable `Users/<slug>/` path.
+   */
+  slug: string;
 }
 
 export interface WorkspaceAgentProfileRoutingEntry {

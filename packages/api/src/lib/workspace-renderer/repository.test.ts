@@ -138,3 +138,48 @@ describe("listRoutableAgentProfiles space-local scoping (U7)", () => {
     expect(spaceAEntries.map((entry) => entry.slug)).toEqual(["research"]);
   });
 });
+
+describe("listSpaceParticipants slug derivation (THNK-10 fetchable Users/<slug>/ paths)", () => {
+  it("returns workspace_folder_name as the slug when set, else the derived user slug", async () => {
+    const repo = new DrizzleWorkspaceTupleRepository();
+    rowsQueue.push([
+      {
+        id: "user-2",
+        name: "Jane Doe",
+        email: "jane@example.com",
+        workspaceFolderName: "jane-folder",
+      },
+      {
+        id: "user-3",
+        name: "Sam Lee",
+        email: "Sam.Lee@example.com",
+        workspaceFolderName: null,
+      },
+    ]);
+
+    const participants = await repo.listSpaceParticipants(tuple(SPACE_A));
+
+    expect(participants).toEqual([
+      { id: "user-2", name: "Jane Doe", slug: "jane-folder" },
+      { id: "user-3", name: "Sam Lee", slug: "sam-lee" },
+    ]);
+  });
+
+  it("derives the slug from the name when the email is absent", async () => {
+    const repo = new DrizzleWorkspaceTupleRepository();
+    rowsQueue.push([
+      {
+        id: "user-4",
+        name: "Ada Lovelace",
+        email: null,
+        workspaceFolderName: null,
+      },
+    ]);
+
+    const participants = await repo.listSpaceParticipants(tuple(SPACE_A));
+
+    expect(participants).toEqual([
+      { id: "user-4", name: "Ada Lovelace", slug: "ada-lovelace" },
+    ]);
+  });
+});

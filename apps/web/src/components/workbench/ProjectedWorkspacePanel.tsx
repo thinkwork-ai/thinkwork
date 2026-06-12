@@ -12,17 +12,23 @@ import type { ProjectedWorkspace } from "./workspace-projection";
  * captured at dispatch/finalize time for THAT turn.
  *
  * The AGENTS.md body is the one best-effort exception: the snapshot stores an
- * S3 key, and the web can only read the CURRENT rendered AGENTS.md (via the
- * workspace-files thread target). For the latest render they match; for older
- * turns the panel labels the body as possibly differing
- * (`agentsMdMayDiffer`), and a failed read shows an expired state. The
- * structured fields above are always from this turn's snapshot.
+ * S3 key (and, on newer snapshots, an ETag), and the web can only read the
+ * CURRENT rendered AGENTS.md (via the workspace-files thread target). For the
+ * latest render they match; for older turns the panel labels the body as
+ * possibly differing (`agentsMdMayDiffer` — etag inequality when both
+ * snapshots carry `agentsMdEtag`, else a later-turn heuristic), and a failed
+ * read shows an expired state. The structured fields above are always from
+ * this turn's snapshot.
  */
 export interface ProjectedWorkspacePanelProps {
   projection: ProjectedWorkspace;
   /** Needed for the AGENTS.md content read; omit to disable the body view. */
   threadId?: string | null;
-  /** True when a later turn re-rendered the workspace (see module docs). */
+  /**
+   * True when the current AGENTS.md content may differ from this turn's
+   * render — etag mismatch when known, later-turn heuristic otherwise (see
+   * module docs).
+   */
   agentsMdMayDiffer?: boolean;
   /** Injectable AGENTS.md reader for tests; defaults to the REST client. */
   loadAgentsMd?: (threadId: string) => Promise<string | null>;

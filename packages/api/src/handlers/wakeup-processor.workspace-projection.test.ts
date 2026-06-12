@@ -8,10 +8,11 @@ import { renderWorkspaceTupleForWakeup } from "./wakeup-processor.js";
  *
  * wakeup-processor has TWO dispatch sites that reuse the SAME
  * thread_turn_id (`run.id`): the primary `agentCorePayload` invoke and the
- * turn-loop re-invoke. Both must record the projection through the shared
- * recorder (same shape as chat-agent-invoke), and the RE-dispatch write
- * must run through the merge-semantics writer so fetch events appended
- * earlier in the turn survive (covered behaviorally in
+ * turn-loop re-invoke. The render happens ONCE, pre-loop, so the projection
+ * snapshot is recorded exactly once before the primary invoke — an in-loop
+ * re-record would be a redundant UPDATE with identical inputs. Fetch events
+ * appended across loop iterations survive because the writer object-merges
+ * instead of replacing (covered behaviorally in
  * `../lib/workspace-projection-snapshot.test.ts`).
  */
 
@@ -85,41 +86,37 @@ describe("wakeup dispatch sites (source contract)", () => {
     "utf8",
   );
 
-  it("BOTH builders record the projection snapshot (main + turn-loop re-dispatch)", () => {
+  it("records the projection snapshot exactly once (render happens once, pre-loop)", () => {
     expect(
       source.match(/recordDispatchWorkspaceProjectionSnapshot\(\{/g),
-    ).toHaveLength(2);
-    // Both writes target the shared turn id and tenant scope.
-    expect(
-      source.match(/threadTurnId: run\.id,/g)?.length,
-    ).toBeGreaterThanOrEqual(2);
-    expect(source.match(/source: "wakeup-processor",/g)).toHaveLength(2);
+    ).toHaveLength(1);
+    expect(source.match(/source: "wakeup-processor",/g)).toHaveLength(1);
+    // The single write targets the shared turn id + tenant scope.
+    expect(source).toContain("threadTurnId: run.id,");
   });
 
-  it("primary write lands after render success and BEFORE the primary invoke", () => {
+  it("the single write lands after render success and BEFORE the primary invoke", () => {
     const renderAt = source.indexOf(
       "renderedWorkspace = await renderWorkspaceTupleForWakeup(",
     );
-    const firstWriteAt = source.indexOf(
+    const writeAt = source.indexOf(
       "recordDispatchWorkspaceProjectionSnapshot({",
     );
     const primaryInvokeAt = source.indexOf("await invokeAgentCore(");
     expect(renderAt).toBeGreaterThan(-1);
-    expect(firstWriteAt).toBeGreaterThan(renderAt);
-    expect(primaryInvokeAt).toBeGreaterThan(firstWriteAt);
+    expect(writeAt).toBeGreaterThan(renderAt);
+    expect(primaryInvokeAt).toBeGreaterThan(writeAt);
   });
 
-  it("turn-loop RE-dispatch re-records the snapshot inside the loop, before the re-invoke", () => {
+  it("the turn-loop RE-dispatch does NOT re-record the snapshot (identical inputs; merge-writer preserves fetches)", () => {
     const loopAt = source.indexOf("while (loopToolsCalled.length > 0");
-    const secondWriteAt = source.indexOf(
-      "recordDispatchWorkspaceProjectionSnapshot({",
-      loopAt,
-    );
-    const loopInvokeAt = source.indexOf(
-      "const loopResponse = await invokeAgentCore(",
-    );
     expect(loopAt).toBeGreaterThan(-1);
-    expect(secondWriteAt).toBeGreaterThan(loopAt);
-    expect(loopInvokeAt).toBeGreaterThan(secondWriteAt);
+    // No write inside or after the loop: the pre-loop snapshot persists for
+    // the whole turn, and fetch events appended between iterations survive
+    // because writeWorkspaceProjectionSnapshot object-merges (see
+    // ../lib/workspace-projection-snapshot.test.ts).
+    expect(
+      source.indexOf("recordDispatchWorkspaceProjectionSnapshot({", loopAt),
+    ).toBe(-1);
   });
 });

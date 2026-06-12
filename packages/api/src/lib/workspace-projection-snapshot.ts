@@ -9,6 +9,7 @@
  *     renderedPrefix: string,
  *     sources: [{ owner, prefix, etagSummary? }],
  *     agentsMdKey: string,            // `${renderedPrefix}AGENTS.md` (U2)
+ *     agentsMdEtag: string | null,    // etag of the generated AGENTS.md
  *     injectedFiles: string[],        // PROMPT_FILES present in the render
  *     generatedAt: string,            // ISO-8601
  *     fetches: WorkspaceProjectionFetchEvent[],   // appended by U4 (this lib)
@@ -50,8 +51,15 @@ export type WorkspaceProjectionFetchOutcome =
  * `revoked` — the access check failed but the caller asserted the target was
  * listed in the turn's rendered routing (`listedInRouting: true`), i.e.
  * access was revoked between render and fetch. The agent shouldn't retry.
+ * `already_hydrated` — the target is already mounted writable in this
+ * workspace (the thread's active Space, or the acting user's own User/
+ * folder); fetching it again would destructively remount a writable lane
+ * read-only. Returned with HTTP 200 — informative, not an access failure.
  */
-export type WorkspaceProjectionFetchDeniedReason = "not_authorized" | "revoked";
+export type WorkspaceProjectionFetchDeniedReason =
+  | "not_authorized"
+  | "revoked"
+  | "already_hydrated";
 
 export interface WorkspaceProjectionFetchTarget {
   kind: WorkspaceProjectionFetchKind;
@@ -155,6 +163,14 @@ export interface WorkspaceProjectionSnapshot {
   sources: WorkspaceProjectionSnapshotSource[];
   /** S3 key of the generated AGENTS.md for this exact render (U2). */
   agentsMdKey: string;
+  /**
+   * Etag of the generated AGENTS.md from the hydrate manifest, or null when
+   * the manifest carries no generated AGENTS.md entry. The key alone is not
+   * enough to recover a turn's actual AGENTS.md — every re-render overwrites
+   * the same key — so consumers (web panel, evals) compare etags to detect
+   * staleness instead of guessing.
+   */
+  agentsMdEtag: string | null;
   /** The PROMPT_FILES actually present in the rendered workspace. */
   injectedFiles: string[];
   /** ISO-8601 — when the render this snapshot describes was generated. */
@@ -169,7 +185,12 @@ export interface WorkspaceProjectionSnapshot {
 export interface WorkspaceProjectionManifestLike {
   generatedAt?: string;
   sources?: Array<{ owner?: string; prefix?: string }>;
-  files?: Array<{ path?: string; sourcePrefix?: string; etag?: string }>;
+  files?: Array<{
+    path?: string;
+    sourcePrefix?: string;
+    etag?: string;
+    generated?: boolean;
+  }>;
 }
 
 /**
@@ -222,6 +243,9 @@ export function buildWorkspaceProjectionSnapshot(input: {
   const presentPaths = new Set(
     files.map((file) => file.path).filter((p): p is string => !!p),
   );
+  const generatedAgentsMd = files.find(
+    (file) => file.path === "AGENTS.md" && file.generated === true,
+  );
 
   return {
     renderedPrefix: input.renderedPrefix,
@@ -237,6 +261,7 @@ export function buildWorkspaceProjectionSnapshot(input: {
       ];
     }),
     agentsMdKey: `${input.renderedPrefix}AGENTS.md`,
+    agentsMdEtag: generatedAgentsMd?.etag ?? null,
     injectedFiles: WORKSPACE_PROJECTION_PROMPT_FILES.filter((file) =>
       presentPaths.has(file),
     ),

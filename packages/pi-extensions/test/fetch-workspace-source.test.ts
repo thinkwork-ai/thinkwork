@@ -1,4 +1,5 @@
 import {
+  mkdir,
   mkdtemp,
   readFile,
   readdir,
@@ -17,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FETCH_WORKSPACE_SOURCE_TOOL_NAME,
   createFetchWorkspaceSourceExtension,
+  resolveSafeMountDir,
   type FetchedBaselineFile,
   type FetchWorkspaceSourceHost,
 } from "../src/fetch-workspace-source.js";
@@ -236,8 +238,8 @@ describe("fetch_workspace_source — mounting (AE1)", () => {
     );
   });
 
-  it("mounts a participant's User folder at User/<slug>/", async () => {
-    const { workspaceDir, host } = await makeHost({
+  it("mounts a participant's folder at the top-level Users/<slug>/ root, never under User/", async () => {
+    const { workspaceDir, host, appended } = await makeHost({
       "tenants/acme/users/jane/workspace/USER.md": "jane profile\n",
     });
     const fetchImpl = vi.fn().mockResolvedValue(
@@ -255,7 +257,7 @@ describe("fetch_workspace_source — mounting (AE1)", () => {
       host,
     });
 
-    await tool.execute(
+    const result = await tool.execute(
       "call-1",
       { kind: "user", slug: "jane" },
       NO_SIGNAL,
@@ -264,8 +266,56 @@ describe("fetch_workspace_source — mounting (AE1)", () => {
     );
 
     expect(
-      await readFile(path.join(workspaceDir, "User/jane/USER.md"), "utf8"),
+      await readFile(path.join(workspaceDir, "Users/jane/USER.md"), "utf8"),
     ).toBe("jane profile\n");
+    // Nothing bleeds into the acting user's writable User/ tree.
+    await expect(stat(path.join(workspaceDir, "User/jane"))).rejects.toThrow();
+    expect(appended[0]!.map((file) => file.path)).toEqual([
+      "Users/jane/USER.md",
+    ]);
+    expect(
+      (result as { details?: { mountPath?: string } }).details?.mountPath,
+    ).toBe("Users/jane/");
+  });
+
+  it("a fetched participant slug colliding with an acting-user subfolder (e.g. 'memory') cannot touch User/memory", async () => {
+    const { workspaceDir, host } = await makeHost({
+      "tenants/acme/users/memory/workspace/USER.md": "other user\n",
+    });
+    // Acting user's writable memory lane, pre-hydrated.
+    const actingUserMemory = path.join(workspaceDir, "User/memory");
+    await mkdir(actingUserMemory, { recursive: true });
+    await writeFile(path.join(actingUserMemory, "MEMORY.md"), "mine\n");
+    const fetchImpl = vi.fn().mockResolvedValue(
+      endpointResponse(
+        successBody([
+          {
+            key: "tenants/acme/users/memory/workspace/USER.md",
+            relPath: "USER.md",
+          },
+        ]),
+      ),
+    );
+    const { tool } = await buildTool({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      host,
+    });
+
+    await tool.execute(
+      "call-1",
+      { kind: "user", slug: "memory" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    // The acting user's writable lane is intact; the fetch landed at Users/.
+    expect(
+      await readFile(path.join(actingUserMemory, "MEMORY.md"), "utf8"),
+    ).toBe("mine\n");
+    expect(
+      await readFile(path.join(workspaceDir, "Users/memory/USER.md"), "utf8"),
+    ).toBe("other user\n");
   });
 
   it("surfaces the endpoint's partial outcome as status partial", async () => {
@@ -319,6 +369,180 @@ describe("fetch_workspace_source — mounting (AE1)", () => {
     expect(resultText(result as { content?: unknown })).toContain(
       "already hydrated",
     );
+  });
+
+  it("treats a server-side already_hydrated denial for a space ALIAS as informative — no mount, no throw", async () => {
+    // The active space is hydrated at Spaces/research-a/ but fetched under its
+    // OTHER identifier; the client folder-segment guard misses it, the
+    // endpoint's identity check answers 200 already_hydrated.
+    const { workspaceDir, host, appended } = await makeHost({});
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        endpointResponse(
+          { outcome: "denied", deniedReason: "already_hydrated", files: [] },
+          200,
+        ),
+      );
+    const { tool } = await buildTool({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      host,
+      activeSpaceFolder: "research-a",
+    });
+
+    const result = (await tool.execute(
+      "call-1",
+      { kind: "space", slug: "research-a-alias" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    )) as { details?: { status?: string; mountPath?: string } };
+
+    expect(result.details?.status).toBe("already_hydrated");
+    expect(result.details?.mountPath).toBe("Spaces/research-a/");
+    expect(resultText(result as { content?: unknown })).toContain(
+      "already hydrated at Spaces/research-a/",
+    );
+    // Nothing mounted, baseline untouched, no staging residue.
+    await expect(
+      stat(path.join(workspaceDir, "Spaces/research-a-alias")),
+    ).rejects.toThrow();
+    expect(appended).toHaveLength(0);
+    expect(await listTempResidue(workspaceDir)).toEqual([]);
+  });
+
+  it("treats a server-side already_hydrated denial for the acting user as informative, pointing at User/", async () => {
+    const { workspaceDir, host, appended } = await makeHost({});
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        endpointResponse(
+          { outcome: "denied", deniedReason: "already_hydrated", files: [] },
+          200,
+        ),
+      );
+    const { tool } = await buildTool({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      host,
+    });
+
+    const result = (await tool.execute(
+      "call-1",
+      { kind: "user", slug: "eric" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    )) as { details?: { status?: string; mountPath?: string } };
+
+    expect(result.details?.status).toBe("already_hydrated");
+    expect(result.details?.mountPath).toBe("User/");
+    expect(resultText(result as { content?: unknown })).toContain(
+      "already hydrated at User/",
+    );
+    await expect(
+      stat(path.join(workspaceDir, "Users/eric")),
+    ).rejects.toThrow();
+    expect(appended).toHaveLength(0);
+  });
+
+  it("downloads with bounded concurrency (max 8 in flight) before the atomic rename", async () => {
+    const fileCount = 30;
+    const keys = Array.from({ length: fileCount }, (_, i) => `k${i}`);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const workspaceDir = await mkdtemp(path.join(tmpdir(), "fetch-ws-"));
+    cleanups.push(() => rm(workspaceDir, { recursive: true, force: true }));
+    const host: FetchWorkspaceSourceHost = {
+      workspaceDir,
+      downloadObject: async (key: string) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return new TextEncoder().encode(`content of ${key}`);
+      },
+      appendToBaseline: () => {},
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(
+      endpointResponse(
+        successBody(keys.map((key) => ({ key, relPath: `${key}.md` }))),
+      ),
+    );
+    const { tool } = await buildTool({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      host,
+    });
+
+    const result = (await tool.execute(
+      "call-1",
+      { kind: "space", slug: "big" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    )) as { details?: { fileCount?: number } };
+
+    expect(result.details?.fileCount).toBe(fileCount);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(8);
+    expect(
+      await readFile(path.join(workspaceDir, "Spaces/big/k0.md"), "utf8"),
+    ).toBe("content of k0");
+    expect(await listTempResidue(workspaceDir)).toEqual([]);
+  });
+});
+
+describe("fetch_workspace_source — mount-path hard guard", () => {
+  const workspaceDir = "/workspace";
+
+  it("allows Spaces/<slug> and Users/<slug> mounts", () => {
+    expect(
+      resolveSafeMountDir({ workspaceDir, mountRel: "Spaces/research-b" }),
+    ).toBe(path.resolve("/workspace/Spaces/research-b"));
+    expect(
+      resolveSafeMountDir({ workspaceDir, mountRel: "Users/jane" }),
+    ).toBe(path.resolve("/workspace/Users/jane"));
+  });
+
+  it("refuses any mount resolving into the acting user's writable User/ tree", () => {
+    expect(() =>
+      resolveSafeMountDir({ workspaceDir, mountRel: "User/jane" }),
+    ).toThrow(/never mount into the writable 'User\/'/);
+    expect(() =>
+      resolveSafeMountDir({ workspaceDir, mountRel: "User" }),
+    ).toThrow(/refused mount path/);
+    expect(() =>
+      resolveSafeMountDir({ workspaceDir, mountRel: "Users/../User/jane" }),
+    ).toThrow(/never mount into the writable 'User\/'/);
+  });
+
+  it("refuses hydrated/reserved writable roots and non-fetch roots", () => {
+    for (const mountRel of [
+      "Agent/notes",
+      "Thread/x",
+      "scratch/x",
+      "Space/x",
+      "Spaces",
+      "Users",
+      "Spaces/a/b",
+      "Elsewhere/x",
+    ]) {
+      expect(() => resolveSafeMountDir({ workspaceDir, mountRel })).toThrow(
+        /refused mount path/,
+      );
+    }
+  });
+
+  it("refuses escaping the workspace root and remounting the active Space", () => {
+    expect(() =>
+      resolveSafeMountDir({ workspaceDir, mountRel: "../outside" }),
+    ).toThrow(/escapes the workspace root/);
+    expect(() =>
+      resolveSafeMountDir({
+        workspaceDir,
+        mountRel: "Spaces/research-a",
+        activeSpaceFolder: "research-a",
+      }),
+    ).toThrow(/already hydrated writable/);
   });
 });
 

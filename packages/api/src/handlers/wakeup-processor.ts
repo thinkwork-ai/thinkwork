@@ -1756,30 +1756,41 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   // from the rendered workspace's effective TOOLS.md policy, approved models
   // for the actual invoker (R15: never the agent's human pair). Profile
   // loading is best-effort: a resolver failure ships `[]`, not a dead turn.
-  let agentProfilesConfig: AgentProfileRuntimeConfig[] = [];
-  try {
-    agentProfilesConfig = await loadAgentProfileRuntimeConfigs({
+  const modelRoutingRoutes = effectiveToolPolicy.modelRouting ?? [];
+  // Model routing enforcement requires an approvable invoker: the runtime's
+  // assertModelRouteApproved throws MODEL_ROUTE_UNAPPROVED for any routed
+  // model missing from approved_model_ids. System/agent-actor wakeups
+  // (scheduled jobs, automations) have no invoking user, so no approval
+  // list can be resolved — shipping the policy with `[]` approvals would
+  // fail EVERY routed skill/MCP call on automation turns that ran unrouted
+  // before the policy reached the wakeup path. Preserve that pre-policy
+  // behavior: omit model_routing_policy AND approved_model_ids entirely for
+  // non-user actors; user-actor wakeups carry the full policy plus the
+  // invoker's approved catalog (chat parity).
+  const modelRoutingPolicy =
+    invokerUserId && modelRoutingRoutes.length > 0
+      ? { routes: modelRoutingRoutes }
+      : undefined;
+  // Profiles + approved catalog are independent lookups — resolve them
+  // concurrently. Per-arm semantics preserved: profile resolution stays
+  // best-effort (failure → `[]`), catalog failure still fails the wakeup.
+  const [agentProfilesConfig, approvedModelIds] = await Promise.all([
+    loadAgentProfileRuntimeConfigs({
       tenantId: wakeup.tenant_id,
       spaceId: renderedWorkspace.activeSpace?.id ?? runSpaceId ?? null,
       mcpConfigs: mcpConfigsRaw,
       logPrefix: "[wakeup-processor]",
-    });
-  } catch (err) {
-    console.error(`[wakeup-processor] Agent profile resolution failed:`, err);
-  }
-  const modelRoutingRoutes = effectiveToolPolicy.modelRouting ?? [];
-  const modelRoutingPolicy =
-    modelRoutingRoutes.length > 0 ? { routes: modelRoutingRoutes } : undefined;
-  const approvedModelIds = modelRoutingPolicy
-    ? invokerUserId
-      ? (
-          await listApprovedModelCatalog({
-            tenantId: wakeup.tenant_id,
-            userId: invokerUserId,
-          })
-        ).map((model) => model.modelId)
-      : []
-    : undefined;
+    }).catch((err): AgentProfileRuntimeConfig[] => {
+      console.error(`[wakeup-processor] Agent profile resolution failed:`, err);
+      return [];
+    }),
+    modelRoutingPolicy && invokerUserId
+      ? listApprovedModelCatalog({
+          tenantId: wakeup.tenant_id,
+          userId: invokerUserId,
+        }).then((models) => models.map((model) => model.modelId))
+      : Promise.resolve(undefined),
+  ]);
 
   const startMs = Date.now();
   // Generate trace ID for observability correlation (PRD-20)
@@ -2441,18 +2452,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           .where(eq(threadTurns.id, run.id));
 
         // U6 (plan 2026-06-12-002): the turn-loop RE-dispatch reuses the same
-        // thread_turn_id, so re-record the dispatch-time projection. The
-        // writer's object-merge semantics preserve any `fetches` events the
-        // agent appended earlier this turn — never a clobber.
-        if (renderedWorkspace.rendered && renderedWorkspacePrefix) {
-          await recordDispatchWorkspaceProjectionSnapshot({
-            threadTurnId: run.id,
-            tenantId: wakeup.tenant_id,
-            renderedPrefix: renderedWorkspacePrefix,
-            hydrateManifest: renderedWorkspace.hydrateManifest,
-            source: "wakeup-processor",
-          });
-        }
+        // render AND thread_turn_id, so the pre-loop projection snapshot
+        // already describes this dispatch — re-recording here would be a
+        // redundant UPDATE with identical inputs. The merge-semantics writer
+        // preserves any `fetches` the agent appends across loop iterations.
 
         const loopResponse = await invokeAgentCore(
           {

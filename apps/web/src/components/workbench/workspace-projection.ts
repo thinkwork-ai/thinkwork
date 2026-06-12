@@ -47,6 +47,8 @@ export interface ProjectedWorkspace {
   sources: ProjectedWorkspaceSource[];
   /** S3 key of the rendered AGENTS.md for this exact render. */
   agentsMdKey: string | null;
+  /** S3 ETag of the rendered AGENTS.md for this exact render (optional). */
+  agentsMdEtag: string | null;
   /** Prompt files actually injected into the system prompt. */
   injectedFiles: string[];
   generatedAt: string | null;
@@ -141,6 +143,7 @@ export function parseWorkspaceProjection(
         })
       : [],
     agentsMdKey: asString(raw.agentsMdKey),
+    agentsMdEtag: asString(raw.agentsMdEtag),
     injectedFiles: Array.isArray(raw.injectedFiles)
       ? raw.injectedFiles.flatMap((entry) => {
           const file = asString(entry);
@@ -167,6 +170,7 @@ export interface LatestProjectionRef {
   turnId: string;
   generatedAt: string | null;
   agentsMdKey: string | null;
+  agentsMdEtag: string | null;
 }
 
 /**
@@ -194,6 +198,7 @@ export function selectLatestProjection(
           turnId: turn.id,
           generatedAt: projection.generatedAt,
           agentsMdKey: projection.agentsMdKey,
+          agentsMdEtag: projection.agentsMdEtag,
         },
         time,
       };
@@ -204,8 +209,12 @@ export function selectLatestProjection(
 
 /**
  * Whether the CURRENT rendered AGENTS.md content may differ from what this
- * turn's render contained: true when a later turn re-rendered the workspace
- * (different latest turn) or the latest render writes to a different key.
+ * turn's render contained. When both this turn's snapshot and the latest
+ * projection carry an `agentsMdEtag`, etag inequality is a fact — equal
+ * etags mean the bytes are identical even across re-renders. Without etags
+ * on both sides, fall back to the heuristic: a later turn re-rendered the
+ * workspace (different latest turn) or the latest render writes to a
+ * different key.
  */
 export function agentsMdContentMayDiffer(
   turnId: string,
@@ -213,6 +222,9 @@ export function agentsMdContentMayDiffer(
   latest: LatestProjectionRef | null,
 ): boolean {
   if (!latest) return false;
+  if (projection.agentsMdEtag && latest.agentsMdEtag) {
+    return projection.agentsMdEtag !== latest.agentsMdEtag;
+  }
   return (
     latest.turnId !== turnId || latest.agentsMdKey !== projection.agentsMdKey
   );

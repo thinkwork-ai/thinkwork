@@ -42,7 +42,6 @@ When a turn starts, ThinkWork hydrates a different tree into `/workspace`:
 ├── skills/
 ├── workspaces/
 ├── Spaces/
-│   ├── INDEX.md
 │   └── board-pack/
 │       ├── SPACE.md
 │       ├── CONTEXT.md
@@ -62,44 +61,44 @@ When a turn starts, ThinkWork hydrates a different tree into `/workspace`:
     └── notes/
 ```
 
-The Agent source becomes the root of `/workspace`. User context stays explicit under `User/`. The active Space is hydrated under `Spaces/<active-space>/`, while `Spaces/INDEX.md` lists other authorized Spaces without hydrating every Space folder by default.
+The Agent source becomes the root of `/workspace`. User context stays explicit under `User/`. The active Space is hydrated under `Spaces/<active-space>/`. Other authorized Spaces are not hydrated by default; they are listed in the generated Workspace Routing section of `AGENTS.md`, which the renderer composes from authorization state (active Space, other authorized Spaces, acting user, participants, and Agent Profiles) and which replaces the former `Spaces/INDEX.md`. The agent reads non-active Spaces read-only through the `fetch_workspace_source` tool.
 
 Thread runtime folders in S3 hold `.hydrate_manifest.json`, `.rendered_at`, generated Thread projection files, and writable `Thread/notes/` files. The manifest points back to the Agent, Space, User, and Thread sources used for hydration and write-back.
 
 ## How to read common files
 
-| Path                                      | Meaning                                                     | Edit how                                                |
-| ----------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------- |
-| `AGENTS.md`                               | Agent identity, routing, and high-priority instructions     | Edit Agent source                                       |
-| `CONTEXT.md`                              | Durable Agent-level context                                 | Edit Agent source                                       |
-| `Spaces/INDEX.md`                         | Generated registry of authorized Spaces and active Space    | Do not edit; regenerate by rendering the Thread runtime |
-| `Spaces/<space>/SPACE.md`                 | Active Space manifest, workflow, and policy overview        | Edit Space source                                       |
-| `Spaces/<space>/CONTEXT.md`               | Active Space context                                        | Edit Space source                                       |
-| `User/USER.md`                            | User/requester context                                      | Edit user/profile source, not the runtime copy          |
-| `User/memory/*.md`                        | User-scoped working memory notes                            | Edit User source                                        |
-| `skills/<slug>/SKILL.md`                  | Installed skill instructions                                | Install or update skills                                |
-| `Spaces/<space>/goals/<template>/GOAL.md` | Reusable Space Goal template                                | Edit Space source                                       |
-| `Thread/THREAD.md`                        | Generated Thread summary                                    | Use Thread actions; runtime projection is read-only     |
-| `Thread/GOAL.md`                          | Generated current Goal projection                           | Use Goal actions; runtime projection is read-only       |
-| `Thread/PROGRESS.md`                      | Generated progress projection from database task rows       | Use `set_task_status` or UI actions                     |
-| `Thread/TASKS.md`                         | Generated checklist/task projection                         | Use `set_task_status` or UI actions                     |
-| `Thread/notes/*.md`                       | Thread-scoped working notes and findings                    | Agent or operator can edit as narrative work            |
-| `.hydrate_manifest.json`                  | Runtime source map, provenance, ETags, and read-only mounts | Do not edit; regenerate by rendering the Thread runtime |
-| `.rendered_at`                            | Runtime freshness marker                                    | Do not edit                                             |
+| Path                                      | Meaning                                                                         | Edit how                                                |
+| ----------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `AGENTS.md`                               | Agent identity, routing, and high-priority instructions                         | Edit Agent source                                       |
+| `CONTEXT.md`                              | Durable Agent-level context                                                     | Edit Agent source                                       |
+| Workspace Routing section of `AGENTS.md`  | Generated routing: authorized Spaces, acting user, participants, Agent Profiles | Do not edit; recomposed on every render                 |
+| `Spaces/<space>/SPACE.md`                 | Active Space manifest, workflow, and policy overview                            | Edit Space source                                       |
+| `Spaces/<space>/CONTEXT.md`               | Active Space context                                                            | Edit Space source                                       |
+| `User/USER.md`                            | User/requester context                                                          | Edit user/profile source, not the runtime copy          |
+| `User/memory/*.md`                        | User-scoped working memory notes                                                | Edit User source                                        |
+| `skills/<slug>/SKILL.md`                  | Installed skill instructions                                                    | Install or update skills                                |
+| `Spaces/<space>/goals/<template>/GOAL.md` | Reusable Space Goal template                                                    | Edit Space source                                       |
+| `Thread/THREAD.md`                        | Generated Thread summary                                                        | Use Thread actions; runtime projection is read-only     |
+| `Thread/GOAL.md`                          | Generated current Goal projection                                               | Use Goal actions; runtime projection is read-only       |
+| `Thread/PROGRESS.md`                      | Generated progress projection from database task rows                           | Use `set_task_status` or UI actions                     |
+| `Thread/TASKS.md`                         | Generated checklist/task projection                                             | Use `set_task_status` or UI actions                     |
+| `Thread/notes/*.md`                       | Thread-scoped working notes and findings                                        | Agent or operator can edit as narrative work            |
+| `.hydrate_manifest.json`                  | Runtime source map, provenance, ETags, and read-only mounts                     | Do not edit; regenerate by rendering the Thread runtime |
+| `.rendered_at`                            | Runtime freshness marker                                                        | Do not edit                                             |
 
 ## Owner lanes
 
 Reconcile routes changed files back to their owning source:
 
-| Runtime path pattern                                                                             | Owner lane   | Backing source                              |
-| ------------------------------------------------------------------------------------------------ | ------------ | ------------------------------------------- |
-| Agent root files and `skills/**`                                                                 | Agent        | `tenants/{tenant}/agents/{agent-folder}/`   |
-| `Spaces/<space>/**` docs, artifacts, plans, and workflows                                        | Space        | `tenants/{tenant}/spaces/{space-folder}/`   |
-| `User/**` user context and memory                                                                | User         | `tenants/{tenant}/users/{user-folder}/`     |
-| `Thread/notes/**`                                                                                | Thread notes | `tenants/{tenant}/threads/{thread-folder}/` |
-| `Spaces/INDEX.md`, `Thread/THREAD.md`, `Thread/GOAL.md`, `Thread/PROGRESS.md`, `Thread/TASKS.md` | Status       | Generated read-only projection              |
+| Runtime path pattern                                                          | Owner lane   | Backing source                              |
+| ----------------------------------------------------------------------------- | ------------ | ------------------------------------------- |
+| Agent root files and `skills/**`                                              | Agent        | `tenants/{tenant}/agents/{agent-folder}/`   |
+| `Spaces/<space>/**` docs, artifacts, plans, and workflows                     | Space        | `tenants/{tenant}/spaces/{space-folder}/`   |
+| `User/**` user context and memory                                             | User         | `tenants/{tenant}/users/{user-folder}/`     |
+| `Thread/notes/**`                                                             | Thread notes | `tenants/{tenant}/threads/{thread-folder}/` |
+| `Thread/THREAD.md`, `Thread/GOAL.md`, `Thread/PROGRESS.md`, `Thread/TASKS.md` | Status       | Generated read-only projection              |
 
-If a changed file does not map to an allowed lane, reconcile rejects it and records the rejection on the turn.
+If a changed file does not map to an allowed lane, reconcile rejects it and records the rejection on the turn. The generated Workspace Routing section of `AGENTS.md` is likewise render output: the composer strips and rebuilds it on every render, so hand edits to that section do not persist.
 
 ## Operator checklist
 

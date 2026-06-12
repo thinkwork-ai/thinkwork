@@ -21,6 +21,14 @@ export async function deleteAgentProfile(
   await ensureBuiltInAgentProfiles(args.tenantId);
 
   const existing = await loadAgentProfileRow(args.tenantId, args.id);
+  // Space-local rows (source_space_id set) are projections of a Space's
+  // workspace files. Deleting one here would remove the CENTRAL agent
+  // source agents/<slug>.md — killing a same-slug central profile.
+  if (existing.source_space_id != null) {
+    throw badInput(
+      "Space-local Agent Profiles are managed from their Space's workspace files (Settings → Spaces → the owning Space → Workspace files)",
+    );
+  }
   if (existing.built_in_key) {
     throw badInput("Built-in Agent Profiles can be disabled but not deleted");
   }

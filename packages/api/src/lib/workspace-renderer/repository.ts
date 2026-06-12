@@ -195,7 +195,12 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
     tuple: ResolvedWorkspaceRenderTuple,
   ): Promise<WorkspaceSpaceParticipantEntry[]> {
     const rows = await this.db
-      .select({ id: users.id, name: users.name, email: users.email })
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        workspaceFolderName: users.workspace_folder_name,
+      })
       .from(spaceMembers)
       .innerJoin(users, eq(spaceMembers.user_id, users.id))
       .where(
@@ -209,6 +214,9 @@ export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository
       .map((row) => ({
         id: row.id,
         name: row.name?.trim() || row.email?.split("@")[0] || row.id,
+        // Same derivation as resolve(): the routing section renders this as
+        // the fetchable `Users/<slug>/` path for fetch_workspace_source.
+        slug: row.workspaceFolderName ?? userSlug(row),
       }))
       .sort(
         (left, right) =>

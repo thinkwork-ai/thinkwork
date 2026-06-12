@@ -34,7 +34,10 @@ const ROUTING_INPUT = {
     },
   ],
   user: { name: "Eric", folderPath: "User/" },
-  participants: ["Alice", "Eric"],
+  participants: [
+    { name: "Alice", folderPath: "Users/alice/" },
+    { name: "Eric", folderPath: "Users/eric/" },
+  ],
   agentProfiles: [
     { name: "Researcher", routingGuidance: "Deep research tasks" },
     { name: "Writer", routingGuidance: null },
@@ -86,7 +89,16 @@ describe("composeAgentsMdWithRouting", () => {
     );
     expect(composed).toContain("- Eric — `User/` (acting user, hydrated)");
     expect(composed).toContain("### Active Space Participants");
-    expect(composed).toContain("- Alice");
+    // Participants carry their fetchable Users/<slug>/ path (NOT User/…) so
+    // fetch_workspace_source mounts never collide with the acting user's
+    // writable User/ tree.
+    expect(composed).toContain(
+      "- Alice — `Users/alice/` (not currently hydrated)",
+    );
+    expect(composed).toContain(
+      "- Eric — `Users/eric/` (not currently hydrated)",
+    );
+    expect(composed).not.toContain("`User/alice/`");
     expect(composed).toContain("- Researcher — Deep research tasks");
     expect(composed).toContain("- Writer");
   });

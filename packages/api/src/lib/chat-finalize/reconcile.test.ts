@@ -614,6 +614,55 @@ describe("reconcileChangedFiles", () => {
     ]);
   });
 
+  it("resolves the active Space folder for a tenant whose slug is literally 'spaces'", async () => {
+    // Regression: activeSpaceFolderSegment used indexOf('/spaces/') on the
+    // source prefix, so `tenants/spaces/spaces/board-pack/` matched at the
+    // tenant segment and extracted "spaces/board-pack" → "spaces-board-pack",
+    // bricking EVERY active-space write as fetched_path_read_only. Parsing
+    // by known structure (tenants/<tenant>/spaces/<slug>/) fixes it.
+    const spacesTenantContext = { ...context, tenantSlug: "spaces" };
+    const spacesTenantManifest = JSON.parse(
+      JSON.stringify(hydrateManifest).replaceAll(
+        "tenants/acme/",
+        "tenants/spaces/",
+      ),
+    ) as WorkspaceHydrateManifest;
+    const store = objectStore();
+
+    const result = await reconcileChangedFiles({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      bucket: "workspace-bucket",
+      context: spacesTenantContext,
+      hydrateManifest: spacesTenantManifest,
+      objectStore: store,
+      changedFiles: [
+        {
+          path: "Spaces/board-pack/docs/new-note.md",
+          op: "create",
+          content: "# Active-space note\n",
+        },
+      ],
+    });
+
+    expect(result.status).toBe("complete");
+    expect(result.files).toEqual([
+      expect.objectContaining({
+        path: "Spaces/board-pack/docs/new-note.md",
+        status: "written",
+      }),
+    ]);
+    expect(store.puts).toEqual([
+      {
+        key: "tenants/spaces/spaces/board-pack/docs/new-note.md",
+        content: "# Active-space note\n",
+        ifNoneMatch: "*",
+      },
+    ]);
+  });
+
   it("rejects bare Spaces paths with an empty source path instead of misrouting", async () => {
     const store = objectStore();
 

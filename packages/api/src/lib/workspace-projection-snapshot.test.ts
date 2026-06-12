@@ -161,6 +161,7 @@ const manifest: WorkspaceProjectionManifestLike = {
       path: "AGENTS.md",
       sourcePrefix: "tenants/acme/agents/main/",
       etag: "e1",
+      generated: true,
     },
     {
       path: "CONTEXT.md",
@@ -196,6 +197,38 @@ describe("buildWorkspaceProjectionSnapshot", () => {
       manifest,
     });
     expect(snapshot.agentsMdKey).toBe(`${RENDERED_PREFIX}AGENTS.md`);
+  });
+
+  it("captures the generated AGENTS.md etag as agentsMdEtag", () => {
+    // The rendered AGENTS.md key is overwritten by every re-render, so the
+    // etag is the only durable fact for staleness comparison (web panel /
+    // evals consume it).
+    const snapshot = buildWorkspaceProjectionSnapshot({
+      renderedPrefix: RENDERED_PREFIX,
+      manifest,
+    });
+    expect(snapshot.agentsMdEtag).toBe("e1");
+  });
+
+  it("agentsMdEtag is null without a generated AGENTS.md manifest entry", () => {
+    // A non-generated AGENTS.md (hydrated source file) doesn't count…
+    const nonGenerated = buildWorkspaceProjectionSnapshot({
+      renderedPrefix: RENDERED_PREFIX,
+      manifest: {
+        ...manifest,
+        files: manifest.files!.map((file) =>
+          file.path === "AGENTS.md" ? { ...file, generated: undefined } : file,
+        ),
+      },
+    });
+    expect(nonGenerated.agentsMdEtag).toBeNull();
+    // …and neither does a missing manifest (legacy renderer payload).
+    expect(
+      buildWorkspaceProjectionSnapshot({
+        renderedPrefix: RENDERED_PREFIX,
+        manifest: null,
+      }).agentsMdEtag,
+    ).toBeNull();
   });
 
   it("injectedFiles lists exactly the PROMPT_FILES present in the rendered manifest", () => {
