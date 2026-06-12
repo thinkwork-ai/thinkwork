@@ -64,3 +64,19 @@ export function commentMatchesOwner(
   const parsed = parseClaimComment(comment);
   return parsed !== null && parsed.kind === kind && parsed.owner === owner;
 }
+
+/**
+ * True iff `owner` survives a format→parse round trip — i.e. the comment
+ * grammar (CLAIM_COMMENT_PATTERN) can represent it. An owner that fails
+ * this (uppercase, spaces, …) would stamp comments that no reader — not
+ * even our own post-write verification — could ever attribute back to us,
+ * so writers MUST refuse such owners before touching Cloudflare.
+ */
+export function isValidClaimOwner(owner: string): boolean {
+  const probe = formatClaimComment({
+    kind: "deployment",
+    owner,
+    created: "2000-01-01",
+  });
+  return commentMatchesOwner(probe, "deployment", owner);
+}

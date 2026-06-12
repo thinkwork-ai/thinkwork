@@ -41,6 +41,35 @@ const NS_TARGETS = [
 ];
 
 describe("claimName — phase one", () => {
+  // Covers #15: shape validation precedes both sources.
+  it("rejects an invalid name shape before any API call", async () => {
+    const { deps, dns, tenants } = makeDeps();
+    const result = await claimName(deps, {
+      name: "-bad-",
+      tenantSlug: "-bad-",
+      kind: "deployment",
+      owner: "bad",
+    });
+    expect(result).toMatchObject({ ok: false, reason: "invalid-name" });
+    expect(dns.calls).toEqual([]);
+    expect(tenants.calls).toEqual([]);
+  });
+
+  // An owner the comment grammar can't represent would strand a record
+  // postWriteVerify can never attribute back to us — refuse up front.
+  it("rejects an owner the comment grammar cannot represent before any API call", async () => {
+    const { deps, dns, tenants } = makeDeps();
+    const result = await claimName(deps, {
+      name: "tei",
+      tenantSlug: "tei",
+      kind: "deployment",
+      owner: "TEI Corp",
+    });
+    expect(result).toMatchObject({ ok: false, reason: "invalid-owner" });
+    expect(dns.calls).toEqual([]);
+    expect(tenants.calls).toEqual([]);
+  });
+
   // Covers AE2.
   it("rejects a reserved name (api) before any API call", async () => {
     const { deps, dns, tenants } = makeDeps();
@@ -229,6 +258,46 @@ describe("claimName — post-write verification (KTD4 / R14)", () => {
     expect(tenants.calls).toEqual(["tei", "tei"]);
     expect(dns.records).toHaveLength(0); // self-released
   });
+
+  it("self-releases its NS records when a rival record lands during phase two", async () => {
+    const { deps, dns } = makeDeps();
+    dns.seed({
+      type: "TXT",
+      name: "tei.thinkwork.ai",
+      content: RESERVATION_TXT_CONTENT,
+      comment: TEI_COMMENT,
+    });
+    dns.afterCreate = () => {
+      // Rival claim lands between our first NS write and the verify pass.
+      dns.afterCreate = null;
+      dns.seed({
+        type: "TXT",
+        name: "tei.thinkwork.ai",
+        content: RESERVATION_TXT_CONTENT,
+        comment: formatClaimComment({
+          kind: "deployment",
+          owner: "rival",
+          created: TODAY,
+        }),
+      });
+    };
+    const result = await claimName(deps, {
+      name: "tei",
+      tenantSlug: "tei",
+      kind: "deployment",
+      owner: "tei",
+      targets: NS_TARGETS,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      reason: "lost-race",
+      source: "cloudflare",
+    });
+    // Our placeholder TXT and all 4 NS records were self-released; only
+    // the rival's record remains.
+    expect(dns.records).toHaveLength(1);
+    expect(dns.records[0]!.comment).toContain("deployment:rival");
+  });
 });
 
 describe("claimName — phase two (--set-targets)", () => {
@@ -341,6 +410,18 @@ describe("claimName — tenant-kind claims (ses_tenant_slugs path)", () => {
 });
 
 describe("releaseName", () => {
+  it("rejects an owner the comment grammar cannot represent before any API call", async () => {
+    const { deps, dns, tenants } = makeDeps();
+    const result = await releaseName(deps, {
+      name: "tei",
+      kind: "deployment",
+      owner: "TEI Corp",
+    });
+    expect(result).toMatchObject({ ok: false, reason: "invalid-owner" });
+    expect(dns.calls).toEqual([]);
+    expect(tenants.calls).toEqual([]);
+  });
+
   // Covers AE4.
   it("removes exactly the owner's records", async () => {
     const { deps, dns } = makeDeps();

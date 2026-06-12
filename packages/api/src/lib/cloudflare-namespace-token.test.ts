@@ -94,6 +94,53 @@ describe("resolveCloudflareNamespaceToken", () => {
     ).rejects.toBeInstanceOf(CloudflareNamespaceTokenError);
   });
 
+  it("re-resolves a stale resolved-null after the TTL — warm containers pick up a freshly seeded token", async () => {
+    vi.useFakeTimers();
+    try {
+      // First resolution finds the terraform placeholder → unconfigured.
+      const ssmSend = vi
+        .fn()
+        .mockResolvedValueOnce(CLOUDFLARE_NAMESPACE_TOKEN_PLACEHOLDER)
+        .mockResolvedValueOnce("freshly-seeded-token");
+
+      await expect(
+        resolveCloudflareNamespaceToken({ ssmSend }),
+      ).resolves.toBeNull();
+
+      // Within the TTL the null result is served from cache.
+      vi.advanceTimersByTime(30_000);
+      await expect(
+        resolveCloudflareNamespaceToken({ ssmSend }),
+      ).resolves.toBeNull();
+      expect(ssmSend).toHaveBeenCalledTimes(1);
+
+      // Past the TTL the next call re-resolves and finds the real token.
+      vi.advanceTimersByTime(31_000);
+      await expect(resolveCloudflareNamespaceToken({ ssmSend })).resolves.toBe(
+        "freshly-seeded-token",
+      );
+      expect(ssmSend).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a real token cached past the null TTL (container lifetime)", async () => {
+    vi.useFakeTimers();
+    try {
+      const ssmSend = vi.fn().mockResolvedValue("ssm-token");
+
+      await resolveCloudflareNamespaceToken({ ssmSend });
+      vi.advanceTimersByTime(10 * 60_000);
+      await expect(resolveCloudflareNamespaceToken({ ssmSend })).resolves.toBe(
+        "ssm-token",
+      );
+      expect(ssmSend).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not cache lookup failures — the next call retries", async () => {
     const ssmSend = vi
       .fn()

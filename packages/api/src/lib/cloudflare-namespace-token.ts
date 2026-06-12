@@ -12,8 +12,10 @@
  *   /thinkwork/<stage>/cloudflare-namespace-token
  *
  * Resolution order: CLOUDFLARE_NAMESPACE_API_TOKEN env (local dev, vitest;
- * getConfig's env leg) → the SecureString parameter, cached for the
- * container lifetime (same shape as wiki/google-places-client.ts).
+ * getConfig's env leg) → the SecureString parameter. A real token is cached
+ * for the container lifetime (same shape as wiki/google-places-client.ts);
+ * a resolved-null ("unconfigured") result is cached for only ~60s so warm
+ * containers pick up a freshly seeded token without recycling.
  *
  * A missing parameter, an empty value, or the terraform-seeded
  * PLACEHOLDER_SET_VIA_CLI sentinel all resolve to null — the caller
@@ -40,10 +42,15 @@ export class CloudflareNamespaceTokenError extends Error {
   }
 }
 
-// Container-lifetime cache: undefined = not yet resolved; null = resolved
-// to "unconfigured". Lookup FAILURES are never cached, so a transient SSM
-// outage retries on the next validation instead of pinning the skip path.
-let cachedToken: string | null | undefined;
+// Cache: a real token is cached for the container lifetime; a resolved-null
+// ("unconfigured") result is only cached for NULL_CACHE_TTL_MS so a warm
+// container picks up a token an operator just seeded via `aws ssm
+// put-parameter` without waiting for a recycle. Lookup FAILURES are never
+// cached, so a transient SSM outage retries on the next validation instead
+// of pinning the skip path.
+const NULL_CACHE_TTL_MS = 60_000;
+
+let cachedToken: { value: string | null; resolvedAt: number } | undefined;
 
 export interface ResolveCloudflareNamespaceTokenOptions {
   /** Test injection — returns the raw parameter value or null when absent. */
@@ -57,12 +64,18 @@ export async function resolveCloudflareNamespaceToken(
   const fromEnv = getConfig("CLOUDFLARE_NAMESPACE_API_TOKEN");
   if (fromEnv) return fromEnv;
 
-  if (cachedToken !== undefined) return cachedToken;
+  if (cachedToken !== undefined) {
+    const isFreshNull =
+      cachedToken.value === null &&
+      Date.now() - cachedToken.resolvedAt < NULL_CACHE_TTL_MS;
+    if (cachedToken.value !== null || isFreshNull) return cachedToken.value;
+    // Stale resolved-null: fall through and re-resolve from SSM.
+  }
 
   const stage = getConfig("STAGE");
   if (!stage) {
     // No stage identity (vitest, local tools) — nothing to look up.
-    cachedToken = null;
+    cachedToken = { value: null, resolvedAt: Date.now() };
     return null;
   }
 
@@ -72,18 +85,19 @@ export async function resolveCloudflareNamespaceToken(
     raw = await (opts.ssmSend ?? defaultSsmSend)(paramName);
   } catch (err) {
     if (isParameterNotFound(err)) {
-      cachedToken = null;
+      cachedToken = { value: null, resolvedAt: Date.now() };
       return null;
     }
     throw new CloudflareNamespaceTokenError(paramName, err);
   }
 
   const trimmed = raw?.trim() ?? "";
-  cachedToken =
+  const value =
     trimmed.length > 0 && trimmed !== CLOUDFLARE_NAMESPACE_TOKEN_PLACEHOLDER
       ? trimmed
       : null;
-  return cachedToken;
+  cachedToken = { value, resolvedAt: Date.now() };
+  return value;
 }
 
 function isParameterNotFound(error: unknown): boolean {

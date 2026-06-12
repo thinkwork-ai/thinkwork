@@ -107,6 +107,8 @@ export type FetchLike = (
     method: string;
     headers: Record<string, string>;
     body?: string;
+    /** Abort signal for the request timeout; injected fakes may ignore it. */
+    signal?: AbortSignal;
   },
 ) => Promise<{
   ok: boolean;
@@ -114,22 +116,33 @@ export type FetchLike = (
   text(): Promise<string>;
 }>;
 
+/**
+ * Default per-request timeout. The api Lambda's signup path calls this
+ * client synchronously with the user's request — without a deadline a
+ * hung Cloudflare connection would ride out the whole Lambda timeout.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 8000;
+
 export interface CloudflareClientOptions {
   token: string;
   zoneName?: string;
   fetchImpl?: FetchLike;
+  /** Per-request deadline in milliseconds (default {@link DEFAULT_REQUEST_TIMEOUT_MS}). */
+  timeoutMs?: number;
 }
 
 export class CloudflareNamespaceClient implements NamespaceDnsApi {
   private readonly token: string;
   private readonly zoneName: string;
   private readonly fetchImpl: FetchLike;
+  private readonly timeoutMs: number;
   private zoneId: string | null = null;
 
   constructor(options: CloudflareClientOptions) {
     this.token = options.token;
     this.zoneName = options.zoneName ?? THINKWORK_APEX_ZONE;
     this.fetchImpl = options.fetchImpl ?? (fetch as unknown as FetchLike);
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   private async request<T>(
@@ -137,15 +150,48 @@ export class CloudflareNamespaceClient implements NamespaceDnsApi {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const res = await this.fetchImpl(`${CF_BASE}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        "Content-Type": "application/json",
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    const text = await res.text();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeoutError = () =>
+      new Error(
+        `Cloudflare API ${method} ${path} timed out after ${this.timeoutMs}ms`,
+      );
+
+    let res: Awaited<ReturnType<FetchLike>>;
+    let text: string;
+    try {
+      const attempt = (async () => {
+        const r = await this.fetchImpl(`${CF_BASE}${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            "Content-Type": "application/json",
+          },
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: controller.signal,
+        });
+        return { r, t: await r.text() };
+      })();
+      // Race the abort event too, so the deadline holds even when an
+      // injected fetch ignores `signal`. (Promise.race consumes the losing
+      // promise's rejection — no unhandled-rejection leak.)
+      const deadline = new Promise<never>((_, reject) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => reject(timeoutError()),
+          { once: true },
+        );
+      });
+      const settled = await Promise.race([attempt, deadline]);
+      res = settled.r;
+      text = settled.t;
+    } catch (err) {
+      // Translate the native fetch AbortError into our clear message.
+      if (controller.signal.aborted) throw timeoutError();
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
     let parsed: CloudflareEnvelope<T> | null = null;
     try {
       parsed = JSON.parse(text) as CloudflareEnvelope<T>;

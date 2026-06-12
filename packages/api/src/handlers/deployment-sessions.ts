@@ -277,12 +277,23 @@ async function enforceDomainFieldsEchoGuard(
     return updated ?? session;
   }
 
-  const message =
-    `Deployment runner did not echo the requested customer domain fields ` +
-    `(customerDomain=${requested.customerDomain}) in deployment-evidence.json. ` +
-    `The controller is likely executing an outdated runner script (runner ` +
-    `version skew) that silently dropped the domain configuration — update ` +
-    `the deployment runner release before retrying.`;
+  // The runner's catch-all failure write (write_evidence("failed", error=exc)
+  // with no vars_json) also lacks consumedDomainFields — for ANY uncaught
+  // exception, including terraform/init failures. Surface that real error
+  // instead of misdiagnosing it as runner version skew; the skew diagnosis
+  // only holds when the run itself is healthy (running/succeeded).
+  const evidenceStatus = stringField(evidence, "status");
+  const evidenceError = stringField(evidence, "error");
+  const runFailed = evidenceStatus === "failed" || evidenceError.length > 0;
+  const message = runFailed
+    ? `Deployment runner reported a failed run: ${evidenceError || "unknown error (no error detail in deployment-evidence.json)"}. ` +
+      `The requested customer domain fields (customerDomain=${requested.customerDomain}) ` +
+      `were also not echoed in deployment-evidence.json.`
+    : `Deployment runner did not echo the requested customer domain fields ` +
+      `(customerDomain=${requested.customerDomain}) in deployment-evidence.json. ` +
+      `The controller is likely executing an outdated runner script (runner ` +
+      `version skew) that silently dropped the domain configuration — update ` +
+      `the deployment runner release before retrying.`;
   const [failed] = await db
     .update(customerDeploymentSessions)
     .set({
@@ -301,6 +312,9 @@ async function enforceDomainFieldsEchoGuard(
       requestedCustomerDomain: requested.customerDomain,
       evidenceBucket: bucket,
       evidencePrefix: prefix,
+      ...(runFailed
+        ? { evidenceStatus, evidenceError: evidenceError || null }
+        : {}),
     },
     idempotencyKey: "domain_fields_echo_missing",
   });
@@ -324,7 +338,23 @@ async function readDeploymentEvidence(
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : null;
-  } catch {
+  } catch (err) {
+    const errorName = err instanceof Error ? err.name : "";
+    const notWrittenYet =
+      errorName === "NoSuchKey" ||
+      errorName === "NotFound" ||
+      errorName === "NoSuchBucket";
+    if (!notWrittenYet) {
+      // AccessDenied / parse / network errors silently neutralize the echo
+      // guard if treated like "not written yet" — log them so they're
+      // diagnosable, but still return null so the read path never fails.
+      console.error(
+        `[deployment-sessions] failed to read deployment evidence ` +
+          `s3://${bucket}/${prefix}/deployment-evidence.json ` +
+          `(${errorName || "unknown error"})`,
+        err,
+      );
+    }
     // Evidence is not written yet (run still in progress) or unreadable —
     // re-check on the next poll instead of failing the read path.
     return null;

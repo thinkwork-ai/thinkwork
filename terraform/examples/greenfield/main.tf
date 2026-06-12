@@ -644,6 +644,24 @@ variable "mcp_custom_domain_ready" {
   default     = false
 }
 
+variable "customer_domain" {
+  description = "Customer domain for this deployment (e.g. tei.thinkwork.ai), claimed via the shared namespace claim tool. Leave empty to skip all customer-domain resources."
+  type        = string
+  default     = ""
+}
+
+variable "customer_domain_delegated" {
+  description = "Set true once the apex zone's NS records point at the customer zone (claim tool phase two). Gates the ACM certificate, the web alias records, and the customer-domain Cognito callback entries. Requires customer_domain."
+  type        = bool
+  default     = false
+}
+
+variable "customer_domain_legacy_retired" {
+  description = "Set true to remove the legacy (non-customer-domain) end-user app URLs from the Cognito callback/logout lists after the dual-domain cutover window closes. Requires customer_domain_delegated."
+  type        = bool
+  default     = false
+}
+
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
@@ -940,6 +958,11 @@ module "thinkwork" {
   # docs/solutions/patterns/mcp-custom-domain-setup-2026-04-23.md
   mcp_custom_domain       = var.mcp_custom_domain
   mcp_custom_domain_ready = var.mcp_custom_domain_ready
+
+  # Customer-namespace domain (optional — two-apply flow; see README).
+  customer_domain                = var.customer_domain
+  customer_domain_delegated      = var.customer_domain_delegated
+  customer_domain_legacy_retired = var.customer_domain_legacy_retired
 
   # Greenfield: create everything (all defaults are true)
 }
@@ -1395,4 +1418,9 @@ output "mcp_custom_domain_validation" {
 output "mcp_custom_domain_target" {
   description = "Regional target for the final mcp CNAME — only populated on the second apply after mcp_custom_domain_ready=true. { target_domain_name, hosted_zone_id } or null."
   value       = module.thinkwork.mcp_custom_domain_target
+}
+
+output "customer_domain_name_servers" {
+  description = "The four Route53 name servers for the customer-domain zone — publish these via the claim tool's `claim --set-targets` to delegate (empty when no customer domain is configured)."
+  value       = module.thinkwork.customer_domain_name_servers
 }

@@ -6,12 +6,18 @@
  * zone, consumed as a library (packages/api signup check, U5) and as an
  * ops CLI (src/cli.ts). The record-comment format in comment-format.ts is
  * the contract between the claim writer and every reader (R4).
+ *
+ * This root export is the LIBRARY surface only — it is bundled into the
+ * graphql-http Lambda, so it must never re-export db.ts (pg) or cli.ts
+ * (execSync). The CLI imports its own modules directly; run it via the
+ * package's `cli` script.
  */
 
 export {
   CLAIM_COMMENT_PATTERN,
   commentMatchesOwner,
   formatClaimComment,
+  isValidClaimOwner,
   parseClaimComment,
   type ClaimComment,
   type ClaimKind,
@@ -22,6 +28,7 @@ export {
   CF_ERROR_CODE_TOKEN_DRIFT,
   CloudflareApiError,
   CloudflareNamespaceClient,
+  DEFAULT_REQUEST_TIMEOUT_MS,
   THINKWORK_APEX_ZONE,
   formatCloudflareError,
   type CloudflareClientOptions,
@@ -34,11 +41,8 @@ export {
 export {
   NS_TARGET_COUNT,
   RESERVATION_TXT_CONTENT,
-  RESERVED_TENANT_SLUGS,
-  TENANT_SLUG_PATTERN,
   checkName,
   claimName,
-  isReservedTenantSlug,
   namespaceFqdn,
   releaseName,
   type CheckResult,
@@ -51,12 +55,3 @@ export {
   type ReleaseResult,
   type TenantSlugSource,
 } from "./core.js";
-
-export {
-  DEFAULT_TENANT_DB_STAGE,
-  createStageTenantSource,
-  resolveStageDatabaseUrl,
-  type TenantSourceHandle,
-} from "./db.js";
-
-export { parseCliArgs, runCli, type CliDeps } from "./cli.js";

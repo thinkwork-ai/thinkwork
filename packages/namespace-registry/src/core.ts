@@ -20,6 +20,7 @@ import {
 import {
   commentMatchesOwner,
   formatClaimComment,
+  isValidClaimOwner,
   type ClaimKind,
 } from "./comment-format.js";
 import {
@@ -141,6 +142,7 @@ export interface ClaimRequest {
 
 export type ClaimFailureReason =
   | "invalid-name"
+  | "invalid-owner"
   | "reserved"
   | "tenant-slug-mismatch"
   | "invalid-targets"
@@ -213,6 +215,21 @@ export async function claimName(
       reason: "invalid-name",
       fqdn,
       detail: `"${name}" does not match the tenant slug pattern ${TENANT_SLUG_PATTERN}`,
+    };
+  }
+  // An owner the comment grammar cannot represent would write a record
+  // that post-write verification (and every later release) treats as
+  // FOREIGN — stranding the record in Cloudflare and reporting a phantom
+  // lost-race. Refuse before any read or write.
+  if (!isValidClaimOwner(owner)) {
+    return {
+      ok: false,
+      reason: "invalid-owner",
+      fqdn,
+      detail:
+        `owner "${owner}" cannot be represented in the record-comment grammar ` +
+        `(expected a lowercase slug-shaped token like "tei"; got something the ` +
+        `claim comment "${kind}:<owner> created:<date>" cannot round-trip)`,
     };
   }
   if (isReservedTenantSlug(name)) {
@@ -482,7 +499,7 @@ export type ReleaseResult =
     }
   | {
       ok: false;
-      reason: "owned-by-other";
+      reason: "owned-by-other" | "invalid-owner";
       fqdn: string;
       detail: string;
     };
@@ -493,6 +510,21 @@ export async function releaseName(
 ): Promise<ReleaseResult> {
   const { name, kind, owner } = request;
   const fqdn = namespaceFqdn(name);
+
+  // Same grammar gate as claimName: a malformed owner can never match any
+  // record comment, so a release under it could only ever refuse (or worse,
+  // mislead the operator). Reject before touching Cloudflare.
+  if (!isValidClaimOwner(owner)) {
+    return {
+      ok: false,
+      reason: "invalid-owner",
+      fqdn,
+      detail:
+        `owner "${owner}" cannot be represented in the record-comment grammar ` +
+        `(expected a lowercase slug-shaped token like "tei") — no record can ` +
+        "be owned by it",
+    };
+  }
 
   const records = await deps.dns.listRecords(fqdn);
   if (records.length === 0) {

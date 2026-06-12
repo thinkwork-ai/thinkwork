@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatClaimComment } from "@thinkwork/namespace-registry";
 
 const {
   mockDb,
@@ -166,6 +167,67 @@ describe("bootstrapUser", () => {
     expect(namespaceListRecords).toHaveBeenCalledWith(
       "happy-otter.thinkwork.ai",
     );
+  });
+
+  it("rejects when the generated slug is deployment-claimed in the namespace — no tenant row", async () => {
+    selectQueue.push([]); // existing user lookup → none
+    selectQueue.push([]); // pending (paid) tenant lookup → none
+    namespaceListRecords.mockResolvedValue([
+      {
+        id: "rec-1",
+        type: "NS",
+        name: "happy-otter.thinkwork.ai",
+        content: "ns-123.awsdns-01.com",
+        comment: formatClaimComment({
+          kind: "deployment",
+          owner: "tei-deploy",
+          created: "2026-06-12",
+        }),
+      },
+    ]);
+
+    await expect(
+      bootstrapUser({}, {}, {
+        auth: {
+          authType: "cognito",
+          principalId: "sub-new",
+          email: "new@example.com",
+          name: "New User",
+        },
+        headers: {},
+      } as any),
+    ).rejects.toMatchObject({ extensions: { code: "SLUG_UNAVAILABLE" } });
+
+    expect(namespaceListRecords).toHaveBeenCalledWith(
+      "happy-otter.thinkwork.ai",
+    );
+    expect(insertCalls).toEqual([]);
+    expect(bootstrapDefaultCalls).toEqual([]);
+  });
+
+  it("fails CLOSED on a Cloudflare API error — no tenant row is created", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    selectQueue.push([]); // existing user lookup → none
+    selectQueue.push([]); // pending (paid) tenant lookup → none
+    namespaceListRecords.mockRejectedValue(new Error("cloudflare 500"));
+
+    await expect(
+      bootstrapUser({}, {}, {
+        auth: {
+          authType: "cognito",
+          principalId: "sub-new",
+          email: "new@example.com",
+          name: "New User",
+        },
+        headers: {},
+      } as any),
+    ).rejects.toMatchObject({
+      extensions: { code: "SLUG_VALIDATION_UNAVAILABLE" },
+    });
+
+    expect(insertCalls).toEqual([]);
+    expect(bootstrapDefaultCalls).toEqual([]);
+    error.mockRestore();
   });
 
   it("repairs tenant bootstrap defaults for existing users", async () => {

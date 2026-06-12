@@ -909,6 +909,61 @@ describe("deployment session handler", () => {
     expect(JSON.parse(response.body || "{}").session.status).toBe("failed");
   });
 
+  it("surfaces the runner's own error when failed evidence lacks the echoed domain fields", async () => {
+    const session = domainDeployingSessionRow();
+    selectQueue.push([session]);
+    // Catch-all failure write: runner.py writes status:"failed" + error with
+    // no vars_json on ANY uncaught exception, so consumedDomainFields is
+    // absent even on an up-to-date runner.
+    mockS3Send.mockResolvedValue(
+      evidenceObject({
+        status: "failed",
+        sessionId: SESSION_ID,
+        error: "terraform init failed: backend bucket unreachable",
+      }),
+    );
+    returningQueue.push([
+      {
+        ...session,
+        status: "failed",
+        error_message: "terraform init failed",
+      },
+    ]);
+    selectQueue.push([
+      { id: "event-1", event_type: "domain_fields_echo_missing" },
+    ]);
+
+    const response = await mod.handler(
+      event("GET", `/api/deployment-sessions/${SESSION_ID}`, undefined, {
+        "x-thinkwork-deployment-token": "correct-token",
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "failed",
+          error_message: expect.stringContaining(
+            "terraform init failed: backend bucket unreachable",
+          ),
+        }),
+      ]),
+    );
+    const failedUpdate = updateCalls.find(
+      (call) => call.status === "failed",
+    ) as { error_message: string };
+    expect(failedUpdate.error_message).not.toContain("version skew");
+    expect(failedUpdate.error_message).toContain("also not echoed");
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event_type: "domain_fields_echo_missing",
+        }),
+      ]),
+    );
+  });
+
   it("records the echo verification when evidence carries the consumed domain fields", async () => {
     const session = domainDeployingSessionRow();
     selectQueue.push([session]);
@@ -958,9 +1013,16 @@ describe("deployment session handler", () => {
   });
 
   it("leaves a domain-requesting run untouched while evidence is not written yet", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
     const session = domainDeployingSessionRow();
     selectQueue.push([session]);
-    mockS3Send.mockRejectedValue(new Error("NoSuchKey"));
+    mockS3Send.mockRejectedValue(
+      Object.assign(new Error("The specified key does not exist."), {
+        name: "NoSuchKey",
+      }),
+    );
     selectQueue.push([]);
 
     const response = await mod.handler(
@@ -972,6 +1034,37 @@ describe("deployment session handler", () => {
     expect(response.statusCode).toBe(200);
     expect(updateCalls).toEqual([]);
     expect(JSON.parse(response.body || "{}").session.status).toBe("deploying");
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("logs unexpected evidence-read errors without failing the read path", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const session = domainDeployingSessionRow();
+    selectQueue.push([session]);
+    mockS3Send.mockRejectedValue(
+      Object.assign(new Error("Access Denied"), { name: "AccessDenied" }),
+    );
+    selectQueue.push([]);
+
+    const response = await mod.handler(
+      event("GET", `/api/deployment-sessions/${SESSION_ID}`, undefined, {
+        "x-thinkwork-deployment-token": "correct-token",
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(updateCalls).toEqual([]);
+    expect(JSON.parse(response.body || "{}").session.status).toBe("deploying");
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining(
+        `s3://thinkwork-evidence/sessions/${SESSION_ID}/deploy/deployment-evidence.json`,
+      ),
+      expect.objectContaining({ name: "AccessDenied" }),
+    );
+    consoleError.mockRestore();
   });
 
   it("skips the echo guard when the session requested no customer domain", async () => {

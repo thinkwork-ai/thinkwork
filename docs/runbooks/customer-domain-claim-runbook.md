@@ -334,6 +334,69 @@ runner-updating release first — the runner self-updates its S3 script at the
 end of a successful run — then retry the domain update. Do not proceed on a
 deployment whose evidence lacks the echo.
 
+#### Version-skew session recovery
+
+When the echo guard fires on a hosted session, `enforceDomainFieldsEchoGuard`
+sets the session to `status='failed'` with `error_message` citing
+`domain_fields_echo_missing`. There is currently **no operator API to reset a
+failed session** — the `/start` endpoint's idempotency guard
+(`session_config.deploymentRun.executionArn`) also blocks re-dispatch even if
+the status were patched alone. Full recovery requires direct DB surgery against
+the SaaS **control-plane** Aurora instance:
+
+1. **Update the runner release** (existing step above) — the outdated runner
+   self-updates at the end of a successful run; trigger a plain update run on
+   the customer's state machine to complete the self-update before the domain
+   retry.
+
+2. **Reset the session** — once the runner is current, patch the session row so
+   `/start` can dispatch a new Step Functions execution:
+
+   ```sql
+   -- ⚠️  Interim direct-DB surgery. Run against the SaaS control-plane DB.
+   -- Verify <session-id> and the before/after state with the SELECT below first.
+
+   SELECT id, status, error_message,
+          session_config->>'deploymentRun'   AS deployment_run,
+          session_config->>'domainFieldsEcho' AS domain_fields_echo
+   FROM   customer_deployment_sessions
+   WHERE  id = '<session-id>';
+
+   UPDATE customer_deployment_sessions
+   SET
+     status        = 'ready_to_deploy',
+     error_message = NULL,
+     session_config = session_config
+       -- Remove the stale execution reference so /start is not idempotency-blocked
+       - 'deploymentRun'
+       -- Remove the cached echo result so the guard re-runs against fresh evidence
+       - 'domainFieldsEcho',
+     updated_at    = now()
+   WHERE id = '<session-id>';
+   ```
+
+   Why both keys must be cleared:
+   - `deploymentRun` (specifically `.executionArn`) is the idempotency guard in
+     `startDeployment`: if it is present the endpoint returns `deployment_start_reused`
+     and never fires a new Step Functions execution.
+   - `domainFieldsEcho` (specifically `.verifiedAt`) is checked first by
+     `enforceDomainFieldsEchoGuard`: if it is present the guard skips the S3
+     evidence check entirely and will not detect a successful echo on the new run.
+
+   After the UPDATE, `credentials_status` must still be `'validated'` or
+   `'transferred'` — the start endpoint enforces this. If credentials have
+   expired, re-connect the bootstrap credential lease through the UI before
+   calling `/start`.
+
+3. **Re-trigger the run** — the browser UI's "Start deployment" button (or a
+   POST to `/api/deployment-sessions/<session-id>/start`) dispatches a new
+   Step Functions execution and transitions the session back to `'deploying'`.
+   Verify the evidence echo in the next poll (see the `jq '.consumedDomainFields'`
+   check above).
+
+_Operator reset endpoint is tracked as follow-up work; when shipped it will
+supersede the direct-DB step above._
+
 Smoke the web side now (TLS + login):
 
 ```sh

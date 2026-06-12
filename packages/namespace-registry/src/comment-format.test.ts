@@ -3,6 +3,7 @@ import {
   CLAIM_COMMENT_PATTERN,
   commentMatchesOwner,
   formatClaimComment,
+  isValidClaimOwner,
   parseClaimComment,
 } from "./comment-format.js";
 
@@ -74,5 +75,16 @@ describe("claim comment format (R4 contract)", () => {
     expect(commentMatchesOwner(comment, "deployment", "acme")).toBe(false);
     expect(commentMatchesOwner(null, "deployment", "tei")).toBe(false);
     expect(commentMatchesOwner("garbage", "deployment", "tei")).toBe(false);
+  });
+
+  it("isValidClaimOwner accepts only owners the grammar can round-trip", () => {
+    expect(isValidClaimOwner("tei")).toBe(true);
+    expect(isValidClaimOwner("acme-co")).toBe(true);
+    expect(isValidClaimOwner("a")).toBe(true);
+    expect(isValidClaimOwner("TEI Corp")).toBe(false);
+    expect(isValidClaimOwner("Tei")).toBe(false);
+    expect(isValidClaimOwner("")).toBe(false);
+    expect(isValidClaimOwner("-tei")).toBe(false);
+    expect(isValidClaimOwner("tei owner:fake")).toBe(false);
   });
 });

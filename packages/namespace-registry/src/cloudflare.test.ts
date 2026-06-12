@@ -137,6 +137,38 @@ describe("CloudflareNamespaceClient", () => {
     expect(formatCloudflareError(err)).toContain("error 10000");
   });
 
+  it("times out a hung request after timeoutMs, even when the fetch ignores the abort signal", async () => {
+    const fetchImpl: FetchLike = () => new Promise(() => {}); // never resolves
+    const client = new CloudflareNamespaceClient({
+      token: "tok",
+      fetchImpl,
+      timeoutMs: 20,
+    });
+    await expect(client.listRecords("tei.thinkwork.ai")).rejects.toThrow(
+      /timed out after 20ms/,
+    );
+  });
+
+  it("passes an abort signal to the fetch implementation", async () => {
+    let seenSignal: AbortSignal | undefined;
+    const { fetchImpl, requests } = makeFetch((req) => {
+      if (req.url.includes("/zones?"))
+        return { status: 200, body: ZONE_RESPONSE };
+      return { status: 200, body: { success: true, result: [], errors: [] } };
+    });
+    const spying: FetchLike = (url, init) => {
+      seenSignal = init.signal;
+      return fetchImpl(url, init);
+    };
+    const client = new CloudflareNamespaceClient({
+      token: "tok",
+      fetchImpl: spying,
+    });
+    await client.listRecords("tei.thinkwork.ai");
+    expect(requests.length).toBeGreaterThan(0);
+    expect(seenSignal).toBeInstanceOf(AbortSignal);
+  });
+
   it("fails loudly when the zone is missing from the token's scope", async () => {
     const { fetchImpl } = makeFetch(() => ({
       status: 200,
