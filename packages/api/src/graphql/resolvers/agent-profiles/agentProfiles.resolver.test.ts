@@ -73,6 +73,7 @@ vi.mock("../../utils.js", () => ({
     delete: mockDelete,
   },
   eq: vi.fn((left: unknown, right: unknown) => ({ type: "eq", left, right })),
+  isNull: vi.fn((column: unknown) => ({ type: "isNull", column })),
   inArray: vi.fn((left: unknown, right: unknown[]) => ({
     type: "inArray",
     left,
