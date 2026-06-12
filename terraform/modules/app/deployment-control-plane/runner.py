@@ -576,6 +576,31 @@ def safe_get(mapping, *names, default=""):
     return default
 
 
+def existing_stage_secret_string(stage, suffix):
+    """Read a plain-string platform secret (e.g. thinkwork/<stage>/api-auth).
+
+    Returns "" when the secret does not exist yet (first install) or cannot
+    be read — callers mint a fresh value in that case.
+    """
+    try:
+        body = output(
+            [
+                "aws",
+                "secretsmanager",
+                "get-secret-value",
+                "--secret-id",
+                f"thinkwork/{stage}/{suffix}",
+                "--query",
+                "SecretString",
+                "--output",
+                "text",
+            ]
+        )
+        return body.strip() if isinstance(body, str) else ""
+    except Exception:
+        return ""
+
+
 def existing_stage_secret_field(stage, field):
     try:
         body = output(
@@ -1209,6 +1234,13 @@ def write_runner_files(payload, runner_secrets):
     )
     if not db_password:
         db_password = secrets.token_urlsafe(36)
+    if not api_auth_secret:
+        # Reuse the stage's existing service-auth secret (written to Secrets
+        # Manager by terraform on the previous apply). Minting a fresh value
+        # on every run rotated API_AUTH_SECRET per release, which silently
+        # drifted the env copy away from the pinned Secrets Manager copy —
+        # harmless while readers are env-first, fatal once env drops (R8).
+        api_auth_secret = existing_stage_secret_string(stage, "api-auth")
     if not api_auth_secret:
         api_auth_secret = secrets.token_urlsafe(48)
 
