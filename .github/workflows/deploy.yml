@@ -2090,7 +2090,7 @@ jobs:
             --secret-id "${{ steps.outputs.outputs.db_secret_arn }}" \
             --query SecretString --output text | jq -r .password)
           export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=no-verify"
-          pnpm exec tsx scripts/migrate-workspace-layout.ts \
+          pnpm exec tsx scripts/migrate-workspace-layout.mts \
             --apply \
             --delete-legacy-sources \
             --workspace-bucket "${{ steps.outputs.outputs.bucket }}"
