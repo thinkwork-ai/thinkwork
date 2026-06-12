@@ -439,9 +439,7 @@ describe("fetch_workspace_source — mounting (AE1)", () => {
     expect(resultText(result as { content?: unknown })).toContain(
       "already hydrated at User/",
     );
-    await expect(
-      stat(path.join(workspaceDir, "Users/eric")),
-    ).rejects.toThrow();
+    await expect(stat(path.join(workspaceDir, "Users/eric"))).rejects.toThrow();
     expect(appended).toHaveLength(0);
   });
 
@@ -463,11 +461,13 @@ describe("fetch_workspace_source — mounting (AE1)", () => {
       },
       appendToBaseline: () => {},
     };
-    const fetchImpl = vi.fn().mockResolvedValue(
-      endpointResponse(
-        successBody(keys.map((key) => ({ key, relPath: `${key}.md` }))),
-      ),
-    );
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        endpointResponse(
+          successBody(keys.map((key) => ({ key, relPath: `${key}.md` }))),
+        ),
+      );
     const { tool } = await buildTool({
       fetchImpl: fetchImpl as unknown as typeof fetch,
       host,
@@ -498,9 +498,9 @@ describe("fetch_workspace_source — mount-path hard guard", () => {
     expect(
       resolveSafeMountDir({ workspaceDir, mountRel: "Spaces/research-b" }),
     ).toBe(path.resolve("/workspace/Spaces/research-b"));
-    expect(
-      resolveSafeMountDir({ workspaceDir, mountRel: "Users/jane" }),
-    ).toBe(path.resolve("/workspace/Users/jane"));
+    expect(resolveSafeMountDir({ workspaceDir, mountRel: "Users/jane" })).toBe(
+      path.resolve("/workspace/Users/jane"),
+    );
   });
 
   it("refuses any mount resolving into the acting user's writable User/ tree", () => {

@@ -95,9 +95,7 @@ export function resolveSafeMountDir(input: {
     segments.length !== 2 ||
     (segments[0] !== "Spaces" && segments[0] !== "Users")
   ) {
-    refused(
-      "fetched sources mount only at Spaces/<slug>/ or Users/<slug>/.",
-    );
+    refused("fetched sources mount only at Spaces/<slug>/ or Users/<slug>/.");
   }
   if (
     input.activeSpaceFolder &&
@@ -469,7 +467,8 @@ export function createFetchWorkspaceSourceExtension(
                 : new Error(String(failure.reason));
             }
             for (const file of staged) {
-              if (!file) throw new Error("fetch_workspace_source: staging incomplete.");
+              if (!file)
+                throw new Error("fetch_workspace_source: staging incomplete.");
               totalBytes += file.bytes.byteLength;
               baselineFiles.push(file);
             }
