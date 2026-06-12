@@ -576,6 +576,22 @@ def safe_get(mapping, *names, default=""):
     return default
 
 
+def safe_get_bool(runner_secrets, payload, name, default=False):
+    """Boolean analogue of the safe_get(runner_secrets, default=safe_get(payload))
+    precedence. Controller payloads carry real JSON booleans, but Secrets
+    Manager JSON values frequently arrive as strings ("true"). Generated-root
+    variables typed `bool` reject strings, so boolean wiring points must
+    round-trip through this helper and always emit real booleans.
+    """
+    for source in (runner_secrets, payload):
+        value = source.get(name)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value:
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+    return default
+
+
 def existing_stage_secret_string(stage, suffix):
     """Read a plain-string platform secret (e.g. thinkwork/<stage>/api-auth).
 
@@ -1302,6 +1318,23 @@ def write_runner_files(payload, runner_secrets):
             "appCertificateArn",
             default=safe_get(payload, "appCertificateArn", default=""),
         ),
+        "customer_domain": safe_get(
+            runner_secrets,
+            "customerDomain",
+            default=safe_get(payload, "customerDomain", default=""),
+        ),
+        "customer_domain_delegated": safe_get_bool(
+            runner_secrets,
+            payload,
+            "customerDomainDelegated",
+            default=False,
+        ),
+        "customer_domain_legacy_retired": safe_get_bool(
+            runner_secrets,
+            payload,
+            "customerDomainLegacyRetired",
+            default=False,
+        ),
         "lambda_artifact_bucket": os.environ["THINKWORK_RELEASE_ARTIFACT_BUCKET"],
         "lambda_artifact_prefix": f"releases/{release_version}/lambdas",
         "deployment_release_version": release_version,
@@ -1354,10 +1387,6 @@ terraform {{
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }}
-    cloudflare = {{
-      source  = "cloudflare/cloudflare"
-      version = "~> 4.0"
-    }}
   }}
 }}
 
@@ -1365,7 +1394,14 @@ provider "aws" {{
   region = var.region
 }}
 
-provider "cloudflare" {{}}
+# The thinkwork module declares configuration_aliases = [aws.us_east_1]
+# (customer-domain ACM certificates must live in us-east-1 for CloudFront),
+# so every generated root must define the alias and pass it through the
+# module's providers mapping — even when no customer domain is configured.
+provider "aws" {{
+  alias  = "us_east_1"
+  region = "us-east-1"
+}}
 
 variable "stage" {{
   type = string
@@ -1419,6 +1455,18 @@ variable "app_domain" {{
 
 variable "app_certificate_arn" {{
   type = string
+}}
+
+variable "customer_domain" {{
+  type = string
+}}
+
+variable "customer_domain_delegated" {{
+  type = bool
+}}
+
+variable "customer_domain_legacy_retired" {{
+  type = bool
 }}
 
 variable "google_oauth_client_id" {{
@@ -1485,6 +1533,9 @@ variable "deployment_terraform_module_version" {{
 module "thinkwork" {{
   source  = {hcl_string(terraform_module_source)}
 {module_version_line}
+  providers = {{
+    aws.us_east_1 = aws.us_east_1
+  }}
 
   stage      = var.stage
   region     = var.region
@@ -1504,6 +1555,10 @@ module "thinkwork" {{
 
   app_domain          = var.app_domain
   app_certificate_arn = var.app_certificate_arn
+
+  customer_domain                = var.customer_domain
+  customer_domain_delegated      = var.customer_domain_delegated
+  customer_domain_legacy_retired = var.customer_domain_legacy_retired
 
   lambda_artifact_bucket   = var.lambda_artifact_bucket
   lambda_artifact_prefix   = var.lambda_artifact_prefix
@@ -1543,6 +1598,8 @@ output "appsync_api_key" {{
   sensitive = true
 }}
 output "auth_domain" {{ value = module.thinkwork.auth_domain }}
+output "customer_domain" {{ value = module.thinkwork.customer_domain }}
+output "customer_domain_name_servers" {{ value = module.thinkwork.customer_domain_name_servers }}
 output "db_cluster_endpoint" {{ value = module.thinkwork.db_cluster_endpoint }}
 output "db_secret_arn" {{ value = module.thinkwork.db_secret_arn }}
 output "database_name" {{ value = module.thinkwork.database_name }}
@@ -2035,6 +2092,17 @@ def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None)
         "startedAt": STARTED_AT,
         "recordedAt": datetime.now(UTC).isoformat(),
     }
+    if "customer_domain" in vars_json:
+        # Echoed-fields guard (KTD5): record the domain fields this runner
+        # version actually consumed so the controller can detect an outdated
+        # runner that silently dropped them. Booleans must stay booleans.
+        evidence["consumedDomainFields"] = {
+            "customerDomain": vars_json.get("customer_domain", ""),
+            "customerDomainDelegated": bool(vars_json.get("customer_domain_delegated", False)),
+            "customerDomainLegacyRetired": bool(
+                vars_json.get("customer_domain_legacy_retired", False)
+            ),
+        }
     if error:
         evidence["error"] = str(error)
     if RELEASE_EVIDENCE:
@@ -2068,7 +2136,6 @@ def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None)
 def main():
     global CONTROLLER_EVIDENCE, TERRAFORM_EVIDENCE
     WORK.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("CLOUDFLARE_API_TOKEN", "placeholder-not-configured")
     payload = read_json_env("THINKWORK_DEPLOYMENT_INPUT", {})
     apply_release_selection(payload)
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION") or payload.get("action") or "deploy"

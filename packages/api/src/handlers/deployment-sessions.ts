@@ -13,6 +13,7 @@ import type {
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { StartExecutionCommand, SFNClient } from "@aws-sdk/client-sfn";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   createHash,
   randomBytes,
@@ -47,6 +48,7 @@ const SESSION_TTL_DAYS = 14;
 const CONTROLLER_CONTRACT = "thinkwork.deployment.controller.v1";
 const CONTROLLER_SCHEMA_VERSION = 1;
 const sfn = new SFNClient({});
+const s3 = new S3Client({});
 
 type CreateSessionBody = {
   customerName?: unknown;
@@ -72,6 +74,7 @@ type ControllerSessionRow = {
   availability_zones?: unknown;
   admin_name?: string | null;
   admin_email?: string | null;
+  session_config?: unknown;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -209,8 +212,123 @@ async function readSession(
   if (!isAuthorizedSessionRequest(session, event)) {
     return forbidden("Deployment session token is invalid");
   }
+  const checked = await enforceDomainFieldsEchoGuard(session);
   const events = await loadSessionEvents(session.id);
-  return json({ session: toSessionPayload(session, events) });
+  return json({ session: toSessionPayload(checked, events) });
+}
+
+/**
+ * Echoed-fields guard (KTD5). The runner builds its Terraform vars per its
+ * own script version, so an outdated customer runner silently drops newer
+ * controller-input fields (this shipped twice before: #2341, #2375). When a
+ * session requests a customer domain, an up-to-date runner echoes the
+ * consumed domain fields into deployment-evidence.json; once evidence exists
+ * without them the run is failed loudly instead of shipping a deployment
+ * that ignored the domain.
+ */
+async function enforceDomainFieldsEchoGuard(
+  session: NonNullable<Awaited<ReturnType<typeof loadSession>>>,
+) {
+  if (session.status !== "deploying") return session;
+  const requested = sessionCustomerDomainConfig(session);
+  if (!requested.customerDomain) return session;
+  const config = objectConfig(session.session_config);
+  if (stringField(objectConfig(config.domainFieldsEcho), "verifiedAt")) {
+    return session;
+  }
+  const run = objectConfig(config.deploymentRun);
+  const bucket = stringField(run, "evidenceBucket");
+  const prefix = stringField(run, "evidencePrefix");
+  if (!bucket || !prefix) return session;
+
+  const evidence = await readDeploymentEvidence(bucket, prefix);
+  if (!evidence) return session;
+
+  const consumed = objectConfig(evidence.consumedDomainFields);
+  const echoed =
+    typeof consumed.customerDomain === "string" &&
+    consumed.customerDomain.length > 0 &&
+    typeof consumed.customerDomainDelegated === "boolean" &&
+    typeof consumed.customerDomainLegacyRetired === "boolean";
+
+  if (echoed) {
+    const [updated] = await db
+      .update(customerDeploymentSessions)
+      .set({
+        session_config: {
+          ...config,
+          domainFieldsEcho: {
+            verifiedAt: new Date().toISOString(),
+            consumedDomainFields: consumed,
+          },
+        },
+        updated_at: new Date(),
+      })
+      .where(eq(customerDeploymentSessions.id, session.id))
+      .returning();
+    await appendSessionEvent({
+      sessionId: session.id,
+      eventType: "domain_fields_echoed",
+      stepKey: "foundation",
+      message: `Deployment runner echoed the consumed customer domain fields (customerDomain=${String(consumed.customerDomain)}).`,
+      payload: { consumedDomainFields: consumed },
+      idempotencyKey: "domain_fields_echoed",
+    });
+    return updated ?? session;
+  }
+
+  const message =
+    `Deployment runner did not echo the requested customer domain fields ` +
+    `(customerDomain=${requested.customerDomain}) in deployment-evidence.json. ` +
+    `The controller is likely executing an outdated runner script (runner ` +
+    `version skew) that silently dropped the domain configuration — update ` +
+    `the deployment runner release before retrying.`;
+  const [failed] = await db
+    .update(customerDeploymentSessions)
+    .set({
+      status: "failed",
+      error_message: message,
+      updated_at: new Date(),
+    })
+    .where(eq(customerDeploymentSessions.id, session.id))
+    .returning();
+  await appendSessionEvent({
+    sessionId: session.id,
+    eventType: "domain_fields_echo_missing",
+    stepKey: "foundation",
+    message,
+    payload: {
+      requestedCustomerDomain: requested.customerDomain,
+      evidenceBucket: bucket,
+      evidencePrefix: prefix,
+    },
+    idempotencyKey: "domain_fields_echo_missing",
+  });
+  return failed ?? session;
+}
+
+async function readDeploymentEvidence(
+  bucket: string,
+  prefix: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const object = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: `${prefix}/deployment-evidence.json`,
+      }),
+    );
+    const body = await object.Body?.transformToString();
+    if (!body) return null;
+    const parsed = JSON.parse(body) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    // Evidence is not written yet (run still in progress) or unreadable —
+    // re-check on the next poll instead of failing the read path.
+    return null;
+  }
 }
 
 async function startDeployment(
@@ -1033,6 +1151,25 @@ function deploymentEvidenceBucket(): string | null {
   );
 }
 
+/**
+ * Customer-domain configuration for a deployment session. There is no
+ * dedicated column — like other optional controller wiring (e.g. the
+ * authority-transfer controller ARN) the values live in the session_config
+ * JSON blob, set operationally per the customer-domain claim runbook.
+ */
+function sessionCustomerDomainConfig(session: { session_config?: unknown }): {
+  customerDomain: string;
+  customerDomainDelegated: boolean;
+  customerDomainLegacyRetired: boolean;
+} {
+  const config = objectConfig(session.session_config);
+  return {
+    customerDomain: stringField(config, "customerDomain"),
+    customerDomainDelegated: config.customerDomainDelegated === true,
+    customerDomainLegacyRetired: config.customerDomainLegacyRetired === true,
+  };
+}
+
 function releaseVersionToTerraformModuleVersion(version: string): string {
   return version.replace(/^v/, "");
 }
@@ -1045,6 +1182,7 @@ function buildControllerInput(
   const release = deploymentReleaseSelection();
   const evidencePrefix = `sessions/${session.id}/${action}`;
   const phase = action === "destroy" ? "teardown" : action;
+  const domain = sessionCustomerDomainConfig(session);
 
   return {
     schemaVersion: CONTROLLER_SCHEMA_VERSION,
@@ -1061,6 +1199,9 @@ function buildControllerInput(
       name: session.admin_name,
       email: session.admin_email,
     },
+    customerDomain: domain.customerDomain,
+    customerDomainDelegated: domain.customerDomainDelegated,
+    customerDomainLegacyRetired: domain.customerDomainLegacyRetired,
     source: session.source,
     evidenceBucket,
     evidence: {
