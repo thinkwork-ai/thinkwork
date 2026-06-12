@@ -1,0 +1,55 @@
+import { generateKeyPairSync } from "node:crypto";
+import { describe, expect, it } from "vitest";
+
+import { buildSignedCatalogJson } from "../../scripts/build-catalog";
+import { verifyPluginCatalog } from "../catalog";
+import { allPluginManifests } from "../plugins";
+
+function keyPair() {
+  const pair = generateKeyPairSync("ed25519");
+  return {
+    publicKeyPem: pair.publicKey.export({
+      format: "pem",
+      type: "spki",
+    }) as string,
+    privateKeyPem: pair.privateKey.export({
+      format: "pem",
+      type: "pkcs8",
+    }) as string,
+  };
+}
+
+describe("buildSignedCatalogJson", () => {
+  it("produces a JSON document that verifies against the signing key", () => {
+    const keys = keyPair();
+    const json = buildSignedCatalogJson({
+      manifests: allPluginManifests,
+      privateKeyPem: keys.privateKeyPem,
+      generatedAt: "2026-06-12T00:00:00.000Z",
+    });
+    const document = JSON.parse(json) as unknown;
+    const verified = verifyPluginCatalog({
+      document,
+      trustedPublicKeyPem: keys.publicKeyPem,
+    });
+    expect(verified.plugins.map((plugin) => plugin.pluginKey)).toContain(
+      "lastmile",
+    );
+    expect(verified.generatedAt).toBe("2026-06-12T00:00:00.000Z");
+  });
+
+  it("fails verification against a different key", () => {
+    const signing = keyPair();
+    const other = keyPair();
+    const json = buildSignedCatalogJson({
+      manifests: allPluginManifests,
+      privateKeyPem: signing.privateKeyPem,
+    });
+    expect(() =>
+      verifyPluginCatalog({
+        document: JSON.parse(json) as unknown,
+        trustedPublicKeyPem: other.publicKeyPem,
+      }),
+    ).toThrow(/signature is invalid/);
+  });
+});
