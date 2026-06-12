@@ -75,6 +75,26 @@ describe("wakeup processor system prompt capture", () => {
     expect(source.indexOf("turn_context: runSpaceId")).toBeGreaterThan(-1);
   });
 
+  it("passes the extension gate fields so ask_user_question registers on wakeup turns", () => {
+    const source = readFileSync(
+      new URL("./wakeup-processor.ts", import.meta.url),
+      "utf8",
+    );
+
+    // The runtime registers the ask_user_question (and task-status)
+    // extensions only when the invoke payload carries the API wiring plus
+    // the active turn id (server.ts gate). chat-agent-invoke passes these;
+    // the wakeup path must too, or every question_answer resume /
+    // automation turn silently loses the tool and asks in prose.
+    expect(source).toContain(
+      "thinkwork_api_url: thinkworkApiUrl() || undefined",
+    );
+    expect(source).toContain(
+      "thinkwork_api_secret: getApiAuthSecret() || undefined",
+    );
+    expect(source).toContain("thread_turn_id: run.id");
+  });
+
   it("excludes every source-specific message branch from the catch-all assistant insert", () => {
     const source = readFileSync(
       new URL("./wakeup-processor.ts", import.meta.url),
