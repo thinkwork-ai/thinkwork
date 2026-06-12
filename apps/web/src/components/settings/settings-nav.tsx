@@ -7,7 +7,6 @@ import {
   Cpu,
   FolderTree,
   History,
-  Puzzle,
   Repeat,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -16,7 +15,7 @@ import {
   Webhook,
   Wrench,
 } from "lucide-react";
-import { IconApps, IconPlanet } from "@tabler/icons-react";
+import { IconApps, IconPlanet, IconPlug } from "@tabler/icons-react";
 import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
@@ -95,7 +94,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   {
     label: "Plugins",
     to: "/settings/plugins",
-    icon: Puzzle,
+    icon: IconPlug,
   },
   {
     label: "Activity",

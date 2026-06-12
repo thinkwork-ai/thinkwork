@@ -3,11 +3,11 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
   LogOut,
-  Puzzle,
   RefreshCw,
   Settings,
   TriangleAlert,
 } from "lucide-react";
+import { IconPlug } from "@tabler/icons-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -262,7 +262,7 @@ function AccountMenu({
               </span>
             </div>
             <DropdownMenuItem onSelect={() => onOpenPlugins?.()}>
-              <Puzzle className="mr-2 h-4 w-4" />
+              <IconPlug className="mr-2 h-4 w-4" />
               Reconnect plugins
             </DropdownMenuItem>
             <DropdownMenuSeparator />
