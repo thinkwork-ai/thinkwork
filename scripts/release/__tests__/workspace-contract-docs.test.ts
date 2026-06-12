@@ -56,10 +56,10 @@ test("workspace contract docs describe the v1 runtime shape", () => {
     docs[
       "docs/src/content/docs/concepts/agents/workspace-architecture/index.mdx"
     ],
-    /INDEX\.md[\s\S]+User\/[\s\S]+USER\.md[\s\S]+Thread\/[\s\S]+PROGRESS\.md/,
+    /Workspace Routing[\s\S]+User\/[\s\S]+USER\.md[\s\S]+Thread\/[\s\S]+PROGRESS\.md/,
   );
   assert.match(
     docs["docs/runbooks/workspace-architecture-verification.md"],
-    /USER\.md missing[\s\S]+User\/USER\.md exists[\s\S]+Spaces\/INDEX\.md exists[\s\S]+legacy Space missing/,
+    /USER\.md missing[\s\S]+User\/USER\.md exists[\s\S]+Workspace Routing present[\s\S]+legacy Space missing/,
   );
 });

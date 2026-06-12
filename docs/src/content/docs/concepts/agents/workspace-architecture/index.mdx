@@ -59,7 +59,7 @@ Workspace
 
 The **runtime workspace** is what the agent sees for one Thread turn. It is rendered per Thread under a stable thread folder and hydrated into `/workspace` for Pi on AgentCore, desktop, and mobile. Runtime rendering is by reference: it writes a hydrate manifest that points back to the source files instead of copying every Agent, Space, and User file into a permanent per-user tuple.
 
-The runtime does not show the same top-level source folders. It uses the Agent source as the root, keeps User context explicit under `User/`, hydrates only the active Space under `Spaces/<active-space>/`, and renders Thread status under `Thread/`:
+The runtime does not show the same top-level source folders. It uses the Agent source as the root, keeps User context explicit under `User/`, hydrates only the active Space under `Spaces/<active-space>/`, and renders Thread status under `Thread/`. The rendered `AGENTS.md` carries a generated **Workspace Routing** section listing other authorized Spaces and participants, reachable read-only via `fetch_workspace_source`:
 
 ```text
 /workspace

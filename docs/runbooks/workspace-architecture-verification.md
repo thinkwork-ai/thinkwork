@@ -53,7 +53,6 @@ as Settings -> Workspace.
 ├── skills/
 ├── workspaces/
 ├── Spaces/
-│   ├── INDEX.md
 │   └── customer-onboarding/
 │       ├── SPACE.md
 │       ├── CONTEXT.md
@@ -75,7 +74,8 @@ as Settings -> Workspace.
 
 The Agent source is the runtime root. The User source remains explicit under
 `User/`. Only the active Space folder is hydrated under `Spaces/<active-space>/`;
-`Spaces/INDEX.md` lists other authorized Spaces.
+the generated **Workspace Routing** section of `AGENTS.md` lists other
+authorized Spaces, reachable read-only via `fetch_workspace_source`.
 
 Forbidden runtime folders:
 
@@ -92,18 +92,17 @@ by diffing, but their presence on disk is not a workspace-shape failure.
 
 ## Settings verification
 
-1. Open Settings -> Workspace.
-2. Confirm top-level roots are `Agent`, `Spaces`, and `User`.
-3. Expand `Agent`; confirm root files are direct children and `workspace/` is not
-   present.
-4. Expand one Space under `Spaces`; confirm its files are direct children and
-   `source/` is not present.
-5. Expand `User`; confirm `USER.md` and `memory/` are visible for the current
-   user.
+1. Open Settings -> Agents and click the workspace toggle (file icon); confirm
+   the main Agent source shows root files as direct children and `workspace/`
+   is not present.
+2. Open Settings -> Spaces -> a Space -> Workspace files; confirm its files are
+   direct children and `source/` is not present.
+3. Open Settings -> Users -> a user -> Workspace files; confirm `USER.md` and
+   `memory/` are visible for that user.
 
-If a root is missing, verify the workspace-files API target first: Agent target,
-Space target, and User target are separate S3-backed sources that the
-consolidated Settings view prefixes for display.
+If a surface is empty, verify the workspace-files API target first: Agent
+target, Space target, and User target are separate S3-backed sources, each
+scoped to its own settings surface.
 
 ## Runtime smoke
 
@@ -116,7 +115,7 @@ find . -maxdepth 2 -type d -print | sort
 printf '%s\n' ---
 test -f USER.md && echo USER.md exists || echo USER.md missing
 test -f User/USER.md && echo User/USER.md exists || echo User/USER.md missing
-test -f Spaces/INDEX.md && echo Spaces/INDEX.md exists || echo Spaces/INDEX.md missing
+grep -q "Workspace Routing" AGENTS.md && echo Workspace Routing present || echo Workspace Routing missing
 test -d Space && echo legacy Space exists || echo legacy Space missing
 ```
 
@@ -125,7 +124,7 @@ Expected:
 - `pwd` reports `/workspace`.
 - `USER.md missing`.
 - `User/USER.md exists`.
-- `Spaces/INDEX.md exists`.
+- `Workspace Routing present`.
 - `legacy Space missing`.
 - No top-level `Agent`, singular `Space`, root `USER.md`, `workspace`, `source`, or
   `workspace-archives` directories.
