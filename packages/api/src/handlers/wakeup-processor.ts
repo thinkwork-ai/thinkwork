@@ -1699,9 +1699,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   }
 
   // Build MCP configs from agent_mcp_servers + tenant_mcp_servers.
+  // Dispatch identity (plan 2026-06-12-001 U6): plugin-managed servers
+  // gate on the wakeup's honest invoker (`requested_by_actor_type='user'`
+  // → requested_by_actor_id, i.e. the thread/job owner). System/agent
+  // actors leave requesterUserId null → plugin servers drop (fail
+  // closed). Direct per_user_oauth servers keep human-pair semantics.
   const mcpConfigsRaw = await buildMcpConfigs(
     wakeup.agent_id,
-    agent.human_pair_id,
+    {
+      humanPairId: agent.human_pair_id,
+      requesterUserId: invokerUserId ?? null,
+    },
     "[wakeup-processor]",
   );
   const mcpConfigs = mcpConfigsRaw.filter((config: { name: string }) => {

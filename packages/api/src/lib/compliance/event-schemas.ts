@@ -346,6 +346,21 @@ export const EVENT_PAYLOAD_SHAPES: Record<
   "plugin.uninstalled": {
     allowedFields: new Set(["pluginInstallId", "pluginKey", "version"]),
   },
+  "plugin.activation_granted": {
+    // tokenCount = number of resource-bound token records minted under
+    // the grant; sharedAudience flags the documented v1 fallback where
+    // the AS rejected per-resource minting and one token covers all
+    // resource records. Scopes/tokens/secret refs never enter the log.
+    allowedFields: new Set([
+      "pluginInstallId",
+      "pluginKey",
+      "tokenCount",
+      "sharedAudience",
+    ]),
+  },
+  "plugin.activation_revoked": {
+    allowedFields: new Set(["pluginInstallId", "pluginKey"]),
+  },
 };
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,

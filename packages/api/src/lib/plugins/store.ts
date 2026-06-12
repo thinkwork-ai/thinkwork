@@ -22,6 +22,7 @@ import {
   type PluginComponentState,
   type PluginInstallState,
   type UserPluginActivationStatus,
+  type UserPluginActivationTokenStatus,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../../graphql/utils.js";
 import {
@@ -58,6 +59,24 @@ export interface UpdateComponentPatch {
   state?: PluginComponentState;
   handlerRef?: Record<string, unknown>;
   lastError?: string | null;
+}
+
+export interface UpsertActivationInput {
+  userId: string;
+  pluginInstallId: string;
+  grantedScopes: string[];
+}
+
+export interface UpsertActivationTokenInput {
+  activationId: string;
+  resourceIndicator: string;
+  secretRef: string;
+  expiresAt: Date | null;
+}
+
+export interface UpdateActivationTokenPatch {
+  expiresAt?: Date | null;
+  status?: UserPluginActivationTokenStatus;
 }
 
 export interface PluginEngineStore {
@@ -99,14 +118,38 @@ export interface PluginEngineStore {
     userId: string,
     installIds: string[],
   ): Promise<UserPluginActivationRow[]>;
+  getActivationByUserAndInstall(
+    userId: string,
+    installId: string,
+  ): Promise<UserPluginActivationRow | null>;
   countActiveActivations(installId: string): Promise<number>;
+  /**
+   * Create-or-reactivate the (user, install) grant: ON CONFLICT the
+   * UNIQUE(user_id, plugin_install_id) pair the row flips back to
+   * 'active' with fresh granted_scopes/granted_at and a cleared
+   * revoked_at. The optional audit event (plugin.activation_granted)
+   * is written in the same transaction.
+   */
+  upsertActivation(
+    input: UpsertActivationInput,
+    audit?: EmitAuditEventInput,
+  ): Promise<UserPluginActivationRow>;
   updateActivationStatus(
     activationId: string,
     status: UserPluginActivationStatus,
-  ): Promise<void>;
+    audit?: EmitAuditEventInput,
+  ): Promise<UserPluginActivationRow | null>;
   listActivationTokens(
     activationId: string,
   ): Promise<UserPluginActivationTokenRow[]>;
+  /** ON CONFLICT (activation_id, resource_indicator) DO UPDATE. */
+  upsertActivationToken(
+    input: UpsertActivationTokenInput,
+  ): Promise<UserPluginActivationTokenRow>;
+  updateActivationToken(
+    tokenId: string,
+    patch: UpdateActivationTokenPatch,
+  ): Promise<void>;
   deleteActivationTokens(activationId: string): Promise<void>;
   deleteActivation(activationId: string): Promise<void>;
 }
@@ -257,6 +300,20 @@ export function createDrizzlePluginEngineStore(
       return rows.filter((row) => allowed.has(row.plugin_install_id));
     },
 
+    async getActivationByUserAndInstall(userId, installId) {
+      const [row] = await db
+        .select()
+        .from(userPluginActivations)
+        .where(
+          and(
+            eq(userPluginActivations.user_id, userId),
+            eq(userPluginActivations.plugin_install_id, installId),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
+    },
+
     async countActiveActivations(installId) {
       const rows = await db
         .select({ id: userPluginActivations.id })
@@ -270,15 +327,71 @@ export function createDrizzlePluginEngineStore(
       return rows.length;
     },
 
-    async updateActivationStatus(activationId, status) {
-      await db
+    async upsertActivation(input, audit) {
+      const now = new Date();
+      const run = async (dbh: DbLike) => {
+        const [row] = await dbh
+          .insert(userPluginActivations)
+          .values({
+            user_id: input.userId,
+            plugin_install_id: input.pluginInstallId,
+            status: "active",
+            granted_scopes: input.grantedScopes,
+            granted_at: now,
+            revoked_at: null,
+          })
+          .onConflictDoUpdate({
+            target: [
+              userPluginActivations.user_id,
+              userPluginActivations.plugin_install_id,
+            ],
+            set: {
+              status: "active",
+              granted_scopes: input.grantedScopes,
+              granted_at: now,
+              revoked_at: null,
+              updated_at: now,
+            },
+          })
+          .returning();
+        if (!row) {
+          throw new Error("user_plugin_activations upsert returned no row");
+        }
+        return row;
+      };
+      if (audit) {
+        return db.transaction(async (tx) => {
+          const row = await run(tx as unknown as DbLike);
+          await emitAuditEvent(tx, audit);
+          return row;
+        });
+      }
+      return run(db);
+    },
+
+    async updateActivationStatus(activationId, status, audit) {
+      const set = {
+        status,
+        updated_at: new Date(),
+        ...(status === "revoked" ? { revoked_at: new Date() } : {}),
+      };
+      if (audit) {
+        return db.transaction(async (tx) => {
+          const [row] = await tx
+            .update(userPluginActivations)
+            .set(set)
+            .where(eq(userPluginActivations.id, activationId))
+            .returning();
+          await emitAuditEvent(tx, audit);
+          return row ?? null;
+        });
+      }
+      const [row] = await db
         .update(userPluginActivations)
-        .set({
-          status,
-          updated_at: new Date(),
-          ...(status === "revoked" ? { revoked_at: new Date() } : {}),
-        })
-        .where(eq(userPluginActivations.id, activationId));
+        .set(set)
+        .where(eq(userPluginActivations.id, activationId))
+        .returning();
+      return row ?? null;
     },
 
     async listActivationTokens(activationId) {
@@ -286,6 +399,46 @@ export function createDrizzlePluginEngineStore(
         .select()
         .from(userPluginActivationTokens)
         .where(eq(userPluginActivationTokens.activation_id, activationId));
+    },
+
+    async upsertActivationToken(input) {
+      const now = new Date();
+      const [row] = await db
+        .insert(userPluginActivationTokens)
+        .values({
+          activation_id: input.activationId,
+          resource_indicator: input.resourceIndicator,
+          secret_ref: input.secretRef,
+          status: "active",
+          expires_at: input.expiresAt,
+        })
+        .onConflictDoUpdate({
+          target: [
+            userPluginActivationTokens.activation_id,
+            userPluginActivationTokens.resource_indicator,
+          ],
+          set: {
+            secret_ref: input.secretRef,
+            status: "active",
+            expires_at: input.expiresAt,
+            updated_at: now,
+          },
+        })
+        .returning();
+      if (!row) {
+        throw new Error("user_plugin_activation_tokens upsert returned no row");
+      }
+      return row;
+    },
+
+    async updateActivationToken(tokenId, patch) {
+      const set: Record<string, unknown> = { updated_at: new Date() };
+      if (patch.expiresAt !== undefined) set.expires_at = patch.expiresAt;
+      if (patch.status !== undefined) set.status = patch.status;
+      await db
+        .update(userPluginActivationTokens)
+        .set(set)
+        .where(eq(userPluginActivationTokens.id, tokenId));
     },
 
     async deleteActivationTokens(activationId) {

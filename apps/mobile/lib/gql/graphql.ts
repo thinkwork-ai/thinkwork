@@ -738,6 +738,8 @@ export enum ComplianceEventType {
   McpAdded = "MCP_ADDED",
   McpRemoved = "MCP_REMOVED",
   OutputArtifactProduced = "OUTPUT_ARTIFACT_PRODUCED",
+  PluginActivationGranted = "PLUGIN_ACTIVATION_GRANTED",
+  PluginActivationRevoked = "PLUGIN_ACTIVATION_REVOKED",
   PluginInstalled = "PLUGIN_INSTALLED",
   PluginUninstalled = "PLUGIN_UNINSTALLED",
   PolicyAllowed = "POLICY_ALLOWED",

@@ -53,6 +53,7 @@ import {
   provisionPluginSkillsComponent,
   teardownPluginSkillsComponent,
 } from "./handlers/skills.js";
+import { createSecretsManagerDeleteSecrets } from "./secrets.js";
 import {
   createDrizzlePluginEngineStore,
   type PluginComponentRow,
@@ -78,22 +79,12 @@ export interface PluginEngineActor {
 }
 
 /**
- * Token-secret deletion port. U6 (app-level OAuth activation) owns the
- * Secrets Manager wiring; the engine deletes the DB rows itself and hands
- * the secret refs to this port. The default implementation only logs —
- * there are no plugin token secrets until U6 mints them.
+ * Token-secret deletion port. The engine deletes the DB rows itself and
+ * hands the secret refs to this port. The default implementation (U6)
+ * performs real Secrets Manager deletion of the activation token secrets
+ * under thinkwork/{stage}/plugin-tokens/... — see `secrets.ts`.
  */
 export type DeleteSecretsPort = (secretRefs: string[]) => Promise<void>;
-
-export const logOnlyDeleteSecrets: DeleteSecretsPort = async (secretRefs) => {
-  if (secretRefs.length > 0) {
-    console.warn(
-      `[plugin-engine] ${secretRefs.length} activation token secret ref(s) ` +
-        "scheduled for deletion; Secrets Manager deletion is wired by the " +
-        "activation flow (plan U6) — DB rows are removed now.",
-    );
-  }
-};
 
 export interface PluginVersionResolution {
   plugin: { pluginKey: string; displayName: string; description: string };
@@ -147,7 +138,7 @@ export function createDefaultPluginEngineDeps(): PluginEngineDeps {
       provisionSkills: (args) => provisionPluginSkillsComponent(args),
       teardownSkills: (args) => teardownPluginSkillsComponent(args),
     },
-    deleteSecrets: logOnlyDeleteSecrets,
+    deleteSecrets: createSecretsManagerDeleteSecrets(),
   };
 }
 

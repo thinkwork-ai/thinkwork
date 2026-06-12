@@ -7,8 +7,26 @@
  * servers the runtime container should connect to. Servers whose auth
  * can't be resolved are logged and skipped.
  *
- * Called from both the wakeup processor (scheduled/triggered
- * invocations) and chat-agent-invoke (direct chat turns).
+ * Requester identity (plan 2026-06-12-001 U6): callers pass BOTH halves
+ * of the dispatch identity explicitly —
+ *
+ *   - `humanPairId`      — the agent's paired human; resolves DIRECT
+ *     `per_user_oauth` servers via user_mcp_tokens exactly as before (R16).
+ *   - `requesterUserId`  — the thread-turn / job owner; resolves
+ *     PLUGIN-managed servers (management_source='plugin') via
+ *     user_plugin_activation_tokens by (requester, plugin_install_id,
+ *     resource indicator), with refresh-on-expiry per token record.
+ *     Refresh failure flips the activation to needs_reauth and skips that
+ *     plugin's servers (log, never throw). A null requester excludes ALL
+ *     plugin servers (fail closed).
+ *
+ * URL dedupe: when a plugin server and a direct server share an endpoint
+ * URL, the dispatch includes the plugin entry for users whose activation
+ * resolves, else the direct entry (if its own auth resolves) — never both.
+ *
+ * Called from the wakeup processor (scheduled/triggered invocations),
+ * chat-agent-invoke via resolve-agent-runtime-config (direct chat turns),
+ * and mcp-proxy (interactive tool calls).
  */
 
 import { and, eq } from "drizzle-orm";
@@ -24,6 +42,8 @@ import {
   UpdateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { mcpHashMatches } from "./mcp-server-hash.js";
+import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
+import { resolveMcpOAuthResource } from "./mcp-oauth-client.js";
 
 export interface McpServerConfig {
   name: string;
@@ -34,13 +54,31 @@ export interface McpServerConfig {
   availableTools?: string[];
 }
 
+/** Dispatch identity for MCP auth resolution — see module doc. */
+export interface McpRequesterIdentity {
+  humanPairId: string | null | undefined;
+  requesterUserId: string | null | undefined;
+}
+
+export interface BuildMcpConfigsDeps {
+  /** Injectable for tests; defaults to the Drizzle/SecretsManager resolver. */
+  pluginAuth?: PluginDispatchAuthResolver;
+}
+
 const db = getDb();
+
+function normalizeServerUrl(url: string): string {
+  return url.replace(/\/+$/, "");
+}
 
 export async function buildMcpConfigs(
   agentId: string,
-  humanPairId: string | null | undefined,
+  requester: McpRequesterIdentity | null,
   logPrefix = "[mcp-configs]",
+  deps: BuildMcpConfigsDeps = {},
 ): Promise<McpServerConfig[]> {
+  const humanPairId = requester?.humanPairId ?? null;
+  const requesterUserId = requester?.requesterUserId ?? null;
   const mcpConfigs: McpServerConfig[] = [];
 
   // U11 gate: only approved + enabled servers whose pinned `url_hash`
@@ -61,6 +99,8 @@ export async function buildMcpConfigs(
       server_enabled: tenantMcpServers.enabled,
       server_status: tenantMcpServers.status,
       server_url_hash: tenantMcpServers.url_hash,
+      management_source: tenantMcpServers.management_source,
+      plugin_install_id: tenantMcpServers.plugin_install_id,
       assignment_enabled: agentMcpServers.enabled,
       assignment_config: agentMcpServers.config,
     })
@@ -78,7 +118,29 @@ export async function buildMcpConfigs(
       ),
     );
 
-  for (const mcp of mcpRows) {
+  // Plugin rows resolve FIRST so the URL-dedupe pass below can give the
+  // plugin entry precedence over a direct entry sharing the endpoint.
+  const isPluginRow = (row: (typeof mcpRows)[number]): boolean =>
+    row.management_source === "plugin" && Boolean(row.plugin_install_id);
+  const orderedRows = [
+    ...mcpRows.filter(isPluginRow),
+    ...mcpRows.filter((row) => !isPluginRow(row)),
+  ];
+  /** Normalized URLs of plugin entries that made it into the dispatch. */
+  const includedPluginUrls = new Set<string>();
+  // Lazy (dynamic import): the activation module — and its store/engine
+  // dependency graph — only loads when a plugin row actually needs
+  // resolving in this invocation.
+  let pluginAuth: PluginDispatchAuthResolver | null = deps.pluginAuth ?? null;
+  const getPluginAuth = async (): Promise<PluginDispatchAuthResolver> => {
+    if (!pluginAuth) {
+      const activation = await import("./plugins/activation.js");
+      pluginAuth = activation.createPluginDispatchAuthResolver();
+    }
+    return pluginAuth;
+  };
+
+  for (const mcp of orderedRows) {
     if (!mcp.server_enabled) continue;
     // Defensive invariant: the SQL WHERE already filters by
     // status='approved', but drift between `url_hash` and the
@@ -100,6 +162,62 @@ export async function buildMcpConfigs(
     ) {
       console.warn(
         `${logPrefix} skipping ${mcp.slug}: url_hash mismatch with (url, auth_config); re-approval required`,
+      );
+      continue;
+    }
+
+    // ── Plugin-managed servers (management_source='plugin') ──────────
+    // Auth resolves from the REQUESTER's app-level activation, never
+    // from humanPairId. No resolvable requester → fail closed.
+    if (isPluginRow(mcp)) {
+      if (!requesterUserId) {
+        console.warn(
+          `${logPrefix} Skipping plugin MCP ${mcp.slug}: no resolvable requesting user (fail closed)`,
+        );
+        continue;
+      }
+      const pluginInstallId = mcp.plugin_install_id as string;
+      let pluginToken: string | undefined;
+      if (mcp.auth_type === "oauth" || mcp.auth_type === "per_user_oauth") {
+        const resource = resolveMcpOAuthResource({
+          serverUrl: mcp.url,
+          authConfig: mcp.auth_config as Record<string, unknown> | null,
+        });
+        const resolved = await (
+          await getPluginAuth()
+        ).resolveToken({
+          requesterUserId,
+          pluginInstallId,
+          resource,
+          slug: mcp.slug ?? mcp.name,
+          logPrefix,
+        });
+        if (!resolved) continue;
+        pluginToken = resolved;
+      } else {
+        // Non-OAuth plugin servers still gate on the requester's active
+        // activation (R14: install alone exposes nothing to end users).
+        const active = await (
+          await getPluginAuth()
+        ).hasActiveActivation(requesterUserId, pluginInstallId);
+        if (!active) {
+          console.warn(
+            `${logPrefix} Skipping plugin MCP ${mcp.slug}: requester has no active activation`,
+          );
+          continue;
+        }
+      }
+      mcpConfigs.push(toMcpServerConfig(mcp, pluginToken));
+      includedPluginUrls.add(normalizeServerUrl(mcp.url));
+      continue;
+    }
+
+    // ── Direct servers ────────────────────────────────────────────────
+    // URL dedupe: a plugin entry with the same endpoint already resolved
+    // for this requester wins — never dispatch both.
+    if (includedPluginUrls.has(normalizeServerUrl(mcp.url))) {
+      console.log(
+        `${logPrefix} Skipping direct MCP ${mcp.slug}: deduped against an active plugin server with the same URL`,
       );
       continue;
     }
@@ -305,22 +423,7 @@ export async function buildMcpConfigs(
       continue;
     }
 
-    const assignCfg = (mcp.assignment_config as Record<string, unknown>) || {};
-    const toolAllowlist = Array.isArray(assignCfg.toolAllowlist)
-      ? (assignCfg.toolAllowlist as string[]).filter(
-          (tool): tool is string => typeof tool === "string",
-        )
-      : undefined;
-    const availableTools = extractMcpToolNames(mcp.tools);
-    mcpConfigs.push({
-      name: mcp.slug,
-      url: mcp.url,
-      transport:
-        (mcp.transport as "streamable-http" | "sse") || "streamable-http",
-      auth: token ? { type: "bearer", token } : undefined,
-      tools: toolAllowlist,
-      availableTools: availableTools.length > 0 ? availableTools : undefined,
-    });
+    mcpConfigs.push(toMcpServerConfig(mcp, token));
   }
 
   if (mcpConfigs.length > 0) {
@@ -330,6 +433,35 @@ export async function buildMcpConfigs(
   }
 
   return mcpConfigs;
+}
+
+function toMcpServerConfig(
+  mcp: {
+    slug: string | null;
+    name: string;
+    url: string;
+    transport: string | null;
+    tools: unknown;
+    assignment_config: unknown;
+  },
+  token: string | undefined,
+): McpServerConfig {
+  const assignCfg = (mcp.assignment_config as Record<string, unknown>) || {};
+  const toolAllowlist = Array.isArray(assignCfg.toolAllowlist)
+    ? (assignCfg.toolAllowlist as string[]).filter(
+        (tool): tool is string => typeof tool === "string",
+      )
+    : undefined;
+  const availableTools = extractMcpToolNames(mcp.tools);
+  return {
+    name: mcp.slug ?? mcp.name,
+    url: mcp.url,
+    transport:
+      (mcp.transport as "streamable-http" | "sse") || "streamable-http",
+    auth: token ? { type: "bearer", token } : undefined,
+    tools: toolAllowlist,
+    availableTools: availableTools.length > 0 ? availableTools : undefined,
+  };
 }
 
 async function resolveTenantApiKeyToken(

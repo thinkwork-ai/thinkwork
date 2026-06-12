@@ -69,6 +69,23 @@ locals {
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*"
       },
+      # Plugin app-level OAuth activation tokens (plan 2026-06-12-001 U6):
+      # thinkwork/{stage}/plugin-tokens/{userId}/{pluginInstallId}/{resourceKey}.
+      # Already covered by the thinkwork/* wildcard above — named here
+      # explicitly (additive, no behavior change) so the plugin-tokens
+      # path survives any future narrowing of that wildcard. Create/Update
+      # mint+refresh, Get resolves at dispatch, Delete is the real
+      # deactivation/uninstall teardown (ForceDeleteWithoutRecovery).
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:CreateSecret",
+          "secretsmanager:UpdateSecret",
+          "secretsmanager:DeleteSecret",
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*/plugin-tokens/*"
+      },
       # (was inline policy "s3-access" — the workspace bucket)
       {
         Effect = "Allow"

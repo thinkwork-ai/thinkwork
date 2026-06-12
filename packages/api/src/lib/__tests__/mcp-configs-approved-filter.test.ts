@@ -273,7 +273,10 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
       JSON.stringify({ access_token: "user-scoped-token" }),
     );
 
-    const configs = await buildMcpConfigs(agentId, userId);
+    const configs = await buildMcpConfigs(agentId, {
+      humanPairId: userId,
+      requesterUserId: null,
+    });
 
     expect(configs).toEqual([
       {
@@ -308,7 +311,10 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     mockRowsForUserToken.mockReturnValue([]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const configs = await buildMcpConfigs("agent-1", "user-current-1");
+    const configs = await buildMcpConfigs("agent-1", {
+      humanPairId: "user-current-1",
+      requesterUserId: null,
+    });
 
     expect(configs).toEqual([]);
     expect(warn).toHaveBeenCalledWith(
@@ -337,7 +343,10 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
       JSON.stringify({ access_token: "twenty-user-token" }),
     );
 
-    const configs = await buildMcpConfigs("agent-1", "user-current-1");
+    const configs = await buildMcpConfigs("agent-1", {
+      humanPairId: "user-current-1",
+      requesterUserId: null,
+    });
 
     expect(configs).toEqual([
       {

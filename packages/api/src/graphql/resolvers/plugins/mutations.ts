@@ -1,18 +1,28 @@
 /**
- * Plugin mutations (plan 2026-06-12-001 U5).
+ * Plugin mutations (plan 2026-06-12-001 U5 + U6).
  *
  * install/upgrade/uninstall/retry are tenant-admin gated and run the
  * engine synchronously inside the GraphQL request (v1 plugins have no
  * infrastructure components, so teardown/provisioning completes in-line;
  * errors surface to the caller — never fire-and-forget).
  *
- * activatePlugin / deactivatePlugin are U6 (app-level OAuth activation):
- * stubbed with a structured NOT_IMPLEMENTED error so the SDL surface is
- * complete without faking an OAuth flow.
+ * activatePlugin / deactivatePlugin (U6) are MEMBER-level: any
+ * authenticated tenant member activates for THEMSELF. The acting user is
+ * the canonical caller resolved from the auth context — never an input
+ * field — and the install must belong to the caller's tenant
+ * (startActivation/deactivateActivation pin by resolveCallerTenantId's
+ * tenant).
  */
 
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
+import { snakeToCamel } from "../../utils.js";
+import {
+  createDefaultPluginActivationDeps,
+  deactivateActivation,
+  startActivation,
+} from "../../../lib/plugins/activation.js";
+import { normalizeMcpOAuthReturnTo } from "../../../lib/mcp-oauth-client.js";
 import {
   createDefaultPluginEngineDeps,
   installPlugin as engineInstallPlugin,
@@ -25,6 +35,7 @@ import type { PluginInstallRow } from "../../../lib/plugins/store.js";
 import {
   pluginActorFor,
   requirePluginTenantAdmin,
+  requirePluginTenantMember,
   toPluginInstallPayload,
 } from "./shared.js";
 
@@ -129,16 +140,66 @@ export async function retryPluginComponent(
   return installResultPayload(install, deps);
 }
 
-export async function activatePlugin(): Promise<never> {
-  throw new GraphQLError(
-    "Plugin activation is not implemented yet (app-level OAuth activation ships in plan U6)",
-    { extensions: { code: "NOT_IMPLEMENTED" } },
-  );
+async function requireActivationCaller(
+  ctx: GraphQLContext,
+): Promise<{ tenantId: string; callerUserId: string }> {
+  const { tenantId, callerUserId } = await requirePluginTenantMember(ctx);
+  if (!callerUserId) {
+    throw new GraphQLError("User context required", {
+      extensions: { code: "FORBIDDEN" },
+    });
+  }
+  return { tenantId, callerUserId };
 }
 
-export async function deactivatePlugin(): Promise<never> {
-  throw new GraphQLError(
-    "Plugin deactivation is not implemented yet (app-level OAuth activation ships in plan U6)",
-    { extensions: { code: "NOT_IMPLEMENTED" } },
+export async function activatePlugin(
+  _parent: unknown,
+  args: { input: { installId: string; returnTo?: string | null } },
+  ctx: GraphQLContext,
+) {
+  const { tenantId, callerUserId } = await requireActivationCaller(ctx);
+  const rawReturnTo = args.input.returnTo ?? null;
+  const returnTo = normalizeMcpOAuthReturnTo(rawReturnTo ?? undefined);
+  if (rawReturnTo && !returnTo) {
+    throw new GraphQLError("Invalid plugin OAuth return URL", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  const deps = createDefaultPluginActivationDeps();
+  const { authorizeUrl } = await startActivation(
+    {
+      userId: callerUserId,
+      tenantId,
+      pluginInstallId: args.input.installId,
+      returnTo,
+    },
+    deps,
   );
+  return { authorizeUrl };
+}
+
+export async function deactivatePlugin(
+  _parent: unknown,
+  args: { input: { installId: string } },
+  ctx: GraphQLContext,
+) {
+  const { tenantId, callerUserId } = await requireActivationCaller(ctx);
+  const deps = createDefaultPluginActivationDeps();
+  const activation = await deactivateActivation(
+    {
+      userId: callerUserId,
+      tenantId,
+      pluginInstallId: args.input.installId,
+    },
+    deps,
+  );
+  const install = await deps.store.getInstallById(
+    tenantId,
+    args.input.installId,
+  );
+  return {
+    ...snakeToCamel(activation as unknown as Record<string, unknown>),
+    pluginKey: install?.plugin_key ?? "",
+    grantedScopes: activation.granted_scopes ?? [],
+  };
 }

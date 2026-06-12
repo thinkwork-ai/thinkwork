@@ -36,7 +36,11 @@
  * inside the container (admin-skill refusals).
  */
 
-import { getConfig, getApiAuthSecret, getAppsyncApiKey } from "@thinkwork/runtime-config";
+import {
+  getConfig,
+  getApiAuthSecret,
+  getAppsyncApiKey,
+} from "@thinkwork/runtime-config";
 import { eq, and } from "drizzle-orm";
 import {
   GetObjectCommand,
@@ -287,9 +291,7 @@ export async function resolveAgentRuntimeConfig(
   const thinkworkApiUrl =
     opts.thinkworkApiUrl ?? getConfig("THINKWORK_API_URL") ?? "";
   const thinkworkApiSecret =
-    opts.thinkworkApiSecret ??
-    (getApiAuthSecret()) ??
-    "";
+    opts.thinkworkApiSecret ?? getApiAuthSecret() ?? "";
   const appsyncApiKey = opts.appsyncApiKey ?? getAppsyncApiKey();
 
   const [agent] = await db
@@ -654,9 +656,17 @@ export async function resolveAgentRuntimeConfig(
 
   // --- MCP configs ---------------------------------------------------------
 
+  // Dispatch identity (plan 2026-06-12-001 U6): direct per_user_oauth
+  // servers resolve by the agent's human pair (R16); plugin-managed
+  // servers resolve by the REQUESTING user — the thread turn's invoker
+  // (`opts.currentUserId`, resolved by chat-agent-invoke's identity
+  // step). No invoker → plugin servers are excluded (fail closed).
   const mcpConfigs = await buildMcpConfigs(
     opts.agentId,
-    agent.human_pair_id,
+    {
+      humanPairId: agent.human_pair_id,
+      requesterUserId: opts.currentUserId ?? null,
+    },
     logPrefix,
   );
 

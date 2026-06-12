@@ -14,12 +14,18 @@ const {
   mockRequireTenantAdmin,
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
+  mockStartActivation,
+  mockDeactivateActivation,
   depsHolder,
+  activationDepsHolder,
 } = vi.hoisted(() => ({
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerTenantId: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
+  mockStartActivation: vi.fn(),
+  mockDeactivateActivation: vi.fn(),
   depsHolder: { current: null as unknown },
+  activationDepsHolder: { current: null as unknown },
 }));
 
 vi.mock("../../utils.js", () => ({
@@ -48,6 +54,17 @@ vi.mock("../../../lib/plugins/engine.js", async (importOriginal) => {
   return {
     ...actual,
     createDefaultPluginEngineDeps: () => depsHolder.current,
+  };
+});
+
+vi.mock("../../../lib/plugins/activation.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../../lib/plugins/activation.js")>();
+  return {
+    ...actual,
+    createDefaultPluginActivationDeps: () => activationDepsHolder.current,
+    startActivation: mockStartActivation,
+    deactivateActivation: mockDeactivateActivation,
   };
 });
 
@@ -128,9 +145,15 @@ function buildDeps(): PluginEngineDeps {
 beforeEach(() => {
   vi.clearAllMocks();
   depsHolder.current = buildDeps();
+  // activatePlugin/deactivatePlugin share the same store through their
+  // own deps object (only `store` is consumed at the resolver level).
+  activationDepsHolder.current = { store };
   mockResolveCallerTenantId.mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockResolvedValue("user-1");
   mockRequireTenantAdmin.mockResolvedValue(undefined);
+  mockStartActivation.mockResolvedValue({
+    authorizeUrl: "https://auth.example.invalid/authorize?state=signed",
+  });
 });
 
 describe("admin gating", () => {
@@ -234,13 +257,97 @@ describe("uninstallPlugin", () => {
   });
 });
 
-describe("U6 stubs", () => {
-  it("activatePlugin / deactivatePlugin return a structured NOT_IMPLEMENTED error", async () => {
-    await expect(activatePlugin()).rejects.toMatchObject({
-      extensions: { code: "NOT_IMPLEMENTED" },
+describe("activatePlugin (U6)", () => {
+  it("is member-level, binds the CANONICAL caller user id, and returns the authorize URL", async () => {
+    const result = (await activatePlugin(
+      null,
+      { input: { installId: "install-1" } },
+      CTX,
+    )) as { authorizeUrl: string };
+
+    expect(result.authorizeUrl).toBe(
+      "https://auth.example.invalid/authorize?state=signed",
+    );
+    // Member-level: no admin gate.
+    expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+    // Canonical caller binding: userId comes from the auth context,
+    // tenant from resolveCallerTenantId — never from input fields.
+    expect(mockStartActivation).toHaveBeenCalledWith(
+      {
+        userId: "user-1",
+        tenantId: "tenant-1",
+        pluginInstallId: "install-1",
+        returnTo: null,
+      },
+      activationDepsHolder.current,
+    );
+  });
+
+  it("rejects callers with no resolvable user identity", async () => {
+    mockResolveCallerUserId.mockResolvedValue(null);
+    await expect(
+      activatePlugin(null, { input: { installId: "install-1" } }, CTX),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+    expect(mockStartActivation).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid returnTo before starting the flow", async () => {
+    await expect(
+      activatePlugin(
+        null,
+        {
+          input: {
+            installId: "install-1",
+            returnTo: "https://evil.example.com/phish",
+          },
+        },
+        CTX,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expect(mockStartActivation).not.toHaveBeenCalled();
+  });
+});
+
+describe("deactivatePlugin (U6)", () => {
+  it("deactivates the CALLER's activation and returns the revoked payload", async () => {
+    await installPlugin(
+      null,
+      { input: { pluginKey: "lastmile", idempotencyKey: "i-1" } },
+      CTX,
+    );
+    const installId = [...store.installs.keys()][0]!;
+    const seeded = store.seedActivation({
+      user_id: "user-1",
+      plugin_install_id: installId,
+      granted_scopes: ["openid"],
     });
-    await expect(deactivatePlugin()).rejects.toMatchObject({
-      extensions: { code: "NOT_IMPLEMENTED" },
+    mockDeactivateActivation.mockResolvedValue({
+      ...seeded,
+      status: "revoked",
+      revoked_at: new Date(),
+    });
+    mockRequireTenantAdmin.mockClear();
+
+    const result = (await deactivatePlugin(
+      null,
+      { input: { installId } },
+      CTX,
+    )) as Record<string, unknown>;
+
+    expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+    expect(mockDeactivateActivation).toHaveBeenCalledWith(
+      {
+        userId: "user-1",
+        tenantId: "tenant-1",
+        pluginInstallId: installId,
+      },
+      activationDepsHolder.current,
+    );
+    expect(result).toMatchObject({
+      userId: "user-1",
+      status: "revoked",
+      pluginKey: "lastmile",
+      grantedScopes: ["openid"],
     });
   });
 });

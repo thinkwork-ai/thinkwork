@@ -9,6 +9,7 @@
  */
 
 import type { EmitAuditEventInput } from "../compliance/emit.js";
+import type { PluginSecretsClient } from "./secrets.js";
 import type {
   CreateInstallInput,
   PluginComponentRow,
@@ -17,6 +18,35 @@ import type {
   UserPluginActivationRow,
   UserPluginActivationTokenRow,
 } from "./store.js";
+
+/**
+ * In-memory PluginSecretsClient — records every put/delete so tests can
+ * assert "deactivation deletes every secret" against the secrets client
+ * itself, not just the DB rows.
+ */
+export interface InMemoryPluginSecrets extends PluginSecretsClient {
+  values: Map<string, string>;
+  deleted: string[];
+}
+
+export function createInMemoryPluginSecrets(): InMemoryPluginSecrets {
+  const values = new Map<string, string>();
+  const deleted: string[] = [];
+  return {
+    values,
+    deleted,
+    async getSecret(name) {
+      return values.get(name) ?? null;
+    },
+    async putSecret(name, value) {
+      values.set(name, value);
+    },
+    async deleteSecret(name) {
+      values.delete(name);
+      deleted.push(name);
+    },
+  };
+}
 
 export interface InMemoryPluginEngineStore extends PluginEngineStore {
   installs: Map<string, PluginInstallRow>;
@@ -265,24 +295,89 @@ export function createInMemoryPluginEngineStore(): InMemoryPluginEngineStore {
         .map((row) => ({ ...row }));
     },
 
+    async getActivationByUserAndInstall(userId, installId) {
+      for (const row of activations.values()) {
+        if (row.user_id === userId && row.plugin_install_id === installId) {
+          return { ...row };
+        }
+      }
+      return null;
+    },
+
     async countActiveActivations(installId) {
       return [...activations.values()].filter(
         (row) => row.plugin_install_id === installId && row.status === "active",
       ).length;
     },
 
-    async updateActivationStatus(activationId, status) {
+    async upsertActivation(input, audit) {
+      const now = new Date();
+      let row = [...activations.values()].find(
+        (candidate) =>
+          candidate.user_id === input.userId &&
+          candidate.plugin_install_id === input.pluginInstallId,
+      );
+      if (row) {
+        row.status = "active";
+        row.granted_scopes = input.grantedScopes;
+        row.granted_at = now;
+        row.revoked_at = null;
+        row.updated_at = now;
+      } else {
+        row = store.seedActivation({
+          user_id: input.userId,
+          plugin_install_id: input.pluginInstallId,
+          granted_scopes: input.grantedScopes,
+        });
+      }
+      if (audit) audits.push(audit);
+      return { ...row };
+    },
+
+    async updateActivationStatus(activationId, status, audit) {
       const row = activations.get(activationId);
-      if (!row) return;
+      if (!row) return null;
       row.status = status;
       if (status === "revoked") row.revoked_at = new Date();
       row.updated_at = new Date();
+      if (audit) audits.push(audit);
+      return { ...row };
     },
 
     async listActivationTokens(activationId) {
       return [...tokens.values()]
         .filter((row) => row.activation_id === activationId)
         .map((row) => ({ ...row }));
+    },
+
+    async upsertActivationToken(input) {
+      let row = [...tokens.values()].find(
+        (candidate) =>
+          candidate.activation_id === input.activationId &&
+          candidate.resource_indicator === input.resourceIndicator,
+      );
+      if (row) {
+        row.secret_ref = input.secretRef;
+        row.status = "active";
+        row.expires_at = input.expiresAt;
+        row.updated_at = new Date();
+      } else {
+        row = store.seedToken({
+          activation_id: input.activationId,
+          resource_indicator: input.resourceIndicator,
+          secret_ref: input.secretRef,
+          expires_at: input.expiresAt,
+        });
+      }
+      return { ...row };
+    },
+
+    async updateActivationToken(tokenId, patch) {
+      const row = tokens.get(tokenId);
+      if (!row) return;
+      if (patch.expiresAt !== undefined) row.expires_at = patch.expiresAt;
+      if (patch.status !== undefined) row.status = patch.status;
+      row.updated_at = new Date();
     },
 
     async deleteActivationTokens(activationId) {
