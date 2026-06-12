@@ -71,7 +71,7 @@ export function SystemPromptViewer({
             highlightActiveLine: false,
             highlightActiveLineGutter: false,
           }}
-          style={{ fontSize: "12px", height: "60vh" }}
+          style={{ fontSize: "12px", height: "100%" }}
           className="[&_.cm-editor]:!h-full [&_.cm-scroller]:!overflow-auto"
         />
       </div>
