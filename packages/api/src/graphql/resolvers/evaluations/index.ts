@@ -344,6 +344,8 @@ function testCaseToGraphql(row: Record<string, unknown>) {
     tags: row.tags ?? [],
     enabled: row.enabled,
     source: row.source,
+    datasetId: row.dataset_id ?? null,
+    datasetCaseId: row.dataset_case_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -640,7 +642,12 @@ const evalTimeSeries = async (
 
 const evalTestCasesQuery = async (
   _p: any,
-  args: { tenantId: string; category?: string | null; search?: string | null },
+  args: {
+    tenantId: string;
+    category?: string | null;
+    search?: string | null;
+    datasetId?: string | null;
+  },
   ctx: GraphQLContext,
 ) => {
   // Seeding is a write triggered by a read — never let it land in a
@@ -649,15 +656,19 @@ const evalTestCasesQuery = async (
   const tenantId = await resolveReadTenantId(ctx);
   if (!tenantId || tenantId !== args.tenantId) return [];
 
-  // Auto-seed the Thinkwork starter pack on first visit. We check for the
-  // presence of ANY yaml-seed row for this tenant — if zero, run the seed.
-  // The partial unique index makes this idempotent on the off-chance two
-  // concurrent first-visit queries race. Seeded rows then show up
-  // immediately in the same response.
+  // Auto-seed the baseline red-team dataset on first visit (dataset-based
+  // since Trust Core U5: S3 materialization + index sync + re-home of
+  // legacy yaml-seed rows). The S3 version marker and the partial unique
+  // index keep this idempotent if two first-visit queries race. Seeded
+  // rows then show up immediately in the same response.
   await ensureTenantSeeded(tenantId);
 
   const conditions = [eq(evalTestCases.tenant_id, tenantId)];
   if (args.category) conditions.push(eq(evalTestCases.category, args.category));
+  // Dataset filter (Trust Core U4): restricts to one dataset's index rows
+  // (live + tombstoned — the enabled flag distinguishes them).
+  if (args.datasetId)
+    conditions.push(eq(evalTestCases.dataset_id, args.datasetId));
   if (args.search)
     conditions.push(
       sql`${evalTestCases.name} ILIKE ${"%" + args.search + "%"}`,
@@ -673,48 +684,29 @@ const evalTestCasesQuery = async (
 };
 
 /**
- * Lazy-seed the Thinkwork starter pack on a tenant's first visit to the
- * Studio. Cached in-memory per Lambda container so subsequent queries
- * for the same tenant skip the COUNT(*) probe.
+ * Lazy-seed the baseline red-team dataset on a tenant's first visit to
+ * the Studio. Cached in-memory per Lambda container; the cache key is
+ * versioned with BASELINE_DATASET_VERSION so warm containers re-seed
+ * when a deploy bumps the baseline version (the S3 marker keeps the
+ * re-run itself a cheap no-op for already-current tenants).
  */
 const _seededTenants = new Set<string>();
 async function ensureTenantSeeded(tenantId: string): Promise<void> {
-  if (_seededTenants.has(tenantId)) return;
-  const [{ count }] = await db
-    .select({
-      count: sql<number>`COUNT(*) FILTER (WHERE source = 'yaml-seed')::int`,
-    })
-    .from(evalTestCases)
-    .where(eq(evalTestCases.tenant_id, tenantId));
-  if (count > 0) {
-    _seededTenants.add(tenantId);
-    return;
+  const { baselineSeedCacheKey, ensureBaselineDatasetSeeded } =
+    await import("../../../lib/evals/baseline-dataset.js");
+  const cacheKey = baselineSeedCacheKey(tenantId);
+  if (_seededTenants.has(cacheKey)) return;
+  try {
+    await ensureBaselineDatasetSeeded(tenantId);
+    _seededTenants.add(cacheKey);
+  } catch (err) {
+    // A read-triggered seed must never take down the Studio listing;
+    // the cache only records success so the next query retries.
+    console.warn("[evalTestCases] baseline dataset seeding failed", {
+      tenantId,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
-  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } =
-    await import("../../../lib/eval-seeds.js");
-  if (EVAL_SEEDS.length === 0) {
-    _seededTenants.add(tenantId);
-    return;
-  }
-  await db
-    .insert(evalTestCases)
-    .values(
-      EVAL_SEEDS.map((s) => ({
-        tenant_id: tenantId,
-        name: s.name,
-        category: s.category,
-        query: s.query,
-        assertions: s.assertions,
-        source: BUILT_IN_EVAL_SEED_SOURCE,
-        tags: seedTags(s),
-        agentcore_evaluator_ids:
-          s.agentcore_evaluator_ids && s.agentcore_evaluator_ids.length > 0
-            ? s.agentcore_evaluator_ids
-            : ["Builtin.Helpfulness"],
-      })),
-    )
-    .onConflictDoNothing();
-  _seededTenants.add(tenantId);
 }
 
 const evalTestCase = async (
@@ -1049,54 +1041,19 @@ const seedEvalTestCases = async (
 ) => {
   // Arg-derived gate — seeding writes rows into the named tenant.
   await requireTenantAdmin(ctx, args.tenantId);
-  const { BUILT_IN_EVAL_SEED_SOURCE, EVAL_SEEDS } =
-    await import("../../../lib/eval-seeds.js");
-  const filtered =
-    args.categories && args.categories.length > 0
-      ? EVAL_SEEDS.filter((s) => args.categories!.includes(s.category))
-      : EVAL_SEEDS;
-  if (filtered.length === 0) return 0;
-
-  // Idempotent insert. We deliberately skip on (tenant_id, name)
-  // conflict — the partial unique index added in migration 0011 enforces
-  // this only for source='yaml-seed' rows so user-created tests with
-  // the same name are unaffected.
-  const values = filtered.map((s) => ({
-    tenant_id: args.tenantId,
-    name: s.name,
-    category: s.category,
-    query: s.query,
-    assertions: s.assertions,
-    source: BUILT_IN_EVAL_SEED_SOURCE,
-    tags: seedTags(s),
-    agentcore_evaluator_ids:
-      s.agentcore_evaluator_ids && s.agentcore_evaluator_ids.length > 0
-        ? s.agentcore_evaluator_ids
-        : ["Builtin.Helpfulness"],
-  }));
-  // onConflictDoNothing() with no `target` triggers Postgres's generic
-  // "any unique violation" handling, which catches the partial index
-  // uq_eval_test_cases_tenant_seed_name without needing to spell out the
-  // WHERE clause (drizzle doesn't support partial-index ON CONFLICT).
-  const inserted = await db
-    .insert(evalTestCases)
-    .values(values)
-    .onConflictDoNothing()
-    .returning({ id: evalTestCases.id });
-  return inserted.length;
+  // Dataset-based since Trust Core U5: materialize the baseline dataset
+  // into the tenant's S3 prefix, re-home legacy yaml-seed rows in place
+  // (same row ids, source unchanged), and sync the index. The legacy
+  // direct DB-insert path is retired; the S3 version marker plus the
+  // partial unique index uq_eval_test_cases_tenant_seed_name keep the
+  // mutation idempotent across deploy windows and rollbacks.
+  const { ensureBaselineDatasetSeeded } =
+    await import("../../../lib/evals/baseline-dataset.js");
+  const result = await ensureBaselineDatasetSeeded(args.tenantId, {
+    categories: args.categories ?? null,
+  });
+  return result.inserted;
 };
-
-function seedTags(seed: {
-  target_surface?: string;
-  target_skill?: string;
-  threshold?: number;
-}) {
-  return [
-    seed.target_surface ? `surface:${seed.target_surface}` : null,
-    seed.target_skill ? `skill:${seed.target_skill}` : null,
-    typeof seed.threshold === "number" ? `threshold:${seed.threshold}` : null,
-  ].filter((tag): tag is string => Boolean(tag));
-}
 
 // ---------------------------------------------------------------------------
 // Exports
