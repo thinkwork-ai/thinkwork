@@ -64,6 +64,54 @@ type EvalDataset {
 }
 
 # ────────────────────────────────────────────────────────────────────
+# Flag-thread → dataset case (Trust Core U7)
+#
+# An operator flags a completed thread turn into a custom dataset. The
+# flag-time snapshot (message history, workspace projection when the
+# turn carries one, tool traces when retrievable) is copied into the
+# dataset's S3 prefix as case payload objects — self-contained, so the
+# case survives source-thread deletion. The completeness record states
+# exactly what was captured; pre-THNK-10 threads degrade to
+# history-only rather than being blocked.
+# ────────────────────────────────────────────────────────────────────
+
+type EvalCaseCompleteness {
+  # Message history captured into the snapshot.
+  history: Boolean!
+  # The turn's context_snapshot.workspace_projection was present and
+  # captured. False on pre-THNK-10 threads (history-only badge).
+  workspace: Boolean!
+  # Tool traces (tool_calls/tool_results from the message rows) captured.
+  traces: Boolean!
+  # Any payload hit the size cap and was truncated (oldest entries
+  # dropped first; the payload records the dropped count).
+  truncated: Boolean!
+}
+
+type FlagThreadForEvalResult {
+  # The created case's derived index row (kind 'flagged-thread').
+  case: EvalTestCase!
+  # The target dataset (existing custom dataset or the newly created one).
+  dataset: EvalDataset!
+  completeness: EvalCaseCompleteness!
+}
+
+input FlagThreadForEvalInput {
+  threadId: ID!
+  # Must be a completed turn of the thread — in-flight turns are rejected.
+  turnId: ID!
+  # Exactly one of datasetSlug (existing custom dataset; baseline is not
+  # a valid target) or newDatasetName (creates a custom dataset).
+  datasetSlug: String
+  newDatasetName: String
+  # Required, non-empty after trim: what "fixed" looks like. Becomes the
+  # case's llm-rubric assertion (judging hardened in U8).
+  resolutionTarget: String!
+  # 'security' | 'quality' — tagged onto the case.
+  outcomeKind: String!
+}
+
+# ────────────────────────────────────────────────────────────────────
 # Runs
 # ────────────────────────────────────────────────────────────────────
 
@@ -354,4 +402,9 @@ extend type Mutation {
     datasetSlug: String!
     caseId: String!
   ): EvalDataset!
+  # Flag a completed thread turn into a custom dataset (Trust Core U7).
+  # Tenant is derived from the thread row (never caller input); the
+  # caller must be an operator of that tenant. Copies the flag-time
+  # snapshot into the dataset's S3 prefix before the case file lands.
+  flagThreadForEval(input: FlagThreadForEvalInput!): FlagThreadForEvalResult!
 }

@@ -263,3 +263,45 @@ export const OnEvalRunUpdatedSubscription = graphql(`
     }
   }
 `);
+
+// ────────────────────────────────────────────────────────────────────
+// Flag-thread → dataset case (Trust Core U7)
+// ────────────────────────────────────────────────────────────────────
+
+export const EvalDatasetsForFlagQuery = graphql(`
+  query EvalDatasetsForFlag($tenantId: ID!) {
+    evalDatasets(tenantId: $tenantId) {
+      id
+      slug
+      name
+      kind
+      archivedAt
+    }
+  }
+`);
+
+export const FlagThreadForEvalMutation = graphql(`
+  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {
+    flagThreadForEval(input: $input) {
+      case {
+        id
+        datasetId
+        datasetCaseId
+        name
+        category
+        tags
+      }
+      dataset {
+        id
+        slug
+        name
+      }
+      completeness {
+        history
+        workspace
+        traces
+        truncated
+      }
+    }
+  }
+`);

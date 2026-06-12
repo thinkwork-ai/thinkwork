@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
-import { Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
+import { Flag, Info, Maximize2, Minimize2, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@thinkwork/ui";
 import {
@@ -23,6 +23,7 @@ import {
 } from "@/components/workbench/TaskThreadView";
 import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifactCard";
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
+import { FlagThreadForEvalDialog } from "@/components/workbench/FlagThreadForEvalDialog";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import type { UserQuestionRecord } from "@/lib/ui-message-types";
@@ -361,9 +362,13 @@ export function SpacesThreadDetailRoute({
   documentTitlePrefix = "Thread",
   breadcrumbParents,
 }: SpacesThreadDetailRouteProps) {
-  const { tenantId, userId } = useTenant();
+  const { tenantId, userId, isOperator } = useTenant();
   const [optimisticMessage, setOptimisticMessage] =
     useState<OptimisticMessage | null>(null);
+  // Flag-for-evaluation dialog (Trust Core U7): operator-gated client-side
+  // via TenantContext.isOperator; the mutation re-checks server-side.
+  const [flagEvalTurnId, setFlagEvalTurnId] = useState<string | null>(null);
+  const [flagEvalOpen, setFlagEvalOpen] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
     readStoredModelId(),
   );
@@ -881,6 +886,10 @@ export function SpacesThreadDetailRoute({
   if (thread) {
     thread.turns = threadTurns;
   }
+  // Latest completed (persisted) turn — target of the header-level
+  // "Flag for evaluation" action. Optimistic/synthetic turn rows carry
+  // non-UUID ids and are never flaggable.
+  const latestCompletedTurnId = latestFlaggableTurnId(threadTurns);
   const hasPersistedPendingStartUserMessage = optimisticThreadStart
     ? hasPersistedUserMessage(
         routeThread?.messages?.edges,
@@ -1424,6 +1433,23 @@ export function SpacesThreadDetailRoute({
     ),
     action: (
       <div className={`flex items-center ${desktopToolbarGapClassName}`}>
+        {isOperator && latestCompletedTurnId ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Flag for evaluation"
+            title="Flag for evaluation"
+            data-testid="thread-flag-for-eval"
+            className={desktopToolbarButtonClassName}
+            onClick={() => {
+              setFlagEvalTurnId(latestCompletedTurnId);
+              setFlagEvalOpen(true);
+            }}
+          >
+            <Flag className="size-4" />
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="ghost"
@@ -1513,7 +1539,7 @@ export function SpacesThreadDetailRoute({
         ) : null}
       </div>
     ),
-    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}:${artifactFullscreen ? "fullscreen" : "normal"}`,
+    actionKey: `thread-actions:${threadId}:${attachedArtifacts.length}:${threadArtifacts.length}:${effectiveSelectedArtifactId ?? ""}:${threadInfoOpen ? "info-open" : "info-closed"}:${artifactPanelOpen ? "open" : "closed"}:${artifactFullscreen ? "fullscreen" : "normal"}:${isOperator ? (latestCompletedTurnId ?? "") : "no-flag"}`,
   });
 
   useEffect(() => {
@@ -1568,6 +1594,15 @@ export function SpacesThreadDetailRoute({
       }}
       artifactPanelState={artifactPanelState}
       infoPanelState={threadInfoPanelState}
+      onFlagTurn={
+        isOperator
+          ? (turn) => {
+              if (!isUuidLike(turn.id)) return;
+              setFlagEvalTurnId(turn.id);
+              setFlagEvalOpen(true);
+            }
+          : undefined
+      }
       onSendFollowUp={async (
         content,
         files,
@@ -1705,7 +1740,61 @@ export function SpacesThreadDetailRoute({
     />
   );
 
-  return threadView;
+  return (
+    <>
+      {threadView}
+      <FlagThreadForEvalDialog
+        open={flagEvalOpen}
+        onOpenChange={(open) => {
+          setFlagEvalOpen(open);
+          if (!open) setFlagEvalTurnId(null);
+        }}
+        tenantId={tenantId ?? ""}
+        threadId={threadId}
+        turnId={flagEvalTurnId}
+      />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Flag-for-evaluation helpers (Trust Core U7)
+// ---------------------------------------------------------------------------
+
+const FLAGGABLE_TURN_STATUSES = new Set([
+  "completed",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+]);
+
+function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+/**
+ * Latest completed persisted turn — the target of the header-level
+ * "Flag for evaluation" action. Synthetic/optimistic turn rows carry
+ * non-UUID ids and are skipped.
+ */
+export function latestFlaggableTurnId(turns: TaskThreadTurn[]): string | null {
+  let best: { id: string; time: number } | null = null;
+  for (const turn of turns) {
+    const status = String(turn.status ?? "")
+      .trim()
+      .toLowerCase();
+    if (!FLAGGABLE_TURN_STATUSES.has(status)) continue;
+    if (!isUuidLike(turn.id)) continue;
+    const time = Date.parse(turn.finishedAt ?? turn.startedAt ?? "");
+    const safeTime = Number.isFinite(time) ? time : 0;
+    if (!best || safeTime >= best.time) {
+      best = { id: turn.id, time: safeTime };
+    }
+  }
+  return best?.id ?? null;
 }
 
 export function deriveThreadArtifacts(

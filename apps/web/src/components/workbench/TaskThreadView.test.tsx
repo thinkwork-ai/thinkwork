@@ -4533,3 +4533,53 @@ describe("normalizePersistedParts", () => {
     expect(part.data?.questionId).toBe("q-2");
   });
 });
+
+describe("flag-for-evaluation affordance (Trust Core U7)", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const flagThread = (turnStatus: string) => ({
+    id: "thread-1",
+    title: "Flaggable",
+    messages: [
+      { id: "message-1", role: "USER", content: "Do the thing" },
+      { id: "message-2", role: "ASSISTANT", content: "Did the thing badly." },
+    ],
+    turns: [
+      {
+        id: "turn-1",
+        status: turnStatus,
+        invocationSource: "chat_message",
+        startedAt: "2026-06-01T00:00:00Z",
+        finishedAt: "2026-06-01T00:01:00Z",
+      },
+    ],
+  });
+
+  it("renders a flag button on completed turns when onFlagTurn is wired and forwards the turn", () => {
+    const onFlagTurn = vi.fn();
+    render(
+      <TaskThreadView
+        thread={flagThread("succeeded")}
+        onFlagTurn={onFlagTurn}
+      />,
+    );
+    const button = screen.getByTestId("flag-turn-turn-1");
+    fireEvent.click(button);
+    expect(onFlagTurn).toHaveBeenCalledTimes(1);
+    expect(onFlagTurn.mock.calls[0][0]).toMatchObject({ id: "turn-1" });
+  });
+
+  it("renders no flag button without the (operator-gated) callback", () => {
+    render(<TaskThreadView thread={flagThread("succeeded")} />);
+    expect(screen.queryByTestId("flag-turn-turn-1")).toBeNull();
+  });
+
+  it("renders no flag button on in-flight turns", () => {
+    render(
+      <TaskThreadView thread={flagThread("running")} onFlagTurn={vi.fn()} />,
+    );
+    expect(screen.queryByTestId("flag-turn-turn-1")).toBeNull();
+  });
+});
