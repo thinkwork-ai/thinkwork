@@ -8,7 +8,12 @@
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { evalRuns, evalTestCases } from "@thinkwork/database-pg/schema";
+import {
+  evalDatasets,
+  evalRuns,
+  evalTestCases,
+  tenants,
+} from "@thinkwork/database-pg/schema";
 import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
   SendMessageBatchCommand,
@@ -17,9 +22,19 @@ import {
 } from "@aws-sdk/client-sqs";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
+import {
+  captureRunSnapshot,
+  createEvalDatasetStorageFromConfig,
+  type RunSnapshot,
+} from "../lib/evals/run-launch.js";
+import type { DatasetStorage } from "../lib/evals/dataset-store.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
-const DEFAULT_QUEUE_URL = process.env.EVAL_FANOUT_QUEUE_URL || "";
+// Read per-invocation, not at module load (vitest env capture timing —
+// Lambda sets it before init anyway).
+function fanoutQueueUrl(): string {
+  return process.env.EVAL_FANOUT_QUEUE_URL || "";
+}
 
 const sqs = new SQSClient({ region: REGION } satisfies SQSClientConfig);
 let sqsClientForTests: SQSClient | undefined;
@@ -35,6 +50,14 @@ export interface EvalWorkerMessage {
   runId: string;
   testCaseId: string;
   index: number;
+  /**
+   * Dataset-pinned launches (Trust Core U6): the run-scoped S3 key the
+   * worker fetches the case content from, plus its expected sha. The
+   * message stays small — content lives in the snapshot copy, never
+   * inline (256KB SQS cap; U7 flagged-thread payloads exceed it).
+   */
+  snapshotKey?: string;
+  contentSha?: string;
 }
 
 const DIRECT_AGENTCORE_MESSAGE_SHARDS = Math.max(
@@ -52,12 +75,15 @@ export function selectedTestCaseIdsFromEvent(event: EvalRunnerEvent): string[] {
 
 export function buildEvalWorkerMessages(
   runId: string,
-  testCases: Array<{ id: string }>,
+  testCases: Array<{ id: string; snapshotKey?: string; contentSha?: string }>,
 ): EvalWorkerMessage[] {
   return testCases.map((tc, index) => ({
     runId,
     testCaseId: tc.id,
     index,
+    ...(tc.snapshotKey
+      ? { snapshotKey: tc.snapshotKey, contentSha: tc.contentSha }
+      : {}),
   }));
 }
 
@@ -99,6 +125,15 @@ export function _setSqsClientForTests(client: SQSClient | undefined): void {
   sqsClientForTests = client;
 }
 
+let datasetStorageForTests: DatasetStorage | undefined;
+
+/** Test seam: dataset dispatch tests inject an in-memory storage fake. */
+export function _setDatasetStorageForTests(
+  storage: DatasetStorage | undefined,
+): void {
+  datasetStorageForTests = storage;
+}
+
 async function sendFanoutBatch(
   queueUrl: string,
   batch: EvalWorkerMessage[],
@@ -122,6 +157,182 @@ async function sendFanoutBatch(
   }
 }
 
+/**
+ * Dataset-pinned dispatch (Trust Core U6). The startEvalRun mutation
+ * already resolved the dataset (drift-healing the index) and stamped
+ * run.dataset_id; this path captures the launch-time snapshot — copying
+ * every enabled case's sha-verified content into the run snapshot
+ * prefix — pins dataset_version + pinned_case_ids + total_tests on the
+ * run row, and fans out messages that carry the run-scoped S3 key +
+ * expected sha. A copy failure throws; the handler's catch marks the
+ * run failed with the error message.
+ */
+async function dispatchDatasetRun(
+  db: ReturnType<typeof getDb>,
+  run: typeof evalRuns.$inferSelect,
+  queueUrl: string,
+  client: SQSClient,
+): Promise<{ dispatched: number; totalTests: number }> {
+  const datasetId = run.dataset_id;
+  if (!datasetId) throw new Error("run has no dataset_id");
+  const [dataset] = await db
+    .select({ slug: evalDatasets.slug })
+    .from(evalDatasets)
+    .where(
+      and(
+        eq(evalDatasets.id, datasetId),
+        eq(evalDatasets.tenant_id, run.tenant_id),
+      ),
+    );
+  if (!dataset) {
+    throw new Error(`dataset ${datasetId} not found for run ${run.id}`);
+  }
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, run.tenant_id));
+  if (!tenant?.slug) {
+    throw new Error(`tenant ${run.tenant_id} has no slug`);
+  }
+
+  const storage =
+    datasetStorageForTests ?? createEvalDatasetStorageFromConfig();
+  const snapshot: RunSnapshot = await captureRunSnapshot(
+    { tenantId: run.tenant_id, tenantSlug: tenant.slug, slug: dataset.slug },
+    run.id,
+    storage,
+  );
+  const pinnedCaseIds = snapshot.cases.map((c) => c.caseId);
+  const startedAt = new Date();
+
+  if (snapshot.cases.length === 0) {
+    // Zero enabled cases: nothing to score — the run completes with a
+    // null pass_rate ("no score", never 0%), with the scope still pinned
+    // so the run row records exactly what it ran against.
+    await db
+      .update(evalRuns)
+      .set({
+        status: "completed",
+        started_at: run.started_at ?? startedAt,
+        completed_at: startedAt,
+        dataset_version: snapshot.datasetVersion,
+        pinned_case_ids: [],
+        total_tests: 0,
+        passed: 0,
+        failed: 0,
+        errored: run.scoring_version === null ? null : 0,
+        pass_rate: null,
+        summary_scoring_version:
+          run.scoring_version === null ? null : CURRENT_EVAL_SCORING_VERSION,
+        cost_usd: "0.000000",
+      })
+      .where(eq(evalRuns.id, run.id));
+    await notifyEvalRunUpdate({
+      runId: run.id,
+      tenantId: run.tenant_id,
+      agentId: run.agent_id,
+      status: "completed",
+      totalTests: 0,
+      passed: 0,
+      failed: 0,
+    });
+    return { dispatched: 0, totalTests: 0 };
+  }
+
+  if (!run.computer_id && !run.agent_id) {
+    const platformAgent = await resolveTenantPlatformAgent(run.tenant_id);
+    const [updatedRun] = await db
+      .update(evalRuns)
+      .set({ agent_id: platformAgent.id })
+      .where(eq(evalRuns.id, run.id))
+      .returning();
+    run = updatedRun ?? { ...run, agent_id: platformAgent.id };
+  }
+
+  // Resolve the pinned dataset_case_ids to their index row uuids —
+  // eval_results FK eval_test_cases for dedupe + trend history. The
+  // mutation's drift-heal read just re-synced the index, and index rows
+  // are never deleted (tombstone = enabled=false), so every pinned case
+  // must resolve. NO enabled filter here: enabled-ness was decided from
+  // the snapshot content at capture time.
+  const idRows = await db
+    .select({
+      id: evalTestCases.id,
+      dataset_case_id: evalTestCases.dataset_case_id,
+    })
+    .from(evalTestCases)
+    .where(
+      and(
+        eq(evalTestCases.tenant_id, run.tenant_id),
+        eq(evalTestCases.dataset_id, datasetId),
+        inArray(evalTestCases.dataset_case_id, pinnedCaseIds),
+      ),
+    );
+  const uuidByCaseId = new Map(
+    idRows
+      .filter((r): r is typeof r & { dataset_case_id: string } =>
+        Boolean(r.dataset_case_id),
+      )
+      .map((r) => [r.dataset_case_id, r.id]),
+  );
+  const unresolved = pinnedCaseIds.filter((id) => !uuidByCaseId.has(id));
+  if (unresolved.length > 0) {
+    throw new Error(
+      `dataset ${dataset.slug} index rows missing for pinned case(s): ${unresolved.join(", ")}`,
+    );
+  }
+
+  await db
+    .update(evalRuns)
+    .set({
+      status: "running",
+      started_at: run.started_at ?? startedAt,
+      dataset_version: snapshot.datasetVersion,
+      pinned_case_ids: pinnedCaseIds,
+      // Belt-and-suspenders for legacy read paths (placeholder rows,
+      // pre-pinning reconciler fallback): record the resolved uuids too.
+      selected_test_case_ids: pinnedCaseIds.map(
+        (caseId) => uuidByCaseId.get(caseId) as string,
+      ),
+      total_tests: snapshot.cases.length,
+      passed: 0,
+      failed: 0,
+      errored: run.scoring_version === null ? null : 0,
+      pass_rate: null,
+      summary_scoring_version: null,
+      cost_usd: "0.000000",
+      error_message: null,
+    })
+    .where(eq(evalRuns.id, run.id));
+  await notifyEvalRunUpdate({
+    runId: run.id,
+    tenantId: run.tenant_id,
+    agentId: run.agent_id,
+    status: "running",
+    totalTests: snapshot.cases.length,
+  });
+
+  const messages = buildEvalWorkerMessages(
+    run.id,
+    snapshot.cases.map((c) => ({
+      id: uuidByCaseId.get(c.caseId) as string,
+      snapshotKey: c.snapshotKey,
+      contentSha: c.contentSha,
+    })),
+  );
+  for (const batch of chunkEvalWorkerMessages(messages)) {
+    await sendFanoutBatch(queueUrl, batch, client, run);
+  }
+
+  console.log(
+    `[eval-runner] runId=${run.id} dataset=${dataset.slug} v${snapshot.datasetVersion} dispatched ${snapshot.cases.length} pinned eval cases`,
+  );
+  return {
+    dispatched: snapshot.cases.length,
+    totalTests: snapshot.cases.length,
+  };
+}
+
 export async function handler(event: EvalRunnerEvent): Promise<{
   ok: boolean;
   runId: string;
@@ -141,9 +352,22 @@ export async function handler(event: EvalRunnerEvent): Promise<{
   );
 
   try {
-    const queueUrl = DEFAULT_QUEUE_URL;
+    const queueUrl = fanoutQueueUrl();
     if (!queueUrl) {
       throw new Error("EVAL_FANOUT_QUEUE_URL is not configured");
+    }
+
+    // Dataset-pinned launch (Trust Core U6): copy-at-launch + pinned
+    // fan-out. Legacy category/test-case launches continue below.
+    if (run.dataset_id) {
+      const client = sqsClientForTests ?? sqs;
+      const { dispatched, totalTests } = await dispatchDatasetRun(
+        db,
+        run,
+        queueUrl,
+        client,
+      );
+      return { ok: true, runId, dispatched, totalTests };
     }
 
     const eventSelectedTestCaseIds = selectedTestCaseIdsFromEvent(event);

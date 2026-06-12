@@ -20,7 +20,10 @@ import {
   fetchSpansForSession,
   type AgentCoreSpanRecord,
 } from "../../../lib/agentcore-spans.js";
-import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
+import {
+  CURRENT_EVAL_SCORING_VERSION,
+  summarizeEvalStatuses,
+} from "@thinkwork/evals-core";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
 import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
@@ -61,6 +64,11 @@ function runToGraphql(row: Record<string, unknown>, agentName?: string | null) {
     model: row.model,
     categories: row.categories,
     selectedTestCaseIds: row.selected_test_case_ids ?? [],
+    // Dataset pinning (Trust Core U6): dataset launches record the id at
+    // creation; the eval-runner stamps the version when it captures the
+    // run snapshot. Null on legacy category/test-case launches.
+    datasetId: row.dataset_id ?? null,
+    datasetVersion: row.dataset_version ?? null,
     totalTests: row.total_tests,
     passed: row.passed,
     failed: row.failed,
@@ -508,6 +516,13 @@ const evalRunResults = async (
     eq(evalTestCases.tenant_id, run.tenant_id),
     eq(evalTestCases.enabled, true),
   ];
+  // Dataset runs (Trust Core U6): before the runner pins the scope
+  // (pending window), placeholder rows are restricted to the dataset's
+  // cases instead of the whole tenant; after pinning,
+  // selected_test_case_ids carries the resolved scope.
+  if (run.dataset_id) {
+    caseConditions.push(eq(evalTestCases.dataset_id, run.dataset_id));
+  }
   if (run.selected_test_case_ids.length > 0) {
     caseConditions.push(inArray(evalTestCases.id, run.selected_test_case_ids));
   } else if (run.categories.length > 0) {
@@ -765,6 +780,12 @@ interface StartEvalRunInput {
   model?: string | null;
   categories?: string[] | null;
   testCaseIds?: string[] | null;
+  /**
+   * Dataset launch (Trust Core U6): the run pins the dataset version +
+   * case scope at launch and executes run-scoped copies. Mutually
+   * exclusive with categories/testCaseIds; legacy launches unchanged.
+   */
+  datasetSlug?: string | null;
 }
 
 async function resolveEvalModelId(
@@ -809,6 +830,28 @@ const startEvalRun = async (
 
   const model = await resolveEvalModelId(args.tenantId, args.input.model);
 
+  // Dataset launch (Trust Core U6): resolve the dataset BEFORE the run
+  // row exists — readEvalDataset drift-checks the index manifest_sha
+  // against S3 and re-syncs on mismatch, so the runner fans out from a
+  // current index. The eval-runner then captures the run snapshot
+  // (copy-at-launch) and pins dataset_version + pinned_case_ids.
+  let datasetId: string | null = null;
+  if (args.input.datasetSlug) {
+    if (
+      (args.input.categories?.length ?? 0) > 0 ||
+      (args.input.testCaseIds?.length ?? 0) > 0
+    ) {
+      throw new Error(
+        "datasetSlug cannot be combined with categories or testCaseIds.",
+      );
+    }
+    const { resolveDatasetForLaunch } =
+      await import("../../../lib/evals/run-launch.js");
+    datasetId = (
+      await resolveDatasetForLaunch(args.tenantId, args.input.datasetSlug)
+    ).id;
+  }
+
   // Insert a pending row up front so the failure path (e.g. tenant has no
   // platform agent yet) still surfaces in the runs list with a recoverable
   // error_message. Plan R6 mandates the failed-row trail.
@@ -824,6 +867,7 @@ const startEvalRun = async (
       model,
       categories: args.input.categories ?? [],
       selected_test_case_ids: args.input.testCaseIds ?? [],
+      dataset_id: datasetId,
       // Scoring semantics are stamped at run creation — never inferred
       // later — so post-deploy code can't silently upgrade older runs.
       scoring_version: CURRENT_EVAL_SCORING_VERSION,
@@ -907,26 +951,91 @@ async function invokeEvalRunner(
   );
 }
 
+/**
+ * Cancel finalizes a PARTIAL summary (Trust Core U6): counts over the
+ * result rows written so far under the run's stamped scoring semantics,
+ * explicit `cancelled` status preserved, completed_at set. In-flight
+ * workers may still finish executing — their late rows are simply not
+ * written (the worker re-checks status before the insert) and
+ * maybeFinalizeRun only ever updates `running` runs, so a late writer
+ * can never resurrect a cancelled run. Cross-run aggregates
+ * (evalSummary/evalTimeSeries) already exclude cancelled runs via their
+ * status='completed' filter (U2).
+ */
 const cancelEvalRun = async (
   _p: any,
   args: { id: string },
   ctx: GraphQLContext,
 ) => {
   const [existing] = await db
-    .select({ tenantId: evalRuns.tenant_id })
+    .select({
+      tenantId: evalRuns.tenant_id,
+      status: evalRuns.status,
+      scoringVersion: evalRuns.scoring_version,
+    })
     .from(evalRuns)
     .where(eq(evalRuns.id, args.id));
   if (!existing) throw new Error(`run ${args.id} not found`);
   // Row-derived gate — fails FORBIDDEN before the status write when the
   // run belongs to another tenant.
   await requireTenantAdmin(ctx, existing.tenantId);
+
+  // Terminal runs are immutable: cancelling a completed/failed/cancelled
+  // run is a no-op that returns the current row.
+  if (["completed", "failed", "cancelled"].includes(existing.status ?? "")) {
+    const [current] = await db
+      .select()
+      .from(evalRuns)
+      .where(eq(evalRuns.id, args.id));
+    return runToGraphql(current as unknown as Record<string, unknown>, null);
+  }
+
+  const resultRows = await db
+    .select({ status: evalResults.status })
+    .from(evalResults)
+    .where(eq(evalResults.run_id, args.id));
+  const counts = summarizeEvalStatuses(
+    resultRows,
+    existing.scoringVersion ?? null,
+  );
+
   const [row] = await db
     .update(evalRuns)
-    .set({ status: "cancelled", completed_at: new Date() })
-    .where(eq(evalRuns.id, args.id))
+    .set({
+      status: "cancelled",
+      completed_at: new Date(),
+      passed: counts.passed,
+      failed: counts.failed,
+      errored: counts.errored,
+      // The partial clean denominator: pass/(pass+fail) over written
+      // rows; null when nothing scoreable was written before the cancel.
+      pass_rate:
+        counts.completed === 0 || counts.passRate === null
+          ? null
+          : counts.passRate.toFixed(4),
+      summary_scoring_version:
+        existing.scoringVersion === null ? null : CURRENT_EVAL_SCORING_VERSION,
+    })
+    // Guarded on non-terminal status so a concurrent finalizer (worker /
+    // reconciler) winning the race is never overwritten.
+    .where(
+      and(
+        eq(evalRuns.id, args.id),
+        inArray(evalRuns.status, ["pending", "running"]),
+      ),
+    )
     .returning();
-  if (!row) throw new Error(`run ${args.id} not found`);
-  return runToGraphql(row as unknown as Record<string, unknown>, null);
+  if (row) {
+    return runToGraphql(row as unknown as Record<string, unknown>, null);
+  }
+  // Race: the run finalized between the gate and the update — return the
+  // winner's terminal state.
+  const [fresh] = await db
+    .select()
+    .from(evalRuns)
+    .where(eq(evalRuns.id, args.id));
+  if (!fresh) throw new Error(`run ${args.id} not found`);
+  return runToGraphql(fresh as unknown as Record<string, unknown>, null);
 };
 
 const deleteEvalRun = async (
@@ -935,12 +1044,25 @@ const deleteEvalRun = async (
   ctx: GraphQLContext,
 ) => {
   const [existing] = await db
-    .select({ tenantId: evalRuns.tenant_id })
+    .select({
+      tenantId: evalRuns.tenant_id,
+      datasetId: evalRuns.dataset_id,
+      pinnedCaseIds: evalRuns.pinned_case_ids,
+    })
     .from(evalRuns)
     .where(eq(evalRuns.id, args.id));
   // Deleting a missing row stays an idempotent no-op (prior behavior).
   if (!existing) return true;
   await requireTenantAdmin(ctx, existing.tenantId);
+  // Dataset-pinned runs own a snapshot prefix in S3
+  // (tenants/<slug>/eval-datasets/.runs/<run-id>/) — sweep it before the
+  // row goes away. An S3 failure surfaces (row kept) so the operator can
+  // retry; tenant teardown sweeps eval-datasets/ as the backstop.
+  if (existing.datasetId || existing.pinnedCaseIds) {
+    const { deleteRunSnapshotForTenant } =
+      await import("../../../lib/evals/run-launch.js");
+    await deleteRunSnapshotForTenant(existing.tenantId, args.id);
+  }
   await db.delete(evalRuns).where(eq(evalRuns.id, args.id));
   return true;
 };
