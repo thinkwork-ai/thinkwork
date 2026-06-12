@@ -2296,7 +2296,8 @@ function TurnRow({
         }}
       >
         <DialogContent
-          className="flex max-h-[85vh] w-[75vw] max-w-[75vw] flex-col gap-3"
+          className="flex h-[85vh] flex-col gap-3"
+          style={{ width: "90vw", maxWidth: 900 }}
           data-testid="trace-system-prompt-dialog"
         >
           <DialogHeader>
