@@ -6,6 +6,7 @@ export const RESERVED_TENANT_SLUGS = [
   "api",
   "app",
   "assets",
+  "canary",
   "cdn",
   "dev",
   "docs",
