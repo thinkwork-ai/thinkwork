@@ -18,6 +18,7 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentC
 - `packages/workspace-defaults` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
 - `terraform/modules/{foundation,data,app,thinkwork}` — three-tier Terraform Registry modules (`thinkwork-ai/thinkwork/aws`)
 - `docs/` — Astro Starlight docs site; also holds `plans/`, `brainstorms/`, `solutions/` — prior-session institutional knowledge worth grepping before starting non-trivial work.
+- `CONCEPTS.md` — shared domain vocabulary (entities, named processes, status concepts); relevant when orienting to the codebase or discussing domain terms
 - `CONCEPTS.md` — shared domain vocabulary (entities, named processes, status concepts); relevant when orienting to the codebase or discussing domain concepts Compliance module reference: `docs/src/content/docs/compliance/` (rendered at `/compliance/` in the Starlight site)
 
 ## Tooling ground rules
