@@ -63,7 +63,9 @@ describe("resolveProjectionPath", () => {
     expect(
       resolveProjectionPath(storedProjection, "sources.9.owner"),
     ).toBeUndefined();
-    expect(resolveProjectionPath(storedProjection, "nope.deep")).toBeUndefined();
+    expect(
+      resolveProjectionPath(storedProjection, "nope.deep"),
+    ).toBeUndefined();
   });
 });
 

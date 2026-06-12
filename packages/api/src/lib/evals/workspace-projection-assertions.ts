@@ -82,10 +82,7 @@ export function partitionEvalAssertions(assertions: EvalAssertion[]): {
  * `"sources.0.prefix"`, `"reconcile.rejectedCount"`). Returns `undefined`
  * when any segment is missing.
  */
-export function resolveProjectionPath(
-  value: unknown,
-  path: string,
-): unknown {
+export function resolveProjectionPath(value: unknown, path: string): unknown {
   let current: unknown = value;
   for (const segment of path.split(".")) {
     if (current === null || current === undefined) return undefined;
@@ -173,10 +170,7 @@ export async function evaluateWorkspaceProjectionAssertions(
 ): Promise<WorkspaceProjectionAssertionOutcome> {
   const results: EvalAssertionResult[] = [];
   let linkedThreadTurnId: string | null = null;
-  const loaded = new Map<
-    string,
-    { found: boolean; projection: unknown }
-  >();
+  const loaded = new Map<string, { found: boolean; projection: unknown }>();
 
   for (const assertion of assertions) {
     const threadTurnId =
