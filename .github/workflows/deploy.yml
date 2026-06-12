@@ -1400,6 +1400,83 @@ jobs:
   #
   # Runs AFTER terraform-apply (containers must exist) and BEFORE
   # migration-drift-check (drift gate verifies the roles created here).
+  update-agentcore-runtimes:
+    name: Update AgentCore Runtimes
+    needs: [build-container, terraform-apply]
+    # Belt-and-suspenders for the build-container/terraform-apply gate
+    # coupling: when `runtime_container_stale=true` forces a container
+    # rebuild on a docs-only push, terraform-apply's gate fires too (the
+    # OR list above includes runtime_container_stale), so the strict
+    # success-only check works today. Accepting `skipped` keeps this
+    # job firing even if a future edit narrows terraform-apply's gate
+    # without also widening this one. Prevents the silent-pin failure
+    # mode in docs/solutions/workflow-issues/agentcore-runtime-no-auto
+    # -repull-requires-explicit-update-2026-04-24.md.
+    if: >-
+      always()
+      && needs.build-container.result == 'success'
+      && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update Pi AgentCore runtime
+        run: |
+          set -euo pipefail
+          REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/thinkwork-${{ env.STAGE }}-agentcore"
+          bash scripts/update-agentcore-runtime-image.sh \
+            --stage ${{ env.STAGE }} \
+            --region ${{ env.AWS_REGION }} \
+            --runtime pi \
+            --image "${REPO}:${{ github.sha }}-pi-arm64" \
+            --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
+            --wait-seconds 900
+
+  # ── Database migration drift check ──────────────────────────────
+  # Runs `scripts/db-migrate-manual.sh` against the dev DB after
+  # terraform-apply has ensured the cluster exists. Fails the deploy if
+  # any hand-rolled .sql file in packages/database-pg/drizzle/ (i.e.
+  # one not registered in meta/_journal.json) declares objects missing
+  # from the DB, forcing an operator to apply them via
+  # `psql "$DATABASE_URL" -f <file>` before redeploying.
+  #
+  # Why this exists: three drift incidents in five days (Apr 17 mig
+  # 0008; Apr 18 mig 0012 collision; Apr 21 migs 0018+0019) all had
+  # the same root cause — hand-rolled migrations are outside
+  # drizzle-kit's journal and have no automated drift detection. This
+  # gate turns drift into a deploy-time error instead of a runtime
+  # surprise. Captures the deferred fix named in session 3fdbdb0c
+  # (Apr 17) that stayed open across two incidents.
+  #
+  # Scope: manual-track only (drizzle/*.sql not in meta/_journal.json).
+  # Journal-track drift detection is a separate follow-up. If
+  # migration-drift-check surfaces false positives or blocks
+  # legitimate deploys, an operator can re-run the workflow after
+  # applying the missing migrations via `psql`.
+  # ── Compliance role bootstrap ────────────────────────────────────
+  # Phase 3 U2 chicken-egg: terraform-apply creates the three Secrets
+  # Manager containers (writer/drainer/reader), but only the bootstrap
+  # script can populate values + create the matching Aurora roles +
+  # apply 0070_compliance_aurora_roles.sql with psql variable
+  # substitution. Without this step, migration-drift-check below would
+  # report the three creates-role: markers as MISSING after every deploy
+  # until an operator manually ran the bootstrap.
+  #
+  # The script is idempotent across re-runs: it reads existing Secrets
+  # Manager values and re-uses them on subsequent deploys (no password
+  # rotation), only auto-generating on greenfield. Safe to run on every
+  # deploy.
+  #
+  # Runs AFTER terraform-apply (containers must exist) and BEFORE
+  # migration-drift-check (drift gate verifies the roles created here).
+
   compliance-bootstrap:
     name: Compliance Role Bootstrap
     needs: [terraform-apply]
