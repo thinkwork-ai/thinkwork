@@ -49,7 +49,16 @@ interface DeployOptions {
   wait?: boolean;
 }
 
-export function registerReleaseCommand(program: Command): void {
+export function registerReleaseCommand(
+  program: Command,
+  // Test seam: the registration test injects a spy to prove flags placed
+  // after the subcommand actually reach the handler (see the commander
+  // parent/child duplicate-flag note in the deploy action).
+  deployImpl: (
+    version: string | undefined,
+    opts: DeployOptions,
+  ) => Promise<void> = deployRelease,
+): void {
   const release = program
     .command("release")
     .description(
@@ -58,8 +67,8 @@ export function registerReleaseCommand(program: Command): void {
     .option("-s, --stage <name>", "Deployment stage")
     .option("-y, --yes", "Skip the confirmation prompt")
     .option("--no-wait", "Start the controller execution and return immediately")
-    .action(async (opts: DeployOptions) => {
-      await deployRelease(undefined, opts);
+    .action(async (_opts: DeployOptions, command: Command) => {
+      await deployImpl(undefined, command.optsWithGlobals<DeployOptions>());
     });
 
   release
@@ -81,9 +90,18 @@ export function registerReleaseCommand(program: Command): void {
     .option("-s, --stage <name>", "Deployment stage")
     .option("-y, --yes", "Skip the confirmation prompt")
     .option("--no-wait", "Start the controller execution and return immediately")
-    .action(async (version: string | undefined, opts: DeployOptions) => {
-      await deployRelease(version, opts);
-    });
+    .action(
+      async (
+        version: string | undefined,
+        _opts: DeployOptions,
+        command: Command,
+      ) => {
+        // Duplicate flags (-s/--yes/--no-wait) exist on both the `release`
+        // group and this subcommand; commander parses them onto the PARENT
+        // when they follow the subcommand name, so read the merged chain.
+        await deployImpl(version, command.optsWithGlobals<DeployOptions>());
+      },
+    );
 }
 
 async function listOrExit(): Promise<ReleaseSummary[]> {
