@@ -65,3 +65,4 @@ export * from "./spaces";
 export * from "./goals";
 export * from "./deployments";
 export * from "./pending-user-questions";
+export * from "./plugins";

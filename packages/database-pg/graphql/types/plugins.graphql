@@ -1,0 +1,207 @@
+"""
+Application plugins (plan 2026-06-12-001).
+
+The plugin engine is the canonical record of install, component, and
+activation state. Admin mutations (install/upgrade/uninstall/retry) require
+tenant admin via resolveCallerTenantId; activation mutations bind the
+canonical caller user id. Install/component status reconciles against linked
+deployment-job events at read time — no readiness snapshots. Token secret
+refs are NEVER exposed through this schema.
+"""
+type PluginComponent {
+  id: ID!
+  "Component key from the pinned manifest version (unique within the install)."
+  componentKey: String!
+  "'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'."
+  componentType: String!
+  "'pending' | 'provisioned' | 'failed' (failed → pending on retry)."
+  state: String!
+  """
+  Handler linkage into real runtime rows, shape by component type:
+  mcp-server { tenantMcpServerId }, skills { seededCatalogPrefix,
+  workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId }.
+  """
+  handlerRef: AWSJSON!
+  lastError: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type PluginInstall {
+  id: ID!
+  tenantId: ID!
+  "Plugin key from the signed catalog (e.g. 'lastmile')."
+  pluginKey: String!
+  "Catalog version pinned at install/upgrade time."
+  pinnedVersion: String!
+  "sha256 of the pinned version payload."
+  pinnedPayloadSha256: String!
+  """
+  'installing' | 'awaiting_approval' | 'installed' | 'partially_installed' |
+  'failed' | 'uninstalling'.
+  """
+  state: String!
+  "Set on every state transition; staleness re-drive input."
+  lastTransitionAt: AWSDateTime!
+  lastError: String
+  components: [PluginComponent!]!
+  "Count of 'active' user activations — powers the uninstall warning."
+  activatedUserCount: Int!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+"""
+A user's app-level OAuth grant for an installed plugin. One grant covers all
+of the plugin's MCP servers; token records (secret refs) are internal and
+never exposed here.
+"""
+type UserPluginActivation {
+  id: ID!
+  userId: ID!
+  pluginInstallId: ID!
+  "Plugin key of the underlying install, for display without a second query."
+  pluginKey: String!
+  "'active' | 'needs_reauth' | 'revoked'."
+  status: String!
+  "OAuth scopes granted at consent time."
+  grantedScopes: [String!]!
+  grantedAt: AWSDateTime!
+  revokedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+"Display summary of one manifest component for catalog browse."
+type PluginCatalogComponent {
+  key: String!
+  "'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'."
+  type: String!
+  "Display name where the manifest declares one; null → render falls back to key."
+  displayName: String
+}
+
+"One published version of a plugin in the signed catalog."
+type PluginCatalogVersion {
+  version: String!
+  "sha256 of the version payload (what installs pin)."
+  payloadSha256: String!
+  "OAuth scopes this version's MCP servers require at activation."
+  requiredOauthScopes: [String!]!
+  components: [PluginCatalogComponent!]!
+}
+
+"""
+Catalog browse entry: the signed-catalog manifest overlaid with the caller
+tenant's install state. `install` is null when the plugin is not installed.
+"""
+type PluginCatalogEntry {
+  pluginKey: String!
+  displayName: String!
+  description: String!
+  "Published versions, newest first."
+  versions: [PluginCatalogVersion!]!
+  latestVersion: String!
+  "The caller tenant's install of this plugin, if any."
+  install: PluginInstall
+  "True when an install exists and a newer catalog version is available."
+  updateAvailable: Boolean!
+}
+
+input InstallPluginInput {
+  pluginKey: String!
+  "Catalog version to pin; defaults to the latest published version."
+  version: String
+  idempotencyKey: String!
+}
+
+input UpgradePluginInput {
+  installId: ID!
+  "Catalog version to pin (must differ from the pinned version)."
+  version: String!
+  idempotencyKey: String!
+}
+
+input UninstallPluginInput {
+  installId: ID!
+  """
+  Required when the install has an infrastructure component (mirrors the
+  managed-application destructive confirmation gate).
+  """
+  destructiveConfirmation: String
+}
+
+input RetryPluginComponentInput {
+  installId: ID!
+  "Component to re-drive; must be in state 'failed'."
+  componentKey: String!
+}
+
+input ActivatePluginInput {
+  installId: ID!
+  "Client path to land on after the OAuth callback (validated server-side)."
+  returnTo: String
+}
+
+input DeactivatePluginInput {
+  installId: ID!
+}
+
+"""
+Start of the app-level OAuth activation flow. The caller redirects the user
+to `authorizeUrl`; the callback upserts the activation and its token records
+and returns the user to the plugin detail page.
+"""
+type ActivatePluginResult {
+  authorizeUrl: String!
+}
+
+extend type Query {
+  """
+  Browse the signed plugin catalog overlaid with the caller tenant's install
+  state. Fails closed (GraphQL error) on catalog signature/digest failure.
+  """
+  pluginCatalog: [PluginCatalogEntry!]!
+  "The caller tenant's plugin installs (admin status surface)."
+  pluginInstalls: [PluginInstall!]!
+  "One install by id, with read-time component status reconciliation."
+  pluginInstall(id: ID!): PluginInstall
+  "The caller's plugin activations across the tenant's installs."
+  myPluginActivations: [UserPluginActivation!]!
+}
+
+extend type Mutation {
+  """
+  Install a catalog plugin tenant-wide (tenant admin). Idempotent per
+  (tenant, plugin): a concurrent call returns the in-flight install; a
+  stuck-installing install past the staleness threshold re-drives the
+  handler sequence.
+  """
+  installPlugin(input: InstallPluginInput!): PluginInstall!
+  """
+  Pin a new catalog version and reconcile the component diff through the
+  install state machine (tenant admin). Scope/auth-domain changes flip
+  affected activations to needs_reauth.
+  """
+  upgradePlugin(input: UpgradePluginInput!): PluginInstall!
+  """
+  Tear down every component and derived state (tenant admin): activations +
+  token secrets, skill folders + seeded catalog prefix, MCP rows, then the
+  infrastructure destroy job behind the approval gate. Returns the final
+  install snapshot ('uninstalling' while async teardown runs).
+  """
+  uninstallPlugin(input: UninstallPluginInput!): PluginInstall!
+  "Re-drive one failed component (failed → pending) and re-run its handler (tenant admin)."
+  retryPluginComponent(input: RetryPluginComponentInput!): PluginInstall!
+  """
+  Begin app-level OAuth activation for the calling user — one consent
+  covering all the plugin's MCP servers. Returns the authorize URL.
+  """
+  activatePlugin(input: ActivatePluginInput!): ActivatePluginResult!
+  """
+  Disconnect the calling user's activation: deletes stored token secrets and
+  marks the activation revoked. Local-only — provider-side grants are not
+  revoked in v1 (UI copy says "disconnect").
+  """
+  deactivatePlugin(input: DeactivatePluginInput!): UserPluginActivation!
+}
