@@ -2,9 +2,11 @@ export type EvalCaseStatus = "pass" | "fail" | "error";
 
 /**
  * Why a case errored. Mirrors the comment-enum on
- * `eval_results.error_cause`. U2 only distinguishes `reconciler`
- * (synthetic rows) from `infra_other` (everything else); U3 classifies
- * `timeout` / `throttle` / `evaluator_error`.
+ * `eval_results.error_cause`. The reconciler stamps `reconciler` on
+ * synthetic rows; the eval-worker classifies `timeout` (invoke budget
+ * exhausted), `throttle` (retry budget exhausted), and
+ * `evaluator_error` (LLM judge crash) at its catch site, with
+ * `infra_other` as the fallback.
  */
 export type EvalErrorCause =
   | "timeout"

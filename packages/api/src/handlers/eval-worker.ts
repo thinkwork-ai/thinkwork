@@ -2,9 +2,13 @@
  * eval-worker Lambda
  *
  * SQS delivers one eval test case per invocation. Application-level case
- * failures are recorded as eval_results.status='error' and acknowledged; only
- * infrastructure failures return batch item failures so SQS can redrive to the
- * eval fan-out DLQ.
+ * failures are recorded as eval_results.status='error' (with an error_cause)
+ * and acknowledged. Throttling is the only error that redrives through SQS:
+ * on the final receive (ApproximateReceiveCount vs the queue's
+ * maxReceiveCount, mirrored in EVAL_FANOUT_MAX_RECEIVE_COUNT) the worker
+ * records error/throttle instead of rethrowing, so a case never vanishes
+ * into the DLQ without a result row. Timeouts already consumed the full
+ * response budget and are recorded immediately as error/timeout.
  */
 
 import type { SQSEvent, SQSRecord } from "aws-lambda";
@@ -19,7 +23,6 @@ import {
 import {
   CURRENT_EVAL_SCORING_VERSION,
   evaluateAssertions,
-  llmRubricHeuristic,
   scoreEvalOutcome,
   summarizeEvalStatuses,
   type EvalAssertion,
@@ -134,20 +137,77 @@ export function agentCoreEvaluatorsEnabled(
   );
 }
 
+/**
+ * Throttling shapes (Lambda + Bedrock) are the only retryable
+ * infrastructure errors: they redrive through SQS within the queue's
+ * maxReceiveCount budget. Genuine timeouts are NOT retryable — the case
+ * already consumed the full response budget, so it records error/timeout
+ * immediately instead of burning redrives.
+ */
 export function isRetryableEvalInfrastructureError(error: unknown): boolean {
+  if (error instanceof AgentCoreEvalInvocationTimeoutError) return false;
+  const err = error as
+    | { name?: unknown; $metadata?: { httpStatusCode?: unknown } }
+    | null
+    | undefined;
+  if (err?.$metadata?.httpStatusCode === 429) return true;
+  if (
+    typeof err?.name === "string" &&
+    /^(ThrottlingException|TooManyRequestsException|ServiceQuotaExceededException)$/.test(
+      err.name,
+    )
+  ) {
+    return true;
+  }
   const message = error instanceof Error ? error.message : String(error);
-  return /Lambda\.TooManyRequestsException|Lambda throttled/i.test(message);
+  return /ThrottlingException|TooManyRequestsException|ServiceQuotaExceededException|Lambda throttled|Rate exceeded|status(?:Code)?:?\s*429|\(429\)/i.test(
+    message,
+  );
 }
 
-export function agentCoreBudgetExceededAssertion(
-  timeoutMs: number,
-): EvalAssertionResult {
-  return {
-    type: "agentcore-response-budget",
-    passed: false,
-    score: 0,
-    reason: `AgentCore did not return a response within the ${timeoutMs}ms eval response budget.`,
-  };
+/**
+ * The eval fan-out queue's redrive maxReceiveCount, mirrored into the
+ * worker env by terraform (same local feeds the redrive policy, so the
+ * two can't drift). Defaults to the terraform value when unset.
+ */
+export const DEFAULT_EVAL_FANOUT_MAX_RECEIVE_COUNT = 5;
+
+export function evalFanoutMaxReceiveCount(
+  value = process.env.EVAL_FANOUT_MAX_RECEIVE_COUNT,
+): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_EVAL_FANOUT_MAX_RECEIVE_COUNT;
+  }
+  return Math.floor(parsed);
+}
+
+/**
+ * True when SQS will not redeliver this message again (this receive is
+ * the last one before the redrive policy moves it to the DLQ). On the
+ * final receive the worker records error/throttle instead of rethrowing
+ * so the case never disappears without a result row.
+ */
+export function isFinalSqsReceive(
+  record: Pick<SQSRecord, "attributes">,
+  maxReceiveCount = evalFanoutMaxReceiveCount(),
+): boolean {
+  const count = Number(record.attributes?.ApproximateReceiveCount ?? "1");
+  if (!Number.isFinite(count)) return false;
+  return count >= maxReceiveCount;
+}
+
+/**
+ * The LLM judge (Bedrock Converse) crashed or returned an unusable
+ * verdict. Classified as error/evaluator_error — never a behavioral
+ * fail, because the agent's response was fine; the evaluator wasn't.
+ */
+export class EvalJudgeInvocationError extends Error {
+  constructor(cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`LLM judge invocation failed: ${detail}`);
+    this.name = "EvalJudgeInvocationError";
+  }
 }
 
 function evaluatorCostUsd(evaluatorResults: unknown): number {
@@ -223,11 +283,13 @@ Respond with ONLY a JSON object (no markdown, no explanation outside JSON):
     }
     throw new Error("No JSON in judge response");
   } catch (err) {
-    console.warn(
-      "[eval-worker] LLM judge failed, falling back to heuristic:",
-      err,
-    );
-    return llmRubricHeuristic(output, rubric);
+    // Judge throttles redrive through SQS like any other throttle; every
+    // other judge crash is evaluator infrastructure (error/evaluator_error).
+    // Never fall back to the heuristic here — a heuristic fail caused by a
+    // judge crash would pollute the pass rate with infra noise.
+    if (isRetryableEvalInfrastructureError(err)) throw err;
+    console.error("[eval-worker] LLM judge invocation failed:", err);
+    throw new EvalJudgeInvocationError(err);
   }
 }
 
@@ -253,12 +315,14 @@ async function executeCase(
   run: typeof evalRuns.$inferSelect,
   tc: typeof evalTestCases.$inferSelect,
   message: EvalWorkerMessage,
+  options: { finalReceive: boolean },
 ): Promise<CaseOutcome> {
   const sessionId = uniqueSessionId(run.id, tc.id, message.index ?? 0);
   let actualOutput = "";
   let systemPrompt: string | null = null;
   let durationMs = 0;
   let errorMessage: string | null = null;
+  let errorCause: EvalErrorCause | null = null;
   const assertionResults: EvalAssertionResult[] = [];
   const evaluatorResults: EvalEvaluatorResult[] = [];
   let costUsd = 0;
@@ -318,13 +382,38 @@ async function executeCase(
       );
     }
   } catch (err) {
-    if (isRetryableEvalInfrastructureError(err)) {
-      throw err;
-    }
     if (err instanceof AgentCoreEvalInvocationTimeoutError) {
+      // Timeout is infrastructure, not behavior: the case consumed the
+      // full response budget, so it records error/timeout immediately —
+      // no synthetic failing assertion, no SQS redrive.
       durationMs = err.timeoutMs;
-      assertionResults.push(agentCoreBudgetExceededAssertion(err.timeoutMs));
+      errorCause = "timeout";
+      errorMessage = err.message;
+      console.error(`[eval-worker] test '${tc.name}' timed out:`, errorMessage);
+    } else if (isRetryableEvalInfrastructureError(err)) {
+      if (!options.finalReceive) {
+        // SQS redrive retries the case (bounded by the queue's
+        // maxReceiveCount).
+        throw err;
+      }
+      // Final receive: a rethrow would dead-letter the message with no
+      // result row, leaving the run open until the reconciler. Record
+      // error/throttle so the case terminates visibly.
+      errorCause = "throttle";
+      errorMessage = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[eval-worker] test '${tc.name}' throttled on final SQS receive; recording error/throttle:`,
+        errorMessage,
+      );
+    } else if (err instanceof EvalJudgeInvocationError) {
+      errorCause = "evaluator_error";
+      errorMessage = err.message;
+      console.error(
+        `[eval-worker] test '${tc.name}' judge error:`,
+        errorMessage,
+      );
     } else {
+      errorCause = "infra_other";
       errorMessage = err instanceof Error ? err.message : String(err);
       console.error(`[eval-worker] test '${tc.name}' failed:`, errorMessage);
     }
@@ -334,6 +423,7 @@ async function executeCase(
     assertionResults,
     evaluatorResults,
     errorMessage,
+    errorCause,
   });
 
   return {
@@ -423,7 +513,10 @@ async function maybeFinalizeRun(runId: string): Promise<void> {
   );
 }
 
-async function handleMessage(message: EvalWorkerMessage): Promise<void> {
+async function handleMessage(
+  message: EvalWorkerMessage,
+  options: { finalReceive: boolean },
+): Promise<void> {
   const db = getDb();
   const [run] = await db
     .select()
@@ -470,7 +563,7 @@ async function handleMessage(message: EvalWorkerMessage): Promise<void> {
     );
   }
 
-  const outcome = await executeCase(run, tc, message);
+  const outcome = await executeCase(run, tc, message, options);
 
   const [freshRun] = await db
     .select({ status: evalRuns.status })
@@ -526,9 +619,12 @@ export async function handler(event: SQSEvent): Promise<{
   batchItemFailures: Array<{ itemIdentifier: string }>;
 }> {
   const batchItemFailures: Array<{ itemIdentifier: string }> = [];
+  const maxReceiveCount = evalFanoutMaxReceiveCount();
   for (const record of recordsFromEvent(event)) {
     try {
-      await handleMessage(parseEvalWorkerMessage(record.body));
+      await handleMessage(parseEvalWorkerMessage(record.body), {
+        finalReceive: isFinalSqsReceive(record, maxReceiveCount),
+      });
     } catch (err) {
       console.error("[eval-worker] infrastructure failure:", err);
       batchItemFailures.push({ itemIdentifier: record.messageId });

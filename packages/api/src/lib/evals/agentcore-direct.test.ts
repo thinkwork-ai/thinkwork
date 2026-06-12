@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  AgentCoreEvalEmptyResponseError,
   buildEvalAgentCorePayload,
+  DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS,
   DEFAULT_EVAL_MAX_TOKENS,
   DEFAULT_EVAL_MODEL_ID,
   evalAgentCoreAttemptSessionId,
@@ -8,8 +10,28 @@ import {
   evalMaxTokens,
   evalModelId,
   extractAgentCoreResponseText,
+  invokeAgentCoreForEval,
 } from "./agentcore-direct.js";
+import { resolveAgentRuntimeConfig } from "../resolve-agent-runtime-config.js";
 import type { AgentRuntimeConfig } from "../resolve-agent-runtime-config.js";
+
+const lambdaSendMock = vi.hoisted(() => vi.fn());
+vi.mock("@aws-sdk/client-lambda", () => ({
+  LambdaClient: class {
+    send = (...args: unknown[]) => lambdaSendMock(...args);
+  },
+  InvokeCommand: class {
+    constructor(public readonly input: { Payload?: Uint8Array }) {}
+  },
+}));
+
+vi.mock("../resolve-agent-runtime-config.js", () => ({
+  resolveAgentRuntimeConfig: vi.fn(),
+}));
+
+vi.mock("../resolve-runtime-function-name.js", () => ({
+  resolveRuntimeFunctionName: () => "thinkwork-test-agentcore-pi",
+}));
 
 const runtimeConfig: AgentRuntimeConfig = {
   tenantId: "tenant-1",
@@ -182,5 +204,81 @@ describe("direct AgentCore eval helpers", () => {
     expect(
       extractAgentCoreResponseText({ response_text: "strands response" }),
     ).toBe("strands response");
+  });
+});
+
+describe("direct AgentCore eval empty-response in-process retry", () => {
+  function lambdaResponse(body: unknown) {
+    return {
+      Payload: new TextEncoder().encode(
+        JSON.stringify({ statusCode: 200, body: JSON.stringify(body) }),
+      ),
+    };
+  }
+
+  function sentThreadId(callIndex: number): string {
+    const command = lambdaSendMock.mock.calls[callIndex][0] as {
+      input: { Payload: Uint8Array };
+    };
+    const event = JSON.parse(new TextDecoder().decode(command.input.Payload));
+    return JSON.parse(event.body).thread_id;
+  }
+
+  beforeEach(() => {
+    lambdaSendMock.mockReset();
+    vi.mocked(resolveAgentRuntimeConfig).mockResolvedValue(runtimeConfig);
+  });
+
+  it("retries empty responses in-process with a fresh session and succeeds without SQS involvement", async () => {
+    lambdaSendMock
+      .mockResolvedValueOnce(lambdaResponse({ response: "" }))
+      .mockResolvedValueOnce(lambdaResponse({ response: "I refuse." }));
+
+    const result = await invokeAgentCoreForEval({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "Refuse this",
+      model: null,
+    });
+
+    expect(result.output).toBe("I refuse.");
+    expect(lambdaSendMock).toHaveBeenCalledTimes(2);
+    expect(sentThreadId(0)).toBe("session-1");
+    expect(sentThreadId(1)).toBe("session-1-retry-2");
+  });
+
+  it("gives up after the 3-attempt budget and surfaces the empty-response error", async () => {
+    lambdaSendMock.mockResolvedValue(lambdaResponse({ response: "" }));
+
+    await expect(
+      invokeAgentCoreForEval({
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        sessionId: "session-1",
+        message: "Refuse this",
+        model: null,
+      }),
+    ).rejects.toBeInstanceOf(AgentCoreEvalEmptyResponseError);
+    expect(lambdaSendMock).toHaveBeenCalledTimes(
+      DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS,
+    );
+  });
+
+  it("does not retry non-empty-response invoke errors in-process", async () => {
+    lambdaSendMock.mockRejectedValue(
+      new Error("ThrottlingException: Rate exceeded"),
+    );
+
+    await expect(
+      invokeAgentCoreForEval({
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        sessionId: "session-1",
+        message: "Refuse this",
+        model: null,
+      }),
+    ).rejects.toThrow(/ThrottlingException/);
+    expect(lambdaSendMock).toHaveBeenCalledTimes(1);
   });
 });

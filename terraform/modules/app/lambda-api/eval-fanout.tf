@@ -2,9 +2,21 @@
 # Evals per-case fan-out substrate
 #
 # eval-runner dispatches one message per test case. eval-worker catches
-# application-level case failures and writes eval_results.status='error';
-# infrastructure failures redrive through SQS to the DLQ after maxReceiveCount=3.
+# application-level case failures and writes eval_results.status='error'
+# (with an error_cause); throttling errors redrive through SQS within the
+# redrive budget below. On the final receive the worker records
+# error/throttle instead of rethrowing, so the DLQ only sees messages from
+# crashes that prevented any result write.
 # ---------------------------------------------------------------------------
+
+locals {
+  # Single source of truth for the fan-out retry budget. Feeds BOTH the
+  # queue's redrive policy maxReceiveCount AND the eval-worker's
+  # EVAL_FANOUT_MAX_RECEIVE_COUNT env var (handlers.tf), so the worker's
+  # final-receive detection can never drift from the queue's actual
+  # redrive behavior.
+  eval_fanout_max_receive_count = 5
+}
 
 resource "aws_sqs_queue" "eval_fanout_dlq" {
   count                     = local.deploy_lambda_handlers ? 1 : 0
@@ -29,7 +41,7 @@ resource "aws_sqs_queue" "eval_fanout" {
 
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.eval_fanout_dlq[0].arn
-    maxReceiveCount     = 5
+    maxReceiveCount     = local.eval_fanout_max_receive_count
   })
 
   tags = {

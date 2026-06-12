@@ -345,8 +345,8 @@ export function scoreEvalOutcome({
   errorMessage?: string | null;
   /**
    * Why the execution errored, when the caller knows. Defaults to
-   * "infra_other" whenever errorMessage is set — U3 layers in
-   * timeout/throttle/evaluator_error classification.
+   * "infra_other" whenever errorMessage is set; the eval-worker
+   * classifies timeout/throttle/evaluator_error at its catch site.
    */
   errorCause?: EvalErrorCause | null;
   passThreshold?: number;

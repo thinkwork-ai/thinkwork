@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
+import { AgentCoreEvalInvocationTimeoutError } from "../lib/evals/agentcore-direct.js";
 import {
-  agentCoreBudgetExceededAssertion,
   agentCoreEvaluatorsEnabled,
+  DEFAULT_EVAL_FANOUT_MAX_RECEIVE_COUNT,
   estimateAgentCoreEvaluatorCostUsd,
+  evalFanoutMaxReceiveCount,
+  isFinalSqsReceive,
   isRetryableEvalInfrastructureError,
   llmJudgeEnabled,
   parseEvalWorkerMessage,
@@ -120,7 +123,7 @@ describe("eval-worker evaluator cost controls", () => {
 });
 
 describe("eval-worker infrastructure retry classification", () => {
-  it("treats AgentCore throttling as retryable and model throttles as case errors", () => {
+  it("treats Lambda and Bedrock throttling shapes as retryable", () => {
     expect(
       isRetryableEvalInfrastructureError(
         new Error("Lambda.TooManyRequestsException: backoff"),
@@ -129,6 +132,44 @@ describe("eval-worker infrastructure retry classification", () => {
     expect(
       isRetryableEvalInfrastructureError(
         new Error("ThrottlingException: Too many requests"),
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableEvalInfrastructureError(
+        new Error("ServiceQuotaExceededException: quota reached"),
+      ),
+    ).toBe(true);
+    expect(isRetryableEvalInfrastructureError(new Error("Rate exceeded"))).toBe(
+      true,
+    );
+    expect(
+      isRetryableEvalInfrastructureError(new Error("Lambda throttled")),
+    ).toBe(true);
+  });
+
+  it("recognizes AWS SDK error name and 429 metadata shapes", () => {
+    const named = new Error("Too many requests, please wait");
+    named.name = "ThrottlingException";
+    expect(isRetryableEvalInfrastructureError(named)).toBe(true);
+
+    const metadata = Object.assign(new Error("opaque service error"), {
+      $metadata: { httpStatusCode: 429 },
+    });
+    expect(isRetryableEvalInfrastructureError(metadata)).toBe(true);
+
+    expect(
+      isRetryableEvalInfrastructureError(
+        new Error("AgentCore 429: slow down (429)"),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps genuine timeouts and unrelated errors non-retryable", () => {
+    // Timeouts already consumed the full response budget — they record
+    // error/timeout immediately instead of burning SQS redrives.
+    expect(
+      isRetryableEvalInfrastructureError(
+        new AgentCoreEvalInvocationTimeoutError(180_000),
       ),
     ).toBe(false);
     expect(
@@ -142,14 +183,31 @@ describe("eval-worker infrastructure retry classification", () => {
       isRetryableEvalInfrastructureError(new Error("policy violation")),
     ).toBe(false);
   });
+});
 
-  it("represents stalled AgentCore responses as failed eval assertions", () => {
-    expect(agentCoreBudgetExceededAssertion(180_000)).toEqual({
-      type: "agentcore-response-budget",
-      passed: false,
-      score: 0,
-      reason:
-        "AgentCore did not return a response within the 180000ms eval response budget.",
-    });
+describe("eval-worker SQS receive budget", () => {
+  it("reads the queue's maxReceiveCount from the env mirror with a safe default", () => {
+    expect(evalFanoutMaxReceiveCount("5")).toBe(5);
+    expect(evalFanoutMaxReceiveCount("3")).toBe(3);
+    expect(evalFanoutMaxReceiveCount(undefined)).toBe(
+      DEFAULT_EVAL_FANOUT_MAX_RECEIVE_COUNT,
+    );
+    expect(evalFanoutMaxReceiveCount("nope")).toBe(
+      DEFAULT_EVAL_FANOUT_MAX_RECEIVE_COUNT,
+    );
+    expect(evalFanoutMaxReceiveCount("0")).toBe(
+      DEFAULT_EVAL_FANOUT_MAX_RECEIVE_COUNT,
+    );
+  });
+
+  it("detects the final receive before the redrive policy dead-letters the message", () => {
+    const record = (count: string) =>
+      ({ attributes: { ApproximateReceiveCount: count } }) as never;
+    expect(isFinalSqsReceive(record("1"), 5)).toBe(false);
+    expect(isFinalSqsReceive(record("4"), 5)).toBe(false);
+    expect(isFinalSqsReceive(record("5"), 5)).toBe(true);
+    expect(isFinalSqsReceive(record("6"), 5)).toBe(true);
+    // Missing attribute → assume first receive (rethrow keeps the retry).
+    expect(isFinalSqsReceive({ attributes: {} } as never, 5)).toBe(false);
   });
 });
