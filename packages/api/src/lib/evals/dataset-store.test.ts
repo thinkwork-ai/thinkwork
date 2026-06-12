@@ -258,6 +258,15 @@ describe("slug / case id validation", () => {
     expect(() => assertValidDatasetSlug("good-slug-1")).not.toThrow();
     expect(() => assertValidCaseId("case-1")).not.toThrow();
     expect(() => assertValidDatasetSlug("a".repeat(64))).not.toThrow();
+    // Case ids get a longer budget than dataset slugs: U5 baseline case
+    // ids are the historical seed names (longest is 67 chars).
+    expect(() =>
+      assertValidCaseId(
+        "red-team-agents-prompt-injection-12-confidential-document-injection",
+      ),
+    ).not.toThrow();
+    expect(() => assertValidCaseId("a".repeat(128))).not.toThrow();
+    expect(() => assertValidCaseId("a".repeat(129))).toThrow(/Invalid case id/);
   });
 
   it("createEvalDataset refuses an invalid slug before any S3 write", async () => {

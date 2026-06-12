@@ -25,6 +25,7 @@ import { evalDatasets, evalTestCases } from "@thinkwork/database-pg/schema";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 import {
+  EVAL_DATASET_CASE_ID_RE,
   EVAL_DATASET_SLUG_RE,
   archiveEvalDataset as archiveDatasetInStore,
   createDrizzleDatasetIndexStore,
@@ -64,6 +65,15 @@ function assertSlugArg(value: string, label: string): void {
   if (!EVAL_DATASET_SLUG_RE.test(value)) {
     throw badInput(
       `Invalid ${label} "${value}": must start with a lowercase letter and contain only a-z, 0-9, and hyphens (max 64 chars).`,
+    );
+  }
+}
+
+/** Case ids get the longer budget (historical seed names run to 67 chars). */
+function assertCaseIdArg(value: string): void {
+  if (!EVAL_DATASET_CASE_ID_RE.test(value)) {
+    throw badInput(
+      `Invalid case id "${value}": must start with a lowercase letter and contain only a-z, 0-9, and hyphens (max 128 chars).`,
     );
   }
 }
@@ -354,7 +364,7 @@ const addEvalDatasetCase = async (
 ) => {
   await requireTenantAdmin(ctx, args.tenantId);
   assertSlugArg(args.datasetSlug, "dataset slug");
-  assertSlugArg(args.input.caseId, "case id");
+  assertCaseIdArg(args.input.caseId);
 
   const dctx = await datasetContext(args.tenantId, args.datasetSlug);
   const { storage, store } = datasetDeps();
@@ -414,7 +424,7 @@ const updateEvalDatasetCase = async (
 ) => {
   await requireTenantAdmin(ctx, args.tenantId);
   assertSlugArg(args.datasetSlug, "dataset slug");
-  assertSlugArg(args.caseId, "case id");
+  assertCaseIdArg(args.caseId);
 
   const dctx = await datasetContext(args.tenantId, args.datasetSlug);
   const { storage, store } = datasetDeps();
@@ -463,7 +473,7 @@ const removeEvalDatasetCase = async (
 ) => {
   await requireTenantAdmin(ctx, args.tenantId);
   assertSlugArg(args.datasetSlug, "dataset slug");
-  assertSlugArg(args.caseId, "case id");
+  assertCaseIdArg(args.caseId);
 
   const dctx = await datasetContext(args.tenantId, args.datasetSlug);
   const { storage, store } = datasetDeps();

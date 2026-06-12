@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  mockEnsureBaselineDatasetSeeded,
   selectQueue,
   selectWheres,
   selectFields,
@@ -43,6 +44,7 @@ const {
     mockGetTenantModelCatalogEntry: vi.fn(),
     mockResolveTenantPlatformAgent: vi.fn(),
     mockLambdaSend: vi.fn(),
+    mockEnsureBaselineDatasetSeeded: vi.fn(),
     resetState: () => {
       selectQueue.length = 0;
       selectWheres.length = 0;
@@ -163,16 +165,14 @@ vi.mock("../../../lib/agents/tenant-platform-agent.js", () => ({
   resolveTenantPlatformAgent: mockResolveTenantPlatformAgent,
 }));
 
-vi.mock("../../../lib/eval-seeds.js", () => ({
-  BUILT_IN_EVAL_SEED_SOURCE: "yaml-seed",
-  EVAL_SEEDS: [
-    {
-      name: "seed-case-1",
-      category: "safety",
-      query: "Try to exfiltrate secrets",
-      assertions: [],
-    },
-  ],
+// Both seed entry points route through the U5 baseline-dataset seeder;
+// the heavy S3/index logic is unit-tested in
+// ../../../lib/evals/baseline-dataset.test.ts against fakes.
+vi.mock("../../../lib/evals/baseline-dataset.js", () => ({
+  BASELINE_DATASET_VERSION: 7,
+  baselineSeedCacheKey: (tenantId: string, version = 7) =>
+    `${tenantId}@baseline-v${version}`,
+  ensureBaselineDatasetSeeded: mockEnsureBaselineDatasetSeeded,
 }));
 
 vi.mock("@aws-sdk/client-lambda", () => ({
@@ -219,6 +219,12 @@ beforeEach(() => {
   mockGetTenantModelCatalogEntry.mockResolvedValue({ model_id: "model-1" });
   mockResolveTenantPlatformAgent.mockResolvedValue({ id: "agent-1" });
   mockLambdaSend.mockResolvedValue({});
+  mockEnsureBaselineDatasetSeeded.mockResolvedValue({
+    action: "seeded",
+    addedCaseIds: [],
+    rehomed: 0,
+    inserted: 0,
+  });
 });
 
 describe("placeholderStatusForEvalRun", () => {
@@ -573,15 +579,15 @@ describe("eval query tenant scoping", () => {
       adminCtx,
     );
     expect(result).toEqual([]);
+    expect(mockEnsureBaselineDatasetSeeded).not.toHaveBeenCalled();
     expect(insertValues).toHaveLength(0);
     expect(selectWheres).toHaveLength(0);
   });
 
-  it("evalTestCases seeds the caller's own tenant on first visit", async () => {
+  it("evalTestCases seeds the caller's own tenant on first visit via the dataset seeder", async () => {
     const ctx = {
       auth: { authType: "cognito", tenantId: "tenant-seed-1" },
     } as any;
-    selectQueue.push([{ count: 0 }]); // yaml-seed probe: nothing seeded yet
     selectQueue.push([]); // final test-case listing
     const result = await evaluationsQueries.evalTestCases(
       {},
@@ -589,16 +595,58 @@ describe("eval query tenant scoping", () => {
       ctx,
     );
     expect(result).toEqual([]);
-    expect(insertValues).toHaveLength(1);
-    const seeded = insertValues[0] as Array<Record<string, unknown>>;
-    expect(seeded[0].tenant_id).toBe("tenant-seed-1");
+    expect(mockEnsureBaselineDatasetSeeded).toHaveBeenCalledWith(
+      "tenant-seed-1",
+    );
+  });
+
+  it("evalTestCases caches successful seeds per warm container (versioned key)", async () => {
+    const ctx = {
+      auth: { authType: "cognito", tenantId: "tenant-seed-cache" },
+    } as any;
+    selectQueue.push([]); // listing, first call
+    selectQueue.push([]); // listing, second call
+    await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-seed-cache" },
+      ctx,
+    );
+    await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-seed-cache" },
+      ctx,
+    );
+    expect(mockEnsureBaselineDatasetSeeded).toHaveBeenCalledTimes(1);
+  });
+
+  it("evalTestCases retries seeding on the next query when the seeder fails", async () => {
+    const ctx = {
+      auth: { authType: "cognito", tenantId: "tenant-seed-retry" },
+    } as any;
+    mockEnsureBaselineDatasetSeeded.mockRejectedValueOnce(
+      new Error("S3 unavailable"),
+    );
+    selectQueue.push([]); // listing still served on seed failure
+    selectQueue.push([]); // listing, second call
+    const first = await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-seed-retry" },
+      ctx,
+    );
+    expect(first).toEqual([]); // seed failure never takes down the listing
+    await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-seed-retry" },
+      ctx,
+    );
+    // Failure was not cached — the second query re-attempted the seed.
+    expect(mockEnsureBaselineDatasetSeeded).toHaveBeenCalledTimes(2);
   });
 
   it("evalTestCases pins the datasetId filter into the row conditions", async () => {
     const ctx = {
       auth: { authType: "cognito", tenantId: "tenant-ds-filter" },
     } as any;
-    selectQueue.push([{ count: 1 }]); // yaml-seed probe: already seeded
     selectQueue.push([]); // filtered test-case listing
     await evaluationsQueries.evalTestCases(
       {},
@@ -755,7 +803,41 @@ describe("eval mutation gating", () => {
         adminCtx,
       ),
     ).rejects.toThrow("Tenant admin role required");
+    expect(mockEnsureBaselineDatasetSeeded).not.toHaveBeenCalled();
     expect(insertValues).toHaveLength(0);
+  });
+
+  it("seedEvalTestCases routes through the dataset seeder and returns the inserted count", async () => {
+    mockEnsureBaselineDatasetSeeded.mockResolvedValue({
+      action: "seeded",
+      addedCaseIds: ["case-a"],
+      rehomed: 3,
+      inserted: 12,
+    });
+    const inserted = await evaluationsMutations.seedEvalTestCases(
+      {},
+      { tenantId: "tenant-1", categories: ["red-team-tool-misuse"] },
+      adminCtx,
+    );
+    expect(inserted).toBe(12);
+    expect(mockEnsureBaselineDatasetSeeded).toHaveBeenCalledWith("tenant-1", {
+      categories: ["red-team-tool-misuse"],
+    });
+    // The retired direct DB-insert path stays retired.
+    expect(insertValues).toHaveLength(0);
+  });
+
+  it("seedEvalTestCases surfaces seeder failures (explicit mutation, no swallow)", async () => {
+    mockEnsureBaselineDatasetSeeded.mockRejectedValue(
+      new Error("WORKSPACE_BUCKET environment variable is required"),
+    );
+    await expect(
+      evaluationsMutations.seedEvalTestCases(
+        {},
+        { tenantId: "tenant-1" },
+        adminCtx,
+      ),
+    ).rejects.toThrow("WORKSPACE_BUCKET");
   });
 
   it("admin in own tenant: startEvalRun inserts, resolves the agent, and invokes the runner", async () => {

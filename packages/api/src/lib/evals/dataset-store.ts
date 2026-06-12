@@ -66,6 +66,13 @@ import {
  */
 export const EVAL_DATASET_SLUG_RE = /^[a-z][a-z0-9-]{0,63}$/;
 
+/**
+ * Case ids share the slug alphabet but get a longer budget: baseline case
+ * ids are the historical seed case names (U5 identity-stability
+ * requirement) and the longest of the 189 is 67 chars.
+ */
+export const EVAL_DATASET_CASE_ID_RE = /^[a-z][a-z0-9-]{0,127}$/;
+
 export function assertValidDatasetSlug(slug: string): void {
   if (!EVAL_DATASET_SLUG_RE.test(slug)) {
     throw new Error(
@@ -75,9 +82,9 @@ export function assertValidDatasetSlug(slug: string): void {
 }
 
 export function assertValidCaseId(caseId: string): void {
-  if (!EVAL_DATASET_SLUG_RE.test(caseId)) {
+  if (!EVAL_DATASET_CASE_ID_RE.test(caseId)) {
     throw new Error(
-      `Invalid case id "${caseId}": must start with a lowercase letter and contain only a-z, 0-9, and hyphens (max 64 chars).`,
+      `Invalid case id "${caseId}": must start with a lowercase letter and contain only a-z, 0-9, and hyphens (max 128 chars).`,
     );
   }
 }
@@ -441,7 +448,7 @@ function caseRowsEqual(
   );
 }
 
-function caseFileToIndexRow(
+export function caseFileToIndexRow(
   caseId: string,
   parsed: ParsedEvalDatasetCase,
 ): DatasetCaseIndexRow {
