@@ -19,6 +19,7 @@ import {
   evalResults,
   evalRuns,
   evalTestCases,
+  tenants,
 } from "@thinkwork/database-pg/schema";
 import {
   CURRENT_EVAL_SCORING_VERSION,
@@ -42,6 +43,13 @@ import {
 } from "../lib/evals/workspace-projection-assertions.js";
 import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.js";
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
+import {
+  isEvalRunSnapshotKeyForRun,
+  parseEvalDatasetCase,
+  sha256Hex,
+  type DatasetStorage,
+} from "../lib/evals/dataset-store.js";
+import { createEvalDatasetStorageFromConfig } from "../lib/evals/run-launch.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const BUILT_IN_EVALUATOR_INPUT_USD_PER_1K = 0.0024;
@@ -50,6 +58,37 @@ export interface EvalWorkerMessage {
   runId: string;
   testCaseId: string;
   index?: number;
+  /**
+   * Dataset-pinned launches (Trust Core U6): the run-scoped S3 key the
+   * worker loads the case content from, plus its expected sha. Absent on
+   * legacy messages, which keep reading the eval_test_cases row.
+   */
+  snapshotKey?: string;
+  contentSha?: string;
+}
+
+/**
+ * Execution-facing shape of a case: either the eval_test_cases row
+ * (legacy messages) or the parsed run-scoped snapshot copy (pinned
+ * messages). `id` is always the eval_test_cases row uuid — result rows
+ * FK it for dedupe and trend history either way.
+ */
+export interface ExecutionCase {
+  id: string;
+  name: string;
+  query: string;
+  system_prompt: string | null;
+  assertions: unknown;
+  agentcore_evaluator_ids: string[] | null;
+}
+
+let snapshotStorageForTests: DatasetStorage | undefined;
+
+/** Test seam: pinned-case tests inject an in-memory storage fake. */
+export function _setSnapshotStorageForTests(
+  storage: DatasetStorage | undefined,
+): void {
+  snapshotStorageForTests = storage;
 }
 
 interface CaseOutcome {
@@ -81,6 +120,14 @@ export function parseEvalWorkerMessage(body: string): EvalWorkerMessage {
     runId: parsed.runId,
     testCaseId: parsed.testCaseId,
     index: typeof parsed.index === "number" ? parsed.index : undefined,
+    snapshotKey:
+      typeof parsed.snapshotKey === "string" && parsed.snapshotKey.length > 0
+        ? parsed.snapshotKey
+        : undefined,
+    contentSha:
+      typeof parsed.contentSha === "string" && parsed.contentSha.length > 0
+        ? parsed.contentSha
+        : undefined,
   };
 }
 
@@ -311,9 +358,76 @@ async function builtInEvaluatorResults(
   return evaluatorIds.map(skippedBuiltInEvaluator);
 }
 
+/**
+ * Pinned-case load (Trust Core U6): dataset-pinned messages carry a
+ * run-scoped snapshot key. Reject any key resolving outside the run's
+ * guarded tenant prefix BEFORE any S3 fetch, verify the fetched content
+ * sha against the message's expected sha, and parse the engine-neutral
+ * case file. Every failure is error/infra_other — never a behavioral
+ * fail, never an SQS redrive (retrying cannot fix a bad reference).
+ */
+async function loadPinnedCase(
+  run: typeof evalRuns.$inferSelect,
+  message: EvalWorkerMessage,
+): Promise<
+  | { ok: true; executionCase: ExecutionCase }
+  | { ok: false; errorMessage: string }
+> {
+  const snapshotKey = message.snapshotKey as string;
+  const db = getDb();
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, run.tenant_id));
+  if (!tenant?.slug) {
+    return {
+      ok: false,
+      errorMessage: `tenant ${run.tenant_id} has no slug; cannot resolve run snapshot`,
+    };
+  }
+  if (!isEvalRunSnapshotKeyForRun(snapshotKey, tenant.slug, run.id)) {
+    // No fetch: the reference points outside this run's guarded prefix.
+    return {
+      ok: false,
+      errorMessage: `eval snapshot key rejected (outside run snapshot prefix): ${snapshotKey}`,
+    };
+  }
+
+  const storage =
+    snapshotStorageForTests ?? createEvalDatasetStorageFromConfig();
+  const content = await storage.read(snapshotKey);
+  if (content == null) {
+    return {
+      ok: false,
+      errorMessage: `run snapshot object missing: ${snapshotKey}`,
+    };
+  }
+  if (message.contentSha && sha256Hex(content) !== message.contentSha) {
+    return {
+      ok: false,
+      errorMessage: `run snapshot content sha mismatch for ${snapshotKey}`,
+    };
+  }
+
+  const parsed = parseEvalDatasetCase(content);
+  return {
+    ok: true,
+    executionCase: {
+      id: message.testCaseId,
+      name: parsed.core.name,
+      query: parsed.core.query,
+      system_prompt: parsed.core.system_prompt,
+      assertions: parsed.core.assertions,
+      // Engine evaluator ids come from the case file's engines.agentcore
+      // block for pinned cases — never the live index row.
+      agentcore_evaluator_ids: parsed.engines?.agentcore?.evaluator_ids ?? [],
+    },
+  };
+}
+
 async function executeCase(
   run: typeof evalRuns.$inferSelect,
-  tc: typeof evalTestCases.$inferSelect,
+  tc: ExecutionCase,
   message: EvalWorkerMessage,
   options: { finalReceive: boolean },
 ): Promise<CaseOutcome> {
@@ -563,7 +677,43 @@ async function handleMessage(
     );
   }
 
-  const outcome = await executeCase(run, tc, message, options);
+  // Dataset-pinned messages execute the launch-time copy (Trust Core
+  // U6); the live eval_test_cases content is never used for them — a
+  // mid-run edit or tombstone cannot change what this case runs against.
+  let executionCase: ExecutionCase = tc;
+  let outcome: CaseOutcome;
+  if (message.snapshotKey) {
+    const pinned = await loadPinnedCase(run, message);
+    if (!pinned.ok) {
+      console.error(
+        `[eval-worker] pinned case load failed for run ${message.runId}:`,
+        pinned.errorMessage,
+      );
+      outcome = {
+        status: "error",
+        errorCause: "infra_other",
+        score: null,
+        assertionResults: [],
+        evaluatorResults: [],
+        actualOutput: "",
+        systemPrompt: null,
+        durationMs: 0,
+        errorMessage: pinned.errorMessage,
+        costUsd: 0,
+        sessionId: uniqueSessionId(
+          message.runId,
+          message.testCaseId,
+          message.index ?? 0,
+        ),
+        threadTurnId: null,
+      };
+    } else {
+      executionCase = pinned.executionCase;
+      outcome = await executeCase(run, executionCase, message, options);
+    }
+  } else {
+    outcome = await executeCase(run, executionCase, message, options);
+  }
 
   const [freshRun] = await db
     .select({ status: evalRuns.status })
@@ -598,7 +748,7 @@ async function handleMessage(
       duration_ms: outcome.durationMs,
       agent_session_id: outcome.sessionId,
       thread_turn_id: outcome.threadTurnId,
-      input: tc.query,
+      input: executionCase.query,
       expected: null,
       actual_output: outcome.actualOutput,
       system_prompt: outcome.systemPrompt,

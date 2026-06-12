@@ -81,6 +81,13 @@ type EvalRun {
   model: String
   categories: [String!]!
   selectedTestCaseIds: [ID!]!
+  # Run scope pinning (Trust Core U6). Dataset launches record the
+  # dataset id at creation; the eval-runner pins the manifest version
+  # when it captures the run snapshot (copy-at-launch), so the run
+  # executes exactly the dataset version it was launched with. Both null
+  # on legacy category/test-case launches.
+  datasetId: ID
+  datasetVersion: Int
   totalTests: Int!
   passed: Int!
   failed: Int!
@@ -268,6 +275,11 @@ input StartEvalRunInput {
   categories: [String!]
   # Subset of test case IDs to run; empty = use the categories filter above.
   testCaseIds: [ID!]
+  # Dataset launch (Trust Core U6): the run pins the dataset version +
+  # case scope at launch and executes run-scoped copies — mid-run dataset
+  # edits cannot change what the run scores. Mutually exclusive with
+  # categories/testCaseIds.
+  datasetSlug: String
 }
 
 # ────────────────────────────────────────────────────────────────────

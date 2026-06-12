@@ -140,6 +140,53 @@ export function isEvalDatasetsKey(key: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Run snapshot keys (Trust Core U6)
+//
+// Launch copies each enabled case's content to a run-scoped location so
+// workers execute exactly the dataset version pinned at launch — the live
+// dataset prefix is never read after launch. The `.runs/` folder sits
+// INSIDE the guarded eval-datasets prefix, so the Pi-role IAM Deny, the
+// deletion lifecycle, and tenant teardown cover the copies by
+// construction. The leading dot can never collide with a dataset slug:
+// EVAL_DATASET_SLUG_RE requires a leading lowercase letter.
+// ---------------------------------------------------------------------------
+
+const RUN_SNAPSHOT_FOLDER = ".runs";
+
+export function evalRunSnapshotPrefix(
+  tenantSlug: string,
+  runId: string,
+): string {
+  return `${evalDatasetsRootPrefix(tenantSlug)}${RUN_SNAPSHOT_FOLDER}/${runId}/`;
+}
+
+export function evalRunSnapshotCaseKey(
+  tenantSlug: string,
+  runId: string,
+  caseId: string,
+): string {
+  return `${evalRunSnapshotPrefix(tenantSlug, runId)}cases/${caseId}.json`;
+}
+
+/**
+ * Strict worker-side guard for snapshot references arriving on SQS
+ * messages (untrusted by policy): the key must sit exactly inside THIS
+ * run's snapshot prefix for THIS tenant and name a valid case file —
+ * anything else is rejected before any S3 fetch (error/infra_other).
+ */
+export function isEvalRunSnapshotKeyForRun(
+  key: string,
+  tenantSlug: string,
+  runId: string,
+): boolean {
+  const prefix = evalRunSnapshotPrefix(tenantSlug, runId);
+  if (!key.startsWith(prefix)) return false;
+  const rel = key.slice(prefix.length);
+  const match = rel.match(/^cases\/([a-z][a-z0-9-]{0,127})\.json$/);
+  return match !== null && EVAL_DATASET_CASE_ID_RE.test(match[1]);
+}
+
+// ---------------------------------------------------------------------------
 // Canonical formats — manifest + case file
 // ---------------------------------------------------------------------------
 

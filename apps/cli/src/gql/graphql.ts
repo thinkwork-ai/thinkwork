@@ -1261,6 +1261,8 @@ export type EvalRun = {
   completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   costUsd?: Maybe<Scalars["Float"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
+  datasetId?: Maybe<Scalars["ID"]["output"]>;
+  datasetVersion?: Maybe<Scalars["Int"]["output"]>;
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   errored?: Maybe<Scalars["Int"]["output"]>;
   executionTarget: Scalars["String"]["output"];
@@ -5720,6 +5722,7 @@ export type StartDeploymentReleaseUpdateInput = {
 
 export type StartEvalRunInput = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  datasetSlug?: InputMaybe<Scalars["String"]["input"]>;
   model?: InputMaybe<Scalars["String"]["input"]>;
   testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
 };

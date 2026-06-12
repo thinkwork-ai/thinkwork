@@ -171,6 +171,18 @@ export const evalRuns = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::uuid[]`),
+    // Run scope pinning (Trust Core U6). Dataset launches record the
+    // dataset id at creation; the eval-runner pins dataset_version and
+    // pinned_case_ids (the resolved dataset_case_ids) when it captures
+    // the run snapshot, *before* fan-out. Case content is COPIED at
+    // launch to the run snapshot prefix
+    // tenants/<slug>/eval-datasets/.runs/<run-id>/ in S3 — workers never
+    // read the live dataset prefix after launch. ON DELETE NO ACTION by
+    // design: datasets soft-archive, never hard-delete while runs pin
+    // them. All three null on legacy category/test-case launches.
+    dataset_id: uuid("dataset_id").references(() => evalDatasets.id),
+    dataset_version: integer("dataset_version"),
+    pinned_case_ids: text("pinned_case_ids").array(),
     total_tests: integer("total_tests").notNull().default(0),
     passed: integer("passed").notNull().default(0),
     failed: integer("failed").notNull().default(0),
@@ -328,6 +340,10 @@ export const evalRunsRelations = relations(evalRuns, ({ one, many }) => ({
   tenant: one(tenants, {
     fields: [evalRuns.tenant_id],
     references: [tenants.id],
+  }),
+  dataset: one(evalDatasets, {
+    fields: [evalRuns.dataset_id],
+    references: [evalDatasets.id],
   }),
   agent: one(agents, {
     fields: [evalRuns.agent_id],
