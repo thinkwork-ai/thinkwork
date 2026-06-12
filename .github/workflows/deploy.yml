@@ -2181,7 +2181,19 @@ jobs:
           state_machine_arn="$(tf_output_raw deployment_state_machine_arn 2>/dev/null || echo "")"
           runner_project_name="$(tf_output_raw deployment_runner_project_name 2>/dev/null || echo "")"
           release_tag="$(git tag --points-at "$GITHUB_SHA" --list 'v*' --sort=-version:refname | head -1 || true)"
-          release_version="${release_tag:-source-${GITHUB_SHA:0:12}}"
+          release_version=""
+          if [ -z "$release_tag" ]; then
+            # Dev deploys from source on every merge, so the deployed commit
+            # is rarely an exact tag commit. Describe against the nearest
+            # reachable release tag so the operator-facing label stays
+            # version-shaped (v0.1.0-canary.175+2 = two merges past
+            # canary.175) instead of an opaque source-<sha> marker.
+            described="$(git describe --tags --match 'v*' "$GITHUB_SHA" 2>/dev/null || true)"
+            if [[ "$described" =~ ^(v.+)-([0-9]+)-g[0-9a-f]+$ ]]; then
+              release_version="${BASH_REMATCH[1]}+${BASH_REMATCH[2]}"
+            fi
+          fi
+          release_version="${release_version:-${release_tag:-source-${GITHUB_SHA:0:12}}}"
           manifest_url=""
           manifest_sha256=""
 
