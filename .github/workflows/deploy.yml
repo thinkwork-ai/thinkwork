@@ -1351,17 +1351,6 @@ jobs:
           delete_secret_if_present "${TWENTY_DB_URL_SECRET_ARN:-$TWENTY_DB_URL_SECRET_ID}" "database URL"
           delete_secret_if_present "${TWENTY_ENCRYPTION_KEY_SECRET_ARN:-$TWENTY_ENCRYPTION_KEY_SECRET_ID}" "encryption key"
 
-      - name: Update Pi AgentCore runtime
-        run: |
-          set -euo pipefail
-          REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/thinkwork-${{ env.STAGE }}-agentcore"
-          bash scripts/update-agentcore-runtime-image.sh \
-            --stage ${{ env.STAGE }} \
-            --region ${{ env.AWS_REGION }} \
-            --runtime pi \
-            --image "${REPO}:${{ github.sha }}-pi-arm64" \
-            --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
-            --wait-seconds 900
 
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after

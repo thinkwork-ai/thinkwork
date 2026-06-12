@@ -622,10 +622,14 @@ export async function startActivation(
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
-  // RFC 8707 permits repeating `resource` in the authorization request;
-  // each token exchange then names the single resource it wants.
-  for (const resource of resources) {
-    authorizeUrl.searchParams.append("resource", resource);
+  // RFC 8707 permits repeating `resource` in the authorization request, but
+  // WorkOS AuthKit rejects repeated params with `invalid_query_params`
+  // (observed live 2026-06-12). The authorize leg names only the primary
+  // resource; the remaining resources mint via refresh-token grants in
+  // completeActivation, with the sharedAudience fallback when re-mints are
+  // unsupported. `state.resources` still carries the full list.
+  if (resources.length > 0) {
+    authorizeUrl.searchParams.set("resource", resources[0]);
   }
 
   return { authorizeUrl: authorizeUrl.toString() };
