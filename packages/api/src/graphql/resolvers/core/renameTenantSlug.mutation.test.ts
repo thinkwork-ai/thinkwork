@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RESERVED_TENANT_SLUGS } from "@thinkwork/database-pg/utils/reserved-slugs";
+import { formatClaimComment } from "@thinkwork/namespace-registry";
 import { db } from "../../utils.js";
 import { requireTenantAdmin } from "./authz.js";
 import { renameTenantSlug } from "./renameTenantSlug.mutation.js";
+import { __setNamespaceCheckDepsForTests } from "./tenantSlugValidation.js";
 
 const {
   selectRowsQueue,
@@ -92,6 +94,10 @@ async function call(newSlug: string, ctx = cognitoCtx()) {
   ) as Promise<Record<string, unknown>>;
 }
 
+// Namespace-check injection (plan 2026-06-12-002 U5): default = free name.
+const namespaceListRecords = vi.fn();
+const namespaceResolveToken = vi.fn();
+
 describe("renameTenantSlug", () => {
   beforeEach(() => {
     selectRowsQueue.length = 0;
@@ -101,6 +107,17 @@ describe("renameTenantSlug", () => {
     vi.mocked(dbMock.select).mockClear();
     vi.mocked(dbMock.update).mockClear();
     requireTenantAdminMock.mockResolvedValue("admin");
+    namespaceListRecords.mockReset().mockResolvedValue([]);
+    namespaceResolveToken.mockReset().mockResolvedValue("cf-token");
+    __setNamespaceCheckDepsForTests({
+      resolveToken: namespaceResolveToken,
+      createDns: () => ({ listRecords: namespaceListRecords }),
+    });
+  });
+
+  afterEach(() => {
+    __setNamespaceCheckDepsForTests(null);
+    vi.restoreAllMocks();
   });
 
   it("renames an admin's tenant to an available slug", async () => {
@@ -157,6 +174,46 @@ describe("renameTenantSlug", () => {
       expect(dbMock.update).not.toHaveBeenCalled();
     },
   );
+
+  it("rejects renaming to a deployment-claimed namespace name (AE1, rename path)", async () => {
+    namespaceListRecords.mockResolvedValue([
+      {
+        id: "rec-1",
+        type: "NS",
+        name: "tei.thinkwork.ai",
+        content: "ns-123.awsdns-01.com",
+        comment: formatClaimComment({
+          kind: "deployment",
+          owner: "tei-deploy",
+          created: "2026-06-12",
+        }),
+      },
+    ]);
+
+    const error = await call("tei").then(
+      () => {
+        throw new Error("expected renameTenantSlug to reject");
+      },
+      (err) => err,
+    );
+
+    expect(error.extensions).toMatchObject({ code: "SLUG_UNAVAILABLE" });
+    // R5 — no record comment / deployment-owner leakage in the response.
+    expect(
+      JSON.stringify({ message: error.message, ext: error.extensions }),
+    ).not.toContain("tei-deploy");
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("fails CLOSED on a Cloudflare API error — no rename happens", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    namespaceListRecords.mockRejectedValue(new Error("cloudflare 500"));
+
+    await expect(call("acme")).rejects.toMatchObject({
+      extensions: { code: "SLUG_VALIDATION_UNAVAILABLE" },
+    });
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
 
   it("rejects a slug already held by another tenant", async () => {
     selectRowsQueue.push([tenantRow()], [{ id: "tenant-2" }]);

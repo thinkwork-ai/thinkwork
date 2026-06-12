@@ -899,6 +899,182 @@ def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default
     assert vars_json_default["app_certificate_arn"] == ""
 
 
+def test_write_runner_files_threads_customer_domain_vars_from_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "customerDomain": "tei.thinkwork.ai",
+            "customerDomainDelegated": True,
+            "customerDomainLegacyRetired": False,
+        },
+        {},
+    )
+
+    assert vars_json["customer_domain"] == "tei.thinkwork.ai"
+    assert vars_json["customer_domain_delegated"] is True
+    assert vars_json["customer_domain_legacy_retired"] is False
+
+    # Booleans must survive the tfvars round-trip as real JSON booleans —
+    # the generated root declares them `type = bool` and rejects strings.
+    tfvars = json.loads((tf_dir / "terraform.auto.tfvars.json").read_text(encoding="utf-8"))
+    assert tfvars["customer_domain"] == "tei.thinkwork.ai"
+    assert tfvars["customer_domain_delegated"] is True
+    assert tfvars["customer_domain_legacy_retired"] is False
+
+    # All four wiring points: vars_json (above), root variable declarations,
+    # module arguments, and the aliased us-east-1 provider + providers mapping
+    # the thinkwork module's configuration_aliases requires.
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+    for name in (
+        "customer_domain",
+        "customer_domain_delegated",
+        "customer_domain_legacy_retired",
+    ):
+        assert f'variable "{name}"' in main_tf
+        assert f"= var.{name}" in main_tf
+    assert 'variable "customer_domain_delegated" {\n  type = bool\n}' in main_tf
+    assert 'variable "customer_domain_legacy_retired" {\n  type = bool\n}' in main_tf
+    assert 'alias  = "us_east_1"' in main_tf
+    assert 'region = "us-east-1"' in main_tf
+    assert "aws.us_east_1 = aws.us_east_1" in main_tf
+
+
+def test_write_runner_files_without_domain_keeps_defaults_and_provider_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {},
+    )
+
+    assert vars_json["customer_domain"] == ""
+    assert vars_json["customer_domain_delegated"] is False
+    assert vars_json["customer_domain_legacy_retired"] is False
+
+    tfvars = json.loads((tf_dir / "terraform.auto.tfvars.json").read_text(encoding="utf-8"))
+    assert tfvars["customer_domain"] == ""
+    assert tfvars["customer_domain_delegated"] is False
+    assert tfvars["customer_domain_legacy_retired"] is False
+
+    # The thinkwork module requires the us-east-1 alias unconditionally, so
+    # the provider block and providers mapping must exist even without a
+    # customer domain.
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+    assert 'alias  = "us_east_1"' in main_tf
+    assert "aws.us_east_1 = aws.us_east_1" in main_tf
+
+    # KTD7: the inert cloudflare provider is gone from generated roots —
+    # customer accounts never hold Cloudflare credentials.
+    assert "cloudflare" not in main_tf
+
+
+def test_write_runner_files_customer_domain_prefers_secrets_and_coerces_booleans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "customerDomain": "payload.thinkwork.ai",
+            "customerDomainDelegated": False,
+            "customerDomainLegacyRetired": True,
+        },
+        {
+            "customerDomain": "secret.thinkwork.ai",
+            # Secrets Manager JSON values arrive as strings; they must land
+            # in vars_json as real booleans.
+            "customerDomainDelegated": "true",
+            "customerDomainLegacyRetired": "false",
+        },
+    )
+
+    assert vars_json["customer_domain"] == "secret.thinkwork.ai"
+    assert vars_json["customer_domain_delegated"] is True
+    assert vars_json["customer_domain_legacy_retired"] is False
+
+
+def test_write_evidence_records_consumed_domain_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("THINKWORK_EVIDENCE_BUCKET", raising=False)
+    monkeypatch.delenv("THINKWORK_EVIDENCE_PREFIX", raising=False)
+    monkeypatch.delenv("THINKWORK_DEPLOYMENT_ACTION", raising=False)
+
+    runner.write_evidence(
+        "succeeded",
+        {
+            "stage": "tei-e2e",
+            "account_id": "637423202447",
+            "region": "us-east-1",
+            "customer_domain": "tei.thinkwork.ai",
+            "customer_domain_delegated": True,
+            "customer_domain_legacy_retired": False,
+        },
+        0,
+    )
+
+    evidence = json.loads((tmp_path / "deployment-evidence.json").read_text(encoding="utf-8"))
+    assert evidence["consumedDomainFields"] == {
+        "customerDomain": "tei.thinkwork.ai",
+        "customerDomainDelegated": True,
+        "customerDomainLegacyRetired": False,
+    }
+    assert evidence["consumedDomainFields"]["customerDomainDelegated"] is True
+    assert evidence["consumedDomainFields"]["customerDomainLegacyRetired"] is False
+
+
+def test_write_evidence_omits_consumed_domain_fields_without_domain_vars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("THINKWORK_EVIDENCE_BUCKET", raising=False)
+    monkeypatch.delenv("THINKWORK_EVIDENCE_PREFIX", raising=False)
+    monkeypatch.delenv("THINKWORK_DEPLOYMENT_ACTION", raising=False)
+
+    # The status action builds a minimal vars_json without domain keys — an
+    # old-runner-shaped evidence document must stay distinguishable from a
+    # new runner that consumed an empty domain.
+    runner.write_evidence(
+        "succeeded",
+        {
+            "stage": "tei-e2e",
+            "account_id": "637423202447",
+            "region": "us-east-1",
+        },
+        0,
+    )
+
+    evidence = json.loads((tmp_path / "deployment-evidence.json").read_text(encoding="utf-8"))
+    assert "consumedDomainFields" not in evidence
+
+
 def test_registry_module_source_checks_out_release_manifest_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

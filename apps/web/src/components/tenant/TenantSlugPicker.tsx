@@ -43,6 +43,9 @@ export function tenantSlugServerError(code: unknown, fallback: string): string {
   if (code === "FORBIDDEN") {
     return "You do not have permission to rename this tenant.";
   }
+  if (code === "SLUG_VALIDATION_UNAVAILABLE") {
+    return "Slug availability could not be confirmed — please try again.";
+  }
   return fallback;
 }
 

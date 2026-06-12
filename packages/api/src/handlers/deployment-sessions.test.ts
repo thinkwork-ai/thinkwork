@@ -59,6 +59,10 @@ const { mockSecretsSend } = vi.hoisted(() => ({
   mockSecretsSend: vi.fn(),
 }));
 
+const { mockS3Send } = vi.hoisted(() => ({
+  mockS3Send: vi.fn(),
+}));
+
 vi.mock("../lib/db.js", () => ({
   db: mockDb,
 }));
@@ -68,6 +72,18 @@ vi.mock("@aws-sdk/client-sfn", () => ({
     send = mockSfnSend;
   },
   StartExecutionCommand: class StartExecutionCommand {
+    input: unknown;
+    constructor(input: unknown) {
+      this.input = input;
+    }
+  },
+}));
+
+vi.mock("@aws-sdk/client-s3", () => ({
+  S3Client: class {
+    send = mockS3Send;
+  },
+  GetObjectCommand: class GetObjectCommand {
     input: unknown;
     constructor(input: unknown) {
       this.input = input;
@@ -105,6 +121,7 @@ beforeEach(async () => {
   updateCalls.length = 0;
   mockSfnSend.mockReset();
   mockSecretsSend.mockReset();
+  mockS3Send.mockReset();
   mod = await import("./deployment-sessions.js");
 });
 
@@ -765,6 +782,315 @@ describe("deployment session handler", () => {
     };
     expect(command.input.stateMachineArn).toContain("thinkwork-tei-e2e");
   });
+
+  it("threads customer domain fields from session_config into the controller input", async () => {
+    vi.stubEnv(
+      "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN",
+      "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment-orchestrator",
+    );
+    vi.stubEnv("THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET", "thinkwork-evidence");
+    vi.stubEnv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.134");
+    vi.stubEnv(
+      "THINKWORK_RELEASE_MANIFEST_URL",
+      "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
+    );
+    vi.stubEnv("THINKWORK_RELEASE_MANIFEST_SHA256", "b".repeat(64));
+    mockSfnSend.mockResolvedValue({ executionArn: "arn:execution" });
+    const session = sessionRow({
+      session_config: {
+        customerDomain: "tei.thinkwork.ai",
+        customerDomainDelegated: true,
+        customerDomainLegacyRetired: false,
+      },
+    });
+    selectQueue.push([session]);
+    returningQueue.push([{ ...session, status: "deploying" }]);
+    selectQueue.push([
+      { id: "event-1", event_type: "deployment_execution_started" },
+    ]);
+
+    const response = await mod.handler(
+      event(
+        "POST",
+        `/api/deployment-sessions/${SESSION_ID}/start`,
+        {},
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const command = mockSfnSend.mock.calls[0]?.[0] as {
+      input: { input: string };
+    };
+    const payload = JSON.parse(command.input.input);
+    expect(payload.customerDomain).toBe("tei.thinkwork.ai");
+    expect(payload.customerDomainDelegated).toBe(true);
+    expect(payload.customerDomainLegacyRetired).toBe(false);
+  });
+
+  it("sends empty customer domain defaults when the session has none configured", async () => {
+    vi.stubEnv(
+      "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN",
+      "arn:aws:states:us-east-1:123456789012:stateMachine:thinkwork-dev-deployment-orchestrator",
+    );
+    mockSfnSend.mockResolvedValue({ executionArn: "arn:execution" });
+    const session = sessionRow();
+    selectQueue.push([session]);
+    returningQueue.push([{ ...session, status: "deploying" }]);
+    selectQueue.push([
+      { id: "event-1", event_type: "deployment_execution_started" },
+    ]);
+
+    await mod.handler(
+      event(
+        "POST",
+        `/api/deployment-sessions/${SESSION_ID}/start`,
+        {},
+        { "x-thinkwork-deployment-token": "correct-token" },
+      ),
+    );
+
+    const command = mockSfnSend.mock.calls[0]?.[0] as {
+      input: { input: string };
+    };
+    const payload = JSON.parse(command.input.input);
+    expect(payload.customerDomain).toBe("");
+    expect(payload.customerDomainDelegated).toBe(false);
+    expect(payload.customerDomainLegacyRetired).toBe(false);
+  });
+
+  it("fails a domain-requesting run when evidence lacks the echoed domain fields", async () => {
+    const session = domainDeployingSessionRow();
+    selectQueue.push([session]);
+    // Old-runner evidence: no consumedDomainFields key at all.
+    mockS3Send.mockResolvedValue(
+      evidenceObject({ status: "running", sessionId: SESSION_ID }),
+    );
+    returningQueue.push([
+      {
+        ...session,
+        status: "failed",
+        error_message: "runner version skew",
+      },
+    ]);
+    selectQueue.push([
+      { id: "event-1", event_type: "domain_fields_echo_missing" },
+    ]);
+
+    const response = await mod.handler(
+      event("GET", `/api/deployment-sessions/${SESSION_ID}`, undefined, {
+        "x-thinkwork-deployment-token": "correct-token",
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const getCommand = mockS3Send.mock.calls[0]?.[0] as {
+      input: Record<string, unknown>;
+    };
+    expect(getCommand.input).toEqual({
+      Bucket: "thinkwork-evidence",
+      Key: `sessions/${SESSION_ID}/deploy/deployment-evidence.json`,
+    });
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "failed",
+          error_message: expect.stringContaining("runner version skew"),
+        }),
+      ]),
+    );
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event_type: "domain_fields_echo_missing",
+        }),
+      ]),
+    );
+    expect(JSON.parse(response.body || "{}").session.status).toBe("failed");
+  });
+
+  it("surfaces the runner's own error when failed evidence lacks the echoed domain fields", async () => {
+    const session = domainDeployingSessionRow();
+    selectQueue.push([session]);
+    // Catch-all failure write: runner.py writes status:"failed" + error with
+    // no vars_json on ANY uncaught exception, so consumedDomainFields is
+    // absent even on an up-to-date runner.
+    mockS3Send.mockResolvedValue(
+      evidenceObject({
+        status: "failed",
+        sessionId: SESSION_ID,
+        error: "terraform init failed: backend bucket unreachable",
+      }),
+    );
+    returningQueue.push([
+      {
+        ...session,
+        status: "failed",
+        error_message: "terraform init failed",
+      },
+    ]);
+    selectQueue.push([
+      { id: "event-1", event_type: "domain_fields_echo_missing" },
+    ]);
+
+    const response = await mod.handler(
+      event("GET", `/api/deployment-sessions/${SESSION_ID}`, undefined, {
+        "x-thinkwork-deployment-token": "correct-token",
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "failed",
+          error_message: expect.stringContaining(
+            "terraform init failed: backend bucket unreachable",
+          ),
+        }),
+      ]),
+    );
+    const failedUpdate = updateCalls.find(
+      (call) => call.status === "failed",
+    ) as { error_message: string };
+    expect(failedUpdate.error_message).not.toContain("version skew");
+    expect(failedUpdate.error_message).toContain("also not echoed");
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event_type: "domain_fields_echo_missing",
+        }),
+      ]),
+    );
+  });
+
+  it("records the echo verification when evidence carries the consumed domain fields", async () => {
+    const session = domainDeployingSessionRow();
+    selectQueue.push([session]);
+    mockS3Send.mockResolvedValue(
+      evidenceObject({
+        status: "running",
+        sessionId: SESSION_ID,
+        consumedDomainFields: {
+          customerDomain: "tei.thinkwork.ai",
+          customerDomainDelegated: true,
+          customerDomainLegacyRetired: false,
+        },
+      }),
+    );
+    returningQueue.push([session]);
+    selectQueue.push([{ id: "event-1", event_type: "domain_fields_echoed" }]);
+
+    const response = await mod.handler(
+      event("GET", `/api/deployment-sessions/${SESSION_ID}`, undefined, {
+        "x-thinkwork-deployment-token": "correct-token",
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(updateCalls).toEqual([
+      expect.objectContaining({
+        session_config: expect.objectContaining({
+          domainFieldsEcho: expect.objectContaining({
+            verifiedAt: expect.any(String),
+            consumedDomainFields: expect.objectContaining({
+              customerDomain: "tei.thinkwork.ai",
+              customerDomainDelegated: true,
+              customerDomainLegacyRetired: false,
+            }),
+          }),
+        }),
+      }),
+    ]);
+    expect(updateCalls).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ status: "failed" })]),
+    );
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ event_type: "domain_fields_echoed" }),
+      ]),
+    );
+  });
+
+  it("leaves a domain-requesting run untouched while evidence is not written yet", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const session = domainDeployingSessionRow();
+    selectQueue.push([session]);
+    mockS3Send.mockRejectedValue(
+      Object.assign(new Error("The specified key does not exist."), {
+        name: "NoSuchKey",
+      }),
+    );
+    selectQueue.push([]);
+
+    const response = await mod.handler(
+      event("GET", `/api/deployment-sessions/${SESSION_ID}`, undefined, {
+        "x-thinkwork-deployment-token": "correct-token",
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(updateCalls).toEqual([]);
+    expect(JSON.parse(response.body || "{}").session.status).toBe("deploying");
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("logs unexpected evidence-read errors without failing the read path", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const session = domainDeployingSessionRow();
+    selectQueue.push([session]);
+    mockS3Send.mockRejectedValue(
+      Object.assign(new Error("Access Denied"), { name: "AccessDenied" }),
+    );
+    selectQueue.push([]);
+
+    const response = await mod.handler(
+      event("GET", `/api/deployment-sessions/${SESSION_ID}`, undefined, {
+        "x-thinkwork-deployment-token": "correct-token",
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(updateCalls).toEqual([]);
+    expect(JSON.parse(response.body || "{}").session.status).toBe("deploying");
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining(
+        `s3://thinkwork-evidence/sessions/${SESSION_ID}/deploy/deployment-evidence.json`,
+      ),
+      expect.objectContaining({ name: "AccessDenied" }),
+    );
+    consoleError.mockRestore();
+  });
+
+  it("skips the echo guard when the session requested no customer domain", async () => {
+    const session = sessionRow({
+      status: "deploying",
+      session_config: {
+        deploymentRun: {
+          executionArn: "arn:execution",
+          evidenceBucket: "thinkwork-evidence",
+          evidencePrefix: `sessions/${SESSION_ID}/deploy`,
+        },
+      },
+    });
+    selectQueue.push([session]);
+    selectQueue.push([]);
+
+    const response = await mod.handler(
+      event("GET", `/api/deployment-sessions/${SESSION_ID}`, undefined, {
+        "x-thinkwork-deployment-token": "correct-token",
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(mockS3Send).not.toHaveBeenCalled();
+    expect(updateCalls).toEqual([]);
+  });
 });
 
 function event(
@@ -809,6 +1135,30 @@ function sessionRow(overrides: Record<string, unknown> = {}) {
     created_at: "2026-06-08T00:00:00.000Z",
     updated_at: "2026-06-08T00:00:00.000Z",
     ...overrides,
+  };
+}
+
+function domainDeployingSessionRow() {
+  return sessionRow({
+    status: "deploying",
+    session_config: {
+      customerDomain: "tei.thinkwork.ai",
+      customerDomainDelegated: true,
+      customerDomainLegacyRetired: false,
+      deploymentRun: {
+        executionArn: "arn:execution",
+        evidenceBucket: "thinkwork-evidence",
+        evidencePrefix: `sessions/${SESSION_ID}/deploy`,
+      },
+    },
+  });
+}
+
+function evidenceObject(evidence: Record<string, unknown>) {
+  return {
+    Body: {
+      transformToString: async () => JSON.stringify(evidence),
+    },
   };
 }
 

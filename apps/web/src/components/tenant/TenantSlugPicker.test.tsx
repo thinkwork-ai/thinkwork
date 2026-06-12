@@ -50,6 +50,9 @@ describe("tenant slug helpers", () => {
     expect(tenantSlugServerError("FORBIDDEN", "fallback")).toBe(
       "You do not have permission to rename this tenant.",
     );
+    expect(
+      tenantSlugServerError("SLUG_VALIDATION_UNAVAILABLE", "fallback"),
+    ).toBe("Slug availability could not be confirmed — please try again.");
     expect(tenantSlugServerError("UNKNOWN", "fallback")).toBe("fallback");
   });
 });

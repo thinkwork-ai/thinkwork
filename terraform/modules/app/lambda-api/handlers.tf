@@ -1648,6 +1648,46 @@ resource "aws_ssm_parameter" "google_places_api_key" {
   }
 }
 
+########################################################################
+# SecureString parameter for the graphql-http Lambda's OWN Cloudflare
+# namespace token (plan 2026-06-12-002 U5, KTD7). Tenant slug validation
+# lists records under <slug>.thinkwork.ai so signup cannot take a name
+# delegated to a customer deployment. The token is zone-scoped DNS:Edit
+# on thinkwork.ai, minted SEPARATELY from the CI CLOUDFLARE_API_TOKEN
+# (independent rotation; a signup-path compromise doesn't burn CI), and
+# is deliberately NOT a Lambda env var — graphql-http's env sits at the
+# 4KB ceiling (#2375) — nor a runtime-config document key (secrets stay
+# out of the plain String document).
+#
+# Seeded with a placeholder: @thinkwork/api treats the placeholder (or a
+# missing parameter) as "namespace check unconfigured" and SKIPS the
+# Cloudflare leg with a loud log (ship-inert posture, so pre-token dev
+# stages keep creating tenants). The customer-domain runbook makes the
+# real token mandatory for stages whose deployments share the namespace.
+# Populate/rotate via:
+#   aws ssm put-parameter --overwrite \
+#     --name /thinkwork/<stage>/cloudflare-namespace-token \
+#     --type SecureString --value <TOKEN>
+#
+# IAM: read access rides the existing ssm:GetParameter grant on
+# parameter/thinkwork/<stage>/* in aws_iam_policy.api_data_plane
+# (iam-grouped.tf), plus its kms:Decrypt-via-SSM statement.
+########################################################################
+
+resource "aws_ssm_parameter" "cloudflare_namespace_token" {
+  name        = "/thinkwork/${var.stage}/cloudflare-namespace-token"
+  type        = "SecureString"
+  value       = "PLACEHOLDER_SET_VIA_CLI"
+  description = "Zone-scoped Cloudflare DNS:Edit token for the thinkwork.ai namespace signup check (plan 2026-06-12-002 U5/KTD7). Placeholder = check skipped; set the real token via CLI."
+
+  lifecycle {
+    # Initial population and rotation happen via `aws ssm put-parameter
+    # --overwrite`, never via terraform var (the value must not transit
+    # tfvars / state more than necessary).
+    ignore_changes = [value]
+  }
+}
+
 resource "aws_ssm_parameter" "lambda_arns" {
   for_each = local.deploy_lambda_handlers ? {
     "chat-agent-invoke-fn-arn"    = aws_lambda_function.handler["chat-agent-invoke"].arn

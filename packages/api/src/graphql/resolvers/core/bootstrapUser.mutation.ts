@@ -26,6 +26,7 @@ import {
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { ensureTenantBootstrapDefaults } from "../../../lib/tenant-bootstrap-defaults.js";
+import { validateTenantSlug } from "./tenantSlugValidation.js";
 
 async function seedTenantBootstrapDefaults(tenantId: string, userId: string) {
   try {
@@ -69,7 +70,10 @@ export const bootstrapUser = async (
       : [];
 
     if (existingUser.tenant_id) {
-      await seedTenantBootstrapDefaults(existingUser.tenant_id, existingUser.id);
+      await seedTenantBootstrapDefaults(
+        existingUser.tenant_id,
+        existingUser.id,
+      );
     }
 
     return {
@@ -184,6 +188,11 @@ export const bootstrapUser = async (
   // Default path — no pending tenant, create a fresh free-tier workspace.
   const tenantName = `${name}'s Workspace`;
   const tenantSlug = generateSlug();
+
+  // Same validation path as createTenant/renameTenantSlug (plan
+  // 2026-06-12-002 U5): even generated slugs must clear the reserved list
+  // and the customer-domain namespace check before a tenant row exists.
+  await validateTenantSlug(tenantSlug);
 
   const [tenant] = await db
     .insert(tenants)

@@ -24,7 +24,7 @@ export const renameTenantSlug = async (
 
   await requireTenantAdmin(ctx, tenantId);
 
-  validateTenantSlug(newSlug);
+  await validateTenantSlug(newSlug);
 
   const [current] = await db
     .select()
