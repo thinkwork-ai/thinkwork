@@ -45,6 +45,10 @@ import {
   evaluationsMutations,
   evalResultTypeResolvers,
 } from "./evaluations/index.js";
+import {
+  evalDatasetQueries,
+  evalDatasetMutations,
+} from "./evaluations/datasets.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import {
@@ -103,6 +107,7 @@ export const queryResolvers: Record<string, any> = {
   ...memoryQueries,
   ...recipeQueries,
   ...evaluationsQueries,
+  ...evalDatasetQueries,
   ...wikiQueries,
   ...skillRunsQueries,
   ...skillCatalogQueries,
@@ -142,6 +147,7 @@ export const mutationResolvers: Record<string, any> = {
   ...memoryMutations,
   ...recipeMutations,
   ...evaluationsMutations,
+  ...evalDatasetMutations,
   ...wikiMutations,
   ...skillRunsMutations,
   ...skillCatalogMutations,

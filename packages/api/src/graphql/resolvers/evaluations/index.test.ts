@@ -594,6 +594,27 @@ describe("eval query tenant scoping", () => {
     expect(seeded[0].tenant_id).toBe("tenant-seed-1");
   });
 
+  it("evalTestCases pins the datasetId filter into the row conditions", async () => {
+    const ctx = {
+      auth: { authType: "cognito", tenantId: "tenant-ds-filter" },
+    } as any;
+    selectQueue.push([{ count: 1 }]); // yaml-seed probe: already seeded
+    selectQueue.push([]); // filtered test-case listing
+    await evaluationsQueries.evalTestCases(
+      {},
+      { tenantId: "tenant-ds-filter", datasetId: "ds-1" },
+      ctx,
+    );
+    const clause = selectWheres[selectWheres.length - 1] as any;
+    const conditions = clause.and as Array<{ eq?: unknown[] }>;
+    expect(
+      conditions.some(
+        (c) =>
+          c.eq?.[0] === evalTestCasesTable.dataset_id && c.eq?.[1] === "ds-1",
+      ),
+    ).toBe(true);
+  });
+
   it("resolves Google-federated callers via the fallback and scopes them", async () => {
     selectQueue.push([
       {

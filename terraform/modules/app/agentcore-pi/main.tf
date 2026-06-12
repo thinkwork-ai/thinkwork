@@ -61,6 +61,22 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         ]
       },
       {
+        # Eval datasets hold red-team answer keys and flagged-thread
+        # snapshots (PII) — never agent-readable. The grant above is
+        # bucket-wide, so application-level path resolution alone is one
+        # bug away from exposing them to the agent under test; this Deny
+        # is the enforcement layer (Evaluations Trust Core U4 KTD). Run
+        # snapshots live under the same prefix
+        # (tenants/<slug>/eval-datasets/.runs/<run-id>/) so they are
+        # covered by construction.
+        Sid    = "DenyEvalDatasetPrefix"
+        Effect = "Deny"
+        Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = [
+          "arn:aws:s3:::${var.bucket_name}/tenants/*/eval-datasets/*",
+        ]
+      },
+      {
         # Bedrock invoke spans foundation models, inference profiles, and
         # cross-region routing. The original
         # `arn:aws:bedrock:${region}::foundation-model/*` only covered

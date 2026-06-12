@@ -344,6 +344,8 @@ function testCaseToGraphql(row: Record<string, unknown>) {
     tags: row.tags ?? [],
     enabled: row.enabled,
     source: row.source,
+    datasetId: row.dataset_id ?? null,
+    datasetCaseId: row.dataset_case_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -640,7 +642,12 @@ const evalTimeSeries = async (
 
 const evalTestCasesQuery = async (
   _p: any,
-  args: { tenantId: string; category?: string | null; search?: string | null },
+  args: {
+    tenantId: string;
+    category?: string | null;
+    search?: string | null;
+    datasetId?: string | null;
+  },
   ctx: GraphQLContext,
 ) => {
   // Seeding is a write triggered by a read — never let it land in a
@@ -658,6 +665,10 @@ const evalTestCasesQuery = async (
 
   const conditions = [eq(evalTestCases.tenant_id, tenantId)];
   if (args.category) conditions.push(eq(evalTestCases.category, args.category));
+  // Dataset filter (Trust Core U4): restricts to one dataset's index rows
+  // (live + tombstoned — the enabled flag distinguishes them).
+  if (args.datasetId)
+    conditions.push(eq(evalTestCases.dataset_id, args.datasetId));
   if (args.search)
     conditions.push(
       sql`${evalTestCases.name} ILIKE ${"%" + args.search + "%"}`,

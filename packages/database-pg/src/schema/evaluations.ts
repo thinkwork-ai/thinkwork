@@ -22,11 +22,57 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants } from "./core";
 import { agents } from "./agents";
 import { scheduledJobs, threadTurns } from "./scheduled-jobs";
+
+// ---------------------------------------------------------------------------
+// eval_datasets — derived index of the S3-canonical dataset artifacts
+//
+// S3 is canonical (tenants/<slug>/eval-datasets/<dataset-slug>/ in the
+// workspace bucket); this table is a write-through projection synced by
+// packages/api/src/lib/evals/dataset-store.ts and must stay fully
+// reconstructible from S3 alone. Datasets soft-archive (archived_at) —
+// never hard-delete while eval_test_cases / eval_results history
+// references them.
+// ---------------------------------------------------------------------------
+
+export const evalDatasets = pgTable(
+  "eval_datasets",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id)
+      .notNull(),
+    slug: text("slug").notNull(),
+    name: text("name"),
+    kind: text("kind").notNull().default("custom"), // 'baseline' | 'custom'
+    // version: monotonically bumped on every dataset mutation; runs pin it.
+    version: integer("version").notNull().default(1),
+    // manifest_sha: sha256 of the S3 dataset.json content — the drift
+    // detector recomputes from S3 on dataset read and re-syncs on mismatch.
+    manifest_sha: text("manifest_sha"),
+    archived_at: timestamp("archived_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_eval_datasets_tenant_slug").on(table.tenant_id, table.slug),
+    index("idx_eval_datasets_tenant_created").on(
+      table.tenant_id,
+      table.created_at,
+    ),
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // eval_test_cases — Studio-managed test definitions
@@ -62,7 +108,14 @@ export const evalTestCases = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     enabled: boolean("enabled").notNull().default(true),
-    source: text("source").notNull().default("manual"), // 'manual' | 'yaml-seed' | 'imported'
+    source: text("source").notNull().default("manual"), // 'manual' | 'yaml-seed' | 'imported' | 'dataset'
+    // dataset_id / dataset_case_id: linkage into the S3-canonical dataset
+    // substrate (Evaluations Trust Core U4). Null on pre-dataset rows.
+    // ON DELETE NO ACTION by design — datasets soft-archive, never hard
+    // delete while result history references their cases. Case removal is
+    // a manifest tombstone + enabled=false here, never a row delete.
+    dataset_id: uuid("dataset_id").references(() => evalDatasets.id),
+    dataset_case_id: text("dataset_case_id"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -79,6 +132,9 @@ export const evalTestCases = pgTable(
       table.tenant_id,
       table.enabled,
     ),
+    uniqueIndex("uq_eval_test_cases_dataset_case")
+      .on(table.dataset_id, table.dataset_case_id)
+      .where(sql`${table.dataset_id} IS NOT NULL`),
   ],
 );
 
@@ -242,12 +298,27 @@ export const evalResults = pgTable(
 // Relations
 // ---------------------------------------------------------------------------
 
+export const evalDatasetsRelations = relations(
+  evalDatasets,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [evalDatasets.tenant_id],
+      references: [tenants.id],
+    }),
+    testCases: many(evalTestCases),
+  }),
+);
+
 export const evalTestCasesRelations = relations(
   evalTestCases,
   ({ one, many }) => ({
     tenant: one(tenants, {
       fields: [evalTestCases.tenant_id],
       references: [tenants.id],
+    }),
+    dataset: one(evalDatasets, {
+      fields: [evalTestCases.dataset_id],
+      references: [evalDatasets.id],
     }),
     results: many(evalResults),
   }),
