@@ -44,6 +44,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { UserModelsSection } from "@/components/settings/UserModelsSection";
+import { ScopedWorkspaceEditor } from "@/components/workspace-settings/ScopedWorkspaceEditor";
 
 export function SettingsUserDetail() {
   const { userId: memberId } = useParams({
@@ -138,6 +139,7 @@ export function SettingsUserDetail() {
         onSaved={() => refetch({ requestPolicy: "network-only" })}
       />
       <UserModelsSection userId={user.id} />
+      <UserWorkspaceSection userId={user.id} />
       <DangerSection
         displayName={displayName}
         memberId={member.id}
@@ -147,6 +149,28 @@ export function SettingsUserDetail() {
         }}
       />
     </SettingsPane>
+  );
+}
+
+/**
+ * Embedded file editor over this user's workspace source. The client targets
+ * `{ userId }` directly, so edits land under the user's own source tree —
+ * never the consolidated multi-source view. Replaces the User/ slice of the
+ * retired Settings → Workspace page.
+ */
+function UserWorkspaceSection({ userId }: { userId: string }) {
+  return (
+    <SettingsSection label="Workspace files">
+      <div className="h-[28rem]">
+        <ScopedWorkspaceEditor
+          target={{ userId }}
+          targetKey={`user:${userId}`}
+          defaultOpenFile="USER.md"
+          bordered={false}
+          className="h-full"
+        />
+      </div>
+    </SettingsSection>
   );
 }
 

@@ -5,7 +5,7 @@ import {
   visibleSettingsNavItems,
 } from "./settings-nav";
 
-const LOCAL_WORKSPACE = "/settings/local-workspace";
+const MAIN_AGENT = "/settings/main-agent";
 const ACTIVITY = "/settings/activity";
 const KNOWLEDGE_GRAPH = "/settings/knowledge-graph";
 const KNOWLEDGE_BASES = "/settings/knowledge-bases";
@@ -16,43 +16,51 @@ const AGENTS = "/settings/agents";
 const MODEL_CATALOG = "/settings/model-catalog";
 
 describe("visibleSettingsNavItems", () => {
-  it("declares Workspace as a non-operator, non-desktop-gated section", () => {
+  it("declares Main Agent as a non-operator, non-desktop-gated section", () => {
     // The S3-backed editor works in any build; editing is gated to owner/admin
     // inside the view (readOnly), not by hiding the nav entry.
-    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === LOCAL_WORKSPACE);
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === MAIN_AGENT);
     expect(item).toBeDefined();
+    expect(item?.label).toBe("Main Agent");
     expect(item?.desktopOnly).toBeFalsy();
     expect(item?.operatorOnly).toBeFalsy();
   });
 
-  it("shows Workspace on the web build for any role", () => {
+  it("no longer lists the consolidated Workspace entry (route redirects)", () => {
+    expect(
+      SETTINGS_NAV_ITEMS.some((i) => i.to === "/settings/local-workspace"),
+    ).toBe(false);
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Workspace")).toBe(false);
+  });
+
+  it("shows Main Agent on the web build for any role", () => {
     const items = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
       isDesktop: false,
     });
-    expect(items.some((i) => i.to === LOCAL_WORKSPACE)).toBe(true);
+    expect(items.some((i) => i.to === MAIN_AGENT)).toBe(true);
   });
 
-  it("shows Workspace on desktop builds too", () => {
+  it("shows Main Agent on desktop builds too", () => {
     const items = visibleSettingsNavItems({
       isOperator: true,
       roleResolved: true,
       isDesktop: true,
     });
-    expect(items.some((i) => i.to === LOCAL_WORKSPACE)).toBe(true);
+    expect(items.some((i) => i.to === MAIN_AGENT)).toBe(true);
   });
 
-  it("still gates operator-only sections independently of Workspace", () => {
+  it("still gates operator-only sections independently of Main Agent", () => {
     const memberWeb = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
       isDesktop: false,
     });
     // An operator-only section (Users) stays hidden for a non-operator, while
-    // Workspace shows for everyone.
+    // Main Agent shows for everyone.
     expect(memberWeb.some((i) => i.to === "/settings/users")).toBe(false);
-    expect(memberWeb.some((i) => i.to === LOCAL_WORKSPACE)).toBe(true);
+    expect(memberWeb.some((i) => i.to === MAIN_AGENT)).toBe(true);
   });
 
   it("does not list Billing in navigation (route kept, hidden from sidebar)", () => {

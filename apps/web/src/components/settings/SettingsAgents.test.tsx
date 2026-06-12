@@ -22,8 +22,8 @@ const detailRouteSource = readFileSync(
   join(process.cwd(), "src/routes/_authed/settings.agents.$profileId.tsx"),
   "utf8",
 );
-const workspaceRouteSource = readFileSync(
-  join(process.cwd(), "src/routes/_authed/settings.local-workspace.tsx"),
+const mainAgentRouteSource = readFileSync(
+  join(process.cwd(), "src/routes/_authed/settings.main-agent.tsx"),
   "utf8",
 );
 const builtInProfilesSource = readFileSync(
@@ -40,7 +40,9 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain('label="Default Agent"');
     expect(agentsSource).toContain("SettingsTenantAgentQuery");
     expect(agentsSource).toContain("SettingsUpdateTenantAgentMutation");
-    expect(agentsSource).toContain('search={{ file: "Agent/AGENTS.md" }}');
+    expect(agentsSource).toContain('to="/settings/main-agent"');
+    expect(agentsSource).toContain('search={{ file: "AGENTS.md" }}');
+    expect(agentsSource).not.toContain("/settings/local-workspace");
     expect(agentsSource).toContain('aria-label="Open AGENTS.md"');
     expect(agentsSource).not.toContain("Edit AGENTS.md");
 
@@ -68,9 +70,14 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain('label="External reviewer"');
     expect(agentsSource).toContain('label="Max review loops"');
     expect(agentsSource).toContain('label="Failure behavior"');
-    expect(agentsSource).toContain("agentProfileWorkspacePath");
-    expect(agentsSource).toContain("Agent/agents/${profile.slug}.md");
-    expect(agentsSource).toContain("Open Agent Profile markdown");
+    // Profile markdown is edited through the embedded scoped editor on the
+    // detail page (agents/ subtree of the agent source), not a deep link into
+    // the retired consolidated workspace page.
+    expect(agentsSource).toContain("ProfileWorkspaceSection");
+    expect(agentsSource).toContain("ScopedWorkspaceEditor");
+    expect(agentsSource).toContain('pathPrefix="agents/"');
+    expect(agentsSource).toContain("defaultOpenFile={`${profileSlug}.md`}");
+    expect(agentsSource).not.toContain("Open Agent Profile markdown");
     expect(agentsSource).not.toContain("Advanced editor");
     expect(agentsSource).toContain("text-[#54a9ff]");
     expect(agentsSource).toContain("{builtIns} Tools");
@@ -156,7 +163,7 @@ describe("SettingsAgents page", () => {
     expect(detailRouteSource).toContain(
       '"/_authed/settings/agents/$profileId"',
     );
-    expect(workspaceRouteSource).toContain("validateSearch");
-    expect(workspaceRouteSource).toContain("defaultOpenFile={file}");
+    expect(mainAgentRouteSource).toContain("validateSearch");
+    expect(mainAgentRouteSource).toContain("defaultOpenFile={file}");
   });
 });

@@ -48,8 +48,11 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   },
   { label: "Users", to: "/settings/users", icon: Users, operatorOnly: true },
   {
-    label: "Workspace",
-    to: "/settings/local-workspace",
+    // The Agent-source file editor (baseline AGENTS.md + skills/ + agents/).
+    // Replaced the consolidated "Workspace" page; /settings/local-workspace
+    // redirects here. Visible to all roles — editing is read-only gated inside.
+    label: "Main Agent",
+    to: "/settings/main-agent",
     icon: FolderTree,
   },
   {
@@ -147,9 +150,8 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
 
 /**
  * Visible settings sections for the current caller. Operator-only sections need
- * a resolved operator role; desktop-only sections (the local-workspace
- * inspector) need the desktop bridge build. Pure so it can be unit-tested
- * without rendering the sidebar.
+ * a resolved operator role; desktop-only sections need the desktop bridge
+ * build. Pure so it can be unit-tested without rendering the sidebar.
  */
 export function visibleSettingsNavItems(opts: {
   isOperator: boolean;

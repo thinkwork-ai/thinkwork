@@ -31,6 +31,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { ScopedWorkspaceEditor } from "@/components/workspace-settings/ScopedWorkspaceEditor";
 
 export function SettingsSpaceConfig() {
   const { spaceId } = useParams({
@@ -119,8 +120,32 @@ export function SettingsSpaceConfig() {
           manifest={manifest}
           diagnostics={manifestDiagnostics}
         />
+        <SpaceWorkspaceSection spaceId={spaceId} />
       </div>
     </div>
+  );
+}
+
+/**
+ * Embedded file editor over this Space's workspace source (SPACE.md, GOAL.md,
+ * agents/, …). The client targets `{ spaceId }` directly, so the tree lists
+ * only this Space's files and edits land under its source. Replaces the
+ * Spaces/<name>/ slice of the retired consolidated Settings → Workspace page.
+ * Space-local agent profiles surface naturally via the `agents/` folder.
+ */
+function SpaceWorkspaceSection({ spaceId }: { spaceId: string }) {
+  return (
+    <SettingsSection label="Workspace files">
+      <div className="h-[28rem]">
+        <ScopedWorkspaceEditor
+          target={{ spaceId }}
+          targetKey={`space:${spaceId}`}
+          defaultOpenFile="SPACE.md"
+          bordered={false}
+          className="h-full"
+        />
+      </div>
+    </SettingsSection>
   );
 }
 

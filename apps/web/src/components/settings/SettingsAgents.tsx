@@ -21,6 +21,7 @@ import { AgentRuntime } from "@/gql/graphql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { ScopedWorkspaceEditor } from "@/components/workspace-settings/ScopedWorkspaceEditor";
 import {
   SettingsAgentProfilesQuery,
   SettingsCreateAgentProfileMutation,
@@ -218,10 +219,7 @@ export function SettingsAgents() {
             aria-label="Open AGENTS.md"
             title="Open AGENTS.md"
           >
-            <Link
-              to="/settings/local-workspace"
-              search={{ file: "Agent/AGENTS.md" }}
-            >
+            <Link to="/settings/main-agent" search={{ file: "AGENTS.md" }}>
               <FileCode className="h-4 w-4" />
               <span className="sr-only">Open AGENTS.md</span>
             </Link>
@@ -305,26 +303,6 @@ export function SettingsAgentProfileDetail() {
       { label: "Agents", href: "/settings/agents" },
       { label: profile?.name ?? "Agent Profile" },
     ],
-    action: profile ? (
-      <Button
-        asChild
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="text-muted-foreground hover:text-foreground"
-        aria-label="Open Agent Profile markdown"
-        title="Open Agent Profile markdown"
-      >
-        <Link
-          to="/settings/local-workspace"
-          search={{ file: agentProfileWorkspacePath(profile) }}
-        >
-          <FileCode className="h-4 w-4" />
-          <span className="sr-only">Open Agent Profile markdown</span>
-        </Link>
-      </Button>
-    ) : undefined,
-    actionKey: profile ? `agent-profile-editor:${profile.id}` : undefined,
   });
 
   async function onDeleteProfile(profile: AgentProfileRow) {
@@ -409,7 +387,40 @@ export function SettingsAgentProfileDetail() {
         onSaved={() => refetchProfiles({ requestPolicy: "network-only" })}
         onDelete={() => onDeleteProfile(profile)}
       />
+      <ProfileWorkspaceSection profileSlug={profile.slug} />
     </SettingsPane>
+  );
+}
+
+/**
+ * Embedded file editor over the agent source's `agents/` subtree — the
+ * profile markdown files the composed routing section is derived from. Scoped
+ * via `pathPrefix` so the editor only lists/writes `agents/*`; replaces the
+ * old deep link into the retired consolidated workspace page.
+ */
+function ProfileWorkspaceSection({ profileSlug }: { profileSlug: string }) {
+  const { tenantId } = useTenant();
+  const [agentResult] = useQuery({
+    query: SettingsTenantAgentQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const agentId = agentResult.data?.agent?.id ?? null;
+  if (!agentId) return null;
+
+  return (
+    <SettingsSection label="Profile files">
+      <div className="h-[28rem]">
+        <ScopedWorkspaceEditor
+          target={{ agentId }}
+          targetKey={`agent-profiles:${agentId}`}
+          pathPrefix="agents/"
+          defaultOpenFile={`${profileSlug}.md`}
+          bordered={false}
+          className="h-full"
+        />
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -524,10 +535,6 @@ function AgentConfigSection() {
       </SettingsRow>
     </SettingsSection>
   );
-}
-
-function agentProfileWorkspacePath(profile: AgentProfileRow): string {
-  return `Agent/agents/${profile.slug}.md`;
 }
 
 function ProfileListItem({

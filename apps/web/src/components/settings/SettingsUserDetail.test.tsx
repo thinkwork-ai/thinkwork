@@ -96,6 +96,18 @@ vi.mock("@/components/settings/UserModelsSection", () => ({
     <section data-testid="user-models-section" data-user-id={userId} />
   ),
 }));
+vi.mock("@/components/workspace-settings/ScopedWorkspaceEditor", () => ({
+  ScopedWorkspaceEditor: (props: {
+    target: Record<string, string>;
+    targetKey: string;
+  }) => (
+    <div
+      data-testid="user-workspace-editor"
+      data-target={JSON.stringify(props.target)}
+      data-targetkey={props.targetKey}
+    />
+  ),
+}));
 
 import { SettingsUserDetail } from "./SettingsUserDetail";
 
@@ -154,6 +166,20 @@ describe("SettingsUserDetail role merge", () => {
 
     const section = screen.getByTestId("user-models-section");
     expect(section.getAttribute("data-user-id")).toBe("user-9");
+  });
+
+  it("embeds the workspace editor scoped to this user's own source (AE6)", () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    const editor = screen.getByTestId("user-workspace-editor");
+    // Single userId target — not the consolidated multi-source client — so
+    // edits land under this user's source tree.
+    expect(JSON.parse(editor.getAttribute("data-target")!)).toEqual({
+      userId: "user-9",
+    });
+    expect(editor.getAttribute("data-targetkey")).toBe("user:user-9");
+    expect(screen.getByText("Workspace files")).toBeTruthy();
   });
 
   it("disables the Role select for the caller's own membership", () => {

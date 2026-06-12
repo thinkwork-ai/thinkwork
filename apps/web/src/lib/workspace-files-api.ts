@@ -93,6 +93,54 @@ export const spacesWorkspaceFilesClient: WorkspaceFilesClient<WorkspaceFilesTarg
     },
   };
 
+/**
+ * A workspace client narrowed to one sub-folder of a single-target source:
+ * paths are presented relative to the folder (prefix stripped on list) and
+ * re-prefixed before hitting the backend, so the editor only ever sees and
+ * writes that subtree. Same prefix-strip/re-prefix pattern as
+ * `skillCatalogClient`, generalized over any `WorkspaceFilesTarget` — used by
+ * the Agents settings surface to scope the agent source to `agents/`.
+ */
+export function createPrefixedWorkspaceClient(
+  prefix: string,
+): WorkspaceFilesClient<WorkspaceFilesTarget> {
+  const pre = prefix.endsWith("/") ? prefix : `${prefix}/`;
+  const strip = (path: string) =>
+    path.startsWith(pre) ? path.slice(pre.length) : path;
+  return {
+    async listFiles(target) {
+      const { files } = await spacesWorkspaceFilesClient.listFiles(target);
+      return {
+        files: files
+          .filter((f) => f.path.startsWith(pre))
+          .map((f) => ({ ...f, path: f.path.slice(pre.length) })),
+      };
+    },
+    getFile: (target, path) =>
+      spacesWorkspaceFilesClient.getFile(target, `${pre}${path}`),
+    putFile: (target, path, content) =>
+      spacesWorkspaceFilesClient.putFile(target, `${pre}${path}`, content),
+    deleteFile: (target, path) =>
+      spacesWorkspaceFilesClient.deleteFile(target, `${pre}${path}`),
+    async movePath(target, fromPath, toFolder): Promise<WorkspaceMoveResult> {
+      const result = await spacesWorkspaceFilesClient.movePath?.(
+        target,
+        `${pre}${fromPath}`,
+        `${pre}${toFolder}`,
+      );
+      return { destPath: strip(result?.destPath ?? `${pre}${fromPath}`) };
+    },
+    async renamePath(target, fromPath, toPath): Promise<WorkspaceMoveResult> {
+      const result = await spacesWorkspaceFilesClient.renamePath?.(
+        target,
+        `${pre}${fromPath}`,
+        `${pre}${toPath}`,
+      );
+      return { destPath: strip(result?.destPath ?? `${pre}${toPath}`) };
+    },
+  };
+}
+
 // ─── Skill catalog ───────────────────────────────────────────────────────
 
 /**

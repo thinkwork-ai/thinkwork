@@ -25,6 +25,7 @@ import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settin
 import { Route as AuthedSettingsModelCatalogRouteImport } from "./routes/_authed/settings.model-catalog";
 import { Route as AuthedSettingsMemoryRouteImport } from "./routes/_authed/settings.memory";
 import { Route as AuthedSettingsManagedApplicationsRouteImport } from "./routes/_authed/settings.managed-applications";
+import { Route as AuthedSettingsMainAgentRouteImport } from "./routes/_authed/settings.main-agent";
 import { Route as AuthedSettingsLocalWorkspaceRouteImport } from "./routes/_authed/settings.local-workspace";
 import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_authed/settings.knowledge-graph";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
@@ -173,6 +174,11 @@ const AuthedSettingsManagedApplicationsRoute =
     path: "/managed-applications",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsMainAgentRoute = AuthedSettingsMainAgentRouteImport.update({
+  id: "/main-agent",
+  path: "/main-agent",
+  getParentRoute: () => AuthedSettingsRoute,
+} as any);
 const AuthedSettingsLocalWorkspaceRoute =
   AuthedSettingsLocalWorkspaceRouteImport.update({
     id: "/local-workspace",
@@ -579,6 +585,7 @@ export interface FileRoutesByFullPath {
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
+  "/settings/main-agent": typeof AuthedSettingsMainAgentRoute;
   "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
@@ -657,6 +664,7 @@ export interface FileRoutesByTo {
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
+  "/settings/main-agent": typeof AuthedSettingsMainAgentRoute;
   "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
@@ -743,6 +751,7 @@ export interface FileRoutesById {
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/_authed/settings/local-workspace": typeof AuthedSettingsLocalWorkspaceRoute;
+  "/_authed/settings/main-agent": typeof AuthedSettingsMainAgentRoute;
   "/_authed/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/_authed/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/_authed/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
@@ -828,6 +837,7 @@ export interface FileRouteTypes {
     | "/settings/general"
     | "/settings/knowledge-graph"
     | "/settings/local-workspace"
+    | "/settings/main-agent"
     | "/settings/managed-applications"
     | "/settings/memory"
     | "/settings/model-catalog"
@@ -906,6 +916,7 @@ export interface FileRouteTypes {
     | "/settings/general"
     | "/settings/knowledge-graph"
     | "/settings/local-workspace"
+    | "/settings/main-agent"
     | "/settings/managed-applications"
     | "/settings/memory"
     | "/settings/model-catalog"
@@ -991,6 +1002,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/general"
     | "/_authed/settings/knowledge-graph"
     | "/_authed/settings/local-workspace"
+    | "/_authed/settings/main-agent"
     | "/_authed/settings/managed-applications"
     | "/_authed/settings/memory"
     | "/_authed/settings/model-catalog"
@@ -1177,6 +1189,13 @@ declare module "@tanstack/react-router" {
       path: "/managed-applications";
       fullPath: "/settings/managed-applications";
       preLoaderRoute: typeof AuthedSettingsManagedApplicationsRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/main-agent": {
+      id: "/_authed/settings/main-agent";
+      path: "/main-agent";
+      fullPath: "/settings/main-agent";
+      preLoaderRoute: typeof AuthedSettingsMainAgentRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/local-workspace": {
@@ -1818,6 +1837,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeGraphRoute: typeof AuthedSettingsKnowledgeGraphRoute;
   AuthedSettingsLocalWorkspaceRoute: typeof AuthedSettingsLocalWorkspaceRoute;
+  AuthedSettingsMainAgentRoute: typeof AuthedSettingsMainAgentRoute;
   AuthedSettingsManagedApplicationsRoute: typeof AuthedSettingsManagedApplicationsRoute;
   AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRouteWithChildren;
   AuthedSettingsModelCatalogRoute: typeof AuthedSettingsModelCatalogRoute;
@@ -1864,6 +1884,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeGraphRoute: AuthedSettingsKnowledgeGraphRoute,
   AuthedSettingsLocalWorkspaceRoute: AuthedSettingsLocalWorkspaceRoute,
+  AuthedSettingsMainAgentRoute: AuthedSettingsMainAgentRoute,
   AuthedSettingsManagedApplicationsRoute:
     AuthedSettingsManagedApplicationsRoute,
   AuthedSettingsMemoryRoute: AuthedSettingsMemoryRouteWithChildren,
