@@ -99,6 +99,21 @@ locals {
     local.customer_domain_web_enabled && var.customer_domain_legacy_retired
   )
 
+  # KTD6 — SES allows ONE active receipt rule set per account/region, and the
+  # owner differs by account kind. Whenever the ses-email module is enabled
+  # (mirrors its own `enabled` local: legacy inbound domain OR tenant
+  # subdomains configured), it owns the active set and the customer-domain
+  # module must not activate its own. In customer accounts the ses-email
+  # module is never enabled, so the customer-domain module owns activation —
+  # still subject to ses_manage_active_rule_set for stages sharing an account.
+  ses_email_module_enabled = (
+    var.ses_inbound_domain != "" ||
+    (var.ses_parent_domain != "" && length(var.ses_tenant_slugs) > 0)
+  )
+  customer_domain_manage_active_rule_set = (
+    var.ses_manage_active_rule_set && !local.ses_email_module_enabled
+  )
+
   # The end-user app is now canonically hosted at app.<domain>. Keep
   # computer_domain as a compatibility fallback so older module callers and
   # stages can upgrade without a flag-day. A delegated customer domain takes
@@ -1264,9 +1279,26 @@ module "customer_domain" {
   # cert → distribution → alias-records chain into a module-level cycle.
   # The guardrail preconditions fail the plan on their own.
   stage                        = var.stage
+  region                       = var.region
+  account_id                   = var.account_id
   customer_domain              = var.customer_domain
   customer_domain_delegated    = var.customer_domain_delegated
   app_distribution_domain_name = module.computer_site.distribution_domain
+
+  # SES send + receive for the customer domain. Created with the zone —
+  # intentionally pre-delegation — see the module header for the ~72h
+  # verification-expiry note and re-verify procedure.
+  inbound_bucket_name                = module.s3.bucket_name
+  email_inbound_fn_arn               = module.api.email_inbound_fn_arn
+  email_inbound_fn_name              = module.api.email_inbound_fn_name
+  enable_email_inbound_lambda_action = true
+
+  # KTD6 — one active receipt rule set per account/region. The customer-domain
+  # module only activates its rule set when the ses-email module is disabled
+  # in this account (customer deployments: always disabled — the controller
+  # threads zero ses_* vars). ses_manage_active_rule_set still applies so a
+  # secondary stage sharing an account never fights over activation.
+  manage_active_rule_set = local.customer_domain_manage_active_rule_set
 }
 
 ################################################################################

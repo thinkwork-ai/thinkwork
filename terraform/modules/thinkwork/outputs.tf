@@ -426,6 +426,16 @@ output "customer_domain_certificate_arn" {
   value       = module.customer_domain.certificate_arn
 }
 
+output "customer_domain_ses_identity_arn" {
+  description = "SES domain identity ARN for the customer domain (empty when no customer domain is configured). Candidate cognito_email_source_arn value — switching Cognito email to it is an operator action taken only after the identity verifies and SES production access is granted (R11), never automatic."
+  value       = module.customer_domain.ses_identity_arn
+}
+
+output "customer_domain_ses_rule_set_name" {
+  description = "SES receipt rule set name owned by the customer-domain module (empty when no customer domain is configured). Active only when the ses-email module is disabled in this account — KTD6."
+  value       = module.customer_domain.rule_set_name
+}
+
 # Deprecated compatibility aliases. Keep these stable for existing scripts and
 # external callers while the source path is apps/web.
 output "computer_distribution_id" {
