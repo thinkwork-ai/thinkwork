@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "urql";
 import { LogOut, RefreshCw, Settings, TriangleAlert } from "lucide-react";
 import {
   AlertDialog,
@@ -35,6 +36,8 @@ import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
 import { rememberSettingsReturnTo } from "@/lib/settings-return";
+import { SidebarDeployedReleaseQuery } from "@/lib/settings-queries";
+import { useTenant } from "@/context/TenantContext";
 
 export function SpacesSidebar() {
   const { state, setOpen } = useSidebar();
@@ -47,6 +50,19 @@ export function SpacesSidebar() {
     () => getSpacesDeploymentProfileSnapshot(),
     [],
   );
+  // The deployed release is server truth (deploymentStatus reads the
+  // evidence-bucket status pointer / SSM deployment profile). The query is
+  // operator-gated server-side, so pause it for non-operators and fall back
+  // to the client profile's VITE_RELEASE_VERSION (populated on customer
+  // installs via the runner's runtime-config viteEnv).
+  const { isOperator, roleResolved } = useTenant();
+  const [deployedReleaseResult] = useQuery({
+    query: SidebarDeployedReleaseQuery,
+    pause: !(roleResolved && isOperator),
+  });
+  const deployedReleaseVersion =
+    deployedReleaseResult.data?.deploymentStatus?.releaseVersion?.trim() ||
+    deploymentProfile.releaseVersion;
 
   return (
     <SidebarHealthProvider>
@@ -92,7 +108,7 @@ export function SpacesSidebar() {
           <AccountMenu
             name={user?.name}
             email={user?.email}
-            deployedReleaseVersion={deploymentProfile.releaseVersion}
+            deployedReleaseVersion={deployedReleaseVersion}
             onOpenSettings={() => {
               rememberSettingsReturnTo(currentPath);
               navigate({ to: "/settings" });

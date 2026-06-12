@@ -12,12 +12,36 @@ const routerMocks = vi.hoisted(() => ({
 const deploymentProfileMocks = vi.hoisted(() => ({
   releaseVersion: "v0.1.0-canary.164",
 }));
+const tenantMocks = vi.hoisted(() => ({
+  isOperator: true,
+  roleResolved: true,
+}));
+const deploymentStatusMocks = vi.hoisted(() => ({
+  releaseVersion: "v0.1.0-canary.200" as string | null,
+}));
 
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
 vi.mock("@/lib/deployment-profile", () => ({
   getSpacesDeploymentProfileSnapshot: () => ({
     releaseVersion: deploymentProfileMocks.releaseVersion,
   }),
+}));
+vi.mock("@/context/TenantContext", () => ({
+  useTenant: () => tenantMocks,
+}));
+vi.mock("urql", () => ({
+  useQuery: ({ pause }: { pause?: boolean }) => [
+    {
+      data: pause
+        ? undefined
+        : {
+            deploymentStatus: {
+              releaseVersion: deploymentStatusMocks.releaseVersion,
+            },
+          },
+      fetching: false,
+    },
+  ],
 }));
 vi.mock("@/lib/composer-focus", () => ({
   requestSpacesComposerFocus: vi.fn(),
@@ -169,6 +193,9 @@ afterEach(() => {
   routerMocks.navigate.mockReset();
   routerMocks.pathname = "/threads/abc123";
   deploymentProfileMocks.releaseVersion = "v0.1.0-canary.164";
+  deploymentStatusMocks.releaseVersion = "v0.1.0-canary.200";
+  tenantMocks.isOperator = true;
+  tenantMocks.roleResolved = true;
 });
 
 describe("SpacesSidebar", () => {
@@ -219,10 +246,28 @@ describe("SpacesSidebar", () => {
     });
   });
 
-  it("shows only the deployed release version in the account menu footer", () => {
+  it("shows the server-reported deployed release in the account menu footer", () => {
+    render(<SpacesSidebar />);
+
+    // Server truth (deploymentStatus) wins over the client profile stamp.
+    expect(screen.getByText("v0.1.0-canary.200")).toBeTruthy();
+    expect(screen.queryByText(/ThinkWork v0/)).toBeNull();
+  });
+
+  it("falls back to the client profile release for non-operators", () => {
+    tenantMocks.isOperator = false;
+
     render(<SpacesSidebar />);
 
     expect(screen.getByText("v0.1.0-canary.164")).toBeTruthy();
-    expect(screen.queryByText(/ThinkWork v0/)).toBeNull();
+  });
+
+  it("shows unknown when neither the server nor the client profile has a release", () => {
+    tenantMocks.isOperator = false;
+    deploymentProfileMocks.releaseVersion = "";
+
+    render(<SpacesSidebar />);
+
+    expect(screen.getByText("unknown")).toBeTruthy();
   });
 });
