@@ -1315,3 +1315,144 @@ export const SettingsRegenerateWebhookTokenMutation = graphql(`
     }
   }
 `);
+
+// ─── Plugins (plan 2026-06-12-001 U8) ───────────────────────────────────
+
+export const SettingsPluginCatalogQuery = graphql(`
+  query SettingsPluginCatalog {
+    pluginCatalog {
+      pluginKey
+      displayName
+      description
+      latestVersion
+      updateAvailable
+      versions {
+        version
+        payloadSha256
+        requiredOauthScopes
+        components {
+          key
+          type
+          displayName
+        }
+      }
+      install {
+        id
+        pluginKey
+        pinnedVersion
+        state
+        lastTransitionAt
+        lastError
+        activatedUserCount
+        components {
+          id
+          componentKey
+          componentType
+          state
+          lastError
+        }
+      }
+    }
+  }
+`);
+
+export const SettingsPluginInstallsQuery = graphql(`
+  query SettingsPluginInstalls {
+    pluginInstalls {
+      id
+      pluginKey
+      pinnedVersion
+      state
+      lastTransitionAt
+      lastError
+      activatedUserCount
+      components {
+        id
+        componentKey
+        componentType
+        state
+        lastError
+      }
+    }
+  }
+`);
+
+export const SettingsMyPluginActivationsQuery = graphql(`
+  query SettingsMyPluginActivations {
+    myPluginActivations {
+      id
+      pluginInstallId
+      pluginKey
+      status
+      grantedScopes
+      grantedAt
+      revokedAt
+    }
+  }
+`);
+
+export const SettingsInstallPluginMutation = graphql(`
+  mutation SettingsInstallPlugin($input: InstallPluginInput!) {
+    installPlugin(input: $input) {
+      id
+      pluginKey
+      pinnedVersion
+      state
+    }
+  }
+`);
+
+export const SettingsUpgradePluginMutation = graphql(`
+  mutation SettingsUpgradePlugin($input: UpgradePluginInput!) {
+    upgradePlugin(input: $input) {
+      id
+      pluginKey
+      pinnedVersion
+      state
+    }
+  }
+`);
+
+export const SettingsUninstallPluginMutation = graphql(`
+  mutation SettingsUninstallPlugin($input: UninstallPluginInput!) {
+    uninstallPlugin(input: $input) {
+      id
+      pluginKey
+      state
+    }
+  }
+`);
+
+export const SettingsRetryPluginComponentMutation = graphql(`
+  mutation SettingsRetryPluginComponent($input: RetryPluginComponentInput!) {
+    retryPluginComponent(input: $input) {
+      id
+      state
+      components {
+        id
+        componentKey
+        componentType
+        state
+        lastError
+      }
+    }
+  }
+`);
+
+export const SettingsActivatePluginMutation = graphql(`
+  mutation SettingsActivatePlugin($input: ActivatePluginInput!) {
+    activatePlugin(input: $input) {
+      authorizeUrl
+    }
+  }
+`);
+
+export const SettingsDeactivatePluginMutation = graphql(`
+  mutation SettingsDeactivatePlugin($input: DeactivatePluginInput!) {
+    deactivatePlugin(input: $input) {
+      id
+      status
+      revokedAt
+    }
+  }
+`);

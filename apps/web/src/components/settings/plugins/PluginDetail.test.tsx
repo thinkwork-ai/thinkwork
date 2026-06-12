@@ -1,0 +1,346 @@
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mocks, queryDocs, tenantState } = vi.hoisted(() => ({
+  mocks: {
+    activate: vi.fn(),
+    deactivate: vi.fn(),
+    install: vi.fn(),
+    navigate: vi.fn(),
+    retry: vi.fn(),
+    setHeader: vi.fn(),
+    uninstall: vi.fn(),
+    upgrade: vi.fn(),
+    useQuery: vi.fn(),
+  },
+  queryDocs: {
+    SettingsActivatePluginMutation: Symbol("activatePlugin"),
+    SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
+    SettingsInstallPluginMutation: Symbol("installPlugin"),
+    SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
+    SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
+    SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
+    SettingsRetryPluginComponentMutation: Symbol("retryPluginComponent"),
+    SettingsUninstallPluginMutation: Symbol("uninstallPlugin"),
+    SettingsUpgradePluginMutation: Symbol("upgradePlugin"),
+  },
+  tenantState: { isOperator: true, roleResolved: true },
+}));
+
+vi.mock("urql", () => ({
+  useMutation: (doc: unknown) => {
+    if (doc === queryDocs.SettingsActivatePluginMutation) {
+      return [{ fetching: false }, mocks.activate];
+    }
+    if (doc === queryDocs.SettingsDeactivatePluginMutation) {
+      return [{ fetching: false }, mocks.deactivate];
+    }
+    if (doc === queryDocs.SettingsInstallPluginMutation) {
+      return [{ fetching: false }, mocks.install];
+    }
+    if (doc === queryDocs.SettingsRetryPluginComponentMutation) {
+      return [{ fetching: false }, mocks.retry];
+    }
+    if (doc === queryDocs.SettingsUninstallPluginMutation) {
+      return [{ fetching: false }, mocks.uninstall];
+    }
+    if (doc === queryDocs.SettingsUpgradePluginMutation) {
+      return [{ fetching: false }, mocks.upgrade];
+    }
+    return [{ fetching: false }, vi.fn()];
+  },
+  useQuery: mocks.useQuery,
+}));
+
+vi.mock("@/lib/settings-queries", () => queryDocs);
+
+vi.mock("@/context/PageHeaderContext", () => ({
+  usePageHeaderActions: mocks.setHeader,
+}));
+
+vi.mock("@/context/TenantContext", () => ({
+  useTenant: () => tenantState,
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => mocks.navigate,
+  useParams: () => ({ pluginKey: "lastmile" }),
+}));
+
+import { PluginDetail } from "./PluginDetail";
+
+const refreshCatalog = vi.fn();
+const refreshInstalls = vi.fn();
+const refreshActivations = vi.fn();
+
+type Fixtures = {
+  install?: Record<string, unknown> | null;
+  activations?: Array<Record<string, unknown>>;
+};
+
+function mockQueries({
+  install = baseInstall,
+  activations = [needsReauthActivation],
+}: Fixtures = {}) {
+  mocks.useQuery.mockImplementation(({ query }: { query: unknown }) => {
+    if (query === queryDocs.SettingsPluginCatalogQuery) {
+      return [
+        { data: { pluginCatalog: [catalogEntry] }, fetching: false },
+        refreshCatalog,
+      ];
+    }
+    if (query === queryDocs.SettingsPluginInstallsQuery) {
+      return [
+        {
+          data: { pluginInstalls: install ? [install] : [] },
+          fetching: false,
+        },
+        refreshInstalls,
+      ];
+    }
+    if (query === queryDocs.SettingsMyPluginActivationsQuery) {
+      return [
+        { data: { myPluginActivations: activations }, fetching: false },
+        refreshActivations,
+      ];
+    }
+    return [{ fetching: false }, vi.fn()];
+  });
+}
+
+beforeEach(() => {
+  for (const mock of Object.values(mocks)) mock.mockReset();
+  refreshCatalog.mockReset();
+  refreshInstalls.mockReset();
+  refreshActivations.mockReset();
+  tenantState.isOperator = true;
+  tenantState.roleResolved = true;
+  mocks.upgrade.mockResolvedValue({
+    data: { upgradePlugin: { id: "install-1", state: "installing" } },
+  });
+  mocks.retry.mockResolvedValue({
+    data: { retryPluginComponent: { id: "install-1", state: "installing" } },
+  });
+  mocks.uninstall.mockResolvedValue({
+    data: { uninstallPlugin: { id: "install-1", state: "uninstalling" } },
+  });
+  mocks.activate.mockResolvedValue({
+    data: { activatePlugin: { authorizeUrl: "https://auth.example/start" } },
+  });
+  mocks.deactivate.mockResolvedValue({
+    data: { deactivatePlugin: { id: "act-1", status: "revoked" } },
+  });
+  mockQueries();
+  window.history.replaceState({}, "", "/settings/plugins/lastmile");
+});
+
+afterEach(cleanup);
+
+describe("PluginDetail", () => {
+  it("shows the version diff with a scope warning and installs the update", async () => {
+    render(<PluginDetail />);
+
+    expect(screen.getByText("v1.0.0 → v1.1.0")).toBeTruthy();
+    // 1.1.0 adds the "admin" scope over the pinned 1.0.0 — the update section
+    // must warn that re-auth will be required.
+    expect(
+      screen.getByText(/requests new permissions \(admin\)/i),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /install update/i }));
+
+    await waitFor(() => {
+      expect(mocks.upgrade).toHaveBeenCalledWith({
+        input: expect.objectContaining({
+          installId: "install-1",
+          version: "1.1.0",
+          idempotencyKey: expect.any(String),
+        }),
+      });
+    });
+    await waitFor(() => {
+      expect(refreshInstalls).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+      expect(refreshCatalog).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+      expect(refreshActivations).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+    });
+  });
+
+  it("shows Connect to non-operators without install/update/uninstall/retry actions", () => {
+    tenantState.isOperator = false;
+    mockQueries({ activations: [] });
+    render(<PluginDetail />);
+
+    expect(screen.getByRole("button", { name: /^connect$/i })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /install update/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /uninstall plugin/i }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
+  });
+
+  it("renders per-component errors with a retry action when partially installed", async () => {
+    render(<PluginDetail />);
+
+    expect(screen.getByText("Partially installed")).toBeTruthy();
+    expect(screen.getByText("S3 prefix seed failed")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /retry lastmile-skills/i }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.retry).toHaveBeenCalledWith({
+        input: { installId: "install-1", componentKey: "lastmile-skills" },
+      });
+    });
+  });
+
+  it("renders the Reconnect badge and button for a needs_reauth activation", () => {
+    render(<PluginDetail />);
+
+    // Badge + button both read "Reconnect" (SettingsMcpServerDetail Expired
+    // pattern).
+    expect(screen.getAllByText("Reconnect").length).toBe(2);
+    expect(screen.getByRole("button", { name: /reconnect/i })).toBeTruthy();
+  });
+
+  it("shows the success notice, refetches activations, and clears the OAuth return params", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/settings/plugins/lastmile?pluginOAuth=success",
+    );
+    render(<PluginDetail />);
+
+    expect(await screen.findByText("Connected.")).toBeTruthy();
+    expect(refreshActivations).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(window.location.search).not.toContain("pluginOAuth");
+  });
+
+  it("requires typing the exact plugin key before uninstalling", async () => {
+    render(<PluginDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /uninstall plugin/i }));
+
+    // The dialog lists the component inventory and the activated-user impact.
+    expect(
+      screen.getByText(/3 users will lose access to this plugin/i),
+    ).toBeTruthy();
+
+    const confirm = screen
+      .getAllByRole("button", { name: /uninstall plugin/i })
+      .find((button) => (button as HTMLButtonElement).disabled);
+    expect(confirm).toBeTruthy();
+
+    const input = screen.getByPlaceholderText("lastmile");
+    fireEvent.change(input, { target: { value: "wrong-key" } });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: "lastmile" } });
+    expect((confirm as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(confirm as HTMLButtonElement);
+    await waitFor(() => {
+      expect(mocks.uninstall).toHaveBeenCalledWith({
+        input: {
+          installId: "install-1",
+          destructiveConfirmation: "lastmile",
+        },
+      });
+    });
+  });
+});
+
+const baseInstall = {
+  __typename: "PluginInstall" as const,
+  id: "install-1",
+  pluginKey: "lastmile",
+  pinnedVersion: "1.0.0",
+  state: "partially_installed",
+  lastTransitionAt: "2026-06-12T12:00:00Z",
+  lastError: null,
+  activatedUserCount: 3,
+  components: [
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-1",
+      componentKey: "lastmile-mcp",
+      componentType: "mcp-server",
+      state: "provisioned",
+      lastError: null,
+    },
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-2",
+      componentKey: "lastmile-skills",
+      componentType: "skills",
+      state: "failed",
+      lastError: "S3 prefix seed failed",
+    },
+  ],
+};
+
+const needsReauthActivation = {
+  __typename: "UserPluginActivation" as const,
+  id: "act-1",
+  pluginInstallId: "install-1",
+  pluginKey: "lastmile",
+  status: "needs_reauth",
+  grantedScopes: ["read"],
+  grantedAt: "2026-06-10T12:00:00Z",
+  revokedAt: null,
+};
+
+const catalogEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "lastmile",
+  displayName: "LastMile",
+  description: "LastMile logistics tools and skills.",
+  latestVersion: "1.1.0",
+  updateAvailable: true,
+  versions: [
+    {
+      version: "1.1.0",
+      payloadSha256: "sha256:b",
+      requiredOauthScopes: ["read", "write", "admin"],
+      components: [
+        {
+          key: "lastmile-mcp",
+          type: "mcp-server",
+          displayName: "LastMile MCP",
+        },
+        { key: "lastmile-skills", type: "skills", displayName: null },
+      ],
+    },
+    {
+      version: "1.0.0",
+      payloadSha256: "sha256:a",
+      requiredOauthScopes: ["read", "write"],
+      components: [
+        {
+          key: "lastmile-mcp",
+          type: "mcp-server",
+          displayName: "LastMile MCP",
+        },
+        { key: "lastmile-skills", type: "skills", displayName: null },
+      ],
+    },
+  ],
+  install: null,
+};

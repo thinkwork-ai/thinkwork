@@ -7,6 +7,7 @@ import {
   Cpu,
   FolderTree,
   History,
+  Puzzle,
   Repeat,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -82,6 +83,14 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/managed-applications",
     icon: IconApps,
     operatorOnly: true,
+  },
+  // Plugins is deliberately NOT operatorOnly (plan 2026-06-12-001 U8): all
+  // members can browse and connect; install/update/uninstall gate at render
+  // time inside the pages.
+  {
+    label: "Plugins",
+    to: "/settings/plugins",
+    icon: Puzzle,
   },
   {
     label: "Activity",
