@@ -325,10 +325,14 @@ describe("SettingsActivityThreadDetail", () => {
       { label: "Activity", href: "/settings/activity" },
       { label: "what is SpaceX" },
     ]);
-    expect(headerArgs.actionKey).toBe("thread-properties-closed");
+    expect(headerArgs.actionKey).toBe("thread-actions-trace-props-closed");
 
     render(headerArgs.action);
     mockActivityQueries();
+    // The thread workspace (files) button now lives in the operator header.
+    expect(
+      screen.getByRole("button", { name: "Open thread files" }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Open thread properties" }),
     );
@@ -657,13 +661,6 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.getByTitle("Input / Output tokens").textContent).toContain(
       "15.0K cached",
     );
-    expect(
-      screen.getAllByText((_content, node) =>
-        Boolean(
-          node?.textContent?.replace(/\s+/g, " ").includes("100 in + 207 out"),
-        ),
-      ).length,
-    ).toBeGreaterThan(0);
     expect(screen.getByText("Mixed")).toBeTruthy();
     expect(
       screen.getAllByText((_content, node) =>

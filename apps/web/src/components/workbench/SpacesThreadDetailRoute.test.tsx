@@ -472,7 +472,7 @@ describe("SpacesThreadDetailRoute", () => {
         action: expect.anything(),
         titleTrailing: expect.anything(),
         actionKey: expect.stringContaining(
-          ":1:artifact_123:files-closed:info-closed:closed",
+          ":1:artifact_123:info-closed:closed",
         ),
       }),
     );
