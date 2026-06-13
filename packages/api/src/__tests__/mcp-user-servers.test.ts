@@ -24,7 +24,20 @@ const {
     },
     mockAuthenticate: vi.fn(() => Promise.resolve({ sub: "principal-1" })),
     mockRequireTenantMembership: vi.fn(() =>
-      Promise.resolve({ ok: true, tenantId: "tenant-1", userId: "user-1" }),
+      Promise.resolve({
+        ok: true,
+        auth: {
+          authType: "cognito",
+          principalId: "principal-1",
+          tenantId: "tenant-1",
+          email: "member@example.com",
+          emailVerified: true,
+          agentId: null,
+        },
+        tenantId: "tenant-1",
+        userId: "user-1",
+        role: "member",
+      }),
     ),
     mockSecretsSend: vi.fn(() => Promise.resolve({})),
   };
@@ -153,8 +166,17 @@ beforeEach(() => {
   mockAuthenticate.mockResolvedValue({ sub: "principal-1" });
   mockRequireTenantMembership.mockResolvedValue({
     ok: true,
+    auth: {
+      authType: "cognito",
+      principalId: "principal-1",
+      tenantId: "tenant-1",
+      email: "member@example.com",
+      emailVerified: true,
+      agentId: null,
+    },
     tenantId: "tenant-1",
     userId: "user-1",
+    role: "member",
   });
 });
 
@@ -219,7 +241,7 @@ describe("GET /api/skills/user-mcp-servers", () => {
     expect(body.servers).toEqual([]);
   });
 
-  it("uses the membership-resolved user id instead of a caller-supplied principal header", async () => {
+  it("rejects a member caller-supplied principal header for another user", async () => {
     dbState.selectQueue.push(
       [],
       [managedTwentyRow({ mcp_server_id: "twenty" })],
@@ -227,15 +249,11 @@ describe("GET /api/skills/user-mcp-servers", () => {
     );
 
     const response = await handler(event({ principalId: "cognito-sub-uuid" }));
-    const body = JSON.parse(response.body ?? "{}") as {
-      servers: Array<{ authStatus: string }>;
-    };
+    const body = JSON.parse(response.body ?? "{}") as { error: string };
 
-    expect(response.statusCode).toBe(200);
-    expect(body.servers[0]?.authStatus).toBe("active");
-    const predicates = JSON.stringify(dbState.predicates);
-    expect(predicates).toContain("user-1");
-    expect(predicates).not.toContain("cognito-sub-uuid");
+    expect(response.statusCode).toBe(403);
+    expect(body.error).toBe("Members may only manage their own MCP tokens");
+    expect(dbState.predicates).toEqual([]);
   });
 
   it("resolves raw Cognito sub to users.id before building MCP OAuth state", async () => {
@@ -281,6 +299,23 @@ function managedTwentyRow(overrides: Record<string, unknown> = {}) {
     management_source: "managed_application",
     managed_application_key: "twenty-crm",
     ...overrides,
+  };
+}
+
+function defaultMembership() {
+  return {
+    ok: true,
+    auth: {
+      authType: "cognito",
+      principalId: "principal-1",
+      tenantId: "tenant-1",
+      email: "member@example.com",
+      emailVerified: true,
+      agentId: null,
+    },
+    tenantId: "tenant-1",
+    userId: "user-1",
+    role: "member",
   };
 }
 

@@ -228,6 +228,9 @@ describe("PluginDetail", () => {
     render(<PluginDetail />);
 
     expect(screen.getByRole("button", { name: /^connect$/i })).toBeTruthy();
+    expect(screen.queryByText("Partially installed")).toBeNull();
+    expect(screen.queryByText("Components")).toBeNull();
+    expect(screen.queryByText("S3 prefix seed failed")).toBeNull();
     expect(
       screen.queryByRole("button", { name: /install update/i }),
     ).toBeNull();
@@ -330,14 +333,16 @@ describe("PluginDetail", () => {
     expect(dialog.textContent).toBe("job-77");
   });
 
-  it("non-operators see the pending-approval explanation without the review button", () => {
+  it("hides pending-approval deployment details from non-operators", () => {
     tenantState.isOperator = false;
     mockQueries({ install: awaitingApprovalInstall, activations: [] });
     render(<PluginDetail />);
 
+    expect(screen.getByRole("button", { name: /^connect$/i })).toBeTruthy();
+    expect(screen.queryByText("Awaiting approval")).toBeNull();
     expect(
-      screen.getByText(/an operator must review and approve/i),
-    ).toBeTruthy();
+      screen.queryByText(/an operator must review and approve/i),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: /review deployment plan/i }),
     ).toBeNull();

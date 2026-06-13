@@ -34,6 +34,7 @@ import {
 } from "node:crypto";
 import { authenticate } from "../lib/cognito-auth.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
+import { resolveUserMcpPrincipal } from "../lib/user-mcp-principal.js";
 import {
   handleCors,
   json,
@@ -633,8 +634,9 @@ export async function handler(
         requiredRoles: ["owner", "admin", "member"],
       });
       if (!_v.ok) return error(_v.reason, _v.status);
-      if (!_v.userId) return error("Caller has no user record", 403);
-      return mcpListUserServers(_v.tenantId, _v.userId);
+      const principal = resolveUserMcpPrincipal(_v, event.headers);
+      if (!principal.ok) return error(principal.reason, principal.status);
+      return mcpListUserServers(_v.tenantId, principal.userId);
     }
 
     // DELETE /api/skills/user-mcp-tokens/:mcpServerId — clear user's OAuth tokens for an MCP server
@@ -652,8 +654,9 @@ export async function handler(
         requiredRoles: ["owner", "admin", "member"],
       });
       if (!_v.ok) return error(_v.reason, _v.status);
-      if (!_v.userId) return error("Caller has no user record", 403);
-      return mcpClearUserToken(_v.userId, _v.tenantId, mcpServerId);
+      const principal = resolveUserMcpPrincipal(_v, event.headers);
+      if (!principal.ok) return error(principal.reason, principal.status);
+      return mcpClearUserToken(principal.userId, _v.tenantId, mcpServerId);
     }
 
     // POST /api/skills/start — service-to-service wrapper around startSkillRun.
@@ -2196,6 +2199,7 @@ async function mcpClearUserToken(
     .where(
       and(
         eq(userMcpTokens.user_id, userId),
+        eq(userMcpTokens.tenant_id, tenantId),
         eq(userMcpTokens.mcp_server_id, mcpServerId),
       ),
     );
