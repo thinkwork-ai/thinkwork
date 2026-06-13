@@ -9,6 +9,9 @@ import {
   cutoverTwentyPlugin,
   deactivatePlugin,
   installPlugin,
+  issuePremiumPluginInstallKey,
+  redeemPremiumPluginInstallKey,
+  revokePremiumPluginInstallKey,
   retryPluginComponent,
   uninstallPlugin,
   upgradePlugin,
@@ -28,5 +31,8 @@ export const pluginMutations = {
   retryPluginComponent,
   activatePlugin,
   deactivatePlugin,
+  issuePremiumPluginInstallKey,
+  redeemPremiumPluginInstallKey,
+  revokePremiumPluginInstallKey,
   cutoverTwentyPlugin,
 };

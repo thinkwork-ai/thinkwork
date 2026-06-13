@@ -53,6 +53,7 @@ import { createHash } from "node:crypto";
 import type {
   InfrastructureComponent,
   McpServerComponent,
+  PremiumPluginMetadata,
   PluginComponent,
   PluginVersion,
   SkillsComponent,
@@ -73,6 +74,11 @@ import {
   teardownPluginSkillsComponent,
 } from "./handlers/skills.js";
 import { createSecretsManagerDeleteSecrets } from "./secrets.js";
+import {
+  getActivePremiumEntitlement,
+  redeemPremiumInstallKey,
+  type PremiumRequestMetadata,
+} from "./premium-entitlements.js";
 import {
   createDrizzlePluginEngineStore,
   type PluginComponentRow,
@@ -106,12 +112,26 @@ export interface PluginEngineActor {
 export type DeleteSecretsPort = (secretRefs: string[]) => Promise<void>;
 
 export interface PluginVersionResolution {
-  plugin: { pluginKey: string; displayName: string; description: string };
+  plugin: {
+    pluginKey: string;
+    displayName: string;
+    description: string;
+    premium?: PremiumPluginMetadata;
+  };
   versionEntry: {
     version: string;
     payloadSha256: string;
     payload: PluginVersion;
   };
+}
+
+export interface PremiumInstallGateInput {
+  tenantId: string;
+  pluginKey: string;
+  premium: PremiumPluginMetadata;
+  installKey?: string | null;
+  actor: PluginEngineActor;
+  request?: PremiumRequestMetadata;
 }
 
 export interface PluginEngineDeps {
@@ -167,6 +187,9 @@ export interface PluginEngineDeps {
       requestedByUserId: string | null;
     }) => Promise<{ handlerRef: Record<string, unknown>; complete: boolean }>;
   };
+  premiumAccess: {
+    ensureInstallAllowed(input: PremiumInstallGateInput): Promise<void>;
+  };
   deleteSecrets: DeleteSecretsPort;
   now?: () => Date;
 }
@@ -184,6 +207,9 @@ export function createDefaultPluginEngineDeps(): PluginEngineDeps {
       provisionInfra: (args) => provisionPluginInfraComponent(args),
       teardownInfra: (args) => teardownPluginInfraComponent(args),
     },
+    premiumAccess: {
+      ensureInstallAllowed: ensurePremiumInstallAllowed,
+    },
     deleteSecrets: createSecretsManagerDeleteSecrets(),
   };
 }
@@ -194,6 +220,35 @@ export function createDefaultPluginEngineDeps(): PluginEngineDeps {
 
 export function pluginEngineError(code: string, message: string): GraphQLError {
   return new GraphQLError(message, { extensions: { code } });
+}
+
+async function ensurePremiumInstallAllowed(
+  input: PremiumInstallGateInput,
+): Promise<void> {
+  const entitlement = await getActivePremiumEntitlement({
+    tenantId: input.tenantId,
+    pluginKey: input.pluginKey,
+  });
+  if (entitlement) return;
+
+  const installKey = input.installKey?.trim();
+  if (!installKey) {
+    throw new GraphQLError(input.premium.installKeyPrompt, {
+      extensions: {
+        code: "INSTALL_KEY_REQUIRED",
+        pluginKey: input.pluginKey,
+        installKeyRequired: true,
+      },
+    });
+  }
+
+  await redeemPremiumInstallKey({
+    tenantId: input.tenantId,
+    pluginKey: input.pluginKey,
+    rawKey: installKey,
+    actor: input.actor,
+    request: input.request,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -925,8 +980,10 @@ export async function installPlugin(
     tenantId: string;
     pluginKey: string;
     version?: string | null;
+    installKey?: string | null;
     idempotencyKey: string;
     actor: PluginEngineActor;
+    request?: PremiumRequestMetadata;
   },
   deps: PluginEngineDeps = createDefaultPluginEngineDeps(),
 ): Promise<PluginInstallRow> {
@@ -936,6 +993,16 @@ export async function installPlugin(
     args.version,
     deps,
   );
+  if (requested.plugin.premium?.installKeyRequired) {
+    await deps.premiumAccess.ensureInstallAllowed({
+      tenantId: args.tenantId,
+      pluginKey: requested.plugin.pluginKey,
+      premium: requested.plugin.premium,
+      installKey: args.installKey,
+      actor: args.actor,
+      request: args.request,
+    });
+  }
 
   let install = await deps.store.getInstallByTenantAndKey(
     args.tenantId,
@@ -1100,6 +1167,7 @@ export async function upgradePlugin(
     installId: string;
     toVersion: string;
     actor: PluginEngineActor;
+    request?: PremiumRequestMetadata;
   },
   deps: PluginEngineDeps = createDefaultPluginEngineDeps(),
 ): Promise<PluginInstallRow> {
@@ -1128,6 +1196,16 @@ export async function upgradePlugin(
     args.toVersion,
     deps,
   );
+  if (next.plugin.premium?.installKeyRequired) {
+    await deps.premiumAccess.ensureInstallAllowed({
+      tenantId: args.tenantId,
+      pluginKey: next.plugin.pluginKey,
+      premium: next.plugin.premium,
+      installKey: null,
+      actor: args.actor,
+      request: args.request,
+    });
+  }
 
   // Old payload is diff input only — a pruned old version degrades to
   // "treat every surviving component as changed".

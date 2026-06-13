@@ -17,12 +17,14 @@ import {
   authDomainChanged,
   computeInstallStateFromComponents,
   installPlugin,
+  pluginEngineError,
   reconcileInstallStatus,
   retryPluginComponent,
   STALE_INSTALLING_THRESHOLD_MS,
   uninstallPlugin,
   upgradePlugin,
   type PluginEngineDeps,
+  type PremiumInstallGateInput,
   type PluginVersionResolution,
 } from "./engine.js";
 import {
@@ -32,6 +34,11 @@ import {
 
 const TENANT = "tenant-1";
 const ACTOR = { actorId: "user-1", actorType: "user" as const };
+const PREMIUM = {
+  entitlementProductKey: "lastmile-premium",
+  installKeyRequired: true,
+  installKeyPrompt: "Enter the install key provided by ThinkWork.",
+} as const;
 
 // ---------------------------------------------------------------------------
 // Fixtures — a LastMile-shaped, no-infra manifest version
@@ -97,12 +104,16 @@ function withInfraVersion(): PluginVersion {
   });
 }
 
-function resolution(payload: PluginVersion): PluginVersionResolution {
+function resolution(
+  payload: PluginVersion,
+  premium = false,
+): PluginVersionResolution {
   return {
     plugin: {
       pluginKey: "lastmile",
       displayName: "LastMile",
       description: "d",
+      ...(premium ? { premium: PREMIUM } : {}),
     },
     versionEntry: {
       version: payload.version,
@@ -116,8 +127,10 @@ interface Harness {
   deps: PluginEngineDeps;
   store: InMemoryPluginEngineStore;
   calls: string[];
+  premiumAccessCalls: PremiumInstallGateInput[];
   deletedSecrets: string[][];
   failSkillsOnce: () => void;
+  grantPremiumEntitlement: () => void;
   /** Ids of deployment jobs the infra handler fakes created, in order. */
   infraJobs: string[];
   /**
@@ -128,9 +141,13 @@ interface Harness {
   adoptRunningInfra: () => void;
 }
 
-function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
+function harness(
+  versions: PluginVersion[] = [lastmileVersion()],
+  options: { premium?: boolean } = {},
+): Harness {
   const store = createInMemoryPluginEngineStore();
   const calls: string[] = [];
+  const premiumAccessCalls: PremiumInstallGateInput[] = [];
   const deletedSecrets: string[][] = [];
   const infraJobs: string[] = [];
   const byVersion = new Map(versions.map((v) => [v.version, v]));
@@ -138,6 +155,7 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
   let skillsFailures = 0;
   let jobCounter = 0;
   let adoptRunning = false;
+  let premiumEntitled = false;
 
   const IN_FLIGHT = new Set(["planning", "awaiting_approval", "applying"]);
 
@@ -168,7 +186,7 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
     resolveVersion: async (pluginKey, version) => {
       if (pluginKey !== "lastmile") return null;
       const payload = version ? byVersion.get(version) : latest;
-      return payload ? resolution(payload) : null;
+      return payload ? resolution(payload, options.premium ?? false) : null;
     },
     handlers: {
       provisionSkills: async ({ component }) => {
@@ -284,6 +302,22 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
         };
       },
     },
+    premiumAccess: {
+      ensureInstallAllowed: async (input) => {
+        premiumAccessCalls.push(input);
+        if (premiumEntitled) return;
+        if (!input.installKey) {
+          throw pluginEngineError(
+            "INSTALL_KEY_REQUIRED",
+            input.premium.installKeyPrompt,
+          );
+        }
+        if (input.installKey !== "twpi_valid") {
+          throw pluginEngineError("FORBIDDEN", "Install key is invalid");
+        }
+        premiumEntitled = true;
+      },
+    },
     deleteSecrets: async (refs) => {
       deletedSecrets.push(refs);
       calls.push(`deleteSecrets:${refs.join(",")}`);
@@ -294,10 +328,14 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
     deps,
     store,
     calls,
+    premiumAccessCalls,
     deletedSecrets,
     infraJobs,
     failSkillsOnce: () => {
       skillsFailures += 1;
+    },
+    grantPremiumEntitlement: () => {
+      premiumEntitled = true;
     },
     adoptRunningInfra: () => {
       adoptRunning = true;
@@ -429,6 +467,70 @@ describe("installPlugin", () => {
       installPlugin(installArgs({ version: "9.9.9" }), h.deps),
       "PLUGIN_VERSION_NOT_FOUND",
     );
+  });
+
+  it("requires an install key for premium plugins before creating install rows", async () => {
+    const h = harness([lastmileVersion()], { premium: true });
+
+    await expectCode(
+      installPlugin(installArgs(), h.deps),
+      "INSTALL_KEY_REQUIRED",
+    );
+
+    expect(h.premiumAccessCalls).toHaveLength(1);
+    expect(h.calls).toEqual([]);
+    expect(
+      await h.store.getInstallByTenantAndKey(TENANT, "lastmile"),
+    ).toBeNull();
+  });
+
+  it("redeems a provided premium key before starting component provisioning", async () => {
+    const h = harness([lastmileVersion()], { premium: true });
+
+    const install = await installPlugin(
+      installArgs({ installKey: "twpi_valid" }),
+      h.deps,
+    );
+
+    expect(install.state).toBe("installed");
+    expect(h.premiumAccessCalls).toHaveLength(1);
+    expect(h.premiumAccessCalls[0]).toMatchObject({
+      tenantId: TENANT,
+      pluginKey: "lastmile",
+      installKey: "twpi_valid",
+      premium: PREMIUM,
+    });
+    expect(h.calls).toEqual([
+      "provision:skills:skills",
+      "provision:mcp:crm",
+      "provision:mcp:tasks",
+    ]);
+  });
+
+  it("does not start provisioning or persist an install when the premium key is invalid", async () => {
+    const h = harness([lastmileVersion()], { premium: true });
+
+    await expectCode(
+      installPlugin(installArgs({ installKey: "not-valid" }), h.deps),
+      "FORBIDDEN",
+    );
+
+    expect(h.calls).toEqual([]);
+    expect(
+      await h.store.getInstallByTenantAndKey(TENANT, "lastmile"),
+    ).toBeNull();
+  });
+
+  it("allows premium install without a key when the tenant already has entitlement", async () => {
+    const h = harness([lastmileVersion()], { premium: true });
+    h.grantPremiumEntitlement();
+
+    const install = await installPlugin(installArgs(), h.deps);
+
+    expect(install.state).toBe("installed");
+    expect(h.premiumAccessCalls).toHaveLength(1);
+    expect(h.premiumAccessCalls[0]?.installKey).toBeUndefined();
+    expect(h.calls).toContain("provision:skills:skills");
   });
 
   it("staleness re-drive: a wedged install (crash after MCP rows written) converges idempotently", async () => {
@@ -778,6 +880,61 @@ describe("upgradePlugin", () => {
       ),
       "FAILED_PRECONDITION",
     );
+  });
+
+  it("allows premium upgrades when entitlement already exists", async () => {
+    const h = harness([lastmileVersion(), v020()], { premium: true });
+    h.grantPremiumEntitlement();
+    const install = await installPlugin(
+      installArgs({ version: "0.1.0" }),
+      h.deps,
+    );
+    h.calls.length = 0;
+    h.premiumAccessCalls.length = 0;
+
+    const upgraded = await upgradePlugin(
+      {
+        tenantId: TENANT,
+        installId: install.id,
+        toVersion: "0.2.0",
+        actor: ACTOR,
+      },
+      h.deps,
+    );
+
+    expect(upgraded.pinned_version).toBe("0.2.0");
+    expect(h.premiumAccessCalls).toHaveLength(1);
+    expect(h.premiumAccessCalls[0]?.installKey).toBeNull();
+    expect(h.calls).toEqual(["provision:skills:routing-skills"]);
+  });
+
+  it("blocks premium upgrades without entitlement before changing the install pin", async () => {
+    const h = harness([lastmileVersion(), v020()], { premium: true });
+    const install = h.store.seedInstall({
+      tenant_id: TENANT,
+      plugin_key: "lastmile",
+      pinned_version: "0.1.0",
+      pinned_payload_sha256: "sha-0.1.0",
+      state: "installed",
+    });
+
+    await expectCode(
+      upgradePlugin(
+        {
+          tenantId: TENANT,
+          installId: install.id,
+          toVersion: "0.2.0",
+          actor: ACTOR,
+        },
+        h.deps,
+      ),
+      "INSTALL_KEY_REQUIRED",
+    );
+
+    expect(h.calls).toEqual([]);
+    expect(
+      (await h.store.getInstallById(TENANT, install.id))?.pinned_version,
+    ).toBe("0.1.0");
   });
 });
 

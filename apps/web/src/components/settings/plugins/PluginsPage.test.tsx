@@ -212,6 +212,18 @@ describe("PluginsPage", () => {
     expect(screen.getAllByText("Update available").length).toBe(1);
   });
 
+  it("shows premium/key-gated catalog state without starting install directly", () => {
+    render(<PluginsPage />);
+
+    const brainRow = screen.getByRole("link", { name: "Company Brain" })
+      .parentElement!.parentElement!;
+    expect(within(brainRow).getByText("Premium")).toBeTruthy();
+    expect(within(brainRow).getByText("Key required")).toBeTruthy();
+    expect(within(brainRow).getByRole("link", { name: /enter key/i }))
+      .toBeTruthy();
+    expect(installMock).not.toHaveBeenCalled();
+  });
+
   it("filters to installed-only when the toggle is switched", () => {
     render(<PluginsPage />);
 
@@ -327,6 +339,30 @@ const catalogEntries = [
       },
     ],
     install: installedPlugins[1],
+  },
+  {
+    __typename: "PluginCatalogEntry" as const,
+    pluginKey: "company-brain",
+    displayName: "Company Brain",
+    description: "Premium knowledge graph substrate.",
+    latestVersion: "0.1.0",
+    updateAvailable: false,
+    premium: {
+      entitlementProductKey: "company-brain",
+      installKeyRequired: true,
+      installKeyPrompt:
+        "Enter the Company Brain install key provided by ThinkWork.",
+    },
+    entitlement: null,
+    versions: [
+      {
+        version: "0.1.0",
+        payloadSha256: "sha256:brain",
+        requiredOauthScopes: [],
+        components: [],
+      },
+    ],
+    install: null,
   },
   {
     __typename: "PluginCatalogEntry" as const,

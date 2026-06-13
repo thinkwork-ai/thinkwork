@@ -14,11 +14,12 @@
  *     read-time reconciliation learns completion from the job's status.
  *   - Approval stays on the existing approve/reject deployment mutations;
  *     plugin-created jobs are shape-identical, so no new approval surface.
- *   - ADOPTION (U10 Twenty cutover): when a `managed_applications` row for
- *     (tenant, managedAppKey) already exists and this component has never
- *     provisioned, provision creates an UPGRADE plan job against the
- *     existing row (preserving its desired_config) instead of a fresh
- *     ENABLE — Terraform state adoption produces a no-change plan.
+ *   - ADOPTION: when a `managed_applications` row for (tenant,
+ *     managedAppKey) already exists, most plugins can attach to the running
+ *     app without a job. Company Brain's Cognee substrate is stricter: first
+ *     adoption creates an UPGRADE plan against the existing row, preserving
+ *     desired_config, so Terraform evidence can prove a no-change adoption
+ *     before the component becomes provisioned.
  *   - `teardown` creates a DESTROY plan job behind the same approval gate;
  *     the engine holds the install at `uninstalling` until reconciliation
  *     sees the destroy job succeed.
@@ -85,6 +86,12 @@ export interface InfraHandlerRef extends Record<string, unknown> {
   componentHash: string;
   /** True when provision attached to a pre-existing managed_applications row. */
   adoptedExisting: boolean;
+  /**
+   * True for Company Brain's first Cognee adoption job. The job uses UPGRADE
+   * machinery but semantically exists to prove safe/no-change adoption before
+   * plugin ownership becomes active.
+   */
+  adoptionRequiresNoChange?: boolean;
   /**
    * True when provision adopted an ALREADY-running managed app without a
    * deployment job (first-time adoption, unchanged content). Such a
@@ -226,6 +233,7 @@ function parseHandlerRef(
         ? handlerRef.componentHash
         : undefined,
     adoptedExisting: handlerRef.adoptedExisting === true,
+    adoptionRequiresNoChange: handlerRef.adoptionRequiresNoChange === true,
     adoptedRunningInfra: handlerRef.adoptedRunningInfra === true,
   };
 }
@@ -243,6 +251,13 @@ function planJobIdempotencyKey(args: {
     args.operation.toLowerCase(),
     String(args.attempt),
   ].join(":");
+}
+
+function requiresPlanBackedAdoption(args: {
+  pluginKey: string;
+  appKey: ManagedAppKey;
+}): boolean {
+  return args.pluginKey === "company-brain" && args.appKey === "cognee";
 }
 
 /**
@@ -308,6 +323,7 @@ export async function provisionPluginInfraComponent(args: {
         attempt: prior.attempt ?? 1,
         componentHash: prior.componentHash ?? componentHash,
         adoptedExisting: prior.adoptedExisting === true,
+        adoptionRequiresNoChange: prior.adoptionRequiresNoChange === true,
       };
     }
   }
@@ -319,6 +335,11 @@ export async function provisionPluginInfraComponent(args: {
     prior.adoptedExisting === true ||
     Boolean(existing && !prior.deploymentJobId && !prior.managedApplicationId);
 
+  const planBackedAdoption = requiresPlanBackedAdoption({
+    pluginKey: args.pluginKey,
+    appKey,
+  });
+
   // ADOPTION-WITHOUT-DEPLOY (Fix A): the managed app is ALREADY deployed and
   // running (greenfield/operator-provisioned — its Terraform is not plugin-
   // owned), this component has never provisioned a job (first-time adoption),
@@ -326,9 +347,15 @@ export async function provisionPluginInfraComponent(args: {
   // create a deploy plan job or sit at awaiting_approval. Plugin "installed"
   // means the plugin's components are WIRED UP, not that infra is healthy
   // right now — runtime health stays visible via the deployment-details view.
-  // Genuine upgrades (contentChanged) and net-new provisioning (no existing
-  // row) still take the plan-job path below.
-  if (existing && !contentChanged && !prior.deploymentJobId) {
+  // Genuine upgrades (contentChanged), Company Brain/Cognee plan-backed
+  // adoption, and net-new provisioning (no existing row) still take the
+  // plan-job path below.
+  if (
+    existing &&
+    !contentChanged &&
+    !prior.deploymentJobId &&
+    !planBackedAdoption
+  ) {
     return {
       managedAppKey: appKey,
       managedApplicationId: existing.id,
@@ -351,27 +378,12 @@ export async function provisionPluginInfraComponent(args: {
         ? "UPGRADE"
         : "ENABLE";
 
-  // Net-new provisioning (Fix B): the plugin would have the runner stand up
-  // brand-new Terraform, so the job needs a REAL release to deploy. The
-  // managed-application row carries the operator-selected release; without
-  // one, the deployment Step Function fails at launch on the missing
-  // releaseManifestSha256 and the job wedges in `planning` forever. Fail the
-  // component with an actionable error instead of creating that doomed job.
+  // Existing/adoption rows carry the operator-selected release. Net-new
+  // provisioning intentionally passes null so the shared plan-job core can use
+  // the normal configured release defaults and fail closed if they are still
+  // unresolved.
   const releaseVersion = existing?.selectedReleaseVersion ?? null;
   const manifestDigest = existing?.selectedManifestDigest ?? null;
-  if (
-    operation === "ENABLE" &&
-    (!releaseVersion ||
-      !manifestDigest ||
-      releaseVersion === "unresolved" ||
-      manifestDigest === "unresolved")
-  ) {
-    throw new Error(
-      `Plugin-driven provisioning of ${appKey} requires a resolved release; ` +
-        `deploy the app via Managed Applications first, then install the ` +
-        `plugin to adopt it.`,
-    );
-  }
 
   const attempt = (prior.attempt ?? 0) + 1;
   const job = await deps.startPlanJob({
@@ -403,6 +415,8 @@ export async function provisionPluginInfraComponent(args: {
     attempt,
     componentHash,
     adoptedExisting,
+    adoptionRequiresNoChange:
+      planBackedAdoption && existing && !contentChanged ? true : undefined,
   };
 }
 
@@ -480,6 +494,7 @@ export async function teardownPluginInfraComponent(args: {
       attempt,
       componentHash: prior.componentHash ?? "",
       adoptedExisting: prior.adoptedExisting === true,
+      adoptionRequiresNoChange: prior.adoptionRequiresNoChange === true,
     } satisfies InfraHandlerRef,
     complete: false,
   };

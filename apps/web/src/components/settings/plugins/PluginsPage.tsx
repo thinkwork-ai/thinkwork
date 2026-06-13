@@ -202,10 +202,27 @@ export function PluginsPage() {
                       {entry.description}
                     </p>
                     {!selfServiceOnly ? (
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Latest v{entry.latestVersion} · {entry.versions.length}{" "}
-                        {entry.versions.length === 1 ? "version" : "versions"}
-                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          Latest v{entry.latestVersion} ·{" "}
+                          {entry.versions.length}{" "}
+                          {entry.versions.length === 1
+                            ? "version"
+                            : "versions"}
+                        </span>
+                        {entry.premium ? (
+                          <Badge
+                            variant="outline"
+                            className="border-amber-500/40 text-amber-500"
+                          >
+                            Premium
+                          </Badge>
+                        ) : null}
+                        {entry.premium?.installKeyRequired &&
+                        !entry.entitlement ? (
+                          <Badge variant="outline">Key required</Badge>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -258,15 +275,28 @@ export function PluginsPage() {
                         </Badge>
                       </>
                     ) : showOperatorActions ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={installState.fetching}
-                        onClick={() => void install(entry.pluginKey)}
-                      >
-                        <ArrowDownToLine className="mr-2 size-4" />
-                        Install
-                      </Button>
+                      entry.premium?.installKeyRequired &&
+                      !entry.entitlement ? (
+                        <Button asChild type="button" size="sm">
+                          <Link
+                            to="/settings/plugins/$pluginKey"
+                            params={{ pluginKey: entry.pluginKey }}
+                          >
+                            <ArrowDownToLine className="mr-2 size-4" />
+                            Enter key
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={installState.fetching}
+                          onClick={() => void install(entry.pluginKey)}
+                        >
+                          <ArrowDownToLine className="mr-2 size-4" />
+                          Install
+                        </Button>
+                      )
                     ) : (
                       <Badge variant="outline">Not installed</Badge>
                     )}
