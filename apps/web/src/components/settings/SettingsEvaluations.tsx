@@ -518,6 +518,18 @@ export function SettingsEvaluations() {
             <SlidersHorizontal className="size-4" />
           </Link>
         </Button>
+        <Button
+          asChild
+          variant="ghost"
+          size="icon-sm"
+          title="Replay tools"
+          aria-label="Replay tools"
+          className={desktopToolbarButtonClassName}
+        >
+          <Link to="/settings/evaluations/replay-tools">
+            <ShieldCheck className="size-4" />
+          </Link>
+        </Button>
         <RunEvaluationButton
           tenantId={tenantId}
           onStarted={() => {

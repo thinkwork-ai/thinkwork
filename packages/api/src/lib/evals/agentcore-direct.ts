@@ -105,6 +105,71 @@ export interface EvalReplayHistoryMessage {
   content: string;
 }
 
+/**
+ * A single read-only MCP tool an operator has allowlisted for replay
+ * (Trust Core U13). Default-deny: replay carries an MCP server ONLY if at
+ * least one of its tools appears here, and only the listed tools become
+ * that server's toolWhitelist. Mutating tools and the email/web kill-list
+ * stay blocked regardless of what's listed.
+ */
+export interface EvalReplayAllowedTool {
+  serverName: string;
+  toolName: string;
+}
+
+/**
+ * Restrict the agent's resolved MCP servers to the operator's read-only
+ * replay allowlist (Trust Core U13). Returns the subset of
+ * `runtimeConfig.mcpConfigs` that has ≥1 allowlisted tool, with each
+ * surviving entry's `tools` (the runtime's per-server toolWhitelist) set to
+ * exactly the allowlisted tool names for that server.
+ *
+ * Default-deny is preserved by construction: an empty allowlist yields
+ * `undefined` (no servers), matching the pre-U13 `mcp_configs: undefined`
+ * behavior. Servers with no allowlisted tool are dropped entirely.
+ */
+export function restrictMcpConfigsToReplayAllowlist(
+  mcpConfigs: AgentRuntimeConfig["mcpConfigs"],
+  allowlist: EvalReplayAllowedTool[] | undefined,
+): AgentRuntimeConfig["mcpConfigs"] | undefined {
+  if (!allowlist || allowlist.length === 0) return undefined;
+  if (!mcpConfigs || mcpConfigs.length === 0) return undefined;
+
+  // Group allowlisted tool names by server. Deduped so a server's
+  // toolWhitelist never repeats a tool.
+  const allowedByServer = new Map<string, Set<string>>();
+  for (const entry of allowlist) {
+    const server = entry.serverName?.trim();
+    const tool = entry.toolName?.trim();
+    if (!server || !tool) continue;
+    const set = allowedByServer.get(server) ?? new Set<string>();
+    set.add(tool);
+    allowedByServer.set(server, set);
+  }
+  if (allowedByServer.size === 0) return undefined;
+
+  const restricted = mcpConfigs
+    .map((server) => {
+      const allowed = allowedByServer.get(server.name);
+      if (!allowed || allowed.size === 0) return null;
+      // Intersect with the server's actually-available tools when the
+      // runtime config knows them, so a stale allowlist row can't smuggle
+      // a tool the server doesn't expose; absent availableTools, trust the
+      // operator allowlist (the runtime still gates via toolWhitelist).
+      const availableNames = new Set(
+        (server.availableTools ?? []).map((t) => t.trim()).filter(Boolean),
+      );
+      const tools = [...allowed].filter((tool) =>
+        availableNames.size > 0 ? availableNames.has(tool) : true,
+      );
+      if (tools.length === 0) return null;
+      return { ...server, tools };
+    })
+    .filter((server): server is NonNullable<typeof server> => server !== null);
+
+  return restricted.length > 0 ? restricted : undefined;
+}
+
 export function buildEvalAgentCorePayload(input: {
   tenantId: string;
   agentId: string;
@@ -119,8 +184,18 @@ export function buildEvalAgentCorePayload(input: {
    * replay, history []).
    */
   messagesHistory?: EvalReplayHistoryMessage[];
+  /**
+   * Operator-curated read-only MCP tool allowlist for replay (U13).
+   * Default-deny: omitted/empty → no MCP servers reach the runtime
+   * (`mcp_configs: undefined`, the pre-U13 safe behavior).
+   */
+  replayToolAllowlist?: EvalReplayAllowedTool[];
 }): Record<string, unknown> {
   const runtimeConfig = input.runtimeConfig;
+  const mcpConfigs = restrictMcpConfigsToReplayAllowlist(
+    runtimeConfig.mcpConfigs,
+    input.replayToolAllowlist,
+  );
 
   return {
     tenant_id: input.tenantId,
@@ -168,7 +243,12 @@ export function buildEvalAgentCorePayload(input: {
     knowledge_bases: runtimeConfig.knowledgeBasesConfig,
     trigger_channel: "eval",
     guardrail_config: runtimeConfig.guardrailConfig || undefined,
-    mcp_configs: undefined,
+    // Read-only MCP tools on replay (U13): default-deny via the per-tenant
+    // operator allowlist. Each surviving server carries only its
+    // allowlisted tools as the runtime's per-server toolWhitelist; mutating
+    // tools and the email/web kill-list above stay blocked. Empty allowlist
+    // → undefined (the pre-U13 strip-everything default).
+    mcp_configs: mcpConfigs,
     blocked_tools:
       runtimeConfig.blockedTools.length > 0
         ? runtimeConfig.blockedTools
@@ -186,6 +266,8 @@ export async function invokeAgentCoreForEval(input: {
   systemPrompt?: string | null;
   /** Flagged-thread replay history (U8) — see buildEvalAgentCorePayload. */
   messagesHistory?: EvalReplayHistoryMessage[];
+  /** Read-only MCP tool allowlist for replay (U13). Default-deny. */
+  replayToolAllowlist?: EvalReplayAllowedTool[];
 }): Promise<{
   output: string;
   durationMs: number;
@@ -232,6 +314,7 @@ async function invokeAgentCoreForEvalOnce(input: {
   model: string | null | undefined;
   systemPrompt?: string | null;
   messagesHistory?: EvalReplayHistoryMessage[];
+  replayToolAllowlist?: EvalReplayAllowedTool[];
 }): Promise<{
   output: string;
   durationMs: number;

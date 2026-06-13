@@ -111,6 +111,8 @@ import {
   // Eval datasets — derived index of the S3-canonical dataset artifacts
   evalDatasets,
   evalTestCases,
+  // Read-only MCP replay allowlist (Trust Core U13)
+  evalReplayToolAllowlist,
   slackWorkspaces,
   slackUserLinks,
   spaces,
@@ -209,6 +211,7 @@ export {
   skillCatalog,
   evalDatasets,
   evalTestCases,
+  evalReplayToolAllowlist,
   slackWorkspaces,
   slackUserLinks,
   spaces,

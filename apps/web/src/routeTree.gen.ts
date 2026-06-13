@@ -87,6 +87,7 @@ import { Route as AuthedShellArtifactsIdRouteImport } from "./routes/_authed/_sh
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
 import { Route as AuthedShellActivityThreadIdRouteImport } from "./routes/_authed/_shell/activity.$threadId";
 import { Route as AuthedSettingsEvaluationsStudioIndexRouteImport } from "./routes/_authed/settings.evaluations.studio.index";
+import { Route as AuthedSettingsEvaluationsReplayToolsIndexRouteImport } from "./routes/_authed/settings.evaluations.replay-tools.index";
 import { Route as AuthedSettingsEvaluationsDatasetsIndexRouteImport } from "./routes/_authed/settings.evaluations.datasets.index";
 import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes/_authed/settings.evaluations.studio.new";
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
@@ -529,6 +530,12 @@ const AuthedSettingsEvaluationsStudioIndexRoute =
     path: "/evaluations/studio/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsEvaluationsReplayToolsIndexRoute =
+  AuthedSettingsEvaluationsReplayToolsIndexRouteImport.update({
+    id: "/evaluations/replay-tools/",
+    path: "/evaluations/replay-tools/",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsEvaluationsDatasetsIndexRoute =
   AuthedSettingsEvaluationsDatasetsIndexRouteImport.update({
     id: "/evaluations/datasets/",
@@ -659,6 +666,7 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
   "/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
+  "/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -740,6 +748,7 @@ export interface FileRoutesByTo {
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
   "/settings/evaluations/datasets": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
+  "/settings/evaluations/replay-tools": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -829,6 +838,7 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/_authed/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
   "/_authed/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
+  "/_authed/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/_authed/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/_authed/_shell/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/_authed/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -917,6 +927,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
     | "/settings/evaluations/datasets/"
+    | "/settings/evaluations/replay-tools/"
     | "/settings/evaluations/studio/"
     | "/spaces/$spaceId/threads/$threadId"
     | "/settings/evaluations/studio/edit/$testCaseId"
@@ -998,6 +1009,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
     | "/settings/evaluations/datasets"
+    | "/settings/evaluations/replay-tools"
     | "/settings/evaluations/studio"
     | "/spaces/$spaceId/threads/$threadId"
     | "/settings/evaluations/studio/edit/$testCaseId"
@@ -1086,6 +1098,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/studio/$testCaseId"
     | "/_authed/settings/evaluations/studio/new"
     | "/_authed/settings/evaluations/datasets/"
+    | "/_authed/settings/evaluations/replay-tools/"
     | "/_authed/settings/evaluations/studio/"
     | "/_authed/_shell/spaces/$spaceId/threads/$threadId"
     | "/_authed/settings/evaluations/studio/edit/$testCaseId"
@@ -1651,6 +1664,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsEvaluationsStudioIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/evaluations/replay-tools/": {
+      id: "/_authed/settings/evaluations/replay-tools/";
+      path: "/evaluations/replay-tools";
+      fullPath: "/settings/evaluations/replay-tools/";
+      preLoaderRoute: typeof AuthedSettingsEvaluationsReplayToolsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/evaluations/datasets/": {
       id: "/_authed/settings/evaluations/datasets/";
       path: "/evaluations/datasets";
@@ -1912,6 +1932,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsStudioTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   AuthedSettingsEvaluationsStudioNewRoute: typeof AuthedSettingsEvaluationsStudioNewRoute;
   AuthedSettingsEvaluationsDatasetsIndexRoute: typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
+  AuthedSettingsEvaluationsReplayToolsIndexRoute: typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   AuthedSettingsEvaluationsStudioIndexRoute: typeof AuthedSettingsEvaluationsStudioIndexRoute;
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
@@ -1968,6 +1989,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsEvaluationsStudioNewRoute,
   AuthedSettingsEvaluationsDatasetsIndexRoute:
     AuthedSettingsEvaluationsDatasetsIndexRoute,
+  AuthedSettingsEvaluationsReplayToolsIndexRoute:
+    AuthedSettingsEvaluationsReplayToolsIndexRoute,
   AuthedSettingsEvaluationsStudioIndexRoute:
     AuthedSettingsEvaluationsStudioIndexRoute,
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute:

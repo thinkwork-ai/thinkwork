@@ -1237,6 +1237,28 @@ export type EvalDatasetCaseInput = {
   tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
 };
 
+export type EvalReplayAllowedTool = {
+  __typename?: "EvalReplayAllowedTool";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  serverName: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  toolName: Scalars["String"]["output"];
+};
+
+export type EvalReplayMcpServer = {
+  __typename?: "EvalReplayMcpServer";
+  displayName: Scalars["String"]["output"];
+  serverName: Scalars["String"]["output"];
+  tools: Array<EvalReplayMcpTool>;
+};
+
+export type EvalReplayMcpTool = {
+  __typename?: "EvalReplayMcpTool";
+  description?: Maybe<Scalars["String"]["output"]>;
+  name: Scalars["String"]["output"];
+};
+
 export type EvalResult = {
   __typename?: "EvalResult";
   actualOutput?: Maybe<Scalars["String"]["output"]>;
@@ -2273,6 +2295,7 @@ export type Mutation = {
    */
   activatePlugin: ActivatePluginResult;
   addEvalDatasetCase: EvalTestCase;
+  addEvalReplayAllowedTool: EvalReplayAllowedTool;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addSpaceMember: SpaceMember;
@@ -2436,6 +2459,7 @@ export type Mutation = {
   rejectOntologyChangeSet: OntologyChangeSet;
   releaseThread: Thread;
   removeEvalDatasetCase: EvalDataset;
+  removeEvalReplayAllowedTool: Scalars["Boolean"]["output"];
   removeInboxItemLink: Scalars["Boolean"]["output"];
   removeSpaceMember: Scalars["Boolean"]["output"];
   /** Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey. */
@@ -2567,6 +2591,12 @@ export type MutationAddEvalDatasetCaseArgs = {
   datasetSlug: Scalars["String"]["input"];
   input: EvalDatasetCaseInput;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationAddEvalReplayAllowedToolArgs = {
+  serverName: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  toolName: Scalars["String"]["input"];
 };
 
 export type MutationAddInboxItemCommentArgs = {
@@ -3086,6 +3116,10 @@ export type MutationRemoveEvalDatasetCaseArgs = {
   caseId: Scalars["String"]["input"];
   datasetSlug: Scalars["String"]["input"];
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationRemoveEvalReplayAllowedToolArgs = {
+  id: Scalars["ID"]["input"];
 };
 
 export type MutationRemoveInboxItemLinkArgs = {
@@ -3983,6 +4017,8 @@ export type Query = {
   deploymentStatus: DeploymentStatus;
   evalDataset?: Maybe<EvalDataset>;
   evalDatasets: Array<EvalDataset>;
+  evalReplayAvailableMcpTools: Array<EvalReplayMcpServer>;
+  evalReplayToolAllowlist: Array<EvalReplayAllowedTool>;
   evalResultSpans: Array<EvalSpan>;
   evalRun?: Maybe<EvalRun>;
   evalRunResults: Array<EvalResult>;
@@ -4372,6 +4408,14 @@ export type QueryEvalDatasetArgs = {
 
 export type QueryEvalDatasetsArgs = {
   includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryEvalReplayAvailableMcpToolsArgs = {
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryEvalReplayToolAllowlistArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 

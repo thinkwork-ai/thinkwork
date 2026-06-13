@@ -11,6 +11,8 @@ import {
   evalModelId,
   extractAgentCoreResponseText,
   invokeAgentCoreForEval,
+  restrictMcpConfigsToReplayAllowlist,
+  type EvalReplayAllowedTool,
 } from "./agentcore-direct.js";
 import { resolveAgentRuntimeConfig } from "../resolve-agent-runtime-config.js";
 import type { AgentRuntimeConfig } from "../resolve-agent-runtime-config.js";
@@ -210,6 +212,128 @@ describe("direct AgentCore eval payload", () => {
         );
       }
     }
+  });
+});
+
+describe("read-only MCP replay allowlist (U13)", () => {
+  const crmServer = {
+    name: "lastmile--crm",
+    url: "https://crm.example.com/mcp",
+    transport: "streamable-http",
+    availableTools: [
+      "opportunities_list",
+      "opportunity_create",
+      "opportunity_update",
+    ],
+  };
+  const docsServer = {
+    name: "docs--reader",
+    url: "https://docs.example.com/mcp",
+    transport: "streamable-http",
+    availableTools: ["search", "fetch"],
+  };
+  const runtimeWithMcp = {
+    ...runtimeConfig,
+    mcpConfigs: [crmServer, docsServer],
+  };
+
+  it("empty allowlist → mcp_configs undefined (default-deny preserved)", () => {
+    expect(
+      restrictMcpConfigsToReplayAllowlist(runtimeWithMcp.mcpConfigs, undefined),
+    ).toBeUndefined();
+    expect(
+      restrictMcpConfigsToReplayAllowlist(runtimeWithMcp.mcpConfigs, []),
+    ).toBeUndefined();
+
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "list opportunities",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig: runtimeWithMcp,
+      replayToolAllowlist: [],
+    });
+    expect(payload.mcp_configs).toBeUndefined();
+  });
+
+  it("keeps only allowlisted servers, with tools restricted to allowlisted names", () => {
+    const allowlist: EvalReplayAllowedTool[] = [
+      { serverName: "lastmile--crm", toolName: "opportunities_list" },
+    ];
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "list opportunities",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig: runtimeWithMcp,
+      replayToolAllowlist: allowlist,
+    });
+
+    const configs = payload.mcp_configs as Array<{
+      name: string;
+      tools: string[];
+    }>;
+    expect(configs).toHaveLength(1);
+    expect(configs[0].name).toBe("lastmile--crm");
+    // toolWhitelist carries only the allowlisted read-only tool — the
+    // mutating opportunity_create/opportunity_update are excluded.
+    expect(configs[0].tools).toEqual(["opportunities_list"]);
+    expect(configs[0].tools).not.toContain("opportunity_create");
+    expect(configs[0].tools).not.toContain("opportunity_update");
+  });
+
+  it("drops servers that have no allowlisted tool entirely", () => {
+    const restricted = restrictMcpConfigsToReplayAllowlist(
+      runtimeWithMcp.mcpConfigs,
+      [{ serverName: "docs--reader", toolName: "search" }],
+    );
+    expect(restricted).toHaveLength(1);
+    expect(restricted?.[0].name).toBe("docs--reader");
+    expect(restricted?.[0].tools).toEqual(["search"]);
+    expect(restricted?.some((s) => s.name === "lastmile--crm")).toBe(false);
+  });
+
+  it("ignores allowlist rows whose tool is not in the server's available tools", () => {
+    const restricted = restrictMcpConfigsToReplayAllowlist(
+      runtimeWithMcp.mcpConfigs,
+      [{ serverName: "lastmile--crm", toolName: "tool_that_does_not_exist" }],
+    );
+    // The single allowlisted tool isn't exposed by the server → no usable
+    // tools → server dropped → undefined.
+    expect(restricted).toBeUndefined();
+  });
+
+  it("an allowlist for a server the agent does not have resolves to no servers", () => {
+    const restricted = restrictMcpConfigsToReplayAllowlist(
+      runtimeWithMcp.mcpConfigs,
+      [{ serverName: "ghost--server", toolName: "anything" }],
+    );
+    expect(restricted).toBeUndefined();
+  });
+
+  it("preserves the email/web kill-list and eval_mode regardless of the allowlist", () => {
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "list opportunities",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig: runtimeWithMcp,
+      replayToolAllowlist: [
+        { serverName: "lastmile--crm", toolName: "opportunities_list" },
+      ],
+    });
+
+    expect(payload.send_email_config).toBeUndefined();
+    expect(payload.web_search_config).toBeUndefined();
+    expect(payload.web_extract_config).toBeUndefined();
+    expect(payload.eval_mode).toBe(true);
+    expect(payload.use_memory).toBe(false);
   });
 });
 

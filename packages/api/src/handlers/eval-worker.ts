@@ -16,6 +16,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   costEvents,
+  evalReplayToolAllowlist,
   evalResults,
   evalRuns,
   evalTestCases,
@@ -37,6 +38,7 @@ import { createHash } from "crypto";
 import {
   AgentCoreEvalInvocationTimeoutError,
   invokeAgentCoreForEval,
+  type EvalReplayAllowedTool,
   type EvalReplayHistoryMessage,
 } from "../lib/evals/agentcore-direct.js";
 import { isRetryableEvalInfrastructureError } from "../lib/evals/retryable.js";
@@ -514,6 +516,29 @@ async function loadFlaggedReplayHistory(
   return { ok: true, messagesHistory };
 }
 
+/**
+ * Load the tenant's read-only MCP replay allowlist (Trust Core U13).
+ * Default-deny: an empty result means replay carries no MCP servers
+ * (mcp_configs undefined — the pre-U13 safe behavior). The runtime still
+ * enforces the resulting toolWhitelist per server.
+ */
+export async function loadReplayToolAllowlist(
+  tenantId: string,
+): Promise<EvalReplayAllowedTool[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      server_name: evalReplayToolAllowlist.server_name,
+      tool_name: evalReplayToolAllowlist.tool_name,
+    })
+    .from(evalReplayToolAllowlist)
+    .where(eq(evalReplayToolAllowlist.tenant_id, tenantId));
+  return rows.map((row) => ({
+    serverName: row.server_name,
+    toolName: row.tool_name,
+  }));
+}
+
 async function executeCase(
   run: typeof evalRuns.$inferSelect,
   tc: ExecutionCase,
@@ -542,6 +567,11 @@ async function executeCase(
       targetAgentId = (await resolveTenantPlatformAgent(run.tenant_id)).id;
     }
 
+    // Read-only MCP tools on replay (U13). Default-deny: an empty
+    // allowlist yields no MCP servers in the payload. Loaded per case
+    // (tenant-scoped); cheap indexed lookup.
+    const replayToolAllowlist = await loadReplayToolAllowlist(run.tenant_id);
+
     const inv = await invokeAgentCoreForEval({
       tenantId: run.tenant_id,
       agentId: targetAgentId,
@@ -553,6 +583,7 @@ async function executeCase(
       // before the flagged turn; undefined (= empty history) for
       // synthetic single-message cases.
       messagesHistory: tc.messages_history,
+      replayToolAllowlist,
     });
     actualOutput = inv.output;
     durationMs = inv.durationMs;

@@ -456,6 +456,59 @@ export const RemoveEvalDatasetCaseMutation = graphql(`
   }
 `);
 
+// Read-only MCP replay allowlist (Trust Core U13). Default-deny: replay
+// carries an MCP tool only if an operator lists it here.
+export const EvalReplayToolAllowlistQuery = graphql(`
+  query EvalReplayToolAllowlist($tenantId: ID!) {
+    evalReplayToolAllowlist(tenantId: $tenantId) {
+      id
+      tenantId
+      serverName
+      toolName
+      createdAt
+    }
+  }
+`);
+
+export const EvalReplayAvailableMcpToolsQuery = graphql(`
+  query EvalReplayAvailableMcpTools($tenantId: ID!) {
+    evalReplayAvailableMcpTools(tenantId: $tenantId) {
+      serverName
+      displayName
+      tools {
+        name
+        description
+      }
+    }
+  }
+`);
+
+export const AddEvalReplayAllowedToolMutation = graphql(`
+  mutation AddEvalReplayAllowedTool(
+    $tenantId: ID!
+    $serverName: String!
+    $toolName: String!
+  ) {
+    addEvalReplayAllowedTool(
+      tenantId: $tenantId
+      serverName: $serverName
+      toolName: $toolName
+    ) {
+      id
+      tenantId
+      serverName
+      toolName
+      createdAt
+    }
+  }
+`);
+
+export const RemoveEvalReplayAllowedToolMutation = graphql(`
+  mutation RemoveEvalReplayAllowedTool($id: ID!) {
+    removeEvalReplayAllowedTool(id: $id)
+  }
+`);
+
 export const FlagThreadForEvalMutation = graphql(`
   mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {
     flagThreadForEval(input: $input) {
