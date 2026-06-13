@@ -220,7 +220,7 @@ export function PluginDetail() {
     const result = await activatePlugin({
       input: {
         installId: install.id,
-        returnTo: `/settings/plugins/${pluginKey}`,
+        returnTo: `${window.location.origin}/settings/plugins/${pluginKey}`,
       },
     });
     const authorizeUrl = result.data?.activatePlugin.authorizeUrl;

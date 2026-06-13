@@ -319,7 +319,7 @@ describe("HMAC-signed state", () => {
 // ---------------------------------------------------------------------------
 
 describe("startActivation", () => {
-  it("builds the authorize URL with PKCE, declared scopes, and every resource indicator", async () => {
+  it("builds the authorize URL with PKCE, declared scopes, and only the primary resource (AuthKit rejects repeated resource params)", async () => {
     const h = buildHarness();
     const { authorizeUrl } = await startActivation(
       { userId: USER, tenantId: TENANT, pluginInstallId: h.installId },
@@ -333,10 +333,11 @@ describe("startActivation", () => {
     );
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("scope")).toBe("openid offline_access");
+    // Only the primary resource rides the authorize request; the remaining
+    // resources mint via refresh grants in completeActivation (state still
+    // carries the full list).
     expect(url.searchParams.getAll("resource")).toEqual([
       "https://crm.lastmile.invalid",
-      "https://tasks.lastmile.invalid",
-      "https://routing.lastmile.invalid",
     ]);
   });
 
