@@ -7,9 +7,9 @@ type ExplorerMode = "data" | "definitions";
 
 /**
  * Ontology explorer as a tab of the unified Memory page. This is the explorer
- * half of the former standalone Knowledge Graph page — the deployment config
- * half now lives on the Cognee Application page (Applications > Cognee), so
- * there is no config/Info toggle here.
+ * half of the former standalone Knowledge Graph page. Company Brain plugin
+ * detail owns the substrate lifecycle surface, so there is no config/Info
+ * toggle here.
  */
 export function KnowledgeGraphTab() {
   const [threadSheetOpen, setThreadSheetOpen] = useState(false);

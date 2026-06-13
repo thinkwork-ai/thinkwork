@@ -98,8 +98,8 @@ describe("visibleSettingsNavItems", () => {
   });
 
   it("no longer lists a standalone Knowledge Graph nav entry", () => {
-    // The Knowledge Graph explorer is now a tab of the Memory page; Cognee's
-    // config lives at Applications > Cognee.
+    // The Knowledge Graph explorer is now a tab of the Memory page; Company
+    // Brain plugin detail owns the substrate lifecycle surface.
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(
       false,
     );

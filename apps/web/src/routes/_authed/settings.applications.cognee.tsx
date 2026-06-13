@@ -1,11 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { ManagedApplicationRouteGuard } from "@/components/settings/ManagedApplicationRouteGuard";
-import { SettingsCogneeApplication } from "@/components/settings/SettingsCogneeApplication";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authed/settings/applications/cognee")({
-  component: () => (
-    <ManagedApplicationRouteGuard appKey="cognee">
-      <SettingsCogneeApplication />
-    </ManagedApplicationRouteGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({
+      to: "/settings/plugins/$pluginKey",
+      params: { pluginKey: "company-brain" },
+    });
+  },
 });

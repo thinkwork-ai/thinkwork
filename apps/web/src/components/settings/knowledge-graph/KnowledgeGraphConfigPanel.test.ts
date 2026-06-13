@@ -9,11 +9,8 @@ const configSource = readFileSync(
   ),
   "utf8",
 );
-const cogneePageSource = readFileSync(
-  resolve(
-    process.cwd(),
-    "src/components/settings/SettingsCogneeApplication.tsx",
-  ),
+const cogneeRouteSource = readFileSync(
+  resolve(process.cwd(), "src/routes/_authed/settings.applications.cognee.tsx"),
   "utf8",
 );
 
@@ -32,7 +29,8 @@ describe("KnowledgeGraphConfigPanel", () => {
     expect(configSource).toContain("knowledgeGraphHealthCheck");
   });
 
-  it("backs the Cognee Application page (Applications > Cognee)", () => {
-    expect(cogneePageSource).toContain("<KnowledgeGraphConfigPanel />");
+  it("is no longer mounted by the legacy Cognee route", () => {
+    expect(cogneeRouteSource).toContain('pluginKey: "company-brain"');
+    expect(cogneeRouteSource).not.toContain("KnowledgeGraphConfigPanel");
   });
 });
