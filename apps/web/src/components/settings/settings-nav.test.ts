@@ -137,38 +137,19 @@ describe("visibleSettingsNavItems", () => {
     );
   });
 
-  it("renames Managed Applications to Applications (route path unchanged)", () => {
-    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === MANAGED_APPLICATIONS);
-    expect(item).toBeDefined();
-    expect(item?.label).toBe("Applications");
-    expect(
-      SETTINGS_NAV_ITEMS.some((i) => i.label === "Managed Applications"),
-    ).toBe(false);
-    // Breadcrumb root derives from the renamed nav label.
+  it("retires the Applications nav item (superseded by Plugins)", () => {
+    // The managed-applications surface left the nav — Plugins supersedes it.
+    // The route still resolves by URL until the Company Brain plugin absorbs
+    // Cognee, so the breadcrumb falls back to the generic settings label.
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === MANAGED_APPLICATIONS)).toBe(
+      false,
+    );
+    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Applications")).toBe(
+      false,
+    );
     expect(settingsCrumbForPath(MANAGED_APPLICATIONS)).toEqual([
-      { label: "Applications" },
+      { label: "Settings" },
     ]);
-  });
-
-  it("shows Applications to operators without app-runtime gating", () => {
-    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === MANAGED_APPLICATIONS);
-    expect(item).toBeDefined();
-    expect(item?.operatorOnly).toBe(true);
-    expect(item?.managedAppKey).toBeUndefined();
-
-    const operatorWeb = visibleSettingsNavItems({
-      isOperator: true,
-      roleResolved: true,
-      isDesktop: false,
-    });
-    const memberWeb = visibleSettingsNavItems({
-      isOperator: false,
-      roleResolved: true,
-      isDesktop: false,
-    });
-
-    expect(operatorWeb.some((i) => i.to === MANAGED_APPLICATIONS)).toBe(true);
-    expect(memberWeb.some((i) => i.to === MANAGED_APPLICATIONS)).toBe(false);
   });
 
   it("places Activity in Spaces settings for operators on web and desktop", () => {
