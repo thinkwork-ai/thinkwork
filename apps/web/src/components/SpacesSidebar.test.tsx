@@ -251,6 +251,14 @@ describe("SpacesSidebar", () => {
     });
   });
 
+  it("opens the caller profile from the account menu", () => {
+    render(<SpacesSidebar />);
+
+    fireEvent.click(screen.getByText("Profile"));
+
+    expect(routerMocks.navigate).toHaveBeenCalledWith({ to: "/profile" });
+  });
+
   it("shows the server-reported deployed release in the account menu footer", () => {
     render(<SpacesSidebar />);
 

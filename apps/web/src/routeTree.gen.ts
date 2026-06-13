@@ -34,6 +34,7 @@ import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/sett
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
 import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
 import { Route as AuthedSettingsActivityRouteImport } from "./routes/_authed/settings.activity";
+import { Route as AuthedShellProfileRouteImport } from "./routes/_authed/_shell/profile";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
 import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/memory";
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
@@ -223,6 +224,11 @@ const AuthedSettingsActivityRoute = AuthedSettingsActivityRouteImport.update({
   id: "/activity",
   path: "/activity",
   getParentRoute: () => AuthedSettingsRoute,
+} as any);
+const AuthedShellProfileRoute = AuthedShellProfileRouteImport.update({
+  id: "/profile",
+  path: "/profile",
+  getParentRoute: () => AuthedShellRoute,
 } as any);
 const AuthedShellNewRoute = AuthedShellNewRouteImport.update({
   id: "/new",
@@ -598,6 +604,7 @@ export interface FileRoutesByFullPath {
   "/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
+  "/profile": typeof AuthedShellProfileRoute;
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
@@ -681,6 +688,7 @@ export interface FileRoutesByTo {
   "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/new": typeof AuthedShellNewRoute;
+  "/profile": typeof AuthedShellProfileRoute;
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
@@ -770,6 +778,7 @@ export interface FileRoutesById {
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/_authed/_shell/memory": typeof AuthedShellMemoryRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
+  "/_authed/_shell/profile": typeof AuthedShellProfileRoute;
   "/_authed/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
@@ -859,6 +868,7 @@ export interface FileRouteTypes {
     | "/customize"
     | "/memory"
     | "/new"
+    | "/profile"
     | "/settings/activity"
     | "/settings/analytics"
     | "/settings/artifacts"
@@ -942,6 +952,7 @@ export interface FileRouteTypes {
     | "/auth/desktop-callback"
     | "/onboarding/welcome"
     | "/new"
+    | "/profile"
     | "/settings/activity"
     | "/settings/analytics"
     | "/settings/billing"
@@ -1030,6 +1041,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/customize"
     | "/_authed/_shell/memory"
     | "/_authed/_shell/new"
+    | "/_authed/_shell/profile"
     | "/_authed/settings/activity"
     | "/_authed/settings/analytics"
     | "/_authed/settings/artifacts"
@@ -1292,6 +1304,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/activity";
       preLoaderRoute: typeof AuthedSettingsActivityRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/_shell/profile": {
+      id: "/_authed/_shell/profile";
+      path: "/profile";
+      fullPath: "/profile";
+      preLoaderRoute: typeof AuthedShellProfileRouteImport;
+      parentRoute: typeof AuthedShellRoute;
     };
     "/_authed/_shell/new": {
       id: "/_authed/_shell/new";
@@ -1810,6 +1829,7 @@ interface AuthedShellRouteChildren {
   AuthedShellCustomizeRoute: typeof AuthedShellCustomizeRouteWithChildren;
   AuthedShellMemoryRoute: typeof AuthedShellMemoryRouteWithChildren;
   AuthedShellNewRoute: typeof AuthedShellNewRoute;
+  AuthedShellProfileRoute: typeof AuthedShellProfileRoute;
   AuthedShellActivityThreadIdRoute: typeof AuthedShellActivityThreadIdRoute;
   AuthedShellApprovalsApprovalIdRoute: typeof AuthedShellApprovalsApprovalIdRoute;
   AuthedShellArtifactsIdRoute: typeof AuthedShellArtifactsIdRoute;
@@ -1826,6 +1846,7 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellCustomizeRoute: AuthedShellCustomizeRouteWithChildren,
   AuthedShellMemoryRoute: AuthedShellMemoryRouteWithChildren,
   AuthedShellNewRoute: AuthedShellNewRoute,
+  AuthedShellProfileRoute: AuthedShellProfileRoute,
   AuthedShellActivityThreadIdRoute: AuthedShellActivityThreadIdRoute,
   AuthedShellApprovalsApprovalIdRoute: AuthedShellApprovalsApprovalIdRoute,
   AuthedShellArtifactsIdRoute: AuthedShellArtifactsIdRoute,
