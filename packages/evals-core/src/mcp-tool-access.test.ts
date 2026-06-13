@@ -68,4 +68,42 @@ describe("classifyMcpToolAccess", () => {
     // `settings` should not match the `set` write prefix → no verb → write.
     expect(classifyMcpToolAccess("settings")).toBe("write");
   });
+
+  it("recognizes read-shaped exact introspection names (U15 Finding 3)", () => {
+    expect(classifyMcpToolAccess("me")).toBe("read");
+    expect(classifyMcpToolAccess("whoami")).toBe("read");
+    expect(classifyMcpToolAccess("ping")).toBe("read");
+    expect(classifyMcpToolAccess("health")).toBe("read");
+    expect(classifyMcpToolAccess("status")).toBe("read");
+    expect(classifyMcpToolAccess("info")).toBe("read");
+    expect(classifyMcpToolAccess("schema")).toBe("read");
+    expect(classifyMcpToolAccess("capabilities")).toBe("read");
+    expect(classifyMcpToolAccess("version")).toBe("read");
+    // Case-insensitive + namespaced.
+    expect(classifyMcpToolAccess("ME")).toBe("read");
+    expect(classifyMcpToolAccess("crm__me")).toBe("read");
+  });
+
+  it("recognizes read-shaped suffix patterns (U15 Finding 3)", () => {
+    expect(classifyMcpToolAccess("crm_schema")).toBe("read");
+    expect(classifyMcpToolAccess("data_catalog_schema")).toBe("read");
+    expect(classifyMcpToolAccess("data_catalog")).toBe("read");
+    expect(classifyMcpToolAccess("crm-schema")).toBe("read");
+    expect(classifyMcpToolAccess("account_info")).toBe("read");
+    expect(classifyMcpToolAccess("job_status")).toBe("read");
+    // Namespaced read suffix still classifies on the local name.
+    expect(classifyMcpToolAccess("lastmile--crm.crm_schema")).toBe("read");
+  });
+
+  it("keeps write/mutating names as write despite a read suffix (U15 Finding 3)", () => {
+    // A write verb (leading or in any segment) must win over a read suffix.
+    expect(classifyMcpToolAccess("schema_update")).toBe("write");
+    expect(classifyMcpToolAccess("update_schema")).toBe("write");
+    expect(classifyMcpToolAccess("delete_catalog")).toBe("write");
+    expect(classifyMcpToolAccess("sync")).toBe("write");
+    expect(classifyMcpToolAccess("create_x")).toBe("write");
+    // `catalog_create` must stay write — only the `_catalog` SUFFIX reads, not
+    // a leading `catalog`.
+    expect(classifyMcpToolAccess("catalog_create")).toBe("write");
+  });
 });

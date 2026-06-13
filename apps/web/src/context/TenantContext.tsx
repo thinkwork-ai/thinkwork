@@ -108,7 +108,7 @@ async function discoverCallerViaAuthMe(): Promise<{
 }
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-  const { user, isAuthenticated, getToken } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, getToken } = useAuth();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -225,7 +225,22 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       // hasn't landed). Try tenant-discovery before falling back to
       // NoTenantAssigned.
       discoverTenantThenFetch();
+    } else if (authLoading) {
+      // Auth is still hydrating (hard page load — Cognito/Amplify session
+      // restore hasn't finished, so `isAuthenticated` is transiently false).
+      // Do NOT resolve the role here: flipping `roleResolved=true` with
+      // `role=null` during this window makes OperatorGuard see a non-operator
+      // and redirect operators to /settings/general before auth settles. Keep
+      // `roleResolved=false` (guard renders nothing) and let the authed
+      // branches resolve the role once auth lands. The effect re-runs when
+      // `authLoading`/`isAuthenticated` change.
+      setRoleResolved(false);
+      setIsLoading(true);
     } else {
+      // Auth has definitively settled as signed out. Resolving role=null is
+      // safe: `_authed`'s beforeLoad redirects signed-out users to /sign-in
+      // (via getIdToken's localStorage fallback) before any OperatorGuard
+      // renders, so this never produces a premature operator redirect.
       setTenant(null);
       setDiscoveredUserId(null);
       setRole(null);
@@ -234,7 +249,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, jwtTenantId, authRetryTick]);
+  }, [isAuthenticated, jwtTenantId, authLoading, authRetryTick]);
 
   return (
     <TenantContext.Provider

@@ -10,6 +10,7 @@ const authState = vi.hoisted(() => ({
   value: {
     user: null as { tenantId?: string | null; sub?: string | null } | null,
     isAuthenticated: false,
+    isLoading: false,
     getToken: vi.fn<() => Promise<string | null>>(),
   },
 }));
@@ -30,6 +31,7 @@ beforeEach(() => {
   authState.value = {
     user: { tenantId: "t1", sub: "u1" },
     isAuthenticated: true,
+    isLoading: false,
     getToken: vi.fn(async () => "tok"),
   };
 });
@@ -102,6 +104,83 @@ describe("TenantContext role gating", () => {
 
   it("null role resolves to isOperator false without throwing", async () => {
     mockAuthMe(null);
+    await renderProbe();
+    await waitFor(() =>
+      expect(screen.getByTestId("roleResolved").textContent).toBe("true"),
+    );
+    expect(screen.getByTestId("role").textContent).toBe("null");
+    expect(screen.getByTestId("isOperator").textContent).toBe("false");
+  });
+
+  it("never resolves role=null during the pre-hydration window (U15 Finding 1)", async () => {
+    // Hard page load: auth is still hydrating, so `isAuthenticated` is
+    // transiently false WHILE `isLoading` is true. The provider must NOT flip
+    // `roleResolved=true` with `role=null` here — that would make
+    // OperatorGuard redirect operators to /settings/general before auth
+    // settles.
+    mockAuthMe("owner");
+    authState.value = {
+      user: null,
+      isAuthenticated: false,
+      isLoading: true,
+      getToken: vi.fn(async () => "tok"),
+    };
+
+    const { TenantProvider, useTenant } = await import("./TenantContext");
+    const observed: Array<{ roleResolved: boolean; role: string | null }> = [];
+    function Probe() {
+      const { role, roleResolved } = useTenant();
+      observed.push({ roleResolved, role });
+      return (
+        <div>
+          <span data-testid="roleResolved">{String(roleResolved)}</span>
+          <span data-testid="role">{role ?? "null"}</span>
+        </div>
+      );
+    }
+    const { rerender } = render(
+      <TenantProvider>
+        <Probe />
+      </TenantProvider>,
+    );
+
+    // During hydration the guard stays unresolved (renders nothing), it does
+    // not resolve to a non-operator.
+    expect(screen.getByTestId("roleResolved").textContent).toBe("false");
+
+    // Auth settles: user is authenticated with an operator role.
+    authState.value = {
+      user: { tenantId: "t1", sub: "u1" },
+      isAuthenticated: true,
+      isLoading: false,
+      getToken: vi.fn(async () => "tok"),
+    };
+    rerender(
+      <TenantProvider>
+        <Probe />
+      </TenantProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("roleResolved").textContent).toBe("true"),
+    );
+    expect(screen.getByTestId("role").textContent).toBe("owner");
+
+    // The transient state (roleResolved=true && role=null) must never have
+    // been observed — that's the premature-redirect bug.
+    expect(observed.some((s) => s.roleResolved && s.role === null)).toBe(false);
+  });
+
+  it("resolves role=null only once auth definitively settles signed out", async () => {
+    // `isLoading=false` + not authenticated = genuinely signed out. Resolving
+    // role=null here is safe (the _authed layout redirects to /sign-in before
+    // any OperatorGuard renders) and must not hang on roleResolved=false.
+    authState.value = {
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      getToken: vi.fn<() => Promise<string | null>>(),
+    };
     await renderProbe();
     await waitFor(() =>
       expect(screen.getByTestId("roleResolved").textContent).toBe("true"),
