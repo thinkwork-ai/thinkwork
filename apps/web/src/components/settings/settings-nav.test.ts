@@ -33,16 +33,19 @@ describe("visibleSettingsNavItems", () => {
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Workspace")).toBe(false);
   });
 
-  it("still gates operator-only sections for members", () => {
+  it("shows only General, Activity, and Plugins for members", () => {
     const memberWeb = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
       isDesktop: false,
     });
-    // An operator-only section (Users) stays hidden for a non-operator, while
-    // General shows for everyone.
+
+    expect(memberWeb.map((i) => i.label)).toEqual([
+      "General",
+      "Activity",
+      "Plugins",
+    ]);
     expect(memberWeb.some((i) => i.to === "/settings/users")).toBe(false);
-    expect(memberWeb.some((i) => i.to === "/settings/general")).toBe(true);
   });
 
   it("does not list Billing in navigation (route kept, hidden from sidebar)", () => {
@@ -152,10 +155,10 @@ describe("visibleSettingsNavItems", () => {
     ]);
   });
 
-  it("places Activity in Spaces settings for operators on web and desktop", () => {
+  it("places Activity in Spaces settings for operators and members", () => {
     const item = SETTINGS_NAV_ITEMS.find((i) => i.to === ACTIVITY);
     expect(item).toBeDefined();
-    expect(item?.operatorOnly).toBe(true);
+    expect(item?.operatorOnly).toBeFalsy();
     expect(item?.desktopOnly).toBeFalsy();
 
     const operatorWeb = visibleSettingsNavItems({
@@ -176,7 +179,7 @@ describe("visibleSettingsNavItems", () => {
 
     expect(operatorWeb.some((i) => i.to === ACTIVITY)).toBe(true);
     expect(operatorDesktop.some((i) => i.to === ACTIVITY)).toBe(true);
-    expect(memberWeb.some((i) => i.to === ACTIVITY)).toBe(false);
+    expect(memberWeb.some((i) => i.to === ACTIVITY)).toBe(true);
   });
 
   it("no longer lists a standalone Analytics nav entry", () => {

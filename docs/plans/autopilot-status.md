@@ -11084,3 +11084,47 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - `pnpm dlx prettier@3.8.2 --check ...` passed for touched docs, API, and
     AgentCore-Pi files.
   - `git diff --check` passed.
+
+## THNK-12 Role Access - 2026-06-13
+
+- Plan: `docs/plans/2026-06-13-001-feat-role-access-settings-plan.md`.
+- Linear: THNK-12.
+- Target branch: `main`.
+- Strategy: isolated worktree per implementation unit, PR to `main`, wait for
+  CI, squash merge, delete branch, and sync before the next unit.
+- Current implementation unit: U1/U2 Activity slice — Settings nav, direct
+  route guards, and member-safe Activity.
+- Current branch: `codex/role-access-u1-settings-access`.
+- Current worktree: `.Codex/worktrees/role-access-u1-settings-access`.
+- Pull request: [#2429](https://github.com/thinkwork-ai/thinkwork/pull/2429).
+- Status: PR open; CI pending.
+- Notes:
+  - Grouped Unit 1 with the member-safe Activity part of Unit 2 because
+    exposing Activity in the member nav without making the Activity routes safe
+    would create an unsafe intermediate state.
+  - Branch created from `origin/main` at `07a5eb578`.
+  - `origin/main` already includes a member-visible Plugins route and no
+    standalone Workspace nav item, so this slice focuses on Activity visibility,
+    managed-app direct-route guarding, General non-operator hiding, and status
+    tracking.
+  - After PR creation, GitHub reported `mergeStateStatus: DIRTY`. Rebased onto
+    `origin/main` at `4620c3662` and resolved one conflict in
+    `apps/web/src/components/settings/settings-nav.test.ts` by preserving
+    main's retired-Applications nav assertion while keeping THNK-12's
+    member-visible Activity expectation.
+- Local verification:
+  - `pnpm install --frozen-lockfile` completed in the worktree. Optional
+    `canvas` native build fell back to source and reported missing
+    `pkg-config` under Node 25, but pnpm returned success and linked the
+    workspace.
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/settings-nav.test.ts src/components/settings/SettingsActivityHome.test.tsx src/routes/_authed/-settings.activity-routing.test.ts src/components/settings/SettingsGeneral.test.tsx src/components/settings/SettingsActivity.test.tsx`
+    passed: 5 files, 32 tests.
+  - After rebase, the same focused command passed again: 5 files, 31 tests.
+  - `pnpm --filter @thinkwork/web test` passed: 160 files, 1188 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - After rebase, `pnpm --filter @thinkwork/web typecheck` passed again.
+  - `pnpm --filter @thinkwork/web lint` reported no lint script for the
+    selected package.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for touched web and docs
+    files after formatting the copied plan doc.
+  - `git diff --check` passed.
