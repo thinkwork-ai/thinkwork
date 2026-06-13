@@ -1,12 +1,21 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, budgetPolicies, users } from "../../utils.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { resolveCaller } from "../core/resolve-auth-user.js";
 import { budgetStatusForPolicy } from "./budgetStatus.query.js";
 
 export const userBudgetStatus = async (
   _parent: any,
   args: any,
-  _ctx: GraphQLContext,
+  ctx: GraphQLContext,
 ) => {
+  const caller =
+    ctx.auth.authType === "cognito" ? await resolveCaller(ctx) : null;
+  const isSelf = caller?.userId === args.userId;
+  if (!isSelf) {
+    await requireAdminOrServiceCaller(ctx, args.tenantId, "budget_policy:read");
+  }
+
   const [user] = await db
     .select({ id: users.id })
     .from(users)

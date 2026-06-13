@@ -7,12 +7,15 @@ import {
   users,
   snakeToCamel,
 } from "../../utils.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
 
 export const upsertBudgetPolicy = async (
   _parent: any,
   args: any,
   ctx: GraphQLContext,
 ) => {
+  await requireAdminOrServiceCaller(ctx, args.tenantId, "budget_policy:update");
+
   const i = args.input;
   const scope = i.scope;
   const agentId = scope === "agent" ? i.agentId : null;

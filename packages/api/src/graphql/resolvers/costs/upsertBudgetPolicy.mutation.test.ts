@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   selectRows: [] as Array<Array<Record<string, unknown>>>,
   insertValues: vi.fn(),
+  requireAdminOrServiceCaller: vi.fn(),
   updateSet: vi.fn(),
 }));
 
@@ -79,6 +80,9 @@ vi.mock("../../utils.js", () => ({
   eq: (...args: unknown[]) => ({ _eq: args }),
   snakeToCamel,
 }));
+vi.mock("../core/authz.js", () => ({
+  requireAdminOrServiceCaller: mocks.requireAdminOrServiceCaller,
+}));
 
 // eslint-disable-next-line import/first
 import { upsertBudgetPolicy } from "./upsertBudgetPolicy.mutation.js";
@@ -86,8 +90,14 @@ import { upsertBudgetPolicy } from "./upsertBudgetPolicy.mutation.js";
 beforeEach(() => {
   mocks.selectRows = [];
   mocks.insertValues.mockClear();
+  mocks.requireAdminOrServiceCaller.mockReset();
+  mocks.requireAdminOrServiceCaller.mockResolvedValue(undefined);
   mocks.updateSet.mockClear();
 });
+
+function cognitoCtx(): any {
+  return { auth: { authType: "cognito" } };
+}
 
 describe("upsertBudgetPolicy", () => {
   it("requires userId for user-scoped policies", async () => {
@@ -98,9 +108,14 @@ describe("upsertBudgetPolicy", () => {
           tenantId: "tenant-1",
           input: { scope: "user", limitUsd: 25 },
         },
-        {} as any,
+        cognitoCtx(),
       ),
     ).rejects.toThrow("userId required for user-scope policy");
+    expect(mocks.requireAdminOrServiceCaller).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-1",
+      "budget_policy:update",
+    );
   });
 
   it("rejects a user-scoped policy for a user outside the tenant", async () => {
@@ -113,7 +128,7 @@ describe("upsertBudgetPolicy", () => {
           tenantId: "tenant-1",
           input: { scope: "user", userId: "user-2", limitUsd: 25 },
         },
-        {} as any,
+        cognitoCtx(),
       ),
     ).rejects.toThrow("userId must belong to tenant");
   });
@@ -132,9 +147,14 @@ describe("upsertBudgetPolicy", () => {
           period: "monthly",
         },
       },
-      {} as any,
+      cognitoCtx(),
     );
 
+    expect(mocks.requireAdminOrServiceCaller).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-1",
+      "budget_policy:update",
+    );
     expect(mocks.insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
         tenant_id: "tenant-1",
@@ -150,5 +170,33 @@ describe("upsertBudgetPolicy", () => {
       scope: "user",
       limitUsd: 40,
     });
+  });
+
+  it("rejects before tenant/user validation when the admin gate rejects", async () => {
+    mocks.requireAdminOrServiceCaller.mockRejectedValue(
+      Object.assign(new Error("Tenant admin role required"), {
+        extensions: { code: "FORBIDDEN" },
+      }),
+    );
+
+    await expect(
+      upsertBudgetPolicy(
+        null,
+        {
+          tenantId: "tenant-1",
+          input: {
+            scope: "user",
+            userId: "user-1",
+            limitUsd: 40,
+            period: "monthly",
+          },
+        },
+        cognitoCtx(),
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+
+    expect(mocks.selectRows).toEqual([]);
+    expect(mocks.insertValues).not.toHaveBeenCalled();
+    expect(mocks.updateSet).not.toHaveBeenCalled();
   });
 });
