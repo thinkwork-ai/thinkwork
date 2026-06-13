@@ -49,6 +49,7 @@ import {
   evalDatasetQueries,
   evalDatasetMutations,
 } from "./evaluations/datasets.js";
+import { flagThreadMutations } from "./evaluations/flag-thread.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import {
@@ -148,6 +149,7 @@ export const mutationResolvers: Record<string, any> = {
   ...recipeMutations,
   ...evaluationsMutations,
   ...evalDatasetMutations,
+  ...flagThreadMutations,
   ...wikiMutations,
   ...skillRunsMutations,
   ...skillCatalogMutations,

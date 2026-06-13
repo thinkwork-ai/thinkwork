@@ -86,17 +86,70 @@ describe("direct AgentCore eval payload", () => {
       eval_mode: true,
       eval_tools_enabled: false,
       use_memory: false,
+      messages_history: [],
       context_engine_enabled: false,
       context_engine_config: undefined,
-      web_extract_config: {
-        toolSlug: "web-extract",
-        provider: "firecrawl",
-        apiKey: "fc-key",
-        config: null,
-      },
       mcp_configs: undefined,
       browser_automation_enabled: false,
     });
+  });
+
+  it("strips outbound side-effect configs even when the runtime config carries them (U8 kill list)", () => {
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "Replay a real flagged thread",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig: {
+        ...runtimeConfig,
+        webSearchConfig: { provider: "exa", apiKey: "exa-key" } as never,
+        webExtractConfig: {
+          toolSlug: "web-extract",
+          provider: "firecrawl",
+          apiKey: "fc-key",
+          config: null,
+        },
+        sendEmailConfig: {
+          apiUrl: "https://api.example.com",
+          apiSecret: "secret",
+          agentId: "agent-1",
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+        } as never,
+      },
+    });
+
+    // Replay of a recorded thread must never send real email or hit
+    // external web APIs — the configs are stripped at the payload layer
+    // (the Pi server's eval_mode registration gate is layer 2).
+    expect(payload.send_email_config).toBeUndefined();
+    expect(payload.web_search_config).toBeUndefined();
+    expect(payload.web_extract_config).toBeUndefined();
+  });
+
+  it("ships flagged-thread replay history as messages_history in the chat-agent-invoke row shape", () => {
+    const messagesHistory = [
+      { role: "user" as const, content: "Hi, customer 123 wants a refund" },
+      { role: "assistant" as const, content: "Sure — what was the order id?" },
+    ];
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "So what do I tell the customer?",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig,
+      messagesHistory,
+    });
+
+    expect(payload.messages_history).toEqual(messagesHistory);
+    expect(payload.message).toBe("So what do I tell the customer?");
+    // Replay stays read-only: memory off, eval mode on.
+    expect(payload.eval_mode).toBe(true);
+    expect(payload.use_memory).toBe(false);
   });
 
   it("honors explicit model and test-case system prompt overrides", () => {
