@@ -218,19 +218,24 @@ describe("PluginsPage", () => {
     // Both plugins visible under "All".
     expect(screen.getByRole("link", { name: "Twenty CRM" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /installed \(1\)/i }));
+    fireEvent.click(screen.getByRole("button", { name: /installed \(2\)/i }));
 
-    // Twenty (not installed) drops out; LastMile (installed) remains.
+    // Twenty (not installed) drops out; installed plugins remain.
     expect(screen.queryByRole("link", { name: "Twenty CRM" })).toBeNull();
     expect(screen.getByRole("link", { name: "LastMile" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Docs Sync" })).toBeTruthy();
   });
 
-  it("hides the Install action from non-operators", () => {
+  it("shows only installed auth-capable plugins to non-operators", () => {
     tenantState.isOperator = false;
     render(<PluginsPage />);
 
+    expect(screen.getByRole("link", { name: "LastMile" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Twenty CRM" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Docs Sync" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^install$/i })).toBeNull();
-    expect(screen.getByText("Not installed")).toBeTruthy();
+    expect(screen.queryByText("Not installed")).toBeNull();
+    expect(screen.queryByText("Update available")).toBeNull();
   });
 
   it("installs a catalog plugin and refetches catalog + activations", async () => {
@@ -257,7 +262,7 @@ describe("PluginsPage", () => {
   });
 });
 
-const installs = [
+const installedPlugins = [
   {
     __typename: "PluginInstall" as const,
     id: "install-1",
@@ -267,6 +272,17 @@ const installs = [
     lastTransitionAt: "2026-06-12T12:00:00Z",
     lastError: null,
     activatedUserCount: 2,
+    components: [],
+  },
+  {
+    __typename: "PluginInstall" as const,
+    id: "install-3",
+    pluginKey: "docs-sync",
+    pinnedVersion: "1.0.0",
+    state: "installed",
+    lastTransitionAt: "2026-06-12T12:00:00Z",
+    lastError: null,
+    activatedUserCount: 0,
     components: [],
   },
 ];
@@ -293,7 +309,24 @@ const catalogEntries = [
         components: [],
       },
     ],
-    install: installs[0],
+    install: installedPlugins[0],
+  },
+  {
+    __typename: "PluginCatalogEntry" as const,
+    pluginKey: "docs-sync",
+    displayName: "Docs Sync",
+    description: "Tenant-wide document sync with no per-user OAuth.",
+    latestVersion: "1.0.0",
+    updateAvailable: false,
+    versions: [
+      {
+        version: "1.0.0",
+        payloadSha256: "sha256:d",
+        requiredOauthScopes: [],
+        components: [],
+      },
+    ],
+    install: installedPlugins[1],
   },
   {
     __typename: "PluginCatalogEntry" as const,

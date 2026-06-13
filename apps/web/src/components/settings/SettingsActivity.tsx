@@ -75,9 +75,13 @@ export function SettingsActivity({
   selectedDay = null,
   onSelectedDayChange,
 }: SettingsActivityProps) {
-  const { tenantId } = useTenant();
+  const { isOperator, roleResolved, tenantId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const description =
+    roleResolved && !isOperator
+      ? "Recent thread activity visible to you."
+      : "Recent thread activity across this workspace.";
 
   const [{ data, fetching, error }, reexecuteThreads] =
     useQuery<ThreadsPagedResult>({
@@ -224,9 +228,7 @@ export function SettingsActivity({
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Threads
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Recent thread activity across this workspace.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
       <div className="min-h-0 flex-1">
         {loading ? (

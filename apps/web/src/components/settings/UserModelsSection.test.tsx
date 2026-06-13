@@ -43,11 +43,13 @@ describe("UserModelsSection", () => {
       "utf8",
     );
 
-    expect(source).toContain("SettingsSection label=\"Models\"");
+    expect(source).toContain('SettingsSection label="Models"');
     expect(source).toContain('data-testid="settings-user-models-section"');
     expect(source).toContain("UserModelCatalogQuery");
     expect(source).toContain("SetUserModelApprovalMutation");
     expect(source).toContain('requestPolicy: "cache-and-network"');
+    expect(source).toContain("readOnly = false");
+    expect(source).toContain("disabled={readOnly || savingModelId");
     expect(source).toContain(
       "setModels(applyModelApproval(rows, modelId, approved))",
     );

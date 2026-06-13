@@ -11084,3 +11084,124 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - `pnpm dlx prettier@3.8.2 --check ...` passed for touched docs, API, and
     AgentCore-Pi files.
   - `git diff --check` passed.
+
+## THNK-12 Role Access - 2026-06-13
+
+- Plan: `docs/plans/2026-06-13-001-feat-role-access-settings-plan.md`.
+- Linear: THNK-12.
+- Target branch: `main`.
+- Strategy: isolated worktree per implementation unit, PR to `main`, wait for
+  CI, squash merge, delete branch, and sync before the next unit.
+- Current implementation unit: U5 — Plugins self-service surface and user MCP
+  token hardening.
+- Current branch: `codex/role-access-u5-plugins`.
+- Current worktree: `.Codex/worktrees/role-access-u5-plugins`.
+- Pull request: U1/U2 Activity slice
+  [#2429](https://github.com/thinkwork-ai/thinkwork/pull/2429) merged; U3 PR
+  [#2431](https://github.com/thinkwork-ai/thinkwork/pull/2431) merged; U4 PR
+  [#2433](https://github.com/thinkwork-ai/thinkwork/pull/2433) merged.
+- Status: U1/U2, U3, and U4 merged; U5 implementation in progress.
+- Notes:
+  - U5 branch created from `origin/main` at `1aa55647`.
+  - U4 PR #2433 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) after rebasing onto `origin/main`, then was squash merged on
+    2026-06-13 as `1aa55647`. The local Unit 4 worktree/branch were removed
+    after GitHub confirmed the merge.
+  - U3 PR #2431 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) and was squash merged on 2026-06-13 as `3bcbd00a`. The remote
+    branch was deleted and the local worktree/branch were removed.
+  - U4 branch created from `origin/main` at `3bcbd00a`.
+  - U1/U2 PR #2429 passed required CI (`cla`, `lint`, `verify`,
+    `typecheck`, and `test`) and was squash merged on 2026-06-13 as
+    `d171f6d1`. The remote branch was deleted and the local worktree/branch
+    were removed.
+  - U3 branch created from `origin/main` at `d171f6d1`.
+  - Grouped Unit 1 with the member-safe Activity part of Unit 2 because
+    exposing Activity in the member nav without making the Activity routes safe
+    would create an unsafe intermediate state.
+  - Branch created from `origin/main` at `07a5eb578`.
+  - `origin/main` already includes a member-visible Plugins route and no
+    standalone Workspace nav item, so this slice focuses on Activity visibility,
+    managed-app direct-route guarding, General non-operator hiding, and status
+    tracking.
+  - After PR creation, GitHub reported `mergeStateStatus: DIRTY`. Rebased onto
+    `origin/main` at `4620c3662` and resolved one conflict in
+    `apps/web/src/components/settings/settings-nav.test.ts` by preserving
+    main's retired-Applications nav assertion while keeping THNK-12's
+    member-visible Activity expectation.
+- Local verification:
+  - `pnpm install --frozen-lockfile` completed in the worktree. Optional
+    `canvas` native build fell back to source and reported missing
+    `pkg-config` under Node 25, but pnpm returned success and linked the
+    workspace.
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/settings-nav.test.ts src/components/settings/SettingsActivityHome.test.tsx src/routes/_authed/-settings.activity-routing.test.ts src/components/settings/SettingsGeneral.test.tsx src/components/settings/SettingsActivity.test.tsx`
+    passed: 5 files, 32 tests.
+  - After rebase, the same focused command passed again: 5 files, 31 tests.
+  - `pnpm --filter @thinkwork/web test` passed: 160 files, 1188 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - After rebase, `pnpm --filter @thinkwork/web typecheck` passed again.
+  - `pnpm --filter @thinkwork/web lint` reported no lint script for the
+    selected package.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for touched web and docs
+    files after formatting the copied plan doc.
+  - `git diff --check` passed.
+  - U3 `pnpm install --frozen-lockfile` completed in the worktree with the same
+    optional `canvas` native build fallback/missing `pkg-config` warning; pnpm
+    returned success.
+  - U3 `pnpm --filter @thinkwork/web codegen` passed and generated the
+    typed `SettingsMe` document.
+  - U3 `pnpm --filter @thinkwork/web exec vite build` passed and regenerated
+    the TanStack route tree for `/profile`; Vite emitted the repo's existing
+    source-map and chunk-size warnings.
+  - U3 focused tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/profile/SelfProfilePage.test.tsx src/components/SpacesSidebar.test.tsx src/components/settings/SettingsUserDetail.test.tsx src/components/settings/UserModelsSection.test.tsx`
+    passed: 4 files, 26 tests.
+  - U3 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U3 `pnpm --filter @thinkwork/web test` passed: 161 files, 1193 tests.
+  - U3 `pnpm --filter @thinkwork/web lint` reported no lint script for the
+    selected package.
+  - U3 `pnpm dlx prettier@3.8.2 --check ...` passed for touched web, generated
+    GraphQL, route, and docs files.
+  - U3 `git diff --check` passed.
+  - U4 `pnpm install --frozen-lockfile` completed in the worktree with the same
+    optional `canvas` native build fallback/missing `pkg-config` warning; pnpm
+    returned success.
+  - U4 focused backend tests passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/costs/userBudgetStatus.query.test.ts src/graphql/resolvers/costs/upsertBudgetPolicy.mutation.test.ts src/graphql/resolvers/costs/deleteBudgetPolicy.mutation.test.ts src/graphql/resolvers/tenant-agent/userModelCatalog.query.test.ts src/graphql/resolvers/tenant-agent/setUserModelApproval.mutation.test.ts src/__tests__/update-user-resolver.test.ts src/graphql/resolvers/core/me.query.test.ts`
+    passed: 7 files, 28 tests.
+  - U4 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/api test` passed: 489 files passed, 3 skipped;
+    4634 tests passed, 9 skipped.
+  - U4 `pnpm dlx prettier@3.8.2 --check ...` passed for touched API and docs
+    files.
+  - U4 `git diff --check` passed.
+  - U5 `pnpm install --frozen-lockfile` completed in the worktree with the same
+    optional `canvas` native build fallback/missing `pkg-config` warning; pnpm
+    returned success.
+  - U5 focused web/API tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx src/lib/mcp-api.test.ts && pnpm --filter @thinkwork/api exec vitest run src/lib/user-mcp-principal.test.ts`
+    passed: 4 files, 24 tests.
+  - U5 post-format focused tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx src/lib/mcp-api.test.ts && pnpm --filter @thinkwork/api exec vitest run src/__tests__/mcp-user-servers.test.ts src/lib/user-mcp-principal.test.ts`
+    passed: 5 files, 29 tests.
+  - U5 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U5 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U5 `pnpm --filter @thinkwork/web test` passed: 161 files, 1193 tests.
+  - U5 first `pnpm --filter @thinkwork/api test` run exposed four
+    `mcp-user-servers` failures because the existing endpoint test fixture
+    lacked the membership `auth`/`role` shape now required by the self/admin
+    principal resolver. Updated the harness and the old "ignore spoof" member
+    expectation to the stricter THNK-12 behavior: member-supplied alternate
+    `x-principal-id` now returns 403 before any MCP-token query.
+  - U5 final `pnpm --filter @thinkwork/api test` passed: 490 files passed,
+    3 skipped; 4638 tests passed, 9 skipped.
+  - U5 `pnpm --filter @thinkwork/web lint` and
+    `pnpm --filter @thinkwork/api lint` reported no lint scripts for the
+    selected packages.
+  - U5 `pnpm dlx prettier@3.8.2 --check ...` passed for touched web, API, and
+    docs files after formatting.
+  - U5 `git diff --check` passed.
+  - U5 final post-tightening checks passed after removing the member fallback
+    that could list installed but non-auth-capable plugins when catalog data was
+    unavailable: focused web plugin tests, `@thinkwork/web` typecheck, and
+    `@thinkwork/api` typecheck.

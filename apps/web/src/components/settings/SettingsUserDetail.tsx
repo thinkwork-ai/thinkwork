@@ -180,8 +180,21 @@ const RESENDABLE_INVITE_STATUSES = new Set([
   "UNCONFIRMED",
 ]);
 
-function titleCase(value: string): string {
+export function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function formatBudgetLimit(limitUsd: number | null | undefined): string {
+  if (limitUsd == null || !Number.isFinite(limitUsd)) {
+    return "Unlimited";
+  }
+
+  return `${new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    style: "currency",
+  }).format(limitUsd)} / month`;
 }
 
 function ResendInviteButton({
@@ -244,13 +257,15 @@ function ResendInviteButton({
   );
 }
 
-type Profile = {
+export type Profile = {
   title?: string | null;
   timezone?: string | null;
+  pronouns?: string | null;
+  callBy?: string | null;
   notes?: string | null;
 } | null;
 
-function ProfileSection({
+export function ProfileSection({
   userId,
   name,
   profile,
@@ -259,16 +274,20 @@ function ProfileSection({
   tenantId,
   isSelf,
   callerIsOwner,
+  roleReadOnly = false,
+  budgetReadOnly = false,
   onSaved,
 }: {
   userId: string;
   name: string;
   profile: Profile;
-  memberId: string;
+  memberId?: string;
   currentRole: string;
   tenantId: string;
   isSelf: boolean;
   callerIsOwner: boolean;
+  roleReadOnly?: boolean;
+  budgetReadOnly?: boolean;
   onSaved: () => void;
 }) {
   const [form, setForm] = useState({
@@ -313,7 +332,7 @@ function ProfileSection({
   );
 
   async function onRoleChange(role: string) {
-    if (role === currentRole) return;
+    if (roleReadOnly || !memberId || role === currentRole) return;
     setRoleErrorMsg(null);
     const result = await updateMember({ id: memberId, input: { role } });
     if (result.error) setRoleErrorMsg(result.error.message);
@@ -339,7 +358,10 @@ function ProfileSection({
 
   const set = (k: keyof typeof form) => (v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
-  const saving = savingUser || savingProfile || savingBudget || deletingBudget;
+  const saving =
+    savingUser ||
+    savingProfile ||
+    (!budgetReadOnly && (savingBudget || deletingBudget));
 
   function parseBudgetLimit(): number | null {
     const trimmed = budgetForm.amount.trim();
@@ -353,7 +375,7 @@ function ProfileSection({
     setErrorMsg(null);
     setSaved(false);
     const budgetLimit = budgetForm.unlimited ? null : parseBudgetLimit();
-    if (!budgetForm.unlimited && budgetLimit == null) {
+    if (!budgetReadOnly && !budgetForm.unlimited && budgetLimit == null) {
       setErrorMsg("Budget must be a positive number.");
       return;
     }
@@ -369,25 +391,27 @@ function ProfileSection({
         },
       }),
     ];
-    if (budgetForm.unlimited) {
-      const policyId = budgetStatus?.policy.id;
-      if (policyId) mutations.push(deleteBudget({ id: policyId }));
-    } else {
-      const limitUsd = budgetLimit;
-      if (limitUsd == null) return;
-      mutations.push(
-        upsertBudget({
-          tenantId,
-          input: {
-            scope: "user",
-            userId,
-            agentId: null,
-            limitUsd,
-            period: "monthly",
-            actionOnExceed: "PAUSE",
-          },
-        }),
-      );
+    if (!budgetReadOnly) {
+      if (budgetForm.unlimited) {
+        const policyId = budgetStatus?.policy.id;
+        if (policyId) mutations.push(deleteBudget({ id: policyId }));
+      } else {
+        const limitUsd = budgetLimit;
+        if (limitUsd == null) return;
+        mutations.push(
+          upsertBudget({
+            tenantId,
+            input: {
+              scope: "user",
+              userId,
+              agentId: null,
+              limitUsd,
+              period: "monthly",
+              actionOnExceed: "PAUSE",
+            },
+          }),
+        );
+      }
     }
 
     const results = await Promise.all(mutations);
@@ -398,7 +422,9 @@ function ProfileSection({
     }
 
     setSaved(true);
-    refetchBudget({ requestPolicy: "network-only" });
+    if (!budgetReadOnly) {
+      refetchBudget({ requestPolicy: "network-only" });
+    }
     onSaved();
   }
 
@@ -426,61 +452,77 @@ function ProfileSection({
         label="Role"
         description="Permission level within this tenant."
       >
-        {roleState.fetching ? (
-          <span className="text-sm text-muted-foreground">Saving…</span>
-        ) : roleErrorMsg ? (
-          <span className="text-sm text-destructive">{roleErrorMsg}</span>
-        ) : null}
-        <Select
-          value={currentRole}
-          onValueChange={onRoleChange}
-          disabled={isSelf || roleState.fetching}
-        >
-          <SelectTrigger className="w-72">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {roleOptions.map((r) => (
-              <SelectItem key={r} value={r}>
-                {r}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {roleReadOnly ? (
+          <span className="text-sm text-foreground">
+            {titleCase(currentRole)}
+          </span>
+        ) : (
+          <>
+            {roleState.fetching ? (
+              <span className="text-sm text-muted-foreground">Saving…</span>
+            ) : roleErrorMsg ? (
+              <span className="text-sm text-destructive">{roleErrorMsg}</span>
+            ) : null}
+            <Select
+              value={currentRole}
+              onValueChange={onRoleChange}
+              disabled={isSelf || roleState.fetching}
+            >
+              <SelectTrigger className="w-72">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {roleOptions.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
       </SettingsRow>
       <SettingsRow
         label="Monthly budget"
         description="Monthly spend limit. Off is unlimited."
       >
-        <div className="flex w-72 items-center gap-3">
-          <Switch
-            checked={!budgetForm.unlimited}
-            onCheckedChange={(checked) =>
-              setBudgetForm((f) => ({
-                unlimited: !checked,
-                amount: checked ? f.amount : "",
-              }))
-            }
-            aria-label="Enable user budget"
-          />
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="text-sm text-muted-foreground">$</span>
-            <Input
-              value={budgetForm.amount}
-              disabled={budgetForm.unlimited}
-              inputMode="decimal"
-              placeholder={budgetForm.unlimited ? "Unlimited" : "0.00"}
-              aria-invalid={
-                !budgetForm.unlimited && parseBudgetLimit() == null
-                  ? true
-                  : undefined
+        {budgetReadOnly ? (
+          <span className="text-sm text-foreground">
+            {budgetResult.fetching && !budgetStatus
+              ? "Loading..."
+              : formatBudgetLimit(budgetStatus?.policy.limitUsd)}
+          </span>
+        ) : (
+          <div className="flex w-72 items-center gap-3">
+            <Switch
+              checked={!budgetForm.unlimited}
+              onCheckedChange={(checked) =>
+                setBudgetForm((f) => ({
+                  unlimited: !checked,
+                  amount: checked ? f.amount : "",
+                }))
               }
-              onChange={(e) =>
-                setBudgetForm((f) => ({ ...f, amount: e.target.value }))
-              }
+              aria-label="Enable user budget"
             />
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="text-sm text-muted-foreground">$</span>
+              <Input
+                value={budgetForm.amount}
+                disabled={budgetForm.unlimited}
+                inputMode="decimal"
+                placeholder={budgetForm.unlimited ? "Unlimited" : "0.00"}
+                aria-invalid={
+                  !budgetForm.unlimited && parseBudgetLimit() == null
+                    ? true
+                    : undefined
+                }
+                onChange={(e) =>
+                  setBudgetForm((f) => ({ ...f, amount: e.target.value }))
+                }
+              />
+            </div>
           </div>
-        </div>
+        )}
       </SettingsRow>
       <SettingsRow
         label="Title"

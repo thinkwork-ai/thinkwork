@@ -6,7 +6,13 @@ const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 const source = read("src/components/settings/SettingsActivityHome.tsx");
 const activityRoute = read("src/routes/_authed/settings.activity.tsx");
 const threadsRoute = read("src/routes/_authed/settings.activity.threads.tsx");
+const activityDetailRoute = read(
+  "src/routes/_authed/settings.activity_.$threadId.tsx",
+);
 const analyticsRoute = read("src/routes/_authed/settings.analytics.tsx");
+const managedApplicationsRoute = read(
+  "src/routes/_authed/settings.managed-applications.tsx",
+);
 
 describe("SettingsActivityHome", () => {
   it("owns a single stable Activity breadcrumb", () => {
@@ -15,9 +21,11 @@ describe("SettingsActivityHome", () => {
   });
 
   it("publishes Analytics and Threads tabs into the page header", () => {
-    expect(source).toContain("tabs: [");
+    expect(source).toContain("showOperatorAnalytics");
+    expect(source).toContain("tabs: showOperatorAnalytics");
     expect(source).toContain('{ to: ANALYTICS, label: "Analytics" }');
     expect(source).toContain('{ to: THREADS, label: "Threads" }');
+    expect(source).toContain(": undefined");
   });
 
   it("renders the active facet selected by the current route", () => {
@@ -39,6 +47,14 @@ describe("SettingsActivityHome", () => {
   it("mounts the combined page across both Activity tab routes", () => {
     expect(activityRoute).toContain("SettingsActivityHome");
     expect(threadsRoute).toContain("SettingsActivityHome");
+    expect(activityRoute).not.toContain("OperatorGuard");
+    expect(threadsRoute).not.toContain("OperatorGuard");
+    expect(activityDetailRoute).not.toContain("OperatorGuard");
+  });
+
+  it("keeps managed applications behind an operator route guard", () => {
+    expect(managedApplicationsRoute).toContain("OperatorGuard");
+    expect(managedApplicationsRoute).toContain("ManagedApplicationsPage");
   });
 
   it("redirects the retired Analytics route into the Activity page", () => {

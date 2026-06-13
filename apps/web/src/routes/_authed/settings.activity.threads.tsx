@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
 import { SettingsActivityHome } from "@/components/settings/SettingsActivityHome";
 import { isActivityDay } from "@/lib/settings-activity";
 
@@ -10,9 +9,5 @@ export const Route = createFileRoute("/_authed/settings/activity/threads")({
   validateSearch: (search: Record<string, unknown>): { day?: string } => ({
     day: isActivityDay(search.day) ? search.day : undefined,
   }),
-  component: () => (
-    <OperatorGuard>
-      <SettingsActivityHome />
-    </OperatorGuard>
-  ),
+  component: SettingsActivityHome,
 });

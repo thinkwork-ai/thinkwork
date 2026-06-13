@@ -17,6 +17,8 @@ const { queryDocs, useQueryMock, startReleaseUpdateMock } = vi.hoisted(() => ({
   startReleaseUpdateMock: vi.fn(),
 }));
 
+const useTenantMock = vi.hoisted(() => vi.fn());
+
 vi.mock("urql", () => ({
   useMutation: () => [{ fetching: false }, startReleaseUpdateMock],
   useQuery: useQueryMock,
@@ -25,7 +27,7 @@ vi.mock("urql", () => ({
 vi.mock("@/lib/settings-queries", () => queryDocs);
 
 vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({ isOperator: true, roleResolved: true }),
+  useTenant: useTenantMock,
 }));
 
 vi.mock("@/lib/desktop-detection", () => ({
@@ -56,6 +58,7 @@ import { SettingsGeneral } from "./SettingsGeneral";
 
 beforeEach(() => {
   useQueryMock.mockReset();
+  useTenantMock.mockReturnValue({ isOperator: true, roleResolved: true });
   startReleaseUpdateMock.mockReset().mockResolvedValue({
     data: {
       startDeploymentReleaseUpdate: {
@@ -118,6 +121,28 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsGeneral releases", () => {
+  it("hides deployment, resources, and releases for non-operators", () => {
+    useTenantMock.mockReturnValue({ isOperator: false, roleResolved: true });
+
+    render(<SettingsGeneral />);
+
+    expect(screen.queryByText("Deployment")).toBeNull();
+    expect(screen.queryByText("Resources & URLs")).toBeNull();
+    expect(screen.queryByText("Deployed release")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deploy" })).toBeNull();
+    expect(useQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: queryDocs.SettingsDeploymentStatusQuery,
+        pause: true,
+      }),
+    );
+    expect(useQueryMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: queryDocs.SettingsDeploymentReleasesQuery,
+      }),
+    );
+  });
+
   it("shows deployed platform release in deployment details", () => {
     render(<SettingsGeneral />);
 

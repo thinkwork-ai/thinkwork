@@ -9714,6 +9714,28 @@ export type SettingsDeleteAgentProfileMutation = {
   deleteAgentProfile: boolean;
 };
 
+export type SettingsMeQueryVariables = Exact<{ [key: string]: never }>;
+
+export type SettingsMeQuery = {
+  __typename?: "Query";
+  me?: {
+    __typename?: "User";
+    id: string;
+    tenantId: string;
+    email: string;
+    name?: string | null;
+    profile?: {
+      __typename?: "UserProfile";
+      id: string;
+      title?: string | null;
+      timezone?: string | null;
+      pronouns?: string | null;
+      callBy?: string | null;
+      notes?: string | null;
+    } | null;
+  } | null;
+};
+
 export type SettingsTenantMembersQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
 }>;
@@ -19213,6 +19235,58 @@ export const SettingsDeleteAgentProfileDocument = {
   SettingsDeleteAgentProfileMutation,
   SettingsDeleteAgentProfileMutationVariables
 >;
+export const SettingsMeDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsMe" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "me" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "email" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "profile" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "title" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "timezone" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "pronouns" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "callBy" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "notes" } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<SettingsMeQuery, SettingsMeQueryVariables>;
 export const SettingsTenantMembersDocument = {
   kind: "Document",
   definitions: [

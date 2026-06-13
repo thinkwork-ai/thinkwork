@@ -77,10 +77,14 @@ export function applyModelApproval<
 }
 
 export interface UserModelsSectionProps {
+  readOnly?: boolean;
   userId: string;
 }
 
-export function UserModelsSection({ userId }: UserModelsSectionProps) {
+export function UserModelsSection({
+  readOnly = false,
+  userId,
+}: UserModelsSectionProps) {
   const [models, setModels] = useState<ModelApprovalRow[] | null>(null);
   const [savingModelId, setSavingModelId] = useState<string | null>(null);
 
@@ -161,9 +165,11 @@ export function UserModelsSection({ userId }: UserModelsSectionProps) {
               <Switch
                 aria-label={`Approve ${model.displayName}`}
                 checked={model.approved}
-                disabled={savingModelId === model.modelId}
-                onCheckedChange={(checked) =>
-                  handleApprovalChange(model.modelId, checked)
+                disabled={readOnly || savingModelId === model.modelId}
+                onCheckedChange={
+                  readOnly
+                    ? undefined
+                    : (checked) => handleApprovalChange(model.modelId, checked)
                 }
               />
             </SettingsRow>

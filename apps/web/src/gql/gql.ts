@@ -113,6 +113,7 @@ type Documents = {
   "\n  mutation SettingsCreateAgentProfile(\n    $tenantId: ID!\n    $input: AgentProfileInput!\n  ) {\n    createAgentProfile(tenantId: $tenantId, input: $input) {\n      id\n      slug\n      name\n      updatedAt\n    }\n  }\n": typeof types.SettingsCreateAgentProfileDocument;
   "\n  mutation SettingsUpdateAgentProfile(\n    $tenantId: ID!\n    $id: ID!\n    $input: UpdateAgentProfileInput!\n  ) {\n    updateAgentProfile(tenantId: $tenantId, id: $id, input: $input) {\n      id\n      slug\n      name\n      enabled\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpdateAgentProfileDocument;
   "\n  mutation SettingsDeleteAgentProfile($tenantId: ID!, $id: ID!) {\n    deleteAgentProfile(tenantId: $tenantId, id: $id)\n  }\n": typeof types.SettingsDeleteAgentProfileDocument;
+  "\n  query SettingsMe {\n    me {\n      id\n      tenantId\n      email\n      name\n      profile {\n        id\n        title\n        timezone\n        pronouns\n        callBy\n        notes\n      }\n    }\n  }\n": typeof types.SettingsMeDocument;
   "\n  query SettingsTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      principalType\n      principalId\n      role\n      status\n      cognitoStatus\n      createdAt\n      user {\n        id\n        name\n        email\n        profile {\n          id\n          title\n          timezone\n          pronouns\n          callBy\n          notes\n        }\n      }\n    }\n  }\n": typeof types.SettingsTenantMembersDocument;
   "\n  mutation SettingsUpdateUser($id: ID!, $input: UpdateUserInput!) {\n    updateUser(id: $id, input: $input) {\n      id\n      name\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpdateUserDocument;
   "\n  mutation SettingsUpdateUserProfile(\n    $userId: ID!\n    $input: UpdateUserProfileInput!\n  ) {\n    updateUserProfile(userId: $userId, input: $input) {\n      id\n      title\n      timezone\n      pronouns\n      callBy\n      notes\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpdateUserProfileDocument;
@@ -346,6 +347,8 @@ const documents: Documents = {
     types.SettingsUpdateAgentProfileDocument,
   "\n  mutation SettingsDeleteAgentProfile($tenantId: ID!, $id: ID!) {\n    deleteAgentProfile(tenantId: $tenantId, id: $id)\n  }\n":
     types.SettingsDeleteAgentProfileDocument,
+  "\n  query SettingsMe {\n    me {\n      id\n      tenantId\n      email\n      name\n      profile {\n        id\n        title\n        timezone\n        pronouns\n        callBy\n        notes\n      }\n    }\n  }\n":
+    types.SettingsMeDocument,
   "\n  query SettingsTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      principalType\n      principalId\n      role\n      status\n      cognitoStatus\n      createdAt\n      user {\n        id\n        name\n        email\n        profile {\n          id\n          title\n          timezone\n          pronouns\n          callBy\n          notes\n        }\n      }\n    }\n  }\n":
     types.SettingsTenantMembersDocument,
   "\n  mutation SettingsUpdateUser($id: ID!, $input: UpdateUserInput!) {\n    updateUser(id: $id, input: $input) {\n      id\n      name\n      updatedAt\n    }\n  }\n":
@@ -1022,6 +1025,12 @@ export function graphql(
 export function graphql(
   source: "\n  mutation SettingsDeleteAgentProfile($tenantId: ID!, $id: ID!) {\n    deleteAgentProfile(tenantId: $tenantId, id: $id)\n  }\n",
 ): (typeof documents)["\n  mutation SettingsDeleteAgentProfile($tenantId: ID!, $id: ID!) {\n    deleteAgentProfile(tenantId: $tenantId, id: $id)\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query SettingsMe {\n    me {\n      id\n      tenantId\n      email\n      name\n      profile {\n        id\n        title\n        timezone\n        pronouns\n        callBy\n        notes\n      }\n    }\n  }\n",
+): (typeof documents)["\n  query SettingsMe {\n    me {\n      id\n      tenantId\n      email\n      name\n      profile {\n        id\n        title\n        timezone\n        pronouns\n        callBy\n        notes\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
