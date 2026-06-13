@@ -329,6 +329,38 @@ input UpdateEvalDatasetCaseInput {
   enabled: Boolean
 }
 
+# ────────────────────────────────────────────────────────────────────
+# Read-only MCP replay allowlist (Trust Core U13)
+#
+# Replay strips all MCP tools by default; this per-tenant allowlist is
+# DEFAULT-DENY — an MCP tool is restored on replay ONLY if an operator
+# explicitly lists it here. Mutating tools and the email/web side-effect
+# kill-list stay blocked regardless. One row per (server, tool).
+# ────────────────────────────────────────────────────────────────────
+
+type EvalReplayAllowedTool {
+  id: ID!
+  tenantId: ID!
+  serverName: String!
+  toolName: String!
+  createdAt: AWSDateTime!
+}
+
+# A tenant MCP server and its discovered tools, offered to the UI so an
+# operator can pick which read-only tools to allow on replay. Sourced from
+# the cached tenant_mcp_servers.tools discovery list (approved + enabled
+# servers) — no live MCP connection is made.
+type EvalReplayMcpServer {
+  serverName: String!
+  displayName: String!
+  tools: [EvalReplayMcpTool!]!
+}
+
+type EvalReplayMcpTool {
+  name: String!
+  description: String
+}
+
 input OverrideEvalResultInput {
   resultId: ID!
   # 'pass' | 'fail' to set (or re-set — last write wins) an override;
@@ -383,6 +415,14 @@ extend type Query {
   # Single-dataset read. Drift-checks the index manifestSha against S3
   # and re-syncs on mismatch before returning the row.
   evalDataset(tenantId: ID!, slug: String!): EvalDataset
+  # Read-only MCP replay allowlist (Trust Core U13). Operator-readable;
+  # scoped through resolveCallerTenantId. Default-deny: an empty list means
+  # replay carries no MCP tools.
+  evalReplayToolAllowlist(tenantId: ID!): [EvalReplayAllowedTool!]!
+  # The tenant's available MCP servers + discovered tools, so the UI can
+  # offer toggles. Sourced from the cached tenant_mcp_servers.tools list
+  # (approved + enabled servers); no live MCP discovery.
+  evalReplayAvailableMcpTools(tenantId: ID!): [EvalReplayMcpServer!]!
 }
 
 extend type Mutation {
@@ -440,4 +480,15 @@ extend type Mutation {
   # stamped scoring_version (legacy runs recompute under legacy
   # semantics), and pushes notifyEvalRunUpdate.
   overrideEvalResult(input: OverrideEvalResultInput!): EvalResult!
+  # Read-only MCP replay allowlist (Trust Core U13). Operator-gated
+  # (requireTenantAdmin). Adding a (server, tool) restores that tool on
+  # replay; default-deny otherwise. Idempotent on the unique
+  # (tenant, server, tool) key.
+  addEvalReplayAllowedTool(
+    tenantId: ID!
+    serverName: String!
+    toolName: String!
+  ): EvalReplayAllowedTool!
+  # Remove an allowlist entry by id (gate is row-derived → tenant admin).
+  removeEvalReplayAllowedTool(id: ID!): Boolean!
 }

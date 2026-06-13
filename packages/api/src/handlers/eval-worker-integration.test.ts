@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SQSEvent } from "aws-lambda";
 import { CURRENT_EVAL_SCORING_VERSION } from "@thinkwork/evals-core";
 import {
+  evalReplayToolAllowlist,
   evalResults,
   evalRuns,
   evalTestCases,
@@ -87,6 +88,8 @@ interface FakeDbState {
   testCase: Record<string, unknown>;
   insertedResults: Array<Record<string, any>>;
   runUpdates: Array<Record<string, any>>;
+  // Read-only MCP replay allowlist rows (U13). Empty = default-deny.
+  replayAllowlist: Array<{ server_name: string; tool_name: string }>;
 }
 
 let state: FakeDbState;
@@ -99,6 +102,7 @@ function createFakeDb(dbState: FakeDbState) {
         if (table === evalRuns) return [dbState.run];
         if (table === evalTestCases) return [dbState.testCase];
         if (table === tenants) return [{ slug: "acme" }];
+        if (table === evalReplayToolAllowlist) return dbState.replayAllowlist;
         if (table === evalResults) {
           return dbState.insertedResults.map((row, index) => ({
             id: `result-${index + 1}`,
@@ -224,6 +228,7 @@ beforeEach(() => {
     },
     insertedResults: [],
     runUpdates: [],
+    replayAllowlist: [],
   };
   fakeDb = createFakeDb(state);
 });
@@ -476,6 +481,40 @@ describe("eval-worker non-throttle infrastructure errors", () => {
     const finalize = state.runUpdates.at(-1)!;
     expect(finalize.failed).toBe(1);
     expect(finalize.pass_rate).toBe("0.0000");
+  });
+});
+
+describe("eval-worker read-only MCP replay allowlist (U13)", () => {
+  it("default-deny: an empty tenant allowlist threads an empty list into the invoke", async () => {
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse.",
+      durationMs: 50,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    // Empty allowlist → buildEvalAgentCorePayload yields mcp_configs
+    // undefined downstream (the pre-U13 strip-everything default).
+    expect(invokeMock.mock.calls[0][0].replayToolAllowlist).toEqual([]);
+  });
+
+  it("threads the tenant's loaded allowlist into the invoke", async () => {
+    state.replayAllowlist = [
+      { server_name: "lastmile--crm", tool_name: "opportunities_list" },
+    ];
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse.",
+      durationMs: 50,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    expect(invokeMock.mock.calls[0][0].replayToolAllowlist).toEqual([
+      { serverName: "lastmile--crm", toolName: "opportunities_list" },
+    ]);
   });
 });
 

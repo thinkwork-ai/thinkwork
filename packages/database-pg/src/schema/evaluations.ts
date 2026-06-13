@@ -322,8 +322,60 @@ export const evalResults = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// eval_replay_tool_allowlist — per-tenant read-only MCP tool allowlist for
+// replay (Evaluations Trust Core U13).
+//
+// Replay strips all MCP tools by default (mcp_configs undefined in
+// buildEvalAgentCorePayload) so a flagged thread that needed an MCP tool
+// degrades to "I can't access tools" and the quality eval tests nothing.
+// This table is a DEFAULT-DENY allowlist: an MCP tool is restored on replay
+// ONLY if an operator explicitly lists it here for the tenant. Mutating tools
+// and the outbound side-effect kill-list (email/web) stay blocked
+// unconditionally. Per-tool granularity — one row per (server_name, tool_name).
+// ---------------------------------------------------------------------------
+
+export const evalReplayToolAllowlist = pgTable(
+  "eval_replay_tool_allowlist",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id)
+      .notNull(),
+    // server_name: the MCP server slug as it appears in
+    // runtimeConfig.mcpConfigs[].name (e.g. "lastmile--crm").
+    server_name: text("server_name").notNull(),
+    // tool_name: the per-server tool the runtime exposes via the entry's
+    // toolWhitelist (e.g. "opportunities_list").
+    tool_name: text("tool_name").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_eval_replay_tool_allowlist_tenant_server_tool").on(
+      table.tenant_id,
+      table.server_name,
+      table.tool_name,
+    ),
+    index("idx_eval_replay_tool_allowlist_tenant").on(table.tenant_id),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
+
+export const evalReplayToolAllowlistRelations = relations(
+  evalReplayToolAllowlist,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [evalReplayToolAllowlist.tenant_id],
+      references: [tenants.id],
+    }),
+  }),
+);
 
 export const evalDatasetsRelations = relations(
   evalDatasets,

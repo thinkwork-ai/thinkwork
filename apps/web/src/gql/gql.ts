@@ -47,6 +47,10 @@ type Documents = {
   "\n  mutation ArchiveEvalDataset($tenantId: ID!, $slug: String!) {\n    archiveEvalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      archivedAt\n    }\n  }\n": typeof types.ArchiveEvalDatasetDocument;
   "\n  mutation UpdateEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n    $input: UpdateEvalDatasetCaseInput!\n  ) {\n    updateEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n      input: $input\n    ) {\n      id\n      datasetCaseId\n      enabled\n      updatedAt\n    }\n  }\n": typeof types.UpdateEvalDatasetCaseDocument;
   "\n  mutation RemoveEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n  ) {\n    removeEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n    ) {\n      id\n      slug\n      version\n    }\n  }\n": typeof types.RemoveEvalDatasetCaseDocument;
+  "\n  query EvalReplayToolAllowlist($tenantId: ID!) {\n    evalReplayToolAllowlist(tenantId: $tenantId) {\n      id\n      tenantId\n      serverName\n      toolName\n      createdAt\n    }\n  }\n": typeof types.EvalReplayToolAllowlistDocument;
+  "\n  query EvalReplayAvailableMcpTools($tenantId: ID!) {\n    evalReplayAvailableMcpTools(tenantId: $tenantId) {\n      serverName\n      displayName\n      tools {\n        name\n        description\n      }\n    }\n  }\n": typeof types.EvalReplayAvailableMcpToolsDocument;
+  "\n  mutation AddEvalReplayAllowedTool(\n    $tenantId: ID!\n    $serverName: String!\n    $toolName: String!\n  ) {\n    addEvalReplayAllowedTool(\n      tenantId: $tenantId\n      serverName: $serverName\n      toolName: $toolName\n    ) {\n      id\n      tenantId\n      serverName\n      toolName\n      createdAt\n    }\n  }\n": typeof types.AddEvalReplayAllowedToolDocument;
+  "\n  mutation RemoveEvalReplayAllowedTool($id: ID!) {\n    removeEvalReplayAllowedTool(id: $id)\n  }\n": typeof types.RemoveEvalReplayAllowedToolDocument;
   "\n  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {\n    flagThreadForEval(input: $input) {\n      case {\n        id\n        datasetId\n        datasetCaseId\n        name\n        category\n        tags\n      }\n      dataset {\n        id\n        slug\n        name\n      }\n      completeness {\n        history\n        workspace\n        traces\n        truncated\n      }\n    }\n  }\n": typeof types.FlagThreadForEvalDocument;
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n": typeof types.KnowledgeBasesListDocument;
   "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n    }\n  }\n": typeof types.KnowledgeBaseDetailDocument;
@@ -210,6 +214,14 @@ const documents: Documents = {
     types.UpdateEvalDatasetCaseDocument,
   "\n  mutation RemoveEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n  ) {\n    removeEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n    ) {\n      id\n      slug\n      version\n    }\n  }\n":
     types.RemoveEvalDatasetCaseDocument,
+  "\n  query EvalReplayToolAllowlist($tenantId: ID!) {\n    evalReplayToolAllowlist(tenantId: $tenantId) {\n      id\n      tenantId\n      serverName\n      toolName\n      createdAt\n    }\n  }\n":
+    types.EvalReplayToolAllowlistDocument,
+  "\n  query EvalReplayAvailableMcpTools($tenantId: ID!) {\n    evalReplayAvailableMcpTools(tenantId: $tenantId) {\n      serverName\n      displayName\n      tools {\n        name\n        description\n      }\n    }\n  }\n":
+    types.EvalReplayAvailableMcpToolsDocument,
+  "\n  mutation AddEvalReplayAllowedTool(\n    $tenantId: ID!\n    $serverName: String!\n    $toolName: String!\n  ) {\n    addEvalReplayAllowedTool(\n      tenantId: $tenantId\n      serverName: $serverName\n      toolName: $toolName\n    ) {\n      id\n      tenantId\n      serverName\n      toolName\n      createdAt\n    }\n  }\n":
+    types.AddEvalReplayAllowedToolDocument,
+  "\n  mutation RemoveEvalReplayAllowedTool($id: ID!) {\n    removeEvalReplayAllowedTool(id: $id)\n  }\n":
+    types.RemoveEvalReplayAllowedToolDocument,
   "\n  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {\n    flagThreadForEval(input: $input) {\n      case {\n        id\n        datasetId\n        datasetCaseId\n        name\n        category\n        tags\n      }\n      dataset {\n        id\n        slug\n        name\n      }\n      completeness {\n        history\n        workspace\n        traces\n        truncated\n      }\n    }\n  }\n":
     types.FlagThreadForEvalDocument,
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n":
@@ -614,6 +626,30 @@ export function graphql(
 export function graphql(
   source: "\n  mutation RemoveEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n  ) {\n    removeEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n    ) {\n      id\n      slug\n      version\n    }\n  }\n",
 ): (typeof documents)["\n  mutation RemoveEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n  ) {\n    removeEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n    ) {\n      id\n      slug\n      version\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query EvalReplayToolAllowlist($tenantId: ID!) {\n    evalReplayToolAllowlist(tenantId: $tenantId) {\n      id\n      tenantId\n      serverName\n      toolName\n      createdAt\n    }\n  }\n",
+): (typeof documents)["\n  query EvalReplayToolAllowlist($tenantId: ID!) {\n    evalReplayToolAllowlist(tenantId: $tenantId) {\n      id\n      tenantId\n      serverName\n      toolName\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query EvalReplayAvailableMcpTools($tenantId: ID!) {\n    evalReplayAvailableMcpTools(tenantId: $tenantId) {\n      serverName\n      displayName\n      tools {\n        name\n        description\n      }\n    }\n  }\n",
+): (typeof documents)["\n  query EvalReplayAvailableMcpTools($tenantId: ID!) {\n    evalReplayAvailableMcpTools(tenantId: $tenantId) {\n      serverName\n      displayName\n      tools {\n        name\n        description\n      }\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation AddEvalReplayAllowedTool(\n    $tenantId: ID!\n    $serverName: String!\n    $toolName: String!\n  ) {\n    addEvalReplayAllowedTool(\n      tenantId: $tenantId\n      serverName: $serverName\n      toolName: $toolName\n    ) {\n      id\n      tenantId\n      serverName\n      toolName\n      createdAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation AddEvalReplayAllowedTool(\n    $tenantId: ID!\n    $serverName: String!\n    $toolName: String!\n  ) {\n    addEvalReplayAllowedTool(\n      tenantId: $tenantId\n      serverName: $serverName\n      toolName: $toolName\n    ) {\n      id\n      tenantId\n      serverName\n      toolName\n      createdAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation RemoveEvalReplayAllowedTool($id: ID!) {\n    removeEvalReplayAllowedTool(id: $id)\n  }\n",
+): (typeof documents)["\n  mutation RemoveEvalReplayAllowedTool($id: ID!) {\n    removeEvalReplayAllowedTool(id: $id)\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

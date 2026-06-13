@@ -50,6 +50,10 @@ import {
   evalDatasetMutations,
 } from "./evaluations/datasets.js";
 import { flagThreadMutations } from "./evaluations/flag-thread.js";
+import {
+  evalReplayAllowlistQueries,
+  evalReplayAllowlistMutations,
+} from "./evaluations/replay-allowlist.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import {
@@ -109,6 +113,7 @@ export const queryResolvers: Record<string, any> = {
   ...recipeQueries,
   ...evaluationsQueries,
   ...evalDatasetQueries,
+  ...evalReplayAllowlistQueries,
   ...wikiQueries,
   ...skillRunsQueries,
   ...skillCatalogQueries,
@@ -149,6 +154,7 @@ export const mutationResolvers: Record<string, any> = {
   ...recipeMutations,
   ...evaluationsMutations,
   ...evalDatasetMutations,
+  ...evalReplayAllowlistMutations,
   ...flagThreadMutations,
   ...wikiMutations,
   ...skillRunsMutations,

@@ -1237,6 +1237,28 @@ export type EvalDatasetCaseInput = {
   tags?: InputMaybe<Array<Scalars["String"]["input"]>>;
 };
 
+export type EvalReplayAllowedTool = {
+  __typename?: "EvalReplayAllowedTool";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  serverName: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  toolName: Scalars["String"]["output"];
+};
+
+export type EvalReplayMcpServer = {
+  __typename?: "EvalReplayMcpServer";
+  displayName: Scalars["String"]["output"];
+  serverName: Scalars["String"]["output"];
+  tools: Array<EvalReplayMcpTool>;
+};
+
+export type EvalReplayMcpTool = {
+  __typename?: "EvalReplayMcpTool";
+  description?: Maybe<Scalars["String"]["output"]>;
+  name: Scalars["String"]["output"];
+};
+
 export type EvalResult = {
   __typename?: "EvalResult";
   actualOutput?: Maybe<Scalars["String"]["output"]>;
@@ -2273,6 +2295,7 @@ export type Mutation = {
    */
   activatePlugin: ActivatePluginResult;
   addEvalDatasetCase: EvalTestCase;
+  addEvalReplayAllowedTool: EvalReplayAllowedTool;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addSpaceMember: SpaceMember;
@@ -2436,6 +2459,7 @@ export type Mutation = {
   rejectOntologyChangeSet: OntologyChangeSet;
   releaseThread: Thread;
   removeEvalDatasetCase: EvalDataset;
+  removeEvalReplayAllowedTool: Scalars["Boolean"]["output"];
   removeInboxItemLink: Scalars["Boolean"]["output"];
   removeSpaceMember: Scalars["Boolean"]["output"];
   /** Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey. */
@@ -2567,6 +2591,12 @@ export type MutationAddEvalDatasetCaseArgs = {
   datasetSlug: Scalars["String"]["input"];
   input: EvalDatasetCaseInput;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationAddEvalReplayAllowedToolArgs = {
+  serverName: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+  toolName: Scalars["String"]["input"];
 };
 
 export type MutationAddInboxItemCommentArgs = {
@@ -3086,6 +3116,10 @@ export type MutationRemoveEvalDatasetCaseArgs = {
   caseId: Scalars["String"]["input"];
   datasetSlug: Scalars["String"]["input"];
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationRemoveEvalReplayAllowedToolArgs = {
+  id: Scalars["ID"]["input"];
 };
 
 export type MutationRemoveInboxItemLinkArgs = {
@@ -3983,6 +4017,8 @@ export type Query = {
   deploymentStatus: DeploymentStatus;
   evalDataset?: Maybe<EvalDataset>;
   evalDatasets: Array<EvalDataset>;
+  evalReplayAvailableMcpTools: Array<EvalReplayMcpServer>;
+  evalReplayToolAllowlist: Array<EvalReplayAllowedTool>;
   evalResultSpans: Array<EvalSpan>;
   evalRun?: Maybe<EvalRun>;
   evalRunResults: Array<EvalResult>;
@@ -4372,6 +4408,14 @@ export type QueryEvalDatasetArgs = {
 
 export type QueryEvalDatasetsArgs = {
   includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryEvalReplayAvailableMcpToolsArgs = {
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryEvalReplayToolAllowlistArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
@@ -7965,6 +8009,67 @@ export type RemoveEvalDatasetCaseMutation = {
     slug: string;
     version: number;
   };
+};
+
+export type EvalReplayToolAllowlistQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type EvalReplayToolAllowlistQuery = {
+  __typename?: "Query";
+  evalReplayToolAllowlist: Array<{
+    __typename?: "EvalReplayAllowedTool";
+    id: string;
+    tenantId: string;
+    serverName: string;
+    toolName: string;
+    createdAt: any;
+  }>;
+};
+
+export type EvalReplayAvailableMcpToolsQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type EvalReplayAvailableMcpToolsQuery = {
+  __typename?: "Query";
+  evalReplayAvailableMcpTools: Array<{
+    __typename?: "EvalReplayMcpServer";
+    serverName: string;
+    displayName: string;
+    tools: Array<{
+      __typename?: "EvalReplayMcpTool";
+      name: string;
+      description?: string | null;
+    }>;
+  }>;
+};
+
+export type AddEvalReplayAllowedToolMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  serverName: Scalars["String"]["input"];
+  toolName: Scalars["String"]["input"];
+}>;
+
+export type AddEvalReplayAllowedToolMutation = {
+  __typename?: "Mutation";
+  addEvalReplayAllowedTool: {
+    __typename?: "EvalReplayAllowedTool";
+    id: string;
+    tenantId: string;
+    serverName: string;
+    toolName: string;
+    createdAt: any;
+  };
+};
+
+export type RemoveEvalReplayAllowedToolMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type RemoveEvalReplayAllowedToolMutation = {
+  __typename?: "Mutation";
+  removeEvalReplayAllowedTool: boolean;
 };
 
 export type FlagThreadForEvalMutationVariables = Exact<{
@@ -12841,6 +12946,268 @@ export const RemoveEvalDatasetCaseDocument = {
 } as unknown as DocumentNode<
   RemoveEvalDatasetCaseMutation,
   RemoveEvalDatasetCaseMutationVariables
+>;
+export const EvalReplayToolAllowlistDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "EvalReplayToolAllowlist" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalReplayToolAllowlist" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "serverName" } },
+                { kind: "Field", name: { kind: "Name", value: "toolName" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  EvalReplayToolAllowlistQuery,
+  EvalReplayToolAllowlistQueryVariables
+>;
+export const EvalReplayAvailableMcpToolsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "EvalReplayAvailableMcpTools" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalReplayAvailableMcpTools" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "serverName" } },
+                { kind: "Field", name: { kind: "Name", value: "displayName" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "tools" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "description" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  EvalReplayAvailableMcpToolsQuery,
+  EvalReplayAvailableMcpToolsQueryVariables
+>;
+export const AddEvalReplayAllowedToolDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "AddEvalReplayAllowedTool" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "serverName" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "toolName" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "addEvalReplayAllowedTool" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "serverName" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "serverName" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "toolName" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "toolName" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
+                { kind: "Field", name: { kind: "Name", value: "serverName" } },
+                { kind: "Field", name: { kind: "Name", value: "toolName" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  AddEvalReplayAllowedToolMutation,
+  AddEvalReplayAllowedToolMutationVariables
+>;
+export const RemoveEvalReplayAllowedToolDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "RemoveEvalReplayAllowedTool" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "removeEvalReplayAllowedTool" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  RemoveEvalReplayAllowedToolMutation,
+  RemoveEvalReplayAllowedToolMutationVariables
 >;
 export const FlagThreadForEvalDocument = {
   kind: "Document",
