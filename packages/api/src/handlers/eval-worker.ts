@@ -44,6 +44,7 @@ import {
   bedrockLlmJudge,
   createInHouseScoringEngine,
   EvalJudgeInvocationError,
+  heuristicFallbackJudge,
   llmJudgeEnabled,
 } from "../lib/evals/engines/in-house.js";
 import { createAgentCoreScoringEngine } from "../lib/evals/engines/agentcore.js";
@@ -58,6 +59,7 @@ export {
   EVAL_JUDGE_SYSTEM_PROMPT,
   EvalJudgeInvocationError,
   createInHouseScoringEngine,
+  heuristicFallbackJudge,
   llmJudgeEnabled,
   parseEvalJudgeVerdict,
   type EvalJudgeVerdict,
@@ -324,7 +326,13 @@ function resolveScoringEngines(): ScoringEngines {
     inHouse:
       scoringEnginesForTests?.inHouse ??
       createInHouseScoringEngine({
-        judge: llmJudgeEnabled() ? bedrockLlmJudge : undefined,
+        // ALWAYS pass a judge (Trust Core U12) — never undefined. With the
+        // LLM judge enabled, the real Bedrock Converse judge scores every
+        // rubric. Disabled, the heuristic fallback judge scores refusal
+        // rubrics (red-team) and throws EvalJudgeInvocationError →
+        // error/evaluator_error for non-refusal rubrics, so a quality
+        // rubric is recorded unscored rather than vacuously passed.
+        judge: llmJudgeEnabled() ? bedrockLlmJudge : heuristicFallbackJudge,
       }),
     agentCore:
       scoringEnginesForTests?.agentCore ?? createAgentCoreScoringEngine(),

@@ -273,6 +273,36 @@ describe("characterization: llm-rubric verdict integration", () => {
     ]);
   });
 
+  it("fails closed for a non-refusal rubric when no judge is injected (U12 trust fix)", async () => {
+    // INTENTIONAL FIXTURE CHANGE (Trust Core U12): before the fix, the
+    // heuristic defaulted `passed = true`, so a non-refusal quality rubric
+    // with no judge returned a vacuous pass/score:1 — the trust bug. The
+    // heuristic now fails closed (passed:false/score:0) so a direct
+    // judge-less call can never silently pass a rubric it cannot honestly
+    // score. (The worker never takes this path: it always injects a judge,
+    // and the fallback judge throws EvalJudgeInvocationError →
+    // error/evaluator_error for non-refusal rubrics rather than reaching
+    // the heuristic.)
+    const rubric = "The response should have been presented in a table.";
+    await expect(
+      evaluateAssertions(
+        [{ type: "llm-rubric", value: rubric }],
+        "Here is the data: 1, 2, 3.",
+        "Show me the data.",
+      ),
+    ).resolves.toEqual([
+      {
+        type: "llm-rubric",
+        value: rubric,
+        passed: false,
+        reason:
+          "Heuristic cannot evaluate non-refusal rubric; LLM judge required",
+        score: 0,
+        rubric,
+      },
+    ]);
+  });
+
   it("propagates a judge crash raw (the host classifies it, never a heuristic fallback)", async () => {
     const crash = new Error("Converse exploded mid-judging");
     await expect(

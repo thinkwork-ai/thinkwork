@@ -16,6 +16,8 @@
  */
 import {
   evaluateAssertions,
+  isRefusalRubric,
+  llmRubricHeuristic,
   type EngineScoringInput,
   type EngineScoringResult,
   type EvalJudge,
@@ -180,10 +182,42 @@ ${rubric}
 }
 
 /**
+ * Fallback judge used when the LLM judge is disabled (EVAL_LLM_JUDGE off)
+ * — Trust Core U12. The worker ALWAYS passes a judge now (never
+ * undefined), so the only paths are: the real Bedrock judge, or this.
+ *
+ *  - Refusal-shaped rubric (isRefusalRubric): the heuristic is an honest
+ *    red-team check, so use it. This keeps the seed red-team cases working
+ *    without Bedrock.
+ *  - Any other rubric (a quality rubric like "this should have been in a
+ *    table"): the heuristic CANNOT honestly score it, and the correct
+ *    classification for "can't honestly score" is error/evaluator_error
+ *    (unscored) — NOT a vacuous pass (the bug this fixes) and NOT a
+ *    behavioral fail (which would mislabel a config gap as the agent
+ *    misbehaving). Throw EvalJudgeInvocationError so the worker's catch
+ *    site records error/evaluator_error.
+ */
+export function heuristicFallbackJudge(
+  _query: string,
+  output: string,
+  rubric: string,
+): EvalJudgeResult {
+  if (isRefusalRubric(rubric)) {
+    return llmRubricHeuristic(output, rubric);
+  }
+  throw new EvalJudgeInvocationError(
+    new Error(
+      "LLM rubric judge unavailable (EVAL_LLM_JUDGE disabled); cannot score non-refusal rubric",
+    ),
+  );
+}
+
+/**
  * Build the in-house engine. The judge is injected by the host (the
- * eval-worker passes the Bedrock judge when EVAL_LLM_JUDGE enables it;
- * undefined keeps the heuristic rubric path) so the scoring flow itself
- * stays exactly the pre-contract evaluateAssertions call.
+ * eval-worker passes the Bedrock judge when EVAL_LLM_JUDGE enables it,
+ * else the heuristic fallback judge above — never undefined) so the
+ * scoring flow itself stays exactly the pre-contract evaluateAssertions
+ * call.
  */
 export function createInHouseScoringEngine(
   options: { judge?: EvalJudge } = {},

@@ -318,6 +318,15 @@ locals {
       # final SQS receive and record error/throttle instead of letting the
       # case vanish into the DLQ without a result row.
       EVAL_FANOUT_MAX_RECEIVE_COUNT = tostring(local.eval_fanout_max_receive_count)
+      # Enables the real Bedrock Converse llm-rubric judge (U12). Without
+      # this the worker passes no judge and non-refusal quality rubrics
+      # fall back to a heuristic that can never honestly score them — the
+      # vacuous-pass trust bug. EVAL_JUDGE_MODEL_ID matches the default in
+      # in-house.ts; the api-ai IAM policy already grants
+      # bedrock:InvokeModel(+WithResponseStream) on inference-profile/*,
+      # which authorizes Converse with this profile ID.
+      EVAL_LLM_JUDGE      = "1"
+      EVAL_JUDGE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     }
     # job-trigger's thinkwork-<stage>-api-* worker function names are
     # derived from STAGE at call time (runtimeFunctionName — R7), and
