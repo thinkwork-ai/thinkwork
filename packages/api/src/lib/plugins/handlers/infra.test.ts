@@ -139,12 +139,16 @@ function fakeDeps(): FakeDeps {
 function provisionArgs(
   deps: FakeDeps,
   handlerRef: Record<string, unknown> = {},
+  overrides: {
+    pluginKey?: string;
+    component?: InfrastructureComponent;
+  } = {},
 ) {
   return {
     tenantId: TENANT,
     pluginInstallId: "install-1",
-    pluginKey: "twenty",
-    component: component(),
+    pluginKey: overrides.pluginKey ?? "twenty",
+    component: overrides.component ?? component(),
     handlerRef,
     requestedByUserId: "user-1",
     deps,
@@ -309,6 +313,99 @@ describe("provisionPluginInfraComponent", () => {
     });
   });
 
+  it("Company Brain adopts existing Cognee through a plan-backed UPGRADE job", async () => {
+    const deps = fakeDeps();
+    const brainSubstrate = component({
+      key: "brain-substrate",
+      managedAppKey: "cognee",
+      terraformInputs: {
+        imageUri: { description: "image", type: "string" },
+        dbPasswordSecretArn: { description: "db", type: "string" },
+        bedrockModelResourceArns: {
+          description: "models",
+          type: "list(string)",
+        },
+      },
+    });
+    deps.managedApps.set(`${TENANT}:cognee`, {
+      id: "app-cognee",
+      desiredConfig: {
+        imageUri: "repo/cognee@sha256:abc",
+        dbPasswordSecretArn: "arn:aws:secretsmanager:db",
+        bedrockModelResourceArns: ["arn:aws:bedrock:model"],
+      },
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+
+    const ref = await provisionPluginInfraComponent(
+      provisionArgs(deps, {}, {
+        pluginKey: "company-brain",
+        component: brainSubstrate,
+      }),
+    );
+
+    expect(deps.startCalls).toHaveLength(1);
+    expect(deps.startCalls[0]).toMatchObject({
+      appKey: "cognee",
+      operation: "UPGRADE",
+      requestedByUserId: "user-1",
+      releaseVersion: "v1.2.3",
+      manifestDigest: "sha-123",
+      desiredConfig: {
+        imageUri: "repo/cognee@sha256:abc",
+        dbPasswordSecretArn: "arn:aws:secretsmanager:db",
+        bedrockModelResourceArns: ["arn:aws:bedrock:model"],
+      },
+    });
+    expect(ref).toMatchObject({
+      managedAppKey: "cognee",
+      managedApplicationId: "app-cognee",
+      deploymentJobId: "job-1",
+      operation: "UPGRADE",
+      attempt: 1,
+      adoptedExisting: true,
+      adoptionRequiresNoChange: true,
+    });
+    expect(ref.adoptedRunningInfra).toBeUndefined();
+    expect(ref.componentHash).toBe(infraComponentHash(brainSubstrate));
+  });
+
+  it("idempotently reuses the Company Brain Cognee adoption job", async () => {
+    const deps = fakeDeps();
+    const brainSubstrate = component({
+      key: "brain-substrate",
+      managedAppKey: "cognee",
+      terraformInputs: {
+        imageUri: { description: "image", type: "string" },
+      },
+    });
+    deps.managedApps.set(`${TENANT}:cognee`, {
+      id: "app-cognee",
+      desiredConfig: { imageUri: "repo/cognee@sha256:abc" },
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+    const ref = await provisionPluginInfraComponent(
+      provisionArgs(deps, {}, {
+        pluginKey: "company-brain",
+        component: brainSubstrate,
+      }),
+    );
+    deps.setJobStatus("job-1", "awaiting_approval");
+
+    const again = await provisionPluginInfraComponent(
+      provisionArgs(deps, ref, {
+        pluginKey: "company-brain",
+        component: brainSubstrate,
+      }),
+    );
+
+    expect(again.deploymentJobId).toBe("job-1");
+    expect(again.adoptionRequiresNoChange).toBe(true);
+    expect(deps.startCalls).toHaveLength(1);
+  });
+
   it("changed component content over a succeeded job creates an UPGRADE job instead of reusing", async () => {
     const deps = fakeDeps();
     const { ref, changed } = await upgradeJobRef(deps);
@@ -356,13 +453,25 @@ describe("provisionPluginInfraComponent", () => {
     expect(deps.startCalls).toHaveLength(0);
   });
 
-  it("net-new ENABLE with no resolved release FAILS clearly and creates NO job (Fix B)", async () => {
+  it("net-new ENABLE starts the normal managed-app plan path", async () => {
     const deps = fakeDeps();
     // No existing managed_applications row at all → net-new provisioning.
-    await expect(
-      provisionPluginInfraComponent(provisionArgs(deps)),
-    ).rejects.toThrow(/requires a resolved release/);
-    expect(deps.startCalls).toHaveLength(0);
+    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+
+    expect(ref).toMatchObject({
+      managedAppKey: "twenty",
+      deploymentJobId: "job-1",
+      operation: "ENABLE",
+      adoptedExisting: false,
+    });
+    expect(deps.startCalls).toHaveLength(1);
+    expect(deps.startCalls[0]).toMatchObject({
+      appKey: "twenty",
+      operation: "ENABLE",
+      desiredConfig: {},
+      releaseVersion: null,
+      manifestDigest: null,
+    });
   });
 });
 
