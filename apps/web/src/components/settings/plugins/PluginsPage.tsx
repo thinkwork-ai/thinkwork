@@ -31,6 +31,7 @@ type PluginFilter = "all" | "installed";
 export function PluginsPage() {
   const { isOperator, roleResolved } = useTenant();
   const showOperatorActions = roleResolved && isOperator;
+  const selfServiceOnly = roleResolved && !isOperator;
   const [filter, setFilter] = useState<PluginFilter>("all");
 
   const [catalogResult, refreshCatalog] = useQuery({
@@ -58,8 +59,13 @@ export function PluginsPage() {
   );
 
   const installedCount = catalog.filter((entry) => entry.install).length;
-  const visible =
-    filter === "installed" ? catalog.filter((entry) => entry.install) : catalog;
+  const visible = selfServiceOnly
+    ? catalog.filter(
+        (entry) => Boolean(entry.install) && pluginEntryIsAuthCapable(entry),
+      )
+    : filter === "installed"
+      ? catalog.filter((entry) => entry.install)
+      : catalog;
 
   function refreshAll() {
     refreshCatalog({ requestPolicy: "network-only" });
@@ -91,7 +97,11 @@ export function PluginsPage() {
     <SettingsPane className="max-w-none">
       <SettingsHeader
         title="Plugins"
-        description="Install applications from the plugin catalog and connect them to your account."
+        description={
+          selfServiceOnly
+            ? "Connect installed plugins to your account."
+            : "Install applications from the plugin catalog and connect them to your account."
+        }
         actions={
           <Button
             type="button"
@@ -107,32 +117,39 @@ export function PluginsPage() {
       />
 
       <SettingsSection
-        label="Catalog"
+        label={selfServiceOnly ? "Installed plugins" : "Catalog"}
         action={
-          <ToggleGroup
-            type="single"
-            value={filter}
-            variant="outline"
-            size="sm"
-            onValueChange={(value) => {
-              if (value) setFilter(value as PluginFilter);
-            }}
-            aria-label="Filter plugins"
-          >
-            <ToggleGroupItem value="all" className="px-3 text-xs">
-              All
-            </ToggleGroupItem>
-            <ToggleGroupItem value="installed" className="px-3 text-xs">
-              Installed{installedCount ? ` (${installedCount})` : ""}
-            </ToggleGroupItem>
-          </ToggleGroup>
+          selfServiceOnly ? null : (
+            <ToggleGroup
+              type="single"
+              value={filter}
+              variant="outline"
+              size="sm"
+              onValueChange={(value) => {
+                if (value) setFilter(value as PluginFilter);
+              }}
+              aria-label="Filter plugins"
+            >
+              <ToggleGroupItem value="all" className="px-3 text-xs">
+                All
+              </ToggleGroupItem>
+              <ToggleGroupItem value="installed" className="px-3 text-xs">
+                Installed{installedCount ? ` (${installedCount})` : ""}
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )
         }
       >
-        {catalogUnavailable ? (
+        {!roleResolved ? (
+          <div className="p-4 text-sm text-muted-foreground">
+            Loading plugins...
+          </div>
+        ) : catalogUnavailable ? (
           <div className="flex flex-col items-start gap-3 p-4">
             <p className="text-sm text-muted-foreground">
-              Plugin catalog is currently unavailable. Installed plugins remain
-              active.
+              {selfServiceOnly
+                ? "Plugin connection data is currently unavailable."
+                : "Plugin catalog is currently unavailable. Installed plugins remain active."}
             </p>
             <Button
               type="button"
@@ -154,13 +171,20 @@ export function PluginsPage() {
           </div>
         ) : visible.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">
-            No plugins are installed for this workspace.
+            {selfServiceOnly
+              ? "No installed plugins are available to connect yet."
+              : "No plugins are installed for this workspace."}
           </div>
         ) : (
           <div className="divide-y divide-border">
             {visible.map((entry) => {
               const needsReauth =
                 Boolean(entry.install) && needsReauthKeys.has(entry.pluginKey);
+              const activationStatus = activationStatusFor(
+                entry.install?.id,
+                entry.pluginKey,
+                activations,
+              );
               return (
                 <div
                   key={entry.pluginKey}
@@ -177,13 +201,36 @@ export function PluginsPage() {
                     <p className="mt-0.5 text-sm text-muted-foreground">
                       {entry.description}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Latest v{entry.latestVersion} · {entry.versions.length}{" "}
-                      {entry.versions.length === 1 ? "version" : "versions"}
-                    </p>
+                    {!selfServiceOnly ? (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Latest v{entry.latestVersion} · {entry.versions.length}{" "}
+                        {entry.versions.length === 1 ? "version" : "versions"}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {entry.install ? (
+                    {entry.install && selfServiceOnly ? (
+                      <Badge
+                        variant={
+                          activationStatus === "active"
+                            ? "outline"
+                            : "secondary"
+                        }
+                        className={
+                          activationStatus === "active"
+                            ? "border-emerald-500/40 text-emerald-400"
+                            : activationStatus === "needs_reauth"
+                              ? "border-amber-500/40 text-amber-500"
+                              : undefined
+                        }
+                      >
+                        {activationStatus === "active"
+                          ? "Connected"
+                          : activationStatus === "needs_reauth"
+                            ? "Reconnect"
+                            : "Not connected"}
+                      </Badge>
+                    ) : entry.install ? (
                       <>
                         {needsReauth ? (
                           <Badge
@@ -232,4 +279,30 @@ export function PluginsPage() {
       </SettingsSection>
     </SettingsPane>
   );
+}
+
+function pluginEntryIsAuthCapable(entry: {
+  versions: Array<{ requiredOauthScopes?: readonly string[] | null }>;
+}): boolean {
+  return entry.versions.some(
+    (version) => (version.requiredOauthScopes?.length ?? 0) > 0,
+  );
+}
+
+function activationStatusFor(
+  installId: string | undefined,
+  pluginKey: string,
+  activations: Array<{
+    pluginInstallId: string;
+    pluginKey: string;
+    status: string;
+  }>,
+): string | null {
+  const activation = activations.find(
+    (candidate) =>
+      candidate.status !== "revoked" &&
+      ((installId && candidate.pluginInstallId === installId) ||
+        candidate.pluginKey === pluginKey),
+  );
+  return activation?.status ?? null;
 }

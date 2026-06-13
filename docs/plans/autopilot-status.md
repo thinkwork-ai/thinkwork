@@ -11092,16 +11092,21 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 - Target branch: `main`.
 - Strategy: isolated worktree per implementation unit, PR to `main`, wait for
   CI, squash merge, delete branch, and sync before the next unit.
-- Current implementation unit: U4 — backend self/admin authorization for
-  profile, budget, and model data.
-- Current branch: `codex/role-access-u4-authz`.
-- Current worktree: `.Codex/worktrees/role-access-u4-authz`.
+- Current implementation unit: U5 — Plugins self-service surface and user MCP
+  token hardening.
+- Current branch: `codex/role-access-u5-plugins`.
+- Current worktree: `.Codex/worktrees/role-access-u5-plugins`.
 - Pull request: U1/U2 Activity slice
   [#2429](https://github.com/thinkwork-ai/thinkwork/pull/2429) merged; U3 PR
   [#2431](https://github.com/thinkwork-ai/thinkwork/pull/2431) merged; U4 PR
-  [#2433](https://github.com/thinkwork-ai/thinkwork/pull/2433) open.
-- Status: U1/U2 and U3 merged; U4 PR open, CI pending.
+  [#2433](https://github.com/thinkwork-ai/thinkwork/pull/2433) merged.
+- Status: U1/U2, U3, and U4 merged; U5 implementation in progress.
 - Notes:
+  - U5 branch created from `origin/main` at `1aa55647`.
+  - U4 PR #2433 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) after rebasing onto `origin/main`, then was squash merged on
+    2026-06-13 as `1aa55647`. The local Unit 4 worktree/branch were removed
+    after GitHub confirmed the merge.
   - U3 PR #2431 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) and was squash merged on 2026-06-13 as `3bcbd00a`. The remote
     branch was deleted and the local worktree/branch were removed.
@@ -11170,3 +11175,33 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - U4 `pnpm dlx prettier@3.8.2 --check ...` passed for touched API and docs
     files.
   - U4 `git diff --check` passed.
+  - U5 `pnpm install --frozen-lockfile` completed in the worktree with the same
+    optional `canvas` native build fallback/missing `pkg-config` warning; pnpm
+    returned success.
+  - U5 focused web/API tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx src/lib/mcp-api.test.ts && pnpm --filter @thinkwork/api exec vitest run src/lib/user-mcp-principal.test.ts`
+    passed: 4 files, 24 tests.
+  - U5 post-format focused tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx src/lib/mcp-api.test.ts && pnpm --filter @thinkwork/api exec vitest run src/__tests__/mcp-user-servers.test.ts src/lib/user-mcp-principal.test.ts`
+    passed: 5 files, 29 tests.
+  - U5 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U5 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U5 `pnpm --filter @thinkwork/web test` passed: 161 files, 1193 tests.
+  - U5 first `pnpm --filter @thinkwork/api test` run exposed four
+    `mcp-user-servers` failures because the existing endpoint test fixture
+    lacked the membership `auth`/`role` shape now required by the self/admin
+    principal resolver. Updated the harness and the old "ignore spoof" member
+    expectation to the stricter THNK-12 behavior: member-supplied alternate
+    `x-principal-id` now returns 403 before any MCP-token query.
+  - U5 final `pnpm --filter @thinkwork/api test` passed: 490 files passed,
+    3 skipped; 4638 tests passed, 9 skipped.
+  - U5 `pnpm --filter @thinkwork/web lint` and
+    `pnpm --filter @thinkwork/api lint` reported no lint scripts for the
+    selected packages.
+  - U5 `pnpm dlx prettier@3.8.2 --check ...` passed for touched web, API, and
+    docs files after formatting.
+  - U5 `git diff --check` passed.
+  - U5 final post-tightening checks passed after removing the member fallback
+    that could list installed but non-auth-capable plugins when catalog data was
+    unavailable: focused web plugin tests, `@thinkwork/web` typecheck, and
+    `@thinkwork/api` typecheck.

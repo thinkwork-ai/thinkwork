@@ -54,6 +54,7 @@ export function PluginDetail() {
   const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
   const showOperatorActions = roleResolved && isOperator;
+  const selfServiceOnly = roleResolved && !isOperator;
 
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +111,8 @@ export function PluginDetail() {
     activation && activation.status !== "revoked" ? activation.status : null;
 
   const displayName = entry?.displayName ?? install?.pluginKey ?? pluginKey;
+  const authCapable =
+    (entry && pluginEntryIsAuthCapable(entry)) || Boolean(activation);
 
   // Mutations don't invalidate urql's document cache — refetch every affected
   // query explicitly after each one.
@@ -259,12 +262,30 @@ export function PluginDetail() {
     );
   }
 
+  if (!roleResolved) {
+    return (
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
+        <p className="text-sm text-muted-foreground">Loading plugin...</p>
+      </div>
+    );
+  }
+
   if (!entry && !install) {
     return (
       <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">
           This plugin could not be found — it may have been removed from the
           catalog.
+        </p>
+      </div>
+    );
+  }
+
+  if (selfServiceOnly && (!install || !authCapable)) {
+    return (
+      <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
+        <p className="text-sm text-muted-foreground">
+          This plugin is not available for self-service connection.
         </p>
       </div>
     );
@@ -290,7 +311,7 @@ export function PluginDetail() {
           title={displayName}
           description={entry?.description}
           badge={
-            install ? (
+            selfServiceOnly ? undefined : install ? (
               <Badge
                 variant="outline"
                 className={installStateChipClassName(install.state)}
@@ -304,13 +325,15 @@ export function PluginDetail() {
         />
 
         {catalogResult.error ? (
-          <p className="mb-6 text-sm text-muted-foreground">
-            Plugin catalog is currently unavailable. Installed plugins remain
-            active.
-          </p>
+          !selfServiceOnly ? (
+            <p className="mb-6 text-sm text-muted-foreground">
+              Plugin catalog is currently unavailable. Installed plugins remain
+              active.
+            </p>
+          ) : null
         ) : null}
 
-        {install?.state === "awaiting_approval" ? (
+        {install?.state === "awaiting_approval" && !selfServiceOnly ? (
           <PluginPendingApprovalSection
             deploymentJobId={findPluginDeploymentJobId(install.components)}
             showOperatorActions={showOperatorActions}
@@ -360,7 +383,7 @@ export function PluginDetail() {
           </SettingsSection>
         ) : null}
 
-        {install ? (
+        {install && !selfServiceOnly ? (
           <SettingsSection label="Components">
             {install.lastError ? (
               <div className="border-b border-border px-4 py-3 text-sm text-destructive">
@@ -441,7 +464,7 @@ export function PluginDetail() {
           </SettingsSection>
         ) : null}
 
-        {install ? (
+        {install && authCapable ? (
           <SettingsSection label="Connection">
             <SettingsRow
               label="Your access"
@@ -521,6 +544,14 @@ export function PluginDetail() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+function pluginEntryIsAuthCapable(entry: {
+  versions: Array<{ requiredOauthScopes?: readonly string[] | null }>;
+}): boolean {
+  return entry.versions.some(
+    (version) => (version.requiredOauthScopes?.length ?? 0) > 0,
   );
 }
 
