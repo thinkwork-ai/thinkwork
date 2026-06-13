@@ -33,11 +33,15 @@ function component(
   };
 }
 
+interface ManagedAppFake {
+  id: string;
+  desiredConfig: Record<string, unknown>;
+  selectedReleaseVersion: string | null;
+  selectedManifestDigest: string | null;
+}
+
 interface FakeDeps extends InfraHandlerDeps {
-  managedApps: Map<
-    string,
-    { id: string; desiredConfig: Record<string, unknown> }
-  >;
+  managedApps: Map<string, ManagedAppFake>;
   jobs: Map<string, PluginDeploymentJobSnapshot & { idempotencyKey: string }>;
   startCalls: Array<{
     appKey: string;
@@ -45,15 +49,14 @@ interface FakeDeps extends InfraHandlerDeps {
     idempotencyKey: string;
     desiredConfig: Record<string, unknown>;
     requestedByUserId: string | null;
+    releaseVersion?: string | null;
+    manifestDigest?: string | null;
   }>;
   setJobStatus(jobId: string, status: string, errorMessage?: string): void;
 }
 
 function fakeDeps(): FakeDeps {
-  const managedApps = new Map<
-    string,
-    { id: string; desiredConfig: Record<string, unknown> }
-  >();
+  const managedApps = new Map<string, ManagedAppFake>();
   const jobs = new Map<
     string,
     PluginDeploymentJobSnapshot & { idempotencyKey: string }
@@ -85,6 +88,8 @@ function fakeDeps(): FakeDeps {
         idempotencyKey: args.idempotencyKey,
         desiredConfig: args.desiredConfig,
         requestedByUserId: args.requestedByUserId,
+        releaseVersion: args.releaseVersion ?? null,
+        manifestDigest: args.manifestDigest ?? null,
       });
       // Idempotency dedupe, like the real core.
       const existing = [...jobs.values()].find(
@@ -103,6 +108,8 @@ function fakeDeps(): FakeDeps {
       const app = managedApps.get(appsKey) ?? {
         id: `app-${args.appKey}`,
         desiredConfig: args.desiredConfig,
+        selectedReleaseVersion: args.releaseVersion ?? null,
+        selectedManifestDigest: args.manifestDigest ?? null,
       };
       managedApps.set(appsKey, { ...app, desiredConfig: args.desiredConfig });
       counter += 1;
@@ -145,15 +152,46 @@ function provisionArgs(
 }
 
 describe("provisionPluginInfraComponent", () => {
-  it("creates an ENABLE plan job + managed_applications row and records the handler_ref", async () => {
+  /**
+   * Seed a managed_applications row that exists but has NO prior deployment
+   * job — the U10/Twenty adoption shape (greenfield-provisioned app the
+   * plugin wires up). A CHANGED component over such a row drives a real
+   * UPGRADE job; that is the only plugin-driven path that creates a job for
+   * an existing app (net-new ENABLE without a row always fails — Fix B).
+   */
+  function seedExistingApp(deps: FakeDeps): void {
+    deps.managedApps.set(`${TENANT}:twenty`, {
+      id: "app-twenty",
+      desiredConfig: {},
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+  }
+
+  /** Drive a real UPGRADE job by adopting then changing the component. */
+  async function upgradeJobRef(deps: FakeDeps) {
+    seedExistingApp(deps);
+    const adopted = await provisionPluginInfraComponent(provisionArgs(deps));
+    const changed = component({
+      terraformInputs: {
+        app_password: { description: "rotated", type: "string" },
+      },
+    });
+    const ref = await provisionPluginInfraComponent({
+      ...provisionArgs(deps, adopted),
+      component: changed,
+    });
+    return { ref, changed };
+  }
+
+  it("a changed component over an adopted app creates an UPGRADE job + records the handler_ref", async () => {
     const deps = fakeDeps();
-    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    const { ref, changed } = await upgradeJobRef(deps);
 
     expect(deps.startCalls).toHaveLength(1);
     expect(deps.startCalls[0]).toMatchObject({
       appKey: "twenty",
-      operation: "ENABLE",
-      idempotencyKey: "plugin:install-1:infra:enable:1",
+      operation: "UPGRADE",
       desiredConfig: {},
       requestedByUserId: "user-1",
     });
@@ -162,62 +200,97 @@ describe("provisionPluginInfraComponent", () => {
       managedAppKey: "twenty",
       managedApplicationId: "app-twenty",
       deploymentJobId: "job-1",
-      operation: "ENABLE",
-      attempt: 1,
-      adoptedExisting: false,
+      operation: "UPGRADE",
+      // The adopted ref carried attempt 1; the upgrade job bumps to 2.
+      attempt: 2,
     });
-    expect(ref.componentHash).toBe(infraComponentHash(component()));
+    expect(ref.componentHash).toBe(infraComponentHash(changed));
   });
 
   it("idempotent re-run reuses the in-flight job without creating a second one", async () => {
     const deps = fakeDeps();
-    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    const { ref, changed } = await upgradeJobRef(deps);
     deps.setJobStatus("job-1", "awaiting_approval");
 
-    const again = await provisionPluginInfraComponent(provisionArgs(deps, ref));
+    const again = await provisionPluginInfraComponent({
+      ...provisionArgs(deps, ref),
+      component: changed,
+    });
     expect(again.deploymentJobId).toBe("job-1");
-    expect(again.attempt).toBe(1);
+    expect(again.attempt).toBe(2);
     expect(deps.startCalls).toHaveLength(1); // no second creation
   });
 
   it("a failed prior job drives a FRESH job with a bumped attempt, keeping the original operation", async () => {
     const deps = fakeDeps();
-    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    const { ref, changed } = await upgradeJobRef(deps);
     deps.setJobStatus("job-1", "failed", "apply exploded");
 
-    const retried = await provisionPluginInfraComponent(
-      provisionArgs(deps, ref),
-    );
+    const retried = await provisionPluginInfraComponent({
+      ...provisionArgs(deps, ref),
+      component: changed,
+    });
     expect(retried.deploymentJobId).toBe("job-2");
-    expect(retried.attempt).toBe(2);
-    expect(retried.operation).toBe("ENABLE");
+    expect(retried.attempt).toBe(3);
+    expect(retried.operation).toBe("UPGRADE");
     expect(deps.startCalls[1]!.idempotencyKey).toBe(
-      "plugin:install-1:infra:enable:2",
+      "plugin:install-1:infra:upgrade:3",
     );
   });
 
-  it("ADOPTS a pre-existing managed_applications row: UPGRADE operation, desired_config preserved (U10)", async () => {
+  it("ADOPTS an already-running app WITHOUT a deploy job: adoptedRunningInfra marker, no job (Fix A)", async () => {
     const deps = fakeDeps();
     deps.managedApps.set(`${TENANT}:twenty`, {
       id: "app-existing",
       desiredConfig: { appPassword: "keep-me" },
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
     });
 
     const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    // No deploy plan job — the existing app's Terraform is not plugin-owned.
+    expect(deps.startCalls).toHaveLength(0);
     expect(ref).toMatchObject({
-      operation: "UPGRADE",
+      managedAppKey: "twenty",
+      managedApplicationId: "app-existing",
+      operation: "ADOPT",
+      attempt: 1,
       adoptedExisting: true,
+      adoptedRunningInfra: true,
     });
-    expect(deps.startCalls[0]).toMatchObject({
-      operation: "UPGRADE",
-      desiredConfig: { appPassword: "keep-me" },
-    });
+    expect(ref.deploymentJobId).toBeUndefined();
+    expect(ref.componentHash).toBe(infraComponentHash(component()));
   });
 
-  it("changed component content over a succeeded job creates an UPGRADE job instead of reusing", async () => {
+  it("an idempotent re-run of an adopted-running ref stays a no-job ADOPT (Fix A)", async () => {
     const deps = fakeDeps();
+    deps.managedApps.set(`${TENANT}:twenty`, {
+      id: "app-existing",
+      desiredConfig: {},
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
     const ref = await provisionPluginInfraComponent(provisionArgs(deps));
-    deps.setJobStatus("job-1", "succeeded");
+
+    const again = await provisionPluginInfraComponent(provisionArgs(deps, ref));
+    expect(deps.startCalls).toHaveLength(0);
+    expect(again).toMatchObject({
+      operation: "ADOPT",
+      adoptedRunningInfra: true,
+    });
+    expect(again.deploymentJobId).toBeUndefined();
+  });
+
+  it("a CHANGED component over an adopted-running app drives a real UPGRADE job (Fix A)", async () => {
+    const deps = fakeDeps();
+    deps.managedApps.set(`${TENANT}:twenty`, {
+      id: "app-existing",
+      desiredConfig: { appPassword: "keep-me" },
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    expect(deps.startCalls).toHaveLength(0);
 
     const changed = component({
       terraformInputs: {
@@ -228,17 +301,46 @@ describe("provisionPluginInfraComponent", () => {
       ...provisionArgs(deps, ref),
       component: changed,
     });
+    expect(upgraded.operation).toBe("UPGRADE");
+    expect(upgraded.deploymentJobId).toBe("job-1");
+    expect(deps.startCalls[0]).toMatchObject({
+      operation: "UPGRADE",
+      desiredConfig: { appPassword: "keep-me" },
+    });
+  });
+
+  it("changed component content over a succeeded job creates an UPGRADE job instead of reusing", async () => {
+    const deps = fakeDeps();
+    const { ref, changed } = await upgradeJobRef(deps);
+    deps.setJobStatus("job-1", "succeeded");
+
+    const changedAgain = component({
+      terraformInputs: {
+        app_password: { description: "rotated again", type: "string" },
+      },
+    });
+    // sanity: distinct from the first change so content differs from job-1.
+    expect(infraComponentHash(changedAgain)).not.toBe(
+      infraComponentHash(changed),
+    );
+    const upgraded = await provisionPluginInfraComponent({
+      ...provisionArgs(deps, ref),
+      component: changedAgain,
+    });
     expect(upgraded.deploymentJobId).toBe("job-2");
     expect(upgraded.operation).toBe("UPGRADE");
-    expect(upgraded.componentHash).toBe(infraComponentHash(changed));
+    expect(upgraded.componentHash).toBe(infraComponentHash(changedAgain));
   });
 
   it("an unchanged component over a succeeded job is reused (re-drive convergence)", async () => {
     const deps = fakeDeps();
-    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    const { ref, changed } = await upgradeJobRef(deps);
     deps.setJobStatus("job-1", "succeeded");
 
-    const again = await provisionPluginInfraComponent(provisionArgs(deps, ref));
+    const again = await provisionPluginInfraComponent({
+      ...provisionArgs(deps, ref),
+      component: changed,
+    });
     expect(again.deploymentJobId).toBe("job-1");
     expect(deps.startCalls).toHaveLength(1);
   });
@@ -251,6 +353,15 @@ describe("provisionPluginInfraComponent", () => {
         component: component({ managedAppKey: "not-an-adapter" }),
       }),
     ).rejects.toThrow(/unknown managed-app adapter key/);
+    expect(deps.startCalls).toHaveLength(0);
+  });
+
+  it("net-new ENABLE with no resolved release FAILS clearly and creates NO job (Fix B)", async () => {
+    const deps = fakeDeps();
+    // No existing managed_applications row at all → net-new provisioning.
+    await expect(
+      provisionPluginInfraComponent(provisionArgs(deps)),
+    ).rejects.toThrow(/requires a resolved release/);
     expect(deps.startCalls).toHaveLength(0);
   });
 });
@@ -267,6 +378,31 @@ describe("teardownPluginInfraComponent", () => {
     };
   }
 
+  /**
+   * Build a provisioned-via-real-job ref (job-1 succeeded) by adopting an
+   * existing app then driving an UPGRADE — the only plugin path that creates
+   * a deployment job (net-new ENABLE without a row fails — Fix B).
+   */
+  async function provisionedRef(deps: FakeDeps) {
+    deps.managedApps.set(`${TENANT}:twenty`, {
+      id: "app-twenty",
+      desiredConfig: {},
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+    const adopted = await provisionPluginInfraComponent(provisionArgs(deps));
+    const changed = component({
+      terraformInputs: {
+        app_password: { description: "rotated", type: "string" },
+      },
+    });
+    const ref = await provisionPluginInfraComponent({
+      ...provisionArgs(deps, adopted),
+      component: changed,
+    });
+    return ref; // deploymentJobId job-1
+  }
+
   it("a never-provisioned component completes immediately with no job", async () => {
     const deps = fakeDeps();
     const result = await teardownPluginInfraComponent(teardownArgs(deps, {}));
@@ -276,7 +412,7 @@ describe("teardownPluginInfraComponent", () => {
 
   it("a provisioned component creates a DESTROY plan job behind the approval gate", async () => {
     const deps = fakeDeps();
-    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    const ref = await provisionedRef(deps);
     deps.setJobStatus("job-1", "succeeded");
 
     const result = await teardownPluginInfraComponent(teardownArgs(deps, ref));
@@ -284,17 +420,18 @@ describe("teardownPluginInfraComponent", () => {
     expect(result.handlerRef).toMatchObject({
       operation: "DESTROY",
       deploymentJobId: "job-2",
-      attempt: 2,
+      // provisionedRef carried attempt 2 (adopt→upgrade); destroy bumps to 3.
+      attempt: 3,
     });
     expect(deps.startCalls[1]).toMatchObject({
       operation: "DESTROY",
-      idempotencyKey: "plugin:install-1:infra:destroy:2",
+      idempotencyKey: "plugin:install-1:infra:destroy:3",
     });
   });
 
   it("an in-flight destroy job is reused; a succeeded one completes; a failed one re-drives fresh", async () => {
     const deps = fakeDeps();
-    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    const ref = await provisionedRef(deps);
     deps.setJobStatus("job-1", "succeeded");
     const destroy = await teardownPluginInfraComponent(teardownArgs(deps, ref));
 
@@ -313,7 +450,7 @@ describe("teardownPluginInfraComponent", () => {
     expect(redriven.complete).toBe(false);
     expect(redriven.handlerRef).toMatchObject({
       deploymentJobId: "job-3",
-      attempt: 3,
+      attempt: 4,
     });
 
     // Succeeded — complete.
@@ -326,11 +463,35 @@ describe("teardownPluginInfraComponent", () => {
 
   it("completes when the managed_applications row is already gone", async () => {
     const deps = fakeDeps();
-    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+    const ref = await provisionedRef(deps);
     deps.managedApps.delete(`${TENANT}:twenty`);
 
     const result = await teardownPluginInfraComponent(teardownArgs(deps, ref));
     expect(result.complete).toBe(true);
     expect(deps.startCalls).toHaveLength(1); // only the original provision
+  });
+
+  it("tears down an adopted-running infra (no prior deploy job) by creating a DESTROY job", async () => {
+    const deps = fakeDeps();
+    deps.managedApps.set(`${TENANT}:twenty`, {
+      id: "app-existing",
+      desiredConfig: {},
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+    const adopted = await provisionPluginInfraComponent(provisionArgs(deps));
+    expect(adopted.deploymentJobId).toBeUndefined();
+
+    const result = await teardownPluginInfraComponent(
+      teardownArgs(deps, adopted),
+    );
+    // First job created is the DESTROY (no provision job preceded it) → job-1.
+    // The adopted ref carried attempt 1, so the destroy bumps to attempt 2.
+    expect(result.complete).toBe(false);
+    expect(result.handlerRef).toMatchObject({
+      operation: "DESTROY",
+      deploymentJobId: "job-1",
+      attempt: 2,
+    });
   });
 });

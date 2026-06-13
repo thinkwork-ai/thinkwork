@@ -4,10 +4,11 @@
  * Runs the activation flow against the in-memory store + secrets fakes
  * and a scripted fetch fake (discovery, DCR, token endpoint) — no DB,
  * no AWS, no network. Covers: HMAC state integrity (forged/expired
- * rejected BEFORE any field is consumed), single- and multi-resource
- * minting, the sharedAudience fallback, denial/abandon leaving nothing
- * behind, full-secret-deletion deactivation, needs_reauth on refresh
- * failure, and dispatch-time token resolution.
+ * rejected BEFORE any field is consumed), SINGLE-token minting (Fix C — one
+ * token covers all the plugin's servers; no per-resource chaining),
+ * compat resolution of pre-Fix-C multi-record activations, denial/abandon
+ * leaving nothing behind, full-secret-deletion deactivation, needs_reauth
+ * on refresh failure, and dispatch-time token resolution.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -411,11 +412,11 @@ describe("completeActivation", () => {
     expect(h.store.audits.at(-1)).toMatchObject({
       eventType: "plugin.activation_granted",
       actorId: USER,
-      payload: { tokenCount: 1, sharedAudience: false },
+      payload: { tokenCount: 1 },
     });
   });
 
-  it("distinct resources: initial exchange + refresh-grant re-mints produce one token record per resource", async () => {
+  it("distinct resources: STILL mints exactly ONE token covering all servers (Fix C)", async () => {
     const h = buildHarness(); // 3 distinct resource indicators
     const state = await startAndGetState(h);
     const result = await completeActivation({ state, code: "code-1" }, h.deps);
@@ -423,60 +424,30 @@ describe("completeActivation", () => {
 
     const activation = [...h.store.activations.values()][0]!;
     const tokens = await h.store.listActivationTokens(activation.id);
-    expect(tokens.map((token) => token.resource_indicator).sort()).toEqual([
-      "https://crm.lastmile.invalid",
-      "https://routing.lastmile.invalid",
-      "https://tasks.lastmile.invalid",
-    ]);
-    expect(h.secrets.values.size).toBe(3);
-    // Distinct access tokens per audience.
-    const accessTokens = [...h.secrets.values.values()].map(
-      (value) => (JSON.parse(value) as { access_token: string }).access_token,
-    );
-    expect(new Set(accessTokens).size).toBe(3);
-    // 1 code exchange + 2 refresh-grant mints, each with its resource.
+    // One record, keyed by the PRIMARY resource — no per-resource chaining.
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]!.resource_indicator).toBe("https://crm.lastmile.invalid");
+    expect(h.secrets.values.size).toBe(1);
+    // Exactly ONE token exchange — no refresh-grant mints (the rotation that
+    // invalidated record #1 and flipped the activation to needs_reauth).
     const tokenCalls = h.fetchCalls.filter(
       (call) => call.url === `${AUTH_DOMAIN}/token`,
     );
     expect(tokenCalls.map((call) => call.body?.get("grant_type"))).toEqual([
       "authorization_code",
-      "refresh_token",
-      "refresh_token",
     ]);
     expect(h.store.audits.at(-1)).toMatchObject({
       eventType: "plugin.activation_granted",
-      payload: { tokenCount: 3, sharedAudience: false },
+      payload: { tokenCount: 1 },
     });
-  });
-
-  it("sharedAudience fallback: an AS rejecting multi-resource mints stores the single token for ALL resource records", async () => {
-    const h = buildHarness();
-    h.rejectRefreshMints.value = true;
-    const state = await startAndGetState(h);
-    const result = await completeActivation({ state, code: "code-1" }, h.deps);
-    expect(result.ok).toBe(true);
-
-    const activation = [...h.store.activations.values()][0]!;
-    const tokens = await h.store.listActivationTokens(activation.id);
-    expect(tokens).toHaveLength(3); // one record per resource, same token
-    const secretsParsed = tokens.map(
-      (token) =>
-        JSON.parse(h.secrets.values.get(token.secret_ref)!) as {
-          access_token: string;
-          shared_audience: boolean;
-        },
-    );
-    expect(new Set(secretsParsed.map((s) => s.access_token)).size).toBe(1);
+    // No sharedAudience metadata on the (now single-token) audit.
     expect(
-      secretsParsed.filter((secret) => secret.shared_audience),
-    ).toHaveLength(2);
-    expect(h.store.audits.at(-1)).toMatchObject({
-      eventType: "plugin.activation_granted",
-      payload: { tokenCount: 3, sharedAudience: true },
-    });
+      (h.store.audits.at(-1)!.payload as Record<string, unknown>)
+        .sharedAudience,
+    ).toBeUndefined();
   });
 
-  it("no refresh token from the AS: falls straight to sharedAudience without extra mint attempts", async () => {
+  it("no refresh token from the AS: still one token record, one exchange (Fix C)", async () => {
     const h = buildHarness();
     h.omitRefreshToken.value = true;
     const state = await startAndGetState(h);
@@ -487,7 +458,7 @@ describe("completeActivation", () => {
     );
     expect(tokenCalls).toHaveLength(1); // no refresh grants attempted
     const activation = [...h.store.activations.values()][0]!;
-    expect(await h.store.listActivationTokens(activation.id)).toHaveLength(3);
+    expect(await h.store.listActivationTokens(activation.id)).toHaveLength(1);
   });
 
   it("OAuth denial/abandonment leaves NO activation row and NO secrets", async () => {
@@ -541,7 +512,7 @@ describe("deactivateActivation", () => {
     const state = await startAndGetState(h);
     await completeActivation({ state, code: "code-1" }, h.deps);
     const secretNames = [...h.secrets.values.keys()];
-    expect(secretNames).toHaveLength(3);
+    expect(secretNames).toHaveLength(1);
 
     const revoked = await deactivateActivation(
       { userId: USER, tenantId: TENANT, pluginInstallId: h.installId },
@@ -607,6 +578,70 @@ describe("dispatch token resolution", () => {
       logPrefix: "[test]",
     });
     expect(token).toMatch(/^access-/);
+  });
+
+  it("resolves a server whose resource has NO own record from the single token (Fix C)", async () => {
+    // After Fix C only the PRIMARY resource has a token record, yet the
+    // tasks/routing servers must still resolve from it (audience unenforced).
+    const { h } = await activatedHarness();
+    const resolver = createPluginDispatchAuthResolver({
+      store: h.store,
+      secrets: h.secrets,
+      fetchFn: h.deps.fetchFn,
+      now: () => new Date(),
+    });
+    const token = await resolver.resolveToken({
+      requesterUserId: USER,
+      pluginInstallId: h.installId,
+      resource: "https://tasks.lastmile.invalid", // no own record
+      slug: "lastmile--tasks",
+      logPrefix: "[test]",
+    });
+    expect(token).toMatch(/^access-/);
+  });
+
+  it("COMPAT: a pre-Fix-C multi-record activation still resolves every server", async () => {
+    // Simulate an old activation with 3 distinct token records (Eric's
+    // LastMile shape). Any active record resolves any server.
+    const h = buildHarness();
+    const install = [...h.store.installs.values()][0]!;
+    const activation = h.store.seedActivation({
+      user_id: USER,
+      plugin_install_id: install.id,
+      status: "active",
+      granted_scopes: ["openid", "offline_access"],
+    });
+    for (const key of ["crm", "tasks", "routing"]) {
+      const resource = `https://${key}.lastmile.invalid`;
+      const secretRef = `secret-${key}`;
+      h.secrets.values.set(
+        secretRef,
+        JSON.stringify({ access_token: `legacy-${key}`, resource }),
+      );
+      h.store.seedToken({
+        activation_id: activation.id,
+        resource_indicator: resource,
+        secret_ref: secretRef,
+        status: "active",
+      });
+    }
+    const resolver = createPluginDispatchAuthResolver({
+      store: h.store,
+      secrets: h.secrets,
+      fetchFn: h.deps.fetchFn,
+      now: () => new Date(),
+    });
+    for (const key of ["crm", "tasks", "routing"]) {
+      const token = await resolver.resolveToken({
+        requesterUserId: USER,
+        pluginInstallId: install.id,
+        resource: `https://${key}.lastmile.invalid`,
+        slug: `lastmile--${key}`,
+        logPrefix: "[test]",
+      });
+      // Each server resolves its own (still-present) record.
+      expect(token).toBe(`legacy-${key}`);
+    }
   });
 
   it("refresh failure marks the activation needs_reauth and skips WITHOUT throwing", async () => {

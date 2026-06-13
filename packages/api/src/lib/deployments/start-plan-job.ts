@@ -85,6 +85,21 @@ export async function startManagedApplicationPlanJob(
   const releaseVersion = args.releaseVersion || defaultReleaseVersion();
   const manifestDigest = args.manifestDigest || defaultManifestDigest();
   const releaseManifestUrl = args.releaseManifestUrl || defaultManifestUrl();
+
+  // Guard: never create a deploy job with the "unresolved" sentinel. The
+  // deployment Step Function fails at launch on the missing
+  // releaseManifestSha256 and nothing writes that failure back, so the job
+  // would wedge in `planning` forever. ENABLE/UPGRADE/DESTROY all need a
+  // real release; callers (incl. the plugin infra handler — see Fix B) must
+  // resolve one or fail closed before reaching here.
+  if (releaseVersion === "unresolved" || manifestDigest === "unresolved") {
+    throw new Error(
+      `Cannot start a ${operation} deployment job for ${appKey}: release is ` +
+        `unresolved (releaseVersion="${releaseVersion}", ` +
+        `manifestDigest="${manifestDigest}"). Resolve a real release before ` +
+        `creating the job.`,
+    );
+  }
   const desiredConfigVersion = args.desiredConfigVersion || "v1";
   const desiredConfig = args.desiredConfig ?? {};
   const manifestImages = args.manifestImages ?? {};

@@ -120,6 +120,12 @@ interface Harness {
   failSkillsOnce: () => void;
   /** Ids of deployment jobs the infra handler fakes created, in order. */
   infraJobs: string[];
+  /**
+   * Make the infra handler fake adopt an already-running app WITHOUT a
+   * deploy job (Fix A): it returns an adoptedRunningInfra ref and the engine
+   * marks the component provisioned directly.
+   */
+  adoptRunningInfra: () => void;
 }
 
 function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
@@ -131,6 +137,7 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
   const latest = versions[versions.length - 1]!;
   let skillsFailures = 0;
   let jobCounter = 0;
+  let adoptRunning = false;
 
   const IN_FLIGHT = new Set(["planning", "awaiting_approval", "applying"]);
 
@@ -195,6 +202,18 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
       // fresh one.
       provisionInfra: async ({ tenantId, component, handlerRef }) => {
         calls.push(`provision:infra:${component.key}`);
+        // Fix A: adopting an already-running app returns a no-job
+        // adoptedRunningInfra ref. Reuse a prior adopted ref idempotently.
+        if (adoptRunning && !handlerRef.deploymentJobId) {
+          return {
+            managedAppKey: component.managedAppKey,
+            managedApplicationId: "app-running",
+            operation: "ADOPT",
+            attempt: 1,
+            adoptedExisting: true,
+            adoptedRunningInfra: true,
+          };
+        }
         const priorJobId =
           typeof handlerRef.deploymentJobId === "string"
             ? handlerRef.deploymentJobId
@@ -279,6 +298,9 @@ function harness(versions: PluginVersion[] = [lastmileVersion()]): Harness {
     infraJobs,
     failSkillsOnce: () => {
       skillsFailures += 1;
+    },
+    adoptRunningInfra: () => {
+      adoptRunning = true;
     },
   };
 }
@@ -964,6 +986,45 @@ describe("infrastructure components (U11)", () => {
     // No handler re-run, no second job.
     expect(h.calls).toEqual([]);
     expect(h.infraJobs).toEqual(["job-1"]);
+  });
+
+  it("adopts an already-running app: infra provisioned, install installed, NO approval gate (Fix A)", async () => {
+    const h = harness([withInfraVersion()]);
+    h.adoptRunningInfra();
+    const install = await installPlugin(installArgs(), h.deps);
+
+    // Installed straight away — no awaiting_approval, no deployment job.
+    expect(install.state).toBe("installed");
+    expect(h.infraJobs).toEqual([]);
+    const components = await h.deps.store.listComponents(install.id);
+    const infra = components.find((c) => c.component_key === "infra")!;
+    expect(infra.state).toBe("provisioned");
+    expect(infra.handler_ref).toMatchObject({
+      adoptedRunningInfra: true,
+      operation: "ADOPT",
+    });
+    expect(infra.handler_ref.deploymentJobId).toBeUndefined();
+    // plugin.installed emitted (the install reached `installed`).
+    expect(h.store.audits.map((a) => a.eventType)).toEqual([
+      "plugin.installed",
+    ]);
+  });
+
+  it("an adopted-running infra stays provisioned across reconcile (never gated/regressed) (Fix A)", async () => {
+    const h = harness([withInfraVersion()]);
+    h.adoptRunningInfra();
+    const install = await installPlugin(installArgs(), h.deps);
+    expect(install.state).toBe("installed");
+
+    const reconciled = await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    expect(reconciled.state).toBe("installed");
+    const infra = (await h.deps.store.listComponents(install.id)).find(
+      (c) => c.component_key === "infra",
+    )!;
+    expect(infra.state).toBe("provisioned");
   });
 
   it("maps approved+applying → installing on reconcile", async () => {
