@@ -11101,10 +11101,12 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   [#2431](https://github.com/thinkwork-ai/thinkwork/pull/2431) merged; U4 PR
   [#2433](https://github.com/thinkwork-ai/thinkwork/pull/2433) merged; U5 PR
   [#2434](https://github.com/thinkwork-ai/thinkwork/pull/2434) merged; U6 PR
-  [#2435](https://github.com/thinkwork-ai/thinkwork/pull/2435) opened.
-- Status: U1/U2, U3, U4, and U5 merged; U6 PR passed CI and is ready to
-  merge.
+  [#2435](https://github.com/thinkwork-ai/thinkwork/pull/2435) merged.
+- Status: All THNK-12 role-access implementation units merged.
 - Notes:
+  - U6 PR #2435 passed refreshed required CI (`cla`, `lint`, `verify`,
+    `typecheck`, and `test`) and was squash merged on 2026-06-13 as
+    `aa11e0af`.
   - U6 PR #2435 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) on 2026-06-13.
   - U6 PR #2435 opened on 2026-06-13 after local verification passed.
