@@ -176,7 +176,12 @@ export function SettingsEvalDatasets() {
           <Link
             to="/settings/evaluations/datasets/$slug"
             params={{ slug: row.original.slug }}
-            className="block truncate text-sm font-medium hover:underline"
+            // `block w-full` makes the anchor fill the cell so it has a real
+            // (non-zero) layout box and a keyboard-focusable hit target — a
+            // bare inline/`truncate` anchor reported getBoundingClientRect()
+            // width 0 in automation (Trust Core U15 Finding 2). `min-w-0`
+            // keeps `truncate` working inside the table-fixed cell.
+            className="block w-full min-w-0 truncate text-sm font-medium hover:underline"
             title={row.original.name ?? row.original.slug}
           >
             {row.original.name ?? row.original.slug}

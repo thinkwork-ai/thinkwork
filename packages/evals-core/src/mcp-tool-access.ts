@@ -73,6 +73,43 @@ export const WRITE_TOOL_PREFIXES: readonly string[] = [
 ];
 
 /**
+ * Read-shaped EXACT names (whole local name, case-insensitive). These are
+ * introspection/health reads that carry no read VERB prefix, so the prefix
+ * heuristic would otherwise default them to "write" and block replay
+ * (verified examples: `me`, `crm_schema`). Only names that unambiguously read
+ * belong here.
+ */
+export const READ_TOOL_EXACT_NAMES: readonly string[] = [
+  "me",
+  "whoami",
+  "ping",
+  "health",
+  "status",
+  "info",
+  "schema",
+  "capabilities",
+  "version",
+];
+
+/**
+ * Read-shaped SUFFIX patterns (local name ends with one of these,
+ * case-insensitive). Introspection tools commonly suffix the noun with a
+ * read shape (`crm_schema`, `data_catalog_schema`, `account_info`). Kept
+ * deliberately conservative: a leading/trailing WRITE verb still wins over a
+ * suffix match (see classifyMcpToolAccess), so `schema_update` stays "write".
+ */
+export const READ_TOOL_SUFFIXES: readonly string[] = [
+  "_schema",
+  "-schema",
+  "_catalog",
+  "-catalog",
+  "_info",
+  "-info",
+  "_status",
+  "-status",
+];
+
+/**
  * Strip a server namespace prefix from a tool name so the verb sits at the
  * front. MCP tools surface variously namespaced (e.g. `lastmile--crm.list`,
  * `crm__list_opportunities`, `crm/get_contact`); we split on the common
@@ -119,11 +156,14 @@ function startsWithVerb(name: string, verb: string): boolean {
  * Matching order:
  *   1. A recognized LEADING verb wins (`list_opportunities` → read,
  *      `create_opportunity` → write — the canonical <verb>_<noun> shape).
- *   2. Otherwise, segments are inspected for the <noun>_<verb> shape some
- *      servers use (`opportunities_list` → read). A write verb in any
- *      segment wins (safe default); else a read verb in any segment is
- *      "read".
- *   3. No recognized verb anywhere → "write".
+ *   2. A read-shaped EXACT name (`me`, `status`, `schema`) → read.
+ *   3. A write verb in ANY segment wins next (safe default), so a read suffix
+ *      can never override a mutating verb (`schema_update` → write).
+ *   4. A read-shaped SUFFIX (`crm_schema`, `data_catalog`, `account_info`)
+ *      → read.
+ *   5. Otherwise a read verb in any segment (the <noun>_<verb> shape,
+ *      `opportunities_list` → read).
+ *   6. No recognized verb anywhere → "write".
  */
 export function classifyMcpToolAccess(toolName: string): McpToolAccess {
   const name = localToolName(toolName).toLowerCase();
@@ -132,7 +172,9 @@ export function classifyMcpToolAccess(toolName: string): McpToolAccess {
   const readSet = new Set(READ_TOOL_PREFIXES);
   const writeSet = new Set(WRITE_TOOL_PREFIXES);
 
-  // Leading verb wins first (the canonical <verb>_<noun> shape).
+  // Leading verb wins first (the canonical <verb>_<noun> shape). A leading
+  // WRITE verb here also guarantees a write verb can never be overridden by
+  // a read suffix later (e.g. `delete_schema` → write, not read).
   for (const verb of READ_TOOL_PREFIXES) {
     if (startsWithVerb(name, verb)) return "read";
   }
@@ -140,12 +182,23 @@ export function classifyMcpToolAccess(toolName: string): McpToolAccess {
     if (startsWithVerb(name, verb)) return "write";
   }
 
-  // No recognized leading verb. Inspect segments for a trailing-verb
-  // shape (<noun>_<verb>, e.g. `opportunities_list`). A write verb in any
-  // segment wins (safe default); otherwise a read verb in any segment
-  // classifies "read".
+  // Read-shaped exact names (introspection/health reads with no read verb,
+  // e.g. `me`, `status`, `schema`).
+  if (READ_TOOL_EXACT_NAMES.includes(name)) return "read";
+
+  // A write verb in ANY segment wins before suffix/segment read matching, so
+  // a trailing read suffix can never override a mutating verb
+  // (`schema_update` → write: `update` is a write segment).
   const segments = name.split(/[_\-.]+/).filter(Boolean);
   if (segments.some((seg) => writeSet.has(seg))) return "write";
+
+  // Read-shaped suffix patterns (introspection nouns, e.g. `crm_schema`,
+  // `data_catalog_schema`, `account_info`). Conservative — only after the
+  // write-segment guard above.
+  if (READ_TOOL_SUFFIXES.some((suffix) => name.endsWith(suffix))) return "read";
+
+  // A read verb in any segment (the <noun>_<verb> shape some servers use,
+  // e.g. `opportunities_list`).
   if (segments.some((seg) => readSet.has(seg))) return "read";
 
   // Ambiguous / no recognized verb → write (only run if force-allowed).

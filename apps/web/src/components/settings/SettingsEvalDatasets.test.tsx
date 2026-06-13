@@ -168,6 +168,20 @@ describe("SettingsEvalDatasets (U11)", () => {
     expect(screen.getByText("of 3")).toBeTruthy();
   });
 
+  it("renders the dataset name as a keyboard-focusable link to the detail route (U15 Finding 2)", () => {
+    render(<SettingsEvalDatasets />);
+
+    const link = screen.getByText("Billing regressions").closest("a");
+    expect(link).not.toBeNull();
+    // A real anchor with an href is part of the tab order (keyboard-focusable)
+    // and points at the dataset detail route — not a zero-box inline span.
+    expect(link?.getAttribute("href")).toBe(
+      "/settings/evaluations/datasets/$slug",
+    );
+    link?.focus();
+    expect(document.activeElement).toBe(link);
+  });
+
   it("archives only after the confirm dialog is accepted", async () => {
     render(<SettingsEvalDatasets />);
 

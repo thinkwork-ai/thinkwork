@@ -5,6 +5,7 @@ const authState = vi.hoisted(() => ({
   value: {
     user: null as { tenantId?: string | null; sub?: string | null } | null,
     isAuthenticated: false,
+    isLoading: false,
     getToken: vi.fn<() => Promise<string | null>>(),
   },
 }));
@@ -40,6 +41,7 @@ beforeEach(() => {
   authState.value = {
     user: null,
     isAuthenticated: false,
+    isLoading: false,
     getToken: vi.fn<() => Promise<string | null>>(),
   };
 });
@@ -49,6 +51,7 @@ describe("TenantProvider", () => {
     authState.value = {
       user: { tenantId: "tenant-jwt", sub: "cognito-sub" },
       isAuthenticated: true,
+      isLoading: false,
       getToken: vi.fn(async () => "id-token"),
     };
     apiFetchMock.mockImplementation(async (path: string) => {
