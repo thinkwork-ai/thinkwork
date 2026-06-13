@@ -21,7 +21,8 @@ status: in_progress
   [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) merged as
   `f9aba30f1dd503d18b75a931cb189789c6c876a4`; U3
   [#2442](https://github.com/thinkwork-ai/thinkwork/pull/2442) merged as
-  `ca0dc6741a3411f5aa97af51fc6222ccf56ba4c2`; U4 not opened yet.
+  `ca0dc6741a3411f5aa97af51fc6222ccf56ba4c2`; U4
+  [#2443](https://github.com/thinkwork-ai/thinkwork/pull/2443) opened.
 - Status: U1, U2, and U3 completed and merged. U4 implemented locally with
   engine-level premium gating before install rows/component handlers,
   optional `installKey` on `InstallPluginInput`, active-entitlement bypass for
@@ -74,9 +75,8 @@ status: in_progress
   reports all declared tables, indexes, and constraints present. U2 CI then
   passed required checks and PR #2440 was squash merged.
 - Blockers: none.
-- Next action: finish U4 local verification, push/open the U4 PR, monitor CI,
-  fix any failures, squash merge when green, delete branch/worktree, then sync
-  `origin/main` for U5.
+- Next action: monitor U4 CI, fix any failures, squash merge when green, delete
+  branch/worktree, then sync `origin/main` for U5.
 
 ## Deployment Controller Process - 2026-06-09
 
