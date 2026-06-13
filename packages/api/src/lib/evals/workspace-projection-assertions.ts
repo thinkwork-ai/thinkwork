@@ -26,9 +26,23 @@
  * delegated to evals-core's `evaluateAssertion`. Missing turn / missing
  * snapshot / bad path all fail the assertion with a clear reason — never a
  * crash (plan U10 edge scenario).
+ *
+ * Content-aware sub-family (AE5): the `workspace-projection-agents-md-<op>`
+ * types do NOT read JSONB metadata — they load the turn's write-once,
+ * content-addressed AGENTS.md copy (`workspace_projection.agentsMdHistoryKey`)
+ * from the workspace bucket and match the rendered markdown text. This lets a
+ * test assert that, e.g., turn 3's rendered AGENTS.md listed Space B in its
+ * routing section, regardless of the workspace's current state. The same
+ * `evaluateAssertion` ops apply (contains / not-contains / equals / regex /
+ * the i-variants). Edge cases all fail (never crash) with a distinct reason:
+ * a turn with no `agentsMdHistoryKey` is explicitly reported as predating
+ * immutable AGENTS.md history; a missing/expired S3 object is reported as
+ * such. The S3 getter is injectable so tests never touch AWS.
  */
 
 import { and, eq } from "drizzle-orm";
+import { getConfig } from "@thinkwork/runtime-config";
+import { S3Client } from "@aws-sdk/client-s3";
 import { getDb, type Database } from "@thinkwork/database-pg";
 import { threadTurns } from "@thinkwork/database-pg/schema";
 import {
@@ -36,8 +50,28 @@ import {
   type EvalAssertion,
   type EvalAssertionResult,
 } from "@thinkwork/evals-core";
+import { S3WorkspaceRendererObjectStore } from "../workspace-renderer/s3-store.js";
 
 export const WORKSPACE_PROJECTION_ASSERTION_PREFIX = "workspace-projection-";
+
+/**
+ * Sub-family prefix for the content-aware AGENTS.md assertions (AE5). These
+ * still start with {@link WORKSPACE_PROJECTION_ASSERTION_PREFIX} so they
+ * partition + tenant-scope like the metadata dot-path family, but instead of
+ * reading a JSONB dot-path they load the turn's write-once, content-addressed
+ * AGENTS.md copy (`workspace_projection.agentsMdHistoryKey`) from S3 and match
+ * the rendered markdown text. Lets a Studio test assert on a *historical*
+ * turn's rendered routing section, immune to later re-renders of the same
+ * workspace.
+ *
+ *   {
+ *     "type": "workspace-projection-agents-md-contains",
+ *     "threadTurnId": "0c0ffee0-…",
+ *     "value": "Spaces/board-pack"
+ *   }
+ */
+export const WORKSPACE_PROJECTION_AGENTS_MD_ASSERTION_PREFIX =
+  "workspace-projection-agents-md-";
 
 /** An eval assertion targeting a stored turn's workspace projection. */
 export interface WorkspaceProjectionAssertion extends EvalAssertion {
@@ -55,6 +89,30 @@ export function isWorkspaceProjectionAssertion(
     assertion.type.startsWith(WORKSPACE_PROJECTION_ASSERTION_PREFIX)
   );
 }
+
+/**
+ * True for the content-aware AGENTS.md sub-family
+ * (`workspace-projection-agents-md-<op>`). These resolve the assertion target
+ * by loading S3 content rather than walking the snapshot's JSONB.
+ */
+export function isWorkspaceProjectionAgentsMdAssertion(
+  assertion: EvalAssertion,
+): boolean {
+  return (
+    typeof assertion.type === "string" &&
+    assertion.type.startsWith(WORKSPACE_PROJECTION_AGENTS_MD_ASSERTION_PREFIX)
+  );
+}
+
+/**
+ * Loads the rendered markdown text of a turn's write-once AGENTS.md history
+ * object. Returns `null` when the object is absent (expired / transition-window
+ * turn). Injectable so tests never reach AWS.
+ */
+export type AgentsMdHistoryLoader = (input: {
+  bucket: string;
+  key: string;
+}) => Promise<string | null>;
 
 /**
  * Split a test case's assertions into the output-targeting ones (evaluated by
@@ -110,6 +168,31 @@ export interface EvaluateWorkspaceProjectionAssertionsOptions {
   tenantId: string;
   /** Injectable for tests; defaults to the shared singleton. */
   db?: Database;
+  /**
+   * Workspace bucket the `agents-md-history` objects live in. Defaults to the
+   * runtime `WORKSPACE_BUCKET` config (same resolution the renderer uses).
+   * Only consulted by the AGENTS.md content sub-family.
+   */
+  workspaceBucket?: string;
+  /**
+   * Loads a turn's write-once AGENTS.md history object content (AE5).
+   * Defaults to a real S3-backed loader; injected in tests so the suite never
+   * hits AWS. Only consulted by the AGENTS.md content sub-family.
+   */
+  loadAgentsMdHistory?: AgentsMdHistoryLoader;
+}
+
+/**
+ * Default S3-backed AGENTS.md history loader. Mirrors how the renderer
+ * constructs its client + reads objects: a region-pinned `S3Client` wrapped in
+ * the shared `S3WorkspaceRendererObjectStore`, whose `getText` returns `null`
+ * for a missing key (NoSuchKey/NotFound) rather than throwing.
+ */
+function defaultAgentsMdHistoryLoader(): AgentsMdHistoryLoader {
+  const region =
+    process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
+  const store = new S3WorkspaceRendererObjectStore(new S3Client({ region }));
+  return (input) => store.getText(input);
 }
 
 export interface WorkspaceProjectionAssertionOutcome {
@@ -171,6 +254,16 @@ export async function evaluateWorkspaceProjectionAssertions(
   const results: EvalAssertionResult[] = [];
   let linkedThreadTurnId: string | null = null;
   const loaded = new Map<string, { found: boolean; projection: unknown }>();
+  // Resolved lazily — only the AGENTS.md sub-family needs S3 wiring, so a
+  // metadata-only test case never constructs an S3 client.
+  let agentsMdLoader: AgentsMdHistoryLoader | null = null;
+  const resolveAgentsMdLoader = (): AgentsMdHistoryLoader => {
+    if (!agentsMdLoader) {
+      agentsMdLoader =
+        options.loadAgentsMdHistory ?? defaultAgentsMdHistoryLoader();
+    }
+    return agentsMdLoader;
+  };
 
   for (const assertion of assertions) {
     const threadTurnId =
@@ -224,6 +317,71 @@ export async function evaluateWorkspaceProjectionAssertions(
       continue;
     }
     if (!linkedThreadTurnId) linkedThreadTurnId = threadTurnId;
+
+    // ---- AGENTS.md content sub-family (AE5): match S3-stored render text ----
+    if (isWorkspaceProjectionAgentsMdAssertion(assertion)) {
+      const projection = turn.projection as Record<string, unknown>;
+      const historyKey = projection.agentsMdHistoryKey;
+      if (typeof historyKey !== "string" || historyKey.trim() === "") {
+        results.push(
+          failed(
+            assertion,
+            `Thread turn ${threadTurnId} predates immutable AGENTS.md history (no workspace_projection.agentsMdHistoryKey): its exact rendered AGENTS.md was never captured, so its content cannot be asserted. Only turns rendered after that capability shipped support content assertions.`,
+          ),
+        );
+        continue;
+      }
+
+      const bucket =
+        options.workspaceBucket ?? getConfig("WORKSPACE_BUCKET") ?? "";
+      if (!bucket) {
+        results.push(
+          failed(
+            assertion,
+            `WORKSPACE_BUCKET is not configured; cannot load the AGENTS.md history object for turn ${threadTurnId}.`,
+          ),
+        );
+        continue;
+      }
+
+      let agentsMd: string | null;
+      try {
+        agentsMd = await resolveAgentsMdLoader()({ bucket, key: historyKey });
+      } catch (err) {
+        results.push(
+          failed(
+            assertion,
+            `Failed to load the AGENTS.md history object (${historyKey}) for turn ${threadTurnId}: ${err instanceof Error ? err.message : String(err)}.`,
+          ),
+        );
+        continue;
+      }
+      if (agentsMd === null) {
+        results.push(
+          failed(
+            assertion,
+            `The AGENTS.md history object (${historyKey}) for turn ${threadTurnId} is missing from the workspace bucket (expired or rendered during a transition window); its content cannot be asserted.`,
+          ),
+        );
+        continue;
+      }
+
+      const baseType = assertion.type.slice(
+        WORKSPACE_PROJECTION_AGENTS_MD_ASSERTION_PREFIX.length,
+      );
+      const baseResult = await evaluateAssertion(
+        { type: baseType, value: assertion.value },
+        agentsMd,
+        "",
+      );
+      results.push({
+        ...assertion,
+        passed: baseResult.passed,
+        reason: `rendered AGENTS.md (turn ${threadTurnId}, ${historyKey}): ${baseResult.reason}`,
+        ...(baseResult.score !== undefined ? { score: baseResult.score } : {}),
+      });
+      continue;
+    }
 
     const path = assertion.path?.trim() || "";
     const target = path
