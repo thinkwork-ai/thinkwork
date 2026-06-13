@@ -183,6 +183,25 @@ input DeactivatePluginInput {
   installId: ID!
 }
 
+input IssuePremiumPluginInstallKeyInput {
+  pluginKey: String!
+  "Tenant the one-time key may grant. V1 keys are tenant-scoped for auditability."
+  tenantId: ID!
+  "Optional expiry for the key; null means no explicit expiry."
+  expiresAt: AWSDateTime
+}
+
+input RedeemPremiumPluginInstallKeyInput {
+  pluginKey: String!
+  "ThinkWork-provided one-time install key."
+  installKey: String!
+}
+
+input RevokePremiumPluginInstallKeyInput {
+  keyId: ID!
+  tenantId: ID!
+}
+
 """
 Start of the app-level OAuth activation flow. The caller redirects the user
 to `authorizeUrl`; the callback upserts the activation and its token records
@@ -190,6 +209,32 @@ and returns the user to the plugin detail page.
 """
 type ActivatePluginResult {
   authorizeUrl: String!
+}
+
+"""
+Operator-only result for a one-time premium install key. `installKey` is the
+raw key and is never stored or returned again.
+"""
+type IssuePremiumPluginInstallKeyResult {
+  keyId: ID!
+  pluginKey: String!
+  entitlementProductKey: String!
+  tenantId: ID!
+  installKey: String!
+  expiresAt: AWSDateTime
+  issuedAt: AWSDateTime!
+}
+
+type RedeemPremiumPluginInstallKeyResult {
+  entitlement: PluginEntitlement!
+  source: String!
+}
+
+type RevokePremiumPluginInstallKeyResult {
+  keyId: ID!
+  pluginKey: String!
+  status: String!
+  revokedAt: AWSDateTime
 }
 
 """
@@ -253,6 +298,27 @@ extend type Mutation {
   revoked in v1 (UI copy says "disconnect").
   """
   deactivatePlugin(input: DeactivatePluginInput!): UserPluginActivation!
+  """
+  ThinkWork-operator-only: issue a one-time premium plugin install key for a
+  tenant. Returns the raw key exactly once.
+  """
+  issuePremiumPluginInstallKey(
+    input: IssuePremiumPluginInstallKeyInput!
+  ): IssuePremiumPluginInstallKeyResult!
+  """
+  Tenant-admin: redeem a ThinkWork-provided premium plugin install key into a
+  persistent tenant entitlement.
+  """
+  redeemPremiumPluginInstallKey(
+    input: RedeemPremiumPluginInstallKeyInput!
+  ): RedeemPremiumPluginInstallKeyResult!
+  """
+  ThinkWork-operator-only: revoke an issued premium plugin install key before
+  redemption.
+  """
+  revokePremiumPluginInstallKey(
+    input: RevokePremiumPluginInstallKeyInput!
+  ): RevokePremiumPluginInstallKeyResult!
   """
   One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
   MCP row to plugin ownership (management_source 'plugin' under the

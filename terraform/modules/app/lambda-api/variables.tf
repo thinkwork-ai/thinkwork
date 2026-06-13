@@ -428,6 +428,18 @@ variable "company_brain_source_agent_model_id" {
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
+variable "company_brain_backdoor_install_key_secret_arn" {
+  description = "Optional Secrets Manager ARN containing the temporary Company Brain backdoor install key. Empty disables the backdoor. The raw key is never stored in tfvars or the runtime-config document."
+  type        = string
+  default     = ""
+}
+
+variable "company_brain_backdoor_install_key_stages" {
+  description = "Comma-separated stage allowlist for the temporary Company Brain backdoor install key. Both this value and company_brain_backdoor_install_key_secret_arn must be set for deployed backdoor redemption."
+  type        = string
+  default     = ""
+}
+
 variable "kg_obs_max_candidates_per_run" {
   description = "Per-run candidate cap for the observations → Knowledge Graph ingest worker (KG_OBS_MAX_CANDIDATES_PER_RUN). Bounds the layered-gate classifier cost AND keeps each Cognee cognify small enough to index within budget on the single dogfood task; truncated runs self-invoke to drain the remaining backlog. Stored as a string because the Lambda reads it verbatim from env."
   type        = string

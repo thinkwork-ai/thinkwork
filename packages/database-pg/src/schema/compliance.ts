@@ -349,6 +349,13 @@ export const COMPLIANCE_EVENT_TYPES = [
   // U10 Twenty cutover: one-time adoption of the legacy managed MCP row
   // into plugin ownership (same plugin.* prefix — no constraint change).
   "plugin.cutover",
+  // THNK-15 premium plugin entitlement/key lifecycle. Same plugin.* prefix,
+  // so drizzle/0160_compliance_event_types_plugins.sql already admits them.
+  "plugin.install_key_created",
+  "plugin.install_key_redeemed",
+  "plugin.install_key_failed",
+  "plugin.install_key_revoked",
+  "plugin.entitlement_granted",
 ] as const;
 
 export type ComplianceEventType = (typeof COMPLIANCE_EVENT_TYPES)[number];

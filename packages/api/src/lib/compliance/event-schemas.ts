@@ -375,6 +375,46 @@ export const EVENT_PAYLOAD_SHAPES: Record<
       "invalidatedUserTokenCount",
     ]),
   },
+  "plugin.install_key_created": {
+    allowedFields: new Set([
+      "pluginKey",
+      "entitlementProductKey",
+      "keyId",
+      "tenantScoped",
+      "expiresAt",
+    ]),
+  },
+  "plugin.install_key_redeemed": {
+    allowedFields: new Set([
+      "pluginKey",
+      "entitlementProductKey",
+      "keyId",
+      "source",
+      "entitlementId",
+    ]),
+  },
+  "plugin.install_key_failed": {
+    allowedFields: new Set([
+      "pluginKey",
+      "entitlementProductKey",
+      "reason",
+    ]),
+  },
+  "plugin.install_key_revoked": {
+    allowedFields: new Set([
+      "pluginKey",
+      "entitlementProductKey",
+      "keyId",
+    ]),
+  },
+  "plugin.entitlement_granted": {
+    allowedFields: new Set([
+      "pluginKey",
+      "entitlementProductKey",
+      "source",
+      "entitlementId",
+    ]),
+  },
 };
 
 // Build-time exhaustiveness: the `Record<ComplianceEventType,

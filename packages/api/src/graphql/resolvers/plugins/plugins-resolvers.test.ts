@@ -17,6 +17,9 @@ const {
   mockStartActivation,
   mockDeactivateActivation,
   mockCutoverTwenty,
+  mockIssuePremiumInstallKey,
+  mockRedeemPremiumInstallKey,
+  mockRevokePremiumInstallKey,
   depsHolder,
   activationDepsHolder,
 } = vi.hoisted(() => ({
@@ -26,6 +29,9 @@ const {
   mockStartActivation: vi.fn(),
   mockDeactivateActivation: vi.fn(),
   mockCutoverTwenty: vi.fn(),
+  mockIssuePremiumInstallKey: vi.fn(),
+  mockRedeemPremiumInstallKey: vi.fn(),
+  mockRevokePremiumInstallKey: vi.fn(),
   depsHolder: { current: null as unknown },
   activationDepsHolder: { current: null as unknown },
 }));
@@ -81,6 +87,20 @@ vi.mock("../../../lib/plugins/twenty-cutover.js", async (importOriginal) => {
   };
 });
 
+vi.mock("../../../lib/plugins/premium-entitlements.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../../lib/plugins/premium-entitlements.js")
+    >();
+  return {
+    ...actual,
+    createDefaultPremiumEntitlementDeps: () => ({ mocked: true }),
+    issuePremiumInstallKey: mockIssuePremiumInstallKey,
+    redeemPremiumInstallKey: mockRedeemPremiumInstallKey,
+    revokePremiumInstallKey: mockRevokePremiumInstallKey,
+  };
+});
+
 import type { PluginVersion } from "@thinkwork/plugin-catalog";
 import type { PluginEngineDeps } from "../../../lib/plugins/engine.js";
 import {
@@ -92,6 +112,9 @@ import {
   cutoverTwentyPlugin,
   deactivatePlugin,
   installPlugin,
+  issuePremiumPluginInstallKey,
+  redeemPremiumPluginInstallKey,
+  revokePremiumPluginInstallKey,
   uninstallPlugin,
 } from "./mutations.js";
 import { myPluginActivations, pluginInstalls } from "./queries.js";
@@ -163,6 +186,7 @@ function buildDeps(): PluginEngineDeps {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("THINKWORK_PLATFORM_OPERATOR_EMAILS", "ops@example.com");
   depsHolder.current = buildDeps();
   // activatePlugin/deactivatePlugin share the same store through their
   // own deps object (only `store` is consumed at the resolver level).
@@ -172,6 +196,40 @@ beforeEach(() => {
   mockRequireTenantAdmin.mockResolvedValue(undefined);
   mockStartActivation.mockResolvedValue({
     authorizeUrl: "https://auth.example.invalid/authorize?state=signed",
+  });
+  mockIssuePremiumInstallKey.mockResolvedValue({
+    rawKey: "twpi_test_key",
+    key: {
+      id: "key-1",
+      plugin_key: "company-brain",
+      entitlement_product_key: "company-brain-premium",
+      tenant_id: "tenant-1",
+      expires_at: null,
+      issued_at: new Date("2026-06-13T12:00:00.000Z"),
+    },
+  });
+  mockRedeemPremiumInstallKey.mockResolvedValue({
+    source: "install_key",
+    entitlement: {
+      id: "entitlement-1",
+      tenant_id: "tenant-1",
+      plugin_key: "company-brain",
+      entitlement_product_key: "company-brain-premium",
+      status: "active",
+      source: "install_key",
+      granted_at: new Date("2026-06-13T12:00:00.000Z"),
+      revoked_at: null,
+      created_at: new Date("2026-06-13T12:00:00.000Z"),
+      updated_at: new Date("2026-06-13T12:00:00.000Z"),
+    },
+  });
+  mockRevokePremiumInstallKey.mockResolvedValue({
+    key: {
+      id: "key-1",
+      plugin_key: "company-brain",
+      status: "revoked",
+      revoked_at: new Date("2026-06-13T12:00:00.000Z"),
+    },
   });
 });
 
@@ -368,6 +426,116 @@ describe("deactivatePlugin (U6)", () => {
       pluginKey: "lastmile",
       grantedScopes: ["openid"],
     });
+  });
+});
+
+describe("premium entitlement key mutations (THNK-15 U3)", () => {
+  it("issues keys only for ThinkWork platform operators and returns the raw key once", async () => {
+    const ctx = {
+      auth: { tenantId: null, email: "ops@example.com" },
+      headers: { "x-forwarded-for": "203.0.113.10", "user-agent": "vitest" },
+    } as never;
+
+    const result = (await issuePremiumPluginInstallKey(
+      null,
+      {
+        input: {
+          pluginKey: "company-brain",
+          tenantId: "tenant-1",
+          expiresAt: null,
+        },
+      },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+    expect(mockIssuePremiumInstallKey).toHaveBeenCalledWith(
+      {
+        pluginKey: "company-brain",
+        tenantId: "tenant-1",
+        expiresAt: null,
+        actor: { actorId: "user-1", actorType: "user" },
+        request: { ip: "203.0.113.10", userAgent: "vitest" },
+      },
+      { mocked: true },
+    );
+    expect(result.installKey).toBe("twpi_test_key");
+    expect(result.keyId).toBe("key-1");
+  });
+
+  it("refuses premium key issuance for a tenant admin who is not a platform operator", async () => {
+    const ctx = {
+      auth: { tenantId: null, email: "admin@example.com" },
+      headers: {},
+    } as never;
+
+    await expect(
+      issuePremiumPluginInstallKey(
+        null,
+        {
+          input: {
+            pluginKey: "company-brain",
+            tenantId: "tenant-1",
+            expiresAt: null,
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+    expect(mockIssuePremiumInstallKey).not.toHaveBeenCalled();
+  });
+
+  it("redeems keys through the tenant-admin boundary and resolved tenant", async () => {
+    const result = (await redeemPremiumPluginInstallKey(
+      null,
+      {
+        input: {
+          pluginKey: "company-brain",
+          installKey: "twpi_test_key",
+        },
+      },
+      CTX,
+    )) as Record<string, unknown>;
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(CTX, "tenant-1");
+    expect(mockRedeemPremiumInstallKey).toHaveBeenCalledWith(
+      {
+        tenantId: "tenant-1",
+        pluginKey: "company-brain",
+        rawKey: "twpi_test_key",
+        actor: { actorId: "user-1", actorType: "user" },
+        request: { ip: null, userAgent: null },
+      },
+      { mocked: true },
+    );
+    expect((result.entitlement as Record<string, unknown>).tenantId).toBe(
+      "tenant-1",
+    );
+    expect(result.source).toBe("install_key");
+  });
+
+  it("revokes keys only for ThinkWork platform operators", async () => {
+    const ctx = {
+      auth: { tenantId: null, email: "ops@example.com" },
+      headers: {},
+    } as never;
+
+    const result = (await revokePremiumPluginInstallKey(
+      null,
+      { input: { keyId: "key-1", tenantId: "tenant-1" } },
+      ctx,
+    )) as Record<string, unknown>;
+
+    expect(mockRevokePremiumInstallKey).toHaveBeenCalledWith(
+      {
+        keyId: "key-1",
+        tenantId: "tenant-1",
+        actor: { actorId: "user-1", actorType: "user" },
+        request: { ip: null, userAgent: null },
+      },
+      { mocked: true },
+    );
+    expect(result.status).toBe("revoked");
   });
 });
 

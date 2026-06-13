@@ -34,11 +34,19 @@ import {
 } from "../../../lib/plugins/engine.js";
 import type { PluginEngineDeps } from "../../../lib/plugins/engine.js";
 import type { PluginInstallRow } from "../../../lib/plugins/store.js";
+import {
+  createDefaultPremiumEntitlementDeps,
+  issuePremiumInstallKey,
+  redeemPremiumInstallKey,
+  revokePremiumInstallKey,
+} from "../../../lib/plugins/premium-entitlements.js";
 import { cutoverTwentyPluginForTenant } from "../../../lib/plugins/twenty-cutover.js";
 import {
   pluginActorFor,
+  pluginRequestMetadata,
   requirePluginTenantAdmin,
   requirePluginTenantMember,
+  requireThinkWorkPlatformOperator,
   toPluginInstallPayload,
 } from "./shared.js";
 
@@ -224,5 +232,88 @@ export async function deactivatePlugin(
     ...snakeToCamel(activation as unknown as Record<string, unknown>),
     pluginKey: install?.plugin_key ?? "",
     grantedScopes: activation.granted_scopes ?? [],
+  };
+}
+
+export async function issuePremiumPluginInstallKey(
+  _parent: unknown,
+  args: {
+    input: {
+      pluginKey: string;
+      tenantId: string;
+      expiresAt?: string | null;
+    };
+  },
+  ctx: GraphQLContext,
+) {
+  const { callerUserId } = await requireThinkWorkPlatformOperator(ctx);
+  const deps = createDefaultPremiumEntitlementDeps();
+  const result = await issuePremiumInstallKey(
+    {
+      pluginKey: args.input.pluginKey,
+      tenantId: args.input.tenantId,
+      expiresAt: args.input.expiresAt ? new Date(args.input.expiresAt) : null,
+      actor: pluginActorFor(callerUserId),
+      request: pluginRequestMetadata(ctx),
+    },
+    deps,
+  );
+  return {
+    keyId: result.key.id,
+    pluginKey: result.key.plugin_key,
+    entitlementProductKey: result.key.entitlement_product_key,
+    tenantId: result.key.tenant_id,
+    installKey: result.rawKey,
+    expiresAt: result.key.expires_at,
+    issuedAt: result.key.issued_at,
+  };
+}
+
+export async function redeemPremiumPluginInstallKey(
+  _parent: unknown,
+  args: { input: { pluginKey: string; installKey: string } },
+  ctx: GraphQLContext,
+) {
+  const { tenantId, callerUserId } = await requirePluginTenantAdmin(ctx);
+  const deps = createDefaultPremiumEntitlementDeps();
+  const result = await redeemPremiumInstallKey(
+    {
+      tenantId,
+      pluginKey: args.input.pluginKey,
+      rawKey: args.input.installKey,
+      actor: pluginActorFor(callerUserId),
+      request: pluginRequestMetadata(ctx),
+    },
+    deps,
+  );
+  return {
+    entitlement: snakeToCamel(
+      result.entitlement as unknown as Record<string, unknown>,
+    ),
+    source: result.source,
+  };
+}
+
+export async function revokePremiumPluginInstallKey(
+  _parent: unknown,
+  args: { input: { keyId: string; tenantId: string } },
+  ctx: GraphQLContext,
+) {
+  const { callerUserId } = await requireThinkWorkPlatformOperator(ctx);
+  const deps = createDefaultPremiumEntitlementDeps();
+  const result = await revokePremiumInstallKey(
+    {
+      keyId: args.input.keyId,
+      tenantId: args.input.tenantId,
+      actor: pluginActorFor(callerUserId),
+      request: pluginRequestMetadata(ctx),
+    },
+    deps,
+  );
+  return {
+    keyId: result.key.id,
+    pluginKey: result.key.plugin_key,
+    status: result.key.status,
+    revokedAt: result.key.revoked_at,
   };
 }
