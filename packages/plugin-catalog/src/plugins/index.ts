@@ -1,4 +1,5 @@
 import type { PluginManifest } from "../contracts";
+import { companyBrainManifest } from "./company-brain/manifest";
 import { lastmileManifest } from "./lastmile/manifest";
 import { twentyManifest } from "./twenty/manifest";
 
@@ -7,8 +8,9 @@ import { twentyManifest } from "./twenty/manifest";
  * register here; `scripts/build-catalog.ts` signs this list.
  */
 export const allPluginManifests: readonly PluginManifest[] = [
+  companyBrainManifest,
   lastmileManifest,
   twentyManifest,
 ];
 
-export { lastmileManifest, twentyManifest };
+export { companyBrainManifest, lastmileManifest, twentyManifest };

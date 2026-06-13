@@ -24,6 +24,7 @@ import {
 import {
   validatePluginManifest,
   type PluginManifest,
+  type PremiumPluginMetadata,
   type PluginVersion,
 } from "./contracts";
 
@@ -41,6 +42,7 @@ export interface PluginCatalogEntry {
   pluginKey: string;
   displayName: string;
   description: string;
+  premium?: PremiumPluginMetadata;
   versions: PluginCatalogVersionEntry[];
 }
 
@@ -128,6 +130,7 @@ export function buildPluginCatalog(options: {
       pluginKey: manifest.pluginKey,
       displayName: manifest.displayName,
       description: manifest.description,
+      premium: manifest.premium,
       versions: manifest.versions.map((payload) => ({
         version: payload.version,
         payloadSha256: pluginVersionSha256(payload),
@@ -268,6 +271,7 @@ export function validatePluginCatalog(value: unknown): PluginCatalog {
       pluginKey: plugin.pluginKey,
       displayName: plugin.displayName,
       description: plugin.description,
+      premium: plugin.premium,
       versions: plugin.versions.map((entry) => entry.payload),
     });
     if (seenKeys.has(plugin.pluginKey as string)) {

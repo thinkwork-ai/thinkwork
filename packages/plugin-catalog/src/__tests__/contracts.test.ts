@@ -49,6 +49,51 @@ describe("validatePluginManifest", () => {
     ).toThrow(/pluginKey/);
   });
 
+  it("validates premium metadata for key-gated plugins", () => {
+    const ok = manifest((m) => {
+      m.premium = {
+        entitlementProductKey: "lastmile",
+        installKeyRequired: true,
+        installKeyPrompt: "Enter the install key provided by ThinkWork.",
+      };
+    });
+    expect(validatePluginManifest(ok).premium).toEqual({
+      entitlementProductKey: "lastmile",
+      installKeyRequired: true,
+      installKeyPrompt: "Enter the install key provided by ThinkWork.",
+    });
+  });
+
+  it("rejects premium metadata without a true install-key requirement", () => {
+    const bad = manifest((m) => {
+      m.premium = {
+        entitlementProductKey: "lastmile",
+        installKeyRequired: true,
+        installKeyPrompt: "Enter the install key provided by ThinkWork.",
+      };
+      (m.premium as { installKeyRequired?: boolean }).installKeyRequired =
+        false;
+    });
+    expect(() => validatePluginManifest(bad)).toThrow(
+      /premium\.installKeyRequired must be true/,
+    );
+  });
+
+  it("rejects premium metadata without an entitlement product key", () => {
+    const bad = manifest((m) => {
+      m.premium = {
+        entitlementProductKey: "lastmile",
+        installKeyRequired: true,
+        installKeyPrompt: "Enter the install key provided by ThinkWork.",
+      };
+      (m.premium as { entitlementProductKey?: string }).entitlementProductKey =
+        "";
+    });
+    expect(() => validatePluginManifest(bad)).toThrow(
+      /premium\.entitlementProductKey/,
+    );
+  });
+
   it("rejects an unknown component type", () => {
     const bad = manifest();
     (version(bad).components[0] as { type: string }).type = "webhook";
