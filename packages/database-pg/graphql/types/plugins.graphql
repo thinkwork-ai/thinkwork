@@ -148,6 +148,8 @@ input InstallPluginInput {
   pluginKey: String!
   "Catalog version to pin; defaults to the latest published version."
   version: String
+  "ThinkWork-provided one-time key for premium plugins when no entitlement exists."
+  installKey: String
   idempotencyKey: String!
 }
 

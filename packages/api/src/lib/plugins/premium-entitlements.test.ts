@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   digestInstallKey,
+  getActivePremiumEntitlement,
   issuePremiumInstallKey,
   PREMIUM_INSTALL_KEY_PREFIX,
   PremiumInstallKeyThrottle,
@@ -76,6 +77,35 @@ describe("premium plugin entitlement service", () => {
       "plugin.install_key_redeemed",
       "plugin.entitlement_granted",
     ]);
+  });
+
+  it("reads active tenant entitlement for install and update gating", async () => {
+    const memory = createMemoryPremiumStore();
+    const testDeps = deps(memory);
+    const issued = await issuePremiumInstallKey(
+      { pluginKey: PLUGIN.pluginKey, tenantId: "tenant-1", actor: ACTOR },
+      testDeps,
+    );
+    await redeemPremiumInstallKey(
+      {
+        tenantId: "tenant-1",
+        pluginKey: PLUGIN.pluginKey,
+        rawKey: issued.rawKey,
+        actor: ACTOR,
+      },
+      testDeps,
+    );
+
+    await expect(
+      getActivePremiumEntitlement(
+        { tenantId: "tenant-1", pluginKey: PLUGIN.pluginKey },
+        testDeps,
+      ),
+    ).resolves.toMatchObject({
+      tenant_id: "tenant-1",
+      plugin_key: PLUGIN.pluginKey,
+      status: "active",
+    });
   });
 
   it("rejects reuse of the same key without creating another entitlement", async () => {
@@ -286,6 +316,11 @@ function createMemoryPremiumStore(): MemoryPremiumStore {
     entitlements,
     audits,
 
+    async findActiveEntitlement(input) {
+      const row = activeEntitlement(input.tenantId, input.pluginKey);
+      return row ? { ...row } : null;
+    },
+
     async issueInstallKeyWithAudit(input) {
       const row = {
         id: nextId("key"),
@@ -448,4 +483,3 @@ function createMemoryPremiumStore(): MemoryPremiumStore {
 
   return store;
 }
-

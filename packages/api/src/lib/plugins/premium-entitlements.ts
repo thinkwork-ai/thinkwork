@@ -122,6 +122,10 @@ interface RedeemIssuedKeyResult {
 }
 
 export interface PremiumEntitlementStore {
+  findActiveEntitlement(input: {
+    tenantId: string;
+    pluginKey: string;
+  }): Promise<PluginEntitlementRow | null>;
   issueInstallKeyWithAudit(input: {
     plugin: PremiumEntitlementCatalogEntry;
     tenantId: string;
@@ -257,6 +261,17 @@ export async function issuePremiumInstallKey(
     now,
   });
   return { key, rawKey };
+}
+
+export async function getActivePremiumEntitlement(
+  input: { tenantId: string; pluginKey: string },
+  deps = createDefaultPremiumEntitlementDeps(),
+): Promise<PluginEntitlementRow | null> {
+  const plugin = await requirePremiumPlugin(input.pluginKey, deps);
+  return deps.store.findActiveEntitlement({
+    tenantId: input.tenantId,
+    pluginKey: plugin.pluginKey,
+  });
 }
 
 export async function redeemPremiumInstallKey(
@@ -474,6 +489,21 @@ export function createDrizzlePremiumEntitlementStore(
   db: DbLike = defaultDb,
 ): PremiumEntitlementStore {
   return {
+    async findActiveEntitlement(input) {
+      const [row] = await db
+        .select()
+        .from(pluginEntitlements)
+        .where(
+          and(
+            eq(pluginEntitlements.tenant_id, input.tenantId),
+            eq(pluginEntitlements.plugin_key, input.pluginKey),
+            eq(pluginEntitlements.status, "active"),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
+    },
+
     async issueInstallKeyWithAudit(input) {
       return db.transaction(async (tx) => {
         const [row] = await tx

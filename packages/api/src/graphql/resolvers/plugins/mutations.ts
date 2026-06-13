@@ -70,6 +70,7 @@ export async function installPlugin(
     input: {
       pluginKey: string;
       version?: string | null;
+      installKey?: string | null;
       idempotencyKey: string;
     };
   },
@@ -82,8 +83,10 @@ export async function installPlugin(
       tenantId,
       pluginKey: args.input.pluginKey,
       version: args.input.version ?? null,
+      installKey: args.input.installKey ?? null,
       idempotencyKey: args.input.idempotencyKey,
       actor: pluginActorFor(callerUserId),
+      request: pluginRequestMetadata(ctx),
     },
     deps,
   );
@@ -105,6 +108,7 @@ export async function upgradePlugin(
       installId: args.input.installId,
       toVersion: args.input.version,
       actor: pluginActorFor(callerUserId),
+      request: pluginRequestMetadata(ctx),
     },
     deps,
   );
