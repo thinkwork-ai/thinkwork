@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { WORKSPACE_ROUTING_MARKER } from "./agents-md-composer.js";
-import { renderWorkspaceTuple } from "./compose-tuple.js";
+import {
+  agentsMdContentSha,
+  agentsMdHistoryKey,
+  renderWorkspaceTuple,
+} from "./compose-tuple.js";
 import type { SpaceMembershipRepository } from "./space-membership-check.js";
 import type {
   ResolvedWorkspaceRenderTuple,
@@ -564,11 +568,18 @@ describe("renderWorkspaceTuple", () => {
       modelRouting: [],
     });
 
-    expect(store.puts.map((put) => put.key).sort()).toEqual([
+    const putKeys = store.puts.map((put) => put.key);
+    expect(
+      putKeys.filter((k) => !k.includes("/.agents-md-history/")).sort(),
+    ).toEqual([
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
     ]);
+    // one write-once, content-addressed copy of this render's AGENTS.md
+    expect(
+      putKeys.filter((k) => k.includes("/.agents-md-history/")),
+    ).toHaveLength(1);
     const manifestPut = store.puts.find((put) =>
       put.key.endsWith(".hydrate_manifest.json"),
     );
@@ -597,6 +608,28 @@ describe("renderWorkspaceTuple", () => {
     // ("<!-- RENDERED:ACTIVE_SPACE -->\n\nold"); composition truncates it.
     expect(composed).not.toContain("RENDERED:ACTIVE_SPACE");
     expect(composed).not.toContain("\nold");
+  });
+
+  it("writes a write-once content-addressed AGENTS.md history copy recoverable by sha", async () => {
+    const store = new FakeStore(seedObjects());
+    const result = await renderWorkspaceTuple(
+      { tenantId: "tenant-1", agentId: "agent-1", spaceId: "space-1" },
+      {
+        bucket: "workspace",
+        repository: new FakeRepository(TUPLE),
+        objectStore: store,
+        now: () => new Date("2026-05-22T10:00:00.000Z"),
+      },
+    );
+
+    const agentsMd =
+      store.puts.find((put) => put.key.endsWith("/AGENTS.md"))?.content ?? "";
+    const sha = agentsMdContentSha(agentsMd);
+    const historyKey = agentsMdHistoryKey(result.renderedPrefix, sha);
+    // The immutable copy holds the exact bytes of this turn's AGENTS.md.
+    const recovered = await store.getText({ key: historyKey });
+    expect(recovered).toBe(agentsMd);
+    expect(recovered).toContain(WORKSPACE_ROUTING_MARKER);
   });
 
   it("recomposes the generated AGENTS.md idempotently across renders", async () => {
@@ -1085,11 +1118,18 @@ modelRouting:
       "AGENTS.md",
       ".hydrate_manifest.json",
     ]);
-    expect(store.puts.map((put) => put.key).sort()).toEqual([
+    const putKeys = store.puts.map((put) => put.key);
+    expect(
+      putKeys.filter((k) => !k.includes("/.agents-md-history/")).sort(),
+    ).toEqual([
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
     ]);
+    // one write-once, content-addressed copy of this render's AGENTS.md
+    expect(
+      putKeys.filter((k) => k.includes("/.agents-md-history/")),
+    ).toHaveLength(1);
   });
 
   it("picks up canonical Space source edits without copying files into the thread prefix", async () => {
@@ -1131,11 +1171,18 @@ modelRouting:
         }),
       ]),
     );
-    expect(store.puts.map((put) => put.key).sort()).toEqual([
+    const putKeys = store.puts.map((put) => put.key);
+    expect(
+      putKeys.filter((k) => !k.includes("/.agents-md-history/")).sort(),
+    ).toEqual([
       "tenants/acme/threads/thread-1/.hydrate_manifest.json",
       "tenants/acme/threads/thread-1/.rendered_at",
       "tenants/acme/threads/thread-1/AGENTS.md",
     ]);
+    // one write-once, content-addressed copy of this render's AGENTS.md
+    expect(
+      putKeys.filter((k) => k.includes("/.agents-md-history/")),
+    ).toHaveLength(1);
   });
 
   it("blocks private Spaces before reading source files for non-members", async () => {

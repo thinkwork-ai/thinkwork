@@ -231,6 +231,27 @@ describe("buildWorkspaceProjectionSnapshot", () => {
     ).toBeNull();
   });
 
+  it("derives agentsMdHistoryKey from the renderedPrefix and content sha", () => {
+    // The history key is the content-addressed, write-once copy the renderer
+    // wrote — recoverable after later re-renders overwrite the live key.
+    const snapshot = buildWorkspaceProjectionSnapshot({
+      renderedPrefix: RENDERED_PREFIX,
+      manifest,
+    });
+    expect(snapshot.agentsMdHistoryKey).toBe(
+      `${RENDERED_PREFIX}.agents-md-history/e1.md`,
+    );
+  });
+
+  it("agentsMdHistoryKey is null without a generated AGENTS.md manifest entry", () => {
+    expect(
+      buildWorkspaceProjectionSnapshot({
+        renderedPrefix: RENDERED_PREFIX,
+        manifest: null,
+      }).agentsMdHistoryKey,
+    ).toBeNull();
+  });
+
   it("injectedFiles lists exactly the PROMPT_FILES present in the rendered manifest", () => {
     const snapshot = buildWorkspaceProjectionSnapshot({
       renderedPrefix: RENDERED_PREFIX,

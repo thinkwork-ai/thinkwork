@@ -36,6 +36,7 @@ import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb, type Database } from "@thinkwork/database-pg";
 import { threadTurns } from "@thinkwork/database-pg/schema";
+import { agentsMdHistoryKey } from "./workspace-renderer/compose-tuple.js";
 
 export type WorkspaceProjectionFetchKind = "space" | "user";
 
@@ -171,6 +172,14 @@ export interface WorkspaceProjectionSnapshot {
    * staleness instead of guessing.
    */
   agentsMdEtag: string | null;
+  /**
+   * Write-once, content-addressed S3 key holding this exact render's AGENTS.md
+   * (U2 follow-up). Unlike `agentsMdKey`, this is never overwritten, so the
+   * turn's content stays recoverable after later re-renders — evals (AE5) and
+   * the debug panel read it for exact historical content. Null when the
+   * manifest carries no generated AGENTS.md entry (or a pre-fix render).
+   */
+  agentsMdHistoryKey: string | null;
   /** The PROMPT_FILES actually present in the rendered workspace. */
   injectedFiles: string[];
   /** ISO-8601 — when the render this snapshot describes was generated. */
@@ -262,6 +271,9 @@ export function buildWorkspaceProjectionSnapshot(input: {
     }),
     agentsMdKey: `${input.renderedPrefix}AGENTS.md`,
     agentsMdEtag: generatedAgentsMd?.etag ?? null,
+    agentsMdHistoryKey: generatedAgentsMd?.etag
+      ? agentsMdHistoryKey(input.renderedPrefix, generatedAgentsMd.etag)
+      : null,
     injectedFiles: WORKSPACE_PROJECTION_PROMPT_FILES.filter((file) =>
       presentPaths.has(file),
     ),
