@@ -293,6 +293,21 @@ export const evalResults = pgTable(
     // 'infra_other'. Null on pass/fail rows and on legacy error rows
     // written before this column existed.
     error_cause: text("error_cause"),
+    // Operator verdict override (Trust Core U9). The override is a
+    // SEPARATE field, never a mutation of `status` — the judge's
+    // original verdict + rendered rubric stay immutable on this row
+    // while aggregation reads the override last
+    // (effective = override_status ?? status).
+    // override_status: 'pass' | 'fail' (enum-by-comment); null = no
+    // override. Only scored rows (status pass|fail) may carry one.
+    override_status: text("override_status"),
+    // overridden_by: authenticated caller identity (users.id), derived
+    // server-side — never accepted as an argument.
+    overridden_by: text("overridden_by"),
+    overridden_at: timestamp("overridden_at", { withTimezone: true }),
+    // override_reason: required non-empty audit note; overrides
+    // accumulate as labeled data for rubric hardening.
+    override_reason: text("override_reason"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

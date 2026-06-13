@@ -1245,12 +1245,17 @@ export type EvalResult = {
   category?: Maybe<Scalars["String"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   durationMs?: Maybe<Scalars["Int"]["output"]>;
+  effectiveStatus: Scalars["String"]["output"];
   errorCause?: Maybe<Scalars["String"]["output"]>;
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   evaluatorResults: Scalars["AWSJSON"]["output"];
   expected?: Maybe<Scalars["String"]["output"]>;
   id: Scalars["ID"]["output"];
   input?: Maybe<Scalars["String"]["output"]>;
+  overriddenAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  overriddenBy?: Maybe<Scalars["String"]["output"]>;
+  overrideReason?: Maybe<Scalars["String"]["output"]>;
+  overrideStatus?: Maybe<Scalars["String"]["output"]>;
   runId: Scalars["ID"]["output"];
   score?: Maybe<Scalars["Float"]["output"]>;
   status: Scalars["String"]["output"];
@@ -2408,6 +2413,7 @@ export type Mutation = {
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
+  overrideEvalResult: EvalResult;
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
@@ -3004,6 +3010,10 @@ export type MutationNotifyWorkspaceAccessRevokedArgs = {
   spaceId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
   userId: Scalars["ID"]["input"];
+};
+
+export type MutationOverrideEvalResultArgs = {
+  input: OverrideEvalResultInput;
 };
 
 export type MutationPinThreadArgs = {
@@ -3731,6 +3741,12 @@ export type OrgUpdateEvent = {
   entityType?: Maybe<Scalars["String"]["output"]>;
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type OverrideEvalResultInput = {
+  overrideStatus?: InputMaybe<Scalars["String"]["input"]>;
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+  resultId: Scalars["ID"]["input"];
 };
 
 export type PageInfo = {
@@ -7506,8 +7522,31 @@ export type EvalRunResultsQuery = {
     evaluatorResults: any;
     assertions: any;
     errorMessage?: string | null;
+    overrideStatus?: string | null;
+    overriddenBy?: string | null;
+    overriddenAt?: any | null;
+    overrideReason?: string | null;
+    effectiveStatus: string;
     createdAt: any;
   }>;
+};
+
+export type OverrideEvalResultMutationVariables = Exact<{
+  input: OverrideEvalResultInput;
+}>;
+
+export type OverrideEvalResultMutation = {
+  __typename?: "Mutation";
+  overrideEvalResult: {
+    __typename?: "EvalResult";
+    id: string;
+    status: string;
+    overrideStatus?: string | null;
+    overriddenBy?: string | null;
+    overriddenAt?: any | null;
+    overrideReason?: string | null;
+    effectiveStatus: string;
+  };
 };
 
 export type EvalResultSpansQueryVariables = Exact<{
@@ -10790,6 +10829,26 @@ export const EvalRunResultsDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "errorMessage" },
                 },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "overrideStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "overriddenBy" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "overriddenAt" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "overrideReason" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "effectiveStatus" },
+                },
                 { kind: "Field", name: { kind: "Name", value: "createdAt" } },
               ],
             },
@@ -10799,6 +10858,81 @@ export const EvalRunResultsDocument = {
     },
   ],
 } as unknown as DocumentNode<EvalRunResultsQuery, EvalRunResultsQueryVariables>;
+export const OverrideEvalResultDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "OverrideEvalResult" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "OverrideEvalResultInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "overrideEvalResult" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "overrideStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "overriddenBy" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "overriddenAt" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "overrideReason" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "effectiveStatus" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  OverrideEvalResultMutation,
+  OverrideEvalResultMutationVariables
+>;
 export const EvalResultSpansDocument = {
   kind: "Document",
   definitions: [

@@ -142,6 +142,23 @@ describe("eval-worker finalization summary", () => {
     expect(summary.passRate).toBe(1 / 3);
     expect(summary.totalCostUsd).toBeCloseTo(0.0084);
   });
+
+  it("counts operator overrides as the effective verdict (U9)", () => {
+    const summary = summarizeEvalResults(
+      [
+        { status: "pass", override_status: null, evaluator_results: [] },
+        { status: "fail", override_status: "pass", evaluator_results: [] },
+        { status: "fail", override_status: null, evaluator_results: [] },
+        { status: "error", override_status: null, evaluator_results: [] },
+      ],
+      CURRENT_EVAL_SCORING_VERSION,
+    );
+
+    expect(summary.passed).toBe(2);
+    expect(summary.failed).toBe(1);
+    expect(summary.errored).toBe(1);
+    expect(summary.passRate).toBe(2 / 3);
+  });
 });
 
 describe("eval-worker evaluator cost controls", () => {

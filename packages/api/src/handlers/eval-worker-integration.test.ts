@@ -12,11 +12,14 @@ import {
   chunkEvalWorkerMessages,
 } from "./eval-runner.js";
 import {
+  _setScoringEnginesForTests,
   _setSnapshotStorageForTests,
+  createAgentCoreScoringEngine,
   handler,
   parseEvalWorkerMessage,
   summarizeEvalResults,
 } from "./eval-worker.js";
+import type { EngineScoringResult, ScoringEngine } from "@thinkwork/evals-core";
 import {
   evalRunSnapshotCaseKey,
   evalRunSnapshotCasePayloadKey,
@@ -992,6 +995,143 @@ describe("eval-worker cancel semantics (U6)", () => {
     expect(invokeMock).not.toHaveBeenCalled();
     expect(state.insertedResults).toHaveLength(0);
     expect(state.runUpdates).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U10 — scoring dispatches through the ScoringEngine contract
+// ---------------------------------------------------------------------------
+
+describe("eval-worker scoring-engine contract dispatch (U10)", () => {
+  /** The exact stub row the pre-contract worker persisted ("economy mode"). */
+  function skippedStub(evaluatorId: string) {
+    return {
+      evaluator_id: evaluatorId,
+      source: "agentcore",
+      value: null,
+      label: "skipped",
+      explanation:
+        "Skipped by eval-worker economy mode. Computer-task eval execution currently uses in-house scoring only.",
+      skipped: true,
+    };
+  }
+
+  afterEach(() => {
+    _setScoringEnginesForTests(undefined);
+    delete process.env.EVAL_AGENTCORE_EVALUATORS;
+  });
+
+  it("records an engine returning an unknown status shape as error/evaluator_error (boundary rejection)", async () => {
+    _setScoringEnginesForTests({
+      inHouse: {
+        id: "in_house",
+        // A status-bearing result violates the contract: engines never
+        // decide case status.
+        score: async () =>
+          ({ status: "pass", verdicts: [], assertions: [] }) as never,
+      },
+    });
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse to do that.",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    const response = await handler(sqsEvent("1"));
+
+    // Not SQS-retryable — the engine is broken, retrying can't fix it.
+    expect(response.batchItemFailures).toEqual([]);
+    expect(state.insertedResults).toHaveLength(1);
+    const row = state.insertedResults[0];
+    expect(row.status).toBe("error");
+    expect(row.error_cause).toBe("evaluator_error");
+    expect(row.error_message).toMatch(/violating the engine contract/);
+    expect(row.error_message).toMatch(/status/);
+
+    const finalize = state.runUpdates.at(-1)!;
+    expect(finalize.failed).toBe(0);
+    expect(finalize.errored).toBe(1);
+    expect(finalize.pass_rate).toBeNull();
+  });
+
+  it("gate OFF: evaluator ids persist as the byte-identical skipped stubs (no AgentCore evaluator calls)", async () => {
+    delete process.env.EVAL_AGENTCORE_EVALUATORS;
+    state.testCase.agentcore_evaluator_ids = [
+      "Builtin.ToolSelectionAccuracy",
+      "Builtin.Toxicity",
+    ];
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse to do that.",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    const response = await handler(sqsEvent("1"));
+
+    expect(response.batchItemFailures).toEqual([]);
+    const row = state.insertedResults[0];
+    // Stub parity with the pre-contract worker, byte for byte.
+    expect(JSON.stringify(row.evaluator_results)).toBe(
+      JSON.stringify([
+        skippedStub("Builtin.ToolSelectionAccuracy"),
+        skippedStub("Builtin.Toxicity"),
+      ]),
+    );
+    // Skipped stubs never gate the status; the in-house verdict stays in
+    // the assertions snapshot (the asymmetry U11 reads).
+    expect(row.status).toBe("pass");
+    expect(row.assertions).toHaveLength(1);
+  });
+
+  it("gate ON: the AgentCore adapter is dispatched through the contract (still stubs — activation deferred)", async () => {
+    process.env.EVAL_AGENTCORE_EVALUATORS = "enabled";
+    const adapter = createAgentCoreScoringEngine();
+    const scoreSpy = vi.fn(
+      (
+        input: Parameters<ScoringEngine["score"]>[0],
+      ): Promise<EngineScoringResult> => adapter.score(input),
+    );
+    _setScoringEnginesForTests({
+      agentCore: { id: adapter.id, score: scoreSpy },
+    });
+    state.testCase.agentcore_evaluator_ids = ["Builtin.ToolSelectionAccuracy"];
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse to do that.",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    const response = await handler(sqsEvent("1"));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(scoreSpy).toHaveBeenCalledTimes(1);
+    expect(scoreSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        evaluatorIds: ["Builtin.ToolSelectionAccuracy"],
+        query: "Please do something unsafe",
+      }),
+    );
+    // Gate on changes NOTHING about persisted shapes until activation.
+    expect(state.insertedResults[0].evaluator_results).toEqual([
+      skippedStub("Builtin.ToolSelectionAccuracy"),
+    ]);
+  });
+
+  it("no evaluator selection → the AgentCore engine is never dispatched (parity with the pre-contract guard)", async () => {
+    const scoreSpy = vi.fn();
+    _setScoringEnginesForTests({
+      agentCore: { id: "agentcore", score: scoreSpy },
+    });
+    invokeMock.mockResolvedValueOnce({
+      output: "I refuse to do that.",
+      durationMs: 100,
+      composedSystemPrompt: null,
+    });
+
+    await handler(sqsEvent("1"));
+
+    expect(scoreSpy).not.toHaveBeenCalled();
+    expect(state.insertedResults[0].evaluator_results).toEqual([]);
   });
 });
 

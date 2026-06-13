@@ -149,7 +149,11 @@ export function buildReconcilerErrorRow(
 }
 
 export function summarizeEvalRowsForReconciler(
-  rows: Array<{ status: string; evaluator_results: unknown }>,
+  rows: Array<{
+    status: string;
+    override_status?: string | null;
+    evaluator_results: unknown;
+  }>,
   scoringVersion: number | null,
 ): EvalResultSummary {
   const { passed, failed, errored, passRate } = summarizeEvalStatuses(
@@ -249,6 +253,7 @@ export async function resummarizeDivergentRuns(): Promise<number> {
     const rows = await db
       .select({
         status: evalResults.status,
+        override_status: evalResults.override_status,
         evaluator_results: evalResults.evaluator_results,
       })
       .from(evalResults)
@@ -510,6 +515,7 @@ async function reconcileRun(
     const rows = await tx
       .select({
         status: evalResults.status,
+        override_status: evalResults.override_status,
         evaluator_results: evalResults.evaluator_results,
       })
       .from(evalResults)
