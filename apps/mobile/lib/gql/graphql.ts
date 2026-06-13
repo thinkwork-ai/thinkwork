@@ -1202,6 +1202,14 @@ export type EvalAssertionInput = {
   value?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type EvalCaseCompleteness = {
+  __typename?: "EvalCaseCompleteness";
+  history: Scalars["Boolean"]["output"];
+  traces: Scalars["Boolean"]["output"];
+  truncated: Scalars["Boolean"]["output"];
+  workspace: Scalars["Boolean"]["output"];
+};
+
 export type EvalDataset = {
   __typename?: "EvalDataset";
   archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
@@ -1344,6 +1352,22 @@ export type EvalTimeSeriesPoint = {
   passRate?: Maybe<Scalars["Float"]["output"]>;
   passed: Scalars["Int"]["output"];
   runCount: Scalars["Int"]["output"];
+};
+
+export type FlagThreadForEvalInput = {
+  datasetSlug?: InputMaybe<Scalars["String"]["input"]>;
+  newDatasetName?: InputMaybe<Scalars["String"]["input"]>;
+  outcomeKind: Scalars["String"]["input"];
+  resolutionTarget: Scalars["String"]["input"];
+  threadId: Scalars["ID"]["input"];
+  turnId: Scalars["ID"]["input"];
+};
+
+export type FlagThreadForEvalResult = {
+  __typename?: "FlagThreadForEvalResult";
+  case: EvalTestCase;
+  completeness: EvalCaseCompleteness;
+  dataset: EvalDataset;
 };
 
 export type HeartbeatActivityEvent = {
@@ -2359,6 +2383,7 @@ export type Mutation = {
   disableWorkflow: Scalars["Boolean"]["output"];
   enableWorkflow: WorkflowBinding;
   escalateThread: Thread;
+  flagThreadForEval: FlagThreadForEvalResult;
   importN8nRoutine: Routine;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
@@ -2836,6 +2861,10 @@ export type MutationEnableWorkflowArgs = {
 
 export type MutationEscalateThreadArgs = {
   input: EscalateThreadInput;
+};
+
+export type MutationFlagThreadForEvalArgs = {
+  input: FlagThreadForEvalInput;
 };
 
 export type MutationImportN8nRoutineArgs = {

@@ -55,13 +55,13 @@ async function resolveReadTenantId(
   return ctx.auth?.tenantId ?? (await resolveCallerTenantId(ctx));
 }
 
-function badInput(message: string): GraphQLError {
+export function badInput(message: string): GraphQLError {
   return new GraphQLError(message, {
     extensions: { code: "BAD_USER_INPUT" },
   });
 }
 
-function assertSlugArg(value: string, label: string): void {
+export function assertSlugArg(value: string, label: string): void {
   if (!EVAL_DATASET_SLUG_RE.test(value)) {
     throw badInput(
       `Invalid ${label} "${value}": must start with a lowercase letter and contain only a-z, 0-9, and hyphens (max 64 chars).`,
@@ -83,7 +83,10 @@ function assertCaseIdArg(value: string): void {
  * the dataset-store module wholesale; the resolver logic never touches
  * S3Client/Drizzle directly.
  */
-function datasetDeps(): { storage: DatasetStorage; store: DatasetIndexStore } {
+export function datasetDeps(): {
+  storage: DatasetStorage;
+  store: DatasetIndexStore;
+} {
   const bucket = getConfig("WORKSPACE_BUCKET");
   if (!bucket) {
     throw new GraphQLError("WORKSPACE_BUCKET not configured", {
@@ -101,7 +104,7 @@ function datasetDeps(): { storage: DatasetStorage; store: DatasetIndexStore } {
 }
 
 /** Tenant slug is always row-derived, never caller-supplied (U4 KTD). */
-async function loadTenantSlug(tenantId: string): Promise<string> {
+export async function loadTenantSlug(tenantId: string): Promise<string> {
   const [tenant] = await db
     .select({ slug: tenants.slug })
     .from(tenants)
@@ -114,14 +117,14 @@ async function loadTenantSlug(tenantId: string): Promise<string> {
   return tenant.slug;
 }
 
-async function datasetContext(
+export async function datasetContext(
   tenantId: string,
   slug: string,
 ): Promise<DatasetContext> {
   return { tenantId, tenantSlug: await loadTenantSlug(tenantId), slug };
 }
 
-function datasetToGraphql(row: Record<string, unknown>) {
+export function datasetToGraphql(row: Record<string, unknown>) {
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -136,7 +139,7 @@ function datasetToGraphql(row: Record<string, unknown>) {
   };
 }
 
-function caseRowToGraphql(row: Record<string, unknown>) {
+export function caseRowToGraphql(row: Record<string, unknown>) {
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -156,7 +159,7 @@ function caseRowToGraphql(row: Record<string, unknown>) {
   };
 }
 
-async function loadDatasetRow(
+export async function loadDatasetRow(
   tenantId: string,
   slug: string,
 ): Promise<Record<string, unknown> | null> {
@@ -169,7 +172,7 @@ async function loadDatasetRow(
   return (row as Record<string, unknown> | undefined) ?? null;
 }
 
-async function loadDatasetRowOrThrow(
+export async function loadDatasetRowOrThrow(
   tenantId: string,
   slug: string,
 ): Promise<Record<string, unknown>> {
@@ -182,7 +185,7 @@ async function loadDatasetRowOrThrow(
   return row;
 }
 
-async function loadCaseRowOrThrow(
+export async function loadCaseRowOrThrow(
   datasetId: string,
   caseId: string,
 ): Promise<Record<string, unknown>> {

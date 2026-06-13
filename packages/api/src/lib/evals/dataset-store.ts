@@ -130,6 +130,39 @@ export function evalDatasetCaseKey(
 }
 
 /**
+ * Flag-time snapshot payload objects (Trust Core U7). Flagged-thread
+ * cases store their large captures (message history, workspace
+ * projection, tool traces) as sibling objects under
+ * `cases/<case_id>/payload/` — never inline in DB rows or the case
+ * file. The builders live here so the guarded-prefix tests cover them
+ * alongside every other key the store can produce.
+ */
+export const EVAL_CASE_PAYLOAD_NAMES = [
+  "history",
+  "workspace",
+  "traces",
+] as const;
+
+export type EvalCasePayloadName = (typeof EVAL_CASE_PAYLOAD_NAMES)[number];
+
+export function evalDatasetCasePayloadPrefix(
+  tenantSlug: string,
+  datasetSlug: string,
+  caseId: string,
+): string {
+  return `${evalDatasetPrefix(tenantSlug, datasetSlug)}cases/${caseId}/payload/`;
+}
+
+export function evalDatasetCasePayloadKey(
+  tenantSlug: string,
+  datasetSlug: string,
+  caseId: string,
+  name: EvalCasePayloadName,
+): string {
+  return `${evalDatasetCasePayloadPrefix(tenantSlug, datasetSlug, caseId)}${name}.json`;
+}
+
+/**
  * True when a bucket key sits inside any tenant's eval-datasets prefix.
  * Used by guard tests: workspace target families (agents/, users/,
  * threads/, skill-catalog/, spaces) must never resolve under it; the IAM
@@ -169,6 +202,21 @@ export function evalRunSnapshotCaseKey(
 }
 
 /**
+ * Run-scoped copy of a flagged-thread case's payload object (U8).
+ * Mirrors the live-dataset `cases/<id>/payload/<name>.json` layout so
+ * the run snapshot is self-contained: workers replay from the RUN
+ * prefix only — the live dataset payload is never read after launch.
+ */
+export function evalRunSnapshotCasePayloadKey(
+  tenantSlug: string,
+  runId: string,
+  caseId: string,
+  name: EvalCasePayloadName,
+): string {
+  return `${evalRunSnapshotPrefix(tenantSlug, runId)}cases/${caseId}/payload/${name}.json`;
+}
+
+/**
  * Strict worker-side guard for snapshot references arriving on SQS
  * messages (untrusted by policy): the key must sit exactly inside THIS
  * run's snapshot prefix for THIS tenant and name a valid case file —
@@ -184,6 +232,20 @@ export function isEvalRunSnapshotKeyForRun(
   const rel = key.slice(prefix.length);
   const match = rel.match(/^cases\/([a-z][a-z0-9-]{0,127})\.json$/);
   return match !== null && EVAL_DATASET_CASE_ID_RE.test(match[1]);
+}
+
+/**
+ * The case-id segment of an already-guard-validated run snapshot case
+ * key. The worker derives payload keys from THIS (key-derived) id, not
+ * the case file's `case_id` field, so a hostile case_id inside a
+ * sha-matching file can never steer a read outside the run prefix.
+ */
+export function caseIdFromRunSnapshotKey(key: string): string {
+  const match = key.match(/\/cases\/([a-z][a-z0-9-]{0,127})\.json$/);
+  if (!match) {
+    throw new Error(`not a run snapshot case key: ${key}`);
+  }
+  return match[1];
 }
 
 // ---------------------------------------------------------------------------
@@ -218,10 +280,49 @@ export interface EvalDatasetManifest {
   tombstones: EvalDatasetTombstone[];
 }
 
+/** Outcome classification stamped on flagged-thread cases (Trust Core U7). */
+export type EvalCaseOutcomeKind = "security" | "quality";
+
+/**
+ * Category stamped on thread-derived cases by the flag-thread snapshot
+ * builder (U7). U8's replay path keys off it: flagged cases load their
+ * recorded history payload and replay it as `messages_history`.
+ */
+export const FLAGGED_THREAD_CATEGORY = "flagged-thread";
+
+/**
+ * What the flag-time snapshot actually captured. Surfaced as badges so
+ * gaps (pre-THNK-10 threads, missing traces, truncation at the size
+ * cap) are visible rather than silent.
+ */
+export interface EvalCaseCompleteness {
+  history: boolean;
+  workspace: boolean;
+  traces: boolean;
+  truncated: boolean;
+}
+
+/**
+ * Provenance back to the flagged thread turn. Informational only — the
+ * case must stay loadable and replayable after the source thread is
+ * deleted (AE5): everything replay needs lives in the dataset prefix.
+ */
+export interface EvalCaseSource {
+  source_thread_id: string;
+  source_turn_id: string;
+  flagged_at: string;
+}
+
 /**
  * Engine-neutral core case fields. The canonical format never references
  * engine vocabulary — engine-specific evaluator selections (today's
  * agentcore_evaluator_ids) live only in the `engines` extension block.
+ *
+ * The optional flagged-thread block (source / resolution_target /
+ * outcome_kind / completeness) is engine-neutral too: it describes what
+ * was captured and what "fixed" means, not how any engine scores it.
+ * Authored cases simply omit these fields — parse/serialize round-trips
+ * preserve them only when present so authored case shas don't churn.
  */
 export interface EvalDatasetCaseCore {
   case_id: string;
@@ -233,6 +334,10 @@ export interface EvalDatasetCaseCore {
   assertions: unknown[];
   tags: string[];
   enabled: boolean;
+  source?: EvalCaseSource;
+  resolution_target?: string;
+  outcome_kind?: EvalCaseOutcomeKind;
+  completeness?: EvalCaseCompleteness;
 }
 
 export interface EvalDatasetCaseEngines {
@@ -294,6 +399,37 @@ export function parseEvalDatasetCase(content: string): ParsedEvalDatasetCase {
       : [],
     enabled: typeof rest.enabled === "boolean" ? rest.enabled : true,
   };
+
+  // Flagged-thread block (U7) — preserved on round-trip only when present
+  // so authored case files keep their exact shape (and content sha).
+  if (
+    isRecord(rest.source) &&
+    typeof rest.source.source_thread_id === "string" &&
+    typeof rest.source.source_turn_id === "string"
+  ) {
+    core.source = {
+      source_thread_id: rest.source.source_thread_id,
+      source_turn_id: rest.source.source_turn_id,
+      flagged_at:
+        typeof rest.source.flagged_at === "string"
+          ? rest.source.flagged_at
+          : new Date(0).toISOString(),
+    };
+  }
+  if (typeof rest.resolution_target === "string") {
+    core.resolution_target = rest.resolution_target;
+  }
+  if (rest.outcome_kind === "security" || rest.outcome_kind === "quality") {
+    core.outcome_kind = rest.outcome_kind;
+  }
+  if (isRecord(rest.completeness)) {
+    core.completeness = {
+      history: rest.completeness.history === true,
+      workspace: rest.completeness.workspace === true,
+      traces: rest.completeness.traces === true,
+      truncated: rest.completeness.truncated === true,
+    };
+  }
 
   return {
     core,
@@ -750,6 +886,18 @@ export async function removeEvalDatasetCase(
   // S3 first: delete the payload, then tombstone it in the manifest.
   await storage.delete(evalDatasetCaseKey(ctx.tenantSlug, ctx.slug, caseId));
 
+  // Flagged-thread snapshot payloads (U7) live under cases/<id>/payload/.
+  // The U4 deletion lifecycle removes them with the case — the raw
+  // conversation copy must not outlive the case that justified it.
+  const payloadPrefix = evalDatasetCasePayloadPrefix(
+    ctx.tenantSlug,
+    ctx.slug,
+    caseId,
+  );
+  for (const key of await storage.list(payloadPrefix)) {
+    await storage.delete(key);
+  }
+
   const cases = manifest.cases.filter((c) => c.case_id !== caseId);
   const tombstones = [
     ...manifest.tombstones.filter((t) => t.case_id !== caseId),
@@ -797,7 +945,9 @@ export async function listEvalDatasetCaseKeys(
   return keys.filter((key) => {
     const rel = key.slice(prefix.length);
     if (rel === SENTINEL_FILE || rel === MANIFEST_FILE) return false;
-    return rel.startsWith("cases/") && rel.endsWith(".json");
+    // Exactly cases/<case_id>.json — flagged-thread payload objects under
+    // cases/<case_id>/payload/ are not case files.
+    return /^cases\/[^/]+\.json$/.test(rel);
   });
 }
 

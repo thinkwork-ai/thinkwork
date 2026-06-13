@@ -58,6 +58,13 @@ export interface EvalWorkerMessage {
    */
   snapshotKey?: string;
   contentSha?: string;
+  /**
+   * Flagged-thread cases (U8): launch-computed sha256 per payload
+   * object copied into the run snapshot prefix. The worker verifies
+   * its run-prefix payload fetch against these before replaying the
+   * recorded history.
+   */
+  payloadShas?: Partial<Record<"history" | "workspace" | "traces", string>>;
 }
 
 const DIRECT_AGENTCORE_MESSAGE_SHARDS = Math.max(
@@ -75,7 +82,12 @@ export function selectedTestCaseIdsFromEvent(event: EvalRunnerEvent): string[] {
 
 export function buildEvalWorkerMessages(
   runId: string,
-  testCases: Array<{ id: string; snapshotKey?: string; contentSha?: string }>,
+  testCases: Array<{
+    id: string;
+    snapshotKey?: string;
+    contentSha?: string;
+    payloadShas?: EvalWorkerMessage["payloadShas"];
+  }>,
 ): EvalWorkerMessage[] {
   return testCases.map((tc, index) => ({
     runId,
@@ -83,6 +95,9 @@ export function buildEvalWorkerMessages(
     index,
     ...(tc.snapshotKey
       ? { snapshotKey: tc.snapshotKey, contentSha: tc.contentSha }
+      : {}),
+    ...(tc.snapshotKey && tc.payloadShas
+      ? { payloadShas: tc.payloadShas }
       : {}),
   }));
 }
@@ -318,6 +333,7 @@ async function dispatchDatasetRun(
       id: uuidByCaseId.get(c.caseId) as string,
       snapshotKey: c.snapshotKey,
       contentSha: c.contentSha,
+      payloadShas: c.payloadShas,
     })),
   );
   for (const batch of chunkEvalWorkerMessages(messages)) {

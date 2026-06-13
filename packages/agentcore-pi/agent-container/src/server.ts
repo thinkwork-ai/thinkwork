@@ -1076,7 +1076,15 @@ export async function buildInvocationResources(
     );
   }
 
+  // Outbound side-effect kill list (Evaluations Trust Core U8, layer 2
+  // of 2): send_email / web_search / web_extract never register under
+  // eval_mode — replaying a recorded thread must not send real email or
+  // hit external web APIs. The eval payload builder already strips
+  // these configs (layer 1); this gate mirrors the task-status /
+  // context-engine eval_mode pattern so a payload regression stays
+  // inert.
   if (
+    args.payload.eval_mode !== true &&
     typeof args.payload.send_email_config === "object" &&
     args.payload.send_email_config
   ) {
@@ -1178,8 +1186,9 @@ export async function buildInvocationResources(
   }
 
   // Web Search (Exa/SerpApi) — tenant/template-configured, arrives as
-  // `web_search_config`.
+  // `web_search_config`. Never in eval mode (U8 side-effect kill list).
   if (
+    args.payload.eval_mode !== true &&
     typeof args.payload.web_search_config === "object" &&
     args.payload.web_search_config
   ) {
@@ -1194,8 +1203,9 @@ export async function buildInvocationResources(
   }
 
   // Web Extraction (Firecrawl) — tenant/template-configured, arrives as
-  // `web_extract_config`.
+  // `web_extract_config`. Never in eval mode (U8 side-effect kill list).
   if (
+    args.payload.eval_mode !== true &&
     typeof args.payload.web_extract_config === "object" &&
     args.payload.web_extract_config
   ) {

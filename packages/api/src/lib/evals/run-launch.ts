@@ -25,6 +25,20 @@
  * concurrent case edit interleaved with the launch) the whole snapshot
  * capture retries once from a fresh manifest read, then fails the
  * launch — a run must never pin content that existed as no version.
+ *
+ * Flagged-thread payload objects (U8): cases with category
+ * "flagged-thread" also get their flag-time payload objects
+ * (history/workspace/traces) copied to
+ *
+ *   tenants/<tenant-slug>/eval-datasets/.runs/<run-id>/cases/<case_id>/payload/<name>.json
+ *
+ * Payloads are NOT in the dataset manifest, so their integrity contract
+ * is launch-computed: the capture hashes the exact bytes it copied and
+ * carries the shas on the SQS message (`payloadShas`); the worker
+ * verifies its run-prefix fetch against the message sha before replay —
+ * the same trust shape as `contentSha` for case files. Payload objects
+ * are written once at flag time and only deleted with their case, so
+ * there is no mid-launch edit race to retry against.
  */
 
 import { getConfig } from "@thinkwork/runtime-config";
@@ -34,16 +48,21 @@ import {
   assertValidDatasetSlug,
   createDrizzleDatasetIndexStore,
   createS3DatasetStorage,
+  EVAL_CASE_PAYLOAD_NAMES,
   evalDatasetCaseKey,
+  evalDatasetCasePayloadKey,
   evalDatasetManifestKey,
   evalRunSnapshotCaseKey,
+  evalRunSnapshotCasePayloadKey,
   evalRunSnapshotPrefix,
+  FLAGGED_THREAD_CATEGORY,
   parseEvalDatasetCase,
   parseEvalDatasetManifest,
   readEvalDataset,
   sha256Hex,
   type DatasetContext,
   type DatasetStorage,
+  type EvalCasePayloadName,
   type EvalDatasetCaseCore,
   type EvalDatasetCaseEngines,
 } from "./dataset-store.js";
@@ -124,6 +143,18 @@ export interface RunSnapshotCase {
   snapshotKey: string;
   /** sha256 of the copied content — carried on the SQS message. */
   contentSha: string;
+  /**
+   * Flagged-thread cases only (U8): sha256 of each payload object
+   * (history/workspace/traces) copied into the run snapshot prefix,
+   * keyed by payload name. Payload objects are NOT in the dataset
+   * manifest (only case files are), so launch-time copy integrity is
+   * the same read-once/hash/carry-on-the-SQS-message contract as case
+   * files: the launch hashes the exact bytes it copied and the worker
+   * verifies the run-prefix fetch against that sha before replay.
+   * Names absent from the map were not captured at flag time (the
+   * case's completeness badges record the gap).
+   */
+  payloadShas?: Partial<Record<EvalCasePayloadName, string>>;
   core: EvalDatasetCaseCore;
   engines: EvalDatasetCaseEngines | null;
 }
@@ -201,10 +232,43 @@ export async function captureRunSnapshot(
         entry.caseId,
       );
       await storage.write(snapshotKey, entry.content);
+      // Flagged-thread cases (U8): copy the flag-time payload objects
+      // alongside the case file so replay reads ONLY the run prefix.
+      // A payload missing here (flag-time gap, or deleted between flag
+      // and launch) is skipped — the worker degrades or records
+      // error/infra_other per payload, exactly like a missing object.
+      let payloadShas: Partial<Record<EvalCasePayloadName, string>> | undefined;
+      if (parsed.core.category === FLAGGED_THREAD_CATEGORY) {
+        payloadShas = {};
+        for (const name of EVAL_CASE_PAYLOAD_NAMES) {
+          const payloadContent = await storage.read(
+            evalDatasetCasePayloadKey(
+              ctx.tenantSlug,
+              ctx.slug,
+              entry.caseId,
+              name,
+            ),
+          );
+          if (payloadContent == null) continue;
+          await storage.write(
+            evalRunSnapshotCasePayloadKey(
+              ctx.tenantSlug,
+              runId,
+              entry.caseId,
+              name,
+            ),
+            payloadContent,
+          );
+          payloadShas[name] = sha256Hex(payloadContent);
+        }
+      }
       cases.push({
         caseId: entry.caseId,
         snapshotKey,
         contentSha: entry.contentSha,
+        ...(payloadShas && Object.keys(payloadShas).length > 0
+          ? { payloadShas }
+          : {}),
         core: parsed.core,
         engines: parsed.engines,
       });

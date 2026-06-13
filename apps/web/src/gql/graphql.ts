@@ -1202,6 +1202,14 @@ export type EvalAssertionInput = {
   value?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type EvalCaseCompleteness = {
+  __typename?: "EvalCaseCompleteness";
+  history: Scalars["Boolean"]["output"];
+  traces: Scalars["Boolean"]["output"];
+  truncated: Scalars["Boolean"]["output"];
+  workspace: Scalars["Boolean"]["output"];
+};
+
 export type EvalDataset = {
   __typename?: "EvalDataset";
   archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
@@ -1344,6 +1352,22 @@ export type EvalTimeSeriesPoint = {
   passRate?: Maybe<Scalars["Float"]["output"]>;
   passed: Scalars["Int"]["output"];
   runCount: Scalars["Int"]["output"];
+};
+
+export type FlagThreadForEvalInput = {
+  datasetSlug?: InputMaybe<Scalars["String"]["input"]>;
+  newDatasetName?: InputMaybe<Scalars["String"]["input"]>;
+  outcomeKind: Scalars["String"]["input"];
+  resolutionTarget: Scalars["String"]["input"];
+  threadId: Scalars["ID"]["input"];
+  turnId: Scalars["ID"]["input"];
+};
+
+export type FlagThreadForEvalResult = {
+  __typename?: "FlagThreadForEvalResult";
+  case: EvalTestCase;
+  completeness: EvalCaseCompleteness;
+  dataset: EvalDataset;
 };
 
 export type HeartbeatActivityEvent = {
@@ -2359,6 +2383,7 @@ export type Mutation = {
   disableWorkflow: Scalars["Boolean"]["output"];
   enableWorkflow: WorkflowBinding;
   escalateThread: Thread;
+  flagThreadForEval: FlagThreadForEvalResult;
   importN8nRoutine: Routine;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
@@ -2836,6 +2861,10 @@ export type MutationEnableWorkflowArgs = {
 
 export type MutationEscalateThreadArgs = {
   input: EscalateThreadInput;
+};
+
+export type MutationFlagThreadForEvalArgs = {
+  input: FlagThreadForEvalInput;
 };
 
 export type MutationImportN8nRoutineArgs = {
@@ -7710,6 +7739,55 @@ export type OnEvalRunUpdatedSubscription = {
   } | null;
 };
 
+export type EvalDatasetsForFlagQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type EvalDatasetsForFlagQuery = {
+  __typename?: "Query";
+  evalDatasets: Array<{
+    __typename?: "EvalDataset";
+    id: string;
+    slug: string;
+    name?: string | null;
+    kind: string;
+    archivedAt?: any | null;
+  }>;
+};
+
+export type FlagThreadForEvalMutationVariables = Exact<{
+  input: FlagThreadForEvalInput;
+}>;
+
+export type FlagThreadForEvalMutation = {
+  __typename?: "Mutation";
+  flagThreadForEval: {
+    __typename?: "FlagThreadForEvalResult";
+    case: {
+      __typename?: "EvalTestCase";
+      id: string;
+      datasetId?: string | null;
+      datasetCaseId?: string | null;
+      name: string;
+      category: string;
+      tags: Array<string>;
+    };
+    dataset: {
+      __typename?: "EvalDataset";
+      id: string;
+      slug: string;
+      name?: string | null;
+    };
+    completeness: {
+      __typename?: "EvalCaseCompleteness";
+      history: boolean;
+      workspace: boolean;
+      traces: boolean;
+      truncated: boolean;
+    };
+  };
+};
+
 export type KnowledgeBasesListQueryVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
 }>;
@@ -11622,6 +11700,175 @@ export const OnEvalRunUpdatedDocument = {
 } as unknown as DocumentNode<
   OnEvalRunUpdatedSubscription,
   OnEvalRunUpdatedSubscriptionVariables
+>;
+export const EvalDatasetsForFlagDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "EvalDatasetsForFlag" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalDatasets" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "kind" } },
+                { kind: "Field", name: { kind: "Name", value: "archivedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  EvalDatasetsForFlagQuery,
+  EvalDatasetsForFlagQueryVariables
+>;
+export const FlagThreadForEvalDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "FlagThreadForEval" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "FlagThreadForEvalInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "flagThreadForEval" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "case" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "datasetId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "datasetCaseId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "category" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "tags" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "dataset" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "slug" } },
+                      { kind: "Field", name: { kind: "Name", value: "name" } },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "completeness" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "history" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "workspace" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "traces" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "truncated" },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  FlagThreadForEvalMutation,
+  FlagThreadForEvalMutationVariables
 >;
 export const KnowledgeBasesListDocument = {
   kind: "Document",

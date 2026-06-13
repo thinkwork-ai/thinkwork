@@ -25,12 +25,15 @@ import {
   createEvalDataset,
   createS3DatasetStorage,
   evalDatasetCaseKey,
+  evalDatasetCasePayloadKey,
+  evalDatasetCasePayloadPrefix,
   evalDatasetManifestKey,
   evalDatasetPrefix,
   evalDatasetSentinelKey,
   evalDatasetsRootPrefix,
   getEvalDatasetCase,
   isEvalDatasetsKey,
+  listEvalDatasetCaseKeys,
   parseEvalDatasetCase,
   parseEvalDatasetManifest,
   putEvalDatasetCase,
@@ -423,6 +426,52 @@ describe("case add / edit / remove round-trip", () => {
   });
 });
 
+describe("flagged-case payload objects (U7)", () => {
+  it("case removal deletes the payload objects under cases/<id>/payload/", async () => {
+    await createEvalDataset(ctx, {}, storage, store);
+    await putEvalDatasetCase(ctx, makeCase(), null, storage, store);
+    const historyKey = evalDatasetCasePayloadKey(
+      "acme",
+      "flagged-threads",
+      "case-alpha",
+      "history",
+    );
+    const tracesKey = evalDatasetCasePayloadKey(
+      "acme",
+      "flagged-threads",
+      "case-alpha",
+      "traces",
+    );
+    await storage.write(historyKey, "{}");
+    await storage.write(tracesKey, "{}");
+
+    await removeEvalDatasetCase(ctx, "case-alpha", storage, store);
+
+    // The raw-conversation copy must not outlive the case (U7 data
+    // handling: deletion removes the S3 payload objects).
+    expect(storage.objects.has(historyKey)).toBe(false);
+    expect(storage.objects.has(tracesKey)).toBe(false);
+  });
+
+  it("payload objects are not mistaken for case files by the case-key listing", async () => {
+    await createEvalDataset(ctx, {}, storage, store);
+    await putEvalDatasetCase(ctx, makeCase(), null, storage, store);
+    await storage.write(
+      evalDatasetCasePayloadKey(
+        "acme",
+        "flagged-threads",
+        "case-alpha",
+        "history",
+      ),
+      "{}",
+    );
+    const keys = await listEvalDatasetCaseKeys(ctx, storage);
+    expect(keys).toEqual([
+      evalDatasetCaseKey("acme", "flagged-threads", "case-alpha"),
+    ]);
+  });
+});
+
 describe("archive (soft delete)", () => {
   it("stamps archived_at in the manifest and projects it to the index", async () => {
     await createEvalDataset(ctx, {}, storage, store);
@@ -688,6 +737,12 @@ describe("guarded-prefix invariants", () => {
       evalDatasetManifestKey("acme", "ds"),
       evalDatasetSentinelKey("acme", "ds"),
       evalDatasetCaseKey("acme", "ds", "case-1"),
+      // U7 flagged-case payload objects (raw thread snapshots) live
+      // under the guarded prefix so the Pi-role IAM Deny covers them.
+      evalDatasetCasePayloadPrefix("acme", "ds", "case-1"),
+      evalDatasetCasePayloadKey("acme", "ds", "case-1", "history"),
+      evalDatasetCasePayloadKey("acme", "ds", "case-1", "workspace"),
+      evalDatasetCasePayloadKey("acme", "ds", "case-1", "traces"),
       // U6 run snapshots live under the same prefix by construction.
       `${evalDatasetsRootPrefix("acme")}.runs/run-1/case-1.json`,
     ];

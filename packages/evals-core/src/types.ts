@@ -25,12 +25,20 @@ export interface EvalAssertionResult extends EvalAssertion {
   passed: boolean;
   reason: string;
   score?: number;
+  /**
+   * The rendered rubric an llm-rubric judge evaluated against (U8,
+   * R15: the drill-in shows exactly what was checked). Persisted on
+   * the result row's assertions snapshot.
+   */
+  rubric?: string;
 }
 
 export interface EvalJudgeResult {
   passed: boolean;
   reason: string;
   score: number;
+  /** Rendered rubric the verdict was judged against (see EvalAssertionResult). */
+  rubric?: string;
 }
 
 export type EvalJudge = (
