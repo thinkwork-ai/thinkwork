@@ -36,10 +36,16 @@ status: in_progress
   script. Local dependency install continued to report the existing broad
   workspace `canvas` native build failure under Node 25.6.0 because
   `pkg-config` was not available.
-- CI log: U2 PR #2440 checks pending.
+- CI log: U2 PR #2440 initially passed `cla`, `lint`, `verify`, and
+  `typecheck`, with `test` still pending, but `Migration Drift Precheck (dev)`
+  failed because the new hand-rolled
+  `0165_plugin_premium_entitlements.sql` objects were missing from dev. Applied
+  the scoped dev migration with `psql -v ON_ERROR_STOP=1 -f` and verified
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0165_plugin_premium_entitlements.sql`
+  reports all declared tables, indexes, and constraints present.
 - Blockers: none.
-- Next action: finish U2 review, commit, push, open PR, monitor CI, squash
-  merge when green, delete branch/worktree, then sync `origin/main` for U3.
+- Next action: rerun the failed U2 drift precheck, monitor CI, squash merge when
+  green, delete branch/worktree, then sync `origin/main` for U3.
 
 ## Deployment Controller Process - 2026-06-09
 
