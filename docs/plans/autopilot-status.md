@@ -11092,16 +11092,30 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 - Target branch: `main`.
 - Strategy: isolated worktree per implementation unit, PR to `main`, wait for
   CI, squash merge, delete branch, and sync before the next unit.
-- Current implementation unit: U5 — Plugins self-service surface and user MCP
-  token hardening.
-- Current branch: `codex/role-access-u5-plugins`.
-- Current worktree: `.Codex/worktrees/role-access-u5-plugins`.
+- Current implementation unit: U6 — integration, generated artifacts, and final
+  role-access verification.
+- Current branch: `codex/role-access-u6-integration`.
+- Current worktree: `.Codex/worktrees/role-access-u6-integration`.
 - Pull request: U1/U2 Activity slice
   [#2429](https://github.com/thinkwork-ai/thinkwork/pull/2429) merged; U3 PR
   [#2431](https://github.com/thinkwork-ai/thinkwork/pull/2431) merged; U4 PR
-  [#2433](https://github.com/thinkwork-ai/thinkwork/pull/2433) merged.
-- Status: U1/U2, U3, and U4 merged; U5 implementation in progress.
+  [#2433](https://github.com/thinkwork-ai/thinkwork/pull/2433) merged; U5 PR
+  [#2434](https://github.com/thinkwork-ai/thinkwork/pull/2434) merged; U6 PR
+  [#2435](https://github.com/thinkwork-ai/thinkwork/pull/2435) opened.
+- Status: U1/U2, U3, U4, and U5 merged; U6 PR passed CI and is ready to
+  merge.
 - Notes:
+  - U6 PR #2435 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) on 2026-06-13.
+  - U6 PR #2435 opened on 2026-06-13 after local verification passed.
+  - U6 branch created from `origin/main` at `a72c4128`.
+  - U6 regenerated AppSync schema/codegen artifacts. Client GraphQL artifacts
+    and TanStack route tree were already current after normalizing generator
+    formatting; `terraform/schema.graphql` reflects the current
+    `pnpm schema:build` output.
+  - U5 PR #2434 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) and was squash merged on 2026-06-13 as `a72c4128`. The local Unit
+    5 worktree/branch were removed after GitHub confirmed the merge.
   - U5 branch created from `origin/main` at `1aa55647`.
   - U4 PR #2433 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) after rebasing onto `origin/main`, then was squash merged on
@@ -11205,3 +11219,40 @@ terraform -chdir=terraform/examples/greenfield validate`, and
     that could list installed but non-auth-capable plugins when catalog data was
     unavailable: focused web plugin tests, `@thinkwork/web` typecheck, and
     `@thinkwork/api` typecheck.
+  - U6 `pnpm install --frozen-lockfile` completed in the worktree with the same
+    optional `canvas` native build fallback/missing `pkg-config` warning; pnpm
+    returned success.
+  - U6 generated artifacts:
+    `pnpm schema:build && pnpm --filter @thinkwork/web codegen && pnpm --filter thinkwork-cli codegen && pnpm --filter @thinkwork/mobile codegen && pnpm --filter @thinkwork/web exec vite build`
+    passed. Vite emitted the repo's existing source-map and chunk-size
+    warnings.
+  - U6 normalized generated TypeScript client artifacts with the repo's
+    installed Prettier package path; the client GraphQL generated files had no
+    semantic diff after normalization.
+  - U6 focused web role-access tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/settings-nav.test.ts src/components/settings/SettingsActivityHome.test.tsx src/routes/_authed/-settings.activity-routing.test.ts src/components/settings/SettingsGeneral.test.tsx src/components/settings/SettingsActivity.test.tsx src/components/profile/SelfProfilePage.test.tsx src/components/SpacesSidebar.test.tsx src/components/settings/SettingsUserDetail.test.tsx src/components/settings/UserModelsSection.test.tsx src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx src/lib/mcp-api.test.ts`
+    passed: 12 files, 77 tests.
+  - U6 focused backend role-access tests passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/costs/userBudgetStatus.query.test.ts src/graphql/resolvers/costs/upsertBudgetPolicy.mutation.test.ts src/graphql/resolvers/costs/deleteBudgetPolicy.mutation.test.ts src/graphql/resolvers/tenant-agent/userModelCatalog.query.test.ts src/graphql/resolvers/tenant-agent/setUserModelApproval.mutation.test.ts src/__tests__/update-user-resolver.test.ts src/graphql/resolvers/core/me.query.test.ts src/__tests__/mcp-user-servers.test.ts src/lib/user-mcp-principal.test.ts`
+    passed: 9 files, 37 tests.
+  - U6 touched-package verification passed:
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/api typecheck`,
+    `pnpm --filter thinkwork-cli typecheck`, and
+    `pnpm --filter @thinkwork/mobile test` passed.
+  - U6 broad package verification passed:
+    `pnpm --filter @thinkwork/web test` passed: 161 files, 1193 tests;
+    `pnpm --filter @thinkwork/api test` passed: 490 files passed, 3 skipped;
+    4638 tests passed, 9 skipped.
+  - U6 root CI-equivalent verification passed:
+    `pnpm lint && pnpm lint:agentcore-iam`, `pnpm typecheck`, and a clean
+    rerun of `pnpm test` all passed. The first local root `pnpm test` attempt
+    hit an Electron package install race (`EEXIST` while creating the local
+    Electron Framework symlink); clearing the generated Electron `dist`/`path`
+    files and rerunning Electron's installer repaired local `node_modules`, and
+    both `pnpm --filter @thinkwork/desktop test` and the subsequent root
+    `pnpm test` passed.
+  - U6 `git diff --check` passed.
+  - U6 browser smoke was not run because the worktree does not have reliable
+    operator/non-operator local fixture accounts. The acceptance paths are
+    covered by focused route/component tests and backend authorization tests.
