@@ -75,26 +75,136 @@ function checkAwsIdentity(): Check {
   };
 }
 
+export const DOCTOR_BEDROCK_PROBE_MODEL_ID =
+  "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+
+/**
+ * Interpret a Bedrock converse probe outcome. An entitlement listing is not
+ * enough: the McPherson install (2026-06-12) green-checked an account whose
+ * effective inference allowance was zero (new-account dynamic quota ramp) and
+ * whose Anthropic use-case form was unsubmitted — both only visible by
+ * actually invoking a model.
+ */
+export function evaluateBedrockProbe(error: string | null): {
+  pass: boolean;
+  detail: string;
+} {
+  if (error === null) {
+    return {
+      pass: true,
+      detail: `${DOCTOR_BEDROCK_PROBE_MODEL_ID} invocation OK`,
+    };
+  }
+  if (error.includes("use case details")) {
+    return {
+      pass: false,
+      detail:
+        "Anthropic use-case form not submitted for this account. Submit it via " +
+        "`aws bedrock put-use-case-for-model-access` or the Bedrock console " +
+        "(Model access); it processes in ~15 minutes.",
+    };
+  }
+  if (error.includes("ThrottlingException")) {
+    return {
+      pass: false,
+      detail:
+        "Bedrock throttled the probe — new AWS accounts start with an effective " +
+        "inference allowance of ~zero (per region) that ramps up with account " +
+        "age/billing history over hours-to-days. The applied Service Quotas " +
+        "values are not the enforced values; nothing is configurable here.",
+    };
+  }
+  if (error.includes("AccessDeniedException")) {
+    return {
+      pass: false,
+      detail:
+        "Bedrock model access denied. Request model access in the AWS console " +
+        "(Bedrock → Model access) for the Anthropic models.",
+    };
+  }
+  return {
+    pass: false,
+    detail: `Bedrock invocation failed: ${error.slice(0, 200)}`,
+  };
+}
+
 function checkBedrockAccess(): Check {
   return {
-    name: "Bedrock model access",
+    name: "Bedrock model invocation",
     run: () => {
+      const region = process.env.AWS_REGION || "us-east-1";
       try {
         execSync(
-          "aws bedrock get-foundation-model --model-identifier anthropic.claude-3-haiku-20240307-v1:0 --output json --region us-east-1",
+          `aws bedrock-runtime converse --model-id ${DOCTOR_BEDROCK_PROBE_MODEL_ID} ` +
+            `--messages '[{"role":"user","content":[{"text":"Reply with OK"}]}]' ` +
+            `--inference-config '{"maxTokens":1}' --output json --region ${region}`,
+          {
+            encoding: "utf-8",
+            timeout: 30000,
+            stdio: ["pipe", "pipe", "pipe"],
+          },
+        );
+        return evaluateBedrockProbe(null);
+      } catch (err) {
+        const stderr =
+          err instanceof Error && "stderr" in err
+            ? String((err as { stderr?: unknown }).stderr ?? err.message)
+            : String(err);
+        return evaluateBedrockProbe(stderr);
+      }
+    },
+  };
+}
+
+/**
+ * New AWS accounts default to 10 concurrent Lambda executions — too low for
+ * the stack's reserved-concurrency handlers (the apply fails on
+ * PutFunctionConcurrency) and for production traffic generally.
+ */
+export const MIN_LAMBDA_CONCURRENT_EXECUTIONS = 100;
+
+export function evaluateLambdaConcurrency(value: number | null): {
+  pass: boolean;
+  detail: string;
+} {
+  if (value === null) {
+    return {
+      pass: false,
+      detail: "Could not read the account's Lambda concurrency limit.",
+    };
+  }
+  if (value < MIN_LAMBDA_CONCURRENT_EXECUTIONS) {
+    return {
+      pass: false,
+      detail:
+        `Account Lambda concurrency limit is ${value} (new-account default is 10); ` +
+        `the deploy fails on reserved-concurrency handlers below ` +
+        `${MIN_LAMBDA_CONCURRENT_EXECUTIONS}. Request an increase: ` +
+        "`aws service-quotas request-service-quota-increase --service-code lambda " +
+        "--quota-code L-B99A9384 --desired-value 1000`.",
+    };
+  }
+  return { pass: true, detail: `concurrent executions limit ${value}` };
+}
+
+function checkLambdaConcurrency(): Check {
+  return {
+    name: "Lambda concurrency quota",
+    run: () => {
+      const region = process.env.AWS_REGION || "us-east-1";
+      try {
+        const raw = execSync(
+          `aws lambda get-account-settings --query AccountLimit.ConcurrentExecutions --output text --region ${region}`,
           {
             encoding: "utf-8",
             timeout: 10000,
             stdio: ["pipe", "pipe", "pipe"],
           },
-        );
-        return { pass: true, detail: "anthropic.claude-3-haiku accessible" };
+        ).trim();
+        const value = Number.parseInt(raw, 10);
+        return evaluateLambdaConcurrency(Number.isNaN(value) ? null : value);
       } catch {
-        return {
-          pass: false,
-          detail:
-            "Bedrock model access not confirmed. You may need to request model access in the AWS console.",
-        };
+        return evaluateLambdaConcurrency(null);
       }
     },
   };
@@ -124,6 +234,7 @@ export function registerDoctorCommand(program: Command): void {
         checkTerraformCli(),
         checkAwsIdentity(),
         checkBedrockAccess(),
+        checkLambdaConcurrency(),
       ];
 
       let allPass = true;
