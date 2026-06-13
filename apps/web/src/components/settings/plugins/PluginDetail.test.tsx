@@ -117,16 +117,18 @@ const refreshActivations = vi.fn();
 type Fixtures = {
   install?: Record<string, unknown> | null;
   activations?: Array<Record<string, unknown>>;
+  catalog?: Array<Record<string, unknown>>;
 };
 
 function mockQueries({
   install = baseInstall,
   activations = [needsReauthActivation],
+  catalog = [catalogEntry],
 }: Fixtures = {}) {
   mocks.useQuery.mockImplementation(({ query }: { query: unknown }) => {
     if (query === queryDocs.SettingsPluginCatalogQuery) {
       return [
-        { data: { pluginCatalog: [catalogEntry] }, fetching: false },
+        { data: { pluginCatalog: catalog }, fetching: false },
         refreshCatalog,
       ];
     }
@@ -375,6 +377,67 @@ describe("PluginDetail", () => {
       screen.queryByRole("link", { name: /open deployment details/i }),
     ).toBeNull();
   });
+
+  it("opens an install-key dialog for unentitled Company Brain installs", async () => {
+    paramsState.pluginKey = "company-brain";
+    mockQueries({
+      install: null,
+      activations: [],
+      catalog: [companyBrainEntry],
+    });
+    mocks.install.mockResolvedValue({
+      data: {
+        installPlugin: {
+          id: "install-brain",
+          pluginKey: "company-brain",
+          state: "installing",
+        },
+      },
+    });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("Install key required")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /enter key/i }));
+
+    const input = screen.getByLabelText("Install key");
+    fireEvent.change(input, { target: { value: "twpi_valid" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: /unlock and install/i }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.install).toHaveBeenCalledWith({
+        input: expect.objectContaining({
+          pluginKey: "company-brain",
+          installKey: "twpi_valid",
+          idempotencyKey: expect.any(String),
+        }),
+      });
+    });
+    await waitFor(() => {
+      expect(refreshInstalls).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+      expect(refreshCatalog).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+    });
+  });
+
+  it("shows Company Brain workspace and adoption evidence once entitled", () => {
+    paramsState.pluginKey = "company-brain";
+    mockQueries({
+      install: companyBrainInstall,
+      activations: [],
+      catalog: [{ ...companyBrainEntry, entitlement: companyBrainEntitlement }],
+    });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("Entitled")).toBeTruthy();
+    expect(screen.getByText(/Adoption plan verifies/i)).toBeTruthy();
+    const link = screen.getByRole("link", { name: /open ontology/i });
+    expect(link.getAttribute("href")).toBe("/settings/memory/knowledge-graph");
+  });
 });
 
 const baseInstall = {
@@ -488,4 +551,65 @@ const catalogEntry = {
     },
   ],
   install: null,
+};
+
+const companyBrainEntitlement = {
+  __typename: "PluginEntitlement" as const,
+  id: "entitlement-brain",
+  status: "active",
+  source: "install_key",
+  grantedAt: "2026-06-13T12:00:00Z",
+};
+
+const companyBrainEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "company-brain",
+  displayName: "Company Brain",
+  description: "Premium knowledge graph substrate.",
+  latestVersion: "0.1.0",
+  updateAvailable: false,
+  premium: {
+    entitlementProductKey: "company-brain",
+    installKeyRequired: true,
+    installKeyPrompt:
+      "Enter the Company Brain install key provided by ThinkWork.",
+  },
+  entitlement: null,
+  versions: [
+    {
+      version: "0.1.0",
+      payloadSha256: "sha256:brain",
+      requiredOauthScopes: [],
+      components: [
+        {
+          key: "brain-substrate",
+          type: "infrastructure",
+          displayName: "Brain substrate",
+        },
+      ],
+    },
+  ],
+  install: null,
+};
+
+const companyBrainInstall = {
+  ...baseInstall,
+  id: "install-brain",
+  pluginKey: "company-brain",
+  state: "awaiting_approval",
+  components: [
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-brain",
+      componentKey: "brain-substrate",
+      componentType: "infrastructure",
+      state: "pending",
+      handlerRef: {
+        managedAppKey: "cognee",
+        deploymentJobId: "job-brain",
+        adoptionRequiresNoChange: true,
+      },
+      lastError: null,
+    },
+  ],
 };

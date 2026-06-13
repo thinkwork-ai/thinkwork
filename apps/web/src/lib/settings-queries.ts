@@ -1345,6 +1345,17 @@ export const SettingsPluginCatalogQuery = graphql(`
       description
       latestVersion
       updateAvailable
+      premium {
+        entitlementProductKey
+        installKeyRequired
+        installKeyPrompt
+      }
+      entitlement {
+        id
+        status
+        source
+        grantedAt
+      }
       versions {
         version
         payloadSha256
