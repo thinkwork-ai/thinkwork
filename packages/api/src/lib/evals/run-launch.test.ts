@@ -12,8 +12,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   computeEvalCaseSha,
   evalDatasetCaseKey,
+  evalDatasetCasePayloadKey,
   evalDatasetManifestKey,
   evalRunSnapshotCaseKey,
+  evalRunSnapshotCasePayloadKey,
   evalRunSnapshotPrefix,
   isEvalDatasetsKey,
   isEvalRunSnapshotKeyForRun,
@@ -243,6 +245,137 @@ describe("captureRunSnapshot", () => {
     expect(
       sha256Hex(storage.objects.get(snapshot.cases[1].snapshotKey) as string),
     ).toBe(snapshot.cases[1].contentSha);
+  });
+
+  it("copies flagged-thread payload objects into the run prefix with launch-computed shas (U8)", async () => {
+    const historyContent = JSON.stringify({
+      messages: [
+        { id: "m1", role: "user", content: "hello", parts: null },
+        { id: "m2", role: "user", content: "flagged", parts: null },
+      ],
+      dropped_oldest_count: 0,
+      flagged_message_id: "m2",
+    });
+    const workspaceContent = JSON.stringify({ files: [] });
+    seedDataset(storage, [
+      makeCore("flagged-aaaa-bbbb", {
+        category: "flagged-thread",
+        query: "flagged",
+      }),
+      makeCore("case-a"),
+    ]);
+    storage.objects.set(
+      evalDatasetCasePayloadKey(
+        ctx.tenantSlug,
+        ctx.slug,
+        "flagged-aaaa-bbbb",
+        "history",
+      ),
+      historyContent,
+    );
+    storage.objects.set(
+      evalDatasetCasePayloadKey(
+        ctx.tenantSlug,
+        ctx.slug,
+        "flagged-aaaa-bbbb",
+        "workspace",
+      ),
+      workspaceContent,
+    );
+    // No traces payload was captured at flag time.
+
+    const snapshot = await captureRunSnapshot(ctx, RUN_ID, storage);
+
+    const flagged = snapshot.cases.find(
+      (c) => c.caseId === "flagged-aaaa-bbbb",
+    )!;
+    // Captured payloads copied byte-identical into the run prefix,
+    // shas computed from the copied bytes (payloads are NOT in the
+    // dataset manifest — the launch hash is the integrity anchor the
+    // worker verifies against).
+    const historyRunKey = evalRunSnapshotCasePayloadKey(
+      ctx.tenantSlug,
+      RUN_ID,
+      "flagged-aaaa-bbbb",
+      "history",
+    );
+    const workspaceRunKey = evalRunSnapshotCasePayloadKey(
+      ctx.tenantSlug,
+      RUN_ID,
+      "flagged-aaaa-bbbb",
+      "workspace",
+    );
+    expect(storage.objects.get(historyRunKey)).toBe(historyContent);
+    expect(storage.objects.get(workspaceRunKey)).toBe(workspaceContent);
+    expect(flagged.payloadShas).toEqual({
+      history: sha256Hex(historyContent),
+      workspace: sha256Hex(workspaceContent),
+    });
+    // The run-prefix payload copies sit inside the guarded prefix.
+    expect(isEvalDatasetsKey(historyRunKey)).toBe(true);
+    expect(
+      historyRunKey.startsWith(evalRunSnapshotPrefix("acme", RUN_ID)),
+    ).toBe(true);
+    // Non-flagged cases get no payload copies and no shas.
+    const synthetic = snapshot.cases.find((c) => c.caseId === "case-a")!;
+    expect(synthetic.payloadShas).toBeUndefined();
+    expect(
+      [...storage.objects.keys()].filter((k) =>
+        k.includes(`${RUN_ID}/cases/case-a/payload/`),
+      ),
+    ).toEqual([]);
+  });
+
+  it("a flagged case with no captured payloads pins without payload copies (worker degrades per payload)", async () => {
+    seedDataset(storage, [
+      makeCore("flagged-cccc-dddd", {
+        category: "flagged-thread",
+        query: "flagged",
+      }),
+    ]);
+
+    const snapshot = await captureRunSnapshot(ctx, RUN_ID, storage);
+
+    expect(snapshot.cases).toHaveLength(1);
+    expect(snapshot.cases[0].payloadShas).toBeUndefined();
+    expect(
+      [...storage.objects.keys()].filter((k) => k.includes("/payload/")),
+    ).toEqual([]);
+  });
+
+  it("deleting the live dataset payload after capture leaves the run-prefix payload copy intact", async () => {
+    const historyContent = JSON.stringify({
+      messages: [{ id: "m1", role: "user", content: "flagged", parts: null }],
+      dropped_oldest_count: 0,
+      flagged_message_id: "m1",
+    });
+    const liveKey = evalDatasetCasePayloadKey(
+      ctx.tenantSlug,
+      ctx.slug,
+      "flagged-aaaa-bbbb",
+      "history",
+    );
+    seedDataset(storage, [
+      makeCore("flagged-aaaa-bbbb", {
+        category: "flagged-thread",
+        query: "flagged",
+      }),
+    ]);
+    storage.objects.set(liveKey, historyContent);
+
+    const snapshot = await captureRunSnapshot(ctx, RUN_ID, storage);
+    storage.objects.delete(liveKey);
+
+    const runKey = evalRunSnapshotCasePayloadKey(
+      ctx.tenantSlug,
+      RUN_ID,
+      "flagged-aaaa-bbbb",
+      "history",
+    );
+    expect(storage.objects.get(runKey)).toBe(historyContent);
+    expect(snapshot.cases[0].payloadShas).toEqual({
+      history: sha256Hex(historyContent),
+    });
   });
 
   it("retries once when a case is edited between manifest read and copy, then succeeds on a consistent re-read", async () => {

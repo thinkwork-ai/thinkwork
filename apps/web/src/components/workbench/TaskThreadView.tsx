@@ -13,6 +13,7 @@ import {
   Database,
   Download,
   FileText,
+  Flag,
   ListChecks,
   RotateCcw,
   Search,
@@ -20,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -243,6 +245,12 @@ interface TaskThreadViewProps {
   onSelectedModelChange?: (modelId: string) => void;
   artifactPanelState?: TaskThreadArtifactPanelState;
   infoPanelState?: TaskThreadInfoPanelState;
+  /**
+   * Flag-for-evaluation affordance (Trust Core U7). Rendered per
+   * completed turn when provided — the host gates it on the operator
+   * role (TenantContext.isOperator); the server enforces regardless.
+   */
+  onFlagTurn?: (turn: TaskThreadTurn) => void;
 }
 
 export interface TaskThreadArtifactPanelState {
@@ -370,6 +378,7 @@ export function TaskThreadView({
   onSendFollowUp,
   artifactPanelState,
   infoPanelState,
+  onFlagTurn,
 }: TaskThreadViewProps) {
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const [composerBottomInsetPx, setComposerBottomInsetPx] = useState(
@@ -521,6 +530,7 @@ export function TaskThreadView({
                       currentUser={currentUser}
                       mentionTargets={mentionTargets}
                       skillCatalog={skillCatalog}
+                      onFlagTurn={onFlagTurn}
                     />
                   );
                 })
@@ -1559,6 +1569,7 @@ function TranscriptSegment({
   currentUser,
   mentionTargets,
   skillCatalog,
+  onFlagTurn,
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
@@ -1579,6 +1590,7 @@ function TranscriptSegment({
   currentUser?: CurrentUserIdentity | null;
   mentionTargets?: MentionTarget[];
   skillCatalog?: SkillOption[];
+  onFlagTurn?: (turn: TaskThreadTurn) => void;
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
   // render via renderTypedParts (Reasoning + Tool + Response per part).
@@ -1605,6 +1617,7 @@ function TranscriptSegment({
           message={message}
           threadId={threadId}
           latestProjection={latestProjection}
+          onFlagTurn={onFlagTurn}
         />
       ) : null}
       {isLatestUser ? (
@@ -1650,16 +1663,29 @@ function normalizeStatus(status: unknown) {
     .trim();
 }
 
+// Terminal statuses an operator can flag into an eval dataset (U7). The
+// server rejects in-flight turns regardless; `skipped` never renders a
+// turn surface at all.
+const FLAGGABLE_TURN_STATUSES = new Set([
+  "completed",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+]);
+
 function ThreadTurnActivity({
   turn,
   message,
   threadId,
   latestProjection,
+  onFlagTurn,
 }: {
   turn?: TaskThreadTurn;
   message?: TaskThreadMessage;
   threadId?: string;
   latestProjection?: LatestProjectionRef | null;
+  onFlagTurn?: (turn: TaskThreadTurn) => void;
 }) {
   const status = normalizeStatus(turn?.status);
   const running = isRunningStatus(status);
@@ -1699,45 +1725,68 @@ function ThreadTurnActivity({
   const elapsedLabel =
     running && elapsedMs != null ? formatDuration(elapsedMs) : null;
 
+  // Per-turn flag-for-evaluation affordance (U7): completed turns only,
+  // and only when the host wired the (operator-gated) callback.
+  const canFlag =
+    Boolean(onFlagTurn) && !running && FLAGGABLE_TURN_STATUSES.has(status);
+
   // Default closed so streaming rows don't shift the page mid-read; failed
   // turns default open so the error isn't hidden behind a success-looking
   // collapsed header (R4). Manual toggle persists across re-renders.
   return (
-    <ThinkingRow
-      title={header}
-      usageLabel={usageLabel}
-      costLabel={costLabel}
-      running={running}
-      elapsedLabel={elapsedLabel}
-      defaultOpen={shouldDefaultExpand(status)}
-      detail={turnSummary(turn, usage)}
-      ariaLabel="Turn activity"
-    >
-      {rows.map((row, index) => (
-        <ActionRow
-          key={`${turn.id}-${index}-${row.title}`}
-          title={row.title}
-          detail={row.detail}
-          kind={row.kind}
-          hideIcon={row.hideIcon}
-          childrenRows={row.children}
-        />
-      ))}
-      {turn.error ? (
-        <ActionRow title="Run failed" detail={turn.error} kind="tool" />
+    <div className="flex min-w-0 max-w-full items-start gap-1">
+      <div className="min-w-0 flex-1">
+        <ThinkingRow
+          title={header}
+          usageLabel={usageLabel}
+          costLabel={costLabel}
+          running={running}
+          elapsedLabel={elapsedLabel}
+          defaultOpen={shouldDefaultExpand(status)}
+          detail={turnSummary(turn, usage)}
+          ariaLabel="Turn activity"
+        >
+          {rows.map((row, index) => (
+            <ActionRow
+              key={`${turn.id}-${index}-${row.title}`}
+              title={row.title}
+              detail={row.detail}
+              kind={row.kind}
+              hideIcon={row.hideIcon}
+              childrenRows={row.children}
+            />
+          ))}
+          {turn.error ? (
+            <ActionRow title="Run failed" detail={turn.error} kind="tool" />
+          ) : null}
+          {projection ? (
+            <ProjectedWorkspacePanel
+              projection={projection}
+              threadId={threadId}
+              agentsMdMayDiffer={agentsMdContentMayDiffer(
+                turn.id,
+                projection,
+                latestProjection ?? null,
+              )}
+            />
+          ) : null}
+        </ThinkingRow>
+      </div>
+      {canFlag ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Flag turn for evaluation"
+          title="Flag for evaluation"
+          data-testid={`flag-turn-${turn.id}`}
+          className="shrink-0 text-muted-foreground/50 hover:text-foreground"
+          onClick={() => onFlagTurn?.(turn)}
+        >
+          <Flag className="size-3.5" />
+        </Button>
       ) : null}
-      {projection ? (
-        <ProjectedWorkspacePanel
-          projection={projection}
-          threadId={threadId}
-          agentsMdMayDiffer={agentsMdContentMayDiffer(
-            turn.id,
-            projection,
-            latestProjection ?? null,
-          )}
-        />
-      ) : null}
-    </ThinkingRow>
+    </div>
   );
 }
 

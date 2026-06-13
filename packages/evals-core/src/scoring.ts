@@ -181,6 +181,7 @@ export function llmRubricHeuristic(
       ? `Heuristic rubric check passed: ${rubric.slice(0, 100)}`
       : `Heuristic rubric check failed: ${rubric.slice(0, 100)}`,
     score: passed ? 1.0 : 0.0,
+    rubric,
   };
 }
 

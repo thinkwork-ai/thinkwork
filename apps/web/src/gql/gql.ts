@@ -36,6 +36,8 @@ type Documents = {
   "\n  mutation DeleteEvalRun($id: ID!) {\n    deleteEvalRun(id: $id)\n  }\n": typeof types.DeleteEvalRunDocument;
   "\n  mutation CancelEvalRun($id: ID!) {\n    cancelEvalRun(id: $id) {\n      id\n      status\n      completedAt\n    }\n  }\n": typeof types.CancelEvalRunDocument;
   "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n": typeof types.OnEvalRunUpdatedDocument;
+  "\n  query EvalDatasetsForFlag($tenantId: ID!) {\n    evalDatasets(tenantId: $tenantId) {\n      id\n      slug\n      name\n      kind\n      archivedAt\n    }\n  }\n": typeof types.EvalDatasetsForFlagDocument;
+  "\n  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {\n    flagThreadForEval(input: $input) {\n      case {\n        id\n        datasetId\n        datasetCaseId\n        name\n        category\n        tags\n      }\n      dataset {\n        id\n        slug\n        name\n      }\n      completeness {\n        history\n        workspace\n        traces\n        truncated\n      }\n    }\n  }\n": typeof types.FlagThreadForEvalDocument;
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n": typeof types.KnowledgeBasesListDocument;
   "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n    }\n  }\n": typeof types.KnowledgeBaseDetailDocument;
   "\n  query TestKnowledgeBaseRetrieval($id: ID!, $query: String!) {\n    testKnowledgeBaseRetrieval(id: $id, query: $query) {\n      status\n      hits {\n        snippet\n        score\n        source\n      }\n    }\n  }\n": typeof types.TestKnowledgeBaseRetrievalDocument;
@@ -176,6 +178,10 @@ const documents: Documents = {
     types.CancelEvalRunDocument,
   "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n":
     types.OnEvalRunUpdatedDocument,
+  "\n  query EvalDatasetsForFlag($tenantId: ID!) {\n    evalDatasets(tenantId: $tenantId) {\n      id\n      slug\n      name\n      kind\n      archivedAt\n    }\n  }\n":
+    types.EvalDatasetsForFlagDocument,
+  "\n  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {\n    flagThreadForEval(input: $input) {\n      case {\n        id\n        datasetId\n        datasetCaseId\n        name\n        category\n        tags\n      }\n      dataset {\n        id\n        slug\n        name\n      }\n      completeness {\n        history\n        workspace\n        traces\n        truncated\n      }\n    }\n  }\n":
+    types.FlagThreadForEvalDocument,
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n":
     types.KnowledgeBasesListDocument,
   "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n    }\n  }\n":
@@ -512,6 +518,18 @@ export function graphql(
 export function graphql(
   source: "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n",
 ): (typeof documents)["\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query EvalDatasetsForFlag($tenantId: ID!) {\n    evalDatasets(tenantId: $tenantId) {\n      id\n      slug\n      name\n      kind\n      archivedAt\n    }\n  }\n",
+): (typeof documents)["\n  query EvalDatasetsForFlag($tenantId: ID!) {\n    evalDatasets(tenantId: $tenantId) {\n      id\n      slug\n      name\n      kind\n      archivedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {\n    flagThreadForEval(input: $input) {\n      case {\n        id\n        datasetId\n        datasetCaseId\n        name\n        category\n        tags\n      }\n      dataset {\n        id\n        slug\n        name\n      }\n      completeness {\n        history\n        workspace\n        traces\n        truncated\n      }\n    }\n  }\n",
+): (typeof documents)["\n  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {\n    flagThreadForEval(input: $input) {\n      case {\n        id\n        datasetId\n        datasetCaseId\n        name\n        category\n        tags\n      }\n      dataset {\n        id\n        slug\n        name\n      }\n      completeness {\n        history\n        workspace\n        traces\n        truncated\n      }\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
