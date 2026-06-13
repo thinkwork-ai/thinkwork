@@ -11099,8 +11099,8 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 - Pull request: U1/U2 Activity slice
   [#2429](https://github.com/thinkwork-ai/thinkwork/pull/2429) merged; U3 PR
   [#2431](https://github.com/thinkwork-ai/thinkwork/pull/2431) merged; U4 PR
-  pending.
-- Status: U1/U2 and U3 merged; U4 implementation in progress.
+  [#2433](https://github.com/thinkwork-ai/thinkwork/pull/2433) open.
+- Status: U1/U2 and U3 merged; U4 PR open, CI pending.
 - Notes:
   - U3 PR #2431 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) and was squash merged on 2026-06-13 as `3bcbd00a`. The remote
