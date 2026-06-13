@@ -87,7 +87,29 @@ export const EvalRunResultsQuery = graphql(`
       evaluatorResults
       assertions
       errorMessage
+      overrideStatus
+      overriddenBy
+      overriddenAt
+      overrideReason
+      effectiveStatus
       createdAt
+    }
+  }
+`);
+
+// Operator verdict override (Trust Core U9). The override never mutates
+// the judge's verdict — it's a separate field aggregation reads last.
+// overriddenBy is derived server-side from the authenticated caller.
+export const OverrideEvalResultMutation = graphql(`
+  mutation OverrideEvalResult($input: OverrideEvalResultInput!) {
+    overrideEvalResult(input: $input) {
+      id
+      status
+      overrideStatus
+      overriddenBy
+      overriddenAt
+      overrideReason
+      effectiveStatus
     }
   }
 `);
