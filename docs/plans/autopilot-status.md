@@ -11,19 +11,25 @@ status: in_progress
 - Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
 - Linear issue: `THNK-15`.
 - Target branch: `main`.
-- Current implementation unit: U4 Integrate premium entitlement gating into
-  plugin install/update.
-- Current branch: `codex/thnk-15-u4-premium-install-gate`.
+- Current implementation unit: U5 Add Cognee adoption and provisioning as the
+  Company Brain infrastructure component.
+- Current branch: `codex/thnk-15-u5-company-brain-substrate`.
 - Current worktree:
-  `.Codex/worktrees/thnk-15-u4-premium-install-gate`.
+  `.Codex/worktrees/thnk-15-u5-company-brain-substrate`.
 - Pull request: U1 [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
   merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`; U2
   [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) merged as
   `f9aba30f1dd503d18b75a931cb189789c6c876a4`; U3
   [#2442](https://github.com/thinkwork-ai/thinkwork/pull/2442) merged as
   `ca0dc6741a3411f5aa97af51fc6222ccf56ba4c2`; U4
-  [#2443](https://github.com/thinkwork-ai/thinkwork/pull/2443) opened.
-- Status: U1, U2, and U3 completed and merged. U4 implemented locally with
+  [#2443](https://github.com/thinkwork-ai/thinkwork/pull/2443) merged as
+  `25cd13676a35b331072f0bcc631492b0432503ca`; U5
+  [#2444](https://github.com/thinkwork-ai/thinkwork/pull/2444) opened.
+- Status: U1 through U4 completed and merged. U5 implemented locally with
+  Company Brain's Cognee substrate using a plan-backed UPGRADE adoption job
+  against existing Cognee managed-app rows, a handler_ref marker for
+  no-change adoption evidence, and net-new infrastructure installs flowing
+  through the normal managed-app ENABLE plan path. U4 added
   engine-level premium gating before install rows/component handlers,
   optional `installKey` on `InstallPluginInput`, active-entitlement bypass for
   install/update, key redemption through the U3 entitlement service, generated
@@ -66,6 +72,11 @@ status: in_progress
   `pnpm --filter @thinkwork/database-pg typecheck` passed;
   `pnpm --filter @thinkwork/web typecheck` passed;
   `pnpm --filter thinkwork-cli typecheck` passed; `git diff --check` passed.
+  U4 PR #2443 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+  `test`) and was squash merged. U5 local checks so far:
+  `pnpm --filter @thinkwork/api test -- src/lib/plugins/handlers/infra.test.ts src/lib/plugins/engine.test.ts`
+  passed; `pnpm --filter @thinkwork/api typecheck` passed; `git diff --check`
+  passed.
 - CI log: U2 PR #2440 initially passed `cla`, `lint`, `verify`, and
   `typecheck`, with `test` still pending, but `Migration Drift Precheck (dev)`
   failed because the new hand-rolled
@@ -75,8 +86,8 @@ status: in_progress
   reports all declared tables, indexes, and constraints present. U2 CI then
   passed required checks and PR #2440 was squash merged.
 - Blockers: none.
-- Next action: monitor U4 CI, fix any failures, squash merge when green, delete
-  branch/worktree, then sync `origin/main` for U5.
+- Next action: monitor U5 CI, fix any failures, squash merge when green, delete
+  branch/worktree, then sync `origin/main` for U6.
 
 ## Deployment Controller Process - 2026-06-09
 
