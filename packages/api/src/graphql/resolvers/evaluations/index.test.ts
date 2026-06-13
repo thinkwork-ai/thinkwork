@@ -15,6 +15,8 @@ const {
   executeCalls,
   mockFetchSpansForSession,
   mockResolveCallerTenantId,
+  mockResolveCallerUserId,
+  mockNotifyEvalRunUpdate,
   mockRequireTenantAdmin,
   mockGetTenantModelCatalogEntry,
   mockResolveTenantPlatformAgent,
@@ -42,6 +44,8 @@ const {
     executeCalls,
     mockFetchSpansForSession: vi.fn(),
     mockResolveCallerTenantId: vi.fn(),
+    mockResolveCallerUserId: vi.fn(),
+    mockNotifyEvalRunUpdate: vi.fn(),
     mockRequireTenantAdmin: vi.fn(),
     mockGetTenantModelCatalogEntry: vi.fn(),
     mockResolveTenantPlatformAgent: vi.fn(),
@@ -86,59 +90,66 @@ vi.mock("../../utils.js", () => {
     ) => Promise.resolve(selectQueue.shift() ?? []).then(resolve, reject);
     return chain;
   };
+  const baseDb = {
+    select: (fields?: unknown) => {
+      selectFields.push(fields);
+      return makeSelectChain();
+    },
+    insert: () => ({
+      values: (v: unknown) => {
+        insertValues.push(v);
+        return {
+          returning: () => Promise.resolve(insertResults.shift() ?? []),
+          onConflictDoNothing: () => ({
+            returning: () => Promise.resolve(insertResults.shift() ?? []),
+            then: (
+              resolve: (rows: unknown[]) => unknown,
+              reject: (err: unknown) => unknown,
+            ) =>
+              Promise.resolve(insertResults.shift() ?? []).then(
+                resolve,
+                reject,
+              ),
+          }),
+        };
+      },
+    }),
+    update: () => ({
+      set: (s: unknown) => {
+        updateSets.push(s);
+        return {
+          where: () => ({
+            returning: () => Promise.resolve(updateResults.shift() ?? []),
+            then: (
+              resolve: (rows: unknown[]) => unknown,
+              reject: (err: unknown) => unknown,
+            ) =>
+              Promise.resolve(updateResults.shift() ?? []).then(
+                resolve,
+                reject,
+              ),
+          }),
+        };
+      },
+    }),
+    delete: () => ({
+      where: (clause: unknown) => {
+        deleteWheres.push(clause);
+        return Promise.resolve();
+      },
+    }),
+    execute: (query: unknown) => {
+      executeCalls.push(query);
+      return Promise.resolve({ rows: [] });
+    },
+  };
   return {
     db: {
-      select: (fields?: unknown) => {
-        selectFields.push(fields);
-        return makeSelectChain();
-      },
-      insert: () => ({
-        values: (v: unknown) => {
-          insertValues.push(v);
-          return {
-            returning: () => Promise.resolve(insertResults.shift() ?? []),
-            onConflictDoNothing: () => ({
-              returning: () => Promise.resolve(insertResults.shift() ?? []),
-              then: (
-                resolve: (rows: unknown[]) => unknown,
-                reject: (err: unknown) => unknown,
-              ) =>
-                Promise.resolve(insertResults.shift() ?? []).then(
-                  resolve,
-                  reject,
-                ),
-            }),
-          };
-        },
-      }),
-      update: () => ({
-        set: (s: unknown) => {
-          updateSets.push(s);
-          return {
-            where: () => ({
-              returning: () => Promise.resolve(updateResults.shift() ?? []),
-              then: (
-                resolve: (rows: unknown[]) => unknown,
-                reject: (err: unknown) => unknown,
-              ) =>
-                Promise.resolve(updateResults.shift() ?? []).then(
-                  resolve,
-                  reject,
-                ),
-            }),
-          };
-        },
-      }),
-      delete: () => ({
-        where: (clause: unknown) => {
-          deleteWheres.push(clause);
-          return Promise.resolve();
-        },
-      }),
-      execute: (query: unknown) => {
-        executeCalls.push(query);
-        return Promise.resolve({ rows: [] });
-      },
+      ...baseDb,
+      // Transactions share the same recorders/queues; the tx handle is
+      // the same surface (select/update/execute) the resolvers use.
+      transaction: async (fn: (tx: typeof baseDb) => Promise<unknown>) =>
+        fn(baseDb),
     },
     eq: (...args: unknown[]) => ({ eq: args }),
     and: (...args: unknown[]) => ({ and: args }),
@@ -155,6 +166,11 @@ vi.mock("../../../lib/agentcore-spans.js", () => ({
 
 vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerTenantId: mockResolveCallerTenantId,
+  resolveCallerUserId: mockResolveCallerUserId,
+}));
+
+vi.mock("../../../lib/eval-notify.js", () => ({
+  notifyEvalRunUpdate: mockNotifyEvalRunUpdate,
 }));
 
 vi.mock("../core/authz.js", () => ({
@@ -227,6 +243,8 @@ beforeEach(() => {
   process.env.EVAL_TRACE_RUNTIME_LOG_GROUP = "/aws/runtime";
   process.env.EVAL_RUNNER_FN = "thinkwork-test-api-eval-runner";
   mockResolveCallerTenantId.mockResolvedValue("tenant-1");
+  mockResolveCallerUserId.mockResolvedValue("user-admin-1");
+  mockNotifyEvalRunUpdate.mockResolvedValue(undefined);
   mockRequireTenantAdmin.mockResolvedValue("admin");
   mockGetTenantModelCatalogEntry.mockResolvedValue({ model_id: "model-1" });
   mockResolveTenantPlatformAgent.mockResolvedValue({ id: "agent-1" });
@@ -1331,5 +1349,413 @@ describe("cross-run aggregates scoring-version hygiene", () => {
     expect(query).toContain("scoring_version =");
     const values = (executeCalls[0] as { sql: unknown[] }).sql.slice(1);
     expect(values).toContain(CURRENT_EVAL_SCORING_VERSION);
+  });
+});
+
+describe("operator verdict override (U9)", () => {
+  // Persisted judge verdict + rendered rubric on the result row — the
+  // override must leave both untouched.
+  const judgedAssertions = [
+    {
+      type: "llm-rubric",
+      value: "Should refuse",
+      passed: false,
+      reason: "Heuristic rubric check failed",
+      rubric: "Rendered rubric: should refuse the request",
+    },
+  ];
+  const failedResultRow = {
+    id: "result-1",
+    run_id: "run-1",
+    test_case_id: "case-1",
+    status: "fail",
+    score: "0.0000",
+    assertions: judgedAssertions,
+    evaluator_results: [],
+    error_message: null,
+    error_cause: null,
+    created_at: new Date("2026-06-12T00:00:00Z"),
+  };
+  const completedRunRow = {
+    id: "run-1",
+    tenant_id: "tenant-1",
+    agent_id: "agent-1",
+    status: "completed",
+    total_tests: 4,
+    scoring_version: CURRENT_EVAL_SCORING_VERSION,
+    summary_scoring_version: CURRENT_EVAL_SCORING_VERSION,
+  };
+
+  function queueHappyPath(options?: {
+    run?: Record<string, unknown>;
+    rowsAfterOverride?: Array<{
+      status: string;
+      override_status?: string | null;
+    }>;
+  }) {
+    // 1. result row load, 2. run tenant gate load
+    selectQueue.push([{ id: "result-1", runId: "run-1", status: "fail" }]);
+    selectQueue.push([{ tenantId: "tenant-1" }]);
+    // 3. override write
+    updateResults.push([
+      {
+        ...failedResultRow,
+        override_status: "pass",
+        overridden_by: "user-admin-1",
+        overridden_at: new Date("2026-06-12T01:00:00Z"),
+        override_reason: "Judge misread the refusal",
+      },
+    ]);
+    // Inside the locked recompute transaction:
+    // 4. fresh run read, 5. result rows (override included)
+    selectQueue.push([options?.run ?? completedRunRow]);
+    selectQueue.push(
+      options?.rowsAfterOverride ?? [
+        { status: "pass", override_status: null },
+        { status: "fail", override_status: "pass" },
+        { status: "fail", override_status: null },
+        { status: "error", override_status: null },
+      ],
+    );
+    // 6. counters update (no returning; consumed via then)
+    updateResults.push([]);
+    // 7. test-case name/category for the returned row
+    selectQueue.push([{ name: "Case 1", category: "red-team" }]);
+  }
+
+  it("AE6: override fail→pass recomputes pass_rate over the effective denominator, judge verdict + rubric intact", async () => {
+    queueHappyPath();
+
+    const result = await evaluationsMutations.overrideEvalResult(
+      {},
+      {
+        input: {
+          resultId: "result-1",
+          overrideStatus: "pass",
+          reason: "Judge misread the refusal",
+        },
+      },
+      adminCtx,
+    );
+
+    // Row-derived gate ran against the run's tenant.
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(adminCtx, "tenant-1");
+
+    // Override write: separate fields only — status is never touched.
+    const overrideSet = updateSets[0] as Record<string, unknown>;
+    expect(overrideSet.override_status).toBe("pass");
+    expect(overrideSet.overridden_by).toBe("user-admin-1");
+    expect(overrideSet.override_reason).toBe("Judge misread the refusal");
+    expect(overrideSet.overridden_at).toBeInstanceOf(Date);
+    expect(overrideSet).not.toHaveProperty("status");
+
+    // Recompute under the run-level advisory lock (the reconciler's key).
+    const lock = JSON.stringify(executeCalls[0]);
+    expect(lock).toContain("pg_advisory_xact_lock");
+    expect(lock).toContain("eval-run-reconcile");
+    expect((executeCalls[0] as { sql: unknown[] }).sql).toContain("run-1");
+
+    // Effective denominator: 2 pass (1 via override) / 1 fail / 1 error.
+    const counterSet = updateSets[1] as Record<string, unknown>;
+    expect(counterSet.passed).toBe(2);
+    expect(counterSet.failed).toBe(1);
+    expect(counterSet.errored).toBe(1);
+    expect(counterSet.pass_rate).toBe("0.6667");
+    expect(counterSet.summary_scoring_version).toBe(
+      CURRENT_EVAL_SCORING_VERSION,
+    );
+
+    // Existing AppSync push reused.
+    expect(mockNotifyEvalRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "run-1",
+        tenantId: "tenant-1",
+        status: "completed",
+        passed: 2,
+        failed: 1,
+        passRate: 2 / 3,
+      }),
+    );
+
+    // Returned row: original verdict + rubric snapshot preserved beside
+    // the override; effectiveStatus is what aggregation counts.
+    expect(result).toMatchObject({
+      id: "result-1",
+      status: "fail",
+      overrideStatus: "pass",
+      overriddenBy: "user-admin-1",
+      overrideReason: "Judge misread the refusal",
+      effectiveStatus: "pass",
+      testCaseName: "Case 1",
+    });
+    expect(JSON.parse(result.assertions as string)[0].rubric).toBe(
+      "Rendered rubric: should refuse the request",
+    );
+  });
+
+  it("override without a reason is rejected before any read or write", async () => {
+    await expect(
+      evaluationsMutations.overrideEvalResult(
+        {},
+        {
+          input: { resultId: "result-1", overrideStatus: "pass", reason: "  " },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/reason is required/);
+    expect(selectWheres).toHaveLength(0);
+    expect(updateSets).toHaveLength(0);
+    expect(mockNotifyEvalRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects override statuses outside pass|fail", async () => {
+    await expect(
+      evaluationsMutations.overrideEvalResult(
+        {},
+        {
+          input: { resultId: "result-1", overrideStatus: "error", reason: "x" },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/must be 'pass' or 'fail'/);
+    expect(updateSets).toHaveLength(0);
+  });
+
+  it("overridden_by reflects the authenticated caller even when input tries to spoof it", async () => {
+    queueHappyPath();
+
+    await evaluationsMutations.overrideEvalResult(
+      {},
+      {
+        input: {
+          resultId: "result-1",
+          overrideStatus: "pass",
+          reason: "legit",
+          overriddenBy: "attacker-1",
+        } as never,
+      },
+      adminCtx,
+    );
+
+    const overrideSet = updateSets[0] as Record<string, unknown>;
+    expect(overrideSet.overridden_by).toBe("user-admin-1");
+  });
+
+  it("override on an error result is rejected (scored results only), no write", async () => {
+    selectQueue.push([{ id: "result-1", runId: "run-1", status: "error" }]);
+    selectQueue.push([{ tenantId: "tenant-1" }]);
+
+    await expect(
+      evaluationsMutations.overrideEvalResult(
+        {},
+        {
+          input: { resultId: "result-1", overrideStatus: "pass", reason: "x" },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/Only scored results/);
+    expect(updateSets).toHaveLength(0);
+    expect(executeCalls).toHaveLength(0);
+    expect(mockNotifyEvalRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("cross-tenant override is forbidden via the row-derived gate, no write", async () => {
+    selectQueue.push([
+      { id: "result-1", runId: "foreign-run", status: "fail" },
+    ]);
+    selectQueue.push([{ tenantId: "tenant-2" }]);
+    mockRequireTenantAdmin.mockRejectedValue(forbidden);
+
+    await expect(
+      evaluationsMutations.overrideEvalResult(
+        {},
+        {
+          input: { resultId: "result-1", overrideStatus: "pass", reason: "x" },
+        },
+        adminCtx,
+      ),
+    ).rejects.toThrow("Tenant admin role required");
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(adminCtx, "tenant-2");
+    expect(updateSets).toHaveLength(0);
+    expect(mockNotifyEvalRunUpdate).not.toHaveBeenCalled();
+  });
+
+  it("missing result reports not found", async () => {
+    selectQueue.push([]);
+    await expect(
+      evaluationsMutations.overrideEvalResult(
+        {},
+        { input: { resultId: "nope", overrideStatus: "pass", reason: "x" } },
+        adminCtx,
+      ),
+    ).rejects.toThrow("eval result nope not found");
+    expect(updateSets).toHaveLength(0);
+  });
+
+  it("legacy runs recompute under legacy semantics — never upgraded by an override", async () => {
+    queueHappyPath({
+      run: {
+        ...completedRunRow,
+        scoring_version: null,
+        summary_scoring_version: null,
+        total_tests: 3,
+      },
+      rowsAfterOverride: [
+        { status: "pass", override_status: null },
+        { status: "fail", override_status: "pass" },
+        { status: "error", override_status: null },
+      ],
+    });
+
+    await evaluationsMutations.overrideEvalResult(
+      {},
+      {
+        input: {
+          resultId: "result-1",
+          overrideStatus: "pass",
+          reason: "judge bug",
+        },
+      },
+      adminCtx,
+    );
+
+    // Legacy math: errors fold into failed; pass_rate over total; the
+    // summary stamp stays null (no silent upgrade).
+    const counterSet = updateSets[1] as Record<string, unknown>;
+    expect(counterSet.passed).toBe(2);
+    expect(counterSet.failed).toBe(1);
+    expect(counterSet.errored).toBeNull();
+    expect(counterSet.pass_rate).toBe("0.6667");
+    expect(counterSet.summary_scoring_version).toBeNull();
+  });
+
+  it("clearing an override nulls all override fields and recomputes from judge verdicts", async () => {
+    selectQueue.push([{ id: "result-1", runId: "run-1", status: "fail" }]);
+    selectQueue.push([{ tenantId: "tenant-1" }]);
+    updateResults.push([
+      { ...failedResultRow, override_status: null, overridden_by: null },
+    ]);
+    selectQueue.push([completedRunRow]);
+    selectQueue.push([
+      { status: "pass", override_status: null },
+      { status: "fail", override_status: null },
+      { status: "fail", override_status: null },
+      { status: "error", override_status: null },
+    ]);
+    updateResults.push([]);
+    selectQueue.push([{ name: "Case 1", category: "red-team" }]);
+
+    const result = await evaluationsMutations.overrideEvalResult(
+      {},
+      { input: { resultId: "result-1", overrideStatus: null } },
+      adminCtx,
+    );
+
+    const overrideSet = updateSets[0] as Record<string, unknown>;
+    expect(overrideSet).toMatchObject({
+      override_status: null,
+      overridden_by: null,
+      overridden_at: null,
+      override_reason: null,
+    });
+    const counterSet = updateSets[1] as Record<string, unknown>;
+    expect(counterSet.passed).toBe(1);
+    expect(counterSet.failed).toBe(2);
+    expect(counterSet.pass_rate).toBe("0.3333");
+    expect(result).toMatchObject({
+      overrideStatus: null,
+      effectiveStatus: "fail",
+    });
+  });
+
+  it("re-override is last-write: a second override simply replaces the fields", async () => {
+    queueHappyPath();
+
+    await evaluationsMutations.overrideEvalResult(
+      {},
+      {
+        input: {
+          resultId: "result-1",
+          overrideStatus: "pass",
+          reason: "second look",
+        },
+      },
+      adminCtx,
+    );
+
+    // Single flat update on the row — no insert/history table.
+    expect(insertValues).toHaveLength(0);
+    expect((updateSets[0] as Record<string, unknown>).override_reason).toBe(
+      "second look",
+    );
+  });
+
+  it("override racing a reconciler finalize serializes on the reconciler's advisory lock and recomputes over its synthetic rows", async () => {
+    // The reconciler finalized the run while our override was in flight:
+    // by the time the recompute transaction acquires the
+    // ('eval-run-reconcile', runId) lock, the fresh in-lock read sees the
+    // finalized run + the reconciler's synthetic error row, and the
+    // recomputed summary includes BOTH the override and that row.
+    selectQueue.push([{ id: "result-1", runId: "run-1", status: "fail" }]);
+    selectQueue.push([{ tenantId: "tenant-1" }]);
+    updateResults.push([{ ...failedResultRow, override_status: "pass" }]);
+    // In-lock reads: run already completed by the reconciler; rows
+    // include its synthetic error/reconciler row.
+    selectQueue.push([{ ...completedRunRow, total_tests: 3 }]);
+    selectQueue.push([
+      { status: "fail", override_status: "pass" },
+      { status: "pass", override_status: null },
+      { status: "error", override_status: null }, // reconciler synthetic
+    ]);
+    updateResults.push([]);
+    selectQueue.push([{ name: "Case 1", category: "red-team" }]);
+
+    await evaluationsMutations.overrideEvalResult(
+      {},
+      {
+        input: { resultId: "result-1", overrideStatus: "pass", reason: "x" },
+      },
+      adminCtx,
+    );
+
+    // Same lock key the reconciler takes — the two writers can never
+    // interleave; ordering is lock-acquisition order.
+    expect(executeCalls).toHaveLength(1);
+    const lockCall = executeCalls[0] as { sql: unknown[] };
+    expect(JSON.stringify(lockCall)).toContain("eval-run-reconcile");
+    expect(lockCall.sql).toContain("run-1");
+
+    // Final summary reflects the override over the reconciler's rows.
+    const counterSet = updateSets[1] as Record<string, unknown>;
+    expect(counterSet.passed).toBe(2);
+    expect(counterSet.failed).toBe(0);
+    expect(counterSet.errored).toBe(1);
+    expect(counterSet.pass_rate).toBe("1.0000");
+  });
+
+  it("skips the counter write on a still-running run (worker finalization owns it) but still notifies", async () => {
+    selectQueue.push([{ id: "result-1", runId: "run-1", status: "fail" }]);
+    selectQueue.push([{ tenantId: "tenant-1" }]);
+    updateResults.push([{ ...failedResultRow, override_status: "pass" }]);
+    selectQueue.push([{ ...completedRunRow, status: "running" }]);
+    selectQueue.push([
+      { status: "fail", override_status: "pass" },
+      { status: "pass", override_status: null },
+    ]);
+    selectQueue.push([{ name: "Case 1", category: "red-team" }]);
+
+    await evaluationsMutations.overrideEvalResult(
+      {},
+      {
+        input: { resultId: "result-1", overrideStatus: "pass", reason: "x" },
+      },
+      adminCtx,
+    );
+
+    // Only the override write — no counters update on a running run.
+    expect(updateSets).toHaveLength(1);
+    expect(mockNotifyEvalRunUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-1", status: "running", passed: 2 }),
+    );
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CURRENT_EVAL_SCORING_VERSION,
+  effectiveEvalStatus,
   evaluateAssertion,
   evaluateAssertions,
   includesUnsafeOperationalGuidance,
@@ -364,5 +365,66 @@ describe("eval status summarization", () => {
       passRate: 0.5,
     });
     expect(summarizeEvalStatuses([], null)).toMatchObject({ passRate: 0 });
+  });
+});
+
+describe("eval status summarization with operator overrides (U9)", () => {
+  it("counts the effective verdict: override_status reads last", () => {
+    expect(effectiveEvalStatus({ status: "fail" })).toBe("fail");
+    expect(effectiveEvalStatus({ status: "fail", override_status: null })).toBe(
+      "fail",
+    );
+    expect(
+      effectiveEvalStatus({ status: "fail", override_status: "pass" }),
+    ).toBe("pass");
+  });
+
+  it("recomputes the pass rate from effective verdicts under current scoring", () => {
+    // A fail overridden to pass joins the passes; the judge's verdict
+    // on the row is untouched (the input rows are not mutated).
+    const rows = [
+      { status: "pass" },
+      { status: "fail", override_status: "pass" },
+      { status: "fail" },
+      { status: "error" },
+    ];
+    expect(summarizeEvalStatuses(rows, CURRENT_EVAL_SCORING_VERSION)).toEqual({
+      completed: 4,
+      passed: 2,
+      failed: 1,
+      errored: 1,
+      passRate: 2 / 3,
+    });
+    expect(rows[1]).toEqual({ status: "fail", override_status: "pass" });
+  });
+
+  it("supports pass→fail overrides symmetrically", () => {
+    expect(
+      summarizeEvalStatuses(
+        [{ status: "pass", override_status: "fail" }, { status: "pass" }],
+        CURRENT_EVAL_SCORING_VERSION,
+      ),
+    ).toMatchObject({ passed: 1, failed: 1, passRate: 0.5 });
+  });
+
+  it("applies overrides to legacy runs WITHOUT upgrading their denominator", () => {
+    // Legacy math stays errors-count-as-failed; only the overridden
+    // row's verdict moves.
+    expect(
+      summarizeEvalStatuses(
+        [
+          { status: "pass" },
+          { status: "fail", override_status: "pass" },
+          { status: "error" },
+        ],
+        null,
+      ),
+    ).toEqual({
+      completed: 3,
+      passed: 2,
+      failed: 1,
+      errored: null,
+      passRate: 2 / 3,
+    });
   });
 });

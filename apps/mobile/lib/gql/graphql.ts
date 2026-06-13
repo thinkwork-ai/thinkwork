@@ -1245,12 +1245,17 @@ export type EvalResult = {
   category?: Maybe<Scalars["String"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   durationMs?: Maybe<Scalars["Int"]["output"]>;
+  effectiveStatus: Scalars["String"]["output"];
   errorCause?: Maybe<Scalars["String"]["output"]>;
   errorMessage?: Maybe<Scalars["String"]["output"]>;
   evaluatorResults: Scalars["AWSJSON"]["output"];
   expected?: Maybe<Scalars["String"]["output"]>;
   id: Scalars["ID"]["output"];
   input?: Maybe<Scalars["String"]["output"]>;
+  overriddenAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  overriddenBy?: Maybe<Scalars["String"]["output"]>;
+  overrideReason?: Maybe<Scalars["String"]["output"]>;
+  overrideStatus?: Maybe<Scalars["String"]["output"]>;
   runId: Scalars["ID"]["output"];
   score?: Maybe<Scalars["Float"]["output"]>;
   status: Scalars["String"]["output"];
@@ -2408,6 +2413,7 @@ export type Mutation = {
   notifyThreadTurnUpdate?: Maybe<ThreadTurnUpdateEvent>;
   notifyThreadUpdate?: Maybe<ThreadUpdateEvent>;
   notifyWorkspaceAccessRevoked?: Maybe<WorkspaceAccessRevokedEvent>;
+  overrideEvalResult: EvalResult;
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
@@ -3004,6 +3010,10 @@ export type MutationNotifyWorkspaceAccessRevokedArgs = {
   spaceId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
   userId: Scalars["ID"]["input"];
+};
+
+export type MutationOverrideEvalResultArgs = {
+  input: OverrideEvalResultInput;
 };
 
 export type MutationPinThreadArgs = {
@@ -3731,6 +3741,12 @@ export type OrgUpdateEvent = {
   entityType?: Maybe<Scalars["String"]["output"]>;
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type OverrideEvalResultInput = {
+  overrideStatus?: InputMaybe<Scalars["String"]["input"]>;
+  reason?: InputMaybe<Scalars["String"]["input"]>;
+  resultId: Scalars["ID"]["input"];
 };
 
 export type PageInfo = {

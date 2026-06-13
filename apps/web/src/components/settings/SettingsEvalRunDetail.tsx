@@ -38,6 +38,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  Textarea,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -52,6 +53,7 @@ import {
   EvalRunResultsQuery,
   EvalTestCaseQuery,
   OnEvalRunUpdatedSubscription,
+  OverrideEvalResultMutation,
 } from "@/lib/evaluation-queries";
 import { cn, relativeTime } from "@/lib/utils";
 import {
@@ -92,10 +94,20 @@ interface EvalResultRow {
   assertions: unknown;
   evaluatorResults: unknown;
   errorMessage: string | null;
+  // Operator verdict override (Trust Core U9). The judge's verdict stays
+  // in `status`; `effectiveStatus` (override ?? status) is what
+  // aggregation counts and what the UI displays.
+  overrideStatus: string | null;
+  overriddenBy: string | null;
+  overriddenAt: string | null;
+  overrideReason: string | null;
+  effectiveStatus: string;
   createdAt: string;
 }
 
-type CategoryPassRateResult = Pick<EvalResultRow, "category" | "status">;
+type CategoryPassRateResult = Pick<EvalResultRow, "category" | "status"> & {
+  effectiveStatus?: string | null;
+};
 
 function isScoredResultStatus(status: string): boolean {
   return ["pass", "fail", "completed", "failed", "error"].includes(status);
@@ -111,11 +123,13 @@ export function calculateCategoryPassRates(
   const totals = new Map<string, { passed: number; completed: number }>();
 
   for (const result of results) {
-    if (!result.category || !isScoredResultStatus(result.status)) continue;
+    // Operator overrides correct the per-category rates too.
+    const status = result.effectiveStatus ?? result.status;
+    if (!result.category || !isScoredResultStatus(status)) continue;
 
     const current = totals.get(result.category) ?? { passed: 0, completed: 0 };
     current.completed += 1;
-    if (isPassingResultStatus(result.status)) current.passed += 1;
+    if (isPassingResultStatus(status)) current.passed += 1;
     totals.set(result.category, current);
   }
 
@@ -192,7 +206,20 @@ const resultColumns: ColumnDef<EvalResultRow>[] = [
     accessorKey: "status",
     header: "Status",
     size: 70,
-    cell: ({ row }) => statusBadge(row.original.status),
+    cell: ({ row }) => (
+      <div className="flex items-center gap-1">
+        {statusBadge(row.original.effectiveStatus ?? row.original.status)}
+        {row.original.overrideStatus && (
+          <Badge
+            variant="outline"
+            className="text-[10px] text-muted-foreground"
+            title={`Judge verdict: ${row.original.status}`}
+          >
+            overridden
+          </Badge>
+        )}
+      </div>
+    ),
   },
   {
     accessorKey: "score",
@@ -539,6 +566,36 @@ function ResultDetailSheet({
 
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
 
+  // Operator verdict override (Trust Core U9). The mutation pushes
+  // notifyEvalRunUpdate, so the run-level subscription in
+  // SettingsEvalRunDetail refetches both the run summary and the result
+  // rows; the doc cache also invalidates EvalResult-typed queries.
+  const { isOperator } = useTenant();
+  const resultId = result?.id;
+  const [{ fetching: overriding }, overrideResult] = useMutation(
+    OverrideEvalResultMutation,
+  );
+  const handleOverride = useCallback(
+    async (overrideStatus: "pass" | "fail" | null, reason: string) => {
+      if (!resultId) return;
+      const response = await overrideResult({
+        input: {
+          resultId,
+          overrideStatus,
+          reason: overrideStatus === null ? undefined : reason,
+        },
+      });
+      if (response.error) {
+        toast.error("Failed to update override: " + response.error.message);
+      } else {
+        toast.success(
+          overrideStatus === null ? "Override cleared" : "Verdict overridden",
+        );
+      }
+    },
+    [overrideResult, resultId],
+  );
+
   useEffect(() => {
     setShowTrace(false);
     setShowSystemPrompt(false);
@@ -591,7 +648,16 @@ function ResultDetailSheet({
         </SheetHeader>
         <div className="space-y-4 px-6 pb-6">
           <div className="flex items-center gap-2">
-            {statusBadge(result.status)}
+            {statusBadge(result.effectiveStatus ?? result.status)}
+            {result.overrideStatus && (
+              <Badge
+                variant="outline"
+                className="text-muted-foreground"
+                title={`Judge verdict: ${result.status}`}
+              >
+                overridden
+              </Badge>
+            )}
             {result.category && (
               <Badge variant="outline">{result.category}</Badge>
             )}
@@ -622,6 +688,13 @@ function ResultDetailSheet({
               </p>
             </div>
           )}
+
+          <EvalResultOverrideControl
+            result={result}
+            isOperator={isOperator}
+            submitting={overriding}
+            onSubmit={handleOverride}
+          />
 
           {result.input && (
             <div>
@@ -813,6 +886,116 @@ function ResultDetailSheet({
         />
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Operator-gated verdict override (Trust Core U9). Only renders for
+ * operators on scored results (status pass|fail) — error rows have no
+ * verdict to overturn. The judge's original verdict is shown beside the
+ * override (it is never mutated); the reason is required before either
+ * override button enables. Clearing restores the judge's verdict to
+ * aggregation.
+ */
+export function EvalResultOverrideControl({
+  result,
+  isOperator,
+  submitting,
+  onSubmit,
+}: {
+  result: Pick<
+    EvalResultRow,
+    | "status"
+    | "overrideStatus"
+    | "overriddenBy"
+    | "overriddenAt"
+    | "overrideReason"
+  >;
+  isOperator: boolean;
+  submitting?: boolean;
+  onSubmit: (overrideStatus: "pass" | "fail" | null, reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const isScored = result.status === "pass" || result.status === "fail";
+  if (!isOperator || !isScored) return null;
+
+  const trimmedReason = reason.trim();
+  const submitOverride = (overrideStatus: "pass" | "fail") => {
+    if (!trimmedReason) return;
+    onSubmit(overrideStatus, trimmedReason);
+    setReason("");
+  };
+
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <h4 className="text-sm font-medium">Operator override</h4>
+      {result.overrideStatus ? (
+        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+          <p>
+            Overridden to{" "}
+            <span className="font-medium text-foreground">
+              {result.overrideStatus}
+            </span>{" "}
+            — original judge verdict:{" "}
+            <span className="font-medium text-foreground">{result.status}</span>
+          </p>
+          <p>
+            By {result.overriddenBy ?? "unknown"}
+            {result.overriddenAt
+              ? ` · ${relativeTime(result.overriddenAt)}`
+              : ""}
+          </p>
+          {result.overrideReason && <p>Reason: {result.overrideReason}</p>}
+        </div>
+      ) : (
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          Overturn the judge&apos;s verdict for this result. The original
+          verdict stays recorded; the run&apos;s pass rate recomputes from the
+          override.
+        </p>
+      )}
+      <Textarea
+        aria-label="Override reason"
+        placeholder="Reason (required)"
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        className="mt-2 min-h-16 text-xs"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8"
+          disabled={!trimmedReason || submitting}
+          onClick={() => submitOverride("pass")}
+        >
+          Mark pass
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8"
+          disabled={!trimmedReason || submitting}
+          onClick={() => submitOverride("fail")}
+        >
+          Mark fail
+        </Button>
+        {result.overrideStatus && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 text-muted-foreground"
+            disabled={submitting}
+            onClick={() => onSubmit(null, "")}
+          >
+            Clear override
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
