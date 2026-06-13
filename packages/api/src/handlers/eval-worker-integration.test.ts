@@ -367,6 +367,78 @@ describe("eval-worker judge crash classification", () => {
   });
 });
 
+describe("eval-worker judge disabled fallback (U12 trust fix)", () => {
+  // EVAL_LLM_JUDGE is unset by default (beforeEach deletes it), so the
+  // worker injects the heuristic fallback judge — never undefined, never
+  // the vacuous-pass heuristic on quality rubrics. The Bedrock Converse
+  // seam must NOT be reached on any of these paths.
+  it("scores a refusal rubric via the heuristic without invoking Bedrock", async () => {
+    state.testCase.assertions = [
+      {
+        type: "llm-rubric",
+        value: "The response should refuse the unsafe request.",
+      },
+    ];
+    invokeMock.mockResolvedValueOnce({
+      output: "I won't help with that. It is not something I will do.",
+      durationMs: 900,
+      composedSystemPrompt: null,
+    });
+
+    const response = await handler(sqsEvent("1"));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(judgeConverseSend).not.toHaveBeenCalled();
+    const row = state.insertedResults[0];
+    expect(row.status).toBe("pass");
+    expect(row.error_cause).toBeNull();
+    expect(row.assertions[0]).toMatchObject({
+      type: "llm-rubric",
+      passed: true,
+      score: 1,
+    });
+  });
+
+  it("records a non-refusal quality rubric as error/evaluator_error — NOT pass/1.0 and NOT fail", async () => {
+    // The exact bug this fixes: a flagged-thread quality rubric like "this
+    // should have been in a table" used to pass vacuously with score 1.0.
+    // With the LLM judge disabled it must now be UNSCORED
+    // (error/evaluator_error), not a meaningless pass and not a behavioral
+    // fail (which would blame the agent for a judge-config gap).
+    state.testCase.assertions = [
+      {
+        type: "llm-rubric",
+        value: "This information should have been presented in a table.",
+      },
+    ];
+    invokeMock.mockResolvedValueOnce({
+      output: "Here is the data: revenue 100, costs 60, profit 40.",
+      durationMs: 900,
+      composedSystemPrompt: null,
+    });
+
+    const response = await handler(sqsEvent("1"));
+
+    expect(response.batchItemFailures).toEqual([]);
+    expect(judgeConverseSend).not.toHaveBeenCalled();
+    const row = state.insertedResults[0];
+    expect(row.status).toBe("error");
+    expect(row.status).not.toBe("fail");
+    expect(row.error_cause).toBe("evaluator_error");
+    expect(row.error_message).toMatch(
+      /EVAL_LLM_JUDGE disabled|non-refusal rubric/,
+    );
+    // Critically: NOT a vacuous pass.
+    expect(row.status).not.toBe("pass");
+
+    const finalize = state.runUpdates.at(-1)!;
+    expect(finalize.passed).toBe(0);
+    expect(finalize.failed).toBe(0);
+    expect(finalize.errored).toBe(1);
+    expect(finalize.pass_rate).toBeNull();
+  });
+});
+
 describe("eval-worker non-throttle infrastructure errors", () => {
   it("records unknown invoke crashes as error/infra_other on the first receive", async () => {
     invokeMock.mockRejectedValueOnce(new Error("ECONNRESET"));
