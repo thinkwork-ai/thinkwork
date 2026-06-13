@@ -11092,13 +11092,19 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 - Target branch: `main`.
 - Strategy: isolated worktree per implementation unit, PR to `main`, wait for
   CI, squash merge, delete branch, and sync before the next unit.
-- Current implementation unit: U1/U2 Activity slice — Settings nav, direct
-  route guards, and member-safe Activity.
-- Current branch: `codex/role-access-u1-settings-access`.
-- Current worktree: `.Codex/worktrees/role-access-u1-settings-access`.
-- Pull request: [#2429](https://github.com/thinkwork-ai/thinkwork/pull/2429).
-- Status: PR open; CI pending.
+- Current implementation unit: U3 — self profile route and reusable profile UI.
+- Current branch: `codex/role-access-u3-profile`.
+- Current worktree: `.Codex/worktrees/role-access-u3-profile`.
+- Pull request: U1/U2 Activity slice
+  [#2429](https://github.com/thinkwork-ai/thinkwork/pull/2429) merged; U3 PR
+  [#2431](https://github.com/thinkwork-ai/thinkwork/pull/2431) open.
+- Status: U1/U2 merged; U3 PR open, CI pending.
 - Notes:
+  - U1/U2 PR #2429 passed required CI (`cla`, `lint`, `verify`,
+    `typecheck`, and `test`) and was squash merged on 2026-06-13 as
+    `d171f6d1`. The remote branch was deleted and the local worktree/branch
+    were removed.
+  - U3 branch created from `origin/main` at `d171f6d1`.
   - Grouped Unit 1 with the member-safe Activity part of Unit 2 because
     exposing Activity in the member nav without making the Activity routes safe
     would create an unsafe intermediate state.
@@ -11128,3 +11134,21 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - `pnpm dlx prettier@3.8.2 --check ...` passed for touched web and docs
     files after formatting the copied plan doc.
   - `git diff --check` passed.
+  - U3 `pnpm install --frozen-lockfile` completed in the worktree with the same
+    optional `canvas` native build fallback/missing `pkg-config` warning; pnpm
+    returned success.
+  - U3 `pnpm --filter @thinkwork/web codegen` passed and generated the
+    typed `SettingsMe` document.
+  - U3 `pnpm --filter @thinkwork/web exec vite build` passed and regenerated
+    the TanStack route tree for `/profile`; Vite emitted the repo's existing
+    source-map and chunk-size warnings.
+  - U3 focused tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/profile/SelfProfilePage.test.tsx src/components/SpacesSidebar.test.tsx src/components/settings/SettingsUserDetail.test.tsx src/components/settings/UserModelsSection.test.tsx`
+    passed: 4 files, 26 tests.
+  - U3 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U3 `pnpm --filter @thinkwork/web test` passed: 161 files, 1193 tests.
+  - U3 `pnpm --filter @thinkwork/web lint` reported no lint script for the
+    selected package.
+  - U3 `pnpm dlx prettier@3.8.2 --check ...` passed for touched web, generated
+    GraphQL, route, and docs files.
+  - U3 `git diff --check` passed.

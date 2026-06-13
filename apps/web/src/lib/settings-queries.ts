@@ -1012,6 +1012,25 @@ export const SettingsDeleteAgentProfileMutation = graphql(`
 
 // ─── Users (operator-only section) ───────────────────────────────────────
 
+export const SettingsMeQuery = graphql(`
+  query SettingsMe {
+    me {
+      id
+      tenantId
+      email
+      name
+      profile {
+        id
+        title
+        timezone
+        pronouns
+        callBy
+        notes
+      }
+    }
+  }
+`);
+
 export const SettingsTenantMembersQuery = graphql(`
   query SettingsTenantMembers($tenantId: ID!) {
     tenantMembers(tenantId: $tenantId) {

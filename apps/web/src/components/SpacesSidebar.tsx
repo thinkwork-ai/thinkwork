@@ -1,7 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import { LogOut, RefreshCw, Settings, TriangleAlert } from "lucide-react";
+import {
+  CircleUserRound,
+  LogOut,
+  RefreshCw,
+  Settings,
+  TriangleAlert,
+} from "lucide-react";
 import { IconPlug } from "@tabler/icons-react";
 import {
   AlertDialog,
@@ -138,6 +144,9 @@ export function SpacesSidebar() {
               rememberSettingsReturnTo(currentPath);
               navigate({ to: "/settings" });
             }}
+            onOpenProfile={() => {
+              navigate({ to: "/profile" });
+            }}
             onSignOut={() => {
               signOut();
               navigate({
@@ -160,6 +169,7 @@ function AccountMenu({
   reauthPluginNames = [],
   onOpenPlugins,
   onOpenSettings,
+  onOpenProfile,
   onSignOut,
 }: {
   name?: string | null;
@@ -169,6 +179,7 @@ function AccountMenu({
   reauthPluginNames?: string[];
   onOpenPlugins?: () => void;
   onOpenSettings: () => void;
+  onOpenProfile: () => void;
   onSignOut: () => void;
 }) {
   const displayName = name ?? email ?? "Account";
@@ -271,10 +282,15 @@ function AccountMenu({
             <DropdownMenuSeparator />
           </>
         ) : null}
+        <DropdownMenuItem onSelect={onOpenProfile}>
+          <CircleUserRound className="mr-2 h-4 w-4" />
+          Profile
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={onOpenSettings}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => setConfirmSignOutOpen(true)}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
