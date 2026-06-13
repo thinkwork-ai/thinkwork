@@ -23,7 +23,8 @@ status: in_progress
   [#2442](https://github.com/thinkwork-ai/thinkwork/pull/2442) merged as
   `ca0dc6741a3411f5aa97af51fc6222ccf56ba4c2`; U4
   [#2443](https://github.com/thinkwork-ai/thinkwork/pull/2443) merged as
-  `25cd13676a35b331072f0bcc631492b0432503ca`; U5 not opened yet.
+  `25cd13676a35b331072f0bcc631492b0432503ca`; U5
+  [#2444](https://github.com/thinkwork-ai/thinkwork/pull/2444) opened.
 - Status: U1 through U4 completed and merged. U5 implemented locally with
   Company Brain's Cognee substrate using a plan-backed UPGRADE adoption job
   against existing Cognee managed-app rows, a handler_ref marker for
@@ -85,9 +86,8 @@ status: in_progress
   reports all declared tables, indexes, and constraints present. U2 CI then
   passed required checks and PR #2440 was squash merged.
 - Blockers: none.
-- Next action: finish U5 local verification, push/open the U5 PR, monitor CI,
-  fix any failures, squash merge when green, delete branch/worktree, then sync
-  `origin/main` for U6.
+- Next action: monitor U5 CI, fix any failures, squash merge when green, delete
+  branch/worktree, then sync `origin/main` for U6.
 
 ## Deployment Controller Process - 2026-06-09
 
