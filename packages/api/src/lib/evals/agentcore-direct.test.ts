@@ -11,8 +11,8 @@ import {
   evalModelId,
   extractAgentCoreResponseText,
   invokeAgentCoreForEval,
-  restrictMcpConfigsToReplayAllowlist,
-  type EvalReplayAllowedTool,
+  selectReplayMcpTools,
+  type EvalReplayToolOverride,
 } from "./agentcore-direct.js";
 import { resolveAgentRuntimeConfig } from "../resolve-agent-runtime-config.js";
 import type { AgentRuntimeConfig } from "../resolve-agent-runtime-config.js";
@@ -215,14 +215,14 @@ describe("direct AgentCore eval payload", () => {
   });
 });
 
-describe("read-only MCP replay allowlist (U13)", () => {
+describe("read-only MCP tools on replay — default-allow heuristic (U14)", () => {
   const crmServer = {
     name: "lastmile--crm",
     url: "https://crm.example.com/mcp",
     transport: "streamable-http",
     availableTools: [
       "opportunities_list",
-      "opportunity_create",
+      "create_opportunity",
       "opportunity_update",
     ],
   };
@@ -237,13 +237,15 @@ describe("read-only MCP replay allowlist (U13)", () => {
     mcpConfigs: [crmServer, docsServer],
   };
 
-  it("empty allowlist → mcp_configs undefined (default-deny preserved)", () => {
-    expect(
-      restrictMcpConfigsToReplayAllowlist(runtimeWithMcp.mcpConfigs, undefined),
-    ).toBeUndefined();
-    expect(
-      restrictMcpConfigsToReplayAllowlist(runtimeWithMcp.mcpConfigs, []),
-    ).toBeUndefined();
+  it("no overrides → read tools auto-allowed, write tools blocked", () => {
+    const selected = selectReplayMcpTools(runtimeWithMcp.mcpConfigs, undefined);
+    expect(selected).toHaveLength(2);
+    const crm = selected?.find((s) => s.name === "lastmile--crm");
+    // opportunities_list (read) survives; create_opportunity +
+    // opportunity_update (write) are blocked by the heuristic.
+    expect(crm?.tools).toEqual(["opportunities_list"]);
+    const docs = selected?.find((s) => s.name === "docs--reader");
+    expect(docs?.tools).toEqual(["search", "fetch"]);
 
     const payload = buildEvalAgentCorePayload({
       tenantId: "tenant-1",
@@ -253,69 +255,87 @@ describe("read-only MCP replay allowlist (U13)", () => {
       model: null,
       systemPrompt: null,
       runtimeConfig: runtimeWithMcp,
-      replayToolAllowlist: [],
+      replayToolOverrides: [],
     });
-    expect(payload.mcp_configs).toBeUndefined();
-  });
-
-  it("keeps only allowlisted servers, with tools restricted to allowlisted names", () => {
-    const allowlist: EvalReplayAllowedTool[] = [
-      { serverName: "lastmile--crm", toolName: "opportunities_list" },
-    ];
-    const payload = buildEvalAgentCorePayload({
-      tenantId: "tenant-1",
-      agentId: "agent-1",
-      sessionId: "session-1",
-      message: "list opportunities",
-      model: null,
-      systemPrompt: null,
-      runtimeConfig: runtimeWithMcp,
-      replayToolAllowlist: allowlist,
-    });
-
     const configs = payload.mcp_configs as Array<{
       name: string;
       tools: string[];
     }>;
-    expect(configs).toHaveLength(1);
-    expect(configs[0].name).toBe("lastmile--crm");
-    // toolWhitelist carries only the allowlisted read-only tool — the
-    // mutating opportunity_create/opportunity_update are excluded.
-    expect(configs[0].tools).toEqual(["opportunities_list"]);
-    expect(configs[0].tools).not.toContain("opportunity_create");
-    expect(configs[0].tools).not.toContain("opportunity_update");
+    expect(configs).toHaveLength(2);
+    expect(configs.find((c) => c.name === "lastmile--crm")?.tools).toEqual([
+      "opportunities_list",
+    ]);
   });
 
-  it("drops servers that have no allowlisted tool entirely", () => {
-    const restricted = restrictMcpConfigsToReplayAllowlist(
-      runtimeWithMcp.mcpConfigs,
-      [{ serverName: "docs--reader", toolName: "search" }],
+  it("force-allow restores a blocked write tool", () => {
+    const overrides: EvalReplayToolOverride[] = [
+      {
+        serverName: "lastmile--crm",
+        toolName: "create_opportunity",
+        mode: "allow",
+      },
+    ];
+    const selected = selectReplayMcpTools(runtimeWithMcp.mcpConfigs, overrides);
+    const crm = selected?.find((s) => s.name === "lastmile--crm");
+    // The auto-allowed read + the force-allowed write both survive; the
+    // still-blocked opportunity_update does not.
+    expect(crm?.tools).toEqual(["opportunities_list", "create_opportunity"]);
+    expect(crm?.tools).not.toContain("opportunity_update");
+  });
+
+  it("force-block suppresses an auto-allowed read; empties + drops the server", () => {
+    const selected = selectReplayMcpTools(
+      [crmServer], // only the CRM server in scope
+      [
+        {
+          serverName: "lastmile--crm",
+          toolName: "opportunities_list",
+          mode: "block",
+        },
+      ],
     );
-    expect(restricted).toHaveLength(1);
-    expect(restricted?.[0].name).toBe("docs--reader");
-    expect(restricted?.[0].tools).toEqual(["search"]);
-    expect(restricted?.some((s) => s.name === "lastmile--crm")).toBe(false);
+    // opportunities_list (the only read) is force-blocked; the writes stay
+    // blocked → no usable tools → server dropped → undefined.
+    expect(selected).toBeUndefined();
   });
 
-  it("ignores allowlist rows whose tool is not in the server's available tools", () => {
-    const restricted = restrictMcpConfigsToReplayAllowlist(
-      runtimeWithMcp.mcpConfigs,
-      [{ serverName: "lastmile--crm", toolName: "tool_that_does_not_exist" }],
+  it("drops a server with no cached availableTools unless force-allowed", () => {
+    const blindServer = {
+      name: "blind--server",
+      url: "https://blind.example.com/mcp",
+      transport: "streamable-http",
+      availableTools: [],
+    };
+    // No overrides → unclassifiable → no tools → dropped → undefined.
+    expect(selectReplayMcpTools([blindServer], [])).toBeUndefined();
+
+    // A force-allow restores exactly that tool (the runtime still gates via
+    // toolWhitelist).
+    const selected = selectReplayMcpTools(
+      [blindServer],
+      [{ serverName: "blind--server", toolName: "secret_read", mode: "allow" }],
     );
-    // The single allowlisted tool isn't exposed by the server → no usable
-    // tools → server dropped → undefined.
-    expect(restricted).toBeUndefined();
+    expect(selected).toHaveLength(1);
+    expect(selected?.[0].tools).toEqual(["secret_read"]);
   });
 
-  it("an allowlist for a server the agent does not have resolves to no servers", () => {
-    const restricted = restrictMcpConfigsToReplayAllowlist(
-      runtimeWithMcp.mcpConfigs,
-      [{ serverName: "ghost--server", toolName: "anything" }],
+  it("an override for a server the agent does not have is ignored", () => {
+    const selected = selectReplayMcpTools(
+      [docsServer],
+      [{ serverName: "ghost--server", toolName: "anything", mode: "allow" }],
     );
-    expect(restricted).toBeUndefined();
+    // docs--reader still has its read tools by default; the ghost override
+    // matches no server.
+    expect(selected).toHaveLength(1);
+    expect(selected?.[0].name).toBe("docs--reader");
   });
 
-  it("preserves the email/web kill-list and eval_mode regardless of the allowlist", () => {
+  it("no mcp servers at all → undefined", () => {
+    expect(selectReplayMcpTools([], undefined)).toBeUndefined();
+    expect(selectReplayMcpTools(undefined as never, undefined)).toBeUndefined();
+  });
+
+  it("preserves the email/web kill-list and eval_mode regardless of overrides", () => {
     const payload = buildEvalAgentCorePayload({
       tenantId: "tenant-1",
       agentId: "agent-1",
@@ -324,8 +344,12 @@ describe("read-only MCP replay allowlist (U13)", () => {
       model: null,
       systemPrompt: null,
       runtimeConfig: runtimeWithMcp,
-      replayToolAllowlist: [
-        { serverName: "lastmile--crm", toolName: "opportunities_list" },
+      replayToolOverrides: [
+        {
+          serverName: "lastmile--crm",
+          toolName: "create_opportunity",
+          mode: "allow",
+        },
       ],
     });
 
@@ -334,6 +358,21 @@ describe("read-only MCP replay allowlist (U13)", () => {
     expect(payload.web_extract_config).toBeUndefined();
     expect(payload.eval_mode).toBe(true);
     expect(payload.use_memory).toBe(false);
+  });
+
+  it("synthetic (no-mcp) runtime config leaves mcp_configs undefined", () => {
+    // The base runtimeConfig has mcpConfigs: [] — the non-flagged synthetic
+    // path is unaffected.
+    const payload = buildEvalAgentCorePayload({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      sessionId: "session-1",
+      message: "hello",
+      model: null,
+      systemPrompt: null,
+      runtimeConfig,
+    });
+    expect(payload.mcp_configs).toBeUndefined();
   });
 });
 

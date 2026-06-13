@@ -3,6 +3,7 @@ import {
   getApiAuthSecret,
   getAppsyncApiKey,
 } from "@thinkwork/runtime-config";
+import { classifyMcpToolAccess } from "@thinkwork/evals-core";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import {
   resolveAgentRuntimeConfig,
@@ -106,68 +107,103 @@ export interface EvalReplayHistoryMessage {
 }
 
 /**
- * A single read-only MCP tool an operator has allowlisted for replay
- * (Trust Core U13). Default-deny: replay carries an MCP server ONLY if at
- * least one of its tools appears here, and only the listed tools become
- * that server's toolWhitelist. Mutating tools and the email/web kill-list
- * stay blocked regardless of what's listed.
+ * A single operator OVERRIDE for an MCP tool on replay (Trust Core U14).
+ * The default behavior is heuristic (read-shaped tools run, write-shaped
+ * tools are blocked — classifyMcpToolAccess); an override flips that
+ * decision for one (server, tool):
+ *   - mode "allow" — force-allow a tool the heuristic would block (e.g. a
+ *     trusted write).
+ *   - mode "block" — force-block a tool the heuristic would allow (e.g.
+ *     suppress a read).
+ * The email/web kill-list stays blocked regardless of any override.
  */
-export interface EvalReplayAllowedTool {
+export interface EvalReplayToolOverride {
   serverName: string;
   toolName: string;
+  mode: "allow" | "block";
 }
 
 /**
- * Restrict the agent's resolved MCP servers to the operator's read-only
- * replay allowlist (Trust Core U13). Returns the subset of
- * `runtimeConfig.mcpConfigs` that has ≥1 allowlisted tool, with each
- * surviving entry's `tools` (the runtime's per-server toolWhitelist) set to
- * exactly the allowlisted tool names for that server.
+ * Back-compat alias for the U13 name. The shape now carries `mode`; older
+ * call sites that constructed `{ serverName, toolName }` are gone, but the
+ * exported name is retained to avoid a churny rename across importers.
  *
- * Default-deny is preserved by construction: an empty allowlist yields
- * `undefined` (no servers), matching the pre-U13 `mcp_configs: undefined`
- * behavior. Servers with no allowlisted tool are dropped entirely.
+ * @deprecated Use {@link EvalReplayToolOverride}.
  */
-export function restrictMcpConfigsToReplayAllowlist(
+export type EvalReplayAllowedTool = EvalReplayToolOverride;
+
+/**
+ * Select the MCP tools that run on replay (Trust Core U14).
+ *
+ * New default-ALLOW model: for each of the agent's resolved MCP servers,
+ * the effective tool set is its `availableTools` filtered to
+ *   { t | (classify(t) === "read" OR force-allowed(server, t))
+ *         AND NOT force-blocked(server, t) }
+ * where classify is the name heuristic (classifyMcpToolAccess) and the
+ * force-allow/force-block sets come from the operator overrides. The
+ * surviving tools become the server's `tools` (the runtime's per-server
+ * toolWhitelist).
+ *
+ *   - Empty overrides + servers that expose read tools → those reads run
+ *     automatically (the new default; no operator setup needed).
+ *   - A server whose effective set is empty is dropped entirely.
+ *   - A server with NO cached `availableTools` can't be classified, so it
+ *     contributes ONLY its force-allowed tools (none → server dropped).
+ *   - No servers survive → `undefined`, matching the pre-U13
+ *     `mcp_configs: undefined` behavior.
+ */
+export function selectReplayMcpTools(
   mcpConfigs: AgentRuntimeConfig["mcpConfigs"],
-  allowlist: EvalReplayAllowedTool[] | undefined,
+  overrides: EvalReplayToolOverride[] | undefined,
 ): AgentRuntimeConfig["mcpConfigs"] | undefined {
-  if (!allowlist || allowlist.length === 0) return undefined;
   if (!mcpConfigs || mcpConfigs.length === 0) return undefined;
 
-  // Group allowlisted tool names by server. Deduped so a server's
-  // toolWhitelist never repeats a tool.
-  const allowedByServer = new Map<string, Set<string>>();
-  for (const entry of allowlist) {
+  // Index overrides by server → tool → mode. Last write wins per tool.
+  const forceAllow = new Map<string, Set<string>>();
+  const forceBlock = new Map<string, Set<string>>();
+  for (const entry of overrides ?? []) {
     const server = entry.serverName?.trim();
     const tool = entry.toolName?.trim();
     if (!server || !tool) continue;
-    const set = allowedByServer.get(server) ?? new Set<string>();
+    const target = entry.mode === "block" ? forceBlock : forceAllow;
+    const other = entry.mode === "block" ? forceAllow : forceBlock;
+    const set = target.get(server) ?? new Set<string>();
     set.add(tool);
-    allowedByServer.set(server, set);
+    target.set(server, set);
+    // A tool can't be both force-allowed and force-blocked; the latest
+    // override mode for it wins.
+    other.get(server)?.delete(tool);
   }
-  if (allowedByServer.size === 0) return undefined;
 
-  const restricted = mcpConfigs
+  const selected = mcpConfigs
     .map((server) => {
-      const allowed = allowedByServer.get(server.name);
-      if (!allowed || allowed.size === 0) return null;
-      // Intersect with the server's actually-available tools when the
-      // runtime config knows them, so a stale allowlist row can't smuggle
-      // a tool the server doesn't expose; absent availableTools, trust the
-      // operator allowlist (the runtime still gates via toolWhitelist).
-      const availableNames = new Set(
-        (server.availableTools ?? []).map((t) => t.trim()).filter(Boolean),
-      );
-      const tools = [...allowed].filter((tool) =>
-        availableNames.size > 0 ? availableNames.has(tool) : true,
-      );
+      const allow = forceAllow.get(server.name) ?? new Set<string>();
+      const block = forceBlock.get(server.name) ?? new Set<string>();
+      const available = (server.availableTools ?? [])
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+      let tools: string[];
+      if (available.length > 0) {
+        // Classifiable server: read-shaped tools run by default; overrides
+        // flip individual decisions.
+        tools = available.filter((tool) => {
+          if (block.has(tool)) return false;
+          if (allow.has(tool)) return true;
+          return classifyMcpToolAccess(tool) === "read";
+        });
+      } else {
+        // Unclassifiable server (no cached tool list): include only its
+        // force-allowed tools that aren't also force-blocked.
+        tools = [...allow].filter((tool) => !block.has(tool));
+      }
+
       if (tools.length === 0) return null;
       return { ...server, tools };
     })
     .filter((server): server is NonNullable<typeof server> => server !== null);
 
-  return restricted.length > 0 ? restricted : undefined;
+  return selected.length > 0 ? selected : undefined;
 }
 
 export function buildEvalAgentCorePayload(input: {
@@ -185,16 +221,16 @@ export function buildEvalAgentCorePayload(input: {
    */
   messagesHistory?: EvalReplayHistoryMessage[];
   /**
-   * Operator-curated read-only MCP tool allowlist for replay (U13).
-   * Default-deny: omitted/empty → no MCP servers reach the runtime
-   * (`mcp_configs: undefined`, the pre-U13 safe behavior).
+   * Operator MCP tool overrides for replay (U14). Default-ALLOW: read-shaped
+   * tools run automatically by name heuristic even with no overrides; each
+   * override force-allows a blocked write or force-blocks an allowed read.
    */
-  replayToolAllowlist?: EvalReplayAllowedTool[];
+  replayToolOverrides?: EvalReplayToolOverride[];
 }): Record<string, unknown> {
   const runtimeConfig = input.runtimeConfig;
-  const mcpConfigs = restrictMcpConfigsToReplayAllowlist(
+  const mcpConfigs = selectReplayMcpTools(
     runtimeConfig.mcpConfigs,
-    input.replayToolAllowlist,
+    input.replayToolOverrides,
   );
 
   return {
@@ -243,11 +279,12 @@ export function buildEvalAgentCorePayload(input: {
     knowledge_bases: runtimeConfig.knowledgeBasesConfig,
     trigger_channel: "eval",
     guardrail_config: runtimeConfig.guardrailConfig || undefined,
-    // Read-only MCP tools on replay (U13): default-deny via the per-tenant
-    // operator allowlist. Each surviving server carries only its
-    // allowlisted tools as the runtime's per-server toolWhitelist; mutating
-    // tools and the email/web kill-list above stay blocked. Empty allowlist
-    // → undefined (the pre-U13 strip-everything default).
+    // Read-only MCP tools on replay (U14): default-ALLOW read-shaped tools
+    // by name heuristic, block write-shaped ones; operator overrides flip
+    // individual decisions. Each surviving server carries its selected tools
+    // as the runtime's per-server toolWhitelist; the email/web kill-list
+    // above stays blocked. No servers/tools survive → undefined (the pre-U13
+    // strip-everything default).
     mcp_configs: mcpConfigs,
     blocked_tools:
       runtimeConfig.blockedTools.length > 0
@@ -266,8 +303,8 @@ export async function invokeAgentCoreForEval(input: {
   systemPrompt?: string | null;
   /** Flagged-thread replay history (U8) — see buildEvalAgentCorePayload. */
   messagesHistory?: EvalReplayHistoryMessage[];
-  /** Read-only MCP tool allowlist for replay (U13). Default-deny. */
-  replayToolAllowlist?: EvalReplayAllowedTool[];
+  /** Operator MCP tool overrides for replay (U14). Default-allow heuristic. */
+  replayToolOverrides?: EvalReplayToolOverride[];
 }): Promise<{
   output: string;
   durationMs: number;
@@ -314,7 +351,7 @@ async function invokeAgentCoreForEvalOnce(input: {
   model: string | null | undefined;
   systemPrompt?: string | null;
   messagesHistory?: EvalReplayHistoryMessage[];
-  replayToolAllowlist?: EvalReplayAllowedTool[];
+  replayToolOverrides?: EvalReplayToolOverride[];
 }): Promise<{
   output: string;
   durationMs: number;

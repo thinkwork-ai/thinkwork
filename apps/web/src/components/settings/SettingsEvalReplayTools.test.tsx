@@ -9,14 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery } from "urql";
 
 import {
-  AddEvalReplayAllowedToolMutation,
+  AddEvalReplayToolOverrideMutation,
   EvalReplayAvailableMcpToolsQuery,
   EvalReplayToolAllowlistQuery,
-  RemoveEvalReplayAllowedToolMutation,
+  RemoveEvalReplayToolOverrideMutation,
 } from "@/lib/evaluation-queries";
 import {
   SettingsEvalReplayTools,
-  groupAllowlistByServer,
+  resolveToolDisposition,
 } from "./SettingsEvalReplayTools";
 
 vi.mock("urql", async (importOriginal) => {
@@ -29,8 +29,9 @@ vi.mock("urql", async (importOriginal) => {
   };
 });
 
+let isOperatorValue = true;
 vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({ tenantId: "tenant-1", isOperator: true }),
+  useTenant: () => ({ tenantId: "tenant-1", isOperator: isOperatorValue }),
 }));
 
 // Capture the header action JSX so the test can render + click the add
@@ -42,16 +43,17 @@ vi.mock("@/context/PageHeaderContext", () => ({
   },
 }));
 
-const addToolMock = vi.fn();
-const removeToolMock = vi.fn();
+const addOverrideMock = vi.fn();
+const removeOverrideMock = vi.fn();
 
-const allowlistData = {
+const overridesData = {
   evalReplayToolAllowlist: [
     {
-      id: "allow-1",
+      id: "ov-1",
       tenantId: "tenant-1",
       serverName: "lastmile--crm",
-      toolName: "opportunities_list",
+      toolName: "create_opportunity",
+      mode: "allow",
       createdAt: "2026-06-13T00:00:00Z",
     },
   ],
@@ -63,24 +65,33 @@ const availableData = {
       serverName: "lastmile--crm",
       displayName: "LastMile CRM",
       tools: [
-        { name: "opportunities_list", description: "List opps" },
-        { name: "contacts_list", description: "List contacts" },
+        {
+          name: "opportunities_list",
+          description: "List opps",
+          access: "read",
+        },
+        {
+          name: "create_opportunity",
+          description: "Create an opp",
+          access: "write",
+        },
       ],
     },
   ],
 };
 
 beforeEach(() => {
-  addToolMock.mockReset();
-  addToolMock.mockResolvedValue({ data: {}, error: undefined });
-  removeToolMock.mockReset();
-  removeToolMock.mockResolvedValue({ data: {}, error: undefined });
+  isOperatorValue = true;
+  addOverrideMock.mockReset();
+  addOverrideMock.mockResolvedValue({ data: {}, error: undefined });
+  removeOverrideMock.mockReset();
+  removeOverrideMock.mockResolvedValue({ data: {}, error: undefined });
 
   vi.mocked(useQuery).mockImplementation((args) => {
     const { query } = args as { query: unknown };
     const data =
       query === EvalReplayToolAllowlistQuery
-        ? allowlistData
+        ? overridesData
         : query === EvalReplayAvailableMcpToolsQuery
           ? availableData
           : undefined;
@@ -91,10 +102,10 @@ beforeEach(() => {
   });
   vi.mocked(useMutation).mockImplementation((mutation) => {
     const fn =
-      mutation === AddEvalReplayAllowedToolMutation
-        ? addToolMock
-        : mutation === RemoveEvalReplayAllowedToolMutation
-          ? removeToolMock
+      mutation === AddEvalReplayToolOverrideMutation
+        ? addOverrideMock
+        : mutation === RemoveEvalReplayToolOverrideMutation
+          ? removeOverrideMock
           : vi.fn();
     return [{ fetching: false }, fn] as unknown as ReturnType<
       typeof useMutation
@@ -104,68 +115,85 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe("groupAllowlistByServer", () => {
-  it("groups rows by server and sorts tools", () => {
-    const grouped = groupAllowlistByServer([
-      {
-        id: "2",
-        serverName: "b",
-        toolName: "zebra",
-        createdAt: "",
-      },
-      { id: "1", serverName: "b", toolName: "apple", createdAt: "" },
-      { id: "3", serverName: "a", toolName: "cat", createdAt: "" },
-    ]);
-    expect(grouped.map((g) => g.serverName)).toEqual(["a", "b"]);
-    expect(grouped[1].tools.map((t) => t.toolName)).toEqual(["apple", "zebra"]);
+describe("resolveToolDisposition", () => {
+  it("maps heuristic access + override to a disposition", () => {
+    expect(resolveToolDisposition("read", undefined)).toBe("auto-allowed");
+    expect(resolveToolDisposition("write", undefined)).toBe("blocked");
+    expect(resolveToolDisposition("write", "allow")).toBe("force-allowed");
+    expect(resolveToolDisposition("read", "block")).toBe("force-blocked");
   });
 });
 
-describe("SettingsEvalReplayTools (U13)", () => {
-  it("renders allowed server/tool entries", () => {
+describe("SettingsEvalReplayTools (U14)", () => {
+  it("shows the default-allow framing and each tool's classification", () => {
     render(<SettingsEvalReplayTools />);
-    expect(screen.getByText("lastmile--crm")).toBeTruthy();
+    expect(
+      screen.getByText("Read-only tools already run on replay"),
+    ).toBeTruthy();
+    // The read tool shows auto-allowed; the write tool shows force-allowed
+    // because an 'allow' override exists for it.
     expect(screen.getByText("opportunities_list")).toBeTruthy();
+    expect(screen.getAllByText("Auto-allowed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Force-allowed").length).toBeGreaterThan(0);
   });
 
-  it("adds a tool via the dialog", async () => {
+  it("lists the operator override in the Overrides section", () => {
+    render(<SettingsEvalReplayTools />);
+    expect(screen.getByText("Overrides")).toBeTruthy();
+    expect(screen.getByText("lastmile--crm/create_opportunity")).toBeTruthy();
+  });
+
+  it("adds a force-block override via the dialog", async () => {
     const { rerender } = render(<SettingsEvalReplayTools />);
-    // Open the dialog via the captured header "Allow a tool" button.
     render(<>{capturedHeaderAction}</>);
-    fireEvent.click(screen.getByRole("button", { name: "Allow a tool" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add override" }));
     rerender(<SettingsEvalReplayTools />);
 
     const serverInput = await screen.findByLabelText("Server");
     const toolInput = screen.getByLabelText("Tool");
     fireEvent.change(serverInput, { target: { value: "lastmile--crm" } });
-    fireEvent.change(toolInput, { target: { value: "contacts_list" } });
+    fireEvent.change(toolInput, { target: { value: "opportunities_list" } });
+    // Toggle to force-block.
+    fireEvent.click(screen.getByRole("button", { name: "Force-block" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Allow tool" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add override" }));
 
     await waitFor(() => {
-      expect(addToolMock).toHaveBeenCalledWith({
+      expect(addOverrideMock).toHaveBeenCalledWith({
         tenantId: "tenant-1",
         serverName: "lastmile--crm",
-        toolName: "contacts_list",
+        toolName: "opportunities_list",
+        mode: "block",
       });
     });
   });
 
-  it("removes a tool after confirming", async () => {
+  it("removes an override after confirming", async () => {
     render(<SettingsEvalReplayTools />);
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Remove lastmile--crm/opportunities_list",
+        name: "Remove override lastmile--crm/create_opportunity",
       }),
     );
 
-    // Confirm in the alert dialog.
     const confirm = await screen.findByRole("button", { name: "Remove" });
     fireEvent.click(confirm);
 
     await waitFor(() => {
-      expect(removeToolMock).toHaveBeenCalledWith({ id: "allow-1" });
+      expect(removeOverrideMock).toHaveBeenCalledWith({ id: "ov-1" });
     });
+  });
+
+  it("hides operator affordances for a non-operator", () => {
+    isOperatorValue = false;
+    render(<SettingsEvalReplayTools />);
+    // No header add button captured; no per-row remove button.
+    expect(capturedHeaderAction).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Remove override lastmile--crm/create_opportunity",
+      }),
+    ).toBeNull();
   });
 });

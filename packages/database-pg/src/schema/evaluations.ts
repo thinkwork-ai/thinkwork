@@ -322,16 +322,20 @@ export const evalResults = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// eval_replay_tool_allowlist — per-tenant read-only MCP tool allowlist for
-// replay (Evaluations Trust Core U13).
+// eval_replay_tool_allowlist — per-tenant MCP tool OVERRIDE list for replay
+// (Evaluations Trust Core U13 → reworked U14).
 //
-// Replay strips all MCP tools by default (mcp_configs undefined in
-// buildEvalAgentCorePayload) so a flagged thread that needed an MCP tool
-// degrades to "I can't access tools" and the quality eval tests nothing.
-// This table is a DEFAULT-DENY allowlist: an MCP tool is restored on replay
-// ONLY if an operator explicitly lists it here for the tenant. Mutating tools
-// and the outbound side-effect kill-list (email/web) stay blocked
-// unconditionally. Per-tool granularity — one row per (server_name, tool_name).
+// Replay now DEFAULT-ALLOWS read-shaped MCP tools (classified by name via
+// @thinkwork/evals-core classifyMcpToolAccess) and blocks write-shaped tools,
+// so a flagged thread's read tools run automatically without operator setup.
+// The outbound side-effect kill-list (email/web) stays blocked
+// unconditionally. This table is the optional OVERRIDE layer:
+//   * mode 'allow' — force-allow a tool the heuristic would block (e.g. a
+//     trusted write).
+//   * mode 'block' — force-block a tool the heuristic would allow (e.g.
+//     suppress a read).
+// Per-tool granularity — one row per (server_name, tool_name); toggling mode
+// UPDATEs the existing row. (Name retained for migration continuity.)
 // ---------------------------------------------------------------------------
 
 export const evalReplayToolAllowlist = pgTable(
@@ -349,6 +353,11 @@ export const evalReplayToolAllowlist = pgTable(
     // tool_name: the per-server tool the runtime exposes via the entry's
     // toolWhitelist (e.g. "opportunities_list").
     tool_name: text("tool_name").notNull(),
+    // mode: override direction (enum-by-comment) — 'allow' force-allows a
+    // tool the heuristic blocks; 'block' force-blocks a tool the heuristic
+    // allows. Existing (pre-U14) rows default to 'allow', matching their
+    // prior force-allow meaning. Guarded by a CHECK constraint in 0164.
+    mode: text("mode").notNull().default("allow"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

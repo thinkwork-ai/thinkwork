@@ -1241,6 +1241,7 @@ export type EvalReplayAllowedTool = {
   __typename?: "EvalReplayAllowedTool";
   createdAt: Scalars["AWSDateTime"]["output"];
   id: Scalars["ID"]["output"];
+  mode: Scalars["String"]["output"];
   serverName: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   toolName: Scalars["String"]["output"];
@@ -1255,6 +1256,7 @@ export type EvalReplayMcpServer = {
 
 export type EvalReplayMcpTool = {
   __typename?: "EvalReplayMcpTool";
+  access: Scalars["String"]["output"];
   description?: Maybe<Scalars["String"]["output"]>;
   name: Scalars["String"]["output"];
 };
@@ -2295,7 +2297,7 @@ export type Mutation = {
    */
   activatePlugin: ActivatePluginResult;
   addEvalDatasetCase: EvalTestCase;
-  addEvalReplayAllowedTool: EvalReplayAllowedTool;
+  addEvalReplayToolOverride: EvalReplayAllowedTool;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addSpaceMember: SpaceMember;
@@ -2459,7 +2461,7 @@ export type Mutation = {
   rejectOntologyChangeSet: OntologyChangeSet;
   releaseThread: Thread;
   removeEvalDatasetCase: EvalDataset;
-  removeEvalReplayAllowedTool: Scalars["Boolean"]["output"];
+  removeEvalReplayToolOverride: Scalars["Boolean"]["output"];
   removeInboxItemLink: Scalars["Boolean"]["output"];
   removeSpaceMember: Scalars["Boolean"]["output"];
   /** Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey. */
@@ -2593,7 +2595,8 @@ export type MutationAddEvalDatasetCaseArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
-export type MutationAddEvalReplayAllowedToolArgs = {
+export type MutationAddEvalReplayToolOverrideArgs = {
+  mode: Scalars["String"]["input"];
   serverName: Scalars["String"]["input"];
   tenantId: Scalars["ID"]["input"];
   toolName: Scalars["String"]["input"];
@@ -3118,7 +3121,7 @@ export type MutationRemoveEvalDatasetCaseArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
-export type MutationRemoveEvalReplayAllowedToolArgs = {
+export type MutationRemoveEvalReplayToolOverrideArgs = {
   id: Scalars["ID"]["input"];
 };
 
@@ -8023,6 +8026,7 @@ export type EvalReplayToolAllowlistQuery = {
     tenantId: string;
     serverName: string;
     toolName: string;
+    mode: string;
     createdAt: any;
   }>;
 };
@@ -8041,35 +8045,38 @@ export type EvalReplayAvailableMcpToolsQuery = {
       __typename?: "EvalReplayMcpTool";
       name: string;
       description?: string | null;
+      access: string;
     }>;
   }>;
 };
 
-export type AddEvalReplayAllowedToolMutationVariables = Exact<{
+export type AddEvalReplayToolOverrideMutationVariables = Exact<{
   tenantId: Scalars["ID"]["input"];
   serverName: Scalars["String"]["input"];
   toolName: Scalars["String"]["input"];
+  mode: Scalars["String"]["input"];
 }>;
 
-export type AddEvalReplayAllowedToolMutation = {
+export type AddEvalReplayToolOverrideMutation = {
   __typename?: "Mutation";
-  addEvalReplayAllowedTool: {
+  addEvalReplayToolOverride: {
     __typename?: "EvalReplayAllowedTool";
     id: string;
     tenantId: string;
     serverName: string;
     toolName: string;
+    mode: string;
     createdAt: any;
   };
 };
 
-export type RemoveEvalReplayAllowedToolMutationVariables = Exact<{
+export type RemoveEvalReplayToolOverrideMutationVariables = Exact<{
   id: Scalars["ID"]["input"];
 }>;
 
-export type RemoveEvalReplayAllowedToolMutation = {
+export type RemoveEvalReplayToolOverrideMutation = {
   __typename?: "Mutation";
-  removeEvalReplayAllowedTool: boolean;
+  removeEvalReplayToolOverride: boolean;
 };
 
 export type FlagThreadForEvalMutationVariables = Exact<{
@@ -12990,6 +12997,7 @@ export const EvalReplayToolAllowlistDocument = {
                 { kind: "Field", name: { kind: "Name", value: "tenantId" } },
                 { kind: "Field", name: { kind: "Name", value: "serverName" } },
                 { kind: "Field", name: { kind: "Name", value: "toolName" } },
+                { kind: "Field", name: { kind: "Name", value: "mode" } },
                 { kind: "Field", name: { kind: "Name", value: "createdAt" } },
               ],
             },
@@ -13054,6 +13062,10 @@ export const EvalReplayAvailableMcpToolsDocument = {
                         kind: "Field",
                         name: { kind: "Name", value: "description" },
                       },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "access" },
+                      },
                     ],
                   },
                 },
@@ -13068,13 +13080,13 @@ export const EvalReplayAvailableMcpToolsDocument = {
   EvalReplayAvailableMcpToolsQuery,
   EvalReplayAvailableMcpToolsQueryVariables
 >;
-export const AddEvalReplayAllowedToolDocument = {
+export const AddEvalReplayToolOverrideDocument = {
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "mutation",
-      name: { kind: "Name", value: "AddEvalReplayAllowedTool" },
+      name: { kind: "Name", value: "AddEvalReplayToolOverride" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
@@ -13115,13 +13127,24 @@ export const AddEvalReplayAllowedToolDocument = {
             },
           },
         },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "mode" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
       ],
       selectionSet: {
         kind: "SelectionSet",
         selections: [
           {
             kind: "Field",
-            name: { kind: "Name", value: "addEvalReplayAllowedTool" },
+            name: { kind: "Name", value: "addEvalReplayToolOverride" },
             arguments: [
               {
                 kind: "Argument",
@@ -13147,6 +13170,14 @@ export const AddEvalReplayAllowedToolDocument = {
                   name: { kind: "Name", value: "toolName" },
                 },
               },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "mode" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "mode" },
+                },
+              },
             ],
             selectionSet: {
               kind: "SelectionSet",
@@ -13155,6 +13186,7 @@ export const AddEvalReplayAllowedToolDocument = {
                 { kind: "Field", name: { kind: "Name", value: "tenantId" } },
                 { kind: "Field", name: { kind: "Name", value: "serverName" } },
                 { kind: "Field", name: { kind: "Name", value: "toolName" } },
+                { kind: "Field", name: { kind: "Name", value: "mode" } },
                 { kind: "Field", name: { kind: "Name", value: "createdAt" } },
               ],
             },
@@ -13164,16 +13196,16 @@ export const AddEvalReplayAllowedToolDocument = {
     },
   ],
 } as unknown as DocumentNode<
-  AddEvalReplayAllowedToolMutation,
-  AddEvalReplayAllowedToolMutationVariables
+  AddEvalReplayToolOverrideMutation,
+  AddEvalReplayToolOverrideMutationVariables
 >;
-export const RemoveEvalReplayAllowedToolDocument = {
+export const RemoveEvalReplayToolOverrideDocument = {
   kind: "Document",
   definitions: [
     {
       kind: "OperationDefinition",
       operation: "mutation",
-      name: { kind: "Name", value: "RemoveEvalReplayAllowedTool" },
+      name: { kind: "Name", value: "RemoveEvalReplayToolOverride" },
       variableDefinitions: [
         {
           kind: "VariableDefinition",
@@ -13189,7 +13221,7 @@ export const RemoveEvalReplayAllowedToolDocument = {
         selections: [
           {
             kind: "Field",
-            name: { kind: "Name", value: "removeEvalReplayAllowedTool" },
+            name: { kind: "Name", value: "removeEvalReplayToolOverride" },
             arguments: [
               {
                 kind: "Argument",
@@ -13206,8 +13238,8 @@ export const RemoveEvalReplayAllowedToolDocument = {
     },
   ],
 } as unknown as DocumentNode<
-  RemoveEvalReplayAllowedToolMutation,
-  RemoveEvalReplayAllowedToolMutationVariables
+  RemoveEvalReplayToolOverrideMutation,
+  RemoveEvalReplayToolOverrideMutationVariables
 >;
 export const FlagThreadForEvalDocument = {
   kind: "Document",

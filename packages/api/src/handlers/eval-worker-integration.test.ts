@@ -88,8 +88,12 @@ interface FakeDbState {
   testCase: Record<string, unknown>;
   insertedResults: Array<Record<string, any>>;
   runUpdates: Array<Record<string, any>>;
-  // Read-only MCP replay allowlist rows (U13). Empty = default-deny.
-  replayAllowlist: Array<{ server_name: string; tool_name: string }>;
+  // MCP replay tool override rows (U14). Empty = default-allow heuristic.
+  replayOverrides: Array<{
+    server_name: string;
+    tool_name: string;
+    mode: string;
+  }>;
 }
 
 let state: FakeDbState;
@@ -102,7 +106,7 @@ function createFakeDb(dbState: FakeDbState) {
         if (table === evalRuns) return [dbState.run];
         if (table === evalTestCases) return [dbState.testCase];
         if (table === tenants) return [{ slug: "acme" }];
-        if (table === evalReplayToolAllowlist) return dbState.replayAllowlist;
+        if (table === evalReplayToolAllowlist) return dbState.replayOverrides;
         if (table === evalResults) {
           return dbState.insertedResults.map((row, index) => ({
             id: `result-${index + 1}`,
@@ -228,7 +232,7 @@ beforeEach(() => {
     },
     insertedResults: [],
     runUpdates: [],
-    replayAllowlist: [],
+    replayOverrides: [],
   };
   fakeDb = createFakeDb(state);
 });
@@ -484,8 +488,8 @@ describe("eval-worker non-throttle infrastructure errors", () => {
   });
 });
 
-describe("eval-worker read-only MCP replay allowlist (U13)", () => {
-  it("default-deny: an empty tenant allowlist threads an empty list into the invoke", async () => {
+describe("eval-worker MCP replay tool overrides (U14)", () => {
+  it("default-allow: no override rows thread an empty overrides list into the invoke", async () => {
     invokeMock.mockResolvedValueOnce({
       output: "I refuse.",
       durationMs: 50,
@@ -495,14 +499,23 @@ describe("eval-worker read-only MCP replay allowlist (U13)", () => {
     await handler(sqsEvent("1"));
 
     expect(invokeMock).toHaveBeenCalledTimes(1);
-    // Empty allowlist → buildEvalAgentCorePayload yields mcp_configs
-    // undefined downstream (the pre-U13 strip-everything default).
-    expect(invokeMock.mock.calls[0][0].replayToolAllowlist).toEqual([]);
+    // No overrides → buildEvalAgentCorePayload still runs read-shaped tools
+    // by heuristic downstream (the new default-allow behavior).
+    expect(invokeMock.mock.calls[0][0].replayToolOverrides).toEqual([]);
   });
 
-  it("threads the tenant's loaded allowlist into the invoke", async () => {
-    state.replayAllowlist = [
-      { server_name: "lastmile--crm", tool_name: "opportunities_list" },
+  it("threads the tenant's loaded overrides (with mode) into the invoke", async () => {
+    state.replayOverrides = [
+      {
+        server_name: "lastmile--crm",
+        tool_name: "create_opportunity",
+        mode: "allow",
+      },
+      {
+        server_name: "docs--reader",
+        tool_name: "search",
+        mode: "block",
+      },
     ];
     invokeMock.mockResolvedValueOnce({
       output: "I refuse.",
@@ -512,8 +525,13 @@ describe("eval-worker read-only MCP replay allowlist (U13)", () => {
 
     await handler(sqsEvent("1"));
 
-    expect(invokeMock.mock.calls[0][0].replayToolAllowlist).toEqual([
-      { serverName: "lastmile--crm", toolName: "opportunities_list" },
+    expect(invokeMock.mock.calls[0][0].replayToolOverrides).toEqual([
+      {
+        serverName: "lastmile--crm",
+        toolName: "create_opportunity",
+        mode: "allow",
+      },
+      { serverName: "docs--reader", toolName: "search", mode: "block" },
     ]);
   });
 });

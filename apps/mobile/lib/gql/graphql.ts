@@ -1241,6 +1241,7 @@ export type EvalReplayAllowedTool = {
   __typename?: "EvalReplayAllowedTool";
   createdAt: Scalars["AWSDateTime"]["output"];
   id: Scalars["ID"]["output"];
+  mode: Scalars["String"]["output"];
   serverName: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   toolName: Scalars["String"]["output"];
@@ -1255,6 +1256,7 @@ export type EvalReplayMcpServer = {
 
 export type EvalReplayMcpTool = {
   __typename?: "EvalReplayMcpTool";
+  access: Scalars["String"]["output"];
   description?: Maybe<Scalars["String"]["output"]>;
   name: Scalars["String"]["output"];
 };
@@ -2295,7 +2297,7 @@ export type Mutation = {
    */
   activatePlugin: ActivatePluginResult;
   addEvalDatasetCase: EvalTestCase;
-  addEvalReplayAllowedTool: EvalReplayAllowedTool;
+  addEvalReplayToolOverride: EvalReplayAllowedTool;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
   addSpaceMember: SpaceMember;
@@ -2459,7 +2461,7 @@ export type Mutation = {
   rejectOntologyChangeSet: OntologyChangeSet;
   releaseThread: Thread;
   removeEvalDatasetCase: EvalDataset;
-  removeEvalReplayAllowedTool: Scalars["Boolean"]["output"];
+  removeEvalReplayToolOverride: Scalars["Boolean"]["output"];
   removeInboxItemLink: Scalars["Boolean"]["output"];
   removeSpaceMember: Scalars["Boolean"]["output"];
   /** Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey. */
@@ -2593,7 +2595,8 @@ export type MutationAddEvalDatasetCaseArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
-export type MutationAddEvalReplayAllowedToolArgs = {
+export type MutationAddEvalReplayToolOverrideArgs = {
+  mode: Scalars["String"]["input"];
   serverName: Scalars["String"]["input"];
   tenantId: Scalars["ID"]["input"];
   toolName: Scalars["String"]["input"];
@@ -3118,7 +3121,7 @@ export type MutationRemoveEvalDatasetCaseArgs = {
   tenantId: Scalars["ID"]["input"];
 };
 
-export type MutationRemoveEvalReplayAllowedToolArgs = {
+export type MutationRemoveEvalReplayToolOverrideArgs = {
   id: Scalars["ID"]["input"];
 };
 

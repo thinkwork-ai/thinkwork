@@ -330,12 +330,14 @@ input UpdateEvalDatasetCaseInput {
 }
 
 # ────────────────────────────────────────────────────────────────────
-# Read-only MCP replay allowlist (Trust Core U13)
+# MCP replay tool overrides (Trust Core U13 → reworked U14)
 #
-# Replay strips all MCP tools by default; this per-tenant allowlist is
-# DEFAULT-DENY — an MCP tool is restored on replay ONLY if an operator
-# explicitly lists it here. Mutating tools and the email/web side-effect
-# kill-list stay blocked regardless. One row per (server, tool).
+# Replay now DEFAULT-ALLOWS read-shaped MCP tools (classified by a name
+# heuristic) and blocks write-shaped tools — read-only tools run on replay
+# with no operator setup. The email/web side-effect kill-list stays blocked
+# regardless. This per-tenant list is the OPTIONAL OVERRIDE layer: a row
+# force-allows a write the heuristic would block, or force-blocks a read the
+# heuristic would allow. One row per (server, tool); `mode` carries which.
 # ────────────────────────────────────────────────────────────────────
 
 type EvalReplayAllowedTool {
@@ -343,13 +345,16 @@ type EvalReplayAllowedTool {
   tenantId: ID!
   serverName: String!
   toolName: String!
+  # 'allow' force-allows this tool on replay; 'block' force-blocks it.
+  mode: String!
   createdAt: AWSDateTime!
 }
 
 # A tenant MCP server and its discovered tools, offered to the UI so an
-# operator can pick which read-only tools to allow on replay. Sourced from
-# the cached tenant_mcp_servers.tools discovery list (approved + enabled
-# servers) — no live MCP connection is made.
+# operator can see each tool's auto-classification (read = auto-allowed,
+# write = blocked) and add overrides. Sourced from the cached
+# tenant_mcp_servers.tools discovery list (approved + enabled servers) — no
+# live MCP connection is made.
 type EvalReplayMcpServer {
   serverName: String!
   displayName: String!
@@ -359,6 +364,9 @@ type EvalReplayMcpServer {
 type EvalReplayMcpTool {
   name: String!
   description: String
+  # Heuristic access classification ('read' | 'write'). Read tools are
+  # auto-allowed on replay; write tools are blocked unless force-allowed.
+  access: String!
 }
 
 input OverrideEvalResultInput {
@@ -415,13 +423,16 @@ extend type Query {
   # Single-dataset read. Drift-checks the index manifestSha against S3
   # and re-syncs on mismatch before returning the row.
   evalDataset(tenantId: ID!, slug: String!): EvalDataset
-  # Read-only MCP replay allowlist (Trust Core U13). Operator-readable;
-  # scoped through resolveCallerTenantId. Default-deny: an empty list means
-  # replay carries no MCP tools.
+  # MCP replay tool overrides (Trust Core U14). Operator-readable; scoped
+  # through resolveCallerTenantId. Default-allow heuristic: an empty list
+  # still runs read-shaped tools on replay. Each entry force-allows a write
+  # or force-blocks a read.
   evalReplayToolAllowlist(tenantId: ID!): [EvalReplayAllowedTool!]!
-  # The tenant's available MCP servers + discovered tools, so the UI can
-  # offer toggles. Sourced from the cached tenant_mcp_servers.tools list
-  # (approved + enabled servers); no live MCP discovery.
+  # The tenant's available MCP servers + discovered tools, each annotated
+  # with its heuristic access classification (read = auto-allowed, write =
+  # blocked) so the UI can show what runs on replay by default. Sourced from
+  # the cached tenant_mcp_servers.tools list (approved + enabled servers); no
+  # live MCP discovery.
   evalReplayAvailableMcpTools(tenantId: ID!): [EvalReplayMcpServer!]!
 }
 
@@ -480,15 +491,17 @@ extend type Mutation {
   # stamped scoring_version (legacy runs recompute under legacy
   # semantics), and pushes notifyEvalRunUpdate.
   overrideEvalResult(input: OverrideEvalResultInput!): EvalResult!
-  # Read-only MCP replay allowlist (Trust Core U13). Operator-gated
-  # (requireTenantAdmin). Adding a (server, tool) restores that tool on
-  # replay; default-deny otherwise. Idempotent on the unique
-  # (tenant, server, tool) key.
-  addEvalReplayAllowedTool(
+  # MCP replay tool override (Trust Core U14). Operator-gated
+  # (requireTenantAdmin). mode 'allow' force-allows a write the heuristic
+  # blocks; mode 'block' force-blocks a read the heuristic allows. Upserts
+  # on the unique (tenant, server, tool) key (re-adding with a new mode
+  # updates the row).
+  addEvalReplayToolOverride(
     tenantId: ID!
     serverName: String!
     toolName: String!
+    mode: String!
   ): EvalReplayAllowedTool!
-  # Remove an allowlist entry by id (gate is row-derived → tenant admin).
-  removeEvalReplayAllowedTool(id: ID!): Boolean!
+  # Remove an override entry by id (gate is row-derived → tenant admin).
+  removeEvalReplayToolOverride(id: ID!): Boolean!
 }

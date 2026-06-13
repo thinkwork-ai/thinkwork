@@ -1,10 +1,11 @@
 /**
- * Read-only MCP replay allowlist resolver tests (Evaluations Trust Core U13).
+ * MCP replay tool override resolver tests (Evaluations Trust Core U14).
  *
  * Pins the resolver contract: tenant scoping (incl. Google-federated
  * fallback), operator gating before side effects, row-derived gate on
- * remove, idempotent add, and the available-MCP-tools listing sourced from
- * the cached tenant_mcp_servers.tools discovery list.
+ * remove, upsert-on-mode add, and the available-MCP-tools listing
+ * (with heuristic access classification) sourced from the cached
+ * tenant_mcp_servers.tools discovery list.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +13,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   selectQueue,
   insertQueue,
+  updateQueue,
   insertValues,
+  updateSets,
   deleteWheres,
   mockResolveCallerTenantId,
   mockRequireTenantAdmin,
@@ -20,19 +23,25 @@ const {
 } = vi.hoisted(() => {
   const selectQueue: unknown[][] = [];
   const insertQueue: unknown[][] = [];
+  const updateQueue: unknown[][] = [];
   const insertValues: unknown[] = [];
+  const updateSets: unknown[] = [];
   const deleteWheres: unknown[] = [];
   return {
     selectQueue,
     insertQueue,
+    updateQueue,
     insertValues,
+    updateSets,
     deleteWheres,
     mockResolveCallerTenantId: vi.fn(),
     mockRequireTenantAdmin: vi.fn(),
     resetState: () => {
       selectQueue.length = 0;
       insertQueue.length = 0;
+      updateQueue.length = 0;
       insertValues.length = 0;
+      updateSets.length = 0;
       deleteWheres.length = 0;
     },
   };
@@ -62,6 +71,16 @@ vi.mock("../../utils.js", () => {
           };
         },
       }),
+      update: () => ({
+        set: (vals: unknown) => {
+          updateSets.push(vals);
+          return {
+            where: () => ({
+              returning: () => Promise.resolve(updateQueue.shift() ?? []),
+            }),
+          };
+        },
+      }),
       delete: () => ({
         where: (clause: unknown) => {
           deleteWheres.push(clause);
@@ -84,6 +103,7 @@ vi.mock("../../utils.js", () => {
       tenant_id: "eval_replay_tool_allowlist.tenant_id",
       server_name: "eval_replay_tool_allowlist.server_name",
       tool_name: "eval_replay_tool_allowlist.tool_name",
+      mode: "eval_replay_tool_allowlist.mode",
     },
   };
 });
@@ -109,7 +129,8 @@ const allowRow = {
   id: "allow-1",
   tenant_id: "tenant-1",
   server_name: "lastmile--crm",
-  tool_name: "opportunities_list",
+  tool_name: "opportunity_create",
+  mode: "allow",
   created_at: new Date("2026-06-13T00:00:00Z"),
 };
 
@@ -133,7 +154,8 @@ describe("evalReplayToolAllowlist query", () => {
         id: "allow-1",
         tenantId: "tenant-1",
         serverName: "lastmile--crm",
-        toolName: "opportunities_list",
+        toolName: "opportunity_create",
+        mode: "allow",
         createdAt: allowRow.created_at,
       },
     ]);
@@ -162,7 +184,7 @@ describe("evalReplayToolAllowlist query", () => {
 });
 
 describe("evalReplayAvailableMcpTools query", () => {
-  it("lists approved/enabled servers with normalized discovered tools", async () => {
+  it("lists approved/enabled servers with normalized + classified tools", async () => {
     selectQueue.push([
       {
         slug: "lastmile--crm",
@@ -185,9 +207,13 @@ describe("evalReplayAvailableMcpTools query", () => {
         serverName: "lastmile--crm",
         displayName: "LastMile CRM",
         tools: [
-          { name: "opportunities_list", description: "List opps" },
-          { name: "opportunity_create", description: null },
-          { name: "search", description: null },
+          {
+            name: "opportunities_list",
+            description: "List opps",
+            access: "read",
+          },
+          { name: "opportunity_create", description: null, access: "write" },
+          { name: "search", description: null, access: "read" },
         ],
       },
     ]);
@@ -204,16 +230,17 @@ describe("evalReplayAvailableMcpTools query", () => {
   });
 });
 
-describe("addEvalReplayAllowedTool mutation", () => {
+describe("addEvalReplayToolOverride mutation", () => {
   it("operator-gates before any write", async () => {
     mockRequireTenantAdmin.mockRejectedValueOnce(forbidden);
     await expect(
-      evalReplayAllowlistMutations.addEvalReplayAllowedTool(
+      evalReplayAllowlistMutations.addEvalReplayToolOverride(
         {},
         {
           tenantId: "tenant-1",
           serverName: "lastmile--crm",
-          toolName: "opportunities_list",
+          toolName: "opportunity_create",
+          mode: "allow",
         },
         adminCtx,
       ),
@@ -221,15 +248,16 @@ describe("addEvalReplayAllowedTool mutation", () => {
     expect(insertValues).toHaveLength(0);
   });
 
-  it("inserts a new (server, tool) row", async () => {
+  it("inserts a new (server, tool, mode) row", async () => {
     selectQueue.push([]); // no existing row
     insertQueue.push([allowRow]);
-    const result = await evalReplayAllowlistMutations.addEvalReplayAllowedTool(
+    const result = await evalReplayAllowlistMutations.addEvalReplayToolOverride(
       {},
       {
         tenantId: "tenant-1",
         serverName: " lastmile--crm ",
-        toolName: " opportunities_list ",
+        toolName: " opportunity_create ",
+        mode: "allow",
       },
       adminCtx,
     );
@@ -237,54 +265,96 @@ describe("addEvalReplayAllowedTool mutation", () => {
     expect(insertValues[0]).toMatchObject({
       tenant_id: "tenant-1",
       server_name: "lastmile--crm",
-      tool_name: "opportunities_list",
+      tool_name: "opportunity_create",
+      mode: "allow",
     });
     expect(result).toMatchObject({
       id: "allow-1",
       serverName: "lastmile--crm",
-      toolName: "opportunities_list",
+      toolName: "opportunity_create",
+      mode: "allow",
     });
   });
 
-  it("is idempotent: re-adding an existing entry returns it without a second insert", async () => {
-    selectQueue.push([allowRow]); // existing row found
-    const result = await evalReplayAllowlistMutations.addEvalReplayAllowedTool(
+  it("returns the existing row when re-adding with the same mode (no write)", async () => {
+    selectQueue.push([allowRow]); // existing row, mode 'allow'
+    const result = await evalReplayAllowlistMutations.addEvalReplayToolOverride(
       {},
       {
         tenantId: "tenant-1",
         serverName: "lastmile--crm",
-        toolName: "opportunities_list",
+        toolName: "opportunity_create",
+        mode: "allow",
       },
       adminCtx,
     );
     expect(insertValues).toHaveLength(0);
-    expect(result).toMatchObject({ id: "allow-1" });
+    expect(updateSets).toHaveLength(0);
+    expect(result).toMatchObject({ id: "allow-1", mode: "allow" });
+  });
+
+  it("updates the existing row's mode when toggled (allow → block)", async () => {
+    selectQueue.push([allowRow]); // existing row, mode 'allow'
+    updateQueue.push([{ ...allowRow, mode: "block" }]);
+    const result = await evalReplayAllowlistMutations.addEvalReplayToolOverride(
+      {},
+      {
+        tenantId: "tenant-1",
+        serverName: "lastmile--crm",
+        toolName: "opportunity_create",
+        mode: "block",
+      },
+      adminCtx,
+    );
+    expect(insertValues).toHaveLength(0);
+    expect(updateSets[0]).toMatchObject({ mode: "block" });
+    expect(result).toMatchObject({ id: "allow-1", mode: "block" });
   });
 
   it("rejects empty server or tool names", async () => {
     await expect(
-      evalReplayAllowlistMutations.addEvalReplayAllowedTool(
+      evalReplayAllowlistMutations.addEvalReplayToolOverride(
         {},
-        { tenantId: "tenant-1", serverName: "  ", toolName: "x" },
+        {
+          tenantId: "tenant-1",
+          serverName: "  ",
+          toolName: "x",
+          mode: "allow",
+        },
         adminCtx,
       ),
     ).rejects.toThrow(/serverName/);
     await expect(
-      evalReplayAllowlistMutations.addEvalReplayAllowedTool(
+      evalReplayAllowlistMutations.addEvalReplayToolOverride(
         {},
-        { tenantId: "tenant-1", serverName: "x", toolName: "  " },
+        {
+          tenantId: "tenant-1",
+          serverName: "x",
+          toolName: "  ",
+          mode: "allow",
+        },
         adminCtx,
       ),
     ).rejects.toThrow(/toolName/);
   });
+
+  it("rejects an invalid mode", async () => {
+    await expect(
+      evalReplayAllowlistMutations.addEvalReplayToolOverride(
+        {},
+        { tenantId: "tenant-1", serverName: "x", toolName: "y", mode: "maybe" },
+        adminCtx,
+      ),
+    ).rejects.toThrow(/mode/);
+  });
 });
 
-describe("removeEvalReplayAllowedTool mutation", () => {
+describe("removeEvalReplayToolOverride mutation", () => {
   it("row-derives the tenant and gates before delete", async () => {
     selectQueue.push([{ tenant_id: "tenant-1" }]);
     mockRequireTenantAdmin.mockRejectedValueOnce(forbidden);
     await expect(
-      evalReplayAllowlistMutations.removeEvalReplayAllowedTool(
+      evalReplayAllowlistMutations.removeEvalReplayToolOverride(
         {},
         { id: "allow-1" },
         adminCtx,
@@ -297,7 +367,7 @@ describe("removeEvalReplayAllowedTool mutation", () => {
   it("deletes after the gate passes", async () => {
     selectQueue.push([{ tenant_id: "tenant-1" }]);
     const result =
-      await evalReplayAllowlistMutations.removeEvalReplayAllowedTool(
+      await evalReplayAllowlistMutations.removeEvalReplayToolOverride(
         {},
         { id: "allow-1" },
         adminCtx,
@@ -310,7 +380,7 @@ describe("removeEvalReplayAllowedTool mutation", () => {
   it("rejects an unknown id with NOT_FOUND and never gates or deletes", async () => {
     selectQueue.push([]); // no row
     await expect(
-      evalReplayAllowlistMutations.removeEvalReplayAllowedTool(
+      evalReplayAllowlistMutations.removeEvalReplayToolOverride(
         {},
         { id: "ghost" },
         adminCtx,
