@@ -135,11 +135,26 @@ VITE_ALLOWED_PARENT_ORIGINS="${COMPUTER_SANDBOX_PARENT_ORIGINS}" \
 VITE_MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN}" \
   pnpm --filter @thinkwork/web build:iframe-shell
 
-echo "▸ Syncing to S3 bucket: $APP_BUCKET ..."
+# Content-hashed assets are safe to cache forever; index.html must NOT be
+# (browsers heuristically cache it from Last-Modified and never revalidate,
+# so new deploys go unseen until that heuristic TTL expires — the stale-UI
+# papercut). Pass 1 uploads everything (incl. index.html) with the immutable
+# header and handles --delete cleanup; pass 2 force-overwrites index.html
+# with no-cache. `cp` (not `sync`) is required because `sync` skips the
+# unchanged index.html and would leave the immutable header in place.
+echo "▸ Syncing to S3 bucket (immutable assets): $APP_BUCKET ..."
 aws s3 sync apps/web/dist/ "s3://${APP_BUCKET}/" \
   --delete \
   --exclude "iframe-shell/*" \
+  --cache-control "public,max-age=31536000,immutable" \
   --region "$REGION"
+
+echo "▸ Setting no-cache on index.html ..."
+aws s3 cp apps/web/dist/index.html "s3://${APP_BUCKET}/index.html" \
+  --cache-control "no-cache" \
+  --content-type "text/html; charset=utf-8" \
+  --region "$REGION" \
+  --output text > /dev/null
 
 echo "▸ Invalidating CloudFront cache: $APP_CF_ID ..."
 aws cloudfront create-invalidation \
@@ -148,10 +163,22 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-echo "▸ Syncing iframe-shell to sandbox bucket: $COMPUTER_SANDBOX_BUCKET ..."
+echo "▸ Syncing iframe-shell to sandbox bucket (immutable assets): $COMPUTER_SANDBOX_BUCKET ..."
 aws s3 sync apps/web/dist/iframe-shell/ "s3://${COMPUTER_SANDBOX_BUCKET}/" \
   --delete \
+  --cache-control "public,max-age=31536000,immutable" \
   --region "$REGION"
+
+# Same no-cache rule for the iframe-shell entry html as for index.html above.
+if [[ -f apps/web/dist/iframe-shell/iframe-shell.html ]]; then
+  echo "▸ Setting no-cache on iframe-shell.html ..."
+  aws s3 cp apps/web/dist/iframe-shell/iframe-shell.html \
+    "s3://${COMPUTER_SANDBOX_BUCKET}/iframe-shell.html" \
+    --cache-control "no-cache" \
+    --content-type "text/html; charset=utf-8" \
+    --region "$REGION" \
+    --output text > /dev/null
+fi
 
 echo "▸ Invalidating sandbox CloudFront cache: $COMPUTER_SANDBOX_CF_ID ..."
 aws cloudfront create-invalidation \
