@@ -6,6 +6,35 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-15 Company Brain Premium Plugin - 2026-06-13
+
+- Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
+- Linear issue: `THNK-15`.
+- Target branch: `main`.
+- Current implementation unit: U1 Add Company Brain manifest and premium
+  catalog metadata.
+- Current branch: `codex/thnk-15-u1-company-brain-manifest`.
+- Current worktree:
+  `.Codex/worktrees/thnk-15-company-brain-plugin`.
+- Pull request: [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
+  opened.
+- Status: U1 implemented locally. Application Plugins foundation is
+  present on `origin/main`; this branch adds the Company Brain manifest,
+  premium manifest metadata validation, catalog registration, targeted catalog
+  tests, and carries the THNK-15 plan/brainstorm artifacts into the repo.
+- Verification log: `pnpm --filter @thinkwork/plugin-catalog test` passed
+  (6 files, 66 tests); `pnpm --filter @thinkwork/plugin-catalog typecheck`
+  passed. `pnpm format:check` could not run locally because this checkout's
+  dependency graph does not provide a `prettier` binary for the root script.
+  Initial isolated-worktree dependency install also reported a broad workspace
+  `canvas` native build failure under Node 25.6.0 because `pkg-config` was not
+  available, but plugin-catalog tests/typecheck executed successfully.
+- CI log: PR #2439 checks pending.
+- Blockers: none.
+- Next action: finish U1 local verification, commit, push, open PR, monitor CI,
+  squash merge when green, delete branch/worktree, then sync `origin/main` for
+  U2.
+
 ## Deployment Controller Process - 2026-06-09
 
 - Plan: `docs/plans/2026-06-09-003-feat-deployment-controller-process-plan.md`.

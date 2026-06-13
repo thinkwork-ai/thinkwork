@@ -13,7 +13,7 @@ import {
   verifyPluginCatalog,
   type SignedPluginCatalogDocument,
 } from "../catalog";
-import { lastmileManifest } from "../plugins";
+import { companyBrainManifest, lastmileManifest } from "../plugins";
 
 function keyPair() {
   const pair = generateKeyPairSync("ed25519");
@@ -61,6 +61,17 @@ describe("buildPluginCatalog", () => {
     expect(() =>
       buildPluginCatalog({ manifests: [lastmileManifest, lastmileManifest] }),
     ).toThrow(/Duplicate plugin key in catalog: lastmile/);
+  });
+
+  it("preserves premium metadata on catalog entries", () => {
+    const catalog = buildPluginCatalog({ manifests: [companyBrainManifest] });
+    expect(catalog.plugins[0].pluginKey).toBe("company-brain");
+    expect(catalog.plugins[0].premium).toEqual({
+      entitlementProductKey: "company-brain",
+      installKeyRequired: true,
+      installKeyPrompt:
+        "Enter the Company Brain install key provided by ThinkWork to unlock this premium plugin for your tenant.",
+    });
   });
 
   it("rejects invalid manifests", () => {

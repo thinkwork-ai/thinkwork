@@ -148,11 +148,26 @@ export interface PluginVersion {
   components: PluginComponent[];
 }
 
+export interface PremiumPluginMetadata {
+  /**
+   * Stable product/entitlement key used by the premium entitlement layer.
+   * Usually matches `pluginKey`, but remains explicit so future paid
+   * packages can share or migrate entitlement products deliberately.
+   */
+  entitlementProductKey: string;
+  /** V1 premium plugins install through a ThinkWork-provided one-time key. */
+  installKeyRequired: true;
+  /** Customer-facing prompt copy shown when the tenant lacks entitlement. */
+  installKeyPrompt: string;
+}
+
 export interface PluginManifest {
   /** Plugin key satisfying SLUG_RE; unique within a catalog. */
   pluginKey: string;
   displayName: string;
   description: string;
+  /** Present for paid/key-gated plugins. Omitted for free/included plugins. */
+  premium?: PremiumPluginMetadata;
   versions: PluginVersion[];
 }
 
@@ -176,6 +191,9 @@ export function validatePluginManifest(value: unknown): PluginManifest {
   }
   requireString(manifest.displayName, "displayName");
   requireString(manifest.description, "description");
+  if (manifest.premium !== undefined) {
+    validatePremiumPluginMetadata(manifest.premium, manifest.pluginKey);
+  }
   if (!Array.isArray(manifest.versions) || manifest.versions.length === 0) {
     throw new PluginManifestError(
       `plugin ${manifest.pluginKey}: versions must be a non-empty array`,
@@ -192,6 +210,32 @@ export function validatePluginManifest(value: unknown): PluginManifest {
     seenVersions.add(version.version);
   }
   return manifest as PluginManifest;
+}
+
+function validatePremiumPluginMetadata(
+  value: unknown,
+  pluginKey: string,
+): void {
+  const premium = value as Partial<PremiumPluginMetadata>;
+  const prefix = `plugin ${pluginKey}: premium`;
+  if (!premium || typeof premium !== "object" || Array.isArray(premium)) {
+    throw new PluginManifestError(`${prefix} must be an object`);
+  }
+  requireString(
+    premium.entitlementProductKey,
+    `${prefix}.entitlementProductKey`,
+  );
+  if (!SLUG_RE.test(premium.entitlementProductKey)) {
+    throw new PluginManifestError(
+      `${prefix}.entitlementProductKey "${premium.entitlementProductKey}" must match ${SLUG_RE.source}`,
+    );
+  }
+  if (premium.installKeyRequired !== true) {
+    throw new PluginManifestError(
+      `${prefix}.installKeyRequired must be true`,
+    );
+  }
+  requireString(premium.installKeyPrompt, `${prefix}.installKeyPrompt`);
 }
 
 function validatePluginVersion(value: unknown, pluginKey: string): void {
