@@ -1,7 +1,10 @@
 import { useLocation } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { SettingsDeploymentStatusQuery } from "@/lib/settings-queries";
+import {
+  SettingsDeploymentStatusQuery,
+  SettingsPluginCatalogQuery,
+} from "@/lib/settings-queries";
 import { SettingsMemory } from "@/components/settings/SettingsMemory";
 import { SettingsKnowledgeBases } from "@/components/settings/SettingsKnowledgeBases";
 import { SettingsWiki } from "@/components/settings/SettingsWiki";
@@ -23,24 +26,36 @@ function tabForPath(pathname: string): MemoryTab {
 
 /**
  * The unified Memory settings page. Memory, Knowledge Bases, Wiki, and (when
- * Cognee is enabled) the Knowledge Graph explorer are sibling tabs rendered in
- * the AppTopBar — driven by the route so each tab is deep-linkable. This page
- * owns the page header and renders the active facet's body; each embedded facet
- * suppresses its own header so the "Memory" breadcrumb stays stable.
+ * Company Brain's substrate is available) the Knowledge Graph explorer are
+ * sibling tabs rendered in the AppTopBar — driven by the route so each tab is
+ * deep-linkable. This page owns the page header and renders the active facet's
+ * body; each embedded facet suppresses its own header so the "Memory"
+ * breadcrumb stays stable.
  */
 export function SettingsMemoryHome() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const activeTab = tabForPath(pathname);
 
-  // The Knowledge Graph tab only applies when Cognee is running for this
-  // deployment — mirrors the old standalone route's `managedAppKey` gating.
   const [deploymentResult] = useQuery({ query: SettingsDeploymentStatusQuery });
+  const [catalogResult] = useQuery({ query: SettingsPluginCatalogQuery });
   const deployment = deploymentResult.data?.deploymentStatus;
-  const cogneeEnabled =
+  const companyBrainInstall = catalogResult.data?.pluginCatalog.find(
+    (entry) => entry.pluginKey === "company-brain",
+  )?.install;
+  const companyBrainSubstrateReady = Boolean(
+    companyBrainInstall?.state === "installed" ||
+      companyBrainInstall?.components.some(
+        (component) =>
+          component.componentKey === "brain-substrate" &&
+          component.state === "provisioned",
+      ),
+  );
+  const legacyCogneeEnabled =
     deployment?.managedApplications.find((app) => app.key === "cognee")
       ?.runtimeEnabled ??
     deployment?.cogneeEnabled ??
     false;
+  const ontologyEnabled = companyBrainSubstrateReady || legacyCogneeEnabled;
 
   usePageHeaderActions({
     title: "Memory",
@@ -48,7 +63,7 @@ export function SettingsMemoryHome() {
     tabs: [
       { to: MEMORY, label: "Memory" },
       { to: KNOWLEDGE_BASES, label: "KBs" },
-      ...(cogneeEnabled ? [{ to: KNOWLEDGE_GRAPH, label: "Ontology" }] : []),
+      ...(ontologyEnabled ? [{ to: KNOWLEDGE_GRAPH, label: "Ontology" }] : []),
       { to: WIKI, label: "Wiki" },
     ],
   });

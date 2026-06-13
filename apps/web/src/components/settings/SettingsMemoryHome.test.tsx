@@ -38,10 +38,13 @@ describe("SettingsMemoryHome", () => {
     expect(source).not.toContain("TabsList");
   });
 
-  it("adds a Knowledge Graph tab gated on Cognee being enabled", () => {
+  it("adds a Knowledge Graph tab gated on Company Brain substrate or legacy Cognee", () => {
     expect(source).toContain("KNOWLEDGE_GRAPH, label:");
     expect(source).toContain("<KnowledgeGraphTab");
-    expect(source).toContain("cogneeEnabled");
+    expect(source).toContain("companyBrainSubstrateReady");
+    expect(source).toContain("legacyCogneeEnabled");
+    expect(source).toContain("ontologyEnabled");
+    expect(source).toContain("SettingsPluginCatalogQuery");
   });
 
   it("mounts the combined page across the Memory sub-routes", () => {

@@ -28,18 +28,23 @@ export function ManagedApplicationsPage() {
     requestPolicy: "cache-and-network",
   });
 
-  // Transition IA (plan 2026-06-12-001 U10): once the tenant has a `twenty`
-  // PLUGIN install, Twenty is managed from Settings > Plugins — hide its row
-  // here so the Applications page is Cognee-only. The query failing (or the
-  // install not existing) keeps the legacy row visible.
-  const twentyPluginInstalled = (
-    installsResult.data?.pluginInstalls ?? []
-  ).some((install) => install.pluginKey === "twenty");
+  // Transition IA: once an app has a plugin install, Plugins owns the lifecycle
+  // home and this legacy managed-app list hides that backing app row. Query
+  // failures keep legacy rows visible so operators do not lose access.
+  const pluginInstalls = installsResult.data?.pluginInstalls ?? [];
+  const twentyPluginInstalled = pluginInstalls.some(
+    (install) => install.pluginKey === "twenty",
+  );
+  const companyBrainPluginInstalled = pluginInstalls.some(
+    (install) => install.pluginKey === "company-brain",
+  );
 
   const allApps = appsResult.data?.managedApplications ?? [];
-  const apps = twentyPluginInstalled
-    ? allApps.filter((app) => app.key !== "twenty")
-    : allApps;
+  const apps = allApps.filter((app) => {
+    if (twentyPluginInstalled && app.key === "twenty") return false;
+    if (companyBrainPluginInstalled && app.key === "cognee") return false;
+    return true;
+  });
   const runtimeApps =
     statusResult.data?.deploymentStatus.managedApplications ?? [];
   const loading = appsResult.fetching && apps.length === 0;
@@ -66,7 +71,7 @@ export function ManagedApplicationsPage() {
     <SettingsPane className="max-w-none">
       <SettingsHeader
         title="Applications"
-        description="Plan, approve, monitor, and tear down the customer-owned Cognee deployment. Twenty CRM is managed from Plugins once its plugin is installed."
+        description="Legacy managed-application operations. Company Brain and Twenty CRM move to Plugins once installed."
         actions={
           <Button
             type="button"

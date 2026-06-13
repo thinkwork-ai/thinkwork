@@ -20,22 +20,26 @@ export function ManagedApplicationRow({
   runtime?: RuntimeDeployment;
 }) {
   const key = app.key as ManagedAppKey;
+  const displayName = key === "cognee" ? "Company Brain" : app.displayName;
   const runtimeEnabled =
     runtime?.runtimeEnabled ?? app.currentStatus === "running";
   const status = runtime?.status ?? app.currentStatus;
   const detailPath =
-    key === "twenty" ? "/settings/crm" : "/settings/applications/cognee";
+    key === "twenty" ? "/settings/crm" : "/settings/plugins/$pluginKey";
+  const detailParams =
+    key === "twenty" ? undefined : { pluginKey: "company-brain" };
 
   return (
     <Link
       to={detailPath}
-      aria-label={`Open ${app.displayName}`}
+      params={detailParams}
+      aria-label={`Open ${displayName}`}
       className="flex items-start justify-between gap-4 border-b border-border px-4 py-4 transition-colors last:border-b-0 hover:bg-muted/30"
     >
       <div className="min-w-0">
         <div className="flex items-center gap-1">
           <h3 className="text-sm font-medium text-foreground">
-            {app.displayName}
+            {displayName}
           </h3>
           {runtime?.url && runtimeEnabled ? (
             <Button
@@ -43,8 +47,8 @@ export function ManagedApplicationRow({
               variant="ghost"
               size="icon-sm"
               className="size-6 text-muted-foreground"
-              aria-label={`Open ${app.displayName} in a new tab`}
-              title={`Open ${app.displayName} in a new tab`}
+              aria-label={`Open ${displayName} in a new tab`}
+              title={`Open ${displayName} in a new tab`}
               onClick={(event) => {
                 // Don't trigger the card's drill-in navigation.
                 event.preventDefault();
@@ -73,7 +77,7 @@ function managedAppDescription(key: ManagedAppKey): string {
   if (key === "twenty") {
     return "Customer-owned CRM runtime with dedicated database, cache, files, and generated secrets.";
   }
-  return "Knowledge graph runtime with dedicated graph/vector storage and provider credentials.";
+  return "Company Brain knowledge graph substrate with dedicated graph/vector storage and provider credentials.";
 }
 
 function statusBadgeClassName(status: string) {
