@@ -238,9 +238,26 @@ describe("SelfProfilePage", () => {
     expect(screen.getByText("Unlimited")).toBeTruthy();
     expect(screen.queryByText("Workspace files")).toBeNull();
     expect(screen.queryByText("Danger zone")).toBeNull();
+    expect(screen.getByTestId("profile-scroll-pane").className).toContain(
+      "overflow-y-auto",
+    );
     expect(screen.getByTestId("models").dataset.readonly).toBe("true");
     expect(userModelsMocks.props).toContainEqual({
       readOnly: true,
+      userId: "user-1",
+    });
+  });
+
+  it("allows owners to manage their own budget and model approvals", () => {
+    tenantMocks.role = "owner";
+
+    render(<SelfProfilePage />);
+
+    expect(screen.getAllByText("Owner").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Enable user budget")).toBeTruthy();
+    expect(screen.getByTestId("models").dataset.readonly).toBe("false");
+    expect(userModelsMocks.props).toContainEqual({
+      readOnly: false,
       userId: "user-1",
     });
   });

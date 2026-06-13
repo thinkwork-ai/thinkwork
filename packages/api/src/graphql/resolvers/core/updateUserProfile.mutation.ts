@@ -162,12 +162,19 @@ export const updateUserProfile = async (
 
   const row = await db.transaction(async (tx) => {
     const [updated] = await tx
-      .update(userProfiles)
-      .set(updates)
-      .where(eq(userProfiles.user_id, args.userId))
+      .insert(userProfiles)
+      .values({
+        ...(updates as typeof userProfiles.$inferInsert),
+        user_id: args.userId,
+        tenant_id: target.tenant_id,
+      })
+      .onConflictDoUpdate({
+        target: userProfiles.user_id,
+        set: updates,
+      })
       .returning();
     if (!updated) {
-      throw new GraphQLError("User profile not found", {
+      throw new GraphQLError("User profile could not be saved", {
         extensions: { code: "NOT_FOUND" },
       });
     }
