@@ -7455,6 +7455,11 @@ export type EvalRunsQuery = {
       totalTests: number;
       passed: number;
       failed: number;
+      errored?: number | null;
+      scoringVersion?: number | null;
+      isLegacyScoring: boolean;
+      datasetId?: string | null;
+      datasetVersion?: number | null;
       passRate?: number | null;
       regression: boolean;
       costUsd?: number | null;
@@ -7485,6 +7490,11 @@ export type EvalRunQuery = {
     totalTests: number;
     passed: number;
     failed: number;
+    errored?: number | null;
+    scoringVersion?: number | null;
+    isLegacyScoring: boolean;
+    datasetId?: string | null;
+    datasetVersion?: number | null;
     passRate?: number | null;
     regression: boolean;
     costUsd?: number | null;
@@ -7522,6 +7532,7 @@ export type EvalRunResultsQuery = {
     evaluatorResults: any;
     assertions: any;
     errorMessage?: string | null;
+    errorCause?: string | null;
     overrideStatus?: string | null;
     overriddenBy?: string | null;
     overriddenAt?: any | null;
@@ -7792,6 +7803,168 @@ export type EvalDatasetsForFlagQuery = {
     kind: string;
     archivedAt?: any | null;
   }>;
+};
+
+export type EvalDatasetsQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+}>;
+
+export type EvalDatasetsQuery = {
+  __typename?: "Query";
+  evalDatasets: Array<{
+    __typename?: "EvalDataset";
+    id: string;
+    slug: string;
+    name?: string | null;
+    kind: string;
+    version: number;
+    archivedAt?: any | null;
+    createdAt: any;
+    updatedAt: any;
+  }>;
+};
+
+export type EvalDatasetQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  slug: Scalars["String"]["input"];
+}>;
+
+export type EvalDatasetQuery = {
+  __typename?: "Query";
+  evalDataset?: {
+    __typename?: "EvalDataset";
+    id: string;
+    slug: string;
+    name?: string | null;
+    kind: string;
+    version: number;
+    archivedAt?: any | null;
+    createdAt: any;
+    updatedAt: any;
+  } | null;
+};
+
+export type EvalDatasetCaseIndexQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+}>;
+
+export type EvalDatasetCaseIndexQuery = {
+  __typename?: "Query";
+  evalTestCases: Array<{
+    __typename?: "EvalTestCase";
+    id: string;
+    datasetId?: string | null;
+    enabled: boolean;
+  }>;
+};
+
+export type EvalDatasetCasesQueryVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  datasetId?: InputMaybe<Scalars["ID"]["input"]>;
+}>;
+
+export type EvalDatasetCasesQuery = {
+  __typename?: "Query";
+  evalTestCases: Array<{
+    __typename?: "EvalTestCase";
+    id: string;
+    name: string;
+    category: string;
+    tags: Array<string>;
+    enabled: boolean;
+    source: string;
+    datasetId?: string | null;
+    datasetCaseId?: string | null;
+    createdAt: any;
+    updatedAt: any;
+  }>;
+};
+
+export type CreateEvalDatasetMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  input: CreateEvalDatasetInput;
+}>;
+
+export type CreateEvalDatasetMutation = {
+  __typename?: "Mutation";
+  createEvalDataset: {
+    __typename?: "EvalDataset";
+    id: string;
+    slug: string;
+    name?: string | null;
+    kind: string;
+    version: number;
+    archivedAt?: any | null;
+  };
+};
+
+export type UpdateEvalDatasetMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  slug: Scalars["String"]["input"];
+  input: UpdateEvalDatasetInput;
+}>;
+
+export type UpdateEvalDatasetMutation = {
+  __typename?: "Mutation";
+  updateEvalDataset: {
+    __typename?: "EvalDataset";
+    id: string;
+    slug: string;
+    name?: string | null;
+    kind: string;
+    version: number;
+    archivedAt?: any | null;
+  };
+};
+
+export type ArchiveEvalDatasetMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  slug: Scalars["String"]["input"];
+}>;
+
+export type ArchiveEvalDatasetMutation = {
+  __typename?: "Mutation";
+  archiveEvalDataset: {
+    __typename?: "EvalDataset";
+    id: string;
+    slug: string;
+    archivedAt?: any | null;
+  };
+};
+
+export type UpdateEvalDatasetCaseMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  datasetSlug: Scalars["String"]["input"];
+  caseId: Scalars["String"]["input"];
+  input: UpdateEvalDatasetCaseInput;
+}>;
+
+export type UpdateEvalDatasetCaseMutation = {
+  __typename?: "Mutation";
+  updateEvalDatasetCase: {
+    __typename?: "EvalTestCase";
+    id: string;
+    datasetCaseId?: string | null;
+    enabled: boolean;
+    updatedAt: any;
+  };
+};
+
+export type RemoveEvalDatasetCaseMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  datasetSlug: Scalars["String"]["input"];
+  caseId: Scalars["String"]["input"];
+}>;
+
+export type RemoveEvalDatasetCaseMutation = {
+  __typename?: "Mutation";
+  removeEvalDatasetCase: {
+    __typename?: "EvalDataset";
+    id: string;
+    slug: string;
+    version: number;
+  };
 };
 
 export type FlagThreadForEvalMutationVariables = Exact<{
@@ -10632,6 +10805,26 @@ export const EvalRunsDocument = {
                       },
                       {
                         kind: "Field",
+                        name: { kind: "Name", value: "errored" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "scoringVersion" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "isLegacyScoring" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "datasetId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "datasetVersion" },
+                      },
+                      {
+                        kind: "Field",
                         name: { kind: "Name", value: "passRate" },
                       },
                       {
@@ -10729,6 +10922,20 @@ export const EvalRunDocument = {
                 { kind: "Field", name: { kind: "Name", value: "totalTests" } },
                 { kind: "Field", name: { kind: "Name", value: "passed" } },
                 { kind: "Field", name: { kind: "Name", value: "failed" } },
+                { kind: "Field", name: { kind: "Name", value: "errored" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "scoringVersion" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "isLegacyScoring" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "datasetId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "datasetVersion" },
+                },
                 { kind: "Field", name: { kind: "Name", value: "passRate" } },
                 { kind: "Field", name: { kind: "Name", value: "regression" } },
                 { kind: "Field", name: { kind: "Name", value: "costUsd" } },
@@ -10829,6 +11036,7 @@ export const EvalRunResultsDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "errorMessage" },
                 },
+                { kind: "Field", name: { kind: "Name", value: "errorCause" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "overrideStatus" },
@@ -11889,6 +12097,750 @@ export const EvalDatasetsForFlagDocument = {
 } as unknown as DocumentNode<
   EvalDatasetsForFlagQuery,
   EvalDatasetsForFlagQueryVariables
+>;
+export const EvalDatasetsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "EvalDatasets" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "includeArchived" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "Boolean" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalDatasets" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "includeArchived" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "includeArchived" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "kind" } },
+                { kind: "Field", name: { kind: "Name", value: "version" } },
+                { kind: "Field", name: { kind: "Name", value: "archivedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<EvalDatasetsQuery, EvalDatasetsQueryVariables>;
+export const EvalDatasetDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "EvalDataset" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "slug" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalDataset" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "slug" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "slug" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "kind" } },
+                { kind: "Field", name: { kind: "Name", value: "version" } },
+                { kind: "Field", name: { kind: "Name", value: "archivedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<EvalDatasetQuery, EvalDatasetQueryVariables>;
+export const EvalDatasetCaseIndexDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "EvalDatasetCaseIndex" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalTestCases" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "datasetId" } },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  EvalDatasetCaseIndexQuery,
+  EvalDatasetCaseIndexQueryVariables
+>;
+export const EvalDatasetCasesDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "EvalDatasetCases" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "datasetId" },
+          },
+          type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "evalTestCases" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "datasetId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "datasetId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "category" } },
+                { kind: "Field", name: { kind: "Name", value: "tags" } },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "source" } },
+                { kind: "Field", name: { kind: "Name", value: "datasetId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "datasetCaseId" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  EvalDatasetCasesQuery,
+  EvalDatasetCasesQueryVariables
+>;
+export const CreateEvalDatasetDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CreateEvalDataset" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "CreateEvalDatasetInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "createEvalDataset" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "kind" } },
+                { kind: "Field", name: { kind: "Name", value: "version" } },
+                { kind: "Field", name: { kind: "Name", value: "archivedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CreateEvalDatasetMutation,
+  CreateEvalDatasetMutationVariables
+>;
+export const UpdateEvalDatasetDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "UpdateEvalDataset" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "slug" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpdateEvalDatasetInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateEvalDataset" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "slug" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "slug" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "name" } },
+                { kind: "Field", name: { kind: "Name", value: "kind" } },
+                { kind: "Field", name: { kind: "Name", value: "version" } },
+                { kind: "Field", name: { kind: "Name", value: "archivedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  UpdateEvalDatasetMutation,
+  UpdateEvalDatasetMutationVariables
+>;
+export const ArchiveEvalDatasetDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "ArchiveEvalDataset" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "slug" } },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "archiveEvalDataset" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "slug" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "slug" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "archivedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  ArchiveEvalDatasetMutation,
+  ArchiveEvalDatasetMutationVariables
+>;
+export const UpdateEvalDatasetCaseDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "UpdateEvalDatasetCase" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "datasetSlug" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "caseId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpdateEvalDatasetCaseInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateEvalDatasetCase" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "datasetSlug" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "datasetSlug" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "caseId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "caseId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "datasetCaseId" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  UpdateEvalDatasetCaseMutation,
+  UpdateEvalDatasetCaseMutationVariables
+>;
+export const RemoveEvalDatasetCaseDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "RemoveEvalDatasetCase" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "datasetSlug" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "caseId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "String" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "removeEvalDatasetCase" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "datasetSlug" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "datasetSlug" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "caseId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "caseId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "slug" } },
+                { kind: "Field", name: { kind: "Name", value: "version" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  RemoveEvalDatasetCaseMutation,
+  RemoveEvalDatasetCaseMutationVariables
 >;
 export const FlagThreadForEvalDocument = {
   kind: "Document",

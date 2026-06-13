@@ -87,8 +87,10 @@ import { Route as AuthedShellArtifactsIdRouteImport } from "./routes/_authed/_sh
 import { Route as AuthedShellApprovalsApprovalIdRouteImport } from "./routes/_authed/_shell/approvals.$approvalId";
 import { Route as AuthedShellActivityThreadIdRouteImport } from "./routes/_authed/_shell/activity.$threadId";
 import { Route as AuthedSettingsEvaluationsStudioIndexRouteImport } from "./routes/_authed/settings.evaluations.studio.index";
+import { Route as AuthedSettingsEvaluationsDatasetsIndexRouteImport } from "./routes/_authed/settings.evaluations.datasets.index";
 import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes/_authed/settings.evaluations.studio.new";
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
+import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./routes/_authed/settings.evaluations.datasets.$slug";
 import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_shell/memory.kbs.$kbId";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.$executionId";
 import { Route as AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.edit.$testCaseId";
@@ -527,6 +529,12 @@ const AuthedSettingsEvaluationsStudioIndexRoute =
     path: "/evaluations/studio/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsEvaluationsDatasetsIndexRoute =
+  AuthedSettingsEvaluationsDatasetsIndexRouteImport.update({
+    id: "/evaluations/datasets/",
+    path: "/evaluations/datasets/",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsEvaluationsStudioNewRoute =
   AuthedSettingsEvaluationsStudioNewRouteImport.update({
     id: "/evaluations/studio/new",
@@ -537,6 +545,12 @@ const AuthedSettingsEvaluationsStudioTestCaseIdRoute =
   AuthedSettingsEvaluationsStudioTestCaseIdRouteImport.update({
     id: "/evaluations/studio/$testCaseId",
     path: "/evaluations/studio/$testCaseId",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
+const AuthedSettingsEvaluationsDatasetsSlugRoute =
+  AuthedSettingsEvaluationsDatasetsSlugRouteImport.update({
+    id: "/evaluations/datasets/$slug",
+    path: "/evaluations/datasets/$slug",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedShellMemoryKbsKbIdRoute =
@@ -641,8 +655,10 @@ export interface FileRoutesByFullPath {
   "/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
+  "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
+  "/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -720,8 +736,10 @@ export interface FileRoutesByTo {
   "/settings/users": typeof AuthedSettingsUsersIndexRoute;
   "/settings/webhooks": typeof AuthedSettingsWebhooksIndexRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
+  "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
+  "/settings/evaluations/datasets": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/settings/evaluations/studio": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -807,8 +825,10 @@ export interface FileRoutesById {
   "/_authed/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/_authed/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/_authed/_shell/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
+  "/_authed/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/_authed/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/_authed/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
+  "/_authed/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/_authed/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/_authed/_shell/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/_authed/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
@@ -893,8 +913,10 @@ export interface FileRouteTypes {
     | "/settings/users/"
     | "/settings/webhooks/"
     | "/memory/kbs/$kbId"
+    | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
+    | "/settings/evaluations/datasets/"
     | "/settings/evaluations/studio/"
     | "/spaces/$spaceId/threads/$threadId"
     | "/settings/evaluations/studio/edit/$testCaseId"
@@ -972,8 +994,10 @@ export interface FileRouteTypes {
     | "/settings/users"
     | "/settings/webhooks"
     | "/memory/kbs/$kbId"
+    | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
+    | "/settings/evaluations/datasets"
     | "/settings/evaluations/studio"
     | "/spaces/$spaceId/threads/$threadId"
     | "/settings/evaluations/studio/edit/$testCaseId"
@@ -1058,8 +1082,10 @@ export interface FileRouteTypes {
     | "/_authed/settings/users/"
     | "/_authed/settings/webhooks/"
     | "/_authed/_shell/memory/kbs/$kbId"
+    | "/_authed/settings/evaluations/datasets/$slug"
     | "/_authed/settings/evaluations/studio/$testCaseId"
     | "/_authed/settings/evaluations/studio/new"
+    | "/_authed/settings/evaluations/datasets/"
     | "/_authed/settings/evaluations/studio/"
     | "/_authed/_shell/spaces/$spaceId/threads/$threadId"
     | "/_authed/settings/evaluations/studio/edit/$testCaseId"
@@ -1625,6 +1651,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsEvaluationsStudioIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/evaluations/datasets/": {
+      id: "/_authed/settings/evaluations/datasets/";
+      path: "/evaluations/datasets";
+      fullPath: "/settings/evaluations/datasets/";
+      preLoaderRoute: typeof AuthedSettingsEvaluationsDatasetsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/evaluations/studio/new": {
       id: "/_authed/settings/evaluations/studio/new";
       path: "/evaluations/studio/new";
@@ -1637,6 +1670,13 @@ declare module "@tanstack/react-router" {
       path: "/evaluations/studio/$testCaseId";
       fullPath: "/settings/evaluations/studio/$testCaseId";
       preLoaderRoute: typeof AuthedSettingsEvaluationsStudioTestCaseIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/evaluations/datasets/$slug": {
+      id: "/_authed/settings/evaluations/datasets/$slug";
+      path: "/evaluations/datasets/$slug";
+      fullPath: "/settings/evaluations/datasets/$slug";
+      preLoaderRoute: typeof AuthedSettingsEvaluationsDatasetsSlugRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/_shell/memory/kbs/$kbId": {
@@ -1868,8 +1908,10 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsSpacesIndexRoute: typeof AuthedSettingsSpacesIndexRoute;
   AuthedSettingsUsersIndexRoute: typeof AuthedSettingsUsersIndexRoute;
   AuthedSettingsWebhooksIndexRoute: typeof AuthedSettingsWebhooksIndexRoute;
+  AuthedSettingsEvaluationsDatasetsSlugRoute: typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   AuthedSettingsEvaluationsStudioTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   AuthedSettingsEvaluationsStudioNewRoute: typeof AuthedSettingsEvaluationsStudioNewRoute;
+  AuthedSettingsEvaluationsDatasetsIndexRoute: typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   AuthedSettingsEvaluationsStudioIndexRoute: typeof AuthedSettingsEvaluationsStudioIndexRoute;
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
@@ -1918,10 +1960,14 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsSpacesIndexRoute: AuthedSettingsSpacesIndexRoute,
   AuthedSettingsUsersIndexRoute: AuthedSettingsUsersIndexRoute,
   AuthedSettingsWebhooksIndexRoute: AuthedSettingsWebhooksIndexRoute,
+  AuthedSettingsEvaluationsDatasetsSlugRoute:
+    AuthedSettingsEvaluationsDatasetsSlugRoute,
   AuthedSettingsEvaluationsStudioTestCaseIdRoute:
     AuthedSettingsEvaluationsStudioTestCaseIdRoute,
   AuthedSettingsEvaluationsStudioNewRoute:
     AuthedSettingsEvaluationsStudioNewRoute,
+  AuthedSettingsEvaluationsDatasetsIndexRoute:
+    AuthedSettingsEvaluationsDatasetsIndexRoute,
   AuthedSettingsEvaluationsStudioIndexRoute:
     AuthedSettingsEvaluationsStudioIndexRoute,
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute:

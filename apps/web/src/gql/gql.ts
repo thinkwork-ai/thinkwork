@@ -20,9 +20,9 @@ type Documents = {
   "\n  query AdminApplets(\n    $tenantId: ID!\n    $userId: ID\n    $cursor: String\n    $limit: Int\n  ) {\n    adminApplets(\n      tenantId: $tenantId\n      userId: $userId\n      cursor: $cursor\n      limit: $limit\n    ) {\n      nodes {\n        appId\n        name\n        version\n        tenantId\n        threadId\n        prompt\n        agentVersion\n        modelId\n        generatedAt\n        stdlibVersionAtGeneration\n        artifact {\n          id\n          favoritedAt\n        }\n      }\n      nextCursor\n    }\n  }\n": typeof types.AdminAppletsDocument;
   "\n  mutation AdminUpdateAppletSource($input: AdminUpdateAppletSourceInput!) {\n    adminUpdateAppletSource(input: $input) {\n      ok\n      appId\n      version\n      validated\n      persisted\n      errors\n    }\n  }\n": typeof types.AdminUpdateAppletSourceDocument;
   "\n  query EvalSummary($tenantId: ID!) {\n    evalSummary(tenantId: $tenantId) {\n      totalRuns\n      latestPassRate\n      avgPassRate\n      regressionCount\n    }\n  }\n": typeof types.EvalSummaryDocument;
-  "\n  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {\n    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {\n      items {\n        id\n        status\n        model\n        categories\n        totalTests\n        passed\n        failed\n        passRate\n        regression\n        costUsd\n        agentId\n        agentName\n        scheduledJobId\n        executionTarget\n        runtimeHost\n        startedAt\n        completedAt\n        createdAt\n      }\n      totalCount\n    }\n  }\n": typeof types.EvalRunsDocument;
-  "\n  query EvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      totalTests\n      passed\n      failed\n      passRate\n      regression\n      costUsd\n      errorMessage\n      agentId\n      agentName\n      scheduledJobId\n      executionTarget\n      runtimeHost\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n": typeof types.EvalRunDocument;
-  "\n  query EvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      actualOutput\n      systemPrompt\n      evaluatorResults\n      assertions\n      errorMessage\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n      createdAt\n    }\n  }\n": typeof types.EvalRunResultsDocument;
+  "\n  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {\n    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {\n      items {\n        id\n        status\n        model\n        categories\n        totalTests\n        passed\n        failed\n        errored\n        scoringVersion\n        isLegacyScoring\n        datasetId\n        datasetVersion\n        passRate\n        regression\n        costUsd\n        agentId\n        agentName\n        scheduledJobId\n        executionTarget\n        runtimeHost\n        startedAt\n        completedAt\n        createdAt\n      }\n      totalCount\n    }\n  }\n": typeof types.EvalRunsDocument;
+  "\n  query EvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      totalTests\n      passed\n      failed\n      errored\n      scoringVersion\n      isLegacyScoring\n      datasetId\n      datasetVersion\n      passRate\n      regression\n      costUsd\n      errorMessage\n      agentId\n      agentName\n      scheduledJobId\n      executionTarget\n      runtimeHost\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n": typeof types.EvalRunDocument;
+  "\n  query EvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      actualOutput\n      systemPrompt\n      evaluatorResults\n      assertions\n      errorMessage\n      errorCause\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n      createdAt\n    }\n  }\n": typeof types.EvalRunResultsDocument;
   "\n  mutation OverrideEvalResult($input: OverrideEvalResultInput!) {\n    overrideEvalResult(input: $input) {\n      id\n      status\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n    }\n  }\n": typeof types.OverrideEvalResultDocument;
   "\n  query EvalResultSpans($runId: ID!, $testCaseId: ID!) {\n    evalResultSpans(runId: $runId, testCaseId: $testCaseId) {\n      timestamp\n      name\n      attributes\n    }\n  }\n": typeof types.EvalResultSpansDocument;
   "\n  query EvalTimeSeries($tenantId: ID!, $days: Int) {\n    evalTimeSeries(tenantId: $tenantId, days: $days) {\n      day\n      passRate\n      runCount\n      passed\n      failed\n    }\n  }\n": typeof types.EvalTimeSeriesDocument;
@@ -38,6 +38,15 @@ type Documents = {
   "\n  mutation CancelEvalRun($id: ID!) {\n    cancelEvalRun(id: $id) {\n      id\n      status\n      completedAt\n    }\n  }\n": typeof types.CancelEvalRunDocument;
   "\n  subscription OnEvalRunUpdated($tenantId: ID!) {\n    onEvalRunUpdated(tenantId: $tenantId) {\n      runId\n      tenantId\n      agentId\n      status\n      totalTests\n      passed\n      failed\n      passRate\n      errorMessage\n      updatedAt\n    }\n  }\n": typeof types.OnEvalRunUpdatedDocument;
   "\n  query EvalDatasetsForFlag($tenantId: ID!) {\n    evalDatasets(tenantId: $tenantId) {\n      id\n      slug\n      name\n      kind\n      archivedAt\n    }\n  }\n": typeof types.EvalDatasetsForFlagDocument;
+  "\n  query EvalDatasets($tenantId: ID!, $includeArchived: Boolean) {\n    evalDatasets(tenantId: $tenantId, includeArchived: $includeArchived) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.EvalDatasetsDocument;
+  "\n  query EvalDataset($tenantId: ID!, $slug: String!) {\n    evalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.EvalDatasetDocument;
+  "\n  query EvalDatasetCaseIndex($tenantId: ID!) {\n    evalTestCases(tenantId: $tenantId) {\n      id\n      datasetId\n      enabled\n    }\n  }\n": typeof types.EvalDatasetCaseIndexDocument;
+  "\n  query EvalDatasetCases($tenantId: ID!, $datasetId: ID) {\n    evalTestCases(tenantId: $tenantId, datasetId: $datasetId) {\n      id\n      name\n      category\n      tags\n      enabled\n      source\n      datasetId\n      datasetCaseId\n      createdAt\n      updatedAt\n    }\n  }\n": typeof types.EvalDatasetCasesDocument;
+  "\n  mutation CreateEvalDataset($tenantId: ID!, $input: CreateEvalDatasetInput!) {\n    createEvalDataset(tenantId: $tenantId, input: $input) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n    }\n  }\n": typeof types.CreateEvalDatasetDocument;
+  "\n  mutation UpdateEvalDataset(\n    $tenantId: ID!\n    $slug: String!\n    $input: UpdateEvalDatasetInput!\n  ) {\n    updateEvalDataset(tenantId: $tenantId, slug: $slug, input: $input) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n    }\n  }\n": typeof types.UpdateEvalDatasetDocument;
+  "\n  mutation ArchiveEvalDataset($tenantId: ID!, $slug: String!) {\n    archiveEvalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      archivedAt\n    }\n  }\n": typeof types.ArchiveEvalDatasetDocument;
+  "\n  mutation UpdateEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n    $input: UpdateEvalDatasetCaseInput!\n  ) {\n    updateEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n      input: $input\n    ) {\n      id\n      datasetCaseId\n      enabled\n      updatedAt\n    }\n  }\n": typeof types.UpdateEvalDatasetCaseDocument;
+  "\n  mutation RemoveEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n  ) {\n    removeEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n    ) {\n      id\n      slug\n      version\n    }\n  }\n": typeof types.RemoveEvalDatasetCaseDocument;
   "\n  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {\n    flagThreadForEval(input: $input) {\n      case {\n        id\n        datasetId\n        datasetCaseId\n        name\n        category\n        tags\n      }\n      dataset {\n        id\n        slug\n        name\n      }\n      completeness {\n        history\n        workspace\n        traces\n        truncated\n      }\n    }\n  }\n": typeof types.FlagThreadForEvalDocument;
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n": typeof types.KnowledgeBasesListDocument;
   "\n  query KnowledgeBaseDetail($id: ID!) {\n    knowledgeBase(id: $id) {\n      id\n      tenantId\n      name\n      slug\n      description\n      embeddingModel\n      chunkingStrategy\n      chunkSizeTokens\n      chunkOverlapPercent\n      status\n      awsKbId\n      lastSyncAt\n      lastSyncStatus\n      documentCount\n      errorMessage\n    }\n  }\n": typeof types.KnowledgeBaseDetailDocument;
@@ -147,11 +156,11 @@ const documents: Documents = {
     types.AdminUpdateAppletSourceDocument,
   "\n  query EvalSummary($tenantId: ID!) {\n    evalSummary(tenantId: $tenantId) {\n      totalRuns\n      latestPassRate\n      avgPassRate\n      regressionCount\n    }\n  }\n":
     types.EvalSummaryDocument,
-  "\n  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {\n    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {\n      items {\n        id\n        status\n        model\n        categories\n        totalTests\n        passed\n        failed\n        passRate\n        regression\n        costUsd\n        agentId\n        agentName\n        scheduledJobId\n        executionTarget\n        runtimeHost\n        startedAt\n        completedAt\n        createdAt\n      }\n      totalCount\n    }\n  }\n":
+  "\n  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {\n    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {\n      items {\n        id\n        status\n        model\n        categories\n        totalTests\n        passed\n        failed\n        errored\n        scoringVersion\n        isLegacyScoring\n        datasetId\n        datasetVersion\n        passRate\n        regression\n        costUsd\n        agentId\n        agentName\n        scheduledJobId\n        executionTarget\n        runtimeHost\n        startedAt\n        completedAt\n        createdAt\n      }\n      totalCount\n    }\n  }\n":
     types.EvalRunsDocument,
-  "\n  query EvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      totalTests\n      passed\n      failed\n      passRate\n      regression\n      costUsd\n      errorMessage\n      agentId\n      agentName\n      scheduledJobId\n      executionTarget\n      runtimeHost\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n":
+  "\n  query EvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      totalTests\n      passed\n      failed\n      errored\n      scoringVersion\n      isLegacyScoring\n      datasetId\n      datasetVersion\n      passRate\n      regression\n      costUsd\n      errorMessage\n      agentId\n      agentName\n      scheduledJobId\n      executionTarget\n      runtimeHost\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n":
     types.EvalRunDocument,
-  "\n  query EvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      actualOutput\n      systemPrompt\n      evaluatorResults\n      assertions\n      errorMessage\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n      createdAt\n    }\n  }\n":
+  "\n  query EvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      actualOutput\n      systemPrompt\n      evaluatorResults\n      assertions\n      errorMessage\n      errorCause\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n      createdAt\n    }\n  }\n":
     types.EvalRunResultsDocument,
   "\n  mutation OverrideEvalResult($input: OverrideEvalResultInput!) {\n    overrideEvalResult(input: $input) {\n      id\n      status\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n    }\n  }\n":
     types.OverrideEvalResultDocument,
@@ -183,6 +192,24 @@ const documents: Documents = {
     types.OnEvalRunUpdatedDocument,
   "\n  query EvalDatasetsForFlag($tenantId: ID!) {\n    evalDatasets(tenantId: $tenantId) {\n      id\n      slug\n      name\n      kind\n      archivedAt\n    }\n  }\n":
     types.EvalDatasetsForFlagDocument,
+  "\n  query EvalDatasets($tenantId: ID!, $includeArchived: Boolean) {\n    evalDatasets(tenantId: $tenantId, includeArchived: $includeArchived) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n      createdAt\n      updatedAt\n    }\n  }\n":
+    types.EvalDatasetsDocument,
+  "\n  query EvalDataset($tenantId: ID!, $slug: String!) {\n    evalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n      createdAt\n      updatedAt\n    }\n  }\n":
+    types.EvalDatasetDocument,
+  "\n  query EvalDatasetCaseIndex($tenantId: ID!) {\n    evalTestCases(tenantId: $tenantId) {\n      id\n      datasetId\n      enabled\n    }\n  }\n":
+    types.EvalDatasetCaseIndexDocument,
+  "\n  query EvalDatasetCases($tenantId: ID!, $datasetId: ID) {\n    evalTestCases(tenantId: $tenantId, datasetId: $datasetId) {\n      id\n      name\n      category\n      tags\n      enabled\n      source\n      datasetId\n      datasetCaseId\n      createdAt\n      updatedAt\n    }\n  }\n":
+    types.EvalDatasetCasesDocument,
+  "\n  mutation CreateEvalDataset($tenantId: ID!, $input: CreateEvalDatasetInput!) {\n    createEvalDataset(tenantId: $tenantId, input: $input) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n    }\n  }\n":
+    types.CreateEvalDatasetDocument,
+  "\n  mutation UpdateEvalDataset(\n    $tenantId: ID!\n    $slug: String!\n    $input: UpdateEvalDatasetInput!\n  ) {\n    updateEvalDataset(tenantId: $tenantId, slug: $slug, input: $input) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n    }\n  }\n":
+    types.UpdateEvalDatasetDocument,
+  "\n  mutation ArchiveEvalDataset($tenantId: ID!, $slug: String!) {\n    archiveEvalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      archivedAt\n    }\n  }\n":
+    types.ArchiveEvalDatasetDocument,
+  "\n  mutation UpdateEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n    $input: UpdateEvalDatasetCaseInput!\n  ) {\n    updateEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n      input: $input\n    ) {\n      id\n      datasetCaseId\n      enabled\n      updatedAt\n    }\n  }\n":
+    types.UpdateEvalDatasetCaseDocument,
+  "\n  mutation RemoveEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n  ) {\n    removeEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n    ) {\n      id\n      slug\n      version\n    }\n  }\n":
+    types.RemoveEvalDatasetCaseDocument,
   "\n  mutation FlagThreadForEval($input: FlagThreadForEvalInput!) {\n    flagThreadForEval(input: $input) {\n      case {\n        id\n        datasetId\n        datasetCaseId\n        name\n        category\n        tags\n      }\n      dataset {\n        id\n        slug\n        name\n      }\n      completeness {\n        history\n        workspace\n        traces\n        truncated\n      }\n    }\n  }\n":
     types.FlagThreadForEvalDocument,
   "\n  query KnowledgeBasesList($tenantId: ID!) {\n    knowledgeBases(tenantId: $tenantId) {\n      id\n      name\n      description\n      status\n      documentCount\n      lastSyncAt\n    }\n  }\n":
@@ -429,20 +456,20 @@ export function graphql(
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {\n    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {\n      items {\n        id\n        status\n        model\n        categories\n        totalTests\n        passed\n        failed\n        passRate\n        regression\n        costUsd\n        agentId\n        agentName\n        scheduledJobId\n        executionTarget\n        runtimeHost\n        startedAt\n        completedAt\n        createdAt\n      }\n      totalCount\n    }\n  }\n",
-): (typeof documents)["\n  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {\n    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {\n      items {\n        id\n        status\n        model\n        categories\n        totalTests\n        passed\n        failed\n        passRate\n        regression\n        costUsd\n        agentId\n        agentName\n        scheduledJobId\n        executionTarget\n        runtimeHost\n        startedAt\n        completedAt\n        createdAt\n      }\n      totalCount\n    }\n  }\n"];
+  source: "\n  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {\n    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {\n      items {\n        id\n        status\n        model\n        categories\n        totalTests\n        passed\n        failed\n        errored\n        scoringVersion\n        isLegacyScoring\n        datasetId\n        datasetVersion\n        passRate\n        regression\n        costUsd\n        agentId\n        agentName\n        scheduledJobId\n        executionTarget\n        runtimeHost\n        startedAt\n        completedAt\n        createdAt\n      }\n      totalCount\n    }\n  }\n",
+): (typeof documents)["\n  query EvalRuns($tenantId: ID!, $limit: Int, $offset: Int) {\n    evalRuns(tenantId: $tenantId, limit: $limit, offset: $offset) {\n      items {\n        id\n        status\n        model\n        categories\n        totalTests\n        passed\n        failed\n        errored\n        scoringVersion\n        isLegacyScoring\n        datasetId\n        datasetVersion\n        passRate\n        regression\n        costUsd\n        agentId\n        agentName\n        scheduledJobId\n        executionTarget\n        runtimeHost\n        startedAt\n        completedAt\n        createdAt\n      }\n      totalCount\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  query EvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      totalTests\n      passed\n      failed\n      passRate\n      regression\n      costUsd\n      errorMessage\n      agentId\n      agentName\n      scheduledJobId\n      executionTarget\n      runtimeHost\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n",
-): (typeof documents)["\n  query EvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      totalTests\n      passed\n      failed\n      passRate\n      regression\n      costUsd\n      errorMessage\n      agentId\n      agentName\n      scheduledJobId\n      executionTarget\n      runtimeHost\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n"];
+  source: "\n  query EvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      totalTests\n      passed\n      failed\n      errored\n      scoringVersion\n      isLegacyScoring\n      datasetId\n      datasetVersion\n      passRate\n      regression\n      costUsd\n      errorMessage\n      agentId\n      agentName\n      scheduledJobId\n      executionTarget\n      runtimeHost\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n",
+): (typeof documents)["\n  query EvalRun($id: ID!) {\n    evalRun(id: $id) {\n      id\n      status\n      model\n      categories\n      totalTests\n      passed\n      failed\n      errored\n      scoringVersion\n      isLegacyScoring\n      datasetId\n      datasetVersion\n      passRate\n      regression\n      costUsd\n      errorMessage\n      agentId\n      agentName\n      scheduledJobId\n      executionTarget\n      runtimeHost\n      startedAt\n      completedAt\n      createdAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(
-  source: "\n  query EvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      actualOutput\n      systemPrompt\n      evaluatorResults\n      assertions\n      errorMessage\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n      createdAt\n    }\n  }\n",
-): (typeof documents)["\n  query EvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      actualOutput\n      systemPrompt\n      evaluatorResults\n      assertions\n      errorMessage\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n      createdAt\n    }\n  }\n"];
+  source: "\n  query EvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      actualOutput\n      systemPrompt\n      evaluatorResults\n      assertions\n      errorMessage\n      errorCause\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n      createdAt\n    }\n  }\n",
+): (typeof documents)["\n  query EvalRunResults($runId: ID!) {\n    evalRunResults(runId: $runId) {\n      id\n      testCaseId\n      testCaseName\n      category\n      status\n      score\n      durationMs\n      agentSessionId\n      input\n      actualOutput\n      systemPrompt\n      evaluatorResults\n      assertions\n      errorMessage\n      errorCause\n      overrideStatus\n      overriddenBy\n      overriddenAt\n      overrideReason\n      effectiveStatus\n      createdAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -533,6 +560,60 @@ export function graphql(
 export function graphql(
   source: "\n  query EvalDatasetsForFlag($tenantId: ID!) {\n    evalDatasets(tenantId: $tenantId) {\n      id\n      slug\n      name\n      kind\n      archivedAt\n    }\n  }\n",
 ): (typeof documents)["\n  query EvalDatasetsForFlag($tenantId: ID!) {\n    evalDatasets(tenantId: $tenantId) {\n      id\n      slug\n      name\n      kind\n      archivedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query EvalDatasets($tenantId: ID!, $includeArchived: Boolean) {\n    evalDatasets(tenantId: $tenantId, includeArchived: $includeArchived) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n      createdAt\n      updatedAt\n    }\n  }\n",
+): (typeof documents)["\n  query EvalDatasets($tenantId: ID!, $includeArchived: Boolean) {\n    evalDatasets(tenantId: $tenantId, includeArchived: $includeArchived) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query EvalDataset($tenantId: ID!, $slug: String!) {\n    evalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n      createdAt\n      updatedAt\n    }\n  }\n",
+): (typeof documents)["\n  query EvalDataset($tenantId: ID!, $slug: String!) {\n    evalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query EvalDatasetCaseIndex($tenantId: ID!) {\n    evalTestCases(tenantId: $tenantId) {\n      id\n      datasetId\n      enabled\n    }\n  }\n",
+): (typeof documents)["\n  query EvalDatasetCaseIndex($tenantId: ID!) {\n    evalTestCases(tenantId: $tenantId) {\n      id\n      datasetId\n      enabled\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  query EvalDatasetCases($tenantId: ID!, $datasetId: ID) {\n    evalTestCases(tenantId: $tenantId, datasetId: $datasetId) {\n      id\n      name\n      category\n      tags\n      enabled\n      source\n      datasetId\n      datasetCaseId\n      createdAt\n      updatedAt\n    }\n  }\n",
+): (typeof documents)["\n  query EvalDatasetCases($tenantId: ID!, $datasetId: ID) {\n    evalTestCases(tenantId: $tenantId, datasetId: $datasetId) {\n      id\n      name\n      category\n      tags\n      enabled\n      source\n      datasetId\n      datasetCaseId\n      createdAt\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation CreateEvalDataset($tenantId: ID!, $input: CreateEvalDatasetInput!) {\n    createEvalDataset(tenantId: $tenantId, input: $input) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation CreateEvalDataset($tenantId: ID!, $input: CreateEvalDatasetInput!) {\n    createEvalDataset(tenantId: $tenantId, input: $input) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation UpdateEvalDataset(\n    $tenantId: ID!\n    $slug: String!\n    $input: UpdateEvalDatasetInput!\n  ) {\n    updateEvalDataset(tenantId: $tenantId, slug: $slug, input: $input) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation UpdateEvalDataset(\n    $tenantId: ID!\n    $slug: String!\n    $input: UpdateEvalDatasetInput!\n  ) {\n    updateEvalDataset(tenantId: $tenantId, slug: $slug, input: $input) {\n      id\n      slug\n      name\n      kind\n      version\n      archivedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation ArchiveEvalDataset($tenantId: ID!, $slug: String!) {\n    archiveEvalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      archivedAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation ArchiveEvalDataset($tenantId: ID!, $slug: String!) {\n    archiveEvalDataset(tenantId: $tenantId, slug: $slug) {\n      id\n      slug\n      archivedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation UpdateEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n    $input: UpdateEvalDatasetCaseInput!\n  ) {\n    updateEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n      input: $input\n    ) {\n      id\n      datasetCaseId\n      enabled\n      updatedAt\n    }\n  }\n",
+): (typeof documents)["\n  mutation UpdateEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n    $input: UpdateEvalDatasetCaseInput!\n  ) {\n    updateEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n      input: $input\n    ) {\n      id\n      datasetCaseId\n      enabled\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation RemoveEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n  ) {\n    removeEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n    ) {\n      id\n      slug\n      version\n    }\n  }\n",
+): (typeof documents)["\n  mutation RemoveEvalDatasetCase(\n    $tenantId: ID!\n    $datasetSlug: String!\n    $caseId: String!\n  ) {\n    removeEvalDatasetCase(\n      tenantId: $tenantId\n      datasetSlug: $datasetSlug\n      caseId: $caseId\n    ) {\n      id\n      slug\n      version\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

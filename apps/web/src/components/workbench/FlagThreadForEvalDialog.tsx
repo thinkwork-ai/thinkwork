@@ -139,9 +139,18 @@ export function FlagThreadForEvalDialog({
           description:
             gaps.length > 0 ? `Captured with: ${gaps.join(", ")}.` : undefined,
           action: {
-            label: "Open Evaluations",
-            onClick: () =>
-              void navigate({ to: "/settings/evaluations/studio" }),
+            label: "Open dataset",
+            onClick: () => {
+              const slug = payload?.dataset.slug;
+              if (slug) {
+                void navigate({
+                  to: "/settings/evaluations/datasets/$slug",
+                  params: { slug },
+                });
+              } else {
+                void navigate({ to: "/settings/evaluations/datasets" });
+              }
+            },
           },
         },
       );
