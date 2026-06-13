@@ -1,5 +1,6 @@
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { useTenant } from "@/context/TenantContext";
 import { SettingsActivity } from "@/components/settings/SettingsActivity";
 import { SettingsAnalytics } from "@/components/settings/SettingsAnalytics";
 import { isActivityDay } from "@/lib/settings-activity";
@@ -24,7 +25,9 @@ function tabForPath(pathname: string): ActivityTab {
  */
 export function SettingsActivityHome() {
   const pathname = useLocation({ select: (location) => location.pathname });
-  const activeTab = tabForPath(pathname);
+  const { isOperator, roleResolved } = useTenant();
+  const showOperatorAnalytics = roleResolved && isOperator;
+  const activeTab = showOperatorAnalytics ? tabForPath(pathname) : "threads";
   const navigate = useNavigate();
 
   // Loose read: this component mounts on both /settings/activity (Analytics, no
@@ -37,10 +40,12 @@ export function SettingsActivityHome() {
   usePageHeaderActions({
     title: "Activity",
     breadcrumbs: [{ label: "Activity" }],
-    tabs: [
-      { to: ANALYTICS, label: "Analytics" },
-      { to: THREADS, label: "Threads" },
-    ],
+    tabs: showOperatorAnalytics
+      ? [
+          { to: ANALYTICS, label: "Analytics" },
+          { to: THREADS, label: "Threads" },
+        ]
+      : undefined,
   });
 
   return (

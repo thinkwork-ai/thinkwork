@@ -92,7 +92,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     label: "Activity",
     to: "/settings/activity",
     icon: History,
-    operatorOnly: true,
   },
   {
     label: "Artifacts",
