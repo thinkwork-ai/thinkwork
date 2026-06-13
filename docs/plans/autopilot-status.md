@@ -16,8 +16,9 @@ status: in_progress
 - Current branch: `codex/thnk-15-u2-premium-entitlements`.
 - Current worktree:
   `.Codex/worktrees/thnk-15-u2-premium-entitlements`.
-- Pull request: [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
-  merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`.
+- Pull request: U1 [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
+  merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`; U2
+  [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) opened.
 - Status: U1 completed and merged. U2 implemented locally with generic
   `plugin_entitlements` and `plugin_install_keys` tables, digest-only key
   storage, partial unique active entitlement constraint, GraphQL premium /
@@ -35,7 +36,7 @@ status: in_progress
   script. Local dependency install continued to report the existing broad
   workspace `canvas` native build failure under Node 25.6.0 because
   `pkg-config` was not available.
-- CI log: U2 PR not opened yet.
+- CI log: U2 PR #2440 checks pending.
 - Blockers: none.
 - Next action: finish U2 review, commit, push, open PR, monitor CI, squash
   merge when green, delete branch/worktree, then sync `origin/main` for U3.
