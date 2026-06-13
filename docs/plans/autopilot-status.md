@@ -11,11 +11,11 @@ status: in_progress
 - Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
 - Linear issue: `THNK-15`.
 - Target branch: `main`.
-- Current implementation unit: U7 Redirect/reduce legacy Cognee
-  managed-application surfaces.
-- Current branch: `codex/thnk-15-u7-cognee-surface-reduction`.
+- Current implementation unit: U8 Add smoke coverage, rollout checks, and
+  operator docs.
+- Current branch: `codex/thnk-15-u8-company-brain-smoke-docs`.
 - Current worktree:
-  `.Codex/worktrees/thnk-15-u7-cognee-surface-reduction`.
+  `.Codex/worktrees/thnk-15-u8-company-brain-smoke-docs`.
 - Pull request: U1 [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
   merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`; U2
   [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) merged as
@@ -28,8 +28,13 @@ status: in_progress
   `f44ab2d1a648193c21c53dd8f1cfa16cab7ac847`; U6
   [#2445](https://github.com/thinkwork-ai/thinkwork/pull/2445) merged as
   `80a58246e01e7483f9a87e653b5735624bdd0bea`; U7
-  [#2446](https://github.com/thinkwork-ai/thinkwork/pull/2446) opened.
-- Status: U1 through U6 completed and merged. U7 is implemented locally with
+  [#2446](https://github.com/thinkwork-ai/thinkwork/pull/2446) merged as
+  `183519f670e16686499427936ce265a3a939aa02`; U8
+  [#2447](https://github.com/thinkwork-ai/thinkwork/pull/2447) opened.
+- Status: U1 through U7 completed and merged. U8 is implemented locally with a
+  dry-run-by-default Company Brain premium plugin smoke, smoke README coverage,
+  and an operator runbook for key issuance/revocation, backdoor configuration,
+  adoption evidence, and live smoke execution. U7 added
   the legacy `/settings/applications/cognee` route redirecting to Company Brain
   plugin detail, Managed Applications reducing Company Brain's backing Cognee
   row once the plugin is installed, transitional Cognee rows pointing at
@@ -101,7 +106,12 @@ status: in_progress
   `pnpm --filter @thinkwork/web test -- src/components/settings/managed-applications/ManagedApplicationsPage.test.tsx src/components/settings/SettingsCogneeApplication.test.tsx src/components/settings/knowledge-graph/KnowledgeGraphConfigPanel.test.ts src/components/settings/SettingsMemoryHome.test.tsx src/components/settings/settings-nav.test.ts`
   passed; `pnpm --filter @thinkwork/web typecheck` passed; `git diff --check`
   passed. U7 `pnpm install` completed with the known local `canvas` native
-  build warning under Node 25.6.0 because `pkg-config` is unavailable.
+  build warning under Node 25.6.0 because `pkg-config` is unavailable. U7 PR
+  #2446 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`)
+  and was squash merged. U8 local checks: `node --check
+  scripts/smoke/company-brain-plugin-smoke.mjs` passed; `node
+  scripts/smoke/company-brain-plugin-smoke.mjs` dry-run passed and emitted the
+  expected evidence envelope.
 - CI log: U2 PR #2440 initially passed `cla`, `lint`, `verify`, and
   `typecheck`, with `test` still pending, but `Migration Drift Precheck (dev)`
   failed because the new hand-rolled
@@ -111,8 +121,9 @@ status: in_progress
   reports all declared tables, indexes, and constraints present. U2 CI then
   passed required checks and PR #2440 was squash merged.
 - Blockers: none.
-- Next action: monitor U7 CI, fix any failures, squash merge when green,
-  delete branch/worktree, then sync `origin/main` for U8.
+- Next action: monitor U8 CI, fix any failures, squash merge when green,
+  delete branch/worktree, then assess whether THNK-15 has any remaining
+  implementation units.
 
 ## Deployment Controller Process - 2026-06-09
 

@@ -36,6 +36,7 @@ This kit fills the gap.
 | `managed-app-controller-readiness-smoke.mjs` | Read-only managed-app controller readiness smoke. Verifies selected release manifest descriptors, smoke contracts, and required runtime images for Cognee/Twenty without starting any managed-app job.                                                                                                                             |
 | `deployment-teardown-readiness-smoke.mjs`    | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                                                                                                           |
 | `lastmile-plugin-smoke.mjs`                  | LastMile plugin smoke. Dry-run by default. Phase 1: live OAuth discovery drift guard + `installPlugin` + prints the `activatePlugin` authorize URL; a manual browser OAuth consent sits in between; phase 2 (`--post-activation`): per-user activation status plus MCP tool-surface inclusion/exclusion via `/api/mcp/tools/list`. |
+| `company-brain-plugin-smoke.mjs`             | Company Brain premium plugin smoke. Dry-run by default. Live mode proves catalog visibility, premium key-gating, optional generated/backdoor key redemption through `installPlugin`, persistent entitlement state, Brain substrate deployment evidence, and the Memory / Ontology route contract.                                  |
 
 ## Quick start — run the full smoke suite
 
@@ -103,6 +104,48 @@ Passing live mode means:
 - parked Twenty stages skip with an explicit retained-runtime message;
 - running Twenty stages expose an HTTPS URL;
 - the public `https://.../healthz` endpoint returns a successful response.
+
+## Company Brain premium plugin smoke
+
+The Company Brain plugin smoke is dry-run by default and never starts a live
+install unless `SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1` is set:
+
+```sh
+node scripts/smoke/company-brain-plugin-smoke.mjs
+
+SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
+  SMOKE_COMPANY_BRAIN_INSTALL_KEY=<issued-or-dev-backdoor-key> \
+  node scripts/smoke/company-brain-plugin-smoke.mjs
+```
+
+To mint a one-time key during the smoke instead of passing an existing key,
+use a ThinkWork platform-operator principal:
+
+```sh
+SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
+  SMOKE_COMPANY_BRAIN_ISSUE_KEY=1 \
+  SMOKE_PLATFORM_OPERATOR_USER_ID=<platform-operator-user-id> \
+  node scripts/smoke/company-brain-plugin-smoke.mjs
+```
+
+Live mode requires deployed GraphQL credentials from `apps/web/.env` or
+equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
+`API_AUTH_SECRET`/`THINKWORK_API_SECRET`. Passing live mode means:
+
+- Company Brain appears in `pluginCatalog` with premium/key-gated metadata.
+- unentitled installs without a key and with an invalid key fail closed without
+  creating an install or entitlement.
+- a generated, issued, or configured dev/test backdoor key grants the same
+  persistent entitlement path used by normal install.
+- the Brain substrate infrastructure component exposes managed-app deployment
+  evidence; existing-Cognee adoption reports the no-change marker when that path
+  is active.
+- Company Brain plugin detail remains `/settings/plugins/company-brain`, and
+  Memory / Ontology remains `/settings/memory/knowledge-graph`.
 
 ## GitHub-free foundation smoke
 
