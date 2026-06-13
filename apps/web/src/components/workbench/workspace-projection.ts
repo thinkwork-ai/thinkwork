@@ -49,11 +49,41 @@ export interface ProjectedWorkspace {
   agentsMdKey: string | null;
   /** S3 ETag of the rendered AGENTS.md for this exact render (optional). */
   agentsMdEtag: string | null;
+  /**
+   * Write-once, content-addressed S3 key holding this exact turn's rendered
+   * AGENTS.md (`${renderedPrefix}.agents-md-history/<sha>.md`). Immune to
+   * later re-renders, so the panel can show the EXACT historical content for
+   * an older turn. Null on pre-fix turns (or manifests with no generated
+   * AGENTS.md entry), in which case the panel falls back to the current render.
+   */
+  agentsMdHistoryKey: string | null;
   /** Prompt files actually injected into the system prompt. */
   injectedFiles: string[];
   generatedAt: string | null;
   fetches: ProjectedWorkspaceFetch[];
   reconcile: ProjectedWorkspaceReconcile | null;
+}
+
+/**
+ * The thread-target workspace-files reader maps a path RELATIVE to the
+ * thread's rendered prefix, but `agentsMdHistoryKey` is a FULL S3 key
+ * (`${renderedPrefix}.agents-md-history/<sha>.md`). Strip the snapshot's
+ * `renderedPrefix` to get the path the reader expects
+ * (`.agents-md-history/<sha>.md`). Returns null when the projection lacks a
+ * history key, so the panel can fall back to the current AGENTS.md. If the key
+ * doesn't begin with the prefix (defensive — shouldn't happen), returns the
+ * full key unchanged; a bad read then 404s and the panel falls back.
+ */
+export function agentsMdHistoryRelativePath(
+  projection: ProjectedWorkspace,
+): string | null {
+  const key = projection.agentsMdHistoryKey;
+  if (!key) return null;
+  const prefix = projection.renderedPrefix;
+  if (prefix && key.startsWith(prefix)) {
+    return key.slice(prefix.length);
+  }
+  return key;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -144,6 +174,7 @@ export function parseWorkspaceProjection(
       : [],
     agentsMdKey: asString(raw.agentsMdKey),
     agentsMdEtag: asString(raw.agentsMdEtag),
+    agentsMdHistoryKey: asString(raw.agentsMdHistoryKey),
     injectedFiles: Array.isArray(raw.injectedFiles)
       ? raw.injectedFiles.flatMap((entry) => {
           const file = asString(entry);

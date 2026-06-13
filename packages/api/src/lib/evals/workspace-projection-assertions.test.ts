@@ -33,6 +33,23 @@ const storedProjection = {
 
 const TURN_ID = "11111111-1111-4111-8111-111111111111";
 
+const HISTORY_KEY =
+  "tenants/acme/threads/t-1/rendered/.agents-md-history/deadbeef.md";
+
+const projectionWithHistory = {
+  ...storedProjection,
+  agentsMdHistoryKey: HISTORY_KEY,
+};
+
+const RENDERED_AGENTS_MD = [
+  "# AGENTS.md",
+  "",
+  "## Workspace Routing",
+  "",
+  "- Spaces/board-pack/ — board pack working area",
+  "- Spaces/growth/ — growth space",
+].join("\n");
+
 describe("partitionEvalAssertions", () => {
   it("splits projection-targeting assertions from output assertions", () => {
     const output = { type: "contains", value: "hello" };
@@ -170,6 +187,121 @@ describe("evaluateWorkspaceProjectionAssertions", () => {
     expect(outcome.results[1].reason).toContain('path "doesNot.exist"');
     // The missing-threadTurnId assertion never touches the db.
     expect(select).toHaveBeenCalledTimes(1);
+  });
+
+  it("asserts on the STORED rendered AGENTS.md text via the history key (AE5)", async () => {
+    const { db, select } = fakeDb([
+      [{ context_snapshot: { workspace_projection: projectionWithHistory } }],
+    ]);
+    const loadAgentsMdHistory = vi.fn(async () => RENDERED_AGENTS_MD);
+
+    const outcome = await evaluateWorkspaceProjectionAssertions(
+      [
+        {
+          type: "workspace-projection-agents-md-contains",
+          threadTurnId: TURN_ID,
+          value: "Spaces/board-pack",
+        },
+        {
+          type: "workspace-projection-agents-md-contains",
+          threadTurnId: TURN_ID,
+          value: "Workspace Routing",
+        },
+        {
+          // A Space not present in this render must FAIL — reading STORED
+          // content, never a re-render.
+          type: "workspace-projection-agents-md-contains",
+          threadTurnId: TURN_ID,
+          value: "Spaces/not-listed",
+        },
+        {
+          type: "workspace-projection-agents-md-regex",
+          threadTurnId: TURN_ID,
+          value: "board-pack/ — .*working area",
+        },
+      ],
+      {
+        tenantId: "tenant-1",
+        db,
+        workspaceBucket: "tenant-workspace",
+        loadAgentsMdHistory,
+      },
+    );
+
+    expect(outcome.results.map((r) => r.passed)).toEqual([
+      true,
+      true,
+      false,
+      true,
+    ]);
+    expect(outcome.threadTurnId).toBe(TURN_ID);
+    // Stored row read once; S3 loaded once per assertion with the history key.
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(loadAgentsMdHistory).toHaveBeenCalledWith({
+      bucket: "tenant-workspace",
+      key: HISTORY_KEY,
+    });
+    expect(outcome.results[0].type).toBe(
+      "workspace-projection-agents-md-contains",
+    );
+    expect(outcome.results[0].reason).toContain(HISTORY_KEY);
+  });
+
+  it("fails clearly when the AGENTS.md history object is missing/expired", async () => {
+    const { db } = fakeDb([
+      [{ context_snapshot: { workspace_projection: projectionWithHistory } }],
+    ]);
+    const loadAgentsMdHistory = vi.fn(async () => null);
+
+    const outcome = await evaluateWorkspaceProjectionAssertions(
+      [
+        {
+          type: "workspace-projection-agents-md-contains",
+          threadTurnId: TURN_ID,
+          value: "Spaces/board-pack",
+        },
+      ],
+      {
+        tenantId: "tenant-1",
+        db,
+        workspaceBucket: "tenant-workspace",
+        loadAgentsMdHistory,
+      },
+    );
+
+    expect(outcome.results[0].passed).toBe(false);
+    expect(outcome.results[0].reason).toContain("missing from the workspace");
+  });
+
+  it("fails with a predates-history reason when the turn has no history key", async () => {
+    // storedProjection has no agentsMdHistoryKey — a pre-fix turn.
+    const { db } = fakeDb([
+      [{ context_snapshot: { workspace_projection: storedProjection } }],
+    ]);
+    const loadAgentsMdHistory = vi.fn(async () => RENDERED_AGENTS_MD);
+
+    const outcome = await evaluateWorkspaceProjectionAssertions(
+      [
+        {
+          type: "workspace-projection-agents-md-contains",
+          threadTurnId: TURN_ID,
+          value: "Spaces/board-pack",
+        },
+      ],
+      {
+        tenantId: "tenant-1",
+        db,
+        workspaceBucket: "tenant-workspace",
+        loadAgentsMdHistory,
+      },
+    );
+
+    expect(outcome.results[0].passed).toBe(false);
+    expect(outcome.results[0].reason).toContain(
+      "predates immutable AGENTS.md history",
+    );
+    // The history loader is never consulted for a pre-fix turn.
+    expect(loadAgentsMdHistory).not.toHaveBeenCalled();
   });
 
   it("treats a db failure as a failed assertion, not an exception", async () => {

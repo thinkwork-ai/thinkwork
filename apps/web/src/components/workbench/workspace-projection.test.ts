@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agentsMdContentMayDiffer,
+  agentsMdHistoryRelativePath,
   parseWorkspaceProjection,
   selectLatestProjection,
 } from "./workspace-projection";
@@ -19,6 +20,8 @@ const FULL_SNAPSHOT = {
     ],
     agentsMdKey: "tenants/acme/threads/thread-1/AGENTS.md",
     agentsMdEtag: "etag-render-1",
+    agentsMdHistoryKey:
+      "tenants/acme/threads/thread-1/.agents-md-history/sha-abc.md",
     injectedFiles: ["AGENTS.md", "CONTEXT.md"],
     generatedAt: "2026-06-12T10:00:00.000Z",
     fetches: [
@@ -65,6 +68,9 @@ describe("parseWorkspaceProjection", () => {
       "tenants/acme/threads/thread-1/AGENTS.md",
     );
     expect(projection!.agentsMdEtag).toBe("etag-render-1");
+    expect(projection!.agentsMdHistoryKey).toBe(
+      "tenants/acme/threads/thread-1/.agents-md-history/sha-abc.md",
+    );
     expect(projection!.injectedFiles).toEqual(["AGENTS.md", "CONTEXT.md"]);
     expect(projection!.generatedAt).toBe("2026-06-12T10:00:00.000Z");
     expect(projection!.fetches).toHaveLength(2);
@@ -112,6 +118,7 @@ describe("parseWorkspaceProjection", () => {
     expect(projection!.renderedPrefix).toBeNull();
     expect(projection!.agentsMdKey).toBeNull();
     expect(projection!.agentsMdEtag).toBeNull();
+    expect(projection!.agentsMdHistoryKey).toBeNull();
     expect(projection!.generatedAt).toBeNull();
     // Entries with no owner/prefix are dropped; valid partials kept.
     expect(projection!.sources).toEqual([
@@ -264,5 +271,47 @@ describe("agentsMdContentMayDiffer", () => {
 
   it("is false when no projection exists anywhere", () => {
     expect(agentsMdContentMayDiffer("turn-1", projection, null)).toBe(false);
+  });
+});
+
+describe("agentsMdHistoryRelativePath", () => {
+  it("strips the renderedPrefix to yield a thread-relative history path", () => {
+    const projection = parseWorkspaceProjection(FULL_SNAPSHOT)!;
+    expect(agentsMdHistoryRelativePath(projection)).toBe(
+      ".agents-md-history/sha-abc.md",
+    );
+  });
+
+  it("returns null when the turn has no history key (pre-fix turn)", () => {
+    const projection = parseWorkspaceProjection({
+      workspace_projection: {
+        renderedPrefix: "tenants/acme/threads/thread-1/",
+        agentsMdKey: "tenants/acme/threads/thread-1/AGENTS.md",
+      },
+    })!;
+    expect(agentsMdHistoryRelativePath(projection)).toBeNull();
+  });
+
+  it("returns the full key unchanged when it doesn't begin with the prefix", () => {
+    const projection = parseWorkspaceProjection({
+      workspace_projection: {
+        renderedPrefix: "tenants/acme/threads/thread-1/",
+        agentsMdHistoryKey: "some/other/key/.agents-md-history/sha.md",
+      },
+    })!;
+    expect(agentsMdHistoryRelativePath(projection)).toBe(
+      "some/other/key/.agents-md-history/sha.md",
+    );
+  });
+
+  it("returns the full key when renderedPrefix is missing", () => {
+    const projection = parseWorkspaceProjection({
+      workspace_projection: {
+        agentsMdHistoryKey: ".agents-md-history/sha.md",
+      },
+    })!;
+    expect(agentsMdHistoryRelativePath(projection)).toBe(
+      ".agents-md-history/sha.md",
+    );
   });
 });

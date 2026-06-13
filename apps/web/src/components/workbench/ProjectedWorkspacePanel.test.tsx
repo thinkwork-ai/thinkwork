@@ -38,6 +38,8 @@ const FULL_PROJECTION = parseWorkspaceProjection({
       { owner: "user:eric", prefix: "tenants/acme/users/eric/" },
     ],
     agentsMdKey: "tenants/acme/threads/thread-1/AGENTS.md",
+    agentsMdHistoryKey:
+      "tenants/acme/threads/thread-1/.agents-md-history/sha-abc.md",
     injectedFiles: ["AGENTS.md", "CONTEXT.md", "User/USER.md"],
     generatedAt: "2026-06-12T10:00:00.000Z",
     fetches: [
@@ -134,8 +136,42 @@ describe("ProjectedWorkspacePanel", () => {
     expect(rows[2].textContent).toContain("partial");
   });
 
-  it("loads and shows the current AGENTS.md content on demand", async () => {
-    const loadAgentsMd = vi.fn(async () => "# Rendered AGENTS\nrouting…");
+  it("loads this turn's EXACT historical AGENTS.md from the history path with no caveat", async () => {
+    // FULL_PROJECTION carries an agentsMdHistoryKey, so the panel reads the
+    // write-once history copy via its prefix-relative path — exact content,
+    // and NO caveat even though this turn is older (agentsMdMayDiffer set).
+    const loadAgentsMd = vi.fn(async (_id: string, path: string | null) =>
+      path === ".agents-md-history/sha-abc.md"
+        ? "# Exact turn AGENTS\nrouting…"
+        : "# Current render",
+    );
+    render(
+      <ProjectedWorkspacePanel
+        projection={FULL_PROJECTION}
+        threadId="thread-1"
+        agentsMdMayDiffer
+        loadAgentsMd={loadAgentsMd}
+      />,
+    );
+
+    expect(loadAgentsMd).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("projection-agents-md-toggle"));
+    expect(loadAgentsMd).toHaveBeenCalledWith(
+      "thread-1",
+      ".agents-md-history/sha-abc.md",
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/# Exact turn AGENTS/)).toBeTruthy(),
+    );
+    // Exact content retained: no caveat, even for an older turn.
+    expect(screen.queryByTestId("projection-agents-md-caveat")).toBeNull();
+  });
+
+  it("falls back to current AGENTS.md with the honest 'not retained' caveat when the history read returns null", async () => {
+    const loadAgentsMd = vi.fn(async (_id: string, path: string | null) =>
+      path === null ? "# Current render" : null,
+    );
     render(
       <ProjectedWorkspacePanel
         projection={FULL_PROJECTION}
@@ -144,21 +180,61 @@ describe("ProjectedWorkspacePanel", () => {
       />,
     );
 
-    expect(loadAgentsMd).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("projection-agents-md-toggle"));
-    expect(loadAgentsMd).toHaveBeenCalledWith("thread-1");
-
-    await waitFor(() =>
-      expect(screen.getByText(/# Rendered AGENTS/)).toBeTruthy(),
+    // History path tried first, then the current-render fallback.
+    expect(loadAgentsMd).toHaveBeenNthCalledWith(
+      1,
+      "thread-1",
+      ".agents-md-history/sha-abc.md",
     );
-    // Fresh turn: no may-differ caveat.
-    expect(screen.queryByTestId("projection-agents-md-caveat")).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByTestId("projection-agents-md-caveat")).toBeTruthy(),
+    );
+    expect(loadAgentsMd).toHaveBeenNthCalledWith(2, "thread-1", null);
+    expect(
+      screen.getByTestId("projection-agents-md-caveat").textContent,
+    ).toMatch(/not retained/);
+    expect(screen.getByText(/# Current render/)).toBeTruthy();
   });
 
-  it("labels the AGENTS.md body as possibly differing for older turns", async () => {
+  it("falls back to current AGENTS.md when this turn has no history key (pre-fix turn)", async () => {
+    const preFix = parseWorkspaceProjection({
+      workspace_projection: {
+        renderedPrefix: "tenants/acme/threads/thread-1/",
+        agentsMdKey: "tenants/acme/threads/thread-1/AGENTS.md",
+      },
+    })!;
+    const loadAgentsMd = vi.fn(async () => "# Current render");
     render(
       <ProjectedWorkspacePanel
-        projection={FULL_PROJECTION}
+        projection={preFix}
+        threadId="thread-1"
+        loadAgentsMd={loadAgentsMd}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("projection-agents-md-toggle"));
+    // No history key → reads current AGENTS.md directly.
+    expect(loadAgentsMd).toHaveBeenCalledWith("thread-1", null);
+    await waitFor(() =>
+      expect(screen.getByTestId("projection-agents-md-caveat")).toBeTruthy(),
+    );
+    expect(
+      screen.getByTestId("projection-agents-md-caveat").textContent,
+    ).toMatch(/not retained/);
+    expect(screen.getByText(/# Current render/)).toBeTruthy();
+  });
+
+  it("appends the may-differ wording on the fallback path when content may differ", async () => {
+    const preFix = parseWorkspaceProjection({
+      workspace_projection: {
+        renderedPrefix: "tenants/acme/threads/thread-1/",
+        agentsMdKey: "tenants/acme/threads/thread-1/AGENTS.md",
+      },
+    })!;
+    render(
+      <ProjectedWorkspacePanel
+        projection={preFix}
         threadId="thread-1"
         agentsMdMayDiffer
         loadAgentsMd={vi.fn(async () => "# Later render")}
@@ -171,11 +247,11 @@ describe("ProjectedWorkspacePanel", () => {
     );
     expect(
       screen.getByTestId("projection-agents-md-caveat").textContent,
-    ).toMatch(/current rendered AGENTS\.md/);
+    ).toMatch(/later turn re-rendered/);
     expect(screen.getByText(/# Later render/)).toBeTruthy();
   });
 
-  it("shows a graceful expired state when the AGENTS.md read fails", async () => {
+  it("shows a graceful expired state when both the history and current reads fail", async () => {
     render(
       <ProjectedWorkspacePanel
         projection={FULL_PROJECTION}
@@ -197,7 +273,7 @@ describe("ProjectedWorkspacePanel", () => {
     ).toMatch(/no longer retrievable/);
   });
 
-  it("shows an expired state when the read returns no content", async () => {
+  it("shows an expired state when both reads return no content", async () => {
     render(
       <ProjectedWorkspacePanel
         projection={FULL_PROJECTION}

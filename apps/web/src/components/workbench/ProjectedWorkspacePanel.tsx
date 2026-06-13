@@ -3,7 +3,10 @@ import { ChevronRight, FolderTree } from "lucide-react";
 import { Badge } from "@thinkwork/ui";
 import { cn, formatDateTime } from "@/lib/utils";
 import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
-import type { ProjectedWorkspace } from "./workspace-projection";
+import {
+  agentsMdHistoryRelativePath,
+  type ProjectedWorkspace,
+} from "./workspace-projection";
 
 /**
  * Read-only "Projected workspace" disclosure for a thread turn (plan
@@ -11,14 +14,17 @@ import type { ProjectedWorkspace } from "./workspace-projection";
  * injected prompt files, fetch ledger, reconcile rejections — exactly as
  * captured at dispatch/finalize time for THAT turn.
  *
- * The AGENTS.md body is the one best-effort exception: the snapshot stores an
- * S3 key (and, on newer snapshots, an ETag), and the web can only read the
- * CURRENT rendered AGENTS.md (via the workspace-files thread target). For the
- * latest render they match; for older turns the panel labels the body as
- * possibly differing (`agentsMdMayDiffer` — etag inequality when both
- * snapshots carry `agentsMdEtag`, else a later-turn heuristic), and a failed
- * read shows an expired state. The structured fields above are always from
- * this turn's snapshot.
+ * AGENTS.md body: the snapshot records a write-once, content-addressed history
+ * key (`agentsMdHistoryKey`) holding THIS turn's exact rendered AGENTS.md,
+ * immune to later re-renders. When present, the panel reads that exact content
+ * — no caveat, even for older turns. When it's absent (pre-fix turn) or the
+ * history read returns null/errors, the panel falls back to reading the
+ * CURRENT rendered AGENTS.md via the workspace-files thread target and keeps an
+ * honest caveat: for the latest render the current content matches, but
+ * otherwise the bytes may have differed (`agentsMdMayDiffer` — etag inequality
+ * when both snapshots carry `agentsMdEtag`, else a later-turn heuristic). A
+ * fully failed read shows an expired state. The structured fields above are
+ * always from this turn's snapshot.
  */
 export interface ProjectedWorkspacePanelProps {
   projection: ProjectedWorkspace;
@@ -27,17 +33,29 @@ export interface ProjectedWorkspacePanelProps {
   /**
    * True when the current AGENTS.md content may differ from this turn's
    * render — etag mismatch when known, later-turn heuristic otherwise (see
-   * module docs).
+   * module docs). Only consulted on the current-content FALLBACK path; the
+   * exact history read is never caveated.
    */
   agentsMdMayDiffer?: boolean;
-  /** Injectable AGENTS.md reader for tests; defaults to the REST client. */
-  loadAgentsMd?: (threadId: string) => Promise<string | null>;
+  /**
+   * Injectable AGENTS.md reader for tests; defaults to the REST client.
+   * `path` is RELATIVE to the thread's rendered prefix — `null` requests the
+   * current rendered `AGENTS.md`, a `.agents-md-history/<sha>.md` path requests
+   * this turn's exact historical render.
+   */
+  loadAgentsMd?: (
+    threadId: string,
+    path: string | null,
+  ) => Promise<string | null>;
 }
 
-async function defaultLoadAgentsMd(threadId: string): Promise<string | null> {
+async function defaultLoadAgentsMd(
+  threadId: string,
+  path: string | null,
+): Promise<string | null> {
   const { content } = await spacesWorkspaceFilesClient.getFile(
     { threadId },
-    "AGENTS.md",
+    path ?? "AGENTS.md",
   );
   return content;
 }
@@ -45,7 +63,9 @@ async function defaultLoadAgentsMd(threadId: string): Promise<string | null> {
 type AgentsMdState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "loaded"; content: string }
+  // `exact` true → exact historical content (no caveat). false → current
+  // render fallback (caveat applies).
+  | { status: "loaded"; content: string; exact: boolean }
   | { status: "unavailable" };
 
 function formatBytes(value: number): string {
@@ -103,6 +123,8 @@ export function ProjectedWorkspacePanel({
   const hiddenRejections =
     rejectedCount - (projection.reconcile?.rejections.length ?? 0);
 
+  const historyPath = agentsMdHistoryRelativePath(projection);
+
   function handleToggleAgentsMd() {
     const nextOpen = !agentsMdOpen;
     setAgentsMdOpen(nextOpen);
@@ -111,17 +133,35 @@ export function ProjectedWorkspacePanel({
       setAgentsMd({ status: "unavailable" });
       return;
     }
+    const id = threadId;
     setAgentsMd({ status: "loading" });
-    void loadAgentsMd(threadId).then(
-      (content) => {
-        if (content == null || content.length === 0) {
-          setAgentsMd({ status: "unavailable" });
-        } else {
-          setAgentsMd({ status: "loaded", content });
-        }
-      },
-      () => setAgentsMd({ status: "unavailable" }),
-    );
+
+    const hasContent = (content: string | null): content is string =>
+      content != null && content.length > 0;
+
+    // Fall back to the current rendered AGENTS.md when no exact history copy
+    // exists for this turn (or it can't be read). Flagged non-exact so the
+    // honest caveat fires.
+    const loadCurrentFallback = () =>
+      loadAgentsMd(id, null).then(
+        (content) =>
+          hasContent(content)
+            ? setAgentsMd({ status: "loaded", content, exact: false })
+            : setAgentsMd({ status: "unavailable" }),
+        () => setAgentsMd({ status: "unavailable" }),
+      );
+
+    if (historyPath) {
+      void loadAgentsMd(id, historyPath).then(
+        (content) =>
+          hasContent(content)
+            ? setAgentsMd({ status: "loaded", content, exact: true })
+            : loadCurrentFallback(),
+        () => loadCurrentFallback(),
+      );
+      return;
+    }
+    void loadCurrentFallback();
   }
 
   return (
@@ -240,14 +280,14 @@ export function ProjectedWorkspacePanel({
                 ) : null}
                 {agentsMd.status === "loaded" ? (
                   <>
-                    {agentsMdMayDiffer ? (
+                    {!agentsMd.exact ? (
                       <p
                         className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-600 dark:text-amber-400"
                         data-testid="projection-agents-md-caveat"
                       >
-                        Showing the current rendered AGENTS.md — a later turn
-                        re-rendered this workspace, so this turn's content may
-                        have differed.
+                        {agentsMdMayDiffer
+                          ? "The exact content for this turn is not retained — showing the current rendered AGENTS.md, and a later turn re-rendered this workspace, so this turn's content may have differed."
+                          : "The exact content for this turn is not retained — showing the current rendered AGENTS.md."}
                       </p>
                     ) : null}
                     <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/30 p-3 font-mono leading-5">

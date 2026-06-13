@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getConfig } from "@thinkwork/runtime-config";
 import { S3Client } from "@aws-sdk/client-s3";
 import { shouldRenderWorkspaceSourcePath } from "../workspace-renderer.js";
@@ -53,6 +54,22 @@ const REGION =
 const s3 = new S3Client({ region: REGION });
 const HYDRATE_MANIFEST_PATH = ".hydrate_manifest.json";
 const TOOLS_MD = "TOOLS.md";
+// Write-once, content-addressed copies of each turn's generated AGENTS.md.
+// The live `${renderedPrefix}AGENTS.md` is overwritten on every re-render, so
+// it cannot recover what an older turn saw; the per-turn projection snapshot
+// records the sha and reads the immutable copy here (eval AE5, debug panel).
+const AGENTS_MD_HISTORY_DIR = ".agents-md-history";
+
+export function agentsMdContentSha(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
+}
+
+export function agentsMdHistoryKey(
+  renderedPrefix: string,
+  sha: string,
+): string {
+  return `${renderedPrefix}${AGENTS_MD_HISTORY_DIR}/${sha}.md`;
+}
 
 export interface RenderWorkspaceTupleDeps {
   bucket?: string;
@@ -417,6 +434,9 @@ function sortedManifestFiles(
         generatedFile.key.length - generatedFile.path.length,
       ),
       sourcePath: generatedFile.path,
+      // Content sha so the per-turn snapshot carries a true content
+      // fingerprint (generated files have no S3 etag at manifest-build time).
+      etag: agentsMdContentSha(generatedFile.content),
       readOnly: true,
       generated: true,
       size: Buffer.byteLength(generatedFile.content),
@@ -936,6 +956,16 @@ export async function renderWorkspaceTuple(
       contentType: "text/markdown; charset=utf-8",
     });
   }
+  // Write-once content-addressed copy of this render's AGENTS.md so the turn's
+  // exact content stays recoverable after later re-renders overwrite the live
+  // key. Identical content across turns dedups to one object. Only on the miss
+  // path: any content that ever rendered post-deploy was first produced here.
+  await objectStore.putText({
+    bucket,
+    key: agentsMdHistoryKey(renderedPrefix, agentsMdContentSha(agentsMd)),
+    content: agentsMd,
+    contentType: "text/markdown; charset=utf-8",
+  });
   await objectStore.putText({
     bucket,
     key: manifestKey,
