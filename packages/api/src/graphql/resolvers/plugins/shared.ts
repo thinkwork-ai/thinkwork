@@ -14,6 +14,7 @@
  */
 
 import { GraphQLError } from "graphql";
+import { getConfig } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
 import { snakeToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
@@ -56,6 +57,42 @@ export function pluginActorFor(callerUserId: string | null): PluginEngineActor {
   return callerUserId
     ? { actorId: callerUserId, actorType: "user" }
     : { actorId: "system", actorType: "system" };
+}
+
+export async function requireThinkWorkPlatformOperator(
+  ctx: GraphQLContext,
+): Promise<{ callerUserId: string | null }> {
+  const allowlist = (getConfig("THINKWORK_PLATFORM_OPERATOR_EMAILS") ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowlist.length === 0) {
+    throw new GraphQLError(
+      "Premium plugin key issuance is not enabled: THINKWORK_PLATFORM_OPERATOR_EMAILS must be configured",
+      { extensions: { code: "FAILED_PRECONDITION" } },
+    );
+  }
+
+  const email = ctx.auth.email?.toLowerCase();
+  if (!email || !allowlist.includes(email)) {
+    throw new GraphQLError(
+      "Premium plugin key issuance requires platform-operator role",
+      { extensions: { code: "FORBIDDEN" } },
+    );
+  }
+  return { callerUserId: await resolveCallerUserId(ctx) };
+}
+
+export function pluginRequestMetadata(ctx: GraphQLContext): {
+  ip: string | null;
+  userAgent: string | null;
+} {
+  const headers = ctx.headers ?? {};
+  const forwardedFor =
+    headers["x-forwarded-for"] ?? headers["X-Forwarded-For"];
+  const ip = forwardedFor?.split(",")[0]?.trim() || null;
+  const userAgent = headers["user-agent"] ?? headers["User-Agent"] ?? null;
+  return { ip, userAgent };
 }
 
 export function toPluginInstallPayload(

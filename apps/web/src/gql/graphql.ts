@@ -728,7 +728,12 @@ export enum ComplianceEventType {
   PluginActivationGranted = 'PLUGIN_ACTIVATION_GRANTED',
   PluginActivationRevoked = 'PLUGIN_ACTIVATION_REVOKED',
   PluginCutover = 'PLUGIN_CUTOVER',
+  PluginEntitlementGranted = 'PLUGIN_ENTITLEMENT_GRANTED',
   PluginInstalled = 'PLUGIN_INSTALLED',
+  PluginInstallKeyCreated = 'PLUGIN_INSTALL_KEY_CREATED',
+  PluginInstallKeyFailed = 'PLUGIN_INSTALL_KEY_FAILED',
+  PluginInstallKeyRedeemed = 'PLUGIN_INSTALL_KEY_REDEEMED',
+  PluginInstallKeyRevoked = 'PLUGIN_INSTALL_KEY_REVOKED',
   PluginUninstalled = 'PLUGIN_UNINSTALLED',
   PolicyAllowed = 'POLICY_ALLOWED',
   PolicyBlocked = 'POLICY_BLOCKED',
@@ -1499,6 +1504,29 @@ export type InviteMemberInput = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
   role?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type IssuePremiumPluginInstallKeyInput = {
+  /** Optional expiry for the key; null means no explicit expiry. */
+  expiresAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  pluginKey: Scalars['String']['input'];
+  /** Tenant the one-time key may grant. V1 keys are tenant-scoped for auditability. */
+  tenantId: Scalars['ID']['input'];
+};
+
+/**
+ * Operator-only result for a one-time premium install key. `installKey` is the
+ * raw key and is never stored or returned again.
+ */
+export type IssuePremiumPluginInstallKeyResult = {
+  __typename?: 'IssuePremiumPluginInstallKeyResult';
+  entitlementProductKey: Scalars['String']['output'];
+  expiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  installKey: Scalars['String']['output'];
+  issuedAt: Scalars['AWSDateTime']['output'];
+  keyId: Scalars['ID']['output'];
+  pluginKey: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
 };
 
 export type KnowledgeBase = {
@@ -2412,6 +2440,11 @@ export type Mutation = {
    */
   installPlugin: PluginInstall;
   inviteMember: TenantMember;
+  /**
+   * ThinkWork-operator-only: issue a one-time premium plugin install key for a
+   * tenant. Returns the raw key exactly once.
+   */
+  issuePremiumPluginInstallKey: IssuePremiumPluginInstallKeyResult;
   markThreadsRead: MarkThreadsReadResult;
   notifyAgentStatus?: Maybe<AgentStatusEvent>;
   notifyCostRecorded?: Maybe<CostRecordedEvent>;
@@ -2438,6 +2471,11 @@ export type Mutation = {
    * the counts it would write without mutating. Returns one result per tenant.
    */
   rebuildSkillCatalogIndex: Array<SkillCatalogRebuildResult>;
+  /**
+   * Tenant-admin: redeem a ThinkWork-provided premium plugin install key into a
+   * persistent tenant entitlement.
+   */
+  redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
   refreshGenUI?: Maybe<Message>;
   refreshThreadProgress: RefreshThreadProgressPayload;
   regenerateApplet: SaveAppletPayload;
@@ -2471,6 +2509,11 @@ export type Mutation = {
   /** Re-drive one failed component (failed → pending) and re-run its handler (tenant admin). */
   retryPluginComponent: PluginInstall;
   reviewGoal: ReviewGoalPayload;
+  /**
+   * ThinkWork-operator-only: revoke an issued premium plugin install key before
+   * redemption.
+   */
+  revokePremiumPluginInstallKey: RevokePremiumPluginInstallKeyResult;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
   runScheduledJob: RunScheduledJobResult;
@@ -2991,6 +3034,11 @@ export type MutationInviteMemberArgs = {
 };
 
 
+export type MutationIssuePremiumPluginInstallKeyArgs = {
+  input: IssuePremiumPluginInstallKeyInput;
+};
+
+
 export type MutationMarkThreadsReadArgs = {
   input: MarkThreadsReadInput;
 };
@@ -3160,6 +3208,11 @@ export type MutationRebuildSkillCatalogIndexArgs = {
 };
 
 
+export type MutationRedeemPremiumPluginInstallKeyArgs = {
+  input: RedeemPremiumPluginInstallKeyInput;
+};
+
+
 export type MutationRefreshGenUiArgs = {
   messageId: Scalars['ID']['input'];
   toolIndex: Scalars['Int']['input'];
@@ -3306,6 +3359,11 @@ export type MutationRetryPluginComponentArgs = {
 
 export type MutationReviewGoalArgs = {
   input: ReviewGoalInput;
+};
+
+
+export type MutationRevokePremiumPluginInstallKeyArgs = {
+  input: RevokePremiumPluginInstallKeyInput;
 };
 
 
@@ -5364,6 +5422,18 @@ export type Recipe = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
+export type RedeemPremiumPluginInstallKeyInput = {
+  /** ThinkWork-provided one-time install key. */
+  installKey: Scalars['String']['input'];
+  pluginKey: Scalars['String']['input'];
+};
+
+export type RedeemPremiumPluginInstallKeyResult = {
+  __typename?: 'RedeemPremiumPluginInstallKeyResult';
+  entitlement: PluginEntitlement;
+  source: Scalars['String']['output'];
+};
+
 export type RefreshThreadProgressInput = {
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
@@ -5438,6 +5508,19 @@ export type ReviewGoalPayload = {
   __typename?: 'ReviewGoalPayload';
   goal: ThreadGoal;
   thread: Thread;
+};
+
+export type RevokePremiumPluginInstallKeyInput = {
+  keyId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+export type RevokePremiumPluginInstallKeyResult = {
+  __typename?: 'RevokePremiumPluginInstallKeyResult';
+  keyId: Scalars['ID']['output'];
+  pluginKey: Scalars['String']['output'];
+  revokedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
 };
 
 export type RotateTenantCredentialInput = {

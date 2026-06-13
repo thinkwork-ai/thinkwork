@@ -11,19 +11,22 @@ status: in_progress
 - Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
 - Linear issue: `THNK-15`.
 - Target branch: `main`.
-- Current implementation unit: U2 Add premium entitlement and install-key
-  storage.
-- Current branch: `codex/thnk-15-u2-premium-entitlements`.
+- Current implementation unit: U3 Add premium install-key lifecycle, redemption,
+  temporary backdoor key, and audit events.
+- Current branch: `codex/thnk-15-u3-premium-entitlement-service`.
 - Current worktree:
-  `.Codex/worktrees/thnk-15-u2-premium-entitlements`.
+  `.Codex/worktrees/thnk-15-u3-premium-entitlement-service`.
 - Pull request: U1 [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
   merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`; U2
-  [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) opened.
-- Status: U1 completed and merged. U2 implemented locally with generic
-  `plugin_entitlements` and `plugin_install_keys` tables, digest-only key
-  storage, partial unique active entitlement constraint, GraphQL premium /
-  entitlement status source types, catalog resolver premium passthrough, and
-  generated client code from updated GraphQL schema.
+  [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) merged as
+  `f9aba30f1dd503d18b75a931cb189789c6c876a4`; U3
+  [#2442](https://github.com/thinkwork-ai/thinkwork/pull/2442) opened.
+- Status: U1 and U2 completed and merged. U3 implemented locally with
+  digest-only premium install-key issuance, redemption, revocation, in-memory
+  failed-redemption throttling, tenant-scoped entitlement grants, temporary
+  Company Brain backdoor-key support gated by configured stages, GraphQL
+  mutations, compliance event schema/redaction updates, Terraform runtime
+  config passthrough, and regenerated GraphQL clients.
 - Verification log: U1 PR #2439 passed required CI (`cla`, `lint`, `verify`,
   `typecheck`, and `test`) after rebasing on current `main`. U2 local checks:
   `pnpm --filter @thinkwork/database-pg test -- __tests__/migration-0165-plugin-premium-entitlements.test.ts`
@@ -32,20 +35,33 @@ status: in_progress
   `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/plugins/plugins-resolvers.test.ts`
   passed; `pnpm schema:build` passed; codegen passed for web, mobile, and
   `thinkwork-cli`; `pnpm --filter @thinkwork/web typecheck` passed;
-  `pnpm --filter thinkwork-cli typecheck` passed. Mobile has no `typecheck`
-  script. Local dependency install continued to report the existing broad
-  workspace `canvas` native build failure under Node 25.6.0 because
-  `pkg-config` was not available.
+  `pnpm --filter thinkwork-cli typecheck` passed. U3 local checks so far:
+  `pnpm --filter @thinkwork/api test -- src/lib/plugins/premium-entitlements.test.ts`
+  passed; `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/plugins/plugins-resolvers.test.ts`
+  passed; combined API focused tests for premium entitlements, plugin
+  resolvers, compliance event-type drift, and compliance redaction passed;
+  `pnpm --filter @thinkwork/database-pg test -- __tests__/migration-0165-plugin-premium-entitlements.test.ts`
+  passed; `pnpm --filter @thinkwork/api typecheck` passed;
+  `pnpm --filter @thinkwork/database-pg typecheck` passed;
+  `pnpm --filter @thinkwork/web typecheck` passed;
+  `pnpm --filter thinkwork-cli typecheck` passed; `pnpm schema:build` passed;
+  codegen passed for web, mobile, and `thinkwork-cli`; `terraform fmt` passed
+  on touched Terraform files. Mobile has no `typecheck` script. Local
+  dependency install continued to report the existing broad workspace `canvas`
+  native build failure under Node 25.6.0 because `pkg-config` was not
+  available. Local `pnpm exec prettier --write ...` could not run because the
+  workspace does not expose a `prettier` binary.
 - CI log: U2 PR #2440 initially passed `cla`, `lint`, `verify`, and
   `typecheck`, with `test` still pending, but `Migration Drift Precheck (dev)`
   failed because the new hand-rolled
   `0165_plugin_premium_entitlements.sql` objects were missing from dev. Applied
   the scoped dev migration with `psql -v ON_ERROR_STOP=1 -f` and verified
   `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0165_plugin_premium_entitlements.sql`
-  reports all declared tables, indexes, and constraints present.
+  reports all declared tables, indexes, and constraints present. U2 CI then
+  passed required checks and PR #2440 was squash merged.
 - Blockers: none.
-- Next action: rerun the failed U2 drift precheck, monitor CI, squash merge when
-  green, delete branch/worktree, then sync `origin/main` for U3.
+- Next action: monitor U3 CI, fix any failures, squash merge when green, delete
+  branch/worktree, then sync `origin/main` for U4.
 
 ## Deployment Controller Process - 2026-06-09
 
