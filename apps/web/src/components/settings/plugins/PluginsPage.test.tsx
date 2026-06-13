@@ -8,18 +8,18 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { installMock, queryDocs, tenantState, useQueryMock } = vi.hoisted(
-  () => ({
+const { installMock, queryDocs, tenantState, toggleRef, useQueryMock } =
+  vi.hoisted(() => ({
     installMock: vi.fn(),
     queryDocs: {
       SettingsInstallPluginMutation: Symbol("installPlugin"),
       SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
-      SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
+      SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
     },
     tenantState: { isOperator: true, roleResolved: true },
+    toggleRef: { current: undefined as ((value: string) => void) | undefined },
     useQueryMock: vi.fn(),
-  }),
-);
+  }));
 
 vi.mock("urql", () => ({
   useMutation: (doc: unknown) => {
@@ -29,6 +29,64 @@ vi.mock("urql", () => ({
     return [{ fetching: false }, vi.fn()];
   },
   useQuery: useQueryMock,
+}));
+
+// Radix ToggleGroup is finicky under jsdom — mock the @thinkwork/ui pieces this
+// page uses (matching the repo's approach in DesktopApplicationHeader.test).
+// ToggleGroupItem clicks drive the parent's onValueChange via toggleRef.
+vi.mock("@thinkwork/ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@thinkwork/ui")>()),
+  Badge: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => <span className={className}>{children}</span>,
+  Button: ({
+    children,
+    onClick,
+    disabled,
+    "aria-label": ariaLabel,
+    title,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    "aria-label"?: string;
+    title?: string;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      title={title}
+    >
+      {children}
+    </button>
+  ),
+  ToggleGroup: ({
+    children,
+    onValueChange,
+  }: {
+    children: React.ReactNode;
+    onValueChange?: (value: string) => void;
+  }) => {
+    toggleRef.current = onValueChange;
+    return <div>{children}</div>;
+  },
+  ToggleGroupItem: ({
+    children,
+    value,
+  }: {
+    children: React.ReactNode;
+    value: string;
+  }) => (
+    <button type="button" onClick={() => toggleRef.current?.(value)}>
+      {children}
+    </button>
+  ),
 }));
 
 vi.mock("@/lib/settings-queries", () => queryDocs);
@@ -60,11 +118,15 @@ vi.mock("@tanstack/react-router", () => ({
 import { PluginsPage } from "./PluginsPage";
 
 const refreshCatalog = vi.fn();
-const refreshInstalls = vi.fn();
+const refreshActivations = vi.fn();
 
 function mockQueries({
   catalogError = false,
-}: { catalogError?: boolean } = {}) {
+  activations = [] as Array<{ pluginKey: string; status: string }>,
+}: {
+  catalogError?: boolean;
+  activations?: Array<{ pluginKey: string; status: string }>;
+} = {}) {
   useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
     if (query === queryDocs.SettingsPluginCatalogQuery) {
       return [
@@ -78,10 +140,10 @@ function mockQueries({
         refreshCatalog,
       ];
     }
-    if (query === queryDocs.SettingsPluginInstallsQuery) {
+    if (query === queryDocs.SettingsMyPluginActivationsQuery) {
       return [
-        { data: { pluginInstalls: installs }, fetching: false },
-        refreshInstalls,
+        { data: { myPluginActivations: activations }, fetching: false },
+        refreshActivations,
       ];
     }
     return [{ fetching: false }, vi.fn()];
@@ -91,7 +153,7 @@ function mockQueries({
 beforeEach(() => {
   installMock.mockReset();
   refreshCatalog.mockReset();
-  refreshInstalls.mockReset();
+  refreshActivations.mockReset();
   useQueryMock.mockReset();
   tenantState.isOperator = true;
   tenantState.roleResolved = true;
@@ -111,7 +173,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PluginsPage", () => {
-  it("renders the degraded catalog state while installed plugins still render", () => {
+  it("renders the degraded catalog state with a retry", () => {
     mockQueries({ catalogError: true });
     render(<PluginsPage />);
 
@@ -121,17 +183,46 @@ describe("PluginsPage", () => {
       ),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
-    // The installed plugin still renders (by key — the catalog display name
-    // is unavailable) with its state chip.
-    const installedRow = screen.getByRole("link", { name: /open lastmile/i });
-    expect(within(installedRow).getByText("Installed")).toBeTruthy();
   });
 
-  it("renders the update-available badge for installed catalog entries", () => {
+  it("shows a Reconnect needed badge when the user's activation needs reauth", () => {
+    mockQueries({
+      activations: [{ pluginKey: "lastmile", status: "needs_reauth" }],
+    });
     render(<PluginsPage />);
 
-    // Once on the installed row, once on the catalog entry.
-    expect(screen.getAllByText("Update available").length).toBe(2);
+    const lastmileRow = screen.getByRole("link", { name: "LastMile" })
+      .parentElement!.parentElement!;
+    expect(within(lastmileRow).getByText("Reconnect needed")).toBeTruthy();
+  });
+
+  it("does not show Reconnect needed for an active activation", () => {
+    mockQueries({
+      activations: [{ pluginKey: "lastmile", status: "active" }],
+    });
+    render(<PluginsPage />);
+
+    expect(screen.queryByText("Reconnect needed")).toBeNull();
+  });
+
+  it("renders the update-available badge once for the single catalog list", () => {
+    render(<PluginsPage />);
+
+    // Single list now (no duplicate Installed section) — one badge.
+    expect(screen.getAllByText("Update available").length).toBe(1);
+  });
+
+  it("filters to installed-only when the toggle is switched", () => {
+    render(<PluginsPage />);
+
+    // Both plugins visible under "All".
+    expect(screen.getByRole("link", { name: "Twenty CRM" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /installed \(1\)/i }));
+
+    // Twenty (not installed) drops out; LastMile (installed) remains.
+    expect(screen.queryByRole("link", { name: "Twenty CRM" })).toBeNull();
+    expect(screen.getByRole("link", { name: "LastMile" })).toBeTruthy();
   });
 
   it("hides the Install action from non-operators", () => {
@@ -142,7 +233,7 @@ describe("PluginsPage", () => {
     expect(screen.getByText("Not installed")).toBeTruthy();
   });
 
-  it("installs a catalog plugin and refetches installs + catalog", async () => {
+  it("installs a catalog plugin and refetches catalog + activations", async () => {
     render(<PluginsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: /^install$/i }));
@@ -156,10 +247,10 @@ describe("PluginsPage", () => {
       });
     });
     await waitFor(() => {
-      expect(refreshInstalls).toHaveBeenCalledWith({
+      expect(refreshCatalog).toHaveBeenCalledWith({
         requestPolicy: "network-only",
       });
-      expect(refreshCatalog).toHaveBeenCalledWith({
+      expect(refreshActivations).toHaveBeenCalledWith({
         requestPolicy: "network-only",
       });
     });
