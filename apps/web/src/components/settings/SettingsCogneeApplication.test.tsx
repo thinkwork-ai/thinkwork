@@ -15,16 +15,18 @@ const routeSource = readFileSync(
 );
 
 describe("SettingsCogneeApplication", () => {
-  it("renders the Cognee config panel under an Applications > Cognee breadcrumb", () => {
+  it("keeps the legacy config panel available for implementation reference", () => {
     expect(source).toContain("KnowledgeGraphConfigPanel");
     expect(source).toContain('label: "Applications"');
     expect(source).toContain('href: "/settings/managed-applications"');
     expect(source).toContain('label: "Cognee"');
   });
 
-  it("guards the Cognee application route on the cognee managed app", () => {
-    expect(routeSource).toContain("ManagedApplicationRouteGuard");
-    expect(routeSource).toContain('appKey="cognee"');
-    expect(routeSource).toContain("<SettingsCogneeApplication");
+  it("redirects the legacy Cognee route to Company Brain plugin detail", () => {
+    expect(routeSource).toContain("redirect({");
+    expect(routeSource).toContain('to: "/settings/plugins/$pluginKey"');
+    expect(routeSource).toContain('pluginKey: "company-brain"');
+    expect(routeSource).not.toContain("ManagedApplicationRouteGuard");
+    expect(routeSource).not.toContain("<SettingsCogneeApplication");
   });
 });

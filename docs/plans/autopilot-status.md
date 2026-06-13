@@ -11,11 +11,11 @@ status: in_progress
 - Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
 - Linear issue: `THNK-15`.
 - Target branch: `main`.
-- Current implementation unit: U6 Build Company Brain plugin detail and
-  key-entry UX.
-- Current branch: `codex/thnk-15-u6-company-brain-plugin-ux`.
+- Current implementation unit: U7 Redirect/reduce legacy Cognee
+  managed-application surfaces.
+- Current branch: `codex/thnk-15-u7-cognee-surface-reduction`.
 - Current worktree:
-  `.Codex/worktrees/thnk-15-u6-company-brain-plugin-ux`.
+  `.Codex/worktrees/thnk-15-u7-cognee-surface-reduction`.
 - Pull request: U1 [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
   merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`; U2
   [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) merged as
@@ -26,8 +26,16 @@ status: in_progress
   `25cd13676a35b331072f0bcc631492b0432503ca`; U5
   [#2444](https://github.com/thinkwork-ai/thinkwork/pull/2444) merged as
   `f44ab2d1a648193c21c53dd8f1cfa16cab7ac847`; U6
-  [#2445](https://github.com/thinkwork-ai/thinkwork/pull/2445) opened.
-- Status: U1 through U5 completed and merged. U6 is implemented locally with
+  [#2445](https://github.com/thinkwork-ai/thinkwork/pull/2445) merged as
+  `80a58246e01e7483f9a87e653b5735624bdd0bea`; U7
+  [#2446](https://github.com/thinkwork-ai/thinkwork/pull/2446) opened.
+- Status: U1 through U6 completed and merged. U7 is implemented locally with
+  the legacy `/settings/applications/cognee` route redirecting to Company Brain
+  plugin detail, Managed Applications reducing Company Brain's backing Cognee
+  row once the plugin is installed, transitional Cognee rows pointing at
+  Company Brain with product-facing copy, and Memory/Ontology gating that reads
+  the member-safe plugin catalog's Company Brain substrate state before falling
+  back to legacy Cognee deployment status. U6 added
   Company Brain premium/key-gated catalog state, plugin detail entitlement
   status, install-key dialog submission through `installPlugin`, adoption
   evidence copy for the Brain substrate, a direct Memory / Ontology workspace
@@ -88,7 +96,12 @@ status: in_progress
   `pnpm --filter @thinkwork/web codegen` passed;
   `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginDetail.test.tsx src/components/settings/plugins/PluginsPage.test.tsx`
   passed; `pnpm --filter @thinkwork/web typecheck` passed; `git diff --check`
-  passed.
+  passed. U6 PR #2445 passed required CI (`cla`, `lint`, `verify`,
+  `typecheck`, and `test`) and was squash merged. U7 local checks:
+  `pnpm --filter @thinkwork/web test -- src/components/settings/managed-applications/ManagedApplicationsPage.test.tsx src/components/settings/SettingsCogneeApplication.test.tsx src/components/settings/knowledge-graph/KnowledgeGraphConfigPanel.test.ts src/components/settings/SettingsMemoryHome.test.tsx src/components/settings/settings-nav.test.ts`
+  passed; `pnpm --filter @thinkwork/web typecheck` passed; `git diff --check`
+  passed. U7 `pnpm install` completed with the known local `canvas` native
+  build warning under Node 25.6.0 because `pkg-config` is unavailable.
 - CI log: U2 PR #2440 initially passed `cla`, `lint`, `verify`, and
   `typecheck`, with `test` still pending, but `Migration Drift Precheck (dev)`
   failed because the new hand-rolled
@@ -98,8 +111,8 @@ status: in_progress
   reports all declared tables, indexes, and constraints present. U2 CI then
   passed required checks and PR #2440 was squash merged.
 - Blockers: none.
-- Next action: monitor U6 CI, fix any failures, squash merge when green,
-  delete branch/worktree, then sync `origin/main` for U7.
+- Next action: monitor U7 CI, fix any failures, squash merge when green,
+  delete branch/worktree, then sync `origin/main` for U8.
 
 ## Deployment Controller Process - 2026-06-09
 

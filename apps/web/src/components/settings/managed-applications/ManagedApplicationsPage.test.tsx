@@ -53,12 +53,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ManagedApplicationsPage", () => {
-  it("renders each managed application as a card linking to its detail page", () => {
+  it("renders each managed application as a card linking to its product home", () => {
     render(<ManagedApplicationsPage />);
 
     expect(
-      screen.getByRole("link", { name: /open cognee/i }).getAttribute("href"),
-    ).toBe("/settings/applications/cognee");
+      screen
+        .getByRole("link", { name: /open company brain/i })
+        .getAttribute("href"),
+    ).toBe("/settings/plugins/company-brain");
     expect(
       screen
         .getByRole("link", { name: /open twenty crm/i })
@@ -74,14 +76,30 @@ describe("ManagedApplicationsPage", () => {
     expect(screen.queryByRole("button", { name: /view plan/i })).toBeNull();
   });
 
-  it("hides the Twenty row once a twenty plugin install exists (U10) while Cognee is unaffected", () => {
+  it("hides the Twenty row once a twenty plugin install exists while Company Brain is unaffected", () => {
     pluginInstallsHolder.current = [{ pluginKey: "twenty" }];
     render(<ManagedApplicationsPage />);
 
     expect(screen.queryByRole("link", { name: /open twenty crm/i })).toBeNull();
     expect(
-      screen.getByRole("link", { name: /open cognee/i }).getAttribute("href"),
-    ).toBe("/settings/applications/cognee");
+      screen
+        .getByRole("link", { name: /open company brain/i })
+        .getAttribute("href"),
+    ).toBe("/settings/plugins/company-brain");
+  });
+
+  it("hides the Company Brain backing row once the company-brain plugin is installed", () => {
+    pluginInstallsHolder.current = [{ pluginKey: "company-brain" }];
+    render(<ManagedApplicationsPage />);
+
+    expect(
+      screen.queryByRole("link", { name: /open company brain/i }),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: /open twenty crm/i })
+        .getAttribute("href"),
+    ).toBe("/settings/crm");
   });
 
   it("keeps the Twenty row while only OTHER plugins are installed", () => {
