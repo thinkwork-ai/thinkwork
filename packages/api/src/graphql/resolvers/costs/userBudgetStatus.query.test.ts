@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   rows: [] as Array<Array<Record<string, unknown>>>,
   budgetStatusForPolicy: vi.fn(),
+  requireAdminOrServiceCaller: vi.fn(),
+  resolveCaller: vi.fn(),
 }));
 
 function queryChain() {
@@ -36,6 +38,12 @@ vi.mock("../../utils.js", () => ({
 vi.mock("./budgetStatus.query.js", () => ({
   budgetStatusForPolicy: mocks.budgetStatusForPolicy,
 }));
+vi.mock("../core/authz.js", () => ({
+  requireAdminOrServiceCaller: mocks.requireAdminOrServiceCaller,
+}));
+vi.mock("../core/resolve-auth-user.js", () => ({
+  resolveCaller: mocks.resolveCaller,
+}));
 
 // eslint-disable-next-line import/first
 import { userBudgetStatus } from "./userBudgetStatus.query.js";
@@ -43,19 +51,31 @@ import { userBudgetStatus } from "./userBudgetStatus.query.js";
 beforeEach(() => {
   mocks.rows = [];
   mocks.budgetStatusForPolicy.mockReset();
+  mocks.requireAdminOrServiceCaller.mockReset();
+  mocks.resolveCaller.mockReset();
+  mocks.requireAdminOrServiceCaller.mockResolvedValue(undefined);
+  mocks.resolveCaller.mockResolvedValue({
+    userId: "user-1",
+    tenantId: "tenant-1",
+  });
 });
 
+function cognitoCtx(): any {
+  return { auth: { authType: "cognito" } };
+}
+
 describe("userBudgetStatus", () => {
-  it("rejects users outside the tenant", async () => {
+  it("rejects the caller's own user id when it is outside the requested tenant", async () => {
     mocks.rows = [[]];
 
     await expect(
       userBudgetStatus(
         null,
-        { tenantId: "tenant-1", userId: "user-2" },
-        {} as any,
+        { tenantId: "tenant-2", userId: "user-1" },
+        cognitoCtx(),
       ),
     ).rejects.toThrow("User not found in tenant");
+    expect(mocks.requireAdminOrServiceCaller).not.toHaveBeenCalled();
   });
 
   it("returns null when the tenant user has no enabled user policy", async () => {
@@ -65,10 +85,11 @@ describe("userBudgetStatus", () => {
       userBudgetStatus(
         null,
         { tenantId: "tenant-1", userId: "user-1" },
-        {} as any,
+        cognitoCtx(),
       ),
     ).resolves.toBeNull();
     expect(mocks.budgetStatusForPolicy).not.toHaveBeenCalled();
+    expect(mocks.requireAdminOrServiceCaller).not.toHaveBeenCalled();
   });
 
   it("delegates user policy spend calculation to budgetStatusForPolicy", async () => {
@@ -88,12 +109,58 @@ describe("userBudgetStatus", () => {
       userBudgetStatus(
         null,
         { tenantId: "tenant-1", userId: "user-1" },
-        {} as any,
+        cognitoCtx(),
       ),
     ).resolves.toEqual({ spentUsd: 12, status: "normal" });
     expect(mocks.budgetStatusForPolicy).toHaveBeenCalledWith(
       policy,
       "tenant-1",
     );
+    expect(mocks.requireAdminOrServiceCaller).not.toHaveBeenCalled();
+  });
+
+  it("requires admin or service auth for another user's budget status", async () => {
+    mocks.rows = [[{ id: "user-2" }], []];
+    mocks.resolveCaller.mockResolvedValue({
+      userId: "user-1",
+      tenantId: "tenant-1",
+    });
+
+    await expect(
+      userBudgetStatus(
+        null,
+        { tenantId: "tenant-1", userId: "user-2" },
+        cognitoCtx(),
+      ),
+    ).resolves.toBeNull();
+
+    expect(mocks.requireAdminOrServiceCaller).toHaveBeenCalledWith(
+      expect.anything(),
+      "tenant-1",
+      "budget_policy:read",
+    );
+  });
+
+  it("rejects another user's budget status when the admin gate rejects", async () => {
+    mocks.rows = [];
+    mocks.resolveCaller.mockResolvedValue({
+      userId: "user-1",
+      tenantId: "tenant-1",
+    });
+    mocks.requireAdminOrServiceCaller.mockRejectedValue(
+      Object.assign(new Error("Tenant admin role required"), {
+        extensions: { code: "FORBIDDEN" },
+      }),
+    );
+
+    await expect(
+      userBudgetStatus(
+        null,
+        { tenantId: "tenant-1", userId: "user-2" },
+        cognitoCtx(),
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "FORBIDDEN" } });
+
+    expect(mocks.budgetStatusForPolicy).not.toHaveBeenCalled();
   });
 });

@@ -11092,14 +11092,20 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 - Target branch: `main`.
 - Strategy: isolated worktree per implementation unit, PR to `main`, wait for
   CI, squash merge, delete branch, and sync before the next unit.
-- Current implementation unit: U3 — self profile route and reusable profile UI.
-- Current branch: `codex/role-access-u3-profile`.
-- Current worktree: `.Codex/worktrees/role-access-u3-profile`.
+- Current implementation unit: U4 — backend self/admin authorization for
+  profile, budget, and model data.
+- Current branch: `codex/role-access-u4-authz`.
+- Current worktree: `.Codex/worktrees/role-access-u4-authz`.
 - Pull request: U1/U2 Activity slice
   [#2429](https://github.com/thinkwork-ai/thinkwork/pull/2429) merged; U3 PR
-  [#2431](https://github.com/thinkwork-ai/thinkwork/pull/2431) open.
-- Status: U1/U2 merged; U3 PR open, CI pending.
+  [#2431](https://github.com/thinkwork-ai/thinkwork/pull/2431) merged; U4 PR
+  [#2433](https://github.com/thinkwork-ai/thinkwork/pull/2433) open.
+- Status: U1/U2 and U3 merged; U4 PR open, CI pending.
 - Notes:
+  - U3 PR #2431 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) and was squash merged on 2026-06-13 as `3bcbd00a`. The remote
+    branch was deleted and the local worktree/branch were removed.
+  - U4 branch created from `origin/main` at `3bcbd00a`.
   - U1/U2 PR #2429 passed required CI (`cla`, `lint`, `verify`,
     `typecheck`, and `test`) and was squash merged on 2026-06-13 as
     `d171f6d1`. The remote branch was deleted and the local worktree/branch
@@ -11152,3 +11158,15 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - U3 `pnpm dlx prettier@3.8.2 --check ...` passed for touched web, generated
     GraphQL, route, and docs files.
   - U3 `git diff --check` passed.
+  - U4 `pnpm install --frozen-lockfile` completed in the worktree with the same
+    optional `canvas` native build fallback/missing `pkg-config` warning; pnpm
+    returned success.
+  - U4 focused backend tests passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/costs/userBudgetStatus.query.test.ts src/graphql/resolvers/costs/upsertBudgetPolicy.mutation.test.ts src/graphql/resolvers/costs/deleteBudgetPolicy.mutation.test.ts src/graphql/resolvers/tenant-agent/userModelCatalog.query.test.ts src/graphql/resolvers/tenant-agent/setUserModelApproval.mutation.test.ts src/__tests__/update-user-resolver.test.ts src/graphql/resolvers/core/me.query.test.ts`
+    passed: 7 files, 28 tests.
+  - U4 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/api test` passed: 489 files passed, 3 skipped;
+    4634 tests passed, 9 skipped.
+  - U4 `pnpm dlx prettier@3.8.2 --check ...` passed for touched API and docs
+    files.
+  - U4 `git diff --check` passed.
