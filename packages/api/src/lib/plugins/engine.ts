@@ -350,7 +350,11 @@ async function reconcileInfraComponents(
         ? handlerRef.deploymentJobId
         : null;
     if (!jobId) {
-      // No job yet — provision hasn't run for this row.
+      // No job: either provision hasn't run yet, OR this is an
+      // adoption-without-deploy row (Fix A: handler_ref.adoptedRunningInfra
+      // with no deploymentJobId). Either way there is no deployment job to
+      // reconcile — the row keeps the state provision set (provisioned for
+      // an adopted running app), never gated, never regressed.
       updated.push(row);
       continue;
     }
@@ -608,18 +612,23 @@ async function provisionComponent(
         }),
         provisioned: true,
       };
-    case "infrastructure":
-      return {
-        handlerRef: await deps.handlers.provisionInfra({
-          tenantId: install.tenant_id,
-          pluginInstallId: install.id,
-          pluginKey: install.plugin_key,
-          component,
-          handlerRef: row.handler_ref ?? {},
-          requestedByUserId: requestedByUserIdFor(actor),
-        }),
-        provisioned: false,
-      };
+    case "infrastructure": {
+      const infraRef = await deps.handlers.provisionInfra({
+        tenantId: install.tenant_id,
+        pluginInstallId: install.id,
+        pluginKey: install.plugin_key,
+        component,
+        handlerRef: row.handler_ref ?? {},
+        requestedByUserId: requestedByUserIdFor(actor),
+      });
+      // Adoption-without-deploy (Fix A): adopting an already-running managed
+      // app wires the component up WITHOUT a deployment job — there is no
+      // Terraform for the plugin to re-provision and no approval gate. Mark
+      // it provisioned directly so the install computes to `installed`.
+      const adoptedRunningInfra =
+        infraRef.adoptedRunningInfra === true && !infraRef.deploymentJobId;
+      return { handlerRef: infraRef, provisioned: adoptedRunningInfra };
+    }
     case "ui-surface":
       // Declared-only in v1: recorded as a provisioned no-op.
       return { handlerRef: {}, provisioned: true };

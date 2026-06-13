@@ -66,20 +66,40 @@ const IN_FLIGHT_JOB_STATUSES = new Set([
 export interface InfraHandlerRef extends Record<string, unknown> {
   managedAppKey: string;
   managedApplicationId: string | null;
-  deploymentJobId: string;
-  /** ENABLE | UPGRADE | DESTROY — the operation of the linked job. */
-  operation: string;
+  /**
+   * Id of the linked deployment job. ABSENT on adoption-without-deploy refs
+   * (`adoptedRunningInfra: true`): adopting an already-running managed app
+   * wires the component up WITHOUT creating a deployment job.
+   */
+  deploymentJobId?: string;
+  /**
+   * ENABLE | UPGRADE | DESTROY — the operation of the linked job — OR the
+   * handler-only marker "ADOPT". "ADOPT" is NOT a ManagedAppOperation sent
+   * to the runner; it's a handler_ref state marker that pairs with
+   * `adoptedRunningInfra: true` and carries no deploymentJobId.
+   */
+  operation: ManagedAppOperation | "ADOPT";
   /** Monotonic per-component job counter (fresh job ⇒ attempt + 1). */
   attempt: number;
   /** Content hash of the manifest component the linked job was created for. */
   componentHash: string;
   /** True when provision attached to a pre-existing managed_applications row. */
   adoptedExisting: boolean;
+  /**
+   * True when provision adopted an ALREADY-running managed app without a
+   * deployment job (first-time adoption, unchanged content). Such a
+   * component is treated as `provisioned` directly — its Terraform is not
+   * plugin-owned, so there is nothing to re-provision and no approval gate.
+   */
+  adoptedRunningInfra?: boolean;
 }
 
 export interface InfraManagedApplicationSnapshot {
   id: string;
   desiredConfig: Record<string, unknown>;
+  /** Operator-selected release the managed app is pinned to, if any. */
+  selectedReleaseVersion: string | null;
+  selectedManifestDigest: string | null;
 }
 
 export interface InfraStartPlanJobResult {
@@ -105,6 +125,8 @@ export interface InfraHandlerDeps {
     operation: ManagedAppOperation;
     idempotencyKey: string;
     desiredConfig: Record<string, unknown>;
+    releaseVersion?: string | null;
+    manifestDigest?: string | null;
   }): Promise<InfraStartPlanJobResult>;
 }
 
@@ -127,6 +149,8 @@ export function createDefaultInfraHandlerDeps(
       return {
         id: row.id,
         desiredConfig: (row.desired_config ?? {}) as Record<string, unknown>,
+        selectedReleaseVersion: row.selected_release_version ?? null,
+        selectedManifestDigest: row.selected_manifest_digest ?? null,
       };
     },
     getDeploymentJob: (tenantId, jobId) =>
@@ -193,7 +217,7 @@ function parseHandlerRef(
         : undefined,
     operation:
       typeof handlerRef.operation === "string"
-        ? handlerRef.operation
+        ? (handlerRef.operation as ManagedAppOperation | "ADOPT")
         : undefined,
     attempt:
       typeof handlerRef.attempt === "number" ? handlerRef.attempt : undefined,
@@ -202,6 +226,7 @@ function parseHandlerRef(
         ? handlerRef.componentHash
         : undefined,
     adoptedExisting: handlerRef.adoptedExisting === true,
+    adoptedRunningInfra: handlerRef.adoptedRunningInfra === true,
   };
 }
 
@@ -239,6 +264,26 @@ export async function provisionPluginInfraComponent(args: {
   const componentHash = infraComponentHash(args.component);
   const prior = parseHandlerRef(args.handlerRef);
 
+  // Idempotent re-run of a prior adoption-without-deploy: an adopted
+  // running app stays provisioned (no job to reconcile) as long as the
+  // component content is unchanged. A content change drops out of this
+  // branch and re-evaluates as a genuine upgrade below.
+  if (
+    prior.adoptedRunningInfra === true &&
+    !prior.deploymentJobId &&
+    (prior.componentHash === undefined || prior.componentHash === componentHash)
+  ) {
+    return {
+      managedAppKey: appKey,
+      managedApplicationId: prior.managedApplicationId ?? null,
+      operation: "ADOPT",
+      attempt: prior.attempt ?? 1,
+      componentHash: prior.componentHash ?? componentHash,
+      adoptedExisting: true,
+      adoptedRunningInfra: true,
+    };
+  }
+
   // Idempotent re-run: reuse the linked job while it is in flight (or has
   // already succeeded) for the SAME component content.
   if (prior.deploymentJobId) {
@@ -258,7 +303,8 @@ export async function provisionPluginInfraComponent(args: {
         managedApplicationId:
           prior.managedApplicationId ?? job.applicationId ?? null,
         deploymentJobId: job.id,
-        operation: prior.operation ?? job.operation,
+        operation:
+          prior.operation ?? (job.operation as ManagedAppOperation | "ADOPT"),
         attempt: prior.attempt ?? 1,
         componentHash: prior.componentHash ?? componentHash,
         adoptedExisting: prior.adoptedExisting === true,
@@ -273,16 +319,59 @@ export async function provisionPluginInfraComponent(args: {
     prior.adoptedExisting === true ||
     Boolean(existing && !prior.deploymentJobId && !prior.managedApplicationId);
 
-  // ENABLE for a fresh row; UPGRADE when attaching to a pre-existing row
-  // (U10 adoption) or when the component content changed (plugin upgrade);
+  // ADOPTION-WITHOUT-DEPLOY (Fix A): the managed app is ALREADY deployed and
+  // running (greenfield/operator-provisioned — its Terraform is not plugin-
+  // owned), this component has never provisioned a job (first-time adoption),
+  // and its content is unchanged. Wiring up an already-running app must NOT
+  // create a deploy plan job or sit at awaiting_approval. Plugin "installed"
+  // means the plugin's components are WIRED UP, not that infra is healthy
+  // right now — runtime health stays visible via the deployment-details view.
+  // Genuine upgrades (contentChanged) and net-new provisioning (no existing
+  // row) still take the plan-job path below.
+  if (existing && !contentChanged && !prior.deploymentJobId) {
+    return {
+      managedAppKey: appKey,
+      managedApplicationId: existing.id,
+      operation: "ADOPT",
+      attempt: 1,
+      componentHash,
+      adoptedExisting: true,
+      adoptedRunningInfra: true,
+    };
+  }
+
+  // ENABLE for net-new provisioning (no existing row); UPGRADE when the
+  // component content changed (plugin upgrade) against an existing row;
   // retries of a failed job keep their original operation.
   const operation: ManagedAppOperation = contentChanged
     ? "UPGRADE"
     : prior.operation === "ENABLE" || prior.operation === "UPGRADE"
-      ? (prior.operation as ManagedAppOperation)
+      ? prior.operation
       : existing
         ? "UPGRADE"
         : "ENABLE";
+
+  // Net-new provisioning (Fix B): the plugin would have the runner stand up
+  // brand-new Terraform, so the job needs a REAL release to deploy. The
+  // managed-application row carries the operator-selected release; without
+  // one, the deployment Step Function fails at launch on the missing
+  // releaseManifestSha256 and the job wedges in `planning` forever. Fail the
+  // component with an actionable error instead of creating that doomed job.
+  const releaseVersion = existing?.selectedReleaseVersion ?? null;
+  const manifestDigest = existing?.selectedManifestDigest ?? null;
+  if (
+    operation === "ENABLE" &&
+    (!releaseVersion ||
+      !manifestDigest ||
+      releaseVersion === "unresolved" ||
+      manifestDigest === "unresolved")
+  ) {
+    throw new Error(
+      `Plugin-driven provisioning of ${appKey} requires a resolved release; ` +
+        `deploy the app via Managed Applications first, then install the ` +
+        `plugin to adopt it.`,
+    );
+  }
 
   const attempt = (prior.attempt ?? 0) + 1;
   const job = await deps.startPlanJob({
@@ -300,6 +389,10 @@ export async function provisionPluginInfraComponent(args: {
     // start from the adapter defaults ({} — the manifest declares input
     // CONTRACTS, not values).
     desiredConfig: existing?.desiredConfig ?? {},
+    // Pass the operator-selected release through so the job never falls back
+    // to the "unresolved" sentinel (which the Step Function rejects).
+    releaseVersion,
+    manifestDigest,
   });
 
   return {

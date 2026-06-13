@@ -347,10 +347,11 @@ export const EVENT_PAYLOAD_SHAPES: Record<
     allowedFields: new Set(["pluginInstallId", "pluginKey", "version"]),
   },
   "plugin.activation_granted": {
-    // tokenCount = number of resource-bound token records minted under
-    // the grant; sharedAudience flags the documented v1 fallback where
-    // the AS rejected per-resource minting and one token covers all
-    // resource records. Scopes/tokens/secret refs never enter the log.
+    // tokenCount = number of token records minted under the grant. Fix C
+    // mints exactly ONE token that covers all the plugin's servers, so
+    // tokenCount is 1 for fresh grants; `sharedAudience` is retained in the
+    // allow-list only for backward compatibility with pre-Fix-C emits and is
+    // no longer set. Scopes/tokens/secret refs never enter the log.
     allowedFields: new Set([
       "pluginInstallId",
       "pluginKey",

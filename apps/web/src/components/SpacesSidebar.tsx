@@ -1,12 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import {
-  LogOut,
-  RefreshCw,
-  Settings,
-  TriangleAlert,
-} from "lucide-react";
+import { LogOut, RefreshCw, Settings, TriangleAlert } from "lucide-react";
 import { IconPlug } from "@tabler/icons-react";
 import {
   AlertDialog,
@@ -78,9 +73,16 @@ export function SpacesSidebar() {
   const [pluginActivationsResult] = useQuery({
     query: SettingsMyPluginActivationsQuery,
   });
-  const pluginReauthCount = (
-    pluginActivationsResult.data?.myPluginActivations ?? []
-  ).filter((activation) => activation.status === "needs_reauth").length;
+  // Name the plugin(s) needing reconnect so the warning isn't a generic
+  // "a plugin" (which read as a contradiction when the user was on a
+  // different, healthy plugin's page). Dedupe by pluginKey.
+  const reauthPluginNames = Array.from(
+    new Set(
+      (pluginActivationsResult.data?.myPluginActivations ?? [])
+        .filter((activation) => activation.status === "needs_reauth")
+        .map((activation) => activation.pluginKey),
+    ),
+  );
 
   return (
     <SidebarHealthProvider>
@@ -127,7 +129,7 @@ export function SpacesSidebar() {
             name={user?.name}
             email={user?.email}
             deployedReleaseVersion={deployedReleaseVersion}
-            pluginReauthCount={pluginReauthCount}
+            reauthPluginNames={reauthPluginNames}
             onOpenPlugins={() => {
               rememberSettingsReturnTo(currentPath);
               navigate({ to: "/settings/plugins" });
@@ -155,7 +157,7 @@ function AccountMenu({
   name,
   email,
   deployedReleaseVersion,
-  pluginReauthCount = 0,
+  reauthPluginNames = [],
   onOpenPlugins,
   onOpenSettings,
   onSignOut,
@@ -163,8 +165,8 @@ function AccountMenu({
   name?: string | null;
   email?: string | null;
   deployedReleaseVersion?: string | null;
-  /** Count of the caller's plugin activations in `needs_reauth`. */
-  pluginReauthCount?: number;
+  /** Plugin keys/names of the caller's activations in `needs_reauth`. */
+  reauthPluginNames?: string[];
   onOpenPlugins?: () => void;
   onOpenSettings: () => void;
   onSignOut: () => void;
@@ -172,6 +174,11 @@ function AccountMenu({
   const displayName = name ?? email ?? "Account";
   const initials = getInitials(name, email);
   const releaseLabel = deployedReleaseVersion?.trim() || "unknown";
+  const pluginReauthCount = reauthPluginNames.length;
+  const reauthMessage =
+    pluginReauthCount === 1
+      ? `${reauthPluginNames[0]} needs to be reconnected.`
+      : `${pluginReauthCount} plugins need to be reconnected: ${reauthPluginNames.join(", ")}.`;
   // Transient sidebar query failures surface here as a subtle amber dot on the
   // gear + a Retry action, rather than a dramatic red error in the thread list.
   const sidebarHealth = useSidebarHealth();
@@ -255,11 +262,7 @@ function AccountMenu({
           <>
             <div className="flex items-start gap-2 px-2 py-1.5 text-xs text-amber-500">
               <TriangleAlert className="mt-px size-3.5 shrink-0" />
-              <span>
-                {pluginReauthCount === 1
-                  ? "A plugin connection needs to be reconnected."
-                  : `${pluginReauthCount} plugin connections need to be reconnected.`}
-              </span>
+              <span>{reauthMessage}</span>
             </div>
             <DropdownMenuItem onSelect={() => onOpenPlugins?.()}>
               <IconPlug className="mr-2 h-4 w-4" />

@@ -19,6 +19,9 @@ const tenantMocks = vi.hoisted(() => ({
 const deploymentStatusMocks = vi.hoisted(() => ({
   releaseVersion: "v0.1.0-canary.200" as string | null,
 }));
+const pluginActivationsMocks = vi.hoisted(() => ({
+  activations: [] as Array<{ pluginKey: string; status: string }>,
+}));
 
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
 vi.mock("@/lib/deployment-profile", () => ({
@@ -38,6 +41,7 @@ vi.mock("urql", () => ({
             deploymentStatus: {
               releaseVersion: deploymentStatusMocks.releaseVersion,
             },
+            myPluginActivations: pluginActivationsMocks.activations,
           },
       fetching: false,
     },
@@ -196,6 +200,7 @@ afterEach(() => {
   deploymentStatusMocks.releaseVersion = "v0.1.0-canary.200";
   tenantMocks.isOperator = true;
   tenantMocks.roleResolved = true;
+  pluginActivationsMocks.activations = [];
 });
 
 describe("SpacesSidebar", () => {
@@ -269,5 +274,42 @@ describe("SpacesSidebar", () => {
     render(<SpacesSidebar />);
 
     expect(screen.getByText("unknown")).toBeTruthy();
+  });
+
+  it("names the single plugin needing reconnect (Fix D)", () => {
+    pluginActivationsMocks.activations = [
+      { pluginKey: "lastmile", status: "needs_reauth" },
+      { pluginKey: "twenty", status: "active" },
+    ];
+
+    render(<SpacesSidebar />);
+
+    expect(screen.getByText("lastmile needs to be reconnected.")).toBeTruthy();
+    expect(screen.getByText("Reconnect plugins")).toBeTruthy();
+  });
+
+  it("names multiple plugins needing reconnect, deduped (Fix D)", () => {
+    pluginActivationsMocks.activations = [
+      { pluginKey: "lastmile", status: "needs_reauth" },
+      { pluginKey: "twenty", status: "needs_reauth" },
+      { pluginKey: "lastmile", status: "needs_reauth" },
+    ];
+
+    render(<SpacesSidebar />);
+
+    expect(
+      screen.getByText("2 plugins need to be reconnected: lastmile, twenty."),
+    ).toBeTruthy();
+  });
+
+  it("shows no reconnect warning when all activations are healthy", () => {
+    pluginActivationsMocks.activations = [
+      { pluginKey: "lastmile", status: "active" },
+    ];
+
+    render(<SpacesSidebar />);
+
+    expect(screen.queryByText(/needs? to be reconnected/)).toBeNull();
+    expect(screen.queryByText("Reconnect plugins")).toBeNull();
   });
 });

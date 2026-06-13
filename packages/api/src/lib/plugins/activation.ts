@@ -1,9 +1,8 @@
 /**
  * App-level OAuth activation (plan 2026-06-12-001 U6).
  *
- * One consent per (user, plugin install) minting N token records — one
- * per distinct RFC 8707 resource indicator declared by the plugin's
- * `mcp-server` components.
+ * One consent per (user, plugin install) minting exactly ONE token record
+ * that covers ALL of the plugin's MCP servers (Fix C).
  *
  * Flow:
  *
@@ -15,28 +14,28 @@
  *                         auth context — never a caller-supplied id.
  *   completeActivation  — verifies the state HMAC BEFORE consuming any
  *                         state field, rejects expired state, exchanges
- *                         the code (resource = first indicator), then
- *                         mints additional tokens for the remaining
- *                         indicators via refresh-token grants carrying a
- *                         different `resource` parameter. If the AS
- *                         rejects a multi-resource mint (or issued no
- *                         refresh token), the initial token is stored for
- *                         the remaining resource records with
- *                         `shared_audience: true` in the secret payload
- *                         (the documented v1 fallback — the audit event
- *                         carries `sharedAudience` too; the activation
- *                         table has no metadata column).
+ *                         the code ONCE (resource = primary indicator), and
+ *                         stores a SINGLE token record for the activation.
  *   deactivateActivation — deletes EVERY token secret (real Secrets
  *                         Manager deletion), deletes token rows, flips
  *                         the activation to 'revoked'. Local-only: no
  *                         provider-side grant revocation in v1.
  *   markActivationNeedsReauth — refresh-failure hook used by dispatch.
  *
- * Multi-resource caveat (documented degradation): authorization servers
- * that ROTATE refresh tokens invalidate earlier-minted records' refresh
- * tokens; those records refresh-fail later and flip the activation to
- * needs_reauth, prompting one reconnect. Single-resource plugins (the
- * common case) are unaffected.
+ * Single-token rationale (Fix C — verified live 2026-06-13): LastMile/WorkOS
+ * AuthKit does NOT enforce per-resource token audience — a token minted for
+ * one resource returns 200 against the plugin's other MCP endpoints. We
+ * therefore mint ONE token and resolve every server from it. This also
+ * sidesteps WorkOS's refresh-token ROTATION: minting a second token via a
+ * refresh-grant invalidated the first record's stored refresh token, which
+ * then refresh-failed on next dispatch and flipped the whole activation to
+ * needs_reauth (dropping all the plugin's servers). With one record there is
+ * exactly one refresh token in play, so rotation is a non-issue.
+ *
+ * COMPAT: activations created before Fix C may hold MULTIPLE token records.
+ * Dispatch resolves "any active token record for the activation" (audience
+ * is not enforced) so those keep working until a reconnect re-mints the
+ * single-record shape.
  *
  * Secrets: thinkwork/{stage}/plugin-tokens/{userId}/{pluginInstallId}/{resourceKey}.
  *
@@ -625,9 +624,10 @@ export async function startActivation(
   // RFC 8707 permits repeating `resource` in the authorization request, but
   // WorkOS AuthKit rejects repeated params with `invalid_query_params`
   // (observed live 2026-06-12). The authorize leg names only the primary
-  // resource; the remaining resources mint via refresh-token grants in
-  // completeActivation, with the sharedAudience fallback when re-mints are
-  // unsupported. `state.resources` still carries the full list.
+  // resource, and completeActivation mints exactly ONE token from it that
+  // covers all the plugin's servers (Fix C — audience is not enforced).
+  // `state.resources[0]` is the primary; the full list is retained for
+  // diagnostics/back-compat but no longer drives extra mints.
   if (resources.length > 0) {
     authorizeUrl.searchParams.set("resource", resources[0]);
   }
@@ -743,54 +743,11 @@ export async function completeActivation(
   }
   const initial = (await initialRes.json()) as TokenResponse;
 
-  // Additional mints: refresh-token grant per remaining resource. A
-  // single authorization code is single-use (sequential code exchanges
-  // are not possible), so the refresh token from the initial exchange
-  // is the only same-session mint vehicle.
-  const minted: Array<{
-    resource: string;
-    token: TokenResponse;
-    sharedAudience: boolean;
-  }> = [
-    { resource: state.resources[0]!, token: initial, sharedAudience: false },
-  ];
-  let chainRefreshToken = initial.refresh_token ?? null;
-  let sharedAudience = false;
-
-  for (const resource of state.resources.slice(1)) {
-    if (sharedAudience || !chainRefreshToken) {
-      sharedAudience = true;
-      minted.push({ resource, token: initial, sharedAudience: true });
-      continue;
-    }
-    const mintRes = await deps
-      .fetchFn(state.tokenEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: chainRefreshToken,
-          client_id: state.clientId,
-          resource,
-        }).toString(),
-        signal: AbortSignal.timeout(10000),
-      })
-      .catch(() => null);
-    if (mintRes?.ok) {
-      const token = (await mintRes.json()) as TokenResponse;
-      minted.push({ resource, token, sharedAudience: false });
-      chainRefreshToken = token.refresh_token ?? chainRefreshToken;
-    } else {
-      const body = mintRes
-        ? await mintRes.text().catch(() => "")
-        : "fetch failed";
-      console.warn(
-        `[plugin-oauth] multi-resource mint rejected for ${state.pluginKey} resource ${resource} (${body}); falling back to sharedAudience`,
-      );
-      sharedAudience = true;
-      minted.push({ resource, token: initial, sharedAudience: true });
-    }
-  }
+  // ONE token record per activation (Fix C): the single authorize-leg
+  // exchange carries the primary resource and the resulting token works for
+  // ALL of the plugin's servers (audience is not enforced). No per-resource
+  // refresh-grant chaining — that rotation-triggered the needs_reauth bug.
+  const primaryResource = state.resources[0]!;
 
   const grantedScopes =
     typeof initial.scope === "string" && initial.scope.trim()
@@ -806,8 +763,7 @@ export async function completeActivation(
     payload: {
       pluginInstallId: install.id,
       pluginKey: install.plugin_key,
-      tokenCount: minted.length,
-      sharedAudience,
+      tokenCount: 1,
     },
     resourceType: "plugin_install",
     resourceId: install.id,
@@ -825,39 +781,36 @@ export async function completeActivation(
   );
 
   const stage = deps.stage();
-  for (const record of minted) {
-    const secretName = pluginTokenSecretName({
-      stage,
-      userId: state.userId,
-      pluginInstallId: install.id,
-      resourceIndicator: record.resource,
-    });
-    await deps.secrets.putSecret(
-      secretName,
-      JSON.stringify({
-        access_token: record.token.access_token,
-        refresh_token: record.token.refresh_token ?? null,
-        token_type: record.token.token_type ?? "Bearer",
-        scope: record.token.scope ?? null,
-        obtained_at: deps.now().toISOString(),
-        client_id: state.clientId,
-        token_endpoint: state.tokenEndpoint,
-        resource: record.resource,
-        shared_audience: record.sharedAudience,
-      }),
-    );
-    await deps.store.upsertActivationToken({
-      activationId: activation.id,
-      resourceIndicator: record.resource,
-      secretRef: secretName,
-      expiresAt: record.token.expires_in
-        ? new Date(deps.now().getTime() + record.token.expires_in * 1000)
-        : null,
-    });
-  }
+  const secretName = pluginTokenSecretName({
+    stage,
+    userId: state.userId,
+    pluginInstallId: install.id,
+    resourceIndicator: primaryResource,
+  });
+  await deps.secrets.putSecret(
+    secretName,
+    JSON.stringify({
+      access_token: initial.access_token,
+      refresh_token: initial.refresh_token ?? null,
+      token_type: initial.token_type ?? "Bearer",
+      scope: initial.scope ?? null,
+      obtained_at: deps.now().toISOString(),
+      client_id: state.clientId,
+      token_endpoint: state.tokenEndpoint,
+      resource: primaryResource,
+    }),
+  );
+  await deps.store.upsertActivationToken({
+    activationId: activation.id,
+    resourceIndicator: primaryResource,
+    secretRef: secretName,
+    expiresAt: initial.expires_in
+      ? new Date(deps.now().getTime() + initial.expires_in * 1000)
+      : null,
+  });
 
   console.log(
-    `[plugin-oauth] activation granted: user ${state.userId}, plugin ${install.plugin_key}, ${minted.length} token record(s)${sharedAudience ? " (sharedAudience fallback)" : ""}`,
+    `[plugin-oauth] activation granted: user ${state.userId}, plugin ${install.plugin_key}, 1 token record`,
   );
   return { ok: true, pluginKey: install.plugin_key, returnTo: state.returnTo };
 }
@@ -1018,14 +971,20 @@ export function createPluginDispatchAuthResolver(
 
         const tokens = await deps.store.listActivationTokens(activation.id);
         const wanted = normalizeResource(resource);
-        const tokenRow = tokens.find(
-          (row) =>
-            normalizeResource(row.resource_indicator) === wanted &&
-            row.status === "active",
-        );
+        // ONE token per activation covers ALL the plugin's servers (Fix C):
+        // audience is not enforced, so any active token record resolves any
+        // server. Prefer an exact resource match (single-record activations
+        // and old multi-record activations that happen to have this
+        // resource), else fall back to the first active record (compat for
+        // pre-Fix-C multi-record activations whose stored resource differs).
+        const activeTokens = tokens.filter((row) => row.status === "active");
+        const tokenRow =
+          activeTokens.find(
+            (row) => normalizeResource(row.resource_indicator) === wanted,
+          ) ?? activeTokens[0];
         if (!tokenRow?.secret_ref) {
           console.warn(
-            `${logPrefix} Skipping plugin MCP ${slug}: no token record for resource ${wanted}`,
+            `${logPrefix} Skipping plugin MCP ${slug}: no active token record for activation (resource ${wanted})`,
           );
           return null;
         }
@@ -1044,7 +1003,6 @@ export function createPluginDispatchAuthResolver(
           client_id?: string;
           token_endpoint?: string;
           resource?: string;
-          shared_audience?: boolean;
         };
 
         const nowMs = deps.now().getTime();
