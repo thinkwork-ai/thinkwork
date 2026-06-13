@@ -38,7 +38,7 @@ import { createHash } from "crypto";
 import {
   AgentCoreEvalInvocationTimeoutError,
   invokeAgentCoreForEval,
-  type EvalReplayAllowedTool,
+  type EvalReplayToolOverride,
   type EvalReplayHistoryMessage,
 } from "../lib/evals/agentcore-direct.js";
 import { isRetryableEvalInfrastructureError } from "../lib/evals/retryable.js";
@@ -517,25 +517,28 @@ async function loadFlaggedReplayHistory(
 }
 
 /**
- * Load the tenant's read-only MCP replay allowlist (Trust Core U13).
- * Default-deny: an empty result means replay carries no MCP servers
- * (mcp_configs undefined — the pre-U13 safe behavior). The runtime still
- * enforces the resulting toolWhitelist per server.
+ * Load the tenant's MCP replay tool overrides (Trust Core U14).
+ * Default-ALLOW: with no overrides, the selector still runs read-shaped
+ * tools by name heuristic and blocks write-shaped ones. Each override
+ * force-allows a blocked write or force-blocks an allowed read. The runtime
+ * still enforces the resulting toolWhitelist per server.
  */
-export async function loadReplayToolAllowlist(
+export async function loadReplayToolOverrides(
   tenantId: string,
-): Promise<EvalReplayAllowedTool[]> {
+): Promise<EvalReplayToolOverride[]> {
   const db = getDb();
   const rows = await db
     .select({
       server_name: evalReplayToolAllowlist.server_name,
       tool_name: evalReplayToolAllowlist.tool_name,
+      mode: evalReplayToolAllowlist.mode,
     })
     .from(evalReplayToolAllowlist)
     .where(eq(evalReplayToolAllowlist.tenant_id, tenantId));
   return rows.map((row) => ({
     serverName: row.server_name,
     toolName: row.tool_name,
+    mode: row.mode === "block" ? "block" : "allow",
   }));
 }
 
@@ -567,10 +570,11 @@ async function executeCase(
       targetAgentId = (await resolveTenantPlatformAgent(run.tenant_id)).id;
     }
 
-    // Read-only MCP tools on replay (U13). Default-deny: an empty
-    // allowlist yields no MCP servers in the payload. Loaded per case
-    // (tenant-scoped); cheap indexed lookup.
-    const replayToolAllowlist = await loadReplayToolAllowlist(run.tenant_id);
+    // Read-only MCP tools on replay (U14). Default-ALLOW: read-shaped tools
+    // run by name heuristic with no overrides; the operator override rows
+    // (loaded per case, tenant-scoped, cheap indexed lookup) force-allow a
+    // blocked write or force-block an allowed read.
+    const replayToolOverrides = await loadReplayToolOverrides(run.tenant_id);
 
     const inv = await invokeAgentCoreForEval({
       tenantId: run.tenant_id,
@@ -583,7 +587,7 @@ async function executeCase(
       // before the flagged turn; undefined (= empty history) for
       // synthetic single-message cases.
       messagesHistory: tc.messages_history,
-      replayToolAllowlist,
+      replayToolOverrides,
     });
     actualOutput = inv.output;
     durationMs = inv.durationMs;

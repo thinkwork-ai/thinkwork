@@ -1,12 +1,14 @@
 /**
- * GraphQL resolvers for the read-only MCP replay allowlist (Evaluations
- * Trust Core U13).
+ * GraphQL resolvers for the MCP replay tool overrides (Evaluations Trust
+ * Core U13 → reworked U14).
  *
- * Replay strips all MCP tools by default; this per-tenant allowlist is
- * DEFAULT-DENY — an MCP tool is restored on replay ONLY if an operator
- * explicitly lists it here (consumed by the eval-worker via
- * buildEvalAgentCorePayload). Mutating tools and the email/web side-effect
- * kill-list stay blocked regardless.
+ * Replay now DEFAULT-ALLOWS read-shaped MCP tools (classified by a name
+ * heuristic, classifyMcpToolAccess) and blocks write-shaped tools — read
+ * tools run on replay with no operator setup. This per-tenant list is the
+ * OPTIONAL OVERRIDE layer (consumed by the eval-worker via
+ * buildEvalAgentCorePayload): a row force-allows a write the heuristic would
+ * block, or force-blocks a read the heuristic would allow. The email/web
+ * side-effect kill-list stays blocked regardless.
  *
  *   - Reads scope through resolveCallerTenantId (Google-federated callers
  *     have null ctx.auth.tenantId) and fail closed (empty list).
@@ -16,6 +18,7 @@
  */
 
 import { GraphQLError } from "graphql";
+import { classifyMcpToolAccess } from "@thinkwork/evals-core";
 import type { GraphQLContext } from "../../context.js";
 import {
   db,
@@ -40,12 +43,17 @@ function badInput(message: string): GraphQLError {
   });
 }
 
+function normalizeMode(value: unknown): "allow" | "block" {
+  return value === "block" ? "block" : "allow";
+}
+
 function rowToGraphql(row: Record<string, unknown>) {
   return {
     id: row.id,
     tenantId: row.tenant_id,
     serverName: row.server_name,
     toolName: row.tool_name,
+    mode: normalizeMode(row.mode),
     createdAt: row.created_at,
   };
 }
@@ -73,10 +81,11 @@ const evalReplayToolAllowlistQuery = async (
 };
 
 /**
- * The tenant's available MCP servers + discovered tools, so the UI can
- * offer toggles. Sourced from the cached tenant_mcp_servers.tools list
- * (approved + enabled servers) — no live MCP connection. When a server has
- * no cached tool list the UI falls back to manual server+tool entry.
+ * The tenant's available MCP servers + discovered tools, each annotated with
+ * its heuristic access classification (read = auto-allowed on replay, write =
+ * blocked) so the UI can show what runs by default and where an override is
+ * needed. Sourced from the cached tenant_mcp_servers.tools list (approved +
+ * enabled servers) — no live MCP connection.
  */
 const evalReplayAvailableMcpToolsQuery = async (
   _p: unknown,
@@ -110,13 +119,23 @@ const evalReplayAvailableMcpToolsQuery = async (
 
 function normalizeDiscoveredTools(
   value: unknown,
-): Array<{ name: string; description: string | null }> {
+): Array<{ name: string; description: string | null; access: string }> {
   if (!Array.isArray(value)) return [];
-  const out: Array<{ name: string; description: string | null }> = [];
+  const out: Array<{
+    name: string;
+    description: string | null;
+    access: string;
+  }> = [];
   for (const item of value) {
     if (typeof item === "string") {
       const name = item.trim();
-      if (name) out.push({ name, description: null });
+      if (name) {
+        out.push({
+          name,
+          description: null,
+          access: classifyMcpToolAccess(name),
+        });
+      }
       continue;
     }
     if (!item || typeof item !== "object") continue;
@@ -126,6 +145,7 @@ function normalizeDiscoveredTools(
     out.push({
       name,
       description: typeof rec.description === "string" ? rec.description : null,
+      access: classifyMcpToolAccess(name),
     });
   }
   return out;
@@ -135,9 +155,14 @@ function normalizeDiscoveredTools(
 // Mutations
 // ---------------------------------------------------------------------------
 
-const addEvalReplayAllowedTool = async (
+const addEvalReplayToolOverride = async (
   _p: unknown,
-  args: { tenantId: string; serverName: string; toolName: string },
+  args: {
+    tenantId: string;
+    serverName: string;
+    toolName: string;
+    mode: string;
+  },
   ctx: GraphQLContext,
 ) => {
   // Arg-derived gate — no row exists yet. Must precede every side effect.
@@ -146,9 +171,13 @@ const addEvalReplayAllowedTool = async (
   const toolName = args.toolName?.trim();
   if (!serverName) throw badInput("serverName must be non-empty.");
   if (!toolName) throw badInput("toolName must be non-empty.");
+  if (args.mode !== "allow" && args.mode !== "block") {
+    throw badInput("mode must be 'allow' or 'block'.");
+  }
+  const mode = args.mode;
 
-  // Idempotent on the unique (tenant, server, tool) key: a re-add returns
-  // the existing row rather than erroring.
+  // Upsert on the unique (tenant, server, tool) key: re-adding with a new
+  // mode updates the existing row rather than erroring.
   const [existing] = await db
     .select()
     .from(evalReplayToolAllowlist)
@@ -159,7 +188,16 @@ const addEvalReplayAllowedTool = async (
         eq(evalReplayToolAllowlist.tool_name, toolName),
       ),
     );
-  if (existing) return rowToGraphql(existing as Record<string, unknown>);
+  if (existing) {
+    const row = existing as Record<string, unknown>;
+    if (normalizeMode(row.mode) === mode) return rowToGraphql(row);
+    const [updated] = await db
+      .update(evalReplayToolAllowlist)
+      .set({ mode })
+      .where(eq(evalReplayToolAllowlist.id, row.id as string))
+      .returning();
+    return rowToGraphql(updated as Record<string, unknown>);
+  }
 
   const [inserted] = await db
     .insert(evalReplayToolAllowlist)
@@ -167,12 +205,13 @@ const addEvalReplayAllowedTool = async (
       tenant_id: args.tenantId,
       server_name: serverName,
       tool_name: toolName,
+      mode,
     })
     .returning();
   return rowToGraphql(inserted as Record<string, unknown>);
 };
 
-const removeEvalReplayAllowedTool = async (
+const removeEvalReplayToolOverride = async (
   _p: unknown,
   args: { id: string },
   ctx: GraphQLContext,
@@ -185,7 +224,7 @@ const removeEvalReplayAllowedTool = async (
   if (!existing) {
     // Not found is also returned for cross-tenant ids the caller can't see
     // (the gate below would forbid them anyway).
-    throw new GraphQLError("Allowlist entry not found", {
+    throw new GraphQLError("Override entry not found", {
       extensions: { code: "NOT_FOUND" },
     });
   }
@@ -207,6 +246,6 @@ export const evalReplayAllowlistQueries = {
 };
 
 export const evalReplayAllowlistMutations = {
-  addEvalReplayAllowedTool,
-  removeEvalReplayAllowedTool,
+  addEvalReplayToolOverride,
+  removeEvalReplayToolOverride,
 };

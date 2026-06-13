@@ -456,8 +456,9 @@ export const RemoveEvalDatasetCaseMutation = graphql(`
   }
 `);
 
-// Read-only MCP replay allowlist (Trust Core U13). Default-deny: replay
-// carries an MCP tool only if an operator lists it here.
+// MCP replay tool overrides (Trust Core U14). Default-ALLOW: read-shaped
+// tools run on replay by name heuristic with no setup; overrides force-allow
+// a write or force-block a read.
 export const EvalReplayToolAllowlistQuery = graphql(`
   query EvalReplayToolAllowlist($tenantId: ID!) {
     evalReplayToolAllowlist(tenantId: $tenantId) {
@@ -465,6 +466,7 @@ export const EvalReplayToolAllowlistQuery = graphql(`
       tenantId
       serverName
       toolName
+      mode
       createdAt
     }
   }
@@ -478,34 +480,38 @@ export const EvalReplayAvailableMcpToolsQuery = graphql(`
       tools {
         name
         description
+        access
       }
     }
   }
 `);
 
-export const AddEvalReplayAllowedToolMutation = graphql(`
-  mutation AddEvalReplayAllowedTool(
+export const AddEvalReplayToolOverrideMutation = graphql(`
+  mutation AddEvalReplayToolOverride(
     $tenantId: ID!
     $serverName: String!
     $toolName: String!
+    $mode: String!
   ) {
-    addEvalReplayAllowedTool(
+    addEvalReplayToolOverride(
       tenantId: $tenantId
       serverName: $serverName
       toolName: $toolName
+      mode: $mode
     ) {
       id
       tenantId
       serverName
       toolName
+      mode
       createdAt
     }
   }
 `);
 
-export const RemoveEvalReplayAllowedToolMutation = graphql(`
-  mutation RemoveEvalReplayAllowedTool($id: ID!) {
-    removeEvalReplayAllowedTool(id: $id)
+export const RemoveEvalReplayToolOverrideMutation = graphql(`
+  mutation RemoveEvalReplayToolOverride($id: ID!) {
+    removeEvalReplayToolOverride(id: $id)
   }
 `);
 
