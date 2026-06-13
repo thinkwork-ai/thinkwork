@@ -101,6 +101,172 @@ export const USER_PLUGIN_ACTIVATION_TOKEN_STATUSES = [
 export type UserPluginActivationTokenStatus =
   (typeof USER_PLUGIN_ACTIVATION_TOKEN_STATUSES)[number];
 
+export const PLUGIN_ENTITLEMENT_STATUSES = ["active", "revoked"] as const;
+
+export type PluginEntitlementStatus =
+  (typeof PLUGIN_ENTITLEMENT_STATUSES)[number];
+
+export const PLUGIN_ENTITLEMENT_SOURCES = [
+  "install_key",
+  "backdoor_key",
+  "operator_grant",
+  "migration",
+] as const;
+
+export type PluginEntitlementSource =
+  (typeof PLUGIN_ENTITLEMENT_SOURCES)[number];
+
+export const PLUGIN_INSTALL_KEY_STATUSES = [
+  "issued",
+  "redeemed",
+  "revoked",
+  "expired",
+] as const;
+
+export type PluginInstallKeyStatus =
+  (typeof PLUGIN_INSTALL_KEY_STATUSES)[number];
+
+// ---------------------------------------------------------------------------
+// Premium plugin entitlements and one-time install keys
+// ---------------------------------------------------------------------------
+
+export const pluginEntitlements = pgTable(
+  "plugin_entitlements",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** Plugin key from the signed catalog (e.g. "company-brain"). */
+    plugin_key: text("plugin_key").notNull(),
+    /** Premium product key from manifest premium.entitlementProductKey. */
+    entitlement_product_key: text("entitlement_product_key").notNull(),
+    status: text("status").notNull().default("active"),
+    /** install_key | backdoor_key | operator_grant | migration. */
+    source: text("source").notNull(),
+    granted_by_user_id: uuid("granted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    granted_at: timestamp("granted_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    revoked_at: timestamp("revoked_at", { withTimezone: true }),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_plugin_entitlements_active_tenant_plugin")
+      .on(table.tenant_id, table.plugin_key)
+      .where(sql`${table.status} = 'active'`),
+    index("idx_plugin_entitlements_tenant_plugin").on(
+      table.tenant_id,
+      table.plugin_key,
+    ),
+    index("idx_plugin_entitlements_product_status").on(
+      table.entitlement_product_key,
+      table.status,
+    ),
+    check(
+      "plugin_entitlements_status_allowed",
+      sql`${table.status} IN ('active', 'revoked')`,
+    ),
+    check(
+      "plugin_entitlements_source_allowed",
+      sql`${table.source} IN ('install_key', 'backdoor_key', 'operator_grant', 'migration')`,
+    ),
+  ],
+);
+
+export const pluginInstallKeys = pgTable(
+  "plugin_install_keys",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    /** Plugin key from the signed catalog (e.g. "company-brain"). */
+    plugin_key: text("plugin_key").notNull(),
+    /** Premium product key the key grants when redeemed. */
+    entitlement_product_key: text("entitlement_product_key").notNull(),
+    /** Digest only; raw keys are returned once by the issuer and never stored. */
+    key_digest: text("key_digest").notNull(),
+    digest_algorithm: text("digest_algorithm").notNull().default("sha256"),
+    /** Optional secret/pepper version for HMAC-backed digests. */
+    key_secret_version: text("key_secret_version"),
+    /** Optional tenant scope; null means any tenant can redeem once. */
+    tenant_id: uuid("tenant_id").references(() => tenants.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("issued"),
+    issued_by_user_id: uuid("issued_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    issued_at: timestamp("issued_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    expires_at: timestamp("expires_at", { withTimezone: true }),
+    revoked_at: timestamp("revoked_at", { withTimezone: true }),
+    redeemed_by_user_id: uuid("redeemed_by_user_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    redeemed_tenant_id: uuid("redeemed_tenant_id").references(
+      () => tenants.id,
+      { onDelete: "set null" },
+    ),
+    redeemed_entitlement_id: uuid("redeemed_entitlement_id"),
+    redeemed_at: timestamp("redeemed_at", { withTimezone: true }),
+    audit_correlation_id: text("audit_correlation_id"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    foreignKey({
+      name: "plugin_install_keys_redeemed_entitlement_id_fk",
+      columns: [table.redeemed_entitlement_id],
+      foreignColumns: [pluginEntitlements.id],
+    }).onDelete("set null"),
+    uniqueIndex("uq_plugin_install_keys_digest").on(table.key_digest),
+    index("idx_plugin_install_keys_lookup").on(
+      table.plugin_key,
+      table.key_digest,
+    ),
+    index("idx_plugin_install_keys_plugin_status").on(
+      table.plugin_key,
+      table.status,
+    ),
+    index("idx_plugin_install_keys_tenant_status").on(
+      table.tenant_id,
+      table.status,
+    ),
+    check(
+      "plugin_install_keys_status_allowed",
+      sql`${table.status} IN ('issued', 'redeemed', 'revoked', 'expired')`,
+    ),
+    check(
+      "plugin_install_keys_redeemed_fields",
+      sql`${table.status} <> 'redeemed' OR (${table.redeemed_at} IS NOT NULL AND ${table.redeemed_tenant_id} IS NOT NULL AND ${table.redeemed_entitlement_id} IS NOT NULL)`,
+    ),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // plugin_installs — one row per (tenant, plugin); pins the catalog version
 // ---------------------------------------------------------------------------
@@ -308,6 +474,47 @@ export const userPluginActivationTokens = pgTable(
 // ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
+
+export const pluginEntitlementsRelations = relations(
+  pluginEntitlements,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [pluginEntitlements.tenant_id],
+      references: [tenants.id],
+    }),
+    grantedByUser: one(users, {
+      fields: [pluginEntitlements.granted_by_user_id],
+      references: [users.id],
+    }),
+    redeemedKeys: many(pluginInstallKeys),
+  }),
+);
+
+export const pluginInstallKeysRelations = relations(
+  pluginInstallKeys,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [pluginInstallKeys.tenant_id],
+      references: [tenants.id],
+    }),
+    issuedByUser: one(users, {
+      fields: [pluginInstallKeys.issued_by_user_id],
+      references: [users.id],
+    }),
+    redeemedByUser: one(users, {
+      fields: [pluginInstallKeys.redeemed_by_user_id],
+      references: [users.id],
+    }),
+    redeemedTenant: one(tenants, {
+      fields: [pluginInstallKeys.redeemed_tenant_id],
+      references: [tenants.id],
+    }),
+    redeemedEntitlement: one(pluginEntitlements, {
+      fields: [pluginInstallKeys.redeemed_entitlement_id],
+      references: [pluginEntitlements.id],
+    }),
+  }),
+);
 
 export const pluginInstallsRelations = relations(
   pluginInstalls,
