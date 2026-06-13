@@ -19,7 +19,8 @@ status: in_progress
 - Pull request: U1 [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
   merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`; U2
   [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) merged as
-  `f9aba30f1dd503d18b75a931cb189789c6c876a4`; U3 not opened yet.
+  `f9aba30f1dd503d18b75a931cb189789c6c876a4`; U3
+  [#2442](https://github.com/thinkwork-ai/thinkwork/pull/2442) opened.
 - Status: U1 and U2 completed and merged. U3 implemented locally with
   digest-only premium install-key issuance, redemption, revocation, in-memory
   failed-redemption throttling, tenant-scoped entitlement grants, temporary
@@ -59,9 +60,8 @@ status: in_progress
   reports all declared tables, indexes, and constraints present. U2 CI then
   passed required checks and PR #2440 was squash merged.
 - Blockers: none.
-- Next action: finish U3 local verification, push/open the U3 PR, monitor CI,
-  fix any failures, squash merge when green, delete branch/worktree, then sync
-  `origin/main` for U4.
+- Next action: monitor U3 CI, fix any failures, squash merge when green, delete
+  branch/worktree, then sync `origin/main` for U4.
 
 ## Deployment Controller Process - 2026-06-09
 
