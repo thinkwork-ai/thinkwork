@@ -1612,3 +1612,167 @@ def test_self_update_runner_script_skips_when_source_missing(
     runner.self_update_runner_script()
 
     assert calls == []
+
+
+# ---------------------------------------------------------------------------
+# First-admin bootstrap (first-run provisioning)
+# ---------------------------------------------------------------------------
+
+
+def test_first_admin_tenant_slug_prefers_customer_domain_label() -> None:
+    runner = load_runner()
+    slug = runner.first_admin_tenant_slug(
+        {}, {}, {"stage": "acme-prod", "customer_domain": "acme.thinkwork.ai"}
+    )
+    assert slug == "acme"
+
+
+def test_first_admin_tenant_slug_falls_back_to_stage() -> None:
+    runner = load_runner()
+    slug = runner.first_admin_tenant_slug({}, {}, {"stage": "acme", "customer_domain": ""})
+    assert slug == "acme"
+
+
+def test_first_admin_tenant_slug_rejects_domain_mismatch() -> None:
+    runner = load_runner()
+    with pytest.raises(RuntimeError, match="KTD8"):
+        runner.first_admin_tenant_slug(
+            {},
+            {"tenantSlug": "other"},
+            {"stage": "acme", "customer_domain": "acme.thinkwork.ai"},
+        )
+
+
+def test_first_admin_tenant_slug_rejects_invalid_slug() -> None:
+    runner = load_runner()
+    with pytest.raises(RuntimeError, match="slug pattern"):
+        runner.first_admin_tenant_slug({}, {}, {"stage": "Bad_Stage!", "customer_domain": ""})
+
+
+def test_first_admin_email_takes_first_valid_entry() -> None:
+    runner = load_runner()
+    assert (
+        runner.first_admin_email({"platform_operator_emails": "ops@acme.com, two@acme.com"})
+        == "ops@acme.com"
+    )
+    assert runner.first_admin_email({"platform_operator_emails": ""}) == ""
+    assert runner.first_admin_email({"platform_operator_emails": "not-an-email"}) == ""
+    assert runner.first_admin_email({"platform_operator_emails": "a'b@acme.com"}) == ""
+
+
+def test_ensure_first_admin_skips_without_admin_email(tmp_path: Path) -> None:
+    runner = load_runner()
+    outputs = tmp_path / "outputs.json"
+    outputs.write_text("{}", encoding="utf-8")
+    runner.ensure_first_admin(outputs, {"platform_operator_emails": "", "stage": "acme"}, {}, {})
+    assert runner.FIRST_ADMIN_EVIDENCE["status"] == "skipped"
+
+
+def test_ensure_first_admin_skips_established_env_without_slug(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    outputs = tmp_path / "outputs.json"
+    outputs.write_text(json.dumps({"user_pool_id": {"value": "us-east-1_POOL"}}), encoding="utf-8")
+    monkeypatch.setattr(runner, "database_url_from_outputs", lambda _o: "postgres://x")
+
+    def fake_psql_output(_url, sql):
+        if "count(*)" in sql:
+            return "3"
+        return ""  # slug not present
+
+    monkeypatch.setattr(runner, "psql_output", fake_psql_output)
+    runner.ensure_first_admin(
+        outputs,
+        {"platform_operator_emails": "ops@acme.com", "stage": "acme", "customer_domain": ""},
+        {},
+        {},
+    )
+    assert runner.FIRST_ADMIN_EVIDENCE["status"] == "skipped"
+    assert "3 tenant(s)" in runner.FIRST_ADMIN_EVIDENCE["reason"]
+
+
+def test_ensure_first_admin_provisions_fresh_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    outputs = tmp_path / "outputs.json"
+    outputs.write_text(json.dumps({"user_pool_id": {"value": "us-east-1_POOL"}}), encoding="utf-8")
+    monkeypatch.setattr(runner, "database_url_from_outputs", lambda _o: "postgres://x")
+
+    state = {"sql_calls": [], "cognito_calls": [], "seeded": 0}
+
+    def fake_psql_output(_url, sql):
+        if "count(*)" in sql:
+            return "0"
+        if "SELECT id FROM public.tenants" in sql:
+            return "tenant-uuid-1"
+        return ""
+
+    def fake_psql(_url, sql=None, file=None, variables=None):
+        state["sql_calls"].append((sql, variables))
+
+    def fake_ensure_user(pool, email, region):
+        state["cognito_calls"].append(("ensure", pool, email, region))
+        return "sub-123", True
+
+    def fake_cognito_idp(args, region, check=True):
+        state["cognito_calls"].append((args[0], tuple(args), region))
+
+        class R:
+            returncode = 0
+            stdout = "{}"
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr(runner, "psql_output", fake_psql_output)
+    monkeypatch.setattr(runner, "psql", fake_psql)
+    monkeypatch.setattr(runner, "ensure_first_admin_cognito_user", fake_ensure_user)
+    monkeypatch.setattr(runner, "cognito_idp", fake_cognito_idp)
+    monkeypatch.setattr(
+        runner, "seed_platform_bootstrap_defaults", lambda _url: state.__setitem__("seeded", state["seeded"] + 1)
+    )
+
+    runner.ensure_first_admin(
+        outputs,
+        {
+            "platform_operator_emails": "ops@acme.com",
+            "stage": "acme-prod",
+            "region": "us-east-1",
+            "customer_domain": "acme.thinkwork.ai",
+        },
+        {},
+        {},
+    )
+
+    assert runner.FIRST_ADMIN_EVIDENCE["status"] == "succeeded"
+    assert runner.FIRST_ADMIN_EVIDENCE["tenantSlug"] == "acme"
+    assert runner.FIRST_ADMIN_EVIDENCE["tenantId"] == "tenant-uuid-1"
+    assert runner.FIRST_ADMIN_EVIDENCE["cognitoUserCreated"] is True
+
+    sql, variables = state["sql_calls"][0]
+    assert "INSERT INTO public.spaces" in sql
+    assert variables["tenant_slug"] == "acme"
+    assert variables["admin_email"] == "ops@acme.com"
+    assert variables["cognito_sub"] == "sub-123"
+
+    attr_calls = [c for c in state["cognito_calls"] if c[0] == "admin-update-user-attributes"]
+    assert attr_calls and "Name=custom:tenant_id,Value=tenant-uuid-1" in attr_calls[0][1]
+    assert state["seeded"] == 1
+
+
+def test_ensure_first_admin_failure_is_nonfatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    outputs = tmp_path / "outputs.json"
+    outputs.write_text("{}", encoding="utf-8")  # missing user_pool_id
+    runner.ensure_first_admin(
+        outputs,
+        {"platform_operator_emails": "ops@acme.com", "stage": "acme", "customer_domain": ""},
+        {},
+        {},
+    )
+    assert runner.FIRST_ADMIN_EVIDENCE["status"] == "failed"
+    assert "user_pool_id" in runner.FIRST_ADMIN_EVIDENCE["error"]

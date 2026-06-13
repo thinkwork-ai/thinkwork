@@ -20,6 +20,7 @@ STARTED_AT = datetime.now(UTC).isoformat()
 RELEASE_EVIDENCE = {}
 CONTROLLER_EVIDENCE = {}
 TERRAFORM_EVIDENCE = {}
+FIRST_ADMIN_EVIDENCE = {}
 RELEASE_MANIFEST_TRUST_POLICIES = {
     "allow_unsigned_canary",
     "require_signature",
@@ -1147,6 +1148,284 @@ COMMIT;
     )
 
 
+def is_valid_tenant_slug(value):
+    if not value or len(value) > 63:
+        return False
+    if value[0] == "-" or value[-1] == "-":
+        return False
+    return all(ch.isascii() and (ch.islower() or ch.isdigit() or ch == "-") for ch in value)
+
+
+def is_plausible_email(value):
+    if not value or any(ch.isspace() or ch in "'\"\\" for ch in value):
+        return False
+    local, sep, domain = value.partition("@")
+    return bool(sep and local and "." in domain and domain[0] != "." and domain[-1] != ".")
+
+
+def first_admin_email(vars_json):
+    raw = vars_json.get("platform_operator_emails") or ""
+    first = raw.split(",")[0].strip()
+    return first if is_plausible_email(first) else ""
+
+
+def first_admin_tenant_slug(payload, runner_secrets, vars_json):
+    """Slug for the first-run tenant. MUST equal the customer-domain label when a
+    customer domain is configured (KTD8: email-inbound resolves the tenant from
+    the recipient subdomain), so the domain label outranks everything except an
+    explicit override."""
+    explicit = safe_get(
+        runner_secrets,
+        "tenantSlug",
+        default=safe_get(payload, "tenantSlug", default=""),
+    ).strip().lower()
+    domain = (vars_json.get("customer_domain") or "").strip().lower()
+    domain_label = domain.split(".")[0] if domain else ""
+    candidate = explicit or domain_label or vars_json["stage"]
+    if not is_valid_tenant_slug(candidate):
+        raise RuntimeError(f"first-admin tenant slug {candidate!r} fails the slug pattern")
+    if domain_label and candidate != domain_label:
+        raise RuntimeError(
+            f"first-admin tenant slug {candidate!r} must equal the customer domain "
+            f"label {domain_label!r} (KTD8) — inbound email resolves tenants by subdomain"
+        )
+    return candidate
+
+
+def cognito_idp(args, region, check=True):
+    result = subprocess.run(
+        ["aws", "cognito-idp", *args, "--region", region],
+        capture_output=True,
+        text=True,
+    )
+    if check and result.returncode != 0:
+        raise RuntimeError(f"cognito-idp {args[0]} failed: {result.stderr.strip()}")
+    return result
+
+
+def ensure_first_admin_cognito_user(user_pool_id, email, region):
+    """Idempotently ensure the first admin exists in the user pool. Returns
+    (sub, created). New users get Cognito's invite email with a temporary
+    password — sent by Cognito's default sender, so it works while the
+    account's SES identity is still sandboxed."""
+    probe = cognito_idp(
+        ["admin-get-user", "--user-pool-id", user_pool_id, "--username", email],
+        region,
+        check=False,
+    )
+    created = False
+    if probe.returncode != 0:
+        if "UserNotFoundException" not in (probe.stderr or ""):
+            raise RuntimeError(f"admin-get-user failed: {probe.stderr.strip()}")
+        cognito_idp(
+            [
+                "admin-create-user",
+                "--user-pool-id",
+                user_pool_id,
+                "--username",
+                email,
+                "--user-attributes",
+                f"Name=email,Value={email}",
+                "Name=email_verified,Value=true",
+                "--desired-delivery-mediums",
+                "EMAIL",
+            ],
+            region,
+        )
+        created = True
+        probe = cognito_idp(
+            ["admin-get-user", "--user-pool-id", user_pool_id, "--username", email],
+            region,
+        )
+    attributes = json.loads(probe.stdout or "{}").get("UserAttributes", [])
+    sub = next((a["Value"] for a in attributes if a.get("Name") == "sub"), "")
+    if not sub:
+        raise RuntimeError(f"could not resolve Cognito sub for {email}")
+    return sub, created
+
+
+FIRST_ADMIN_PROVISION_SQL = """
+BEGIN;
+
+-- Tenant: created only when the environment has no tenants at all. An
+-- established environment is never given an extra tenant by this step.
+INSERT INTO public.tenants (name, slug, plan, issue_prefix, issue_counter)
+SELECT :'tenant_name', :'tenant_slug', 'free', 'TW', 0
+WHERE NOT EXISTS (SELECT 1 FROM public.tenants);
+
+INSERT INTO public.tenant_settings (tenant_id, default_model)
+SELECT id, 'us.anthropic.claude-sonnet-4-6'
+FROM public.tenants WHERE slug = :'tenant_slug'
+ON CONFLICT (tenant_id) DO NOTHING;
+
+INSERT INTO public.users (tenant_id, email, name, workspace_folder_name, cognito_sub)
+SELECT t.id, :'admin_email', :'admin_name', :'admin_folder', :'cognito_sub'
+FROM public.tenants t
+WHERE t.slug = :'tenant_slug'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.users WHERE lower(email) = lower(:'admin_email')
+  );
+
+-- Heal a stranded user row (signed in before provisioning existed).
+UPDATE public.users u
+SET tenant_id = t.id,
+    cognito_sub = COALESCE(u.cognito_sub, :'cognito_sub'),
+    updated_at = now()
+FROM public.tenants t
+WHERE t.slug = :'tenant_slug'
+  AND lower(u.email) = lower(:'admin_email')
+  AND u.tenant_id IS NULL;
+
+INSERT INTO public.tenant_members (tenant_id, principal_type, principal_id, role, status)
+SELECT u.tenant_id, 'user', u.id, 'owner', 'active'
+FROM public.users u
+JOIN public.tenants t ON t.id = u.tenant_id
+WHERE t.slug = :'tenant_slug'
+  AND lower(u.email) = lower(:'admin_email')
+  AND NOT EXISTS (
+    SELECT 1 FROM public.tenant_members m
+    WHERE m.tenant_id = u.tenant_id
+      AND m.principal_type = 'user'
+      AND m.principal_id = u.id
+  );
+
+UPDATE public.tenants t
+SET pending_owner_email = NULL,
+    first_admin_claim_required = false,
+    first_admin_claimed_at = COALESCE(t.first_admin_claimed_at, now()),
+    first_admin_claimed_user_id = COALESCE(t.first_admin_claimed_user_id, u.id),
+    updated_at = now()
+FROM public.users u
+WHERE t.slug = :'tenant_slug'
+  AND u.tenant_id = t.id
+  AND lower(u.email) = lower(:'admin_email');
+
+-- Default Space: created only when the tenant has no Spaces, so a fresh
+-- environment's composer has a target without operator setup.
+INSERT INTO public.spaces (
+  tenant_id, slug, workspace_folder_name, name, description,
+  status, kind, access_mode, template_key, config
+)
+SELECT t.id, 'general', 'general', 'General',
+       'Default workspace created at install time.',
+       'active', 'custom', 'public', 'general',
+       '{"workflow":"custom","version":1,"source":"first_admin_bootstrap"}'::jsonb
+FROM public.tenants t
+WHERE t.slug = :'tenant_slug'
+  AND NOT EXISTS (SELECT 1 FROM public.spaces s WHERE s.tenant_id = t.id);
+
+INSERT INTO public.space_members (tenant_id, space_id, user_id, role, notification_preference)
+SELECT s.tenant_id, s.id, u.id, 'owner', 'subscribed'
+FROM public.spaces s
+JOIN public.tenants t ON t.id = s.tenant_id
+JOIN public.users u ON u.tenant_id = t.id AND lower(u.email) = lower(:'admin_email')
+WHERE t.slug = :'tenant_slug'
+  AND s.slug = 'general'
+  AND NOT EXISTS (
+    SELECT 1 FROM public.space_members m WHERE m.space_id = s.id AND m.user_id = u.id
+  );
+
+COMMIT;
+"""
+
+
+def ensure_first_admin(outputs_path, vars_json, payload, runner_secrets):
+    """First-run admin provisioning: when the deployment carries an adminEmail,
+    make a fresh environment sign-in-ready — tenant (slug = customer-domain
+    label, KTD8), Cognito admin user with an invite email, owner membership,
+    custom:tenant_id, and a default Space. Idempotent; never mutates an
+    environment that already has tenants beyond attaching the admin when the
+    expected tenant slug exists. Non-fatal: failures are logged and echoed
+    into deployment evidence (firstAdminBootstrap) instead of failing an
+    otherwise healthy deploy."""
+    global FIRST_ADMIN_EVIDENCE
+    email = first_admin_email(vars_json)
+    if not email:
+        FIRST_ADMIN_EVIDENCE = {"status": "skipped", "reason": "no adminEmail configured"}
+        return
+    try:
+        slug = first_admin_tenant_slug(payload, runner_secrets, vars_json)
+        outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
+        user_pool_id = (outputs.get("user_pool_id") or {}).get("value", "")
+        if not user_pool_id:
+            raise RuntimeError("terraform outputs are missing user_pool_id")
+        database_url = database_url_from_outputs(outputs)
+
+        tenant_count = int(psql_output(database_url, "SELECT count(*) FROM public.tenants") or 0)
+        slug_present = bool(
+            psql_output(
+                database_url,
+                f"SELECT 1 FROM public.tenants WHERE slug = {pg_literal(slug)}",
+            ).strip()
+        )
+        if tenant_count and not slug_present:
+            FIRST_ADMIN_EVIDENCE = {
+                "status": "skipped",
+                "reason": f"environment already has {tenant_count} tenant(s) and none is {slug!r}",
+            }
+            print(f"[runner] first-admin bootstrap skipped: {FIRST_ADMIN_EVIDENCE['reason']}")
+            return
+
+        region = vars_json.get("region") or os.environ.get("AWS_REGION") or "us-east-1"
+        sub, created = ensure_first_admin_cognito_user(user_pool_id, email, region)
+        local_part = email.split("@")[0]
+        folder = "".join(
+            ch if (ch.isascii() and (ch.islower() or ch.isdigit())) else "-"
+            for ch in local_part.lower()
+        ).strip("-") or "user"
+        psql(
+            database_url,
+            sql=FIRST_ADMIN_PROVISION_SQL,
+            variables={
+                "tenant_name": slug.capitalize(),
+                "tenant_slug": slug,
+                "admin_email": email,
+                "admin_name": local_part,
+                "admin_folder": folder,
+                "cognito_sub": sub,
+            },
+        )
+        tenant_id = psql_output(
+            database_url,
+            f"SELECT id FROM public.tenants WHERE slug = {pg_literal(slug)}",
+        ).strip()
+        if tenant_id:
+            cognito_idp(
+                [
+                    "admin-update-user-attributes",
+                    "--user-pool-id",
+                    user_pool_id,
+                    "--username",
+                    email,
+                    "--user-attributes",
+                    f"Name=custom:tenant_id,Value={tenant_id}",
+                ],
+                region,
+            )
+        # Re-run the platform seed so the just-created tenant gets the default
+        # agent / settings / model approvals (the earlier seed saw no tenants).
+        seed_platform_bootstrap_defaults(database_url)
+        FIRST_ADMIN_EVIDENCE = {
+            "status": "succeeded",
+            "adminEmail": email,
+            "tenantSlug": slug,
+            "tenantId": tenant_id,
+            "cognitoUserCreated": created,
+            "inviteEmailSent": created,
+        }
+        print(
+            f"[runner] first-admin bootstrap succeeded: tenant={slug} admin={email} "
+            f"cognitoUserCreated={created}"
+        )
+    except Exception as exc:
+        FIRST_ADMIN_EVIDENCE = {"status": "failed", "adminEmail": email, "error": str(exc)}
+        print(f"[runner] first-admin bootstrap FAILED (non-fatal): {exc}")
+
+
+def pg_literal(value):
+    return "'" + value.replace("'", "''") + "'"
+
+
 def push_database_schema(outputs_path, vars_json):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
     checkout_source(
@@ -2105,6 +2384,8 @@ def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None)
         }
     if error:
         evidence["error"] = str(error)
+    if FIRST_ADMIN_EVIDENCE:
+        evidence["firstAdminBootstrap"] = FIRST_ADMIN_EVIDENCE
     if RELEASE_EVIDENCE:
         evidence["releaseArtifacts"] = RELEASE_EVIDENCE
     if CONTROLLER_EVIDENCE:
@@ -2229,6 +2510,7 @@ def main():
             "s3Uri": upload_evidence_artifact(outputs_path, "terraform-outputs.json"),
         }
         push_database_schema(outputs_path, vars_json)
+        ensure_first_admin(outputs_path, vars_json, payload, runner_secrets)
         write_outputs_to_ssm(outputs_path, vars_json)
         selected_controller_release = write_controller_release_selection_to_ssm(vars_json)
         if selected_controller_release:
