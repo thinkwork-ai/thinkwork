@@ -16,7 +16,8 @@ status: in_progress
 - Current branch: `codex/thnk-15-u1-company-brain-manifest`.
 - Current worktree:
   `.Codex/worktrees/thnk-15-company-brain-plugin`.
-- Pull request: not opened yet.
+- Pull request: [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
+  opened.
 - Status: U1 implemented locally. Application Plugins foundation is
   present on `origin/main`; this branch adds the Company Brain manifest,
   premium manifest metadata validation, catalog registration, targeted catalog
@@ -28,7 +29,7 @@ status: in_progress
   Initial isolated-worktree dependency install also reported a broad workspace
   `canvas` native build failure under Node 25.6.0 because `pkg-config` was not
   available, but plugin-catalog tests/typecheck executed successfully.
-- CI log: pending PR.
+- CI log: PR #2439 checks pending.
 - Blockers: none.
 - Next action: finish U1 local verification, commit, push, open PR, monitor CI,
   squash merge when green, delete branch/worktree, then sync `origin/main` for
