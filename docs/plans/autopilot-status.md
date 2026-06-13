@@ -11,11 +11,9 @@ status: in_progress
 - Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
 - Linear issue: `THNK-15`.
 - Target branch: `main`.
-- Current implementation unit: U8 Add smoke coverage, rollout checks, and
-  operator docs.
-- Current branch: `codex/thnk-15-u8-company-brain-smoke-docs`.
-- Current worktree:
-  `.Codex/worktrees/thnk-15-u8-company-brain-smoke-docs`.
+- Current implementation unit: complete.
+- Current branch: none.
+- Current worktree: none.
 - Pull request: U1 [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
   merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`; U2
   [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) merged as
@@ -30,8 +28,10 @@ status: in_progress
   `80a58246e01e7483f9a87e653b5735624bdd0bea`; U7
   [#2446](https://github.com/thinkwork-ai/thinkwork/pull/2446) merged as
   `183519f670e16686499427936ce265a3a939aa02`; U8
-  [#2447](https://github.com/thinkwork-ai/thinkwork/pull/2447) opened.
-- Status: U1 through U7 completed and merged. U8 is implemented locally with a
+  [#2447](https://github.com/thinkwork-ai/thinkwork/pull/2447) merged as
+  `260a3677686e51e0525d6a598922b579de423abe`.
+- Status: U1 through U8 completed and merged. THNK-15's planned
+  implementation units are complete. U8 added
   dry-run-by-default Company Brain premium plugin smoke, smoke README coverage,
   and an operator runbook for key issuance/revocation, backdoor configuration,
   adoption evidence, and live smoke execution. U7 added
@@ -111,7 +111,10 @@ status: in_progress
   and was squash merged. U8 local checks: `node --check
   scripts/smoke/company-brain-plugin-smoke.mjs` passed; `node
   scripts/smoke/company-brain-plugin-smoke.mjs` dry-run passed and emitted the
-  expected evidence envelope.
+  expected evidence envelope. U8 PR #2447 initially passed required CI but was
+  behind `main`; after rebasing onto `origin/main`, it passed required CI
+  (`cla`, `lint`, `verify`, `typecheck`, and `test`) again and was squash
+  merged.
 - CI log: U2 PR #2440 initially passed `cla`, `lint`, `verify`, and
   `typecheck`, with `test` still pending, but `Migration Drift Precheck (dev)`
   failed because the new hand-rolled
@@ -121,9 +124,8 @@ status: in_progress
   reports all declared tables, indexes, and constraints present. U2 CI then
   passed required checks and PR #2440 was squash merged.
 - Blockers: none.
-- Next action: monitor U8 CI, fix any failures, squash merge when green,
-  delete branch/worktree, then assess whether THNK-15 has any remaining
-  implementation units.
+- Next action: THNK-15 implementation complete; proceed to the next requested
+  plan after handoff.
 
 ## Deployment Controller Process - 2026-06-09
 
