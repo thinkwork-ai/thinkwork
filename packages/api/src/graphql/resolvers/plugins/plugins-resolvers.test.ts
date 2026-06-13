@@ -102,7 +102,10 @@ vi.mock("../../../lib/plugins/premium-entitlements.js", async (importOriginal) =
 });
 
 import type { PluginVersion } from "@thinkwork/plugin-catalog";
-import type { PluginEngineDeps } from "../../../lib/plugins/engine.js";
+import type {
+  PluginEngineDeps,
+  PremiumInstallGateInput,
+} from "../../../lib/plugins/engine.js";
 import {
   createInMemoryPluginEngineStore,
   type InMemoryPluginEngineStore,
@@ -145,9 +148,11 @@ const fixtureVersion: PluginVersion = {
 };
 
 let store: InMemoryPluginEngineStore;
+let premiumAccessCalls: PremiumInstallGateInput[];
 
-function buildDeps(): PluginEngineDeps {
+function buildDeps(options: { premium?: boolean } = {}): PluginEngineDeps {
   store = createInMemoryPluginEngineStore();
+  premiumAccessCalls = [];
   return {
     store,
     resolveVersion: async (pluginKey, version) =>
@@ -157,6 +162,16 @@ function buildDeps(): PluginEngineDeps {
               pluginKey: "lastmile",
               displayName: "LastMile",
               description: "d",
+              ...(options.premium
+                ? {
+                    premium: {
+                      entitlementProductKey: "lastmile-premium",
+                      installKeyRequired: true,
+                      installKeyPrompt:
+                        "Enter the install key provided by ThinkWork.",
+                    },
+                  }
+                : {}),
             },
             versionEntry: {
               version: "0.1.0",
@@ -179,6 +194,11 @@ function buildDeps(): PluginEngineDeps {
         handlerRef,
         complete: true,
       }),
+    },
+    premiumAccess: {
+      ensureInstallAllowed: async (input) => {
+        premiumAccessCalls.push(input);
+      },
     },
     deleteSecrets: async () => undefined,
   };
@@ -281,6 +301,41 @@ describe("admin gating", () => {
       eventType: "plugin.installed",
       actorId: "user-1",
       actorType: "user",
+    });
+  });
+
+  it("passes premium install keys and request metadata through to the engine gate", async () => {
+    depsHolder.current = buildDeps({ premium: true });
+    const ctx = {
+      auth: { tenantId: null },
+      headers: {
+        "x-forwarded-for": "203.0.113.7, 10.0.0.1",
+        "user-agent": "PremiumInstallTest/1.0",
+      },
+    } as never;
+
+    await installPlugin(
+      null,
+      {
+        input: {
+          pluginKey: "lastmile",
+          installKey: "twpi_valid",
+          idempotencyKey: "i-premium",
+        },
+      },
+      ctx,
+    );
+
+    expect(premiumAccessCalls).toHaveLength(1);
+    expect(premiumAccessCalls[0]).toMatchObject({
+      tenantId: "tenant-1",
+      pluginKey: "lastmile",
+      installKey: "twpi_valid",
+      actor: { actorId: "user-1", actorType: "user" },
+      request: {
+        ip: "203.0.113.7",
+        userAgent: "PremiumInstallTest/1.0",
+      },
     });
   });
 

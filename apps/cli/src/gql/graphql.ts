@@ -1493,6 +1493,8 @@ export type InboxItemStatusEvent = {
 
 export type InstallPluginInput = {
   idempotencyKey: Scalars['String']['input'];
+  /** ThinkWork-provided one-time key for premium plugins when no entitlement exists. */
+  installKey?: InputMaybe<Scalars['String']['input']>;
   pluginKey: Scalars['String']['input'];
   /** Catalog version to pin; defaults to the latest published version. */
   version?: InputMaybe<Scalars['String']['input']>;
