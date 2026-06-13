@@ -92,7 +92,13 @@ export function resolveStageDatabaseUrl(
 
   const user = encodeURIComponent(parsed.username);
   const pass = encodeURIComponent(parsed.password);
-  return `postgresql://${user}:${pass}@${endpoint}:5432/thinkwork?sslmode=require`;
+  // No sslmode in the URL: on pg >= 8.20 a connection-string sslmode is
+  // treated as verify-full and OVERRIDES the client's explicit `ssl` option,
+  // so `ssl: { rejectUnauthorized: false }` stopped applying and every
+  // stage-resolved connection died on Aurora's untrusted CA chain ("unable
+  // to get local issuer certificate"). TLS posture is governed solely by the
+  // pg.Client `ssl` option in createStageTenantSource.
+  return `postgresql://${user}:${pass}@${endpoint}:5432/thinkwork`;
 }
 
 export async function createStageTenantSource(
