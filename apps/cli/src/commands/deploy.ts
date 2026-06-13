@@ -83,6 +83,14 @@ export interface ControllerDeployInput {
   releaseVersion: string;
   releaseManifestUrl: string;
   releaseManifestSha256: string;
+  // Required at the top level: the orchestrator state machine resolves
+  // $.terraformModuleVersion via a JsonPath parameter, so an input without it
+  // fails the execution before CodeBuild ever starts.
+  terraformModuleVersion: string;
+  // The runner only reads runner secrets (customerDomain gates, adminEmail,
+  // cognitoEmailSourceArn, ...) from the secret named here; omitting it makes
+  // the runner silently ignore the stage's configured runner secrets.
+  runnerSecretArn: string;
   release: {
     version: string;
     manifestUrl: string;
@@ -257,6 +265,7 @@ export async function runControllerDeploy(
     releaseVersion: opts.releaseVersion ?? "unresolved",
     manifestUrl: opts.manifestUrl,
     manifestSha256: opts.manifestSha256,
+    terraformModuleVersion: opts.terraformModuleVersion,
     sessionId,
   });
   const args = [
@@ -303,10 +312,15 @@ export function buildControllerDeployInput(options: {
   releaseVersion: string;
   manifestUrl: string;
   manifestSha256: string;
+  terraformModuleVersion?: string;
   sessionId: string;
 }): ControllerDeployInput {
   const evidenceBucket = `thinkwork-${options.stage}-${options.accountId}-deploy-evidence`;
   const evidencePrefix = `sessions/${options.sessionId}/${options.action}`;
+  // Registry module versions are unprefixed ("0.1.0-canary.178") while release
+  // tags carry a "v"; derive the module pin from the release when not given.
+  const terraformModuleVersion =
+    options.terraformModuleVersion ?? options.releaseVersion.replace(/^v/, "");
   return {
     schemaVersion: 1,
     contract: "thinkwork.deployment.controller.v1",
@@ -332,6 +346,8 @@ export function buildControllerDeployInput(options: {
     releaseVersion: options.releaseVersion,
     releaseManifestUrl: options.manifestUrl,
     releaseManifestSha256: options.manifestSha256,
+    terraformModuleVersion,
+    runnerSecretArn: `/thinkwork/${options.stage}/deployment/runner-secrets`,
     release: {
       version: options.releaseVersion,
       manifestUrl: options.manifestUrl,

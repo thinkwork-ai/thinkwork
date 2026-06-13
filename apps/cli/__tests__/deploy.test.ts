@@ -40,6 +40,12 @@ describe("deploy controller path", () => {
         "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
       manifestSha256: "a".repeat(64),
     });
+    // The state machine resolves $.terraformModuleVersion via JsonPath — a
+    // payload without it fails the execution before CodeBuild starts.
+    expect(payload.terraformModuleVersion).toBe("0.1.0-canary.134");
+    // The runner reads runner secrets only from this field; without it the
+    // stage's configured secrets (domain gates, adminEmail) are ignored.
+    expect(payload.runnerSecretArn).toBe("/thinkwork/dev/deployment/runner-secrets");
     expect(payload.evidence).toEqual(
       expect.objectContaining({
         bucket: "thinkwork-dev-123456789012-deploy-evidence",
@@ -60,6 +66,21 @@ describe("deploy controller path", () => {
       twenty: false,
     });
     expect(JSON.stringify(payload)).not.toContain("password");
+  });
+
+  it("honors an explicit terraform module version override", () => {
+    const payload = buildControllerDeployInput({
+      action: "update",
+      stage: "dev",
+      accountId: "123456789012",
+      region: "us-east-1",
+      releaseVersion: "v0.1.0-canary.134",
+      manifestUrl: "https://example.com/thinkwork-release.json",
+      manifestSha256: "a".repeat(64),
+      terraformModuleVersion: "0.1.0-canary.130",
+      sessionId: "cli-dev-20260609T100000Z",
+    });
+    expect(payload.terraformModuleVersion).toBe("0.1.0-canary.130");
   });
 
   it("derives the conventional deployment state machine ARN", () => {
