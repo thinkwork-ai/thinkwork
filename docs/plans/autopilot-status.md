@@ -11,29 +11,41 @@ status: in_progress
 - Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
 - Linear issue: `THNK-15`.
 - Target branch: `main`.
-- Current implementation unit: U1 Add Company Brain manifest and premium
-  catalog metadata.
-- Current branch: `codex/thnk-15-u1-company-brain-manifest`.
+- Current implementation unit: U2 Add premium entitlement and install-key
+  storage.
+- Current branch: `codex/thnk-15-u2-premium-entitlements`.
 - Current worktree:
-  `.Codex/worktrees/thnk-15-company-brain-plugin`.
-- Pull request: [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
-  opened.
-- Status: U1 implemented locally. Application Plugins foundation is
-  present on `origin/main`; this branch adds the Company Brain manifest,
-  premium manifest metadata validation, catalog registration, targeted catalog
-  tests, and carries the THNK-15 plan/brainstorm artifacts into the repo.
-- Verification log: `pnpm --filter @thinkwork/plugin-catalog test` passed
-  (6 files, 66 tests); `pnpm --filter @thinkwork/plugin-catalog typecheck`
-  passed. `pnpm format:check` could not run locally because this checkout's
-  dependency graph does not provide a `prettier` binary for the root script.
-  Initial isolated-worktree dependency install also reported a broad workspace
-  `canvas` native build failure under Node 25.6.0 because `pkg-config` was not
-  available, but plugin-catalog tests/typecheck executed successfully.
-- CI log: PR #2439 checks pending.
+  `.Codex/worktrees/thnk-15-u2-premium-entitlements`.
+- Pull request: U1 [#2439](https://github.com/thinkwork-ai/thinkwork/pull/2439)
+  merged as `776880d17c03c868f72fb99a8f114f4f1b37a1f4`; U2
+  [#2440](https://github.com/thinkwork-ai/thinkwork/pull/2440) opened.
+- Status: U1 completed and merged. U2 implemented locally with generic
+  `plugin_entitlements` and `plugin_install_keys` tables, digest-only key
+  storage, partial unique active entitlement constraint, GraphQL premium /
+  entitlement status source types, catalog resolver premium passthrough, and
+  generated client code from updated GraphQL schema.
+- Verification log: U1 PR #2439 passed required CI (`cla`, `lint`, `verify`,
+  `typecheck`, and `test`) after rebasing on current `main`. U2 local checks:
+  `pnpm --filter @thinkwork/database-pg test -- __tests__/migration-0165-plugin-premium-entitlements.test.ts`
+  passed; `pnpm --filter @thinkwork/database-pg typecheck` passed;
+  `pnpm --filter @thinkwork/api typecheck` passed;
+  `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/plugins/plugins-resolvers.test.ts`
+  passed; `pnpm schema:build` passed; codegen passed for web, mobile, and
+  `thinkwork-cli`; `pnpm --filter @thinkwork/web typecheck` passed;
+  `pnpm --filter thinkwork-cli typecheck` passed. Mobile has no `typecheck`
+  script. Local dependency install continued to report the existing broad
+  workspace `canvas` native build failure under Node 25.6.0 because
+  `pkg-config` was not available.
+- CI log: U2 PR #2440 initially passed `cla`, `lint`, `verify`, and
+  `typecheck`, with `test` still pending, but `Migration Drift Precheck (dev)`
+  failed because the new hand-rolled
+  `0165_plugin_premium_entitlements.sql` objects were missing from dev. Applied
+  the scoped dev migration with `psql -v ON_ERROR_STOP=1 -f` and verified
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0165_plugin_premium_entitlements.sql`
+  reports all declared tables, indexes, and constraints present.
 - Blockers: none.
-- Next action: finish U1 local verification, commit, push, open PR, monitor CI,
-  squash merge when green, delete branch/worktree, then sync `origin/main` for
-  U2.
+- Next action: rerun the failed U2 drift precheck, monitor CI, squash merge when
+  green, delete branch/worktree, then sync `origin/main` for U3.
 
 ## Deployment Controller Process - 2026-06-09
 

@@ -78,6 +78,8 @@ export async function pluginCatalog(
       pluginKey: plugin.pluginKey,
       displayName: plugin.displayName,
       description: plugin.description,
+      premium: plugin.premium ?? null,
+      entitlement: null,
       versions,
       latestVersion,
       install: install ? await installPayloadWithDetails(install, deps) : null,
