@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Badge, Button } from "@thinkwork/ui";
 import {
   ArrowDownToLine,
+  Brain,
   LogIn,
   LogOut,
   RotateCw,
@@ -31,6 +32,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { ManagedApplicationPlanDialog } from "@/components/settings/managed-applications/ManagedApplicationPlanDialog";
+import { InstallKeyDialog } from "./InstallKeyDialog";
 import { UninstallPluginDialog } from "./UninstallPluginDialog";
 import {
   broadenedScopes,
@@ -58,6 +60,8 @@ export function PluginDetail() {
 
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [installKeyError, setInstallKeyError] = useState<string | null>(null);
+  const [installKeyOpen, setInstallKeyOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
 
   const [catalogResult, refreshCatalog] = useQuery({
@@ -113,6 +117,13 @@ export function PluginDetail() {
   const displayName = entry?.displayName ?? install?.pluginKey ?? pluginKey;
   const authCapable =
     (entry && pluginEntryIsAuthCapable(entry)) || Boolean(activation);
+  const premium = entry?.premium ?? null;
+  const entitlement = entry?.entitlement ?? null;
+  const hasActiveEntitlement = entitlement?.status === "active";
+  const installNeedsKey = Boolean(
+    premium?.installKeyRequired && !hasActiveEntitlement,
+  );
+  const isCompanyBrain = pluginKey === "company-brain";
 
   // Mutations don't invalidate urql's document cache — refetch every affected
   // query explicitly after each one.
@@ -160,7 +171,8 @@ export function PluginDetail() {
     ],
   });
 
-  async function install_() {
+  async function install_(installKey?: string) {
+    setInstallKeyError(null);
     const idempotencyKey = [
       "plugins",
       pluginKey,
@@ -168,13 +180,17 @@ export function PluginDetail() {
       Date.now().toString(36),
     ].join("-");
     const result = await installPlugin({
-      input: { pluginKey, idempotencyKey },
+      input: { pluginKey, idempotencyKey, installKey },
     });
     if (result.error) {
+      if (installKey) {
+        setInstallKeyError(result.error.message);
+      }
       toast.error(`Could not install ${displayName}: ${result.error.message}`);
       return;
     }
     toast.success(`Installing ${displayName}.`);
+    setInstallKeyOpen(false);
     refreshAll();
   }
 
@@ -333,6 +349,30 @@ export function PluginDetail() {
           ) : null
         ) : null}
 
+        {premium && !selfServiceOnly ? (
+          <SettingsSection label="Premium access">
+            <SettingsRow
+              label={`${displayName} entitlement`}
+              description={
+                hasActiveEntitlement
+                  ? `Unlocked for this workspace through ${formatEntitlementSource(entitlement?.source)}.`
+                  : premium.installKeyPrompt
+              }
+            >
+              <Badge
+                variant="outline"
+                className={
+                  hasActiveEntitlement
+                    ? "border-emerald-500/40 text-emerald-400"
+                    : "border-amber-500/40 text-amber-500"
+                }
+              >
+                {hasActiveEntitlement ? "Entitled" : "Install key required"}
+              </Badge>
+            </SettingsRow>
+          </SettingsSection>
+        ) : null}
+
         {install?.state === "awaiting_approval" && !selfServiceOnly ? (
           <PluginPendingApprovalSection
             deploymentJobId={findPluginDeploymentJobId(install.components)}
@@ -351,10 +391,17 @@ export function PluginDetail() {
                 type="button"
                 size="sm"
                 disabled={installMutationState.fetching}
-                onClick={() => void install_()}
+                onClick={() => {
+                  if (installNeedsKey) {
+                    setInstallKeyError(null);
+                    setInstallKeyOpen(true);
+                  } else {
+                    void install_();
+                  }
+                }}
               >
                 <ArrowDownToLine className="mr-2 size-4" />
-                Install
+                {installNeedsKey ? "Enter key" : "Install"}
               </Button>
             </SettingsRow>
           </SettingsSection>
@@ -436,10 +483,37 @@ export function PluginDetail() {
                         {component.lastError}
                       </p>
                     ) : null}
+                    {isCompanyBrain &&
+                    component.componentType === "infrastructure" &&
+                    handlerRefBoolean(
+                      component.handlerRef,
+                      "adoptionRequiresNoChange",
+                    ) ? (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Adoption plan verifies the existing Brain substrate
+                        before ownership changes.
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>
             )}
+          </SettingsSection>
+        ) : null}
+
+        {isCompanyBrain && (install || hasActiveEntitlement) ? (
+          <SettingsSection label="Workspace">
+            <SettingsRow
+              label="Memory / Ontology"
+              description="Open the graph workspace powered by Company Brain."
+            >
+              <Button asChild type="button" variant="outline" size="sm">
+                <Link to="/settings/memory/knowledge-graph">
+                  <Brain className="size-4" />
+                  Open Ontology
+                </Link>
+              </Button>
+            </SettingsRow>
           </SettingsSection>
         ) : null}
 
@@ -542,9 +616,35 @@ export function PluginDetail() {
             }}
           />
         ) : null}
+        {entry && premium ? (
+          <InstallKeyDialog
+            open={installKeyOpen}
+            onOpenChange={setInstallKeyOpen}
+            pluginName={entry.displayName}
+            prompt={premium.installKeyPrompt}
+            submitting={installMutationState.fetching}
+            error={installKeyError}
+            onSubmit={(key) => void install_(key)}
+          />
+        ) : null}
       </div>
     </div>
   );
+}
+
+function formatEntitlementSource(source: string | null | undefined): string {
+  switch (source) {
+    case "install_key":
+      return "an install key";
+    case "backdoor_key":
+      return "a test key";
+    case "operator_grant":
+      return "an operator grant";
+    case "migration":
+      return "migration";
+    default:
+      return "ThinkWork";
+  }
 }
 
 function pluginEntryIsAuthCapable(entry: {
@@ -579,6 +679,23 @@ function findPluginDeploymentJobId(
     }
   }
   return null;
+}
+
+function handlerRefBoolean(value: unknown, key: string): boolean {
+  let ref = value;
+  if (typeof ref === "string") {
+    try {
+      ref = JSON.parse(ref);
+    } catch {
+      return false;
+    }
+  }
+  return Boolean(
+    ref &&
+      typeof ref === "object" &&
+      !Array.isArray(ref) &&
+      (ref as Record<string, unknown>)[key] === true,
+  );
 }
 
 /**
