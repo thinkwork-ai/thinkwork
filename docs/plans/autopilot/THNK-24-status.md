@@ -5,9 +5,9 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 ## Current State
 
 - Started: 2026-06-14
-- Active branch: `codex/thnk-24-u3-release-preflight`
-- Active unit: U3, release preflight service
-- Linear state: Verification
+- Active branch: `codex/thnk-24-u4-runner-remediation`
+- Active unit: U4, safe runner refresh remediation
+- Linear state: In Progress
 
 ## Context Discovery
 
@@ -71,13 +71,21 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   summary, Route53 IAM drift detection, release-update job/event persistence,
   generated client types, and read-only Terraform IAM grants.
 - 2026-06-14: Opened U3 PR and moved THNK-24 to Verification.
+- 2026-06-14: U3 PR passed CI, squash-merged, and had its remote/local branch
+  cleaned up.
+- 2026-06-14: Moved THNK-24 back to In Progress for U4 and created branch
+  `codex/thnk-24-u4-runner-remediation`.
+- 2026-06-14: Implemented U4 safe runner remediation: additive GraphQL
+  mutation, runner backup/refresh/evidence writes, job/event updates,
+  generated client types, focused remediation test coverage, and scoped
+  deployment evidence S3 write permission.
 
 ## Implementation Units
 
 - U1. Extend release manifest runner metadata: merged in PR #2473.
 - U2. Add release update job substrate: merged in PR #2475.
-- U3. Implement release preflight service: PR open; pending CI/review.
-- U4. Add safe runner refresh remediation: pending.
+- U3. Implement release preflight service: merged in PR #2476.
+- U4. Add safe runner refresh remediation: implemented locally; pending PR.
 - U5. Dispatch and monitor reviewed release updates: pending.
 - U6. Build Settings release safety workflow: pending.
 - U7. Update docs, runbooks, and verification coverage: pending.
@@ -86,7 +94,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 
 - U1: https://github.com/thinkwork-ai/thinkwork/pull/2473 merged
 - U2: https://github.com/thinkwork-ai/thinkwork/pull/2475 merged
-- U3: https://github.com/thinkwork-ai/thinkwork/pull/2476
+- U3: https://github.com/thinkwork-ai/thinkwork/pull/2476 merged
 
 ## CI / Verification
 
@@ -145,6 +153,20 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U3 `pnpm dlx prettier@3.5.3 --check ...`: passed for hand-authored touched
   files.
 - U3 `terraform fmt terraform/modules/app/lambda-api/iam-grouped.tf`: passed.
+- U3 PR CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
+- U4 `pnpm schema:build`: passed; AppSync subscription schema unchanged.
+- U4 `pnpm --filter thinkwork-cli codegen`: passed.
+- U4 `pnpm --filter @thinkwork/web codegen`: passed.
+- U4 `pnpm --filter @thinkwork/mobile codegen`: passed.
+- U4 `pnpm --filter @thinkwork/api exec vitest run src/lib/deployments/release-preflight.test.ts src/graphql/resolvers/deployments/release-update-jobs.test.ts`:
+  passed.
+- U4 `pnpm --filter @thinkwork/api typecheck`: passed.
+- U4 `pnpm --filter @thinkwork/database-pg typecheck`: passed.
+- U4 `pnpm --filter @thinkwork/web typecheck`: passed.
+- U4 `pnpm --filter thinkwork-cli typecheck`: passed.
+- U4 `pnpm dlx prettier@3.5.3 --check ...`: passed for hand-authored touched
+  files.
+- U4 `terraform fmt terraform/modules/app/lambda-api/iam-grouped.tf`: passed.
 
 ## Blockers
 

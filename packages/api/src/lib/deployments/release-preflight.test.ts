@@ -2,38 +2,51 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThinkWorkReleaseManifest } from "@thinkwork/release-manifest";
 
-const { selectQueue, insertCalls, mockDb } = vi.hoisted(() => {
-  const selectQueue: unknown[][] = [];
-  const insertCalls: Array<Record<string, unknown>> = [];
-  const mockDb = {
-    select: vi.fn(() => {
-      const chain: any = {
-        from: vi.fn(() => chain),
-        where: vi.fn(() => chain),
-        limit: vi.fn(async () => selectQueue.shift() ?? []),
-        orderBy: vi.fn(async () => selectQueue.shift() ?? []),
-      };
-      return chain;
-    }),
-    insert: vi.fn(() => ({
-      values: (values: Record<string, unknown>) => {
-        insertCalls.push(values);
-        return {
-          returning: async () => [
-            {
-              ...values,
-              created_at: new Date("2026-06-14T20:00:00Z"),
-              updated_at: new Date("2026-06-14T20:00:00Z"),
-            },
-          ],
-          onConflictDoNothing: async () => [],
-          then: (resolve: (value: unknown[]) => void) => resolve([]),
+const { selectQueue, returningQueue, insertCalls, updateCalls, mockDb } =
+  vi.hoisted(() => {
+    const selectQueue: unknown[][] = [];
+    const returningQueue: unknown[][] = [];
+    const insertCalls: Array<Record<string, unknown>> = [];
+    const updateCalls: Array<Record<string, unknown>> = [];
+    const mockDb = {
+      select: vi.fn(() => {
+        const chain: any = {
+          from: vi.fn(() => chain),
+          where: vi.fn(() => chain),
+          limit: vi.fn(async () => selectQueue.shift() ?? []),
+          orderBy: vi.fn(async () => selectQueue.shift() ?? []),
         };
-      },
-    })),
-  };
-  return { selectQueue, insertCalls, mockDb };
-});
+        return chain;
+      }),
+      insert: vi.fn(() => ({
+        values: (values: Record<string, unknown>) => {
+          insertCalls.push(values);
+          return {
+            returning: async () => [
+              {
+                ...values,
+                created_at: new Date("2026-06-14T20:00:00Z"),
+                updated_at: new Date("2026-06-14T20:00:00Z"),
+              },
+            ],
+            onConflictDoNothing: async () => [],
+            then: (resolve: (value: unknown[]) => void) => resolve([]),
+          };
+        },
+      })),
+      update: vi.fn(() => ({
+        set: (values: Record<string, unknown>) => {
+          updateCalls.push(values);
+          return {
+            where: () => ({
+              returning: async () => returningQueue.shift() ?? [],
+            }),
+          };
+        },
+      })),
+    };
+    return { selectQueue, returningQueue, insertCalls, updateCalls, mockDb };
+  });
 
 vi.mock("../../graphql/utils.js", () => ({
   db: mockDb,
@@ -60,9 +73,12 @@ const manifestSha = sha256(manifestBytes);
 beforeEach(async () => {
   vi.resetModules();
   selectQueue.length = 0;
+  returningQueue.length = 0;
   insertCalls.length = 0;
+  updateCalls.length = 0;
   mockDb.select.mockClear();
   mockDb.insert.mockClear();
+  mockDb.update.mockClear();
   preflightMod = await import("./release-preflight.js");
 });
 
@@ -160,6 +176,119 @@ describe("release update preflight", () => {
     expect(result.job.preserved_config_summary).toMatchObject({
       available: false,
     });
+  });
+
+  it("backs up and refreshes a stale runner with evidence", async () => {
+    const oldRunner = Buffer.from("old runner\n");
+    const writeCalls: Array<{
+      bucket: string;
+      key: string;
+      body: Uint8Array | string;
+      contentType?: string;
+    }> = [];
+    selectQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        status: "preflight_blocked",
+        target_release_version: "v0.1.0-canary.187",
+        current_release_version: "v0.1.0-canary.178",
+        manifest_url:
+          "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.187/thinkwork-release.json",
+        manifest_sha256: manifestSha,
+        manifest_signed: false,
+        manifest_trust_policy: "allow_unsigned_canary",
+        terraform_module_version: "0.1.0-canary.187",
+        preflight_summary: {
+          blocked: true,
+          blockers: [
+            {
+              category: "runner_compatibility",
+              message: "Runner refresh required.",
+              recoveryAction: "Refresh runner.",
+            },
+          ],
+          runner: {
+            status: "mismatch",
+            currentSha256: sha256(oldRunner),
+            targetSha256: runnerSha,
+          },
+        },
+        preserved_config_summary: { available: true },
+        remediation_summary: {
+          runnerRefresh: {
+            required: true,
+            available: true,
+            source: {
+              url: "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.187/thinkwork-runner.py",
+              sha256: runnerSha,
+            },
+          },
+        },
+        evidence_bucket: "thinkwork-tei-e2e-deploy-evidence",
+      },
+    ]);
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        status: "runner_remediated",
+        remediation_summary: {},
+      },
+    ]);
+    selectQueue.push([{ id: "event-1", event_type: "runner_remediated" }]);
+
+    const result = await preflightMod.remediateReleaseRunnerJob(
+      {
+        tenantId: "tenant-1",
+        requestedByUserId: "user-1",
+        jobId: "job-1",
+        idempotencyKey: "remediate-1",
+      },
+      {
+        now: () => new Date("2026-06-14T21:00:00.000Z"),
+        fetch: vi.fn(async () => ({
+          ok: true,
+          arrayBuffer: async () => runnerBytes,
+        })) as any,
+        readS3Object: async (_bucket, key) =>
+          key === "runner/thinkwork-runner.py" ? oldRunner : null,
+        writeS3Object: async (bucket, key, body, contentType) => {
+          writeCalls.push({ bucket, key, body, contentType });
+        },
+      },
+    );
+
+    expect(result.job.status).toBe("runner_remediated");
+    expect(writeCalls.map((call) => call.key)).toEqual([
+      "runner/backups/20260614T210000000Z-job-1-thinkwork-runner.py",
+      "runner/thinkwork-runner.py",
+      "release-updates/job-1/runner-remediation/20260614T210000000Z.json",
+    ]);
+    expect(Buffer.from(writeCalls[1].body as Uint8Array).toString("utf8")).toBe(
+      runnerBytes.toString("utf8"),
+    );
+    expect(updateCalls[0]).toMatchObject({
+      status: "runner_remediated",
+      failure_category: undefined,
+      remediation_summary: {
+        runnerRefresh: {
+          required: false,
+          completed: true,
+          backupKey:
+            "runner/backups/20260614T210000000Z-job-1-thinkwork-runner.py",
+          evidenceKey:
+            "release-updates/job-1/runner-remediation/20260614T210000000Z.json",
+          previousSha256: sha256(oldRunner),
+          targetSha256: runnerSha,
+        },
+      },
+    });
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ event_type: "runner_remediated" }),
+      ]),
+    );
   });
 });
 

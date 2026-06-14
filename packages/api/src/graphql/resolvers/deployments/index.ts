@@ -3,6 +3,7 @@ import { managedApplicationDeployment } from "./managedApplicationDeployment.que
 import { deploymentEvidence } from "./deploymentEvidence.query.js";
 import { deploymentReleases } from "./deploymentReleases.query.js";
 import { releaseUpdateJob } from "./releaseUpdateJob.query.js";
+import { remediateReleaseRunner } from "./remediateReleaseRunner.mutation.js";
 import { startReleaseUpdatePreflight } from "./startReleaseUpdatePreflight.mutation.js";
 import { startDeploymentReleaseUpdate } from "./startDeploymentReleaseUpdate.mutation.js";
 import { startManagedApplicationPlan } from "./startManagedApplicationPlan.mutation.js";
@@ -19,6 +20,7 @@ export const deploymentQueries = {
 
 export const deploymentMutations = {
   startReleaseUpdatePreflight,
+  remediateReleaseRunner,
   startDeploymentReleaseUpdate,
   startManagedApplicationPlan,
   approveManagedApplicationDeployment,
