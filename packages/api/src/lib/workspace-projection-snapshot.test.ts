@@ -269,6 +269,22 @@ describe("buildWorkspaceProjectionSnapshot", () => {
     }
   });
 
+  it("includes activeSkills when provided and omits it otherwise (U7)", () => {
+    const withSkills = buildWorkspaceProjectionSnapshot({
+      renderedPrefix: RENDERED_PREFIX,
+      manifest,
+      activeSkills: ["crm-helper", "artifacts"],
+    });
+    expect(withSkills.activeSkills).toEqual(["crm-helper", "artifacts"]);
+
+    const withoutSkills = buildWorkspaceProjectionSnapshot({
+      renderedPrefix: RENDERED_PREFIX,
+      manifest,
+    });
+    // Absence (old turns / callers that don't pass it) — not an empty array.
+    expect("activeSkills" in withoutSkills).toBe(false);
+  });
+
   it("carries the manifest sources with a per-source etag fingerprint", () => {
     const snapshot = buildWorkspaceProjectionSnapshot({
       renderedPrefix: RENDERED_PREFIX,
