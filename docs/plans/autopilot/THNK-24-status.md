@@ -56,6 +56,12 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - 2026-06-14: Implemented U2 release update job/event schema, GraphQL query,
   generated client types, and focused resolver coverage.
 - 2026-06-14: Opened U2 PR and moved THNK-24 to Verification.
+- 2026-06-14: U2 CI `Migration Drift Precheck (dev)` failed because the new
+  hand-rolled migration objects were not yet present in the dev database.
+- 2026-06-14: Applied the scoped U2 dev migration
+  `packages/database-pg/drizzle/0169_release_update_jobs.sql` through `psql`
+  using the deployed dev database secret, then reran the scoped drift reporter
+  and confirmed all declared objects are present.
 
 ## Implementation Units
 
@@ -99,6 +105,15 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U2 `pnpm --filter @thinkwork/database-pg typecheck`: passed.
 - U2 `pnpm dlx prettier@3.5.3 --check ...`: passed for hand-authored touched
   files. Generated GraphQL bundles were left in native codegen format.
+- U2 PR CI first pass: `cla`, `lint`, `typecheck`, and `verify` passed;
+  `Migration Drift Precheck (dev)` failed before the dev hand-rolled migration
+  was applied; `test` was still running when the failure was triaged.
+- U2 scoped dev migration application:
+  `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0169_release_update_jobs.sql`:
+  passed.
+- U2 scoped drift reporter:
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0169_release_update_jobs.sql`:
+  passed after migration application.
 
 ## Blockers
 
