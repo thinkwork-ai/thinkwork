@@ -20,6 +20,12 @@ const CONFIGURED_RETURN_URL_KEYS = [
   "PUBLIC_APP_URL",
 ];
 
+const DESKTOP_RETURN_SCHEMES = new Set([
+  "thinkwork:",
+  "thinkwork-dev:",
+  "thinkwork-canary:",
+]);
+
 export function resolveMcpOAuthResource(input: {
   serverUrl: string;
   authConfig?: Record<string, unknown> | null;
@@ -40,10 +46,6 @@ export function normalizeMcpOAuthReturnTo(
 ): string | null {
   if (!rawReturnTo) return null;
 
-  if (rawReturnTo.startsWith("thinkwork://")) {
-    return rawReturnTo;
-  }
-
   const baseUrl =
     firstConfiguredReturnOrigin(env) ?? DEFAULT_WEB_RETURN_ORIGINS[0];
 
@@ -53,6 +55,19 @@ export function normalizeMcpOAuthReturnTo(
       ? new URL(rawReturnTo, baseUrl)
       : new URL(rawReturnTo);
   } catch {
+    return null;
+  }
+
+  if (DESKTOP_RETURN_SCHEMES.has(candidate.protocol)) {
+    if (
+      candidate.hostname === "app" &&
+      candidate.pathname.startsWith("/settings/") &&
+      !candidate.hash &&
+      !candidate.username &&
+      !candidate.password
+    ) {
+      return candidate.toString();
+    }
     return null;
   }
 

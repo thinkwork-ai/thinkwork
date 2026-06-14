@@ -7,35 +7,39 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mocks, queryDocs, tenantState, paramsState } = vi.hoisted(() => ({
-  paramsState: { pluginKey: "lastmile" },
-  mocks: {
-    activate: vi.fn(),
-    deactivate: vi.fn(),
-    install: vi.fn(),
-    navigate: vi.fn(),
-    retry: vi.fn(),
-    setHeader: vi.fn(),
-    uninstall: vi.fn(),
-    upgrade: vi.fn(),
-    useQuery: vi.fn(),
-  },
-  queryDocs: {
-    SettingsActivatePluginMutation: Symbol("activatePlugin"),
-    SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
-    SettingsInstallPluginMutation: Symbol("installPlugin"),
-    SettingsManagedApplicationDeploymentQuery: Symbol(
-      "managedApplicationDeployment",
-    ),
-    SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
-    SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
-    SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
-    SettingsRetryPluginComponentMutation: Symbol("retryPluginComponent"),
-    SettingsUninstallPluginMutation: Symbol("uninstallPlugin"),
-    SettingsUpgradePluginMutation: Symbol("upgradePlugin"),
-  },
-  tenantState: { isOperator: true, roleResolved: true },
-}));
+const { desktopState, mocks, queryDocs, tenantState, paramsState } =
+  vi.hoisted(() => ({
+    desktopState: {
+      bridge: null as null | { getDesktopConfig: ReturnType<typeof vi.fn> },
+    },
+    paramsState: { pluginKey: "lastmile" },
+    mocks: {
+      activate: vi.fn(),
+      deactivate: vi.fn(),
+      install: vi.fn(),
+      navigate: vi.fn(),
+      retry: vi.fn(),
+      setHeader: vi.fn(),
+      uninstall: vi.fn(),
+      upgrade: vi.fn(),
+      useQuery: vi.fn(),
+    },
+    queryDocs: {
+      SettingsActivatePluginMutation: Symbol("activatePlugin"),
+      SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
+      SettingsInstallPluginMutation: Symbol("installPlugin"),
+      SettingsManagedApplicationDeploymentQuery: Symbol(
+        "managedApplicationDeployment",
+      ),
+      SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
+      SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
+      SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
+      SettingsRetryPluginComponentMutation: Symbol("retryPluginComponent"),
+      SettingsUninstallPluginMutation: Symbol("uninstallPlugin"),
+      SettingsUpgradePluginMutation: Symbol("upgradePlugin"),
+    },
+    tenantState: { isOperator: true, roleResolved: true },
+  }));
 
 vi.mock("urql", () => ({
   useMutation: (doc: unknown) => {
@@ -70,6 +74,10 @@ vi.mock("@/context/PageHeaderContext", () => ({
 
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantState,
+}));
+
+vi.mock("@/lib/desktop-runtime", () => ({
+  getDesktopBridge: () => desktopState.bridge,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -167,6 +175,7 @@ beforeEach(() => {
   refreshActivations.mockReset();
   tenantState.isOperator = true;
   tenantState.roleResolved = true;
+  desktopState.bridge = null;
   mocks.upgrade.mockResolvedValue({
     data: { upgradePlugin: { id: "install-1", state: "installing" } },
   });
@@ -289,6 +298,29 @@ describe("PluginDetail", () => {
         "Could not start connection: navigation stopped for test",
       ),
     ).toBeTruthy();
+  });
+
+  it("uses the stage-scoped desktop app route as the OAuth return URL", async () => {
+    desktopState.bridge = {
+      getDesktopConfig: vi.fn().mockResolvedValue({
+        oauthRedirectUri: "thinkwork-canary://oauth/callback",
+      }),
+    };
+    mocks.activate.mockResolvedValue({
+      error: new Error("navigation stopped for test"),
+    });
+    render(<PluginDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /reconnect/i }));
+
+    await waitFor(() => {
+      expect(mocks.activate).toHaveBeenCalledWith({
+        input: {
+          installId: "install-1",
+          returnTo: "thinkwork-canary://app/settings/plugins/lastmile",
+        },
+      });
+    });
   });
 
   it("shows the success notice, refetches activations, and clears the OAuth return params", async () => {

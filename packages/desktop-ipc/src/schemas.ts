@@ -84,10 +84,18 @@ export const DeploymentProfileDeepLinkSchema = z
   })
   .strict();
 
+export const AppRouteDeepLinkSchema = z
+  .object({
+    type: z.literal("app-route"),
+    path: z.string().min(1),
+  })
+  .strict();
+
 export const DeepLinkCallbackSchema = z.union([
   OAuthSuccessCallbackSchema,
   OAuthFailureCallbackSchema,
   DeploymentProfileDeepLinkSchema,
+  AppRouteDeepLinkSchema,
 ]);
 
 export const PendingOAuthCallbackSchema = OAuthSuccessCallbackSchema.extend({

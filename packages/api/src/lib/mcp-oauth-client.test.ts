@@ -43,9 +43,26 @@ describe("MCP OAuth client helpers", () => {
     ).toBe("https://spaces.example.com/settings/mcp-servers/server-1");
   });
 
+  it("allows stage-scoped desktop app-route return URLs", () => {
+    expect(
+      normalizeMcpOAuthReturnTo(
+        "thinkwork-canary://app/settings/plugins/lastmile",
+      ),
+    ).toBe("thinkwork-canary://app/settings/plugins/lastmile");
+  });
+
   it("blocks arbitrary web return origins", () => {
     expect(
       normalizeMcpOAuthReturnTo("https://evil.example/settings/mcp-servers"),
+    ).toBeNull();
+  });
+
+  it("blocks desktop return URLs outside the app settings route", () => {
+    expect(
+      normalizeMcpOAuthReturnTo("thinkwork-canary://app/threads/thread-1"),
+    ).toBeNull();
+    expect(
+      normalizeMcpOAuthReturnTo("thinkwork-canary://oauth/callback"),
     ).toBeNull();
   });
 
