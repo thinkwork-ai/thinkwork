@@ -57,6 +57,7 @@ export interface BuildReleaseManifestOptions {
   minRunnerVersion?: string;
   profileSchemaVersion?: number;
   deploymentRunnerImage?: string | null;
+  deploymentRunnerScriptPath?: string;
   managedApps?: ManagedAppDescriptor[];
   acceptedKeyIds?: string[];
   revokedKeyIds?: string[];
@@ -78,6 +79,7 @@ interface ParsedArgs {
   minRunnerVersion?: string;
   profileSchemaVersion?: number;
   deploymentRunnerImage?: string | null;
+  deploymentRunnerScriptPath?: string;
   managedAppSpecs: string[];
   acceptedKeyIds: string[];
   revokedKeyIds: string[];
@@ -250,6 +252,11 @@ export async function buildReleaseManifest(
     bundles: options.artifactBundles ?? [],
     artifacts,
   });
+  const runnerScriptPath = path.resolve(
+    options.deploymentRunnerScriptPath ??
+      path.join(artifactRoot, "runner", "thinkwork-runner.py"),
+  );
+  const runnerScriptStat = await statRunnerScript(runnerScriptPath);
 
   const manifest: ThinkWorkReleaseManifest = {
     schemaVersion: RELEASE_MANIFEST_SCHEMA_VERSION,
@@ -269,6 +276,13 @@ export async function buildReleaseManifest(
       deploymentRunner: {
         version,
         image: options.deploymentRunnerImage ?? null,
+        script: {
+          fileName: path.basename(runnerScriptPath),
+          relativePath: relativeToArtifactRoot(artifactRoot, runnerScriptPath),
+          url: joinReleaseUrl(options.baseUrl, path.basename(runnerScriptPath)),
+          sha256: await sha256File(runnerScriptPath),
+          sizeBytes: runnerScriptStat.size,
+        },
       },
       customerOverlay: {
         schemaVersion: CUSTOMER_OVERLAY_SCHEMA_VERSION,
@@ -292,6 +306,19 @@ export async function buildReleaseManifest(
   };
 
   return validateReleaseManifest(manifest);
+}
+
+async function statRunnerScript(filePath: string) {
+  let fileStat;
+  try {
+    fileStat = await stat(filePath);
+  } catch {
+    throw new Error(`Deployment runner script is missing: ${filePath}`);
+  }
+  if (!fileStat.isFile()) {
+    throw new Error(`Deployment runner script is not a file: ${filePath}`);
+  }
+  return fileStat;
 }
 
 async function buildArtifactBundles(args: {
@@ -565,6 +592,10 @@ function parseArgs(argv: string[]): ParsedArgs {
         parsed.deploymentRunnerImage = requireValue(arg, next);
         index += 1;
         break;
+      case "--deployment-runner-script":
+        parsed.deploymentRunnerScriptPath = requireValue(arg, next);
+        index += 1;
+        break;
       case "--managed-app":
         parsed.managedAppSpecs.push(requireValue(arg, next));
         index += 1;
@@ -644,6 +675,7 @@ async function main(): Promise<void> {
     minRunnerVersion: args.minRunnerVersion,
     profileSchemaVersion: args.profileSchemaVersion,
     deploymentRunnerImage: args.deploymentRunnerImage,
+    deploymentRunnerScriptPath: args.deploymentRunnerScriptPath,
     managedApps:
       args.managedAppSpecs.length > 0
         ? args.managedAppSpecs.map(parseManagedAppSpec)

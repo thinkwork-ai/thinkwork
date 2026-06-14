@@ -49,6 +49,14 @@ export interface RuntimeImage {
   uri: string;
 }
 
+export interface DeploymentRunnerScript {
+  fileName: string;
+  relativePath: string;
+  url: string | null;
+  sha256: string;
+  sizeBytes: number;
+}
+
 export interface ManagedAppDescriptor {
   id: string;
   displayName: string;
@@ -90,6 +98,7 @@ export interface ThinkWorkReleaseManifest {
     deploymentRunner: {
       version: string;
       image: string | null;
+      script: DeploymentRunnerScript;
     };
     customerOverlay: {
       schemaVersion: typeof CUSTOMER_OVERLAY_SCHEMA_VERSION;
@@ -183,6 +192,7 @@ export function validateReleaseManifest(
       "components.deploymentRunner.image must be a string or null",
     );
   }
+  validateDeploymentRunnerScript(manifest.components?.deploymentRunner?.script);
   if (
     manifest.components?.customerOverlay?.schemaVersion !==
     CUSTOMER_OVERLAY_SCHEMA_VERSION
@@ -510,6 +520,30 @@ function validateRuntimeImages(value: unknown): void {
     }
     requireString(image.uri, `runtimeImage ${image.name}.uri`);
   }
+}
+
+function validateDeploymentRunnerScript(value: unknown): void {
+  const script = value as Partial<DeploymentRunnerScript>;
+  if (!script || typeof script !== "object") {
+    throw new ReleaseManifestError(
+      "components.deploymentRunner.script is required",
+    );
+  }
+  requireString(script.fileName, "components.deploymentRunner.script.fileName");
+  requireString(
+    script.relativePath,
+    "components.deploymentRunner.script.relativePath",
+  );
+  if (script.url !== null && typeof script.url !== "string") {
+    throw new ReleaseManifestError(
+      "components.deploymentRunner.script.url must be a string or null",
+    );
+  }
+  requireSha256(script.sha256, "components.deploymentRunner.script.sha256");
+  requireNumber(
+    script.sizeBytes,
+    "components.deploymentRunner.script.sizeBytes",
+  );
 }
 
 function validateManagedApps(value: unknown): void {

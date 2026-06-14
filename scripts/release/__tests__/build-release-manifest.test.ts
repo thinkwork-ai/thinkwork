@@ -25,7 +25,10 @@ import {
 const execFileAsync = promisify(execFile);
 
 async function makeTempReleaseRoot(): Promise<string> {
-  return mkdtemp(path.join(tmpdir(), "thinkwork-release-"));
+  const root = await mkdtemp(path.join(tmpdir(), "thinkwork-release-"));
+  await mkdir(path.join(root, "runner"), { recursive: true });
+  await writeFile(path.join(root, "runner", "thinkwork-runner.py"), "runner");
+  return root;
 }
 
 test("buildReleaseManifest emits stable artifact metadata", async () => {
@@ -102,6 +105,15 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   });
   assert.equal(manifest.components.deploymentRunner.version, "1.2.3");
   assert.equal(manifest.components.deploymentRunner.image, null);
+  assert.deepEqual(manifest.components.deploymentRunner.script, {
+    fileName: "thinkwork-runner.py",
+    relativePath: "runner/thinkwork-runner.py",
+    url:
+      "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/" +
+      "thinkwork-runner.py",
+    sha256: "527aa9f431539da8e151d5434d1d5e611d973f601d8e970790882624554146b0",
+    sizeBytes: 6,
+  });
   assert.deepEqual(
     manifest.artifacts.map(
       (artifact) => `${artifact.type}:${artifact.name}:${artifact.fileName}`,
@@ -328,6 +340,23 @@ test("buildReleaseManifest fails when a required artifact is missing", async () 
         ],
       }),
     /Required release artifact "web" is missing/,
+  );
+});
+
+test("buildReleaseManifest requires staged deployment runner script metadata", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "thinkwork-release-"));
+  const artifactPath = path.join(root, "seed.tar.gz");
+  await writeFile(artifactPath, "seed");
+
+  await assert.rejects(
+    () =>
+      buildReleaseManifest({
+        version: "1.2.3",
+        gitSha: "abc123",
+        artifactRoot: root,
+        artifacts: [{ name: "seed", type: "seed", path: artifactPath }],
+      }),
+    /Deployment runner script is missing/,
   );
 });
 

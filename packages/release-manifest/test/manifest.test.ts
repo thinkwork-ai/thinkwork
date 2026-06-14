@@ -48,6 +48,14 @@ function manifest(overrides: Partial<ThinkWorkReleaseManifest> = {}) {
         version: "1.2.3",
         image:
           "ghcr.io/thinkwork-ai/thinkwork-deployment-runner:v1.2.3@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        script: {
+          fileName: "thinkwork-runner.py",
+          relativePath: "runner/thinkwork-runner.py",
+          url: "https://example.test/thinkwork-runner.py",
+          sha256:
+            "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+          sizeBytes: 4,
+        },
       },
       customerOverlay: { schemaVersion: 1 },
     },
@@ -218,6 +226,23 @@ describe("release manifest contract", () => {
         ],
       }),
     ).toThrow(/smokeContract.required/);
+
+    expect(() =>
+      validateReleaseManifest(
+        manifest({
+          components: {
+            ...manifest().components,
+            deploymentRunner: {
+              ...manifest().components.deploymentRunner,
+              script: {
+                ...manifest().components.deploymentRunner.script,
+                sha256: "not-a-sha",
+              },
+            },
+          },
+        }),
+      ),
+    ).toThrow(/components.deploymentRunner.script.sha256/);
   });
 
   it("verifies detached signatures before trusting artifact metadata", () => {

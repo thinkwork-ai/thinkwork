@@ -22,6 +22,10 @@ if [[ ! -d "$RELEASE_DIR/static" ]]; then
   echo "Static artifact directory is missing: $RELEASE_DIR/static" >&2
   exit 66
 fi
+if [[ ! -f "$RELEASE_DIR/runner/thinkwork-runner.py" ]]; then
+  echo "Deployment runner script is missing: $RELEASE_DIR/runner/thinkwork-runner.py" >&2
+  exit 66
+fi
 
 if ! compgen -G "$RELEASE_DIR/lambdas/*.zip" >/dev/null; then
   echo "No Lambda zip artifacts found under $RELEASE_DIR/lambdas" >&2
@@ -33,5 +37,5 @@ if ! compgen -G "$RELEASE_DIR/static/*.tar.gz" >/dev/null; then
 fi
 
 rm -f "$BUNDLE_PATH"
-tar -C "$RELEASE_DIR" -czf "$BUNDLE_PATH" lambdas static
+tar -C "$RELEASE_DIR" -czf "$BUNDLE_PATH" lambdas static runner
 echo "Wrote platform release artifact bundle: $BUNDLE_PATH"

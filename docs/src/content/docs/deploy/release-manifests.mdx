@@ -20,6 +20,7 @@ The manifest includes:
 - artifact bundle metadata for machine-consumed platform payloads
 - Terraform module or bundle references
 - deployment runner/build image reference
+- deployment runner script path, SHA-256, and size metadata
 - managed-app descriptors for Cognee and Twenty
 - smoke contracts
 - deployment profile schema version
@@ -59,10 +60,19 @@ releases, the expected machine-consumed assets are:
 - `thinkwork-release.sig.json` when release signing is enabled
 - `platform-artifacts.tar.gz`
 
-The platform bundle contains backend Lambda zips and static-site archives.
+The platform bundle contains backend Lambda zips, static-site archives, and the
+deployment runner script under `runner/thinkwork-runner.py`.
 Individual artifact URLs in the manifest are a compatibility path; new
 deployment controller runs should consume the bundle and verify every contained
 artifact against the manifest before staging it.
+
+`components.deploymentRunner.script` records the staged runner script's
+`relativePath`, optional direct `url`, SHA-256, and size. Settings release
+preflight uses that metadata to compare a customer's frozen S3 runner with the
+selected release. Runner refresh remediation must copy the trusted selected
+release script only after the manifest and platform bundle have been verified,
+and evidence should record both the previous runner object and the target
+script digest.
 
 The manifest asset is also the publish finalization marker. Release automation
 removes any existing `thinkwork-release.json` before refreshing deployable
@@ -101,6 +111,7 @@ Release upgrade evidence should record:
 
 - previous release version and manifest digest
 - target release version and manifest digest
+- target deployment runner script digest and path
 - platform bundle digest and staged artifact digests
 - Step Functions execution ARN
 - CodeBuild build ARN/id

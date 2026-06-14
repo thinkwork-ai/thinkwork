@@ -80,6 +80,11 @@ jobs:
           pnpm --filter @thinkwork/docs build
           bash scripts/release/package-static-assets.sh dist/release/static
 
+      - name: Stage deployment runner script
+        run: |
+          mkdir -p dist/release/runner
+          cp terraform/modules/app/deployment-control-plane/runner.py dist/release/runner/thinkwork-runner.py
+
       - name: Bundle platform artifacts
         run: bash scripts/release/package-platform-artifacts.sh dist/release
 
@@ -174,6 +179,7 @@ jobs:
             --artifact-root dist/release \
             --base-url "${{ steps.release.outputs.asset_base_url }}" \
             --lambda-dir dist/release/lambdas \
+            --deployment-runner-script dist/release/runner/thinkwork-runner.py \
             --artifact "name=web,type=static-site,path=dist/release/static/web.tar.gz" \
             --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
             --artifact-bundle "name=platform,path=dist/release/platform-artifacts.tar.gz" \
