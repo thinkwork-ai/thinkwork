@@ -1,0 +1,31 @@
+# Plugin Publication Checklist
+
+## Manifest and Catalog
+
+- [ ] Manifest validates with `validatePluginManifest`.
+- [ ] Manifest is registered in `packages/plugin-catalog/src/plugins/index.ts`.
+- [ ] Manifest-specific tests pass.
+- [ ] Catalog build/sign verification is run or documented for maintainer handoff.
+
+## Premium Review
+
+- [ ] `premium.entitlementProductKey` is slug-safe and product-scoped.
+- [ ] `premium.installKeyRequired` is `true`.
+- [ ] `premium.installKeyPrompt` is customer-facing ThinkWork install-key copy.
+- [ ] No separate licensing, billing, or checkout mechanism is introduced.
+
+## Infrastructure Review
+
+- [ ] Infrastructure component uses a supported managed-app adapter key.
+- [ ] Or an adapter-gap review is attached instead of an invalid manifest.
+- [ ] Terraform input contracts exclude raw tfvars and credentials.
+- [ ] Lifecycle/data-impact risks are named.
+- [ ] Install/provision smoke expectations are named.
+
+## Handoff
+
+- [ ] Assumptions are explicit.
+- [ ] Follow-up platform work is named.
+- [ ] Customer-specific values are excluded or sanitized.
+- [ ] Outcome is one of: ready for catalog implementation, blocked on adapter
+      work, smaller first slice recommended.
