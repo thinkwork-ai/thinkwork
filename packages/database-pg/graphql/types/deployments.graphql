@@ -129,6 +129,15 @@ input StartDeploymentReleaseUpdateInput {
   idempotencyKey: String
 }
 
+input StartReleaseUpdatePreflightInput {
+  version: String!
+  manifestUrl: String!
+  manifestSha256: String!
+  signatureUrl: String
+  signed: Boolean
+  idempotencyKey: String
+}
+
 type BootstrapCredentialLease {
   id: ID!
   sessionId: ID!
@@ -179,6 +188,9 @@ extend type Query {
 }
 
 extend type Mutation {
+  startReleaseUpdatePreflight(
+    input: StartReleaseUpdatePreflightInput!
+  ): ReleaseUpdateJob!
   startDeploymentReleaseUpdate(
     input: StartDeploymentReleaseUpdateInput!
   ): DeploymentReleaseUpdate!

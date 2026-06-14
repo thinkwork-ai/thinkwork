@@ -582,6 +582,28 @@ locals {
           "arn:aws:states:${var.region}:${var.account_id}:execution:thinkwork-${var.stage}-deployment-*:*",
         ]
       },
+      # Settings release-update preflight inspects the frozen customer
+      # control-plane runner and detects known live IAM drift before dispatch.
+      # This is read-only by design: v1 blocks on IAM gaps and requires a
+      # reviewed infrastructure change rather than mutating the runner role
+      # from GraphQL.
+      {
+        Sid    = "DeploymentPreflightRead"
+        Effect = "Allow"
+        Action = [
+          "codebuild:BatchGetProjects",
+          "iam:GetPolicy",
+          "iam:GetPolicyVersion",
+          "iam:GetRolePolicy",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListRolePolicies",
+        ]
+        Resource = [
+          "arn:aws:codebuild:${var.region}:${var.account_id}:project/thinkwork-${var.stage}-deployment-*",
+          "arn:aws:iam::${var.account_id}:role/thinkwork-${var.stage}-deployment-*",
+          "arn:aws:iam::${var.account_id}:policy/thinkwork-${var.stage}-deployment-*",
+        ]
+      },
     ],
     # (was inline policy "agentcore-invoke", count-gated on the same flag)
     # Allow API Lambdas to directly invoke the Pi AgentCore Lambda. Used by

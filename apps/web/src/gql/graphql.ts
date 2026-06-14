@@ -2663,6 +2663,7 @@ export type Mutation = {
   startKnowledgeGraphThreadIngest: KnowledgeGraphIngestRun;
   startManagedApplicationPlan: ManagedApplicationDeploymentJob;
   startOntologySuggestionScan: OntologySuggestionScanJob;
+  startReleaseUpdatePreflight: ReleaseUpdateJob;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
   submitRunFeedback: SkillRun;
@@ -3639,6 +3640,11 @@ export type MutationStartManagedApplicationPlanArgs = {
 
 export type MutationStartOntologySuggestionScanArgs = {
   input: StartOntologySuggestionScanInput;
+};
+
+
+export type MutationStartReleaseUpdatePreflightArgs = {
+  input: StartReleaseUpdatePreflightInput;
 };
 
 
@@ -6567,6 +6573,15 @@ export type StartOntologySuggestionScanInput = {
   dedupeKey?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
   trigger?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type StartReleaseUpdatePreflightInput = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  manifestSha256: Scalars['String']['input'];
+  manifestUrl: Scalars['String']['input'];
+  signatureUrl?: InputMaybe<Scalars['String']['input']>;
+  signed?: InputMaybe<Scalars['Boolean']['input']>;
+  version: Scalars['String']['input'];
 };
 
 export type StartSkillRunInput = {
