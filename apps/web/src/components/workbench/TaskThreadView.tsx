@@ -78,7 +78,6 @@ import {
   formatDuration,
   formatTurnHeader,
   isRunningStatus,
-  shouldDefaultExpand,
 } from "@/components/workbench/turnHeader";
 import { useTurnElapsed } from "@/components/workbench/useTurnElapsed";
 import { renderTypedParts } from "@/components/workbench/render-typed-part";
@@ -1724,15 +1723,17 @@ function ThreadTurnActivity({
 
   const elapsedLabel =
     running && elapsedMs != null ? formatDuration(elapsedMs) : null;
+  const failureDetail =
+    status === "failed" ? turn.error || "No error detail was provided." : null;
 
   // Per-turn flag-for-evaluation affordance (U7): completed turns only,
   // and only when the host wired the (operator-gated) callback.
   const canFlag =
     Boolean(onFlagTurn) && !running && FLAGGABLE_TURN_STATUSES.has(status);
 
-  // Default closed so streaming rows don't shift the page mid-read; failed
-  // turns default open so the error isn't hidden behind a success-looking
-  // collapsed header (R4). Manual toggle persists across re-renders.
+  // Default closed so activity rows do not shift the page mid-read or after
+  // loading; failed turns keep an explicit header and reveal details on manual
+  // expansion. Manual toggle persists across re-renders.
   return (
     <div className="flex min-w-0 max-w-full items-start gap-1">
       <div className="min-w-0 flex-1">
@@ -1742,7 +1743,7 @@ function ThreadTurnActivity({
           costLabel={costLabel}
           running={running}
           elapsedLabel={elapsedLabel}
-          defaultOpen={shouldDefaultExpand(status)}
+          defaultOpen={false}
           detail={turnSummary(turn, usage)}
           ariaLabel="Turn activity"
         >
@@ -1756,8 +1757,8 @@ function ThreadTurnActivity({
               childrenRows={row.children}
             />
           ))}
-          {turn.error ? (
-            <ActionRow title="Run failed" detail={turn.error} kind="tool" />
+          {failureDetail ? (
+            <ActionRow title="Run failed" detail={failureDetail} kind="tool" />
           ) : null}
           {projection ? (
             <ProjectedWorkspacePanel
@@ -3192,6 +3193,7 @@ function ThinkingRow({
       aria-label={ariaLabel}
     >
       <ReasoningTrigger
+        aria-label={title}
         className="group gap-2 text-sm"
         icon={null}
         getThinkingMessage={() => (
@@ -4057,11 +4059,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-    stringValue(payload.profileSlug) ||
-    stringValue(payload.profile_name) ||
-    stringValue(payload.profileName) ||
-    stringValue(payload.profile_run_id) ||
-    stringValue(payload.profileRunId),
+      stringValue(payload.profileSlug) ||
+      stringValue(payload.profile_name) ||
+      stringValue(payload.profileName) ||
+      stringValue(payload.profile_run_id) ||
+      stringValue(payload.profileRunId),
   );
 }
 

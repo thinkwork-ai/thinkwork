@@ -3,7 +3,6 @@ import {
   formatDuration,
   formatTurnHeader,
   isRunningStatus,
-  shouldDefaultExpand,
 } from "./turnHeader";
 
 describe("formatDuration", () => {
@@ -49,7 +48,9 @@ describe("formatTurnHeader", () => {
 
   it("shows distinct headers for non-success terminal states", () => {
     expect(formatTurnHeader("failed", false, 5000)).toBe("Failed after 5s");
-    expect(formatTurnHeader("cancelled", false, 3000)).toBe("Cancelled after 3s");
+    expect(formatTurnHeader("cancelled", false, 3000)).toBe(
+      "Cancelled after 3s",
+    );
     expect(formatTurnHeader("timed_out", false, 90000)).toBe(
       "Timed out after 1m 30s",
     );
@@ -85,17 +86,5 @@ describe("isRunningStatus", () => {
     ]) {
       expect(isRunningStatus(s)).toBe(false);
     }
-  });
-});
-
-describe("shouldDefaultExpand", () => {
-  it("expands failed turns by default", () => {
-    expect(shouldDefaultExpand("failed")).toBe(true);
-  });
-
-  it("keeps other terminal turns collapsed", () => {
-    expect(shouldDefaultExpand("succeeded")).toBe(false);
-    expect(shouldDefaultExpand("cancelled")).toBe(false);
-    expect(shouldDefaultExpand(null)).toBe(false);
   });
 });
