@@ -4,7 +4,7 @@
 
 - Linear issue: THNK-22, "List View"
 - Branch: `codex/thnk-22-list-view`
-- Linear state: moved from `Ready to Work` to `In Progress` on 2026-06-14 after discovery and planning.
+- Linear state: moved from `Ready to Work` to `In Progress` on 2026-06-14 after discovery and planning; moved to `Verification` on 2026-06-14 after opening PR #2469.
 - Plan: `docs/plans/2026-06-14-005-feat-list-view-display-configuration-plan.md`
 - Requirements: `docs/brainstorms/2026-06-14-list-view-and-view-configuration-requirements.md`
 
@@ -51,6 +51,8 @@
   - Merge rapid Display popover changes against a local controlled draft while route updates catch up.
   - Preserve display route params when opening Activity and Automations detail rows, and when returning from detail/delete paths.
   - Bind grouping/sort adapter option keys to each screen's typed config unions.
+- 2026-06-14: Opened draft PR #2469 and moved THNK-22 to `Verification`.
+- 2026-06-14: Added Linear progress comment with PR link and local verification summary.
 
 ## Verification Log
 
@@ -83,7 +85,7 @@
 
 ## PRs
 
-- Pending.
+- Draft PR: https://github.com/thinkwork-ai/thinkwork/pull/2469
 
 ## Blockers
 
