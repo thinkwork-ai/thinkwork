@@ -39,7 +39,7 @@ updated: 2026-06-14
 ## PRs
 
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2486
-- State: draft, opened 2026-06-14.
+- State: ready for review, opened 2026-06-14.
 
 ## CI / Validation
 
