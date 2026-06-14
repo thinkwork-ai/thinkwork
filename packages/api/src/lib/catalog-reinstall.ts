@@ -8,6 +8,7 @@ import {
   type S3Client,
 } from "@aws-sdk/client-s3";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
+import { extractBundledEvalCases } from "./catalog-install.js";
 import { computeCatalogSkillSha } from "./catalog-skill-sha.js";
 import {
   isCatalogRef,
@@ -28,6 +29,13 @@ export type CatalogReinstallResult = {
   reinstalled_paths: string[];
   source_sha256: string;
   noop?: true;
+  /**
+   * Bundled eval case files (`evals/*.json`) from the (post-reinstall)
+   * catalog folder, surfaced for the caller to re-sync the per-skill eval
+   * dataset (Skill Tests & Evals U2). Present on both the changed and
+   * no-op paths so the dataset heals even if it was never created.
+   */
+  eval_cases: { fileName: string; content: string }[];
 };
 
 export class CatalogReinstallError extends Error {
@@ -90,12 +98,14 @@ export async function reinstallCatalogSkill(
     })),
   );
   const sourceSha256 = computeCatalogSkillSha(catalogFiles);
+  const evalCases = extractBundledEvalCases(catalogFiles);
   if (sourceSha256 === catalogRef.source_sha256) {
     return {
       ok: true,
       noop: true,
       reinstalled_paths: [],
       source_sha256: sourceSha256,
+      eval_cases: evalCases,
     };
   }
 
@@ -161,6 +171,7 @@ export async function reinstallCatalogSkill(
       `skills/${slug}/.catalog-ref.json`,
     ].sort(),
     source_sha256: sourceSha256,
+    eval_cases: evalCases,
   };
 }
 

@@ -105,6 +105,11 @@ import {
 } from "./src/lib/catalog-uninstall.js";
 import { computeCatalogSkillShaBySlug } from "./src/lib/catalog-skill-sha.js";
 import {
+  archiveSkillDatasetIfExists,
+  ensureSkillDatasetSeeded,
+  type SkillCaseInput,
+} from "./src/lib/evals/skill-dataset.js";
+import {
   reindexCatalogSkill,
   listIndexedSkills,
 } from "./src/lib/catalog-index.js";
@@ -1600,6 +1605,68 @@ async function handleDelete(
   return json(200, { ok: true, ...(indexWarning ? { indexWarning } : {}) });
 }
 
+/**
+ * Sync a skill's bundled eval cases into its per-skill eval dataset
+ * (Skill Tests & Evals U2). Defensive: a seeding failure must never break
+ * the install/reinstall — it logs and returns a warning the caller folds
+ * into the response. Inert phase: this only syncs cases; scoring/gating
+ * land in Phase C. A skill with no bundled cases is "unrated" — nothing
+ * surfaced, never an error.
+ */
+async function syncSkillEvalDataset(
+  tenantId: string,
+  slug: string,
+  evalCases: SkillCaseInput[],
+): Promise<{
+  evalDataset?: { slug: string; cases: number; skipped: number };
+  evalDatasetWarning?: string;
+}> {
+  try {
+    const result = await ensureSkillDatasetSeeded(tenantId, slug, evalCases);
+    if (result.skipped.length > 0) {
+      console.warn(
+        `[skill-eval] ${slug}: ${result.skipped.length} bundled case(s) skipped: ` +
+          result.skipped.map((s) => `${s.fileName} (${s.reason})`).join("; "),
+      );
+    }
+    if (result.action === "skipped") return {}; // unrated — nothing to surface
+    return {
+      evalDataset: {
+        slug: result.datasetSlug,
+        cases: result.bundledCaseCount,
+        skipped: result.skipped.length,
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[skill-eval] failed to sync eval dataset for skill ${slug}: ${msg}`,
+    );
+    return {
+      evalDatasetWarning: `Skill installed but eval dataset sync failed: ${msg}`,
+    };
+  }
+}
+
+/** Archive a skill's eval dataset on uninstall (defensive, see above). */
+async function archiveSkillEvalDataset(
+  tenantId: string,
+  slug: string,
+): Promise<{ evalDatasetWarning?: string }> {
+  try {
+    await archiveSkillDatasetIfExists(tenantId, slug);
+    return {};
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[skill-eval] failed to archive eval dataset for skill ${slug}: ${msg}`,
+    );
+    return {
+      evalDatasetWarning: `Skill uninstalled but eval dataset archive failed: ${msg}`,
+    };
+  }
+}
+
 async function handleInstallSkill(
   deps: HandlerDeps,
   slug: string,
@@ -1655,11 +1722,14 @@ async function handleInstallSkill(
     "install-skill",
   );
   if (refreshError) return refreshError;
+  const { eval_cases, ...installResult } = result;
+  const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
   return json(200, {
-    ...result,
+    ...installResult,
     ...(derive.result.warnings.length > 0
       ? { deriveWarnings: derive.result.warnings }
       : {}),
+    ...evalSync,
   });
 }
 
@@ -1712,11 +1782,13 @@ async function handleUninstallSkill(
     "uninstall-skill",
   );
   if (refreshError) return refreshError;
+  const evalArchive = await archiveSkillEvalDataset(tenantId, slug);
   return json(200, {
     ...result,
     ...(derive.result.warnings.length > 0
       ? { deriveWarnings: derive.result.warnings }
       : {}),
+    ...evalArchive,
   });
 }
 
@@ -1773,11 +1845,14 @@ async function handleReinstallSkill(
     "reinstall-skill",
   );
   if (refreshError) return refreshError;
+  const { eval_cases, ...reinstallResult } = result;
+  const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
   return json(200, {
-    ...result,
+    ...reinstallResult,
     ...(derive.result.warnings.length > 0
       ? { deriveWarnings: derive.result.warnings }
       : {}),
+    ...evalSync,
   });
 }
 

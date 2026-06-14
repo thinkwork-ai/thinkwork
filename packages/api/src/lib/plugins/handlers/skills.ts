@@ -40,6 +40,7 @@ import type {
 import { db as defaultDb } from "../../../graphql/utils.js";
 import {
   CatalogInstallError,
+  extractBundledEvalCases,
   installCatalogSkill,
 } from "../../catalog-install.js";
 import { uninstallCatalogSkill } from "../../catalog-uninstall.js";
@@ -47,6 +48,10 @@ import { reindexCatalogSkill } from "../../catalog-index.js";
 import { regenerateManifest } from "../../workspace-manifest.js";
 import { resolveTenantPlatformAgent } from "../../agents/tenant-platform-agent.js";
 import { renderWiringMd } from "../../wiring-md.js";
+import {
+  archiveSkillDatasetIfExists,
+  ensureSkillDatasetSeeded,
+} from "../../evals/skill-dataset.js";
 
 type DbLike = typeof defaultDb;
 type S3Like = Pick<S3Client, "send">;
@@ -72,6 +77,10 @@ export interface SkillsHandlerDeps {
   reindex?: typeof reindexCatalogSkill;
   regenerate?: typeof regenerateManifest;
   resolvePlatformAgent?: typeof resolveTenantPlatformAgent;
+  /** Per-skill eval dataset sync (Skill Tests & Evals U2). Injectable so
+   *  unit tests stay hermetic; defaults to the real seeder. */
+  seedSkillEvalDataset?: typeof ensureSkillDatasetSeeded;
+  archiveSkillEvalDataset?: typeof archiveSkillDatasetIfExists;
 }
 
 function workspaceBucket(explicit?: string): string {
@@ -124,6 +133,8 @@ export async function provisionPluginSkillsComponent(args: {
   const reindex = deps.reindex ?? reindexCatalogSkill;
   const regenerate = deps.regenerate ?? regenerateManifest;
   const resolveAgent = deps.resolvePlatformAgent ?? resolveTenantPlatformAgent;
+  const seedSkillEvalDataset =
+    deps.seedSkillEvalDataset ?? ensureSkillDatasetSeeded;
 
   const tenantSlug = await resolveTenantSlug(db, args.tenantId);
   const agent = await resolveAgent(args.tenantId, db as never);
@@ -200,6 +211,24 @@ export async function provisionPluginSkillsComponent(args: {
       }
     }
     workspaceFolders.push(`skills/${skill.slug}/`);
+
+    // 4. Sync the skill's bundled eval cases into its per-skill eval
+    //    dataset (Skill Tests & Evals U2). The bundled cases are among the
+    //    files just seeded (convention: evals/*.json). Defensive — an eval
+    //    seeding failure must never fail plugin provisioning.
+    const evalCases = extractBundledEvalCases(
+      files.map((f) => ({ relativePath: f.path, content: f.content })),
+    );
+    if (evalCases.length > 0) {
+      try {
+        await seedSkillEvalDataset(args.tenantId, skill.slug, evalCases);
+      } catch (error) {
+        console.warn(
+          `[plugin-skills] eval dataset sync failed for ${skill.slug}:`,
+          (error as Error).message,
+        );
+      }
+    }
   }
 
   await regenerate(bucket, tenantSlug, agent.slug);
@@ -221,6 +250,8 @@ export async function teardownPluginSkillsComponent(args: {
   const reindex = deps.reindex ?? reindexCatalogSkill;
   const regenerate = deps.regenerate ?? regenerateManifest;
   const resolveAgent = deps.resolvePlatformAgent ?? resolveTenantPlatformAgent;
+  const archiveSkillEvalDataset =
+    deps.archiveSkillEvalDataset ?? archiveSkillDatasetIfExists;
 
   const tenantSlug = await resolveTenantSlug(db, args.tenantId);
   const agentSlug =
@@ -285,6 +316,18 @@ export async function teardownPluginSkillsComponent(args: {
     } catch (error) {
       console.warn(
         `[plugin-skills] catalog index cleanup failed for ${slug}:`,
+        (error as Error).message,
+      );
+    }
+
+    // 4. Archive the skill's eval dataset (Skill Tests & Evals U2). The
+    //    catalog prefix was fully deleted above, so the skill is gone —
+    //    soft-archive (history intact). Defensive; never fails teardown.
+    try {
+      await archiveSkillEvalDataset(args.tenantId, slug);
+    } catch (error) {
+      console.warn(
+        `[plugin-skills] eval dataset archive failed for ${slug}:`,
         (error as Error).message,
       );
     }

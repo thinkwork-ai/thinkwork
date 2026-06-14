@@ -197,6 +197,7 @@ describe("reinstallCatalogSkill", () => {
       noop: true,
       reinstalled_paths: [],
       source_sha256: currentSha,
+      eval_cases: [],
     });
     expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
     expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);

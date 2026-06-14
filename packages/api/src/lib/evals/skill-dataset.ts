@@ -36,6 +36,7 @@ import { getConfig } from "@thinkwork/runtime-config";
 import { S3Client } from "@aws-sdk/client-s3";
 import { db, eq, tenants } from "../../graphql/utils.js";
 import {
+  archiveEvalDataset,
   assertValidDatasetSlug,
   computeEvalCaseSha,
   createDrizzleDatasetIndexStore,
@@ -384,10 +385,34 @@ export async function seedSkillDataset(
     };
   }
 
-  // Unchanged bundled set on an existing dataset → no-op.
+  // Unchanged bundled set on an existing dataset → no-op, UNLESS the
+  // dataset was archived (skill had been uninstalled): a re-install with
+  // identical cases must reactivate it.
   if (!isNewDataset && marker && marker.cases_sha === casesSha) {
+    const current = parseEvalDatasetManifest(manifestContent);
+    if (!current.archived_at) {
+      return {
+        action: "current",
+        datasetSlug,
+        addedCaseIds: [],
+        updatedCaseIds: [],
+        removedCaseIds: [],
+        skipped,
+        bundledCaseCount: desired.size,
+      };
+    }
+    current.archived_at = null;
+    current.version += 1;
+    current.updated_at = new Date().toISOString();
+    await deps.storage.write(
+      manifestKey,
+      serializeEvalDatasetManifest(current),
+    );
+    await syncEvalDatasetFromS3(dctx, deps.storage, deps.store, {
+      force: true,
+    });
     return {
-      action: "current",
+      action: "seeded",
       datasetSlug,
       addedCaseIds: [],
       updatedCaseIds: [],
@@ -469,13 +494,16 @@ export async function seedSkillDataset(
     removedCaseIds.push(caseId);
   }
 
-  // 5. Sentinel (empty-folder materialization) + manifest write.
+  // 5. Sentinel (empty-folder materialization) + manifest write. A
+  //    content-changing (re)install reactivates a previously-archived
+  //    (uninstalled) dataset.
   if (isNewDataset) {
     await deps.storage.write(
       evalDatasetSentinelKey(ctx.tenantSlug, datasetSlug),
       "",
     );
   }
+  manifest.archived_at = null;
   manifest.version += 1;
   manifest.updated_at = new Date().toISOString();
   await deps.storage.write(manifestKey, serializeEvalDatasetManifest(manifest));
@@ -555,4 +583,52 @@ export async function ensureSkillDatasetSeeded(
       store: createDrizzleDatasetIndexStore(),
     },
   );
+}
+
+/**
+ * Soft-archive a skill's eval dataset when the skill is uninstalled
+ * (history intact — never hard-deleted; a later re-install reactivates
+ * it). No-op when the dataset doesn't exist (unrated skill) or is already
+ * archived.
+ *
+ * One-agent assumption: skill datasets are tenant+skill scoped while skill
+ * install/uninstall is per-agent. The current product runs a single
+ * shared platform agent per tenant, so an uninstall means the tenant no
+ * longer uses the skill. If multi-agent-per-tenant ever returns, this
+ * must first check whether any OTHER agent still has the skill installed
+ * before archiving.
+ */
+export async function archiveSkillDatasetIfExists(
+  tenantId: string,
+  skillSlug: string,
+): Promise<{ action: "archived" | "absent" | "already-archived" }> {
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  if (!tenant?.slug) return { action: "absent" };
+  const bucket = getConfig("WORKSPACE_BUCKET");
+  if (!bucket) {
+    throw new Error("WORKSPACE_BUCKET environment variable is required");
+  }
+  const client = new S3Client({
+    region:
+      process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+  });
+  const storage = createS3DatasetStorage({ client, bucket });
+  const store = createDrizzleDatasetIndexStore();
+  const datasetSlug = skillEvalDatasetSlug(skillSlug);
+  const manifestContent = await storage.read(
+    evalDatasetManifestKey(tenant.slug, datasetSlug),
+  );
+  if (manifestContent == null) return { action: "absent" };
+  if (parseEvalDatasetManifest(manifestContent).archived_at) {
+    return { action: "already-archived" };
+  }
+  await archiveEvalDataset(
+    { tenantId, tenantSlug: tenant.slug, slug: datasetSlug },
+    storage,
+    store,
+  );
+  return { action: "archived" };
 }

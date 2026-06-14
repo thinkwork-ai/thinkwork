@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  archiveEvalDataset,
   evalDatasetCaseKey,
   evalDatasetManifestKey,
   evalDatasetSentinelKey,
@@ -347,9 +348,7 @@ describe("seedSkillDataset", () => {
     const result = await seedSkillDataset(CTX, [], { storage, store });
     expect(result.action).toBe("skipped");
     expect(
-      storage.objects.has(
-        evalDatasetManifestKey("acme", "skill-crm-helper"),
-      ),
+      storage.objects.has(evalDatasetManifestKey("acme", "skill-crm-helper")),
     ).toBe(false);
   });
 
@@ -359,8 +358,14 @@ describe("seedSkillDataset", () => {
     const result = await seedSkillDataset(
       CTX,
       [
-        { fileName: "evil.json", content: caseFile({ case_id: "../escape", query: "q", rubric: "r" }) },
-        { fileName: "Upper.json", content: caseFile({ case_id: "BadId", query: "q", rubric: "r" }) },
+        {
+          fileName: "evil.json",
+          content: caseFile({ case_id: "../escape", query: "q", rubric: "r" }),
+        },
+        {
+          fileName: "Upper.json",
+          content: caseFile({ case_id: "BadId", query: "q", rubric: "r" }),
+        },
         rubricCase("good-case"),
       ],
       { storage, store },
@@ -384,10 +389,19 @@ describe("seedSkillDataset", () => {
     const result = await seedSkillDataset(
       CTX,
       [
-        { fileName: "big.json", content: caseFile({ case_id: "big", query: oversized, rubric: "r" }) },
+        {
+          fileName: "big.json",
+          content: caseFile({ case_id: "big", query: oversized, rubric: "r" }),
+        },
         { fileName: "notjson.json", content: "{not json" },
-        { fileName: "noquery.json", content: caseFile({ case_id: "nq", rubric: "r" }) },
-        { fileName: "norubric.json", content: caseFile({ case_id: "nr", query: "q" }) },
+        {
+          fileName: "noquery.json",
+          content: caseFile({ case_id: "nq", rubric: "r" }),
+        },
+        {
+          fileName: "norubric.json",
+          content: caseFile({ case_id: "nr", query: "q" }),
+        },
         rubricCase("ok"),
       ],
       { storage, store },
@@ -468,12 +482,51 @@ describe("seedSkillDataset", () => {
     );
     expect(flaggedRow?.enabled).toBe(true);
   });
+
+  it("un-archives the dataset when an uninstalled skill is reinstalled (identical content)", async () => {
+    const storage = makeMemoryStorage();
+    const fake = new FakeDb();
+    const store = makeIndexStore(fake);
+    const dctx = {
+      tenantId: "t1",
+      tenantSlug: "acme",
+      slug: "skill-crm-helper",
+    };
+
+    await seedSkillDataset(CTX, [rubricCase("c1")], { storage, store });
+    // Uninstall archives the dataset.
+    await archiveEvalDataset(dctx, storage, store);
+    expect(
+      parseEvalDatasetManifest(
+        storage.objects.get(
+          evalDatasetManifestKey("acme", "skill-crm-helper"),
+        ) as string,
+      ).archived_at,
+    ).not.toBeNull();
+
+    // Reinstall with identical content must reactivate (no-op-path un-archive).
+    const result = await seedSkillDataset(CTX, [rubricCase("c1")], {
+      storage,
+      store,
+    });
+    expect(result.action).toBe("seeded");
+    expect(
+      parseEvalDatasetManifest(
+        storage.objects.get(
+          evalDatasetManifestKey("acme", "skill-crm-helper"),
+        ) as string,
+      ).archived_at,
+    ).toBeNull();
+  });
 });
 
 describe("validateSkillCaseInput", () => {
   it("derives the case id from the filename when none is supplied", () => {
     const r = validateSkillCaseInput(
-      { fileName: "evals/asks-first.json", content: caseFile({ query: "q", rubric: "r" }) },
+      {
+        fileName: "evals/asks-first.json",
+        content: caseFile({ query: "q", rubric: "r" }),
+      },
       "crm-helper",
     );
     expect("core" in r && r.core.case_id).toBe("asks-first");
