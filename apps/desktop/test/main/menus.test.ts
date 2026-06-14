@@ -107,10 +107,13 @@ describe("desktop window navigation", () => {
       url: "https://accounts.google.com/o/oauth2/v2/auth",
     });
     webContents.openHandler?.({
+      url: "https://straightforward-dragon-14-staging.authkit.app/authorize?client_id=lastmile",
+    });
+    webContents.openHandler?.({
       url: "https://malicious.example.com/",
     });
 
-    expect(shell.openExternal).toHaveBeenCalledTimes(2);
+    expect(shell.openExternal).toHaveBeenCalledTimes(3);
     expect(shell.openExternal).toHaveBeenNthCalledWith(
       1,
       "https://thinkwork.ai/docs",
@@ -118,6 +121,10 @@ describe("desktop window navigation", () => {
     expect(shell.openExternal).toHaveBeenNthCalledWith(
       2,
       "https://github.com/thinkwork-ai/thinkwork/releases/tag/desktop-v1.0.0",
+    );
+    expect(shell.openExternal).toHaveBeenNthCalledWith(
+      3,
+      "https://straightforward-dragon-14-staging.authkit.app/authorize?client_id=lastmile",
     );
   });
 
@@ -187,7 +194,7 @@ describe("desktop window navigation", () => {
 });
 
 describe("desktop URL allowlist", () => {
-  it("allows ThinkWork HTTPS URLs and the ThinkWork GitHub organization only", () => {
+  it("allows app-owned URLs and hosted AuthKit OAuth URLs", () => {
     expect(isAllowedExternalUrl("https://thinkwork.ai/docs")).toBe(true);
     expect(isAllowedExternalUrl("https://docs.thinkwork.ai/releases")).toBe(
       true,
@@ -198,6 +205,16 @@ describe("desktop URL allowlist", () => {
     expect(
       isAllowedExternalUrl(
         "https://github.com/login/oauth/authorize?client_id=evil_app",
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedExternalUrl(
+        "https://straightforward-dragon-14-staging.authkit.app/authorize",
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedExternalUrl(
+        "https://straightforward-dragon-14-staging.authkit.app.evil.example/authorize",
       ),
     ).toBe(false);
     expect(isAllowedExternalUrl("https://accounts.google.com/")).toBe(false);

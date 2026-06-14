@@ -62,4 +62,17 @@ describe("configureNavigationHandlers will-navigate", () => {
       "https://docs.thinkwork.ai/guide",
     );
   });
+
+  it("routes plugin OAuth authorize URLs to the OS browser", () => {
+    const webContents = makeWebContents();
+    const shell = { openExternal: vi.fn(async () => undefined) };
+    configureNavigationHandlers(webContents as never, shell);
+
+    const url =
+      "https://straightforward-dragon-14-staging.authkit.app/authorize?client_id=lastmile&state=signed";
+    const event = webContents.fireWillNavigate(url);
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(shell.openExternal).toHaveBeenCalledWith(url);
+  });
 });

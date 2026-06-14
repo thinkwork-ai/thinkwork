@@ -268,6 +268,29 @@ describe("PluginDetail", () => {
     expect(screen.getByRole("button", { name: /reconnect/i })).toBeTruthy();
   });
 
+  it("starts plugin OAuth when Reconnect is clicked", async () => {
+    mocks.activate.mockResolvedValue({
+      error: new Error("navigation stopped for test"),
+    });
+    render(<PluginDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /reconnect/i }));
+
+    await waitFor(() => {
+      expect(mocks.activate).toHaveBeenCalledWith({
+        input: {
+          installId: "install-1",
+          returnTo: "http://localhost:3000/settings/plugins/lastmile",
+        },
+      });
+    });
+    expect(
+      await screen.findByText(
+        "Could not start connection: navigation stopped for test",
+      ),
+    ).toBeTruthy();
+  });
+
   it("shows the success notice, refetches activations, and clears the OAuth return params", async () => {
     window.history.replaceState(
       {},
