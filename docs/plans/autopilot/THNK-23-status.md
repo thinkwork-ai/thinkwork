@@ -16,6 +16,9 @@ Plan: `docs/plans/2026-06-14-005-feat-company-brain-first-party-tool-plan.md`
 - 2026-06-14: Created the repo-local implementation plan and this autopilot ledger.
 - 2026-06-14: Implemented all planned units on `codex/thnk-23-company-brain-first-party-tool`.
 - 2026-06-14: Ran the required review/autofix pass against the plan. Review found one safe edge-case fix: invalid Brain detail selectors should return explicit detail statuses instead of falling back to shortlist output. Applied the fix and added coverage. Residual actionable work: none.
+- 2026-06-14: Committed implementation as `27fdfc7b5` (`feat: expose company brain context tool`) and pushed branch `codex/thnk-23-company-brain-first-party-tool`.
+- 2026-06-14: Opened draft PR https://github.com/thinkwork-ai/thinkwork/pull/2468 targeting `main`.
+- 2026-06-14: Moved THNK-23 from `In Progress` to `Verification` and added a Linear progress comment with PR and local verification details.
 
 ## Source Context
 
@@ -45,7 +48,9 @@ Plan: `docs/plans/2026-06-14-005-feat-company-brain-first-party-tool-plan.md`
 
 ## PR / CI / Merge Log
 
-- Pending PR creation.
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2468
+- CI: pending.
+- Merge: pending.
 
 ## Decisions
 
