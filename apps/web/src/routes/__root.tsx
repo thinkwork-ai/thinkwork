@@ -25,6 +25,11 @@ function DesktopOAuthRouteListener() {
 
     return bridge.onDeepLink((callback) => {
       if ("type" in callback && callback.type === "deployment-profile") return;
+      if ("type" in callback && callback.type === "app-route") {
+        window.history.pushState({}, "", callback.path);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        return;
+      }
       void navigate({ to: "/auth/desktop-callback", replace: true });
     });
   }, [navigate]);

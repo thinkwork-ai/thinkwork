@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
+import { getDesktopBridge } from "@/lib/desktop-runtime";
 import {
   SettingsActivatePluginMutation,
   SettingsDeactivatePluginMutation,
@@ -236,10 +237,11 @@ export function PluginDetail() {
     if (!install) return;
     setNotice(null);
     setError(null);
+    const returnTo = await pluginOAuthReturnTo(pluginKey);
     const result = await activatePlugin({
       input: {
         installId: install.id,
-        returnTo: `${window.location.origin}/settings/plugins/${pluginKey}`,
+        returnTo,
       },
     });
     const authorizeUrl = result.data?.activatePlugin.authorizeUrl;
@@ -606,6 +608,23 @@ export function PluginDetail() {
       </div>
     </div>
   );
+}
+
+async function pluginOAuthReturnTo(pluginKey: string): Promise<string> {
+  const path = `/settings/plugins/${pluginKey}`;
+  const bridge = getDesktopBridge();
+  if (!bridge) return `${window.location.origin}${path}`;
+
+  try {
+    const config = await bridge.getDesktopConfig();
+    const scheme = new URL(config.oauthRedirectUri).protocol.replace(/:$/, "");
+    if (scheme) return `${scheme}://app${path}`;
+  } catch {
+    // Fall through to the current origin; the API will surface validation
+    // failures if the fallback cannot be used.
+  }
+
+  return `${window.location.origin}${path}`;
 }
 
 function pluginDetailDescription(entry: {

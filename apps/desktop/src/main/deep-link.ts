@@ -131,6 +131,12 @@ export function parseDeepLinkCallback(
     return { type: "deployment-profile", json };
   }
 
+  if (url.host === "app") {
+    const path = parseAppRoutePath(url, options.logger);
+    if (!path) return null;
+    return { type: "app-route", path };
+  }
+
   if (
     url.host !== "oauth" ||
     url.pathname !== "/callback" ||
@@ -170,6 +176,35 @@ export function parseDeepLinkCallback(
   }
 
   return { code, state };
+}
+
+function parseAppRoutePath(
+  url: URL,
+  logger: Pick<Console, "warn"> | undefined,
+): string | null {
+  if (url.hash || url.username || url.password) {
+    logger?.warn("[desktop] rejected app-route deep link with unsafe parts");
+    return null;
+  }
+
+  if (!url.pathname.startsWith("/") || url.pathname.startsWith("//")) {
+    logger?.warn("[desktop] rejected app-route deep link with invalid path");
+    return null;
+  }
+
+  const path = `${url.pathname}${url.search}`;
+  if (
+    !(
+      path === "/settings" ||
+      path.startsWith("/settings/") ||
+      path.startsWith("/settings?")
+    )
+  ) {
+    logger?.warn("[desktop] rejected app-route deep link with disallowed route");
+    return null;
+  }
+
+  return path;
 }
 
 function decodeProfileJson(

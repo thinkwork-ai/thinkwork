@@ -286,6 +286,15 @@ describe("desktop IPC schemas", () => {
       type: "deployment-profile",
       json: '{"schemaVersion":1}',
     });
+    expect(
+      DeepLinkCallbackSchema.parse({
+        type: "app-route",
+        path: "/settings/plugins/lastmile?pluginOAuth=success",
+      }),
+    ).toEqual({
+      type: "app-route",
+      path: "/settings/plugins/lastmile?pluginOAuth=success",
+    });
     expect(() =>
       DeepLinkCallbackSchema.parse({
         code: "abc",

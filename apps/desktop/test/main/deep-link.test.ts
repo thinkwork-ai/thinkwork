@@ -80,6 +80,20 @@ describe("desktop deep links", () => {
     });
   });
 
+  it("parses stage-scoped app route deep links for plugin OAuth completion", () => {
+    expect(
+      parseDeepLinkCallback(
+        "thinkwork-canary://app/settings/plugins/lastmile?pluginOAuth=success",
+        {
+          allowedSchemes: ["thinkwork-canary"],
+        },
+      ),
+    ).toEqual({
+      type: "app-route",
+      path: "/settings/plugins/lastmile?pluginOAuth=success",
+    });
+  });
+
   it("rejects disallowed paths, missing data, and malformed URLs", () => {
     const logger = { warn: vi.fn() };
 
@@ -107,8 +121,11 @@ describe("desktop deep links", () => {
         logger,
       }),
     ).toBeNull();
+    expect(
+      parseDeepLinkCallback("thinkwork://app/threads/thread-1", { logger }),
+    ).toBeNull();
 
-    expect(logger.warn).toHaveBeenCalledTimes(6);
+    expect(logger.warn).toHaveBeenCalledTimes(7);
   });
 
   it("rejects callbacks for schemes outside the active stage", () => {
