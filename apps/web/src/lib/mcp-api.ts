@@ -195,3 +195,11 @@ export function isManagedMcpServer(server: McpServer): boolean {
     Boolean(server.managedApplicationKey)
   );
 }
+
+export function isPluginInstalledMcpServer(server: McpServer): boolean {
+  return (
+    server.managementSource === "plugin" ||
+    server.managementSource === "managed_application" ||
+    Boolean(server.managedApplicationKey)
+  );
+}

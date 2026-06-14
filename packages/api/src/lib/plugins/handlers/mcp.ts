@@ -14,9 +14,10 @@
  *     rows, with `auth_config.oauth_resource` carrying the RFC 8707
  *     resource indicator (matches `managedTwentyAuthConfig`).
  *
- * Direct-add coexistence: a `manual` row with the same endpoint URL is
- * left untouched and the plugin row is created anyway — dispatch-time
- * dedupe-by-URL is U6/U7's concern.
+ * Direct-add coexistence: when a `manual` row already points at the same
+ * endpoint URL, provisioning adopts that row in place instead of creating a
+ * duplicate. Existing agent/space/template/token references stay attached to
+ * the stable tenant_mcp_servers id while plugin ownership takes over.
  *
  * `endpointFrom` (U10, the ONE allowed endpoint indirection): a component
  * whose endpoint is tenant-specific (Twenty CRM) resolves it at provision
@@ -38,7 +39,7 @@ import {
   DeleteSecretCommand,
   SecretsManagerClient,
 } from "@aws-sdk/client-secrets-manager";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   agentMcpServers,
   agents,
@@ -67,6 +68,10 @@ export function pluginMcpServerSlug(
   componentKey: string,
 ): string {
   return `${pluginKey}--${componentKey}`;
+}
+
+function normalizeMcpEndpointUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "").toLowerCase();
 }
 
 function pluginMcpAuthFields(
@@ -214,6 +219,34 @@ export async function provisionPluginMcpComponent(args: {
       existing.id,
     );
     return { tenantMcpServerId: existing.id, resolvedEndpointUrl: endpointUrl };
+  }
+
+  const [manualSameEndpoint] = (await db
+    .select({ id: tenantMcpServers.id })
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.tenant_id, args.tenantId),
+        eq(tenantMcpServers.management_source, "manual"),
+        sql`regexp_replace(lower(trim(${tenantMcpServers.url})), '/+$', '') = ${normalizeMcpEndpointUrl(endpointUrl)}`,
+      ),
+    )
+    .limit(1)) as { id: string }[];
+
+  if (manualSameEndpoint) {
+    await db
+      .update(tenantMcpServers)
+      .set({ ...rowValues, approved_by: null, updated_at: new Date() })
+      .where(eq(tenantMcpServers.id, manualSameEndpoint.id));
+    await ensurePluginMcpDefaultAgentAssignments(
+      db,
+      args.tenantId,
+      manualSameEndpoint.id,
+    );
+    return {
+      tenantMcpServerId: manualSameEndpoint.id,
+      resolvedEndpointUrl: endpointUrl,
+    };
   }
 
   const [inserted] = (await db

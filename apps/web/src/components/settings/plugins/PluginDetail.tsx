@@ -325,7 +325,7 @@ export function PluginDetail() {
 
         <SettingsPageTitle
           title={displayName}
-          description={entry?.description}
+          description={entry ? pluginDetailDescription(entry) : undefined}
           badge={
             selfServiceOnly ? undefined : install ? (
               <Badge
@@ -347,30 +347,6 @@ export function PluginDetail() {
               active.
             </p>
           ) : null
-        ) : null}
-
-        {premium && !selfServiceOnly ? (
-          <SettingsSection label="Premium access">
-            <SettingsRow
-              label={`${displayName} entitlement`}
-              description={
-                hasActiveEntitlement
-                  ? `Unlocked for this workspace through ${formatEntitlementSource(entitlement?.source)}.`
-                  : premium.installKeyPrompt
-              }
-            >
-              <Badge
-                variant="outline"
-                className={
-                  hasActiveEntitlement
-                    ? "border-emerald-500/40 text-emerald-400"
-                    : "border-amber-500/40 text-amber-500"
-                }
-              >
-                {hasActiveEntitlement ? "Entitled" : "Install key required"}
-              </Badge>
-            </SettingsRow>
-          </SettingsSection>
         ) : null}
 
         {install?.state === "awaiting_approval" && !selfServiceOnly ? (
@@ -632,19 +608,14 @@ export function PluginDetail() {
   );
 }
 
-function formatEntitlementSource(source: string | null | undefined): string {
-  switch (source) {
-    case "install_key":
-      return "an install key";
-    case "backdoor_key":
-      return "a test key";
-    case "operator_grant":
-      return "an operator grant";
-    case "migration":
-      return "migration";
-    default:
-      return "ThinkWork";
+function pluginDetailDescription(entry: {
+  pluginKey: string;
+  description: string;
+}): string {
+  if (entry.pluginKey === "company-brain") {
+    return entry.description.replace(/^Premium\s+/i, "");
   }
+  return entry.description;
 }
 
 function pluginEntryIsAuthCapable(entry: {
@@ -692,9 +663,9 @@ function handlerRefBoolean(value: unknown, key: string): boolean {
   }
   return Boolean(
     ref &&
-      typeof ref === "object" &&
-      !Array.isArray(ref) &&
-      (ref as Record<string, unknown>)[key] === true,
+    typeof ref === "object" &&
+    !Array.isArray(ref) &&
+    (ref as Record<string, unknown>)[key] === true,
   );
 }
 

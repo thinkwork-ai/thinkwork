@@ -46,6 +46,7 @@ import {
   readDeploymentJobSnapshot,
   type PluginDeploymentJobSnapshot,
 } from "../deployment-job-read.js";
+import { readCogneeStatus } from "../../../graphql/resolvers/core/managedApplications.js";
 
 type DbLike = typeof defaultDb;
 
@@ -102,7 +103,7 @@ export interface InfraHandlerRef extends Record<string, unknown> {
 }
 
 export interface InfraManagedApplicationSnapshot {
-  id: string;
+  id: string | null;
   desiredConfig: Record<string, unknown>;
   /** Operator-selected release the managed app is pinned to, if any. */
   selectedReleaseVersion: string | null;
@@ -152,7 +153,20 @@ export function createDefaultInfraHandlerDeps(
           ),
         )
         .limit(1);
-      if (!row) return null;
+      if (!row) {
+        if (key === "cognee") {
+          const cognee = readCogneeStatus();
+          if (cognee.enabled) {
+            return {
+              id: null,
+              desiredConfig: {},
+              selectedReleaseVersion: null,
+              selectedManifestDigest: null,
+            };
+          }
+        }
+        return null;
+      }
       return {
         id: row.id,
         desiredConfig: (row.desired_config ?? {}) as Record<string, unknown>,
@@ -260,6 +274,15 @@ function requiresPlanBackedAdoption(args: {
   return args.pluginKey === "company-brain" && args.appKey === "cognee";
 }
 
+function hasResolvedRelease(app: InfraManagedApplicationSnapshot): boolean {
+  return Boolean(
+    app.selectedReleaseVersion &&
+    app.selectedReleaseVersion !== "unresolved" &&
+    app.selectedManifestDigest &&
+    app.selectedManifestDigest !== "unresolved",
+  );
+}
+
 /**
  * Provision (ensure) the infrastructure component: managed_applications row
  * + deployment PLAN job. Returns the updated handler_ref; the component is
@@ -295,6 +318,7 @@ export async function provisionPluginInfraComponent(args: {
       attempt: prior.attempt ?? 1,
       componentHash: prior.componentHash ?? componentHash,
       adoptedExisting: true,
+      adoptionRequiresNoChange: prior.adoptionRequiresNoChange === true,
       adoptedRunningInfra: true,
     };
   }
@@ -335,10 +359,12 @@ export async function provisionPluginInfraComponent(args: {
     prior.adoptedExisting === true ||
     Boolean(existing && !prior.deploymentJobId && !prior.managedApplicationId);
 
-  const planBackedAdoption = requiresPlanBackedAdoption({
-    pluginKey: args.pluginKey,
-    appKey,
-  });
+  const planBackedAdoption =
+    requiresPlanBackedAdoption({
+      pluginKey: args.pluginKey,
+      appKey,
+    }) &&
+    (!existing || hasResolvedRelease(existing));
 
   // ADOPTION-WITHOUT-DEPLOY (Fix A): the managed app is ALREADY deployed and
   // running (greenfield/operator-provisioned — its Terraform is not plugin-
@@ -348,8 +374,11 @@ export async function provisionPluginInfraComponent(args: {
   // means the plugin's components are WIRED UP, not that infra is healthy
   // right now — runtime health stays visible via the deployment-details view.
   // Genuine upgrades (contentChanged), Company Brain/Cognee plan-backed
-  // adoption, and net-new provisioning (no existing row) still take the
-  // plan-job path below.
+  // adoption with a real release pin, and net-new provisioning (no existing
+  // row) still take the plan-job path below. Existing Cognee rows from older
+  // deployments may be running with "unresolved" release metadata; those are
+  // adopted directly because fabricating an UPGRADE job would fail before it
+  // can produce useful no-change evidence.
   if (
     existing &&
     !contentChanged &&
@@ -364,6 +393,12 @@ export async function provisionPluginInfraComponent(args: {
       componentHash,
       adoptedExisting: true,
       adoptedRunningInfra: true,
+      adoptionRequiresNoChange: requiresPlanBackedAdoption({
+        pluginKey: args.pluginKey,
+        appKey,
+      })
+        ? true
+        : undefined,
     };
   }
 

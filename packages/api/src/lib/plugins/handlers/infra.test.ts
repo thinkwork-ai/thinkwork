@@ -34,7 +34,7 @@ function component(
 }
 
 interface ManagedAppFake {
-  id: string;
+  id: string | null;
   desiredConfig: Record<string, unknown>;
   selectedReleaseVersion: string | null;
   selectedManifestDigest: string | null;
@@ -339,10 +339,14 @@ describe("provisionPluginInfraComponent", () => {
     });
 
     const ref = await provisionPluginInfraComponent(
-      provisionArgs(deps, {}, {
-        pluginKey: "company-brain",
-        component: brainSubstrate,
-      }),
+      provisionArgs(
+        deps,
+        {},
+        {
+          pluginKey: "company-brain",
+          component: brainSubstrate,
+        },
+      ),
     );
 
     expect(deps.startCalls).toHaveLength(1);
@@ -371,6 +375,88 @@ describe("provisionPluginInfraComponent", () => {
     expect(ref.componentHash).toBe(infraComponentHash(brainSubstrate));
   });
 
+  it("Company Brain adopts existing Cognee directly when release metadata is unresolved", async () => {
+    const deps = fakeDeps();
+    const brainSubstrate = component({
+      key: "brain-substrate",
+      managedAppKey: "cognee",
+      terraformInputs: {
+        imageUri: { description: "image", type: "string" },
+      },
+    });
+    deps.managedApps.set(`${TENANT}:cognee`, {
+      id: "app-cognee",
+      desiredConfig: { imageUri: "repo/cognee@sha256:abc" },
+      selectedReleaseVersion: "unresolved",
+      selectedManifestDigest: "unresolved",
+    });
+
+    const ref = await provisionPluginInfraComponent(
+      provisionArgs(
+        deps,
+        {},
+        {
+          pluginKey: "company-brain",
+          component: brainSubstrate,
+        },
+      ),
+    );
+
+    expect(deps.startCalls).toHaveLength(0);
+    expect(ref).toMatchObject({
+      managedAppKey: "cognee",
+      managedApplicationId: "app-cognee",
+      operation: "ADOPT",
+      attempt: 1,
+      adoptedExisting: true,
+      adoptedRunningInfra: true,
+      adoptionRequiresNoChange: true,
+    });
+    expect(ref.deploymentJobId).toBeUndefined();
+    expect(ref.componentHash).toBe(infraComponentHash(brainSubstrate));
+  });
+
+  it("Company Brain adopts env-provisioned Cognee when no managed app row exists", async () => {
+    const deps = fakeDeps();
+    const brainSubstrate = component({
+      key: "brain-substrate",
+      managedAppKey: "cognee",
+      terraformInputs: {
+        imageUri: { description: "image", type: "string" },
+      },
+    });
+    deps.managedApps.set(`${TENANT}:cognee`, {
+      id: null,
+      desiredConfig: {},
+      selectedReleaseVersion: null,
+      selectedManifestDigest: null,
+    });
+
+    const ref = await provisionPluginInfraComponent(
+      provisionArgs(
+        deps,
+        {},
+        {
+          pluginKey: "company-brain",
+          component: brainSubstrate,
+        },
+      ),
+    );
+
+    expect(deps.startCalls).toHaveLength(0);
+    expect(ref).toMatchObject({
+      managedAppKey: "cognee",
+      managedApplicationId: null,
+      operation: "ADOPT",
+      attempt: 1,
+      adoptedExisting: true,
+      adoptedRunningInfra: true,
+      adoptionRequiresNoChange: true,
+    });
+    expect(ref.deploymentJobId).toBeUndefined();
+    expect(ref.componentHash).toBe(infraComponentHash(brainSubstrate));
+  });
+
   it("idempotently reuses the Company Brain Cognee adoption job", async () => {
     const deps = fakeDeps();
     const brainSubstrate = component({
@@ -387,10 +473,14 @@ describe("provisionPluginInfraComponent", () => {
       selectedManifestDigest: "sha-123",
     });
     const ref = await provisionPluginInfraComponent(
-      provisionArgs(deps, {}, {
-        pluginKey: "company-brain",
-        component: brainSubstrate,
-      }),
+      provisionArgs(
+        deps,
+        {},
+        {
+          pluginKey: "company-brain",
+          component: brainSubstrate,
+        },
+      ),
     );
     deps.setJobStatus("job-1", "awaiting_approval");
 

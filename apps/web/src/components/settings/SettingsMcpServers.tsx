@@ -21,7 +21,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import {
   createMcpServer,
-  isManagedMcpServer,
+  isPluginInstalledMcpServer,
   listMcpServers,
   listUserMcpServers,
   setMcpServerEnabled,
@@ -41,6 +41,25 @@ export function SettingsMcpServers() {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const pluginServers = useMemo(
+    () => sortMcpServers((servers ?? []).filter(isPluginInstalledMcpServer)),
+    [servers],
+  );
+  const pluginServerUrls = useMemo(
+    () => new Set(pluginServers.map((server) => normalizeMcpServerUrl(server))),
+    [pluginServers],
+  );
+  const individualServers = useMemo(
+    () =>
+      sortMcpServers(
+        (servers ?? []).filter(
+          (server) =>
+            !isPluginInstalledMcpServer(server) &&
+            !pluginServerUrls.has(normalizeMcpServerUrl(server)),
+        ),
+      ),
+    [pluginServerUrls, servers],
+  );
 
   const load = useCallback(() => {
     if (!tenantSlug) return;
@@ -100,9 +119,9 @@ export function SettingsMcpServers() {
           return (
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate font-medium">{server.name}</span>
-              {isManagedMcpServer(server) ? (
+              {isPluginInstalledMcpServer(server) ? (
                 <Badge variant="outline" className="shrink-0">
-                  managed
+                  plugin
                 </Badge>
               ) : null}
             </div>
@@ -167,7 +186,9 @@ export function SettingsMcpServers() {
             >
               <Switch
                 checked={server.enabled}
-                disabled={pending[server.id] || isManagedMcpServer(server)}
+                disabled={
+                  pending[server.id] || isPluginInstalledMcpServer(server)
+                }
                 onCheckedChange={(v) => toggle(server.id, v)}
                 aria-label={`Toggle ${server.name}`}
               />
@@ -207,27 +228,33 @@ export function SettingsMcpServers() {
           )
         }
       >
-        <DataTable
-          columns={columns}
-          data={servers ?? []}
-          filterValue={search}
-          filterColumn="name"
-          scrollable
-          allowHorizontalScroll={false}
-          pageSize={25}
-          tableClassName="table-fixed"
-          onRowClick={(row) =>
-            navigate({
-              to: "/settings/mcp-servers/$serverId",
-              params: { serverId: row.id },
-            })
-          }
-          emptyState={
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              No MCP servers configured.
-            </div>
-          }
-        />
+        <div className="space-y-8">
+          <McpServerSection
+            columns={columns}
+            servers={individualServers}
+            search={search}
+            emptyText="No individual MCP servers configured."
+            onOpen={(serverId) =>
+              navigate({
+                to: "/settings/mcp-servers/$serverId",
+                params: { serverId },
+              })
+            }
+          />
+          <McpServerSection
+            title="From plugins"
+            columns={columns}
+            servers={pluginServers}
+            search={search}
+            emptyText="No MCP servers installed by plugins."
+            onOpen={(serverId) =>
+              navigate({
+                to: "/settings/mcp-servers/$serverId",
+                params: { serverId },
+              })
+            }
+          />
+        </div>
       </SettingsTablePane>
       <NewMcpServerDialog
         open={addOpen}
@@ -240,6 +267,65 @@ export function SettingsMcpServers() {
       />
     </>
   );
+}
+
+function McpServerSection({
+  title,
+  columns,
+  servers,
+  search,
+  emptyText,
+  onOpen,
+}: {
+  title?: string;
+  columns: ColumnDef<McpServer>[];
+  servers: McpServer[];
+  search: string;
+  emptyText: string;
+  onOpen: (serverId: string) => void;
+}) {
+  return (
+    <section>
+      {title ? (
+        <h2 className="mb-3 text-base font-medium text-foreground">{title}</h2>
+      ) : null}
+      <DataTable
+        columns={columns}
+        data={servers}
+        filterValue={search}
+        filterColumn="name"
+        scrollable
+        allowHorizontalScroll={false}
+        pageSize={0}
+        tableClassName="table-fixed"
+        onRowClick={(row) => onOpen(row.id)}
+        emptyState={
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            {emptyText}
+          </div>
+        }
+      />
+    </section>
+  );
+}
+
+function normalizeMcpServerUrl(server: McpServer): string {
+  return server.url.trim().replace(/\/+$/, "").toLowerCase();
+}
+
+function sortMcpServers(servers: McpServer[]): McpServer[] {
+  return [...servers].sort((left, right) => {
+    const byName = left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+    if (byName !== 0) return byName;
+    return normalizeMcpServerUrl(left).localeCompare(
+      normalizeMcpServerUrl(right),
+      undefined,
+      { numeric: true, sensitivity: "base" },
+    );
+  });
 }
 
 function NewMcpServerDialog({

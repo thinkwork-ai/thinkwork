@@ -8,18 +8,25 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { installMock, queryDocs, tenantState, toggleRef, useQueryMock } =
-  vi.hoisted(() => ({
-    installMock: vi.fn(),
-    queryDocs: {
-      SettingsInstallPluginMutation: Symbol("installPlugin"),
-      SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
-      SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
-    },
-    tenantState: { isOperator: true, roleResolved: true },
-    toggleRef: { current: undefined as ((value: string) => void) | undefined },
-    useQueryMock: vi.fn(),
-  }));
+const {
+  installMock,
+  navigateMock,
+  queryDocs,
+  tenantState,
+  toggleRef,
+  useQueryMock,
+} = vi.hoisted(() => ({
+  installMock: vi.fn(),
+  navigateMock: vi.fn(),
+  queryDocs: {
+    SettingsInstallPluginMutation: Symbol("installPlugin"),
+    SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
+    SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
+  },
+  tenantState: { isOperator: true, roleResolved: true },
+  toggleRef: { current: undefined as ((value: string) => void) | undefined },
+  useQueryMock: vi.fn(),
+}));
 
 vi.mock("urql", () => ({
   useMutation: (doc: unknown) => {
@@ -51,7 +58,7 @@ vi.mock("@thinkwork/ui", async (importOriginal) => ({
     title,
   }: {
     children: React.ReactNode;
-    onClick?: () => void;
+    onClick?: React.MouseEventHandler<HTMLButtonElement>;
     disabled?: boolean;
     "aria-label"?: string;
     title?: string;
@@ -100,19 +107,7 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({
-    children,
-    to,
-    params: _params,
-    ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
-    to: string;
-    params?: Record<string, string>;
-  }) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
-  ),
+  useNavigate: () => navigateMock,
 }));
 
 import { PluginsPage } from "./PluginsPage";
@@ -152,6 +147,7 @@ function mockQueries({
 
 beforeEach(() => {
   installMock.mockReset();
+  navigateMock.mockReset();
   refreshCatalog.mockReset();
   refreshActivations.mockReset();
   useQueryMock.mockReset();
@@ -191,8 +187,7 @@ describe("PluginsPage", () => {
     });
     render(<PluginsPage />);
 
-    const lastmileRow = screen.getByRole("link", { name: "LastMile" })
-      .parentElement!.parentElement!;
+    const lastmileRow = screen.getByRole("link", { name: "Open LastMile" });
     expect(within(lastmileRow).getByText("Reconnect needed")).toBeTruthy();
   });
 
@@ -212,15 +207,23 @@ describe("PluginsPage", () => {
     expect(screen.getAllByText("Update available").length).toBe(1);
   });
 
-  it("shows premium/key-gated catalog state without starting install directly", () => {
+  it("keeps key-gated catalog rows status-only", () => {
     render(<PluginsPage />);
 
-    const brainRow = screen.getByRole("link", { name: "Company Brain" })
-      .parentElement!.parentElement!;
-    expect(within(brainRow).getByText("Premium")).toBeTruthy();
-    expect(within(brainRow).getByText("Key required")).toBeTruthy();
-    expect(within(brainRow).getByRole("link", { name: /enter key/i }))
-      .toBeTruthy();
+    const brainRow = screen.getByRole("link", {
+      name: "Open Company Brain",
+    });
+    expect(
+      within(brainRow).getByText("knowledge graph substrate.", {
+        exact: false,
+      }),
+    ).toBeTruthy();
+    expect(within(brainRow).queryByText("Premium")).toBeNull();
+    expect(within(brainRow).queryByText("Key required")).toBeNull();
+    expect(
+      within(brainRow).queryByRole("link", { name: /enter key/i }),
+    ).toBeNull();
+    expect(within(brainRow).getByText("Not installed")).toBeTruthy();
     expect(installMock).not.toHaveBeenCalled();
   });
 
@@ -228,23 +231,23 @@ describe("PluginsPage", () => {
     render(<PluginsPage />);
 
     // Both plugins visible under "All".
-    expect(screen.getByRole("link", { name: "Twenty CRM" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Twenty CRM" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /installed \(2\)/i }));
 
     // Twenty (not installed) drops out; installed plugins remain.
-    expect(screen.queryByRole("link", { name: "Twenty CRM" })).toBeNull();
-    expect(screen.getByRole("link", { name: "LastMile" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Docs Sync" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Open Twenty CRM" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Open LastMile" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Docs Sync" })).toBeTruthy();
   });
 
   it("shows only installed auth-capable plugins to non-operators", () => {
     tenantState.isOperator = false;
     render(<PluginsPage />);
 
-    expect(screen.getByRole("link", { name: "LastMile" })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Twenty CRM" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Docs Sync" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Open LastMile" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Open Twenty CRM" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open Docs Sync" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^install$/i })).toBeNull();
     expect(screen.queryByText("Not installed")).toBeNull();
     expect(screen.queryByText("Update available")).toBeNull();
@@ -270,6 +273,18 @@ describe("PluginsPage", () => {
       expect(refreshActivations).toHaveBeenCalledWith({
         requestPolicy: "network-only",
       });
+    });
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it("opens plugin details from the full catalog row", () => {
+    render(<PluginsPage />);
+
+    fireEvent.click(screen.getByRole("link", { name: "Open Company Brain" }));
+
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/settings/plugins/$pluginKey",
+      params: { pluginKey: "company-brain" },
     });
   });
 });

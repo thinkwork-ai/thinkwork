@@ -396,7 +396,11 @@ describe("PluginDetail", () => {
     });
     render(<PluginDetail />);
 
-    expect(screen.getByText("Install key required")).toBeTruthy();
+    expect(screen.queryByText("Premium access")).toBeNull();
+    expect(screen.queryByText("Install key required")).toBeNull();
+    expect(
+      screen.getByText("knowledge graph substrate.", { exact: false }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /enter key/i }));
 
     const input = screen.getByLabelText("Install key");
@@ -433,7 +437,8 @@ describe("PluginDetail", () => {
     });
     render(<PluginDetail />);
 
-    expect(screen.getByText("Entitled")).toBeTruthy();
+    expect(screen.queryByText("Premium access")).toBeNull();
+    expect(screen.queryByText("Entitled")).toBeNull();
     expect(screen.getByText(/Adoption plan verifies/i)).toBeTruthy();
     const link = screen.getByRole("link", { name: /open ontology/i });
     expect(link.getAttribute("href")).toBe("/settings/memory/knowledge-graph");
