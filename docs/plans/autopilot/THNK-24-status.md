@@ -5,8 +5,8 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 ## Current State
 
 - Started: 2026-06-14
-- Active branch: `codex/thnk-24-u6-settings-release-workflow`
-- Active unit: U6, Settings release safety workflow
+- Active branch: `codex/thnk-24-u7-release-runbook`
+- Active unit: U7, docs, runbooks, and verification coverage
 - Linear state: Verification
 
 ## Context Discovery
@@ -107,6 +107,15 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   only a reviewed job, and polls the release-update job while the deployment
   controller runs.
 - 2026-06-14: Opened U6 PR and moved THNK-24 to Verification.
+- 2026-06-14: U6 PR passed CI, was rebased onto current `main`, passed
+  refreshed CI, squash-merged, and had its remote/local branch cleaned up.
+- 2026-06-14: Moved THNK-24 back to In Progress for U7 and created branch
+  `codex/thnk-24-u7-release-runbook`.
+- 2026-06-14: Implemented U7 docs coverage: added the Settings release upgrade
+  runbook, added the release safety verification checklist, and linked the
+  preflight/review workflow from Admin Settings, Release Manifests, and
+  GitHub-free customer deployment docs.
+- 2026-06-14: Opened U7 PR and moved THNK-24 to Verification.
 
 ## Implementation Units
 
@@ -115,8 +124,9 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U3. Implement release preflight service: merged in PR #2476.
 - U4. Add safe runner refresh remediation: merged in PR #2478.
 - U5. Dispatch and monitor reviewed release updates: merged in PR #2479.
-- U6. Build Settings release safety workflow: PR open; pending CI/review.
-- U7. Update docs, runbooks, and verification coverage: pending.
+- U6. Build Settings release safety workflow: merged in PR #2482.
+- U7. Update docs, runbooks, and verification coverage: PR open; pending
+  CI/review.
 
 ## PRs
 
@@ -125,7 +135,8 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U3: https://github.com/thinkwork-ai/thinkwork/pull/2476 merged
 - U4: https://github.com/thinkwork-ai/thinkwork/pull/2478 merged
 - U5: https://github.com/thinkwork-ai/thinkwork/pull/2479 merged
-- U6: https://github.com/thinkwork-ai/thinkwork/pull/2482
+- U6: https://github.com/thinkwork-ai/thinkwork/pull/2482 merged
+- U7: https://github.com/thinkwork-ai/thinkwork/pull/2483
 
 ## CI / Verification
 
@@ -232,6 +243,11 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   preflight-first copy plus `Cancel` and `Run Preflight`. Did not click
   `Run Preflight` in the live dev environment because that would trigger an
   operational backend action.
+- U6 PR CI first pass and refreshed post-rebase pass: `cla`, `lint`, `test`,
+  `typecheck`, and `verify` passed.
+- U7 `pnpm dlx prettier@3.5.3 --write ...`: applied Markdown wrapping to the
+  new runbook and verification checklist.
+- U7 `pnpm --filter @thinkwork/docs build`: passed.
 
 ## Blockers
 

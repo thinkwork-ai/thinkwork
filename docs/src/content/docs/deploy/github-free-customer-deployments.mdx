@@ -198,3 +198,10 @@ the deployment authority.
 Do not run local Terraform against production as a shortcut around a failed
 deployment job. Use the customer control plane so evidence, approvals, and
 selected release digests stay aligned.
+
+Release upgrades for already-bootstrapped external environments should start in
+**Settings -> General -> Releases**. The Settings workflow creates a preflight
+job, verifies runner compatibility and known IAM drift, displays preserved
+customer configuration, and dispatches only a reviewed release-update job. Use
+the manual runbook only when Settings blocks and the recovery action has been
+authorized.
