@@ -80,7 +80,7 @@ if (!LIVE_ENABLED) {
             ],
             verifies: [
               "query_brain_context returns Company Brain hits through Context Engine",
-              "Brain provider status exposes active backend and provenance posture",
+              "Brain provider status exposes active read route, shadow migration, vault provenance, and provider-local retrieval posture",
               "Brain hits include untrusted source-data boundary metadata",
               "Brain answer is better than memory-only for the named workflow by hit count or expected-term match",
               "query_memory_context remains a separate Hindsight path rather than an implicit fallback",
@@ -168,6 +168,9 @@ async function runLiveSmoke() {
   const brainProviders = Array.isArray(brainContent?.providers)
     ? brainContent.providers
     : [];
+  const brainProvider = brainProviders.find(
+    (provider) => provider.providerId === "brain",
+  );
   const brainText = JSON.stringify(brain.result ?? {});
 
   assert("Brain provider returns at least one hit", brainHits.length > 0, {
@@ -175,8 +178,16 @@ async function runLiveSmoke() {
   });
   assert(
     "Brain provider exposes provider-local status",
-    brainProviders.some((provider) => provider.providerId === "brain"),
+    Boolean(brainProvider),
     { providers: brainProviders },
+  );
+  assert(
+    "Brain provider exposes migration-aware read posture",
+    Boolean(
+      brainProvider?.metadata?.readPosture?.active?.role === "active" &&
+        brainProvider.metadata.readPosture.vault?.role === "vault",
+    ),
+    { readPosture: brainProvider?.metadata?.readPosture ?? null },
   );
   assert(
     "Brain hits carry untrusted source-data boundaries",

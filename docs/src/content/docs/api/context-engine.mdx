@@ -33,11 +33,24 @@ Every response includes normalized hits plus provider statuses. Provider failure
 
 The `brain` family is the business/domain memory provider. It searches active Company Brain substrate state through Context Engine policy, then reads tenant-shared pages and facets materialized from approved [Business Ontology](/concepts/knowledge/business-ontology/) definitions. Use it for customers, opportunities, commitments, risks, stakeholders, products, and other durable business concepts.
 
-Brain hits include ontology-facing metadata where available: entity type slug, facet slug/heading, source family, provenance references, confidence, freshness, substrate backend, storage tier, artifact manifest categories, and the ontology version or reprocess context that shaped the materialized output. Retrieved Brain snippets are source data, not instructions; runtime responses mark them with an untrusted source boundary and preserve citations.
+Brain hits include ontology-facing metadata where available: entity type slug, facet slug/heading, source family, provenance references, confidence, freshness, active read route, storage tier, artifact manifest categories, and the ontology version or reprocess context that shaped the materialized output. Retrieved Brain snippets are source data, not instructions; runtime responses mark them with an untrusted source boundary and preserve citations.
 
 If the active Company Brain substrate is not installed, disabled, failed, or missing required retrieval/provenance capability posture, Context Engine reports that as a Brain provider status. A Brain-only call does not silently fall back to Hindsight Memory or raw backend access.
 
 `query_brain_context` accepts the normal `query`, `mode`, `scope`, `depth`, and `limit` fields plus optional source filters used by the dogfood proof: `sourceKind`, `sourceType`, `datasetId`, `nodeSetIds`, and `onlyContext`. These options are provider-scoped hints; they do not grant direct access to Cognee, Neptune, or S3.
+
+## Company Brain Substrate Posture
+
+Company Brain has two operator-visible storage tiers:
+
+- `default`: the existing Company Brain substrate serving tenant reads.
+- `production`: the target private substrate tier used after replay validation and cutover.
+
+During a production migration, Context Engine keeps `query_brain_context` on the active read route. Production can appear as a shadow route while replay validation runs, but it does not become the active route until the migration state says the cutover is complete. Vault projections are provenance views, not canonical storage, and should not be treated as a runtime fallback store.
+
+Operators inspect this posture in **Settings -> Plugins -> Company Brain -> Brain operations**. That surface reads `companyBrainStatus` and shows migration phase/status, launch capabilities, graph/vector counters, vault projection counters, failure actions, and operator evidence. The same surface can request a production migration and record failure/rollback actions through the migration GraphQL mutations.
+
+Tenant-facing status callers receive redacted posture. Raw substrate details such as Cognee endpoints, S3 roots, Neptune ids/endpoints, and EFS ids are reserved for operator evidence and are not part of agent-facing Brain context.
 
 Brain is intentionally separate from:
 
@@ -70,7 +83,7 @@ When Memory is enabled for an agent template, runtimes may also expose specializ
 
 `query_brain_context` should be the model's first choice for governed business/domain context. Raw ontology admin APIs are not runtime tools.
 
-Use `scripts/smoke/company-brain-context-engine-smoke.mjs` after deploy to verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path.
+Use `scripts/smoke/company-brain-context-engine-smoke.mjs` after deploy to verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path. Use `scripts/smoke/company-brain-operations-smoke.mjs` to verify the GraphQL operations posture and redaction contract; it is read-only unless `SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1` is explicitly set.
 
 ## Admin Verification
 

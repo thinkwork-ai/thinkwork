@@ -2,7 +2,7 @@
 
 Linear issue: THNK-6 - ThinkWork Brain
 Target branch: `main`
-Current implementation branch: `codex/thnk-6-u6-brain-operations-ui`
+Current implementation branch: `codex/thnk-6-u7-docs-smoke`
 Plan: `docs/plans/2026-06-14-004-feat-company-brain-remaining-substrate-plan.md`
 Status doc created: 2026-06-14
 
@@ -11,9 +11,8 @@ Status doc created: 2026-06-14
 - THNK-15, the Company Brain premium plugin shell blocker, is Done.
 - THNK-17, THNK-18, THNK-19, and THNK-20 are Done and merged to `main`.
 - U4 migration orchestration is merged to `main`.
-- Remaining parent-scope units are U6 Brain operations UI and U7 docs/smoke
-  closure.
-- This branch implements U6: Brain operations UI and action model.
+- Remaining parent-scope unit is U7 docs/smoke closure.
+- This branch implements U7: documentation and smoke closure.
 
 ## Discovery
 
@@ -185,6 +184,29 @@ proof`, which is 100% complete.
 - 2026-06-14: Opened U6 PR
   [#2464](https://github.com/thinkwork-ai/thinkwork/pull/2464) for the Brain
   operations UI and action model.
+- 2026-06-14: U6 PR
+  [#2464](https://github.com/thinkwork-ai/thinkwork/pull/2464) passed CI
+  (`cla`, `lint`, `verify`, `test`, `typecheck`), was rebased after main moved,
+  passed CI again, and was squash-merged to `main` at `9baefd31`.
+- 2026-06-14: Deleted the merged remote U6 branch and force-deleted the local
+  U6 branch after switching to U7.
+- 2026-06-14: Created branch `codex/thnk-6-u7-docs-smoke` from updated
+  `origin/main`.
+- 2026-06-14: Implemented U7 docs/smoke closure:
+  `company-brain-operations-smoke.mjs` dry-run/read-only live smoke with
+  explicit opt-in production migration request, Context Engine smoke
+  read-posture assertions, smoke README coverage, Context Engine docs for
+  default/production tier posture and restricted MCP access, and the Brain v0
+  dogfood runbook validation flow.
+- 2026-06-14: U7 smoke verification passed:
+  `node --check scripts/smoke/company-brain-operations-smoke.mjs`,
+  `node --check scripts/smoke/company-brain-context-engine-smoke.mjs`,
+  `scripts/smoke/company-brain-operations-smoke.mjs`,
+  `scripts/smoke/company-brain-context-engine-smoke.mjs`,
+  `pnpm --filter @thinkwork/docs build`, and `git diff --check`.
+- 2026-06-14: Opened U7 PR
+  [#2465](https://github.com/thinkwork-ai/thinkwork/pull/2465) for Company
+  Brain documentation and smoke closure.
 
 ## Linear State Changes
 
@@ -205,6 +227,17 @@ proof`, which is 100% complete.
   git diff check, full web test pre-final guard patch, focused rerun after
   guard patch. Browser visual smoke was attempted; in-app Browser tab crashed,
   while local Vite route returned HTTP 200."
+- Desired next Linear update from dispatcher for U6 merge and U7 start:
+  "U6 PR https://github.com/thinkwork-ai/thinkwork/pull/2464 passed CI after a
+  rebase and was squash-merged at 9baefd31. U7 docs/smoke closure is now in
+  progress on codex/thnk-6-u7-docs-smoke. Local U7 verification so far:
+  operations/context smoke syntax checks and dry-runs passed; docs build and
+  diff check passed."
+- Desired next Linear update from dispatcher for U7 PR:
+  "Opened U7 PR for Company Brain documentation and smoke closure:
+  https://github.com/thinkwork-ai/thinkwork/pull/2465. Local verification:
+  operations/context smoke syntax checks, dry-runs, docs build, and diff check
+  passed. Live production migration smoke remains opt-in only."
 
 ## PR / CI Log
 
@@ -223,6 +256,13 @@ proof`, which is 100% complete.
 - 2026-06-14: Opened U6 PR
   [#2464](https://github.com/thinkwork-ai/thinkwork/pull/2464) for Brain
   operations UI and action model.
+- 2026-06-14: U6 PR
+  [#2464](https://github.com/thinkwork-ai/thinkwork/pull/2464) CI passed,
+  required a rebase after `main` moved, passed CI again, and was squash-merged
+  to `main`.
+- 2026-06-14: Opened U7 PR
+  [#2465](https://github.com/thinkwork-ai/thinkwork/pull/2465) for Company
+  Brain documentation and smoke closure.
 
 ## Decisions
 
