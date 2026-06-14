@@ -9,6 +9,8 @@ import {
   managedApplicationDeploymentEvents,
   managedApplicationDeploymentJobs,
   managedApplications,
+  releaseUpdateEvents,
+  releaseUpdateJobs,
 } from "@thinkwork/database-pg/schema";
 import {
   dataImpactForManagedApp,
@@ -194,6 +196,36 @@ export async function loadJobEvents(tenantId: string, jobId: string) {
       ),
     )
     .orderBy(asc(managedApplicationDeploymentEvents.created_at));
+}
+
+export async function loadReleaseUpdateJobForTenant(
+  tenantId: string,
+  jobId: string,
+) {
+  const [job] = await db
+    .select()
+    .from(releaseUpdateJobs)
+    .where(
+      and(
+        eq(releaseUpdateJobs.tenant_id, tenantId),
+        eq(releaseUpdateJobs.id, jobId),
+      ),
+    )
+    .limit(1);
+  return job ?? null;
+}
+
+export async function loadReleaseUpdateEvents(tenantId: string, jobId: string) {
+  return db
+    .select()
+    .from(releaseUpdateEvents)
+    .where(
+      and(
+        eq(releaseUpdateEvents.tenant_id, tenantId),
+        eq(releaseUpdateEvents.job_id, jobId),
+      ),
+    )
+    .orderBy(asc(releaseUpdateEvents.created_at));
 }
 
 export async function appendJobEvent(args: {
@@ -581,6 +613,18 @@ export function parseAwsJsonObject(value: unknown): Record<string, unknown> {
 }
 
 export function toDeploymentPayload(
+  job: Record<string, unknown>,
+  events: unknown[] = [],
+): any {
+  return {
+    ...snakeToCamel(job),
+    events: events.map((event) =>
+      snakeToCamel(event as Record<string, unknown>),
+    ),
+  };
+}
+
+export function toReleaseUpdatePayload(
   job: Record<string, unknown>,
   events: unknown[] = [],
 ): any {

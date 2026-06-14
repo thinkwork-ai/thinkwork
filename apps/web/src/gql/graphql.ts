@@ -4534,6 +4534,7 @@ export type Query = {
   recentWikiPages: Array<WikiPage>;
   recipe?: Maybe<Recipe>;
   recipes: Array<Recipe>;
+  releaseUpdateJob?: Maybe<ReleaseUpdateJob>;
   routine?: Maybe<Routine>;
   routineAslVersion?: Maybe<RoutineAslVersion>;
   routineDefinition?: Maybe<RoutineDefinition>;
@@ -5176,6 +5177,11 @@ export type QueryRecipesArgs = {
 };
 
 
+export type QueryReleaseUpdateJobArgs = {
+  jobId: Scalars['ID']['input'];
+};
+
+
 export type QueryRoutineArgs = {
   id: Scalars['ID']['input'];
 };
@@ -5639,6 +5645,48 @@ export type RejectOntologyChangeSetInput = {
 export type ReleaseThreadInput = {
   runId: Scalars['String']['input'];
   status?: InputMaybe<ThreadStatus>;
+};
+
+export type ReleaseUpdateEvent = {
+  __typename?: 'ReleaseUpdateEvent';
+  createdAt: Scalars['AWSDateTime']['output'];
+  eventType: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  jobId: Scalars['ID']['output'];
+  message: Scalars['String']['output'];
+  payload: Scalars['AWSJSON']['output'];
+};
+
+export type ReleaseUpdateJob = {
+  __typename?: 'ReleaseUpdateJob';
+  codebuildBuildArn?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  currentReleaseVersion?: Maybe<Scalars['String']['output']>;
+  events: Array<ReleaseUpdateEvent>;
+  evidenceBucket?: Maybe<Scalars['String']['output']>;
+  evidencePrefix?: Maybe<Scalars['String']['output']>;
+  executionArn?: Maybe<Scalars['String']['output']>;
+  failureCategory?: Maybe<Scalars['String']['output']>;
+  failureMessage?: Maybe<Scalars['String']['output']>;
+  finalStatus: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  manifestSha256: Scalars['String']['output'];
+  manifestSigned: Scalars['Boolean']['output'];
+  manifestTrustPolicy?: Maybe<Scalars['String']['output']>;
+  manifestUrl: Scalars['String']['output'];
+  preflightSummary: Scalars['AWSJSON']['output'];
+  preservedConfigSummary: Scalars['AWSJSON']['output'];
+  recoveryAction?: Maybe<Scalars['String']['output']>;
+  remediationSummary: Scalars['AWSJSON']['output'];
+  requestedByUserId?: Maybe<Scalars['ID']['output']>;
+  stateMachineArn?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+  statusPointerBucket?: Maybe<Scalars['String']['output']>;
+  statusPointerKey?: Maybe<Scalars['String']['output']>;
+  targetReleaseVersion: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  terraformModuleVersion?: Maybe<Scalars['String']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
 };
 
 export type ReorderQuickActionsInput = {
