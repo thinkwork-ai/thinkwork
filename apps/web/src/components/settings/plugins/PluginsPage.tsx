@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Badge, Button, ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
@@ -29,6 +29,7 @@ type PluginFilter = "all" | "installed";
  * (Connect lives on the detail page); install actions render only for operators.
  */
 export function PluginsPage() {
+  const navigate = useNavigate();
   const { isOperator, roleResolved } = useTenant();
   const showOperatorActions = roleResolved && isOperator;
   const selfServiceOnly = roleResolved && !isOperator;
@@ -91,6 +92,13 @@ export function PluginsPage() {
     // affected query explicitly.
     refreshCatalog({ requestPolicy: "network-only" });
     refreshActivations({ requestPolicy: "network-only" });
+  }
+
+  function openPlugin(pluginKey: string) {
+    void navigate({
+      to: "/settings/plugins/$pluginKey",
+      params: { pluginKey },
+    });
   }
 
   return (
@@ -188,40 +196,32 @@ export function PluginsPage() {
               return (
                 <div
                   key={entry.pluginKey}
-                  className="flex items-center justify-between gap-3 px-4 py-3.5"
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Open ${entry.displayName}`}
+                  onClick={() => openPlugin(entry.pluginKey)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openPlugin(entry.pluginKey);
+                    }
+                  }}
+                  className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3.5 outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   <div className="min-w-0">
-                    <Link
-                      to="/settings/plugins/$pluginKey"
-                      params={{ pluginKey: entry.pluginKey }}
-                      className="text-sm font-medium text-foreground outline-none hover:underline focus-visible:underline"
-                    >
+                    <p className="text-sm font-medium text-foreground">
                       {entry.displayName}
-                    </Link>
+                    </p>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      {entry.description}
+                      {catalogListDescription(entry)}
                     </p>
                     {!selfServiceOnly ? (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className="text-xs text-muted-foreground">
                           Latest v{entry.latestVersion} ·{" "}
                           {entry.versions.length}{" "}
-                          {entry.versions.length === 1
-                            ? "version"
-                            : "versions"}
+                          {entry.versions.length === 1 ? "version" : "versions"}
                         </span>
-                        {entry.premium ? (
-                          <Badge
-                            variant="outline"
-                            className="border-amber-500/40 text-amber-500"
-                          >
-                            Premium
-                          </Badge>
-                        ) : null}
-                        {entry.premium?.installKeyRequired &&
-                        !entry.entitlement ? (
-                          <Badge variant="outline">Key required</Badge>
-                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -275,23 +275,17 @@ export function PluginsPage() {
                         </Badge>
                       </>
                     ) : showOperatorActions ? (
-                      entry.premium?.installKeyRequired &&
-                      !entry.entitlement ? (
-                        <Button asChild type="button" size="sm">
-                          <Link
-                            to="/settings/plugins/$pluginKey"
-                            params={{ pluginKey: entry.pluginKey }}
-                          >
-                            <ArrowDownToLine className="mr-2 size-4" />
-                            Enter key
-                          </Link>
-                        </Button>
+                      entry.premium?.installKeyRequired ? (
+                        <Badge variant="outline">Not installed</Badge>
                       ) : (
                         <Button
                           type="button"
                           size="sm"
                           disabled={installState.fetching}
-                          onClick={() => void install(entry.pluginKey)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void install(entry.pluginKey);
+                          }}
                         >
                           <ArrowDownToLine className="mr-2 size-4" />
                           Install
@@ -309,6 +303,16 @@ export function PluginsPage() {
       </SettingsSection>
     </SettingsPane>
   );
+}
+
+function catalogListDescription(entry: {
+  pluginKey: string;
+  description: string;
+}): string {
+  if (entry.pluginKey === "company-brain") {
+    return entry.description.replace(/^Premium\s+/i, "");
+  }
+  return entry.description;
 }
 
 function pluginEntryIsAuthCapable(entry: {

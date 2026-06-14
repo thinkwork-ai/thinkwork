@@ -107,6 +107,7 @@ beforeEach(() => {
 describe("provisionPluginMcpComponent", () => {
   it("creates a plugin-owned approved row with oauth_resource auth and assigns platform agents", async () => {
     selectQueue.push([]); // no existing plugin row
+    selectQueue.push([]); // no manual row with the same endpoint
     returningQueue.push([{ id: "server-1" }]);
     selectQueue.push([{ id: "agent-1" }]); // platform agents
 
@@ -145,14 +146,12 @@ describe("provisionPluginMcpComponent", () => {
     });
   });
 
-  it("URL coexistence: an existing manual row with the same URL is never updated — the plugin row is created anyway", async () => {
-    // The existing-row lookup keys on (tenant, plugin_install_id, slug), so
-    // a manual row sharing the URL is invisible to it.
+  it("adopts an existing manual row with the same URL instead of inserting a duplicate", async () => {
     selectQueue.push([]); // no plugin-owned row
-    returningQueue.push([{ id: "server-2" }]);
+    selectQueue.push([{ id: "server-2" }]); // manual row with the same endpoint
     selectQueue.push([]); // no platform agents
 
-    await provisionPluginMcpComponent({
+    const ref = await provisionPluginMcpComponent({
       tenantId: "tenant-1",
       pluginInstallId: "install-1",
       pluginKey: "lastmile",
@@ -160,8 +159,19 @@ describe("provisionPluginMcpComponent", () => {
       db: mockDb as never,
     });
 
-    expect(insertCalls).toHaveLength(1); // the plugin row only
-    expect(updateCalls).toHaveLength(0); // the manual row is untouched
+    expect(ref).toEqual({
+      tenantMcpServerId: "server-2",
+      resolvedEndpointUrl: "https://crm.example.invalid/mcp",
+    });
+    expect(updateCalls[0]).toMatchObject({
+      name: "LastMile CRM",
+      slug: "lastmile--crm",
+      url: "https://crm.example.invalid/mcp",
+      management_source: "plugin",
+      plugin_install_id: "install-1",
+      status: "approved",
+    });
+    expect(insertCalls).toHaveLength(0);
   });
 
   it("repairs an existing plugin-owned row instead of inserting a duplicate", async () => {
@@ -220,6 +230,7 @@ describe("endpointFrom resolution (U10)", () => {
       },
     ]); // managed_applications row
     selectQueue.push([]); // no existing plugin row
+    selectQueue.push([]); // no manual row with the same endpoint
     returningQueue.push([{ id: "server-7" }]);
     selectQueue.push([]); // no platform agents
 

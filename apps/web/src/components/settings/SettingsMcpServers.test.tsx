@@ -57,7 +57,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsMcpServers", () => {
-  it("marks managed MCP servers and hides their manual remove action", async () => {
+  it("splits individual MCP servers from plugin-installed servers", async () => {
     mocks.listMcpServers.mockResolvedValue({
       servers: [
         {
@@ -72,15 +72,37 @@ describe("SettingsMcpServers", () => {
           managedApplicationKey: "twenty-crm",
         },
         {
-          id: "control",
-          name: "Control",
-          slug: "control-server",
-          url: "https://api.thinkwork.test/mcp/control",
+          id: "lastmile-tasks",
+          name: "LastMile Tasks",
+          slug: "lastmile-tasks",
+          url: "https://api.thinkwork.test/mcp/tasks",
           enabled: true,
           authType: "tenant_api_key",
           status: "approved",
-          managementSource: "managed_application",
-          managedApplicationKey: "control-server",
+          managementSource: "plugin",
+          managedApplicationKey: null,
+        },
+        {
+          id: "lastmile-crm-plugin",
+          name: "LastMile CRM",
+          slug: "lastmile-crm-plugin",
+          url: "https://api.thinkwork.test/mcp/lastmile",
+          enabled: true,
+          authType: "tenant_api_key",
+          status: "approved",
+          managementSource: "plugin",
+          managedApplicationKey: null,
+        },
+        {
+          id: "manual-duplicate",
+          name: "LastMile CRM",
+          slug: "manual-lastmile-crm",
+          url: "https://api.thinkwork.test/mcp/lastmile/",
+          enabled: true,
+          authType: "oauth",
+          status: "approved",
+          managementSource: "manual",
+          managedApplicationKey: null,
         },
         {
           id: "manual",
@@ -102,8 +124,16 @@ describe("SettingsMcpServers", () => {
     render(<SettingsMcpServers />);
 
     expect(await screen.findByText("Twenty CRM")).toBeTruthy();
-    expect(screen.getByText("Control")).toBeTruthy();
-    expect(screen.getAllByText("managed")).toHaveLength(2);
+    expect(screen.getByText("LastMile CRM")).toBeTruthy();
+    expect(screen.getByText("Manual CRM")).toBeTruthy();
+    expect(screen.queryByText("Individual servers")).toBeNull();
+    expect(screen.getByText("From plugins")).toBeTruthy();
+    expect(screen.getAllByText("LastMile CRM")).toHaveLength(1);
+    expect(screen.getAllByText("plugin")).toHaveLength(3);
+    expect(textAppearsBefore("LastMile CRM", "LastMile Tasks")).toBe(true);
+    expect(textAppearsBefore("LastMile Tasks", "Twenty CRM")).toBe(true);
+    expect(screen.queryByText("Rows per page")).toBeNull();
+    expect(screen.queryByText(/Page\s+1\s+of/i)).toBeNull();
     // The inline Remove/System column is gone — removal lives in the detail view.
     expect(screen.queryByText("System")).toBeNull();
     expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
@@ -142,3 +172,12 @@ describe("SettingsMcpServers", () => {
     });
   });
 });
+
+function textAppearsBefore(left: string, right: string): boolean {
+  const leftElement = screen.getByText(left);
+  const rightElement = screen.getByText(right);
+  return Boolean(
+    leftElement.compareDocumentPosition(rightElement) &
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+}
