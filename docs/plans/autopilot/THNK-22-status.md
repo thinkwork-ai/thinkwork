@@ -3,8 +3,9 @@
 ## Current Status
 
 - Linear issue: THNK-22, "List View"
-- Branch: `codex/thnk-22-list-view`
-- Linear state: moved from `Ready to Work` to `In Progress` on 2026-06-14 after discovery and planning; moved to `Verification` on 2026-06-14 after opening PR #2469.
+- Implementation branch: `codex/thnk-22-list-view`
+- Final status branch: `codex/thnk-22-final-status`
+- Linear state: moved from `Ready to Work` to `In Progress` on 2026-06-14 after discovery and planning; moved to `Verification` on 2026-06-14 after opening PR #2469; moved to `Done` on 2026-06-14 after PR #2469 merged.
 - Plan: `docs/plans/2026-06-14-005-feat-list-view-display-configuration-plan.md`
 - Requirements: `docs/brainstorms/2026-06-14-list-view-and-view-configuration-requirements.md`
 
@@ -53,6 +54,13 @@
   - Bind grouping/sort adapter option keys to each screen's typed config unions.
 - 2026-06-14: Opened draft PR #2469 and moved THNK-22 to `Verification`.
 - 2026-06-14: Added Linear progress comment with PR link and local verification summary.
+- 2026-06-14: Rebased PR #2469 onto `origin/main` after GitHub reported the branch was behind.
+- 2026-06-14: GitHub CI passed on the rebased PR: CLA, lint, supply-chain verify, test, and typecheck.
+- 2026-06-14: Marked PR #2469 ready for review after CI passed.
+- 2026-06-14: Squash-merged PR #2469 to `main` at `04ef3caa8ed6cc1e42d9f2f7a82b662535e013be`.
+- 2026-06-14: Confirmed the remote implementation branch was deleted by the merge flow.
+- 2026-06-14: Detached the worktree at merged `origin/main` and deleted local branch `codex/thnk-22-list-view`.
+- 2026-06-14: Moved THNK-22 to `Done` and added a final Linear comment with the PR, merge commit, CI status, and branch cleanup.
 
 ## Verification Log
 
@@ -70,6 +78,12 @@
 - `pnpm --filter @thinkwork/web test` passed after review fixes: 166 files, 1,231 tests.
 - `pnpm --filter @thinkwork/web build` passed after review fixes with existing sourcemap and chunk-size warnings.
 - Prettier check over touched files passed after review fixes.
+- GitHub PR #2469 CI passed on rebased head `2a15ea3516e0958e289c6da0f060ed2cb0b28e8e`:
+  - CLA Assistant: passed
+  - Lint: passed
+  - Supply Chain / verify: passed
+  - Typecheck: passed
+  - Test: passed
 - Browser verification attempted with the in-app Browser against `http://localhost:5174/settings/automations?view=list`; Browser Use blocked the localhost URL by policy, so no browser screenshot/interaction verification was possible in this session.
 
 ## Review Log
@@ -85,7 +99,9 @@
 
 ## PRs
 
-- Draft PR: https://github.com/thinkwork-ai/thinkwork/pull/2469
+- Merged implementation PR: https://github.com/thinkwork-ai/thinkwork/pull/2469
+- Merge commit: `04ef3caa8ed6cc1e42d9f2f7a82b662535e013be`
+- Final status-doc follow-up PR: pending.
 
 ## Blockers
 
