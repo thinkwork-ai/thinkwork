@@ -7,7 +7,16 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const CollapsibleContext = React.createContext<{
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}>({
+  open: true,
+  setOpen: () => {},
+});
 
 const {
   queryDocs,
@@ -445,28 +454,68 @@ vi.mock("@thinkwork/ui", () => ({
   CommandShortcut: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),
-  Collapsible: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  CollapsibleContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  Collapsible: ({
+    children,
+    defaultOpen = false,
+    open,
+    onOpenChange,
+  }: {
+    children: React.ReactNode;
+    defaultOpen?: boolean;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }) => {
+    const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
+    const isOpen = open ?? internalOpen;
+    const setOpen = (next: boolean) => {
+      if (open === undefined) setInternalOpen(next);
+      onOpenChange?.(next);
+    };
+    return (
+      <CollapsibleContext.Provider value={{ open: isOpen, setOpen }}>
+        <div data-state={isOpen ? "open" : "closed"}>{children}</div>
+      </CollapsibleContext.Provider>
+    );
+  },
+  CollapsibleContent: ({ children }: { children: React.ReactNode }) => {
+    const { open } = React.useContext(CollapsibleContext);
+    return open ? <div>{children}</div> : null;
+  },
   CollapsibleTrigger: ({
     children,
     asChild,
   }: {
     children: React.ReactNode;
     asChild?: boolean;
-  }) => (asChild ? children : <button>{children}</button>),
+  }) => {
+    const { open, setOpen } = React.useContext(CollapsibleContext);
+    if (asChild) {
+      const child = React.Children.only(children);
+      if (!React.isValidElement<React.HTMLAttributes<HTMLElement>>(child)) {
+        return child;
+      }
+      return React.cloneElement(child, {
+        onClick: (event: React.MouseEvent<HTMLElement>) => {
+          child.props.onClick?.(event);
+          setOpen(!open);
+        },
+      });
+    }
+    return <button onClick={() => setOpen(!open)}>{children}</button>;
+  },
   SidebarGroupContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
   SidebarGroup: ({ children }: { children: React.ReactNode }) => (
     <section>{children}</section>
   ),
-  SidebarGroupLabel: ({ children }: { children: React.ReactNode }) => (
-    <h2>{children}</h2>
-  ),
+  SidebarGroupLabel: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => <h2 className={className}>{children}</h2>,
   SidebarMenu: ({ children }: { children: React.ReactNode }) => (
     <ul>{children}</ul>
   ),
@@ -585,7 +634,7 @@ describe("ChatSidebar", () => {
     ).toBe("below");
   });
 
-  it("renders Codex-style action nav and Space sections without Inbox or Space filters", () => {
+  it("renders Codex-style action nav with a single Spaces section", () => {
     recentThreadItemsMock.push({
       id: "thread-default",
       title: "Default chat",
@@ -653,8 +702,11 @@ describe("ChatSidebar", () => {
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Threads" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();
-    expect(container.querySelector(".tabler-icon-planet")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Spaces" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /spaces options/i }),
+    ).toBeTruthy();
+    expect(container.querySelector(".tabler-icon-planet")).toBeTruthy();
     expect(container.querySelector(".lucide-folder")).toBeNull();
     expect(
       screen.getByRole("link", { name: /default chat/i }).getAttribute("href"),
@@ -669,6 +721,34 @@ describe("ChatSidebar", () => {
       "/spaces/space-1/threads/thread-recent",
     );
     expect(spaceThreadLink.className).not.toContain("ml-5");
+    expect(screen.getByText("Recent Space thread")).toBeTruthy();
+  });
+
+  it("collapses all open Space rows from the Spaces section menu", () => {
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({
+      pathname: "/threads",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    expect(screen.getByText("Recent Space thread")).toBeTruthy();
+
+    fireEvent.click(
+      within(sectionMenu(/spaces options/i)).getByRole("button", {
+        name: /collapse all spaces/i,
+      }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: /toggle customer onboarding/i }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Recent Space thread")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /toggle customer onboarding/i }),
+    );
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
   });
 
@@ -1036,7 +1116,8 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     const unreadLink = screen.getByRole("link", { name: /unread thread/i });
-    expect(unreadLink.innerHTML).toContain("bg-blue-500");
+    const unreadRow = unreadLink.closest(".group\\/thread-row")!;
+    expect(within(unreadRow as HTMLElement).getByLabelText("Unread")).toBeTruthy();
 
     act(() => {
       window.dispatchEvent(
@@ -1046,7 +1127,9 @@ describe("ChatSidebar", () => {
       );
     });
 
-    expect(unreadLink.innerHTML).not.toContain("bg-blue-500");
+    expect(
+      within(unreadRow as HTMLElement).queryByLabelText("Unread"),
+    ).toBeNull();
     await waitFor(() =>
       expect(updateThreadMock).toHaveBeenCalledWith({
         id: "unread-thread",

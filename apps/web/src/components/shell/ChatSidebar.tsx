@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { IconPin } from "@tabler/icons-react";
+import { IconPin, IconPlanet } from "@tabler/icons-react";
 import {
   closestCenter,
   DndContext,
@@ -25,6 +25,7 @@ import {
   ArrowLeft,
   CheckCheck,
   ChevronDown,
+  ChevronsUp,
   Clock,
   GitBranch,
   Globe,
@@ -198,6 +199,9 @@ export function ChatSidebar() {
   const [optimisticPinnedOrder, setOptimisticPinnedOrder] = useState<
     string[] | null
   >(null);
+  const [collapsedSpaceIds, setCollapsedSpaceIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
@@ -637,6 +641,33 @@ export function ChatSidebar() {
       ),
     [defaultSpaceIds, spaceThreadsById, spaces],
   );
+  useEffect(() => {
+    if (!routeSpaceId) return;
+    setCollapsedSpaceIds((current) => {
+      if (!current.has(routeSpaceId)) return current;
+      const next = new Set(current);
+      next.delete(routeSpaceId);
+      return next;
+    });
+  }, [routeSpaceId]);
+  const openSpaceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const space of contextualSpaces) {
+      if (!collapsedSpaceIds.has(space.id)) ids.add(space.id);
+    }
+    return ids;
+  }, [collapsedSpaceIds, contextualSpaces]);
+  const setSpaceOpen = useCallback((spaceId: string, open: boolean) => {
+    setCollapsedSpaceIds((current) => {
+      const next = new Set(current);
+      if (open) next.delete(spaceId);
+      else next.add(spaceId);
+      return next;
+    });
+  }, []);
+  const collapseAllSpaces = useCallback(() => {
+    setCollapsedSpaceIds(new Set(contextualSpaces.map((space) => space.id)));
+  }, [contextualSpaces]);
   const searchThreads = useMemo(
     () =>
       sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []).filter(
@@ -866,34 +897,24 @@ export function ChatSidebar() {
                 onPin={pinThread}
                 onMarkSectionRead={markSectionThreadsRead}
               />
-              <div className="space-y-1">
-                {spacesFetching && spaces.length === 0 ? (
-                  <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
-                    Loading Spaces...
-                  </p>
-                ) : contextualSpaces.length === 0 ? (
-                  <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
-                    No Spaces yet
-                  </p>
-                ) : (
-                  contextualSpaces.map((space) => (
-                    <SpaceThreadSection
-                      key={space.id}
-                      space={space}
-                      seedThreads={spaceThreadsById.get(space.id) ?? []}
-                      tenantId={tenantId}
-                      pinnedThreadIdSet={pinnedThreadIdSet}
-                      pendingThreadDeletes={pendingThreadDeletes}
-                      selectedThreadId={selectedThreadId}
-                      activeSpaceId={routeSpaceId}
-                      locallyReadThreadIds={locallyReadThreadIds}
-                      onActivate={activateThread}
-                      onPin={pinThread}
-                      onMarkSectionRead={markSectionThreadsRead}
-                    />
-                  ))
-                )}
-              </div>
+              <SpacesListSection
+                spaces={contextualSpaces}
+                spacesFetching={spacesFetching}
+                hasLoadedSpaces={spaces.length > 0}
+                spaceThreadsById={spaceThreadsById}
+                tenantId={tenantId}
+                pinnedThreadIdSet={pinnedThreadIdSet}
+                pendingThreadDeletes={pendingThreadDeletes}
+                selectedThreadId={selectedThreadId}
+                activeSpaceId={routeSpaceId}
+                openSpaceIds={openSpaceIds}
+                locallyReadThreadIds={locallyReadThreadIds}
+                onSpaceOpenChange={setSpaceOpen}
+                onCollapseAll={collapseAllSpaces}
+                onActivate={activateThread}
+                onPin={pinThread}
+                onMarkSectionRead={markSectionThreadsRead}
+              />
             </div>
           )}
         </SidebarGroup>
@@ -1241,7 +1262,7 @@ function ThreadListSection({
         <CollapsibleTrigger asChild>
           <SidebarGroupLabel
             asChild
-            className="group/section-trigger min-w-0 flex-1 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50"
+            className="group/section-trigger h-6 min-w-0 flex-1 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50"
           >
             <button type="button" aria-label={`Toggle ${label}`}>
               <span className="min-w-0 truncate text-left">{label}</span>
@@ -1285,7 +1306,7 @@ function ThreadListSection({
               No unread — Show all
             </button>
           ) : (
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 pb-2">
               {visibleThreads.map((thread) => (
                 <ChatThreadRow
                   key={thread.id}
@@ -1398,7 +1419,7 @@ function PinnedThreadListSection({
       <CollapsibleTrigger asChild>
         <SidebarGroupLabel
           asChild
-          className="group/section-trigger w-full cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50"
+          className="group/section-trigger h-6 w-full cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50"
         >
           <button type="button" aria-label="Toggle Pinned">
             <span>Pinned</span>
@@ -1419,7 +1440,7 @@ function PinnedThreadListSection({
               items={threadIds}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 pb-2">
                 {threads.map((thread) => (
                   <SortablePinnedThreadRow
                     key={thread.id}
@@ -1536,8 +1557,132 @@ function SpaceJumpMenu({
   );
 }
 
+function SpacesListSection({
+  spaces,
+  spacesFetching,
+  hasLoadedSpaces,
+  spaceThreadsById,
+  tenantId,
+  pinnedThreadIdSet,
+  pendingThreadDeletes,
+  selectedThreadId,
+  activeSpaceId,
+  openSpaceIds,
+  locallyReadThreadIds,
+  onSpaceOpenChange,
+  onCollapseAll,
+  onActivate,
+  onPin,
+  onMarkSectionRead,
+}: {
+  spaces: SpaceNavSummary[];
+  spacesFetching: boolean;
+  hasLoadedSpaces: boolean;
+  spaceThreadsById: ReadonlyMap<string, ChatThreadSummary[]>;
+  tenantId?: string | null;
+  pinnedThreadIdSet: ReadonlySet<string>;
+  pendingThreadDeletes: ReadonlySet<string>;
+  selectedThreadId?: string;
+  activeSpaceId?: string;
+  openSpaceIds: ReadonlySet<string>;
+  locallyReadThreadIds: ReadonlySet<string>;
+  onSpaceOpenChange: (spaceId: string, open: boolean) => void;
+  onCollapseAll: () => void;
+  onActivate: (threadId: string) => void;
+  onPin?: (threadId: string) => void;
+  onMarkSectionRead?: (threadIds: string[]) => void;
+}) {
+  if (spacesFetching && !hasLoadedSpaces) {
+    return (
+      <div className="space-y-0.5">
+        <SpacesSectionHeader onCollapseAll={onCollapseAll} />
+        <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
+          Loading Spaces...
+        </p>
+      </div>
+    );
+  }
+
+  if (spaces.length === 0) {
+    return (
+      <div className="space-y-0.5">
+        <SpacesSectionHeader onCollapseAll={onCollapseAll} />
+        <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
+          No Spaces yet
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-0.5">
+      <SpacesSectionHeader onCollapseAll={onCollapseAll} />
+      <div className="space-y-0.5">
+        {spaces.map((space) => (
+          <SpaceThreadSection
+            key={space.id}
+            space={space}
+            open={openSpaceIds.has(space.id)}
+            onOpenChange={(open) => onSpaceOpenChange(space.id, open)}
+            seedThreads={spaceThreadsById.get(space.id) ?? []}
+            tenantId={tenantId}
+            pinnedThreadIdSet={pinnedThreadIdSet}
+            pendingThreadDeletes={pendingThreadDeletes}
+            selectedThreadId={selectedThreadId}
+            activeSpaceId={activeSpaceId}
+            locallyReadThreadIds={locallyReadThreadIds}
+            onActivate={onActivate}
+            onPin={onPin}
+            onMarkSectionRead={onMarkSectionRead}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SpacesSectionHeader({
+  onCollapseAll,
+}: {
+  onCollapseAll: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <div className="group/section-row flex w-full items-center gap-0 pr-0.5">
+      <SidebarGroupLabel className="h-6 min-w-0 flex-1 px-2 text-xs font-medium text-sidebar-foreground/50">
+        Spaces
+      </SidebarGroupLabel>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Spaces options"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            <MoreHorizontal className="size-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          className="z-[1000] w-48"
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <DropdownMenuItem onSelect={onCollapseAll}>
+            <ChevronsUp className="size-4" />
+            Collapse all Spaces
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 function SpaceThreadSection({
   space,
+  open,
+  onOpenChange,
   seedThreads,
   tenantId,
   pinnedThreadIdSet,
@@ -1550,6 +1695,8 @@ function SpaceThreadSection({
   onMarkSectionRead,
 }: {
   space: SpaceNavSummary;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   seedThreads: ChatThreadSummary[];
   tenantId?: string | null;
   pinnedThreadIdSet: ReadonlySet<string>;
@@ -1632,44 +1779,66 @@ function SpaceThreadSection({
 
   return (
     <Collapsible
-      defaultOpen={isActiveSpace || threads.length > 0}
+      open={open}
+      onOpenChange={onOpenChange}
       className="group/space"
     >
-      <div className="group/section-row flex w-full items-center gap-0 pr-0.5">
+      <div
+        className={cn(
+          "group/section-row flex h-8 w-full min-w-0 items-center rounded-md pr-1 transition-colors hover:bg-sidebar-accent",
+          isActiveSpace && "bg-sidebar-accent",
+        )}
+      >
         <CollapsibleTrigger asChild>
-          <SidebarGroupLabel
-            asChild
+          <button
+            type="button"
+            aria-label={`Toggle ${label}`}
             className={cn(
-              "group/space-trigger min-w-0 flex-1 cursor-pointer select-none gap-1.5 px-2 text-xs font-medium text-sidebar-foreground/50",
-              isActiveSpace && "text-sidebar-foreground/70",
+              "group/space-trigger flex h-full min-w-0 flex-1 cursor-pointer select-none items-center gap-1.5 px-2 text-sm font-normal outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+              open
+                ? "text-sidebar-foreground/75"
+                : "text-sidebar-foreground/45",
+              isActiveSpace && "text-sidebar-accent-foreground",
             )}
           >
-            <button type="button" aria-label={`Toggle ${label}`}>
-              <span className="min-w-0 truncate text-left">{label}</span>
-              <SectionUnreadBadge count={badgeCount} />
-              <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/space-trigger:opacity-100 group-data-[state=closed]/space:-rotate-90" />
-            </button>
-          </SidebarGroupLabel>
+            <IconPlanet
+              className={cn(
+                "size-3.5 shrink-0",
+                open || isActiveSpace
+                  ? "text-sidebar-foreground/75"
+                  : "text-sidebar-foreground/35",
+                isActiveSpace && "text-sidebar-accent-foreground",
+              )}
+              aria-hidden
+            />
+            <span className="min-w-0 truncate text-left">{label}</span>
+            <SectionUnreadBadge count={badgeCount} />
+            <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/space-trigger:opacity-100 group-data-[state=closed]/space:-rotate-90" />
+          </button>
         </CollapsibleTrigger>
-        <Link
-          to="/new"
-          search={{ spaceId: space.id }}
-          onClick={requestSpacesComposerFocus}
-          aria-label={`New thread in ${label}`}
-          title="New thread"
-          className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
-        >
-          <SquarePen className="size-3" />
-        </Link>
-        <SectionHeaderControls
-          sectionId={sectionId}
-          label={label}
-          unreadThreadIds={unreadThreadIds}
-          filterOn={filterOn}
-          scopeSpaceId={space.id}
-          scopeSpaceName={label}
-          onMarkSectionRead={onMarkSectionRead}
-        />
+        {open ? (
+          <>
+            <Link
+              to="/new"
+              search={{ spaceId: space.id }}
+              onClick={requestSpacesComposerFocus}
+              aria-label={`New thread in ${label}`}
+              title="New thread"
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+            >
+              <SquarePen className="size-3" />
+            </Link>
+            <SectionHeaderControls
+              sectionId={sectionId}
+              label={label}
+              unreadThreadIds={unreadThreadIds}
+              filterOn={filterOn}
+              scopeSpaceId={space.id}
+              scopeSpaceName={label}
+              onMarkSectionRead={onMarkSectionRead}
+            />
+          </>
+        ) : null}
       </div>
       <CollapsibleContent>
         <SidebarGroupContent>
@@ -1694,7 +1863,7 @@ function SpaceThreadSection({
               No unread — Show all
             </button>
           ) : (
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 pb-2">
               {visibleThreads.map((thread) => (
                 <ChatThreadRow
                   key={thread.id}
@@ -1927,7 +2096,8 @@ function ChatThreadRow({
                 threadTitleFallback: { threadId: thread.id, title },
               })}
               className={cn(
-                "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-2 text-sidebar-foreground/70 outline-none transition-colors hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                spaceRouteId ? "pl-7" : "pl-2",
                 confirmingDelete
                   ? "pr-20"
                   : awaitingUser && !renamingTitle
@@ -1939,12 +2109,6 @@ function ChatThreadRow({
               )}
               onClick={onActivate}
             >
-              <span
-                className={cn(
-                  "size-1.5 shrink-0 rounded-full",
-                  unread ? "bg-blue-500" : "bg-transparent",
-                )}
-              />
               <span
                 className="min-w-0 flex-1 truncate text-sm font-normal"
                 data-thread-title-rename
@@ -1993,6 +2157,11 @@ function ChatThreadRow({
             >
               Waiting for you
             </span>
+          ) : !renamingTitle && unread ? (
+            <span
+              className="absolute right-3 top-1/2 size-2 -translate-y-1/2 rounded-full bg-blue-400 group-hover/thread-row:hidden"
+              aria-label="Unread"
+            />
           ) : !renamingTitle && relativeDate ? (
             <span
               className="absolute right-2 top-1/2 -translate-y-1/2 text-xs tabular-nums text-sidebar-foreground/45 group-hover/thread-row:hidden"
