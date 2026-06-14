@@ -51,7 +51,7 @@ export const evalDatasets = pgTable(
       .notNull(),
     slug: text("slug").notNull(),
     name: text("name"),
-    kind: text("kind").notNull().default("custom"), // 'baseline' | 'custom'
+    kind: text("kind").notNull().default("custom"), // 'baseline' | 'custom' | 'skill' (no CHECK — widened by app enum normalizeEvalDatasetKind)
     // version: monotonically bumped on every dataset mutation; runs pin it.
     version: integer("version").notNull().default(1),
     // manifest_sha: sha256 of the S3 dataset.json content — the drift

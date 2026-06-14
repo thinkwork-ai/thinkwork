@@ -252,7 +252,19 @@ export function caseIdFromRunSnapshotKey(key: string): string {
 // Canonical formats — manifest + case file
 // ---------------------------------------------------------------------------
 
-export type EvalDatasetKind = "baseline" | "custom";
+export type EvalDatasetKind = "baseline" | "custom" | "skill";
+
+/**
+ * Coerce an untrusted/legacy `kind` value to the canonical enum.
+ * Unknown kinds fall back to "custom" (the safe default a generic
+ * operator-curated dataset gets) — only the two recognized non-default
+ * kinds ("baseline", "skill") survive. Single source for every place
+ * that reads a kind off S3 or the index (manifest parse, row projection,
+ * create-input coercion) so widening the enum is one edit, not three.
+ */
+export function normalizeEvalDatasetKind(raw: unknown): EvalDatasetKind {
+  return raw === "baseline" ? "baseline" : raw === "skill" ? "skill" : "custom";
+}
 
 export interface EvalDatasetCaseRef {
   case_id: string;
@@ -482,7 +494,7 @@ export function parseEvalDatasetManifest(content: string): EvalDatasetManifest {
   if (typeof raw.slug !== "string" || !raw.slug) {
     throw new Error("Invalid dataset manifest: missing slug");
   }
-  const kind = raw.kind === "baseline" ? "baseline" : "custom";
+  const kind = normalizeEvalDatasetKind(raw.kind);
   return {
     slug: raw.slug,
     name: typeof raw.name === "string" ? raw.name : null,
@@ -775,7 +787,7 @@ export async function createEvalDataset(
   const manifest: EvalDatasetManifest = {
     slug: ctx.slug,
     name: input.name ?? null,
-    kind: input.kind === "baseline" ? "baseline" : "custom",
+    kind: normalizeEvalDatasetKind(input.kind),
     version: 1,
     updated_at: new Date().toISOString(),
     archived_at: null,
@@ -1027,7 +1039,7 @@ function rowToIndexRow(row: typeof evalDatasets.$inferSelect): DatasetIndexRow {
     tenant_id: row.tenant_id,
     slug: row.slug,
     name: row.name,
-    kind: row.kind === "baseline" ? "baseline" : "custom",
+    kind: normalizeEvalDatasetKind(row.kind),
     version: row.version,
     manifest_sha: row.manifest_sha,
     archived_at: row.archived_at,
