@@ -27,6 +27,7 @@ import {
   wikiPages,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
+import { writeVaultProjectionArtifact } from "../lib/knowledge-graph/artifacts.js";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { gzip } from "node:zlib";
 import { promisify } from "node:util";
@@ -218,6 +219,23 @@ export async function handler(
           ContentEncoding: "gzip",
         }),
       );
+      await writeVaultProjectionArtifact({
+        db,
+        s3,
+        tenantId: scope.tenant_id,
+        sourceRef: `wiki:vault:${scope.tenant_id}:${scope.owner_id ?? "_tenant"}:${today}`,
+        sourceLabel: `Wiki vault projection for ${tslug}/${aslug}`,
+        sourceIds: pages.map((page) => page.id),
+        body: compressed,
+        date: today,
+        sourceKind: "wiki",
+        sourceType: "wiki_vault_projection",
+        metadata: {
+          wikiExportKey: key,
+          ownerId: scope.owner_id,
+          pageCount: pages.length,
+        },
+      });
 
       result.bundles_written += 1;
       result.bytes_uploaded += compressed.byteLength;

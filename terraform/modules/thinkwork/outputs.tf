@@ -242,6 +242,16 @@ output "knowledge_graph_thread_ingest_fn_arn" {
   value       = module.api.knowledge_graph_thread_ingest_fn_arn
 }
 
+output "brain_artifacts_bucket_name" {
+  description = "Canonical Company Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
+  value       = module.api.brain_artifacts_bucket_name
+}
+
+output "brain_artifacts_bucket_arn" {
+  description = "ARN of the canonical Company Brain artifact bucket."
+  value       = module.api.brain_artifacts_bucket_arn
+}
+
 output "cognee_storage_file_system_id" {
   description = "EFS file system ID backing Cognee writable data/system directories (null when enable_cognee = false)"
   value       = local.cognee_enabled ? module.cognee[0].cognee_storage_file_system_id : null

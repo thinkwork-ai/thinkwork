@@ -18,6 +18,10 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../lib/db.js";
 import { db as defaultDb } from "../lib/db.js";
+import {
+  redactedSourceRef,
+  writeKnowledgeGraphIngestArtifacts,
+} from "../lib/knowledge-graph/artifacts.js";
 import { CogneeClient } from "../lib/knowledge-graph/cognee-client.js";
 import { normalizeCogneeGraph } from "../lib/knowledge-graph/normalizer.js";
 import { loadApprovedOntologyExport } from "../lib/knowledge-graph/ontology-export.js";
@@ -125,8 +129,9 @@ async function selfInvokeObservationsIngest(args: {
       "observations ingest worker function name is not configured (STAGE or KNOWLEDGE_GRAPH_OBSERVATIONS_INGEST_FUNCTION_NAME)",
     );
   }
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   await lambda.send(
     new InvokeCommand({
@@ -298,7 +303,7 @@ async function processTenantObservationsIngest(
 
     const auditMetrics = {
       sourceKind: run.source_kind,
-      sourceRef: run.source_ref,
+      sourceRefHash: redactedSourceRef(run.source_ref),
       candidateCount: source.candidateCount,
       truncated: source.truncated,
       promotedIds: source.gate.audit.promotedIds,
@@ -324,6 +329,13 @@ async function processTenantObservationsIngest(
         metrics: auditMetrics,
       };
     }
+
+    const artifactWrite = await writeKnowledgeGraphIngestArtifacts({
+      db: database,
+      run,
+      source: source.bundle,
+      ontology,
+    });
 
     const client = deps.cogneeClient ?? new CogneeClient();
     const ingest = await client.ingestDocument({
@@ -412,6 +424,11 @@ async function processTenantObservationsIngest(
         sourcePacketCount: source.bundle.packetCount,
         skippedSourceCount: source.bundle.skippedCount,
         sourceDiagnostics: source.bundle.diagnostics,
+        brainArtifactsEnabled: artifactWrite.enabled,
+        sourceArtifactChecksum:
+          artifactWrite.sourceArtifact?.checksumSha256 ?? null,
+        ingestionManifestChecksum:
+          artifactWrite.ingestionManifest?.checksumSha256 ?? null,
         cogneePipelineRunId: ingest.pipelineRunId,
         cogneeIndexStatus: indexing.status,
         cogneeIndexRawStatus: indexing.rawStatus,
@@ -479,13 +496,13 @@ async function processTenantObservationsIngest(
       error: message,
       metrics: {
         sourceKind: run.source_kind,
-        sourceRef: run.source_ref,
+        sourceRefHash: redactedSourceRef(run.source_ref),
       },
     });
     console.error("[knowledge-graph-observations-ingest] failed", {
       runId: run.id,
       tenantId: run.tenant_id,
-      sourceRef: run.source_ref,
+      sourceRefHash: redactedSourceRef(run.source_ref),
       error: message,
     });
     return {

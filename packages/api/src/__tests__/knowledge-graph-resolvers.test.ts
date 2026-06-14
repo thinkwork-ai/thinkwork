@@ -83,6 +83,36 @@ function ingestRun(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function artifactManifest(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "manifest-1",
+    tenant_id: "tenant-1",
+    ingest_run_id: "run-1",
+    manifest_kind: "ingestion_manifest",
+    source_kind: "brain",
+    source_type: "connector_export",
+    manifest_uri:
+      "s3://thinkwork-dev-brain-artifacts/ingestion-manifests/tenant-1/source-id-secret/manifest.json",
+    artifact_root_uri:
+      "s3://thinkwork-dev-brain-artifacts/source-artifacts/tenant-1/source-id-secret/",
+    vault_projection_root_uri: null,
+    checksum_sha256: "abc123",
+    object_count: 2,
+    source_count: 5,
+    content_type: "application/json",
+    content_encoding: null,
+    byte_length: 4096,
+    embedding_model: "amazon.titan-embed-text-v2:0",
+    vector_dimension: 1024,
+    ontology_version: "company-brain-v1",
+    ontology_mechanism: "tenant-default",
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    ...overrides,
+  };
+}
+
 function entity(overrides: Record<string, unknown> = {}) {
   return {
     id: "entity-1",
@@ -332,6 +362,51 @@ describe("knowledge graph read resolvers", () => {
     expect(renderSql(entityQuery)).not.toContain("WITH filtered_entities AS");
     expect(renderSql(entityQuery)).toContain("source_kind =");
     expect(renderSql(entityQuery)).toContain("source_ref =");
+  });
+
+  it("attaches redacted artifact manifest summaries to ingest runs", async () => {
+    const ctx = ctxWithRows([
+      [ingestRun({ source_kind: "brain", source_ref: "connector:secret" })],
+      [artifactManifest()],
+    ]);
+
+    const runs = await knowledgeGraphQueries.knowledgeGraphIngestRuns(
+      null,
+      { tenantId: "tenant-1", sourceKind: "BRAIN" },
+      ctx,
+    );
+
+    expect(runs).toEqual([
+      expect.objectContaining({
+        sourceKind: "BRAIN",
+        artifactManifests: [
+          expect.objectContaining({
+            artifactKind: "INGESTION_MANIFEST",
+            status: "ACTIVE",
+            sourceKind: "BRAIN",
+            sourceType: "connector_export",
+            objectRef: expect.stringMatching(
+              /^brain-artifact:\/\/ingestion_manifest\/[a-f0-9]{16}$/,
+            ),
+            checksumSha256: "abc123",
+            objectCount: 2,
+            sourceCount: 5,
+            byteLength: 4096,
+            embeddingModel: "amazon.titan-embed-text-v2:0",
+            vectorDimension: 1024,
+            ontologyVersion: "company-brain-v1",
+            ontologyMechanism: "tenant-default",
+          }),
+        ],
+      }),
+    ]);
+    expect(runs[0].artifactManifests[0].objectRef).not.toContain("s3://");
+    expect(runs[0].artifactManifests[0].objectRef).not.toContain(
+      "source-id-secret",
+    );
+    const manifestQuery = ctx.db.execute.mock.calls[1]?.[0];
+    expect(renderSql(manifestQuery)).toContain("FROM brain.artifact_manifests");
+    expect(renderSql(manifestQuery)).toContain("ingest_run_id IN");
   });
 
   it("builds a graph from the same filtered entity set", async () => {

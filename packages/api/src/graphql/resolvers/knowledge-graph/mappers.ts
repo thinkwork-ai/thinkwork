@@ -5,6 +5,7 @@ import type {
   KnowledgeGraphProvenanceStatus,
   KnowledgeGraphSourceKind,
 } from "@thinkwork/database-pg/schema";
+import { createHash } from "node:crypto";
 
 type Dateish = Date | string | null | undefined;
 
@@ -32,6 +33,31 @@ export interface KnowledgeGraphIngestRunRow {
   input: unknown;
   metrics: unknown;
   metadata: unknown;
+  created_at: Dateish;
+  updated_at: Dateish;
+}
+
+export interface KnowledgeGraphArtifactManifestRow {
+  id: string;
+  tenant_id: string;
+  ingest_run_id: string | null;
+  manifest_kind: string;
+  source_kind: KnowledgeGraphSourceKind | string | null;
+  source_type: string | null;
+  manifest_uri: string;
+  artifact_root_uri: string | null;
+  vault_projection_root_uri: string | null;
+  checksum_sha256: string | null;
+  object_count: number;
+  source_count: number;
+  content_type: string | null;
+  content_encoding: string | null;
+  byte_length: number | null;
+  embedding_model: string | null;
+  vector_dimension: number | null;
+  ontology_version: string | null;
+  ontology_mechanism: string | null;
+  status: string;
   created_at: Dateish;
   updated_at: Dateish;
 }
@@ -109,7 +135,10 @@ export interface KnowledgeGraphEvidenceRow {
   created_at: Dateish;
 }
 
-export function serializeIngestRun(row: KnowledgeGraphIngestRunRow) {
+export function serializeIngestRun(
+  row: KnowledgeGraphIngestRunRow,
+  extra: { artifactManifests?: KnowledgeGraphArtifactManifestRow[] } = {},
+) {
   return {
     id: row.id,
     tenantId: row.tenant_id,
@@ -134,6 +163,40 @@ export function serializeIngestRun(row: KnowledgeGraphIngestRunRow) {
     input: jsonScalar(row.input),
     metrics: jsonScalar(row.metrics),
     metadata: jsonScalar(row.metadata),
+    artifactManifests: (extra.artifactManifests ?? []).map(
+      serializeArtifactManifestSummary,
+    ),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+  };
+}
+
+export function serializeArtifactManifestSummary(
+  row: KnowledgeGraphArtifactManifestRow,
+) {
+  return {
+    id: row.id,
+    artifactKind: toGraphqlEnum(row.manifest_kind),
+    status: toGraphqlEnum(row.status),
+    sourceKind: row.source_kind ? toGraphqlEnum(row.source_kind) : null,
+    sourceType: row.source_type,
+    objectRef: redactedArtifactRef(row),
+    checksumSha256: row.checksum_sha256,
+    objectCount: Number(row.object_count) || 0,
+    sourceCount: Number(row.source_count) || 0,
+    contentType: row.content_type,
+    contentEncoding: row.content_encoding,
+    byteLength:
+      row.byte_length === null || row.byte_length === undefined
+        ? null
+        : Number(row.byte_length),
+    embeddingModel: row.embedding_model,
+    vectorDimension:
+      row.vector_dimension === null || row.vector_dimension === undefined
+        ? null
+        : Number(row.vector_dimension),
+    ontologyVersion: row.ontology_version,
+    ontologyMechanism: row.ontology_mechanism,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
   };
@@ -245,4 +308,18 @@ export function toIso(value: Dateish): string | null {
 
 function jsonScalar(value: unknown): string {
   return JSON.stringify(value ?? {});
+}
+
+function redactedArtifactRef(row: KnowledgeGraphArtifactManifestRow): string {
+  const material =
+    row.checksum_sha256 ??
+    row.manifest_uri ??
+    row.artifact_root_uri ??
+    row.vault_projection_root_uri ??
+    row.id;
+  const fingerprint = createHash("sha256")
+    .update(String(material))
+    .digest("hex")
+    .slice(0, 16);
+  return `brain-artifact://${row.manifest_kind}/${fingerprint}`;
 }

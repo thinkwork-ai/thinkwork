@@ -53,6 +53,16 @@ output "knowledge_graph_thread_ingest_fn_arn" {
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["knowledge-graph-thread-ingest"].arn : ""
 }
 
+output "brain_artifacts_bucket_name" {
+  description = "Canonical Company Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
+  value       = aws_s3_bucket.brain_artifacts.bucket
+}
+
+output "brain_artifacts_bucket_arn" {
+  description = "ARN of the canonical Company Brain artifact bucket."
+  value       = aws_s3_bucket.brain_artifacts.arn
+}
+
 output "email_inbound_fn_arn" {
   description = "email-inbound Lambda ARN. Used by the SES module to wire the receipt rule Lambda action."
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["email-inbound"].arn : ""
