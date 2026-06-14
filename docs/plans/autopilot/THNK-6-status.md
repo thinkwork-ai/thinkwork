@@ -140,6 +140,11 @@ proof`, which is 100% complete.
   `pnpm --filter @thinkwork/api typecheck`, and
   `pnpm --filter @thinkwork/api test` (501 files passed, 4,797 tests passed,
   existing skipped live/integration cases remained skipped).
+- 2026-06-14: Opened U5b PR
+  [#2462](https://github.com/thinkwork-ai/thinkwork/pull/2462) for
+  migration-aware Company Brain Context Engine reads.
+- 2026-06-14: Attempted to move THNK-6 to `Verification` for U5b, but the
+  Linear connector returned `401 token_revoked`.
 
 ## Linear State Changes
 
@@ -148,6 +153,8 @@ proof`, which is 100% complete.
   U4 PR [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461).
 - 2026-06-14: Moved THNK-6 from `Verification` to `Done` after U4 merged,
   then back to `In Progress` to start U5b.
+- 2026-06-14: U5b Linear move to `Verification` failed because the Linear
+  OAuth token was revoked.
 
 ## PR / CI Log
 
@@ -157,6 +164,10 @@ proof`, which is 100% complete.
 - 2026-06-14: U4 PR
   [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461) CI passed and
   the PR was squash-merged to `main`.
+- 2026-06-14: Opened U5b PR
+  [#2462](https://github.com/thinkwork-ai/thinkwork/pull/2462) for
+  migration-aware Brain reads. CI follow-up is blocked on Linear credential
+  reauthentication because autopilot tracking state can no longer be updated.
 
 ## Decisions
 
@@ -170,4 +181,6 @@ proof`, which is 100% complete.
 
 ## Blockers
 
-- None currently.
+- Linear connector credentials are blocked: moving THNK-6 to `Verification`
+  for U5b failed with `401 token_revoked`. A Linear comment could not be added
+  for the same reason.
