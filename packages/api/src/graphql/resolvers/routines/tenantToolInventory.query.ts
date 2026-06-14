@@ -33,7 +33,7 @@ import {
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
-import { EVAL_BASELINE_AGENT_SOURCE } from "../../../lib/evals/eval-baseline-agent.js";
+import { EVAL_BASELINE_AGENT_SOURCE } from "../../../lib/evals/eval-baseline-constants.js";
 
 interface ToolInventoryAgent {
   id: string;

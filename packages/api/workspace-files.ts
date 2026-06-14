@@ -109,6 +109,7 @@ import {
   ensureSkillDatasetSeeded,
   type SkillCaseInput,
 } from "./src/lib/evals/skill-dataset.js";
+import { launchSkillEvalRun } from "./src/lib/evals/skill-eval-run.js";
 import {
   reindexCatalogSkill,
   listIndexedSkills,
@@ -1607,11 +1608,11 @@ async function handleDelete(
 
 /**
  * Sync a skill's bundled eval cases into its per-skill eval dataset
- * (Skill Tests & Evals U2). Defensive: a seeding failure must never break
- * the install/reinstall — it logs and returns a warning the caller folds
- * into the response. Inert phase: this only syncs cases; scoring/gating
- * land in Phase C. A skill with no bundled cases is "unrated" — nothing
- * surfaced, never an error.
+ * (Skill Tests & Evals U2) and kick off the async scored run (U5 — the
+ * Phase-C seam goes live). Defensive: a seeding OR launch failure must
+ * never break the install/reinstall — it logs and folds a warning/status
+ * into the response. A skill with no bundled cases is "unrated" — nothing
+ * surfaced, no run launched, never an error.
  */
 async function syncSkillEvalDataset(
   tenantId: string,
@@ -1620,23 +1621,17 @@ async function syncSkillEvalDataset(
 ): Promise<{
   evalDataset?: { slug: string; cases: number; skipped: number };
   evalDatasetWarning?: string;
+  evalRun?: { status: string };
 }> {
+  let result;
   try {
-    const result = await ensureSkillDatasetSeeded(tenantId, slug, evalCases);
+    result = await ensureSkillDatasetSeeded(tenantId, slug, evalCases);
     if (result.skipped.length > 0) {
       console.warn(
         `[skill-eval] ${slug}: ${result.skipped.length} bundled case(s) skipped: ` +
           result.skipped.map((s) => `${s.fileName} (${s.reason})`).join("; "),
       );
     }
-    if (result.action === "skipped") return {}; // unrated — nothing to surface
-    return {
-      evalDataset: {
-        slug: result.datasetSlug,
-        cases: result.bundledCaseCount,
-        skipped: result.skipped.length,
-      },
-    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(
@@ -1646,6 +1641,31 @@ async function syncSkillEvalDataset(
       evalDatasetWarning: `Skill installed but eval dataset sync failed: ${msg}`,
     };
   }
+
+  if (result.action === "skipped") return {}; // unrated — nothing to surface
+
+  // The seed left the dataset rated → fire the async scored run. The
+  // launcher self-guards (returns "unrated"/"busy"/"skipped" and never
+  // throws), so this can't break the install — but wrap defensively too.
+  let evalRunStatus = "skipped";
+  try {
+    const launch = await launchSkillEvalRun({ tenantId, skillSlug: slug });
+    evalRunStatus = launch.status;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[skill-eval] failed to launch scored run for skill ${slug}: ${msg}`,
+    );
+  }
+
+  return {
+    evalDataset: {
+      slug: result.datasetSlug,
+      cases: result.bundledCaseCount,
+      skipped: result.skipped.length,
+    },
+    evalRun: { status: evalRunStatus },
+  };
 }
 
 /** Archive a skill's eval dataset on uninstall (defensive, see above). */

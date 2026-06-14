@@ -240,6 +240,33 @@ type EvalSummary {
   regressionCount: Int!
 }
 
+# ────────────────────────────────────────────────────────────────────
+# Per-skill score (Skill Tests & Evals U5)
+#
+# Projects the per-skill eval dataset (slug `skill-<skillSlug>`) into the
+# score install/update surfaces. `rated` is false for a skill with no
+# enabled cases — "unrated" is a neutral state, never a failure.
+# `regression` is true only when the latest completed scored run scored
+# below the previous one (same current scoring version), so a baseline or
+# scoring-version change never reads as a skill regression.
+# ────────────────────────────────────────────────────────────────────
+
+type SkillEvalScore {
+  skillSlug: String!
+  # The derived dataset slug (`skill-<skillSlug>`).
+  datasetSlug: String!
+  # True once the dataset carries at least one enabled case.
+  rated: Boolean!
+  # Latest completed scored run's pass rate (0.0–1.0); null when unrated /
+  # no score yet.
+  passRate: Float
+  # Latest completed run scored below the previous completed run.
+  regression: Boolean!
+  lastRunId: ID
+  lastRunAt: AWSDateTime
+  totalCases: Int!
+}
+
 type EvalTimeSeriesPoint {
   day: String!
   passRate: Float
@@ -434,6 +461,10 @@ extend type Query {
   # the cached tenant_mcp_servers.tools list (approved + enabled servers); no
   # live MCP discovery.
   evalReplayAvailableMcpTools(tenantId: ID!): [EvalReplayMcpServer!]!
+  # Per-skill eval score + regression (Skill Tests & Evals U5).
+  # Operator-gated; tenant-scoped. Returns an "unrated" score (rated:
+  # false) for a skill with no enabled cases — never null.
+  skillEvalScore(tenantId: ID!, skillSlug: String!): SkillEvalScore!
 }
 
 extend type Mutation {

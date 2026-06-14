@@ -52,6 +52,7 @@ import {
   archiveSkillDatasetIfExists,
   ensureSkillDatasetSeeded,
 } from "../../evals/skill-dataset.js";
+import { launchSkillEvalRun } from "../../evals/skill-eval-run.js";
 
 type DbLike = typeof defaultDb;
 type S3Like = Pick<S3Client, "send">;
@@ -81,6 +82,9 @@ export interface SkillsHandlerDeps {
    *  unit tests stay hermetic; defaults to the real seeder. */
   seedSkillEvalDataset?: typeof ensureSkillDatasetSeeded;
   archiveSkillEvalDataset?: typeof archiveSkillDatasetIfExists;
+  /** Async scored-run launcher (Skill Tests & Evals U5). Injectable so
+   *  unit tests never hit AWS; defaults to the real launcher. */
+  launchSkillEvalRun?: typeof launchSkillEvalRun;
 }
 
 function workspaceBucket(explicit?: string): string {
@@ -135,6 +139,7 @@ export async function provisionPluginSkillsComponent(args: {
   const resolveAgent = deps.resolvePlatformAgent ?? resolveTenantPlatformAgent;
   const seedSkillEvalDataset =
     deps.seedSkillEvalDataset ?? ensureSkillDatasetSeeded;
+  const launchEvalRun = deps.launchSkillEvalRun ?? launchSkillEvalRun;
 
   const tenantSlug = await resolveTenantSlug(db, args.tenantId);
   const agent = await resolveAgent(args.tenantId, db as never);
@@ -221,10 +226,23 @@ export async function provisionPluginSkillsComponent(args: {
     );
     if (evalCases.length > 0) {
       try {
-        await seedSkillEvalDataset(args.tenantId, skill.slug, evalCases);
+        const seed = await seedSkillEvalDataset(
+          args.tenantId,
+          skill.slug,
+          evalCases,
+        );
+        // U5: fire the async scored run once the dataset is rated. The
+        // launcher self-guards (never throws), but wrap defensively too —
+        // an eval launch must never fail plugin provisioning.
+        if (seed.action !== "skipped") {
+          await launchEvalRun({
+            tenantId: args.tenantId,
+            skillSlug: skill.slug,
+          });
+        }
       } catch (error) {
         console.warn(
-          `[plugin-skills] eval dataset sync failed for ${skill.slug}:`,
+          `[plugin-skills] eval dataset sync/launch failed for ${skill.slug}:`,
           (error as Error).message,
         );
       }

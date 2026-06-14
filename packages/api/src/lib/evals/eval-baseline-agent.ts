@@ -63,13 +63,15 @@ import { parseWiringMd } from "../wiring-md.js";
 // Constants
 // ---------------------------------------------------------------------------
 
-/**
- * `agents.source` value marking the hidden eval-baseline agent. Tenant-wide
- * agent listings exclude it; `is_platform_default: false` keeps it out of
- * platform-agent resolution.
- */
-export const EVAL_BASELINE_AGENT_SOURCE = "eval-baseline";
-export const EVAL_BASELINE_AGENT_NAME = "Eval Baseline (system)";
+// Identity constants live in a leaf module so listing-exclusion call sites
+// (tenantToolInventory) can import the `source` marker without dragging
+// this module's S3/bootstrap/dataset-store chain. Imported for internal use
+// AND re-exported for callers that already import from here.
+import {
+  EVAL_BASELINE_AGENT_SOURCE,
+  EVAL_BASELINE_AGENT_NAME,
+} from "./eval-baseline-constants.js";
+export { EVAL_BASELINE_AGENT_SOURCE, EVAL_BASELINE_AGENT_NAME };
 
 export class EvalBaselineMaterializationError extends Error {
   constructor(message: string) {

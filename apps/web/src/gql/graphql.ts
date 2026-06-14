@@ -4515,6 +4515,7 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
+  skillEvalScore: SkillEvalScore;
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
@@ -5206,6 +5207,12 @@ export type QueryScheduledJobsArgs = {
 
 export type QuerySingleAgentPerformanceArgs = {
   agentId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillEvalScoreArgs = {
+  skillSlug: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
 };
 
@@ -6079,6 +6086,18 @@ export type SkillCatalogRebuildResult = {
   skillsInS3: Scalars['Int']['output'];
   tenantId: Scalars['ID']['output'];
   tenantSlug: Scalars['String']['output'];
+};
+
+export type SkillEvalScore = {
+  __typename?: 'SkillEvalScore';
+  datasetSlug: Scalars['String']['output'];
+  lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastRunId?: Maybe<Scalars['ID']['output']>;
+  passRate?: Maybe<Scalars['Float']['output']>;
+  rated: Scalars['Boolean']['output'];
+  regression: Scalars['Boolean']['output'];
+  skillSlug: Scalars['String']['output'];
+  totalCases: Scalars['Int']['output'];
 };
 
 export type SkillRun = {

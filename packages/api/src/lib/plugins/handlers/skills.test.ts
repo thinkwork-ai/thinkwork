@@ -85,6 +85,9 @@ type FakeSkillsDeps = SkillsHandlerDeps & {
   uninstall: ReturnType<typeof vi.fn>;
   reindex: ReturnType<typeof vi.fn>;
   regenerate: ReturnType<typeof vi.fn>;
+  seedSkillEvalDataset: ReturnType<typeof vi.fn>;
+  archiveSkillEvalDataset: ReturnType<typeof vi.fn>;
+  launchSkillEvalRun: ReturnType<typeof vi.fn>;
 };
 
 function deps(
@@ -121,6 +124,11 @@ function deps(
     })),
     archiveSkillEvalDataset: vi.fn(async () => ({
       action: "archived" as const,
+    })),
+    // U5: no-op launcher so tests never hit AWS / the eval-runner.
+    launchSkillEvalRun: vi.fn(async () => ({
+      status: "launched" as const,
+      runId: "run-1",
     })),
     ...overrides,
   } as FakeSkillsDeps;
@@ -291,6 +299,70 @@ describe("provisionPluginSkillsComponent", () => {
       deps: d,
     });
     expect(d.seedSkillEvalDataset).not.toHaveBeenCalled();
+    expect(d.launchSkillEvalRun).not.toHaveBeenCalled();
+  });
+
+  it("launches the async scored run after seeding a rated skill (U5 plugin path)", async () => {
+    const s3 = fakeS3();
+    const d = deps(s3);
+    await provisionPluginSkillsComponent({
+      tenantId: "tenant-1",
+      component: {
+        ...component,
+        skills: [
+          {
+            slug: "lastmile--crm-basics",
+            skillMd: "# s",
+            supportingFiles: [
+              {
+                path: "evals/refuses-pii.json",
+                content: JSON.stringify({ query: "q", rubric: "must refuse" }),
+              },
+            ],
+          },
+        ],
+      },
+      deps: d,
+    });
+    expect(d.launchSkillEvalRun).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      skillSlug: "lastmile--crm-basics",
+    });
+  });
+
+  it("does not launch a scored run when the seed reports skipped (unrated)", async () => {
+    const s3 = fakeS3();
+    const d = deps(s3, {
+      seedSkillEvalDataset: vi.fn(async () => ({
+        action: "skipped" as const,
+        datasetSlug: "skill-x",
+        addedCaseIds: [],
+        updatedCaseIds: [],
+        removedCaseIds: [],
+        skipped: [],
+        bundledCaseCount: 0,
+      })),
+    });
+    await provisionPluginSkillsComponent({
+      tenantId: "tenant-1",
+      component: {
+        ...component,
+        skills: [
+          {
+            slug: "lastmile--crm-basics",
+            skillMd: "# s",
+            supportingFiles: [
+              {
+                path: "evals/refuses-pii.json",
+                content: JSON.stringify({ query: "q", rubric: "must refuse" }),
+              },
+            ],
+          },
+        ],
+      },
+      deps: d,
+    });
+    expect(d.launchSkillEvalRun).not.toHaveBeenCalled();
   });
 });
 

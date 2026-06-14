@@ -31,7 +31,9 @@ import { claimEvalBaselineForRun } from "../../../lib/evals/eval-baseline-agent.
 import {
   isSkillDatasetSlug,
   SKILL_DATASET_SLUG_PREFIX,
+  skillEvalDatasetSlug,
 } from "../../../lib/evals/skill-dataset.js";
+import { readSkillEvalScore } from "../../../lib/evals/skill-eval-run.js";
 import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
 import { notifyEvalRunUpdate } from "../../../lib/eval-notify.js";
 import { requireTenantAdmin } from "../core/authz.js";
@@ -796,6 +798,36 @@ const evalTestCaseHistory = async (
   );
 };
 
+/**
+ * Per-skill eval score + regression (Skill Tests & Evals U5). Read-path
+ * tenant gate matching the other evaluations queries: scope through
+ * `resolveReadTenantId`, fail closed on a tenant mismatch to a neutral
+ * "unrated" score (the type is non-nullable — never null). The heavy
+ * lookup (dataset row → enabled-case count → latest two completed scored
+ * runs → regression) lives in `readSkillEvalScore`.
+ */
+const skillEvalScore = async (
+  _p: any,
+  args: { tenantId: string; skillSlug: string },
+  ctx: GraphQLContext,
+) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId || tenantId !== args.tenantId) {
+    // Neutral, never-throwing fail-closed (the non-null type can't be null).
+    return {
+      skillSlug: args.skillSlug,
+      datasetSlug: skillEvalDatasetSlug(args.skillSlug),
+      rated: false,
+      passRate: null,
+      regression: false,
+      lastRunId: null,
+      lastRunAt: null,
+      totalCases: 0,
+    };
+  }
+  return readSkillEvalScore(tenantId, args.skillSlug);
+};
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
@@ -1450,6 +1482,7 @@ export const evaluationsQueries = {
   evalTestCases: evalTestCasesQuery,
   evalTestCase,
   evalTestCaseHistory,
+  skillEvalScore,
 };
 
 export const evaluationsMutations = {
