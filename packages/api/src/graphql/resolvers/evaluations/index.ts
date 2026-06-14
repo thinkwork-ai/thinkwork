@@ -27,6 +27,11 @@ import {
 import { GraphQLError } from "graphql";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
+import { claimEvalBaselineForRun } from "../../../lib/evals/eval-baseline-agent.js";
+import {
+  isSkillDatasetSlug,
+  SKILL_DATASET_SLUG_PREFIX,
+} from "../../../lib/evals/skill-dataset.js";
 import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
 import { notifyEvalRunUpdate } from "../../../lib/eval-notify.js";
 import { requireTenantAdmin } from "../core/authz.js";
@@ -895,10 +900,30 @@ const startEvalRun = async (
     .returning();
   const runId = (run as { id: string }).id;
 
-  let targetAgentId: string;
+  // Skill-eval runs (dataset slug `skill-<slug>`) execute in ISOLATION
+  // against the re-materialized eval-baseline agent, not the tenant
+  // platform agent — so a verdict is attributable to the skill alone.
+  const skillSlug =
+    args.input.datasetSlug && isSkillDatasetSlug(args.input.datasetSlug)
+      ? args.input.datasetSlug.slice(SKILL_DATASET_SLUG_PREFIX.length)
+      : null;
+
   try {
-    const target = await resolveRunTarget({ tenantId: args.tenantId });
-    targetAgentId = target.agentId;
+    if (skillSlug) {
+      // Claims the baseline agent under the per-tenant lock (refuses if a
+      // skill-eval run is already in flight) and sets run.agent_id.
+      await claimEvalBaselineForRun({
+        tenantId: args.tenantId,
+        skillSlug,
+        runId,
+      });
+    } else {
+      const target = await resolveRunTarget({ tenantId: args.tenantId });
+      await db
+        .update(evalRuns)
+        .set({ agent_id: target.agentId })
+        .where(eq(evalRuns.id, runId));
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
@@ -913,10 +938,9 @@ const startEvalRun = async (
   }
 
   const [withAgent] = await db
-    .update(evalRuns)
-    .set({ agent_id: targetAgentId })
-    .where(eq(evalRuns.id, runId))
-    .returning();
+    .select()
+    .from(evalRuns)
+    .where(eq(evalRuns.id, runId));
 
   try {
     await invokeEvalRunner(runId, args.input.testCaseIds ?? null);

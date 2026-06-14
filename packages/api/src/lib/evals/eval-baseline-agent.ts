@@ -42,7 +42,17 @@ import {
 import { getConfig } from "@thinkwork/runtime-config";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
-import { agents, and, db, eq, sql, tenants } from "../../graphql/utils.js";
+import {
+  agents,
+  and,
+  db,
+  eq,
+  inArray,
+  ne,
+  sql,
+  tenants,
+} from "../../graphql/utils.js";
+import { evalRuns } from "@thinkwork/database-pg/schema";
 import { bootstrapAgentWorkspace } from "../workspace-bootstrap.js";
 import { installCatalogSkill } from "../catalog-install.js";
 import { regenerateManifest } from "../workspace-manifest.js";
@@ -65,6 +75,22 @@ export class EvalBaselineMaterializationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "EvalBaselineMaterializationError";
+  }
+}
+
+/**
+ * Raised when a second skill-eval run is launched for a tenant while one
+ * is still in flight. The single reusable baseline workspace can't safely
+ * back two concurrent runs (the async workers would read whichever skill
+ * was materialized last), so runs serialize — the caller retries once the
+ * in-flight run completes.
+ */
+export class EvalBaselineBusyError extends Error {
+  constructor(public readonly tenantId: string) {
+    super(
+      `A skill evaluation is already running for this tenant; retry once it completes.`,
+    );
+    this.name = "EvalBaselineBusyError";
   }
 }
 
@@ -389,5 +415,59 @@ export async function materializeEvalBaselineWorkspace(
     const ops = makeS3WorkspaceOps(s3, bucket, tenantSlug, agent.slug);
     await materializeWorkspaceForSkill(skillSlug, ops, agent.id);
     return { id: agent.id, slug: agent.slug, skillSlug };
+  });
+}
+
+/**
+ * Claim the eval-baseline agent for a specific run: under the per-tenant
+ * advisory lock, refuse if another run already holds the baseline (in
+ * flight), re-materialize the workspace for this run's skill, and assign
+ * the baseline agent to the run — all atomically so a concurrent launch
+ * blocks on the lock, then sees this run's claim and backs off
+ * (EvalBaselineBusyError). The runner/worker then invoke `run.agent_id`
+ * unchanged.
+ */
+export async function claimEvalBaselineForRun(args: {
+  tenantId: string;
+  skillSlug: string;
+  runId: string;
+}): Promise<EvalBaselineMaterializeResult> {
+  const tenantSlug = await resolveTenantSlug(args.tenantId);
+  const bucket = workspaceBucketOrThrow();
+  const s3 = makeS3();
+
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${args.tenantId}), hashtext(${EVAL_BASELINE_LOCK_KEY}))`,
+    );
+    const agent = await ensureEvalBaselineAgent(args.tenantId);
+
+    // In-flight gate: another run already claimed the baseline (agent_id set,
+    // still pending/running)? Refuse — runs serialize so the async workers
+    // never read a workspace re-materialized out from under them.
+    const inFlight = await tx
+      .select({ id: evalRuns.id })
+      .from(evalRuns)
+      .where(
+        and(
+          eq(evalRuns.tenant_id, args.tenantId),
+          eq(evalRuns.agent_id, agent.id),
+          inArray(evalRuns.status, ["pending", "running"]),
+          ne(evalRuns.id, args.runId),
+        ),
+      )
+      .limit(1);
+    if (inFlight.length > 0) throw new EvalBaselineBusyError(args.tenantId);
+
+    const ops = makeS3WorkspaceOps(s3, bucket, tenantSlug, agent.slug);
+    await materializeWorkspaceForSkill(args.skillSlug, ops, agent.id);
+
+    // Claim inside the lock so a blocked concurrent launch sees it.
+    await tx
+      .update(evalRuns)
+      .set({ agent_id: agent.id })
+      .where(eq(evalRuns.id, args.runId));
+
+    return { id: agent.id, slug: agent.slug, skillSlug: args.skillSlug };
   });
 }

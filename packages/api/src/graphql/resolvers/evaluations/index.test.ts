@@ -20,6 +20,7 @@ const {
   mockRequireTenantAdmin,
   mockGetTenantModelCatalogEntry,
   mockResolveTenantPlatformAgent,
+  mockClaimEvalBaselineForRun,
   mockLambdaSend,
   resetState,
 } = vi.hoisted(() => {
@@ -49,6 +50,7 @@ const {
     mockRequireTenantAdmin: vi.fn(),
     mockGetTenantModelCatalogEntry: vi.fn(),
     mockResolveTenantPlatformAgent: vi.fn(),
+    mockClaimEvalBaselineForRun: vi.fn(),
     mockLambdaSend: vi.fn(),
     mockEnsureBaselineDatasetSeeded: vi.fn(),
     mockResolveDatasetForLaunch: vi.fn(),
@@ -183,6 +185,14 @@ vi.mock("../../../lib/model-catalog/tenant-catalog.js", () => ({
 
 vi.mock("../../../lib/agents/tenant-platform-agent.js", () => ({
   resolveTenantPlatformAgent: mockResolveTenantPlatformAgent,
+}));
+
+// Skill-eval runs (Skill Tests & Evals U4) claim the eval-baseline agent
+// instead of the platform agent. The claim's S3/DB internals are unit-tested
+// in ../../../lib/evals/eval-baseline-agent.test.ts; here it's a spy so the
+// routing decision is observable without real S3.
+vi.mock("../../../lib/evals/eval-baseline-agent.js", () => ({
+  claimEvalBaselineForRun: mockClaimEvalBaselineForRun,
 }));
 
 // Both seed entry points route through the U5 baseline-dataset seeder;
@@ -1099,6 +1109,36 @@ describe("run scope pinning + cancel semantics (U6)", () => {
     expect(inserted.scoring_version).toBe(CURRENT_EVAL_SCORING_VERSION);
     expect(mockLambdaSend).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ id: "run-1", datasetId: "ds-1" });
+  });
+
+  it("startEvalRun routes a skill dataset to the eval-baseline agent (U4), not the platform agent", async () => {
+    mockResolveDatasetForLaunch.mockResolvedValue({
+      id: "ds-skill",
+      version: 1,
+    });
+    mockClaimEvalBaselineForRun.mockResolvedValue({
+      id: "eval-baseline-1",
+      slug: "eb-1",
+      skillSlug: "crm-helper",
+    });
+    insertResults.push([runRow]);
+    selectQueue.push([{ ...runRow, agent_id: "eval-baseline-1" }]);
+
+    await evaluationsMutations.startEvalRun(
+      {},
+      { tenantId: "tenant-1", input: { datasetSlug: "skill-crm-helper" } },
+      adminCtx,
+    );
+
+    // Skill slug → claim the re-materialized baseline agent (isolated run).
+    expect(mockClaimEvalBaselineForRun).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      skillSlug: "crm-helper",
+      runId: "run-1",
+    });
+    // A skill run must NEVER resolve the tenant platform agent.
+    expect(mockResolveTenantPlatformAgent).not.toHaveBeenCalled();
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1); // runner dispatched
   });
 
   it("startEvalRun rejects combining datasetSlug with categories or testCaseIds", async () => {
