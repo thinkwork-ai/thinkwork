@@ -2,7 +2,7 @@
 
 Linear issue: THNK-6 - ThinkWork Brain
 Target branch: `main`
-Current implementation branch: `codex/thnk-6-u7-docs-smoke`
+Current implementation branch: `codex/thnk-6-final-status`
 Plan: `docs/plans/2026-06-14-004-feat-company-brain-remaining-substrate-plan.md`
 Status doc created: 2026-06-14
 
@@ -11,8 +11,8 @@ Status doc created: 2026-06-14
 - THNK-15, the Company Brain premium plugin shell blocker, is Done.
 - THNK-17, THNK-18, THNK-19, and THNK-20 are Done and merged to `main`.
 - U4 migration orchestration is merged to `main`.
-- Remaining parent-scope unit is U7 docs/smoke closure.
-- This branch implements U7: documentation and smoke closure.
+- All planned THNK-6 parent-scope implementation units are merged to `main`.
+- This branch records final U7 merge, cleanup, and Linear-dispatcher state.
 
 ## Discovery
 
@@ -207,6 +207,17 @@ proof`, which is 100% complete.
 - 2026-06-14: Opened U7 PR
   [#2465](https://github.com/thinkwork-ai/thinkwork/pull/2465) for Company
   Brain documentation and smoke closure.
+- 2026-06-14: U7 PR
+  [#2465](https://github.com/thinkwork-ai/thinkwork/pull/2465) passed CI
+  (`cla`, `lint`, `verify`, `test`, `typecheck`) and was squash-merged to
+  `main` at `3450a33f`.
+- 2026-06-14: Deleted the merged remote U7 branch and force-deleted the local
+  U7 branch after switching to the final status branch.
+- 2026-06-14: All THNK-6 implementation units are merged: U4
+  [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461), U5b
+  [#2462](https://github.com/thinkwork-ai/thinkwork/pull/2462), U6
+  [#2464](https://github.com/thinkwork-ai/thinkwork/pull/2464), and U7
+  [#2465](https://github.com/thinkwork-ai/thinkwork/pull/2465).
 
 ## Linear State Changes
 
@@ -238,6 +249,12 @@ proof`, which is 100% complete.
   https://github.com/thinkwork-ai/thinkwork/pull/2465. Local verification:
   operations/context smoke syntax checks, dry-runs, docs build, and diff check
   passed. Live production migration smoke remains opt-in only."
+- Desired final Linear update from dispatcher after this status update merges:
+  "U7 PR https://github.com/thinkwork-ai/thinkwork/pull/2465 passed CI and was
+  squash-merged at 3450a33f. All THNK-6 implementation units are complete and
+  merged: U4 #2461, U5b #2462, U6 #2464, U7 #2465. Please move THNK-6 to Done.
+  Final local verification recorded in docs/plans/autopilot/THNK-6-status.md;
+  live production migration smoke remains opt-in and was not run."
 
 ## PR / CI Log
 
@@ -263,6 +280,9 @@ proof`, which is 100% complete.
 - 2026-06-14: Opened U7 PR
   [#2465](https://github.com/thinkwork-ai/thinkwork/pull/2465) for Company
   Brain documentation and smoke closure.
+- 2026-06-14: U7 PR
+  [#2465](https://github.com/thinkwork-ai/thinkwork/pull/2465) CI passed and
+  the PR was squash-merged to `main`.
 
 ## Decisions
 
