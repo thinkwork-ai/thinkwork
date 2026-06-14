@@ -61,6 +61,8 @@
 - 2026-06-14: Confirmed the remote implementation branch was deleted by the merge flow.
 - 2026-06-14: Detached the worktree at merged `origin/main` and deleted local branch `codex/thnk-22-list-view`.
 - 2026-06-14: Moved THNK-22 to `Done` and added a final Linear comment with the PR, merge commit, CI status, and branch cleanup.
+- 2026-06-14: Opened, verified, and squash-merged docs-only final status PR #2470 at `885bd50d358117ff3363c961885bac0b1580e4ce`.
+- 2026-06-14: Confirmed remote branch `codex/thnk-22-final-status` was deleted by the merge flow and deleted the local branch after detaching this worktree at merged `origin/main`.
 
 ## Verification Log
 
@@ -101,7 +103,8 @@
 
 - Merged implementation PR: https://github.com/thinkwork-ai/thinkwork/pull/2469
 - Merge commit: `04ef3caa8ed6cc1e42d9f2f7a82b662535e013be`
-- Final status-doc follow-up PR: pending.
+- Merged final status-doc follow-up PR: https://github.com/thinkwork-ai/thinkwork/pull/2470
+- Final status-doc merge commit: `885bd50d358117ff3363c961885bac0b1580e4ce`
 
 ## Blockers
 
