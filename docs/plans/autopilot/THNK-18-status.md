@@ -3,8 +3,10 @@
 Linear issue: THNK-18 - U2: Add tenant-scoped Cognee Brain provisioning contract
 Parent: THNK-6 - ThinkWork Brain
 Milestone: Company Brain dogfood proof
-Branch: `codex/thnk-18-brain-provisioning-contract`
-PR: https://github.com/thinkwork-ai/thinkwork/pull/2459
+Implementation branch: `codex/thnk-18-brain-provisioning-contract`
+Implementation PR: https://github.com/thinkwork-ai/thinkwork/pull/2459
+Implementation merge commit: `fb1daaee0714d0dad9caf3cb952c74e575436b90`
+Final ledger branch: `codex/thnk-18-final-ledger`
 Target branch: `main`
 Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 
@@ -13,7 +15,7 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 - THNK-15 is Done and unblocks the Company Brain plugin shell dependency.
 - THNK-17, THNK-19, and THNK-20 are Done on `main`.
 - THNK-18 moved from `Ready to Work` to `In Progress` on 2026-06-14 when implementation began.
-- Implementation is complete locally on one PR-sized unit; PR #2459 is open with required CI passing.
+- Implementation PR #2459 was squash-merged to `main`; THNK-18 is Done in Linear.
 
 ## Discovery
 
@@ -60,6 +62,9 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 - 2026-06-14: Opened PR #2459: https://github.com/thinkwork-ai/thinkwork/pull/2459.
 - 2026-06-14: Moved THNK-18 to `Verification`.
 - 2026-06-14: PR #2459 CI passed: CLA, lint, verify, typecheck, and test.
+- 2026-06-14: Rebasing PR #2459 onto current `origin/main` was required because GitHub marked the PR `BEHIND`; rebase was clean and the post-rebase CI cycle passed.
+- 2026-06-14: Squash-merged PR #2459 to `main` as `fb1daaee0714d0dad9caf3cb952c74e575436b90`; GitHub deleted the remote implementation branch and the local implementation branch was deleted.
+- 2026-06-14: Moved THNK-18 to `Done`.
 
 ## Verification
 
@@ -76,11 +81,13 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 - 2026-06-14: `git diff --check` passed.
 - 2026-06-14: `pnpm exec prettier --write ...` could not run because the workspace format script references `prettier` but the root workspace does not declare a Prettier dependency.
 - 2026-06-14: GitHub PR #2459 checks passed: CLA, lint, verify, typecheck, and test.
+- 2026-06-14: Post-rebase GitHub PR #2459 checks passed again: CLA, lint, verify, typecheck, and test.
 
 ## Linear State Changes
 
 - 2026-06-14: Moved THNK-18 from `Ready to Work` to `In Progress`.
 - 2026-06-14: Moved THNK-18 from `In Progress` to `Verification` after opening PR #2459.
+- 2026-06-14: Moved THNK-18 from `Verification` to `Done` after PR #2459 merged.
 
 ## Blockers
 
