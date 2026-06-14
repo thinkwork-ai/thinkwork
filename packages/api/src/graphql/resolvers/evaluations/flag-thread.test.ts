@@ -20,6 +20,7 @@ const {
   mockPutCase,
   mockGetCase,
   mockWritePayloads,
+  mockListIndexedSkills,
   resetState,
 } = vi.hoisted(() => {
   const selectQueue: unknown[][] = [];
@@ -34,6 +35,7 @@ const {
     mockPutCase: vi.fn(),
     mockGetCase: vi.fn(),
     mockWritePayloads: vi.fn(),
+    mockListIndexedSkills: vi.fn(),
     resetState: () => {
       selectQueue.length = 0;
       selectWheres.length = 0;
@@ -138,7 +140,14 @@ vi.mock("../../../lib/evals/thread-snapshot.js", async (importOriginal) => {
   };
 });
 
-import { flagThreadMutations } from "./flag-thread.js";
+// catalog-index drags S3/Drizzle for the real read path; the resolver only
+// needs the installed catalog skill slugs, so mock the one entry point.
+// (skill-dataset.js's slug helpers stay REAL — they're pure leaf functions.)
+vi.mock("../../../lib/catalog-index.js", () => ({
+  listIndexedSkills: mockListIndexedSkills,
+}));
+
+import { flagThreadMutations, flagThreadQueries } from "./flag-thread.js";
 
 const flag = flagThreadMutations.flagThreadForEval as unknown as (
   p: unknown,
@@ -148,6 +157,15 @@ const flag = flagThreadMutations.flagThreadForEval as unknown as (
   case: Record<string, unknown>;
   dataset: Record<string, unknown>;
   completeness: Record<string, boolean>;
+}>;
+
+const candidates = flagThreadQueries.flaggedTurnSkillCandidates as unknown as (
+  p: unknown,
+  args: { tenantId: string; threadId: string; turnId: string },
+  ctx: unknown,
+) => Promise<{
+  candidates: Array<{ skillSlug: string; source: string }>;
+  fallback: boolean;
 }>;
 
 const adminCtx = { auth: { authType: "cognito", tenantId: "tenant-1" } } as any;
@@ -256,6 +274,7 @@ beforeEach(() => {
   mockPutCase.mockResolvedValue({});
   mockGetCase.mockResolvedValue(null);
   mockWritePayloads.mockResolvedValue([]);
+  mockListIndexedSkills.mockResolvedValue([]);
 });
 
 describe("flagThreadForEval — input validation (AE3)", () => {
@@ -555,5 +574,346 @@ describe("flagThreadForEval — new dataset path", () => {
     expect(mockWritePayloads.mock.calls[0][0]).toMatchObject({
       slug: "my-bad-threads-2",
     });
+  });
+});
+
+describe("flagThreadForEval — three-way guard (U8)", () => {
+  const skillInput = {
+    ...baseInput,
+    datasetSlug: null,
+    skillSlug: "sql-helper",
+  };
+
+  it("rejects when zero targets are provided", async () => {
+    await expect(
+      flag(
+        {},
+        { input: { ...baseInput, datasetSlug: null, skillSlug: null } },
+        adminCtx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expectNoS3Writes();
+    expect(selectWheres).toHaveLength(0);
+  });
+
+  it("rejects skillSlug + datasetSlug (two targets)", async () => {
+    await expect(
+      flag({}, { input: { ...baseInput, skillSlug: "sql-helper" } }, adminCtx),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expectNoS3Writes();
+  });
+
+  it("rejects skillSlug + newDatasetName (two targets)", async () => {
+    await expect(
+      flag(
+        {},
+        {
+          input: {
+            ...baseInput,
+            datasetSlug: null,
+            skillSlug: "sql-helper",
+            newDatasetName: "Custom",
+          },
+        },
+        adminCtx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expectNoS3Writes();
+  });
+
+  it("rejects all three targets at once", async () => {
+    await expect(
+      flag(
+        {},
+        {
+          input: { ...skillInput, datasetSlug: "flagged", newDatasetName: "X" },
+        },
+        adminCtx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expectNoS3Writes();
+  });
+
+  it("rejects a skillSlug that cannot form a valid skill dataset slug", async () => {
+    await expect(
+      flag(
+        {},
+        // Uppercase / invalid charset → skillEvalDatasetSlug throws → bad input.
+        { input: { ...skillInput, skillSlug: "Bad Slug!" } },
+        adminCtx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expectNoS3Writes();
+    expect(selectWheres).toHaveLength(0); // rejected before any lookup
+  });
+});
+
+describe("flagThreadForEval — skill attribution (U8 / AE4)", () => {
+  const skillInput = {
+    ...baseInput,
+    datasetSlug: null,
+    skillSlug: "sql-helper",
+  };
+  const skillDatasetRow = {
+    ...datasetRow,
+    slug: "skill-sql-helper",
+    name: "Skill: sql-helper",
+    kind: "skill",
+  };
+
+  it("routes into skill-<slug>, creating the dataset when absent, with NO origin:bundled tag", async () => {
+    // Order: thread → turn → tenant slug → skill dataset lookup (ABSENT) →
+    // (create, mocked) → messages → dataset row (return) → case row (return).
+    selectQueue.push(
+      [threadRow],
+      [turnRow],
+      [tenantSlugRow],
+      [], // skill dataset does not exist yet
+      messageRows,
+      [skillDatasetRow],
+      [caseRow],
+    );
+    const result = await flag({}, { input: skillInput }, adminCtx);
+
+    // Created the skill dataset with kind:'skill'.
+    expect(mockCreateDataset).toHaveBeenCalledTimes(1);
+    const [createCtx, createInput] = mockCreateDataset.mock.calls[0];
+    expect(createCtx).toEqual({
+      tenantId: "tenant-1",
+      tenantSlug: "acme",
+      slug: "skill-sql-helper",
+    });
+    expect(createInput).toEqual({ name: "Skill: sql-helper", kind: "skill" });
+
+    // Case routed into the skill dataset's prefix.
+    expect(mockWritePayloads.mock.calls[0][0]).toMatchObject({
+      slug: "skill-sql-helper",
+    });
+    const core = mockPutCase.mock.calls[0][1];
+    expect(mockPutCase.mock.calls[0][0]).toMatchObject({
+      slug: "skill-sql-helper",
+    });
+    // A re-sync of the skill would only tombstone origin:bundled cases —
+    // this flagged case must NOT carry that tag, so it survives.
+    expect(core.tags).not.toContain("origin:bundled");
+    // And no fallback tag when attributionFallback is not set.
+    expect(core.tags).not.toContain("attribution:fallback");
+    expect(result.dataset).toMatchObject({ slug: "skill-sql-helper" });
+  });
+
+  it("uses an EXISTING skill dataset (kind:'skill') as a flag target without re-creating it", async () => {
+    // Skill dataset already exists → no createDataset call.
+    selectQueue.push(
+      [threadRow],
+      [turnRow],
+      [tenantSlugRow],
+      [skillDatasetRow], // present
+      messageRows,
+      [skillDatasetRow],
+      [caseRow],
+    );
+    await flag({}, { input: skillInput }, adminCtx);
+    expect(mockCreateDataset).not.toHaveBeenCalled();
+    expect(mockPutCase.mock.calls[0][0]).toMatchObject({
+      slug: "skill-sql-helper",
+    });
+  });
+
+  it("tolerates an 'already exists' race when creating the skill dataset", async () => {
+    selectQueue.push(
+      [threadRow],
+      [turnRow],
+      [tenantSlugRow],
+      [], // absent at read time
+      messageRows,
+      [skillDatasetRow],
+      [caseRow],
+    );
+    mockCreateDataset.mockRejectedValueOnce(
+      new Error("Dataset skill-sql-helper already exists."),
+    );
+    const result = await flag({}, { input: skillInput }, adminCtx);
+    expect(result.dataset).toMatchObject({ slug: "skill-sql-helper" });
+    expect(mockPutCase).toHaveBeenCalledTimes(1);
+  });
+
+  it("attributionFallback adds the attribution:fallback tag", async () => {
+    selectQueue.push(
+      [threadRow],
+      [turnRow],
+      [tenantSlugRow],
+      [skillDatasetRow],
+      messageRows,
+      [skillDatasetRow],
+      [caseRow],
+    );
+    await flag(
+      {},
+      { input: { ...skillInput, attributionFallback: true } },
+      adminCtx,
+    );
+    const core = mockPutCase.mock.calls[0][1];
+    expect(core.tags).toContain("attribution:fallback");
+    expect(core.tags).not.toContain("origin:bundled");
+  });
+
+  it("rejects an archived skill dataset", async () => {
+    selectQueue.push(
+      [threadRow],
+      [turnRow],
+      [tenantSlugRow],
+      [{ ...skillDatasetRow, archived_at: new Date() }],
+    );
+    await expect(
+      flag({}, { input: skillInput }, adminCtx),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expectNoS3Writes();
+  });
+
+  it("cross-tenant thread (authz failure) → NOT_FOUND, zero S3 writes", async () => {
+    selectQueue.push([{ ...threadRow, tenant_id: "tenant-other" }]);
+    mockRequireTenantAdmin.mockRejectedValue(
+      new Error("Tenant admin role required"),
+    );
+    await expect(
+      flag({}, { input: skillInput }, adminCtx),
+    ).rejects.toMatchObject({ extensions: { code: "NOT_FOUND" } });
+    expectNoS3Writes();
+  });
+});
+
+describe("flaggedTurnSkillCandidates (U8)", () => {
+  const installedSkills = [
+    { slug: "sql-helper" },
+    { slug: "calendar" },
+    { slug: "weather" },
+  ];
+
+  it("activeSkills present → active candidates intersected with installed, fallback:false", async () => {
+    // thread → turn (carries activeSkills) ; listIndexedSkills is mocked.
+    selectQueue.push(
+      [{ id: "thread-1", tenant_id: "tenant-1" }],
+      [
+        {
+          id: "turn-1",
+          tenant_id: "tenant-1",
+          thread_id: "thread-1",
+          // 'always-on-default' is NOT an installed catalog skill → dropped.
+          context_snapshot: {
+            workspace_projection: {
+              activeSkills: ["sql-helper", "always-on-default", "calendar"],
+            },
+          },
+        },
+      ],
+    );
+    mockListIndexedSkills.mockResolvedValue(installedSkills);
+    const result = await candidates(
+      {},
+      { tenantId: "tenant-1", threadId: "thread-1", turnId: "turn-1" },
+      adminCtx,
+    );
+    expect(result.fallback).toBe(false);
+    expect(result.candidates).toEqual([
+      { skillSlug: "sql-helper", source: "active" },
+      { skillSlug: "calendar", source: "active" },
+    ]);
+  });
+
+  it("activeSkills absent (older turn) → installed fallback, fallback:true", async () => {
+    selectQueue.push(
+      [{ id: "thread-1", tenant_id: "tenant-1" }],
+      [
+        {
+          id: "turn-1",
+          tenant_id: "tenant-1",
+          thread_id: "thread-1",
+          context_snapshot: null,
+        },
+      ],
+    );
+    mockListIndexedSkills.mockResolvedValue(installedSkills);
+    const result = await candidates(
+      {},
+      { tenantId: "tenant-1", threadId: "thread-1", turnId: "turn-1" },
+      adminCtx,
+    );
+    expect(result.fallback).toBe(true);
+    expect(result.candidates).toEqual([
+      { skillSlug: "sql-helper", source: "installed" },
+      { skillSlug: "calendar", source: "installed" },
+      { skillSlug: "weather", source: "installed" },
+    ]);
+  });
+
+  it("activeSkills present but none installed → installed fallback, fallback:true", async () => {
+    selectQueue.push(
+      [{ id: "thread-1", tenant_id: "tenant-1" }],
+      [
+        {
+          id: "turn-1",
+          tenant_id: "tenant-1",
+          thread_id: "thread-1",
+          context_snapshot: {
+            workspace_projection: { activeSkills: ["uninstalled-skill"] },
+          },
+        },
+      ],
+    );
+    mockListIndexedSkills.mockResolvedValue(installedSkills);
+    const result = await candidates(
+      {},
+      { tenantId: "tenant-1", threadId: "thread-1", turnId: "turn-1" },
+      adminCtx,
+    );
+    expect(result.fallback).toBe(true);
+    expect(result.candidates.map((c) => c.skillSlug)).toEqual([
+      "sql-helper",
+      "calendar",
+      "weather",
+    ]);
+  });
+
+  it("turn not in thread → NOT_FOUND", async () => {
+    selectQueue.push(
+      [{ id: "thread-1", tenant_id: "tenant-1" }],
+      [
+        {
+          id: "turn-1",
+          tenant_id: "tenant-1",
+          thread_id: "thread-other",
+          context_snapshot: null,
+        },
+      ],
+    );
+    await expect(
+      candidates(
+        {},
+        { tenantId: "tenant-1", threadId: "thread-1", turnId: "turn-1" },
+        adminCtx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "NOT_FOUND" } });
+  });
+
+  it("unknown thread → NOT_FOUND", async () => {
+    selectQueue.push([]); // thread lookup empty
+    await expect(
+      candidates(
+        {},
+        { tenantId: "tenant-1", threadId: "thread-x", turnId: "turn-1" },
+        adminCtx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "NOT_FOUND" } });
+  });
+
+  it("cross-tenant request → NOT_FOUND (no existence oracle)", async () => {
+    mockResolveCallerTenantId.mockResolvedValue("tenant-1");
+    await expect(
+      candidates(
+        {},
+        { tenantId: "tenant-other", threadId: "thread-1", turnId: "turn-1" },
+        adminCtx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "NOT_FOUND" } });
   });
 });

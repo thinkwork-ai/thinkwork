@@ -1455,10 +1455,12 @@ export type EvalTimeSeriesPoint = {
 };
 
 export type FlagThreadForEvalInput = {
+  attributionFallback?: InputMaybe<Scalars['Boolean']['input']>;
   datasetSlug?: InputMaybe<Scalars['String']['input']>;
   newDatasetName?: InputMaybe<Scalars['String']['input']>;
   outcomeKind: Scalars['String']['input'];
   resolutionTarget: Scalars['String']['input'];
+  skillSlug?: InputMaybe<Scalars['String']['input']>;
   threadId: Scalars['ID']['input'];
   turnId: Scalars['ID']['input'];
 };
@@ -4442,6 +4444,7 @@ export type Query = {
   evalTestCaseHistory: Array<EvalResult>;
   evalTestCases: Array<EvalTestCase>;
   evalTimeSeries: Array<EvalTimeSeriesPoint>;
+  flaggedTurnSkillCandidates: SkillAttributionCandidates;
   inboxItem?: Maybe<InboxItem>;
   inboxItems: Array<InboxItem>;
   knowledgeBase?: Maybe<KnowledgeBase>;
@@ -4924,6 +4927,13 @@ export type QueryEvalTestCasesArgs = {
 export type QueryEvalTimeSeriesArgs = {
   days?: InputMaybe<Scalars['Int']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryFlaggedTurnSkillCandidatesArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
+  turnId: Scalars['ID']['input'];
 };
 
 
@@ -6065,6 +6075,18 @@ export type SetSpaceToolsInput = {
   mcpServerIds: Array<Scalars['ID']['input']>;
   spaceId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+export type SkillAttributionCandidate = {
+  __typename?: 'SkillAttributionCandidate';
+  skillSlug: Scalars['String']['output'];
+  source: Scalars['String']['output'];
+};
+
+export type SkillAttributionCandidates = {
+  __typename?: 'SkillAttributionCandidates';
+  candidates: Array<SkillAttributionCandidate>;
+  fallback: Scalars['Boolean']['output'];
 };
 
 /**

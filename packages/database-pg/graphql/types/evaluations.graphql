@@ -100,8 +100,20 @@ input FlagThreadForEvalInput {
   threadId: ID!
   # Must be a completed turn of the thread — in-flight turns are rejected.
   turnId: ID!
-  # Exactly one of datasetSlug (existing custom dataset; baseline is not
-  # a valid target) or newDatasetName (creates a custom dataset).
+  # Three-way attribution (Skill Tests & Evals U8): exactly one of
+  # skillSlug (route the case into that skill's `skill-<slug>` dataset,
+  # created on demand if the skill shipped no bundled cases yet),
+  # datasetSlug (existing custom dataset; baseline is not a valid target),
+  # or newDatasetName (creates a custom dataset). The system never
+  # auto-attributes — the operator confirms exactly one skill or "not
+  # skill-specific" (the datasetSlug/newDatasetName path).
+  skillSlug: String
+  # True when the operator picked the skill from the low-confidence
+  # INSTALLED-skill fallback (the turn carried no recorded activeSkills)
+  # rather than an `active`-source candidate. Stamps the case with the
+  # `attribution:fallback` tag so a later audit can quarantine a possible
+  # misattribution. Only meaningful alongside skillSlug.
+  attributionFallback: Boolean
   datasetSlug: String
   newDatasetName: String
   # Required, non-empty after trim: what "fixed" looks like. Becomes the
@@ -109,6 +121,35 @@ input FlagThreadForEvalInput {
   resolutionTarget: String!
   # 'security' | 'quality' — tagged onto the case.
   outcomeKind: String!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Flagged-turn skill-attribution candidates (Skill Tests & Evals U8)
+#
+# Suggests which skill a flagged turn's bad output could be attributed
+# to. Suggestion only — the system NEVER auto-attributes; the dialog
+# (U9) renders these + a "not skill-specific" option and the operator
+# confirms exactly one, passing attributionFallback through to
+# flagThreadForEval when picking a fallback candidate.
+# ────────────────────────────────────────────────────────────────────
+
+type SkillAttributionCandidate {
+  # An installed catalog skill slug the operator may attribute the case to.
+  skillSlug: String!
+  # 'active' — intersected from the turn's recorded activeSkills (U7);
+  # high confidence. 'installed' — the turn had no usable activeSkills, so
+  # this comes from the tenant's currently-installed catalog skills (low
+  # confidence; pair with attributionFallback on the mutation).
+  source: String!
+}
+
+type SkillAttributionCandidates {
+  candidates: [SkillAttributionCandidate!]!
+  # True when the candidates are the low-confidence installed-skill
+  # fallback (the turn carried no usable activeSkills). The dialog passes
+  # attributionFallback=true to flagThreadForEval when the operator picks
+  # one of these.
+  fallback: Boolean!
 }
 
 # ────────────────────────────────────────────────────────────────────
@@ -499,6 +540,17 @@ extend type Query {
   # Per-tenant skill-update gate (Skill Tests & Evals U6). Tenant-scoped
   # read; `enabled` is false (threshold null) when no gate is set.
   skillEvalGate(tenantId: ID!): SkillEvalGate!
+  # Skill-attribution candidates for a flagged turn (Skill Tests & Evals
+  # U8). Read-gated; verifies the turn belongs to the thread + tenant
+  # (NOT_FOUND on mismatch, no existence oracle). Returns active-skill
+  # candidates intersected from the turn's recorded activeSkills, else the
+  # low-confidence installed-skill fallback. Suggestion only — never
+  # auto-attributes.
+  flaggedTurnSkillCandidates(
+    tenantId: ID!
+    threadId: ID!
+    turnId: ID!
+  ): SkillAttributionCandidates!
 }
 
 extend type Mutation {
