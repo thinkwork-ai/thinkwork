@@ -141,156 +141,27 @@ describe("deployment releases", () => {
     );
   });
 
-  it("starts a controller update for the selected release", async () => {
-    vi.stubEnv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:controller");
-    vi.stubEnv("THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET", "evidence-bucket");
-    vi.stubEnv("STAGE", "dev");
-    vi.stubEnv("AWS_REGION", "us-east-1");
-    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
-    mockStartExecution.mockResolvedValue({
-      executionArn: "arn:sfn:execution:update",
-      stateMachineArn: "arn:sfn:controller",
-    });
+  it("rejects direct release updates before starting the controller", async () => {
     const digest = "a".repeat(64);
 
-    const result = await updateMod.startDeploymentReleaseUpdate(
-      null,
-      {
-        input: {
-          version: "v0.1.0-canary.134",
-          manifestUrl:
-            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
-          manifestSha256: digest,
-          idempotencyKey: "release-v0.1.0-canary.134",
-        },
-      },
-      {} as any,
-      { startExecution: mockStartExecution },
-    );
-
-    expect(mockRequireTenantAdmin.mock.invocationCallOrder[0]).toBeLessThan(
-      mockStartExecution.mock.invocationCallOrder[0],
-    );
-    expect(mockStartExecution).toHaveBeenCalledWith(
-      expect.objectContaining({
-        stateMachineArn: "arn:sfn:controller",
-        name: "tw-update-11111111222233334444555555555555",
-        payload: expect.objectContaining({
-          action: "update",
-          phase: "update",
-          environmentName: "dev",
-          awsAccountId: "123456789012",
-          terraformModuleVersion: "0.1.0-canary.134",
-          release: {
+    await expect(
+      updateMod.startDeploymentReleaseUpdate(
+        null,
+        {
+          input: {
             version: "v0.1.0-canary.134",
             manifestUrl:
               "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
             manifestSha256: digest,
-          },
-          features: {
-            baseInstall: {
-              cognee: false,
-              slack: false,
-              stripe: false,
-              twenty: false,
-            },
-            optionalApps: [],
-          },
-        }),
-      }),
-    );
-    expect(result.executionArn).toBe("arn:sfn:execution:update");
-    expect(result.evidencePrefix).toContain(
-      "settings/releases/v0.1.0-canary.134/",
-    );
-  });
-
-  it("starts release updates from compact graphql-http deployment env", async () => {
-    vi.stubEnv("DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:compact-controller");
-    vi.stubEnv("DEPLOYMENT_EVIDENCE_BUCKET", "compact-evidence-bucket");
-    mockStartExecution.mockResolvedValue({
-      executionArn: "arn:sfn:execution:compact-update",
-      stateMachineArn: "arn:sfn:compact-controller",
-    });
-    const digest = "b".repeat(64);
-
-    const result = await updateMod.startDeploymentReleaseUpdate(
-      null,
-      {
-        input: {
-          version: "v0.1.0-canary.156",
-          manifestUrl:
-            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.156/thinkwork-release.json",
-          manifestSha256: digest,
+            idempotencyKey: "release-v0.1.0-canary.134",
+          } as any,
         },
-      },
-      {} as any,
-      { startExecution: mockStartExecution },
-    );
+        {} as any,
+        { startExecution: mockStartExecution },
+      ),
+    ).rejects.toThrow(/preflight/i);
 
-    expect(mockStartExecution).toHaveBeenCalledWith(
-      expect.objectContaining({
-        stateMachineArn: "arn:sfn:compact-controller",
-        payload: expect.objectContaining({
-          evidenceBucket: "compact-evidence-bucket",
-          releaseVersion: "v0.1.0-canary.156",
-        }),
-      }),
-    );
-    expect(result.executionArn).toBe("arn:sfn:execution:compact-update");
-    expect(result.evidenceBucket).toBe("compact-evidence-bucket");
-  });
-
-  it("starts release updates from the SSM deployment profile when graphql-http env is empty", async () => {
-    vi.stubEnv("STAGE", "tei-e2e");
-    mockSsmSend.mockResolvedValue({
-      Parameter: {
-        Value: JSON.stringify({
-          controller: {
-            stateMachineArn: "arn:sfn:ssm-controller",
-            evidenceBucketName: "ssm-evidence-bucket",
-          },
-        }),
-      },
-    });
-    mockStartExecution.mockResolvedValue({
-      executionArn: "arn:sfn:execution:ssm-update",
-      stateMachineArn: "arn:sfn:ssm-controller",
-    });
-    const digest = "c".repeat(64);
-
-    const result = await updateMod.startDeploymentReleaseUpdate(
-      null,
-      {
-        input: {
-          version: "v0.1.0-canary.160",
-          manifestUrl:
-            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.160/thinkwork-release.json",
-          manifestSha256: digest,
-        },
-      },
-      {} as any,
-      { startExecution: mockStartExecution },
-    );
-
-    expect(mockSsmSend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: expect.objectContaining({
-          Name: "/thinkwork/tei-e2e/deployment/profile/json",
-        }),
-      }),
-    );
-    expect(mockStartExecution).toHaveBeenCalledWith(
-      expect.objectContaining({
-        stateMachineArn: "arn:sfn:ssm-controller",
-        payload: expect.objectContaining({
-          evidenceBucket: "ssm-evidence-bucket",
-          releaseVersion: "v0.1.0-canary.160",
-        }),
-      }),
-    );
-    expect(result.executionArn).toBe("arn:sfn:execution:ssm-update");
-    expect(result.evidenceBucket).toBe("ssm-evidence-bucket");
+    expect(mockStartExecution).not.toHaveBeenCalled();
   });
 
   it("rejects non-admin callers before loading releases or starting updates", async () => {

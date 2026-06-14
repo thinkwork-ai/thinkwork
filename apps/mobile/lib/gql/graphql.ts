@@ -2657,7 +2657,7 @@ export type Mutation = {
   setSpaceTools: Space;
   setUserModelApproval: Array<UserModelCatalogEntry>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
-  startDeploymentReleaseUpdate: DeploymentReleaseUpdate;
+  startDeploymentReleaseUpdate: ReleaseUpdateJob;
   startEvalRun: EvalRun;
   startKnowledgeGraphIngest: KnowledgeGraphIngestRun;
   startKnowledgeGraphObservationsIngest: KnowledgeGraphIngestRun;
@@ -6531,9 +6531,7 @@ export type StartCustomerOnboardingPayload = {
 
 export type StartDeploymentReleaseUpdateInput = {
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
-  manifestSha256: Scalars['String']['input'];
-  manifestUrl: Scalars['String']['input'];
-  version: Scalars['String']['input'];
+  jobId: Scalars['ID']['input'];
 };
 
 export type StartEvalRunInput = {

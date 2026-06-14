@@ -242,18 +242,15 @@ export const SettingsStartDeploymentReleaseUpdateMutation = graphql(`
     $input: StartDeploymentReleaseUpdateInput!
   ) {
     startDeploymentReleaseUpdate(input: $input) {
+      id
+      status
+      targetReleaseVersion
+      failureMessage
+      recoveryAction
       executionArn
       stateMachineArn
       evidenceBucket
       evidencePrefix
-      message
-      release {
-        version
-        manifestUrl
-        manifestSha256
-        signed
-        deployable
-      }
     }
   }
 `);

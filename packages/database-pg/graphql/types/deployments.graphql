@@ -123,9 +123,7 @@ type ReleaseUpdateEvent {
 }
 
 input StartDeploymentReleaseUpdateInput {
-  version: String!
-  manifestUrl: String!
-  manifestSha256: String!
+  jobId: ID!
   idempotencyKey: String
 }
 
@@ -199,7 +197,7 @@ extend type Mutation {
   remediateReleaseRunner(input: RemediateReleaseRunnerInput!): ReleaseUpdateJob!
   startDeploymentReleaseUpdate(
     input: StartDeploymentReleaseUpdateInput!
-  ): DeploymentReleaseUpdate!
+  ): ReleaseUpdateJob!
   startManagedApplicationPlan(
     input: StartManagedApplicationPlanInput!
   ): ManagedApplicationDeploymentJob!
