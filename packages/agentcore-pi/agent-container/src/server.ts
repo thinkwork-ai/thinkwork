@@ -1220,7 +1220,8 @@ export async function buildInvocationResources(
   }
 
   // Company Brain / Context Engine — query_context + query_memory_context +
-  // query_wiki_context over the API's `/mcp/context-engine` JSON-RPC facade.
+  // query_brain_context + query_wiki_context over the API's
+  // `/mcp/context-engine` JSON-RPC facade.
   // Gated on `context_engine_enabled`; skipped in eval mode (user-less).
   if (
     args.payload.eval_mode !== true &&

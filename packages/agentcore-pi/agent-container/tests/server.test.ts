@@ -197,6 +197,7 @@ describe("handleInvocation — payload validation", () => {
         "web_extract",
         "query_context",
         "query_memory_context",
+        "query_brain_context",
         "query_wiki_context",
       ]),
     );
@@ -2263,6 +2264,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         "web_extract",
         "query_context",
         "query_memory_context",
+        "query_brain_context",
         "query_wiki_context",
         "workspace_skill",
         "delegate_to_managed_agent",
@@ -2366,6 +2368,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
         "web_search",
         "query_context",
         "query_memory_context",
+        "query_brain_context",
         "query_wiki_context",
       ]),
     );

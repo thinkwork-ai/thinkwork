@@ -13,6 +13,9 @@ import type {
   ContextEngineScope,
   ContextProviderFamily,
   ContextProviderSelection,
+  ContextEngineResponse,
+  ContextHit,
+  ContextProviderStatus,
 } from "../lib/context-engine/types.js";
 import { upsertTenantContextProviderSetting } from "../lib/context-engine/admin-config.js";
 import { sourceFamilyForProvider } from "../lib/context-engine/source-families.js";
@@ -197,7 +200,13 @@ const TOOLS = [
         sourceType: { type: "string" },
         datasetId: { type: "string" },
         nodeSetIds: { type: "array", items: { type: "string" } },
+        topK: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
         onlyContext: { type: "boolean" },
+        detailIds: { type: "array", items: { type: "string" } },
+        detailIndexes: {
+          type: "array",
+          items: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
+        },
       },
       required: ["query"],
       additionalProperties: false,
@@ -413,13 +422,10 @@ async function handleToolCall(
       );
     }
     case "query_brain_context": {
-      return await queryContextTool(
+      return await queryBrainContextTool(
         request.id,
         args,
         callerWithTarget,
-        {
-          families: ["brain"],
-        },
         brainProviderOptionsArg(args),
       );
     }
@@ -761,6 +767,59 @@ async function queryContextTool(
   });
 }
 
+async function queryBrainContextTool(
+  id: JsonRpcRequest["id"],
+  args: Record<string, unknown>,
+  caller: NonNullable<Awaited<ReturnType<typeof resolveCaller>>>,
+  providerOptions?: ContextProviderOptions,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const query = stringArg(args.query);
+  if (!query) return jsonRpcError(id, -32602, "query is required");
+
+  const service = getContextEngineService();
+  const result = await service.query({
+    query,
+    mode:
+      enumArg<ContextEngineMode>(args.mode, ["results", "answer"]) ?? "results",
+    scope: enumArg<ContextEngineScope>(args.scope, ["team", "auto"]) ?? "auto",
+    depth:
+      enumArg<ContextEngineDepth>(args.depth, ["quick", "deep"]) ?? "quick",
+    limit: limitArg(args.limit),
+    providers: { families: ["brain"] },
+    providerOptions,
+    caller,
+  });
+
+  const detailIds = stringArrayArg(args.detailIds);
+  const detailIndexes = positiveIntegerArrayArg(args.detailIndexes);
+  const invalidDetailStatuses = invalidBrainDetailStatuses(args);
+  if (
+    Array.isArray(args.detailIds) ||
+    Array.isArray(args.detailIndexes) ||
+    detailIds.length > 0 ||
+    detailIndexes.length > 0
+  ) {
+    const detailed = selectedBrainDetails(
+      result,
+      detailIds,
+      detailIndexes,
+      invalidDetailStatuses,
+    );
+    return jsonRpcResult(id, {
+      content: [{ type: "text", text: formatBrainDetailResponse(detailed) }],
+      structuredContent: detailed,
+    });
+  }
+
+  const progressive = progressiveBrainResponse(result);
+  return jsonRpcResult(id, {
+    content: [
+      { type: "text", text: formatBrainProgressiveResponse(progressive) },
+    ],
+    structuredContent: progressive,
+  });
+}
+
 async function resolveCaller(claims: Record<string, unknown>) {
   const claimedUserId =
     stringClaim(claims.user_id) ?? stringClaim(claims["custom:user_id"]);
@@ -776,8 +835,9 @@ async function resolveCaller(claims: Record<string, unknown>) {
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } =
-    await import("../graphql/resolvers/core/resolve-auth-user.js");
+  const { resolveCallerFromAuth } = await import(
+    "../graphql/resolvers/core/resolve-auth-user.js"
+  );
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -846,6 +906,223 @@ function formatContextResponse(result: {
     }
   }
   return lines.join("\n");
+}
+
+function progressiveBrainResponse(
+  result: ContextEngineResponse,
+): ContextEngineResponse {
+  const entries = result.hits.slice(0, 10).map((hit, index) => {
+    const status = result.providers.find(
+      (provider) => provider.providerId === hit.providerId,
+    );
+    return {
+      index: index + 1,
+      id: hit.id,
+      title: hit.title,
+      family: hit.family,
+      ...(hit.sourceFamily ? { sourceFamily: hit.sourceFamily } : {}),
+      description: brainHitDescription(hit),
+      scope: hit.scope,
+      provenance: {
+        ...(hit.provenance.label ? { label: hit.provenance.label } : {}),
+        ...(hit.provenance.uri ? { uri: hit.provenance.uri } : {}),
+        ...(hit.provenance.sourceId
+          ? { sourceId: hit.provenance.sourceId }
+          : {}),
+      },
+      providerId: hit.providerId,
+      ...(status?.state ? { providerStatus: status.state } : {}),
+      ...(typeof hit.score === "number" ? { score: hit.score } : {}),
+      ...(typeof hit.rank === "number" ? { rank: hit.rank } : {}),
+    };
+  });
+  return {
+    ...result,
+    hits: [],
+    progressive: {
+      type: "shortlist",
+      entries,
+      detailRequest: {
+        tool: "query_brain_context",
+        selectors: {
+          detailIds: entries.map((entry) => entry.id),
+          detailIndexes: entries.map((entry) => entry.index),
+        },
+        guidance:
+          "Call query_brain_context again with the original query/filter arguments and selected detailIds or detailIndexes to expand only the Brain results needed.",
+      },
+    },
+  };
+}
+
+function selectedBrainDetails(
+  result: ContextEngineResponse,
+  detailIds: string[],
+  detailIndexes: number[],
+  invalidStatuses: NonNullable<
+    ContextEngineResponse["details"]
+  >["statuses"] = [],
+): ContextEngineResponse {
+  const byId = new Map(result.hits.map((hit) => [hit.id, hit]));
+  const statuses: NonNullable<ContextEngineResponse["details"]>["statuses"] = [
+    ...invalidStatuses,
+  ];
+  const selected: ContextHit[] = [];
+
+  if (detailIds.length > 0) {
+    for (const detailId of detailIds) {
+      const hit = byId.get(detailId);
+      if (hit) {
+        selected.push(hit);
+        statuses.push({
+          selector: detailId,
+          state: "found",
+          id: hit.id,
+          index:
+            result.hits.findIndex((candidate) => candidate.id === hit.id) + 1,
+        });
+      } else {
+        statuses.push({
+          selector: detailId,
+          state: "not_found",
+          reason: "No recomputed Brain hit matched this detailId.",
+        });
+      }
+    }
+  } else {
+    for (const detailIndex of detailIndexes) {
+      const hit = result.hits[detailIndex - 1];
+      if (hit) {
+        selected.push(hit);
+        statuses.push({
+          selector: detailIndex,
+          state: "found",
+          id: hit.id,
+          index: detailIndex,
+        });
+      } else {
+        statuses.push({
+          selector: detailIndex,
+          state: "not_found",
+          index: detailIndex,
+          reason: "No recomputed Brain hit exists at this 1-based detailIndex.",
+        });
+      }
+    }
+  }
+
+  return {
+    ...result,
+    hits: selected,
+    details: {
+      type: "selected",
+      requested: { detailIds, detailIndexes },
+      statuses,
+    },
+  };
+}
+
+function formatBrainProgressiveResponse(result: ContextEngineResponse): string {
+  const lines: string[] = [];
+  const entries = result.progressive?.entries ?? [];
+  if (entries.length === 0) {
+    lines.push("No matching Company Brain context found.");
+  } else {
+    lines.push("Company Brain results");
+    for (const entry of entries) {
+      const provenance = [
+        entry.provenance?.label,
+        entry.provenance?.sourceId,
+        entry.providerStatus ? `status: ${entry.providerStatus}` : null,
+      ].filter(Boolean);
+      lines.push(
+        `${entry.index}. [${entry.id}] ${entry.title}: ${entry.description}${provenance.length > 0 ? ` (${provenance.join("; ")})` : ""}`,
+      );
+    }
+    lines.push(
+      "",
+      "To expand details, call query_brain_context again with the original query/filter arguments and selected detailIds or detailIndexes.",
+    );
+  }
+  appendProviderStatus(lines, result.providers);
+  return lines.join("\n");
+}
+
+function formatBrainDetailResponse(result: ContextEngineResponse): string {
+  const lines: string[] = [];
+  const found = result.details?.statuses.filter(
+    (status) => status.state === "found",
+  );
+  if (result.hits.length === 0) {
+    lines.push("No selected Company Brain details found.");
+  } else {
+    lines.push("Selected Company Brain details");
+    for (const [index, hit] of result.hits.entries()) {
+      const originalIndex = found?.[index]?.index ?? index + 1;
+      lines.push(
+        `${originalIndex}. [${hit.id}] ${hit.title}: ${formatHitSnippet(hit)}`,
+      );
+    }
+  }
+  const missing = result.details?.statuses.filter(
+    (status) => status.state !== "found",
+  );
+  if (missing && missing.length > 0) {
+    lines.push("", "Detail status");
+    for (const status of missing) {
+      lines.push(
+        `- ${String(status.selector)}: ${status.state}${status.reason ? ` (${status.reason})` : ""}`,
+      );
+    }
+  }
+  appendProviderStatus(lines, result.providers);
+  return lines.join("\n");
+}
+
+function appendProviderStatus(
+  lines: string[],
+  providers: ContextProviderStatus[],
+) {
+  if (providers.length === 0) return;
+  lines.push("", "Provider status");
+  for (const provider of providers) {
+    const details = [
+      typeof provider.hitCount === "number"
+        ? `${provider.hitCount} hits`
+        : null,
+      typeof provider.durationMs === "number"
+        ? `${provider.durationMs}ms`
+        : null,
+      provider.error || provider.reason || null,
+    ].filter(Boolean);
+    lines.push(
+      `- ${provider.displayName}: ${provider.state}${details.length > 0 ? ` (${details.join(", ")})` : ""}`,
+    );
+  }
+}
+
+function brainHitDescription(hit: ContextHit): string {
+  const metadata = hit.metadata ?? {};
+  const provenanceMetadata = hit.provenance.metadata ?? {};
+  for (const key of [
+    "description",
+    "summary",
+    "facetHeading",
+    "sourceType",
+    "sourceKind",
+  ]) {
+    const value = metadata[key] ?? provenanceMetadata[key];
+    if (typeof value === "string" && value.trim())
+      return trimDescription(value);
+  }
+  return "Matched governed Company Brain source data. Expand this result for source details and citations.";
+}
+
+function trimDescription(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > 180
+    ? `${normalized.slice(0, 177)}...`
+    : normalized;
 }
 
 function formatHitSnippet(hit: {
@@ -1048,6 +1325,56 @@ function normalizeBrainProviderOptions(
   };
 }
 
+function stringArrayArg(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean)
+    : [];
+}
+
+function positiveIntegerArrayArg(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value
+        .map((item) => (typeof item === "number" ? item : Number(item)))
+        .filter(
+          (item): item is number =>
+            Number.isInteger(item) && item >= 1 && item <= MAX_LIMIT,
+        )
+    : [];
+}
+
+function invalidBrainDetailStatuses(
+  args: Record<string, unknown>,
+): NonNullable<ContextEngineResponse["details"]>["statuses"] {
+  const statuses: NonNullable<ContextEngineResponse["details"]>["statuses"] =
+    [];
+  if (Array.isArray(args.detailIds)) {
+    for (const item of args.detailIds) {
+      if (typeof item !== "string" || !item.trim()) {
+        statuses.push({
+          selector: String(item),
+          state: "invalid",
+          reason: "detailIds must contain non-empty strings.",
+        });
+      }
+    }
+  }
+  if (Array.isArray(args.detailIndexes)) {
+    for (const item of args.detailIndexes) {
+      const numeric = typeof item === "number" ? item : Number(item);
+      if (!Number.isInteger(numeric) || numeric < 1 || numeric > MAX_LIMIT) {
+        statuses.push({
+          selector: String(item),
+          state: "invalid",
+          reason: `detailIndexes must contain integers from 1 to ${MAX_LIMIT}.`,
+        });
+      }
+    }
+  }
+  return statuses;
+}
+
 function booleanArg(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
@@ -1060,8 +1387,9 @@ async function canManageProviderSettings(
   const principalId = stringClaim(claims.sub);
   if (!principalId) return false;
   try {
-    const { requireTenantAdmin } =
-      await import("../graphql/resolvers/core/authz.js");
+    const { requireTenantAdmin } = await import(
+      "../graphql/resolvers/core/authz.js"
+    );
     await requireTenantAdmin(
       {
         auth: {

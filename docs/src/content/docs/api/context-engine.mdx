@@ -37,7 +37,9 @@ Brain hits include ontology-facing metadata where available: entity type slug, f
 
 If the active Company Brain substrate is not installed, disabled, failed, or missing required retrieval/provenance capability posture, Context Engine reports that as a Brain provider status. A Brain-only call does not silently fall back to Hindsight Memory or raw backend access.
 
-`query_brain_context` accepts the normal `query`, `mode`, `scope`, `depth`, and `limit` fields plus optional source filters used by the dogfood proof: `sourceKind`, `sourceType`, `datasetId`, `nodeSetIds`, and `onlyContext`. These options are provider-scoped hints; they do not grant direct access to Cognee, Neptune, or S3.
+`query_brain_context` accepts the normal `query`, `mode`, `scope`, `depth`, and `limit` fields plus optional source filters used by the dogfood proof: `sourceKind`, `sourceType`, `datasetId`, `nodeSetIds`, `topK`, and `onlyContext`. These options are provider-scoped hints; they do not grant direct access to Cognee, Neptune, or S3.
+
+Brain responses are progressive by default. The first call returns an indexed shortlist with stable hit ids, concise descriptions, and provenance/status hints rather than dumping every matching Brain snippet. To expand source details, call `query_brain_context` again with the same query/filter arguments plus selected `detailIds` or `detailIndexes`; the detail response expands only those selected Brain hits and reports missing selectors explicitly.
 
 ## Company Brain Substrate Posture
 
@@ -79,9 +81,9 @@ MCP server approval is necessary but not sufficient. A tool must also have a row
 
 Pi registers `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping source routing and result normalization aligned with mobile and external MCP callers.
 
-When Memory is enabled for an agent template, runtimes may also expose specialized split tools such as `query_memory_context`, `query_wiki_context`, and `query_brain_context`. These are still Context Engine tools at the API layer: Hindsight memory, compiled pages, and ontology-shaped Brain remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
+When Context Engine is enabled for a first-party Pi runtime, the Pi Context Engine extension exposes specialized split tools: `query_memory_context`, `query_brain_context`, and `query_wiki_context`. These are still Context Engine tools at the API layer: Hindsight memory, ontology-shaped Brain, and compiled pages remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
 
-`query_brain_context` should be the model's first choice for governed business/domain context. Raw ontology admin APIs are not runtime tools.
+`query_brain_context` should be the model's first choice for governed tenant-shared business/domain context such as customers, opportunities, commitments, risks, stakeholders, products, relationships, and cited provenance. Use `query_memory_context` for raw Hindsight Memory and `query_wiki_context` for compiled page/entity/topic lookup. Raw ontology admin APIs, raw Cognee, Neptune, S3, and storage backends are not runtime tools.
 
 Use `scripts/smoke/company-brain-context-engine-smoke.mjs` after deploy to verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path. Use `scripts/smoke/company-brain-operations-smoke.mjs` to verify the GraphQL operations posture and redaction contract; it is read-only unless `SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1` is explicitly set.
 
