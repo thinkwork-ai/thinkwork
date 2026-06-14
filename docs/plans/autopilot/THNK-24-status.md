@@ -7,7 +7,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - Started: 2026-06-14
 - Active branch: `codex/thnk-24-u5-reviewed-dispatch`
 - Active unit: U5, dispatch and monitor reviewed release updates
-- Linear state: In Progress
+- Linear state: Verification
 
 ## Context Discovery
 
@@ -91,6 +91,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   `deployment/status/current.json`, and prevents the old direct Settings
   button path from invoking an unsafe manifest-only update before U6 replaces
   it with the full review workflow.
+- 2026-06-14: Opened U5 PR and moved THNK-24 to Verification.
 
 ## Implementation Units
 
@@ -98,8 +99,8 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U2. Add release update job substrate: merged in PR #2475.
 - U3. Implement release preflight service: merged in PR #2476.
 - U4. Add safe runner refresh remediation: merged in PR #2478.
-- U5. Dispatch and monitor reviewed release updates: implemented locally;
-  pending PR.
+- U5. Dispatch and monitor reviewed release updates: PR open; pending
+  CI/review.
 - U6. Build Settings release safety workflow: pending.
 - U7. Update docs, runbooks, and verification coverage: pending.
 
@@ -109,6 +110,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U2: https://github.com/thinkwork-ai/thinkwork/pull/2475 merged
 - U3: https://github.com/thinkwork-ai/thinkwork/pull/2476 merged
 - U4: https://github.com/thinkwork-ai/thinkwork/pull/2478 merged
+- U5: https://github.com/thinkwork-ai/thinkwork/pull/2479
 
 ## CI / Verification
 
