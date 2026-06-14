@@ -15,7 +15,7 @@ Memory is the product surface. **Context Engine** is the internal API/service bo
 - `depth`: `quick` or `deep`.
 - `providers`: optional provider ids or families.
 - `agentId`: optional target agent id when the caller needs agent-scoped workspace files or agent-specific knowledge-base attachments.
-- provider options: optional source-specific settings, currently including Hindsight `recall` vs `reflect`.
+- provider options: optional source-specific settings, currently including Hindsight `recall` vs `reflect` and Company Brain source/dataset scoping for `query_brain_context`.
 
 Every response includes normalized hits plus provider statuses. Provider failures are local to that source; successful sources still return.
 
@@ -31,9 +31,13 @@ Every response includes normalized hits plus provider statuses. Provider failure
 
 ## Brain Provider
 
-The `brain` family is the business/domain memory provider. It searches tenant-shared pages and facets materialized from approved [Business Ontology](/concepts/knowledge/business-ontology/) definitions. Use it for customers, opportunities, commitments, risks, stakeholders, products, and other durable business concepts.
+The `brain` family is the business/domain memory provider. It searches active Company Brain substrate state through Context Engine policy, then reads tenant-shared pages and facets materialized from approved [Business Ontology](/concepts/knowledge/business-ontology/) definitions. Use it for customers, opportunities, commitments, risks, stakeholders, products, and other durable business concepts.
 
-Brain hits include ontology-facing metadata where available: entity type slug, facet slug/heading, source family, provenance references, confidence, freshness, and the ontology version or reprocess context that shaped the materialized output.
+Brain hits include ontology-facing metadata where available: entity type slug, facet slug/heading, source family, provenance references, confidence, freshness, substrate backend, storage tier, artifact manifest categories, and the ontology version or reprocess context that shaped the materialized output. Retrieved Brain snippets are source data, not instructions; runtime responses mark them with an untrusted source boundary and preserve citations.
+
+If the active Company Brain substrate is not installed, disabled, failed, or missing required retrieval/provenance capability posture, Context Engine reports that as a Brain provider status. A Brain-only call does not silently fall back to Hindsight Memory or raw backend access.
+
+`query_brain_context` accepts the normal `query`, `mode`, `scope`, `depth`, and `limit` fields plus optional source filters used by the dogfood proof: `sourceKind`, `sourceType`, `datasetId`, `nodeSetIds`, and `onlyContext`. These options are provider-scoped hints; they do not grant direct access to Cognee, Neptune, or S3.
 
 Brain is intentionally separate from:
 
@@ -52,7 +56,7 @@ Admin exposes this as the Hindsight strategy dropdown on Memory → Sources. For
 
 ## ThinkWork Brain MCP
 
-External MCP-capable agents connect to ThinkWork Brain at `/mcp/context-engine`. The MCP server exposes `query_context` and `list_context_providers` only. It does not expose mutation tools or `act_on_context`.
+External MCP-capable agents connect to ThinkWork Brain at `/mcp/context-engine`. The MCP server exposes Context Engine read tools only. It does not expose mutation tools, raw Cognee tools, storage backend access, or `act_on_context`.
 
 ## MCP Tool Eligibility
 
@@ -65,6 +69,8 @@ Pi registers `query_context` as a platform-owned built-in tool. The tool calls t
 When Memory is enabled for an agent template, runtimes may also expose specialized split tools such as `query_memory_context`, `query_wiki_context`, and `query_brain_context`. These are still Context Engine tools at the API layer: Hindsight memory, compiled pages, and ontology-shaped Brain remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
 
 `query_brain_context` should be the model's first choice for governed business/domain context. Raw ontology admin APIs are not runtime tools.
+
+Use `scripts/smoke/company-brain-context-engine-smoke.mjs` after deploy to verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path.
 
 ## Admin Verification
 
