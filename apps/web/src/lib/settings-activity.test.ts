@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activityTimestamp,
+  activityRecencyBucket,
+  activityRecencyLabel,
   buildLast30DaysCounts,
   dateKey,
   filterActivityItems,
@@ -146,5 +148,36 @@ describe("settings activity helpers", () => {
     expect(isActivityDay("2026-02-30")).toBe(false);
     expect(isActivityDay("May 31")).toBe(false);
     expect(isActivityDay(null)).toBe(false);
+  });
+
+  it("classifies activity recency buckets with readable labels", () => {
+    const now = new Date("2026-06-14T12:00:00.000Z");
+
+    expect(
+      activityRecencyBucket(
+        new Date("2026-06-14T08:00:00.000Z").getTime(),
+        now,
+      ),
+    ).toBe("today");
+    expect(
+      activityRecencyBucket(
+        new Date("2026-06-13T08:00:00.000Z").getTime(),
+        now,
+      ),
+    ).toBe("yesterday");
+    expect(
+      activityRecencyBucket(
+        new Date("2026-06-10T08:00:00.000Z").getTime(),
+        now,
+      ),
+    ).toBe("last7");
+    expect(
+      activityRecencyBucket(
+        new Date("2026-05-01T08:00:00.000Z").getTime(),
+        now,
+      ),
+    ).toBe("older");
+    expect(activityRecencyBucket(0, now)).toBe("unknown");
+    expect(activityRecencyLabel("last7")).toBe("Last 7 days");
   });
 });

@@ -33,6 +33,13 @@ export interface ActivityItem {
   threadId: string;
 }
 
+export type ActivityRecencyBucket =
+  | "today"
+  | "yesterday"
+  | "last7"
+  | "older"
+  | "unknown";
+
 export const TYPE_LABELS: Record<ActivityType, string> = {
   chat: "Chat",
   routine: "Routine",
@@ -100,6 +107,41 @@ export function formatActivityDay(value: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+export function activityRecencyBucket(
+  timestampValue: number,
+  nowValue: Date | number = Date.now(),
+): ActivityRecencyBucket {
+  if (!timestampValue) return "unknown";
+  const nowKey = dateKey(nowValue);
+  const itemKey = dateKey(timestampValue);
+  if (itemKey === nowKey) return "today";
+
+  const yesterday = new Date(nowKey + "T00:00:00");
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (itemKey === dateKey(yesterday)) return "yesterday";
+
+  const itemTime = new Date(itemKey + "T00:00:00").getTime();
+  const nowTime = new Date(nowKey + "T00:00:00").getTime();
+  const daysAgo = Math.floor((nowTime - itemTime) / 86_400_000);
+  if (daysAgo >= 0 && daysAgo < 7) return "last7";
+  return "older";
+}
+
+export function activityRecencyLabel(bucket: string): string {
+  switch (bucket) {
+    case "today":
+      return "Today";
+    case "yesterday":
+      return "Yesterday";
+    case "last7":
+      return "Last 7 days";
+    case "older":
+      return "Older";
+    default:
+      return "Unknown";
+  }
 }
 
 export function activityTimestamp(thread: ActivityThreadSummary): number {

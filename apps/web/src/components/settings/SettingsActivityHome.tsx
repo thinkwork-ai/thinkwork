@@ -1,8 +1,15 @@
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
-import { SettingsActivity } from "@/components/settings/SettingsActivity";
+import {
+  ACTIVITY_DISPLAY_CONFIG,
+  SettingsActivity,
+} from "@/components/settings/SettingsActivity";
 import { SettingsAnalytics } from "@/components/settings/SettingsAnalytics";
+import {
+  displayStateToSearch,
+  normalizeDisplayState,
+} from "@/lib/list-view-display";
 import { isActivityDay } from "@/lib/settings-activity";
 
 const ANALYTICS = "/settings/activity";
@@ -34,8 +41,9 @@ export function SettingsActivityHome() {
   // `day`) and /settings/activity/threads (Threads, where `day` is validated by
   // that route's validateSearch). strict:false is untyped, so coerce defensively
   // via the same isActivityDay guard the route uses.
-  const search = useSearch({ strict: false }) as { day?: unknown };
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
   const selectedDay = isActivityDay(search.day) ? search.day : null;
+  const displayState = normalizeDisplayState(search, ACTIVITY_DISPLAY_CONFIG);
 
   usePageHeaderActions({
     title: "Activity",
@@ -57,8 +65,25 @@ export function SettingsActivityHome() {
           onSelectedDayChange={(nextDay) =>
             navigate({
               to: THREADS,
-              search: nextDay ? { day: nextDay } : {},
+              search: (previous) => ({
+                ...displayStateToSearch(
+                  normalizeDisplayState(previous, ACTIVITY_DISPLAY_CONFIG),
+                  ACTIVITY_DISPLAY_CONFIG,
+                ),
+                ...(nextDay ? { day: nextDay } : { day: undefined }),
+              }),
               replace: false,
+            })
+          }
+          displayState={displayState}
+          onDisplayStateChange={(nextState) =>
+            navigate({
+              to: THREADS,
+              search: (previous) => ({
+                ...displayStateToSearch(nextState, ACTIVITY_DISPLAY_CONFIG),
+                ...(isActivityDay(previous.day) ? { day: previous.day } : {}),
+              }),
+              replace: true,
             })
           }
         />

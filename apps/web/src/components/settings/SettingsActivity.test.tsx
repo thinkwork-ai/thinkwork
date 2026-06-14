@@ -90,6 +90,54 @@ vi.mock("@thinkwork/ui", () => ({
         : emptyState}
     </div>
   ),
+  DisplayViewControl: ({
+    modes,
+    onStateChange,
+    state,
+  }: {
+    modes: Array<{ value: "table" | "list"; label: string }>;
+    state: { view: "table" | "list" };
+    onStateChange: (state: unknown) => void;
+  }) => (
+    <div data-testid="activity-display-control">
+      {modes.map((mode) => (
+        <button
+          key={mode.value}
+          type="button"
+          onClick={() => onStateChange({ ...state, view: mode.value })}
+        >
+          {mode.label}
+        </button>
+      ))}
+    </div>
+  ),
+  GroupedListView: ({
+    groups,
+    renderRow,
+    emptyState,
+  }: {
+    groups: Array<{
+      id: string;
+      label: string;
+      rows: ActivityItem[];
+      subgroups?: Array<{ id: string; label: string; rows: ActivityItem[] }>;
+    }>;
+    renderRow: (row: ActivityItem) => React.ReactNode;
+    emptyState?: React.ReactNode;
+  }) => {
+    const rows = groups.flatMap((group) =>
+      group.subgroups?.length
+        ? group.subgroups.flatMap((subgroup) => subgroup.rows)
+        : group.rows,
+    );
+    return (
+      <div data-testid="activity-list-view">
+        {rows.length
+          ? rows.map((row) => <div key={row.id}>{renderRow(row)}</div>)
+          : emptyState}
+      </div>
+    );
+  },
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input {...props} />
   ),
@@ -120,7 +168,7 @@ vi.mock("recharts", () => ({
   XAxis: () => null,
 }));
 
-import { SettingsActivity } from "./SettingsActivity";
+import { ACTIVITY_DISPLAY_CONFIG, SettingsActivity } from "./SettingsActivity";
 
 function thread(
   overrides: Partial<ActivityThreadSummary> = {},
@@ -255,6 +303,39 @@ describe("SettingsActivity", () => {
         threadId: "thread-1",
         title: "CHAT-979: AgentCore retry",
       },
+    });
+  });
+
+  it("renders Activity list mode with Table/List controls and preserves row navigation", () => {
+    const onDisplayStateChange = vi.fn();
+
+    render(
+      <SettingsActivity
+        selectedDay="2026-05-31"
+        displayState={{ ...ACTIVITY_DISPLAY_CONFIG.defaults, view: "list" }}
+        onDisplayStateChange={onDisplayStateChange}
+      />,
+    );
+
+    expect(screen.getByTestId("activity-list-view")).toBeTruthy();
+    expect(screen.getByText("Table")).toBeTruthy();
+    expect(screen.getByText("List")).toBeTruthy();
+    expect(screen.queryByText("Board")).toBeNull();
+    expect(screen.getByText("CHAT-979: AgentCore retry")).toBeTruthy();
+    expect(screen.queryByText("CHAT-1043: What is SpaceX?")).toBeNull();
+
+    fireEvent.click(screen.getByText("Table"));
+    expect(onDisplayStateChange).toHaveBeenCalledWith({
+      ...ACTIVITY_DISPLAY_CONFIG.defaults,
+      view: "table",
+    });
+
+    fireEvent.click(screen.getByText("CHAT-979: AgentCore retry"));
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/settings/activity/$threadId",
+      params: { threadId: "thread-1" },
+      search: { view: "list", day: "2026-05-31" },
+      state: expect.any(Function),
     });
   });
 
