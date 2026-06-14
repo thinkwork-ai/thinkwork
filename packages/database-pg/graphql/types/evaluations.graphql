@@ -306,6 +306,17 @@ type SkillEvalScore {
   lastRunId: ID
   lastRunAt: AWSDateTime
   totalCases: Int!
+  # Whether the skill can be RUN in an isolated eval (Skill Tests & Evals —
+  # run gating). True only when its catalog folder has a WIRING.md with a
+  # usable wiring choice — the SAME requirement as a normal install / the
+  # eval-baseline materialization. A rated-but-not-evaluable skill (e.g. no
+  # WIRING.md) must not be run: the UI disables "Run evals now" and shows
+  # `ineligibleReason`. Cases can still be flagged/seeded into it. Computed
+  # lazily (reads catalog WIRING.md) — request it only on the detail surface.
+  evaluable: Boolean!
+  # Human reason the skill can't be run in an isolated eval; null when
+  # evaluable.
+  ineligibleReason: String
 }
 
 type EvalTimeSeriesPoint {

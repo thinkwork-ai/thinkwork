@@ -21,6 +21,7 @@ const {
   mockGetTenantModelCatalogEntry,
   mockResolveTenantPlatformAgent,
   mockClaimEvalBaselineForRun,
+  mockCheckSkillEvalEligibility,
   mockLambdaSend,
   mockGetSkillEvalGateThreshold,
   mockSetSkillEvalGateThreshold,
@@ -58,6 +59,7 @@ const {
     mockGetTenantModelCatalogEntry: vi.fn(),
     mockResolveTenantPlatformAgent: vi.fn(),
     mockClaimEvalBaselineForRun: vi.fn(),
+    mockCheckSkillEvalEligibility: vi.fn(),
     mockLambdaSend: vi.fn(),
     mockEnsureBaselineDatasetSeeded: vi.fn(),
     mockResolveDatasetForLaunch: vi.fn(),
@@ -207,6 +209,7 @@ vi.mock("../../../lib/agents/tenant-platform-agent.js", () => ({
 // routing decision is observable without real S3.
 vi.mock("../../../lib/evals/eval-baseline-agent.js", () => ({
   claimEvalBaselineForRun: mockClaimEvalBaselineForRun,
+  checkSkillEvalEligibility: mockCheckSkillEvalEligibility,
 }));
 
 // Both seed entry points route through the U5 baseline-dataset seeder;
@@ -292,6 +295,7 @@ import {
   evaluationsQueries,
   placeholderStatusForEvalRun,
   shouldIncludePlannedEvalRows,
+  skillEvalScoreTypeResolvers,
   withLiveProgress,
 } from "./index.js";
 
@@ -2138,5 +2142,35 @@ describe("skill-update gate (U6)", () => {
       expect(mockGetSkillEvalGateThreshold).not.toHaveBeenCalled();
       expect(mockReinstallCatalogSkill).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("skillEvalScoreTypeResolvers (run eligibility)", () => {
+  it("fail-closed: a parent with no tenantId is not evaluable and never probes", async () => {
+    mockCheckSkillEvalEligibility.mockReset();
+    const parent = { skillSlug: "x" };
+    expect(await skillEvalScoreTypeResolvers.evaluable(parent)).toBe(false);
+    expect(
+      await skillEvalScoreTypeResolvers.ineligibleReason(parent),
+    ).toBeNull();
+    expect(mockCheckSkillEvalEligibility).not.toHaveBeenCalled();
+  });
+
+  it("memoizes: both fields share one eligibility probe per parent", async () => {
+    mockCheckSkillEvalEligibility.mockReset();
+    mockCheckSkillEvalEligibility.mockResolvedValue({
+      evaluable: false,
+      reason: "no WIRING.md",
+    });
+    const parent = { tenantId: "tenant-1", skillSlug: "research-dashboard" };
+    expect(await skillEvalScoreTypeResolvers.evaluable(parent)).toBe(false);
+    expect(await skillEvalScoreTypeResolvers.ineligibleReason(parent)).toBe(
+      "no WIRING.md",
+    );
+    expect(mockCheckSkillEvalEligibility).toHaveBeenCalledTimes(1);
+    expect(mockCheckSkillEvalEligibility).toHaveBeenCalledWith(
+      "tenant-1",
+      "research-dashboard",
+    );
   });
 });

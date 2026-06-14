@@ -68,6 +68,12 @@ export interface SkillEvalScore {
   lastRunId: string | null;
   lastRunAt: string | null;
   totalCases: number;
+  /**
+   * Internal carrier (NOT in the GraphQL schema) for the lazy `evaluable` /
+   * `ineligibleReason` field resolvers, which read catalog WIRING.md only when
+   * the detail surface requests them — so the list cell stays cheap.
+   */
+  tenantId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +249,7 @@ export async function readSkillEvalScore(
   const unrated = (): SkillEvalScore => ({
     skillSlug,
     datasetSlug,
+    tenantId,
     rated: false,
     passRate: null,
     regression: false,
@@ -309,6 +316,7 @@ export async function readSkillEvalScore(
   return {
     skillSlug,
     datasetSlug,
+    tenantId,
     rated,
     passRate: latestPassRate,
     regression,

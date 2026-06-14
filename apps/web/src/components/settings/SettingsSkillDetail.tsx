@@ -12,7 +12,7 @@ import {
   ApplySkillUpdateMutation,
   EvalDatasetsQuery,
   OnEvalRunUpdatedSubscription,
-  SkillEvalScoreQuery,
+  SkillEvalScoreDetailQuery,
   StartEvalRunMutation,
 } from "@/lib/evaluation-queries";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
@@ -41,7 +41,7 @@ function SkillEvalPanel({ skillSlug }: { skillSlug: string }) {
 
   const [{ data: scoreData, fetching: scoreFetching }, refetchScore] = useQuery(
     {
-      query: SkillEvalScoreQuery,
+      query: SkillEvalScoreDetailQuery,
       variables: { tenantId: tid, skillSlug },
       pause: !tenantId,
       requestPolicy: "cache-and-network",
@@ -190,7 +190,7 @@ function SkillEvalPanel({ skillSlug }: { skillSlug: string }) {
             type="button"
             size="sm"
             data-testid="skill-run-evals"
-            disabled={starting || !score?.rated}
+            disabled={starting || !score?.rated || score?.evaluable === false}
             onClick={() => void runNow()}
           >
             {starting ? <Spinner className="size-3.5" /> : "Run evals now"}
@@ -202,6 +202,18 @@ function SkillEvalPanel({ skillSlug }: { skillSlug: string }) {
         <p className="mt-2 text-xs text-muted-foreground">
           This skill ships no eval cases yet. Add <code>evals/*.json</code> to
           the skill folder, or flag a thread to it, to start scoring.
+        </p>
+      ) : null}
+
+      {score && score.evaluable === false ? (
+        <p
+          className="mt-2 text-xs text-amber-600 dark:text-amber-500"
+          data-testid="skill-not-evaluable"
+        >
+          {score.ineligibleReason ??
+            "This skill can't be run in an isolated eval."}{" "}
+          Cases can still be flagged here; they'll run once the skill is
+          evaluable.
         </p>
       ) : null}
 

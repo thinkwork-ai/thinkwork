@@ -586,6 +586,27 @@ export const SkillEvalScoreQuery = graphql(`
   }
 `);
 
+// Detail-surface score read (U9 + run-eligibility). Adds the lazy
+// `evaluable`/`ineligibleReason` fields (which read catalog WIRING.md) so the
+// skill detail can gate "Run evals now" — kept off the list-cell query above so
+// the list stays cheap.
+export const SkillEvalScoreDetailQuery = graphql(`
+  query SkillEvalScoreDetail($tenantId: ID!, $skillSlug: String!) {
+    skillEvalScore(tenantId: $tenantId, skillSlug: $skillSlug) {
+      skillSlug
+      datasetSlug
+      rated
+      passRate
+      regression
+      lastRunId
+      lastRunAt
+      totalCases
+      evaluable
+      ineligibleReason
+    }
+  }
+`);
+
 // Per-tenant skill-update gate threshold (U6). `enabled` is false
 // (threshold null) when no gate is set.
 export const SkillEvalGateQuery = graphql(`

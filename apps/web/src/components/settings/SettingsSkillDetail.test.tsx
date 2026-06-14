@@ -19,7 +19,7 @@ import { useMutation, useQuery, useSubscription } from "urql";
 import {
   ApplySkillUpdateMutation,
   EvalDatasetsQuery,
-  SkillEvalScoreQuery,
+  SkillEvalScoreDetailQuery,
 } from "@/lib/evaluation-queries";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { SettingsSkillDetail } from "./SettingsSkillDetail";
@@ -73,7 +73,7 @@ const agentData = { agent: { id: "agent-1" } };
 function setupMocks() {
   vi.mocked(useQuery).mockImplementation((args) => {
     let data: unknown = undefined;
-    if (args.query === SkillEvalScoreQuery) data = scoreData;
+    if (args.query === SkillEvalScoreDetailQuery) data = scoreData;
     else if (args.query === EvalDatasetsQuery) data = datasetsData;
     else if (args.query === SettingsTenantAgentQuery) data = agentData;
     return [{ data, fetching: false, stale: false }, vi.fn()] as never;
@@ -100,6 +100,8 @@ beforeEach(() => {
       lastRunId: "run-1",
       lastRunAt: "2026-06-13T00:00:00Z",
       totalCases: 4,
+      evaluable: true,
+      ineligibleReason: null,
     },
   };
   datasetsData = { evalDatasets: [] };
@@ -163,6 +165,8 @@ describe("SettingsSkillDetail eval panel", () => {
         lastRunId: null,
         lastRunAt: null,
         totalCases: 0,
+        evaluable: true,
+        ineligibleReason: null,
       },
     };
     setupMocks();
@@ -171,6 +175,34 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(
       (screen.getByTestId("skill-run-evals") as HTMLButtonElement).disabled,
     ).toBe(true);
+  });
+
+  it("gates the run for a rated-but-non-evaluable skill and shows the reason", () => {
+    // A skill with cases but no WIRING.md: can't be materialized for an
+    // isolated eval, so "Run evals now" must stay disabled with an explanation
+    // (rather than letting the operator hit EvalBaselineMaterializationError).
+    scoreData = {
+      skillEvalScore: {
+        skillSlug: "research-dashboard",
+        datasetSlug: "skill-research-dashboard",
+        rated: true,
+        passRate: null,
+        regression: false,
+        lastRunId: null,
+        lastRunAt: null,
+        totalCases: 1,
+        evaluable: false,
+        ineligibleReason: "This skill has no WIRING.md, so it can't be run.",
+      },
+    };
+    setupMocks();
+    render(<SettingsSkillDetail />);
+    expect(
+      (screen.getByTestId("skill-run-evals") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByTestId("skill-not-evaluable").textContent).toContain(
+      "no WIRING.md",
+    );
   });
 
   it("dispatches an on-demand run against the skill dataset", async () => {
