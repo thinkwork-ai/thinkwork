@@ -1,7 +1,7 @@
 ---
 module: packages/database-pg/drizzle
 date: 2026-04-21
-last_updated: 2026-05-23
+last_updated: 2026-06-14
 category: workflow-issues
 problem_type: workflow_issue
 component: database
@@ -110,8 +110,18 @@ This is the **third** drift incident in five days:
   `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0125_drop_space_agent_assignments.sql`
   reported all markers as `DROPPED`, and rerunning CI cleared the gate. This was
   the destructive-drop mirror of the additive drift incidents above.
+- **2026-06-14, migration 0169.** THNK-24 U2 added
+  `0169_release_update_jobs.sql` for release update job/event persistence. The
+  PR's first CI pass failed `Migration Drift Precheck (dev)` because the new
+  hand-rolled migration objects were not yet present in the dev database. The
+  recovery was scoped and pre-merge: apply only
+  `packages/database-pg/drizzle/0169_release_update_jobs.sql` to dev with
+  `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ...`, run
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0169_release_update_jobs.sql`,
+  then rebase/rerun CI. The refreshed PR passed `cla`, `lint`, `test`,
+  `typecheck`, `Migration Drift Precheck (dev)`, and `verify` before merge.
 
-Three incidents, same root, same named-but-unshipped fix. The compound-
+Repeated incidents, same root, same named-but-unshipped fix. The compound-
 engineering failure mode: the April 17 learning wasn't captured in
 `docs/solutions/`, so it wasn't available when the April 18 session hit a
 related symptom, nor when the April 21 session shipped its own "apply
@@ -233,6 +243,29 @@ gh run rerun <deploy-run-id> --failed
 If `gh run rerun --failed` says the workflow is already running, check the run
 attempt: GitHub may already have started the failed-job rerun. Keep watching
 until `Migration Drift Check` and `Deploy Summary` both complete successfully.
+
+#### 2026-06-14 update: PR CI can be the pre-merge drift gate
+
+THNK-24 U2 showed the healthiest version of this failure mode. The release
+update job migration (`0169_release_update_jobs.sql`) was hand-rolled with
+drift markers. GitHub's PR-level `Migration Drift Precheck (dev)` failed before
+merge because dev did not yet contain `release_update_jobs`,
+`release_update_events`, or the declared release-update indexes.
+
+The correct response was not to loosen the gate or batch unrelated SQL. Apply
+the single PR migration, verify the same file with the scoped reporter, then
+rerun CI:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0169_release_update_jobs.sql
+bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0169_release_update_jobs.sql
+```
+
+Only after the rerun passed `Migration Drift Precheck (dev)` alongside the
+normal `test`, `typecheck`, `lint`, `verify`, and `cla` checks did the PR merge.
+That ordering is the point: the database catches up to the branch while the PR
+is still under review, so `main` never contains application code whose manual
+migration is missing from dev.
 
 ### 3. Ship a drift reporter: `scripts/db-migrate-manual.sh`
 
@@ -439,3 +472,6 @@ checklist, would have caught 0018 before 0019's author typed `psql`.
 - `docs/solutions/workflow-issues/platform-agent-space-runtime-refactor-autopilot-sequencing-2026-05-23.md`
   — Plan B example combining manual migration drift, generated-client coupling,
   destructive-drop gating, and final status-ledger closeout.
+- `docs/plans/autopilot/THNK-24-status.md` — U2 example where the PR-level
+  `Migration Drift Precheck (dev)` failed on `0169_release_update_jobs.sql`,
+  the scoped migration was applied to dev, and refreshed CI passed before merge.
