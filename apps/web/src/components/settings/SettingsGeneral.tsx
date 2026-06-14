@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "urql";
+import { useQuery } from "urql";
 import { toast } from "sonner";
 import {
   Button,
@@ -35,7 +35,6 @@ import {
 import {
   SettingsDeploymentReleasesQuery,
   SettingsDeploymentStatusQuery,
-  SettingsStartDeploymentReleaseUpdateMutation,
 } from "@/lib/settings-queries";
 import {
   SettingsHeader,
@@ -197,16 +196,16 @@ interface DeploymentReleaseRow {
   deployable: boolean;
 }
 
-interface DeploymentReleaseUpdateResult {
-  executionArn: string;
-  stateMachineArn: string;
+interface DeploymentReleaseUpdateJobResult {
+  id: string;
+  status: string;
+  targetReleaseVersion: string;
+  executionArn?: string | null;
+  stateMachineArn?: string | null;
   evidenceBucket?: string | null;
-  evidencePrefix: string;
-  message: string;
-  release: Pick<
-    DeploymentReleaseRow,
-    "version" | "manifestUrl" | "manifestSha256" | "signed" | "deployable"
-  >;
+  evidencePrefix?: string | null;
+  failureMessage?: string | null;
+  recoveryAction?: string | null;
 }
 
 type DeploymentProgressState =
@@ -219,7 +218,7 @@ type DeploymentProgressState =
       phase: "accepted";
       release: DeploymentReleaseRow;
       message: string;
-      result: DeploymentReleaseUpdateResult;
+      result: DeploymentReleaseUpdateJobResult;
     }
   | {
       phase: "failed";
@@ -245,15 +244,12 @@ function DeploymentReleasesSection({
     variables: { limit: 5 },
     pause: !enabled,
   });
-  const [updateState, startReleaseUpdate] = useMutation(
-    SettingsStartDeploymentReleaseUpdateMutation,
-  );
   const releases = (result.data?.deploymentReleases ??
     []) as DeploymentReleaseRow[];
   const deploymentCompleted =
     deploymentProgress?.phase === "accepted" &&
     deploymentProgress.release.version === currentReleaseVersion;
-  const deploymentBusy = updateState.fetching;
+  const deploymentBusy = false;
 
   useEffect(() => {
     if (deploymentProgress?.phase !== "accepted" || deploymentCompleted) {
@@ -273,53 +269,10 @@ function DeploymentReleasesSection({
     if (!selectedRelease) return;
     const release = selectedRelease;
     setSelectedRelease(null);
-    setDeploymentProgress({
-      phase: "starting",
-      release,
-      message: "Contacting the deployment API and starting the controller.",
-    });
-
-    try {
-      const response = await startReleaseUpdate({
-        input: {
-          version: release.version,
-          manifestUrl: release.manifestUrl,
-          manifestSha256: release.manifestSha256,
-          idempotencyKey: `settings-release-${release.version}`,
-        },
-      });
-      if (response.error) {
-        const message = response.error.message;
-        setDeploymentProgress({ phase: "failed", release, message });
-        toast.error("Release deploy failed", { description: message });
-        return;
-      }
-
-      const deployResult = response.data
-        ?.startDeploymentReleaseUpdate as DeploymentReleaseUpdateResult | null;
-      if (!deployResult) {
-        const message = "The deployment API returned no controller execution.";
-        setDeploymentProgress({ phase: "failed", release, message });
-        toast.error("Release deploy failed", { description: message });
-        return;
-      }
-
-      setDeploymentProgress({
-        phase: "accepted",
-        release,
-        message: deployResult.message,
-        result: deployResult,
-      });
-      onRefreshDeploymentStatus?.();
-      toast.success("Release deploy started", {
-        description: deployResult.message,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown deployment error.";
-      setDeploymentProgress({ phase: "failed", release, message });
-      toast.error("Release deploy failed", { description: message });
-    }
+    const message =
+      "Release updates now require preflight review before dispatch.";
+    setDeploymentProgress({ phase: "failed", release, message });
+    toast.error("Release preflight required", { description: message });
   }
 
   return (
@@ -457,13 +410,13 @@ function DeploymentProgressPanel({
         <ConfirmFact label="Release" value={progress.release.version} />
         {result ? (
           <>
-            <ConfirmFact label="Execution" value={result.executionArn} />
+            <ConfirmFact label="Execution" value={result.executionArn ?? ""} />
             <ConfirmFact
               label="Evidence"
               value={
                 result.evidenceBucket
                   ? `${result.evidenceBucket}/${result.evidencePrefix}`
-                  : result.evidencePrefix
+                  : (result.evidencePrefix ?? "")
               }
             />
           </>

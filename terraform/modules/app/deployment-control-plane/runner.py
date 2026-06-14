@@ -1459,6 +1459,11 @@ def push_database_schema(outputs_path, vars_json):
 
 
 def write_runner_files(payload, runner_secrets):
+    preserved_config = payload.get("preservedConfig")
+    if not isinstance(preserved_config, dict):
+        preserved_config = {}
+    reviewed_payload = dict(payload)
+    reviewed_payload.update(preserved_config)
     stage = safe_get(
         payload,
         "stage",
@@ -1546,17 +1551,22 @@ def write_runner_files(payload, runner_secrets):
         "db_password": db_password,
         "api_auth_secret": api_auth_secret,
         "database_engine": safe_get(
-            payload,
+            reviewed_payload,
             "databaseEngine",
             default="aurora-serverless",
         ),
-        "enable_hindsight": bool(payload.get("enableHindsight", False)),
+        "enable_hindsight": safe_get_bool(
+            {},
+            reviewed_payload,
+            "enableHindsight",
+            default=False,
+        ),
         "platform_operator_emails": safe_get(
             runner_secrets,
             "adminEmail",
             "platformOperatorEmails",
             default=safe_get(
-                payload,
+                reviewed_payload,
                 "adminEmail",
                 "platformOperatorEmails",
                 default="",
@@ -1565,52 +1575,72 @@ def write_runner_files(payload, runner_secrets):
         "google_oauth_client_id": safe_get(
             runner_secrets,
             "googleOauthClientId",
-            default=safe_get(payload, "googleOauthClientId", default=""),
+            default=safe_get(
+                reviewed_payload,
+                "googleOauthClientId",
+                default="",
+            ),
         ),
         "google_oauth_client_secret": safe_get(
             runner_secrets,
             "googleOauthClientSecret",
-            default=safe_get(payload, "googleOauthClientSecret", default=""),
+            default=safe_get(
+                reviewed_payload,
+                "googleOauthClientSecret",
+                default="",
+            ),
         ),
         "cognito_email_source_arn": safe_get(
             runner_secrets,
             "cognitoEmailSourceArn",
-            default=safe_get(payload, "cognitoEmailSourceArn", default=""),
+            default=safe_get(
+                reviewed_payload,
+                "cognitoEmailSourceArn",
+                default="",
+            ),
         ),
         "cognito_from_email_address": safe_get(
             runner_secrets,
             "cognitoFromEmailAddress",
-            default=safe_get(payload, "cognitoFromEmailAddress", default=""),
+            default=safe_get(
+                reviewed_payload,
+                "cognitoFromEmailAddress",
+                default="",
+            ),
         ),
         "cognito_reply_to_email_address": safe_get(
             runner_secrets,
             "cognitoReplyToEmailAddress",
-            default=safe_get(payload, "cognitoReplyToEmailAddress", default=""),
+            default=safe_get(
+                reviewed_payload,
+                "cognitoReplyToEmailAddress",
+                default="",
+            ),
         ),
         "app_domain": safe_get(
             runner_secrets,
             "appDomain",
-            default=safe_get(payload, "appDomain", default=""),
+            default=safe_get(reviewed_payload, "appDomain", default=""),
         ),
         "app_certificate_arn": safe_get(
             runner_secrets,
             "appCertificateArn",
-            default=safe_get(payload, "appCertificateArn", default=""),
+            default=safe_get(reviewed_payload, "appCertificateArn", default=""),
         ),
         "customer_domain": safe_get(
             runner_secrets,
             "customerDomain",
-            default=safe_get(payload, "customerDomain", default=""),
+            default=safe_get(reviewed_payload, "customerDomain", default=""),
         ),
         "customer_domain_delegated": safe_get_bool(
             runner_secrets,
-            payload,
+            reviewed_payload,
             "customerDomainDelegated",
             default=False,
         ),
         "customer_domain_legacy_retired": safe_get_bool(
             runner_secrets,
-            payload,
+            reviewed_payload,
             "customerDomainLegacyRetired",
             default=False,
         ),
