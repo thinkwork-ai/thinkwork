@@ -23,6 +23,76 @@ output "cognee_backend_mode" {
   value       = var.backend_mode
 }
 
+output "cognee_brain_instance_key" {
+  description = "Tenant-scoped Company Brain instance key used for resource naming; null for legacy stage-wide instances."
+  value       = local.tenant_scoped_brain_instance ? local.normalized_brain_instance_key : null
+}
+
+output "cognee_brain_tenant_id" {
+  description = "Tenant ID owning this Company Brain substrate instance; null for legacy stage-wide instances."
+  value       = var.brain_tenant_id != "" ? var.brain_tenant_id : null
+}
+
+output "cognee_brain_storage_tier" {
+  description = "Company Brain storage tier selected for this substrate instance."
+  value       = var.brain_storage_tier
+}
+
+output "cognee_graph_database_provider" {
+  description = "Cognee graph database provider selected for the Brain substrate."
+  value       = var.graph_database_provider
+}
+
+output "cognee_vector_db_provider" {
+  description = "Cognee vector database provider selected for the Brain substrate."
+  value       = var.vector_db_provider
+}
+
+output "cognee_embedding_model" {
+  description = "Embedding model configured for Brain retrieval and migration evidence."
+  value       = var.embedding_model
+}
+
+output "cognee_embedding_dimensions" {
+  description = "Embedding vector dimension configured for Brain retrieval and migration evidence."
+  value       = var.embedding_dimensions
+}
+
+output "cognee_s3_artifact_root" {
+  description = "Canonical Company Brain S3 source artifact root."
+  value       = var.brain_s3_artifact_root
+}
+
+output "cognee_s3_manifest_root" {
+  description = "Canonical Company Brain S3 ingestion manifest root."
+  value       = var.brain_s3_manifest_root
+}
+
+output "cognee_s3_vault_projection_root" {
+  description = "Canonical Company Brain S3 vault projection root."
+  value       = var.brain_s3_vault_projection_root
+}
+
+output "cognee_neptune_graph_id" {
+  description = "Neptune Analytics graph ID for production Brain tier."
+  value       = var.neptune_graph_id
+}
+
+output "cognee_neptune_endpoint" {
+  description = "Neptune Analytics endpoint for production Brain tier."
+  value       = var.neptune_endpoint
+}
+
+output "cognee_private_substrate_mode" {
+  description = "Whether the Brain substrate is configured as private/internal-only."
+  value       = var.private_substrate_mode
+}
+
+output "cognee_production_posture" {
+  description = "Operator evidence string for production-tier approval/readiness posture."
+  value       = var.production_posture
+}
+
 output "cognee_cluster_arn" {
   description = "ECS cluster ARN for the Cognee service"
   value       = aws_ecs_cluster.main.arn

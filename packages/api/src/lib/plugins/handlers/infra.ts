@@ -274,6 +274,39 @@ function requiresPlanBackedAdoption(args: {
   return args.pluginKey === "company-brain" && args.appKey === "cognee";
 }
 
+function isCompanyBrainSubstrate(args: {
+  pluginKey: string;
+  appKey: ManagedAppKey;
+}): boolean {
+  return args.pluginKey === "company-brain" && args.appKey === "cognee";
+}
+
+function tenantScopedBrainInstanceKey(tenantId: string): string {
+  return `tenant-${createHash("sha256")
+    .update(tenantId)
+    .digest("hex")
+    .slice(0, 12)}`;
+}
+
+function desiredConfigForPlanJob(args: {
+  tenantId: string;
+  pluginKey: string;
+  appKey: ManagedAppKey;
+  existing: InfraManagedApplicationSnapshot | null;
+}): Record<string, unknown> {
+  const existingConfig = args.existing?.desiredConfig ?? {};
+  if (args.existing || !isCompanyBrainSubstrate(args)) {
+    return existingConfig;
+  }
+  return {
+    ...existingConfig,
+    brainTenantId: args.tenantId,
+    brainInstanceKey: tenantScopedBrainInstanceKey(args.tenantId),
+    brainStorageTier: "default",
+    privateSubstrateMode: true,
+  };
+}
+
 function hasResolvedRelease(app: InfraManagedApplicationSnapshot): boolean {
   return Boolean(
     app.selectedReleaseVersion &&
@@ -432,10 +465,16 @@ export async function provisionPluginInfraComponent(args: {
       operation,
       attempt,
     }),
-    // Adoption preserves the existing row's desired_config; fresh installs
-    // start from the adapter defaults ({} — the manifest declares input
-    // CONTRACTS, not values).
-    desiredConfig: existing?.desiredConfig ?? {},
+    // Adoption preserves the existing row's desired_config so no-change
+    // evidence stays meaningful. Net-new Company Brain installs seed
+    // tenant-scoped Brain identity in desiredConfig for the runner/Terraform
+    // contract; generic managed apps continue to start from adapter defaults.
+    desiredConfig: desiredConfigForPlanJob({
+      tenantId: args.tenantId,
+      pluginKey: args.pluginKey,
+      appKey,
+      existing,
+    }),
     // Pass the operator-selected release through so the job never falls back
     // to the "unresolved" sentinel (which the Step Function rejects).
     releaseVersion,

@@ -563,6 +563,53 @@ describe("provisionPluginInfraComponent", () => {
       manifestDigest: null,
     });
   });
+
+  it("net-new Company Brain provisioning seeds tenant-scoped Brain desired config", async () => {
+    const deps = fakeDeps();
+    const brainSubstrate = component({
+      key: "brain-substrate",
+      managedAppKey: "cognee",
+      terraformInputs: {
+        imageUri: { description: "image", type: "string" },
+        dbPasswordSecretArn: { description: "db", type: "string" },
+        bedrockModelResourceArns: {
+          description: "models",
+          type: "list(string)",
+        },
+      },
+    });
+
+    const ref = await provisionPluginInfraComponent(
+      provisionArgs(
+        deps,
+        {},
+        {
+          pluginKey: "company-brain",
+          component: brainSubstrate,
+        },
+      ),
+    );
+
+    expect(ref).toMatchObject({
+      managedAppKey: "cognee",
+      deploymentJobId: "job-1",
+      operation: "ENABLE",
+      adoptedExisting: false,
+    });
+    expect(deps.startCalls).toHaveLength(1);
+    expect(deps.startCalls[0]).toMatchObject({
+      appKey: "cognee",
+      operation: "ENABLE",
+      desiredConfig: {
+        brainTenantId: TENANT,
+        brainInstanceKey: "tenant-0a96abb33b07",
+        brainStorageTier: "default",
+        privateSubstrateMode: true,
+      },
+      releaseVersion: null,
+      manifestDigest: null,
+    });
+  });
 });
 
 describe("teardownPluginInfraComponent", () => {

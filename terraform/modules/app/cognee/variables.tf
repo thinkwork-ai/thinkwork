@@ -105,6 +105,88 @@ variable "desired_count" {
   default     = 1
 }
 
+variable "brain_tenant_id" {
+  description = "Tenant ID for a tenant-scoped Company Brain substrate instance. Empty preserves the legacy stage-wide Cognee resource names."
+  type        = string
+  default     = ""
+}
+
+variable "brain_instance_key" {
+  description = "Stable tenant-scoped Brain instance key used to derive resource names. Empty falls back to brain_tenant_id, and both empty preserve legacy stage-wide names."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.brain_instance_key == "" || can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$", var.brain_instance_key))
+    error_message = "brain_instance_key must be empty or a stable 1-48 character alphanumeric, underscore, or dash key."
+  }
+}
+
+variable "brain_storage_tier" {
+  description = "Company Brain storage tier: default uses local LanceDB/Kuzu-style stores; production uses Neptune Analytics graph/vector providers."
+  type        = string
+  default     = "default"
+
+  validation {
+    condition     = contains(["default", "production"], var.brain_storage_tier)
+    error_message = "brain_storage_tier must be default or production."
+  }
+}
+
+variable "brain_s3_artifact_root" {
+  description = "Canonical Company Brain S3 root URI for source artifacts. Used as runner/status evidence; S3 is the replay source of truth."
+  type        = string
+  default     = ""
+}
+
+variable "brain_s3_manifest_root" {
+  description = "Canonical Company Brain S3 root URI for ingestion manifests."
+  type        = string
+  default     = ""
+}
+
+variable "brain_s3_vault_projection_root" {
+  description = "Canonical Company Brain S3 root URI for vault/materialized projections."
+  type        = string
+  default     = ""
+}
+
+variable "brain_artifacts_bucket_arn" {
+  description = "Optional S3 bucket ARN for canonical Brain artifacts. When set with brain_artifacts_prefixes, the task role receives scoped object access."
+  type        = string
+  default     = ""
+}
+
+variable "brain_artifacts_prefixes" {
+  description = "Tenant/stage prefixes inside brain_artifacts_bucket_arn the Brain task may access."
+  type        = list(string)
+  default     = []
+}
+
+variable "private_substrate_mode" {
+  description = "Whether the Brain substrate is private/internal-only. Public substrate mode is intentionally unsupported for Company Brain."
+  type        = bool
+  default     = true
+}
+
+variable "require_authentication" {
+  description = "Passed to Cognee REQUIRE_AUTHENTICATION. Defaults false for current internal ALB compatibility; Company Brain can set true when the runtime supports it."
+  type        = bool
+  default     = false
+}
+
+variable "enable_backend_access_control" {
+  description = "Passed to Cognee ENABLE_BACKEND_ACCESS_CONTROL for private-substrate hardening."
+  type        = bool
+  default     = false
+}
+
+variable "cors_allowed_origins" {
+  description = "Passed to Cognee CORS_ALLOWED_ORIGINS. Keep empty for internal-only Company Brain substrate."
+  type        = string
+  default     = ""
+}
+
 variable "cpu_architecture" {
   description = "Fargate CPU architecture for the Cognee task"
   type        = string
@@ -271,6 +353,30 @@ variable "graph_database_username" {
 
 variable "graph_database_password_secret_arn" {
   description = "Optional Secrets Manager ARN for a remote graph store password"
+  type        = string
+  default     = ""
+}
+
+variable "neptune_graph_id" {
+  description = "Neptune Analytics graph ID used by the production Brain tier."
+  type        = string
+  default     = ""
+}
+
+variable "neptune_graph_arn" {
+  description = "Optional Neptune Analytics graph ARN. When set, the task role receives scoped Neptune graph query access."
+  type        = string
+  default     = ""
+}
+
+variable "neptune_endpoint" {
+  description = "Neptune Analytics endpoint used by the production Brain tier."
+  type        = string
+  default     = ""
+}
+
+variable "production_posture" {
+  description = "Operator evidence string for production-tier approval/readiness posture."
   type        = string
   default     = ""
 }

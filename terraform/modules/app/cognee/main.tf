@@ -7,43 +7,63 @@
 ################################################################################
 
 locals {
-  name = "thinkwork-${var.stage}-cognee"
+  legacy_name = "thinkwork-${var.stage}-cognee"
+
+  raw_brain_instance_key        = var.brain_instance_key != "" ? var.brain_instance_key : var.brain_tenant_id
+  normalized_brain_instance_key = trim(replace(replace(lower(local.raw_brain_instance_key), "/[^a-z0-9-]/", "-"), "/-+/", "-"), "-")
+  tenant_scoped_brain_instance  = local.normalized_brain_instance_key != ""
+  brain_instance_hash           = substr(sha1(local.raw_brain_instance_key), 0, 12)
+  name                          = local.tenant_scoped_brain_instance ? "thinkwork-${var.stage}-cb-${local.brain_instance_hash}" : local.legacy_name
+  resource_short_name           = local.tenant_scoped_brain_instance ? "tw-${substr(var.stage, 0, 8)}-cb-${substr(local.brain_instance_hash, 0, 10)}" : "tw-${var.stage}-cognee"
 
   data_root_directory   = "/app/cognee-storage/data"
   system_root_directory = "/app/cognee-storage/system"
 
-  vector_db_url = var.vector_db_url != "" ? var.vector_db_url : "${local.system_root_directory}/databases/cognee.lancedb"
-  graph_db_url  = var.graph_database_url != "" ? var.graph_database_url : "${local.system_root_directory}/databases/cognee.kuzu"
+  vector_db_url = (
+    var.vector_db_url != ""
+    ? var.vector_db_url
+    : var.vector_db_provider == "neptune_analytics" && var.neptune_endpoint != ""
+    ? var.neptune_endpoint
+    : "${local.system_root_directory}/databases/cognee.lancedb"
+  )
+  graph_db_url = (
+    var.graph_database_url != ""
+    ? var.graph_database_url
+    : var.graph_database_provider == "neptune_analytics" && var.neptune_endpoint != ""
+    ? var.neptune_endpoint
+    : "${local.system_root_directory}/databases/cognee.kuzu"
+  )
+  log_group_name = local.tenant_scoped_brain_instance ? "/thinkwork/${var.stage}/brain/${local.normalized_brain_instance_key}/cognee" : "/thinkwork/${var.stage}/cognee"
 
   managed_secret_specs = {
     db_password = {
       enabled       = var.create_secret_placeholders && var.db_password_secret_arn == ""
-      name          = "thinkwork/${var.stage}/cognee/db-credentials"
-      description   = "Dedicated Cognee PostgreSQL credentials"
+      name          = local.tenant_scoped_brain_instance ? "thinkwork/${var.stage}/brain/${local.normalized_brain_instance_key}/db-credentials" : "thinkwork/${var.stage}/cognee/db-credentials"
+      description   = "Dedicated Brain/Cognee PostgreSQL credentials"
       secret_string = jsonencode({ password = "PLACEHOLDER_SET_VIA_CLI" })
     }
     llm_api_key = {
       enabled       = var.create_secret_placeholders && var.llm_provider != "bedrock" && var.llm_api_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/cognee/llm-api-key"
-      description   = "Cognee non-Bedrock LLM provider API key"
+      name          = local.tenant_scoped_brain_instance ? "thinkwork/${var.stage}/brain/${local.normalized_brain_instance_key}/llm-api-key" : "thinkwork/${var.stage}/cognee/llm-api-key"
+      description   = "Brain/Cognee non-Bedrock LLM provider API key"
       secret_string = "PLACEHOLDER_SET_VIA_CLI"
     }
     embedding_api_key = {
       enabled       = var.create_secret_placeholders && var.embedding_provider != "bedrock" && var.embedding_api_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/cognee/embedding-api-key"
-      description   = "Cognee non-Bedrock embedding provider API key"
+      name          = local.tenant_scoped_brain_instance ? "thinkwork/${var.stage}/brain/${local.normalized_brain_instance_key}/embedding-api-key" : "thinkwork/${var.stage}/cognee/embedding-api-key"
+      description   = "Brain/Cognee non-Bedrock embedding provider API key"
       secret_string = "PLACEHOLDER_SET_VIA_CLI"
     }
     vector_db_key = {
       enabled       = var.create_secret_placeholders && var.vector_db_provider != "lancedb" && var.vector_db_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/cognee/vector-db-key"
-      description   = "Cognee remote vector store key"
+      name          = local.tenant_scoped_brain_instance ? "thinkwork/${var.stage}/brain/${local.normalized_brain_instance_key}/vector-db-key" : "thinkwork/${var.stage}/cognee/vector-db-key"
+      description   = "Brain/Cognee remote vector store key"
       secret_string = "PLACEHOLDER_SET_VIA_CLI"
     }
     graph_database_password = {
       enabled       = var.create_secret_placeholders && var.graph_database_provider != "kuzu" && var.graph_database_password_secret_arn == ""
-      name          = "thinkwork/${var.stage}/cognee/graph-database-password"
-      description   = "Cognee remote graph store password"
+      name          = local.tenant_scoped_brain_instance ? "thinkwork/${var.stage}/brain/${local.normalized_brain_instance_key}/graph-database-password" : "thinkwork/${var.stage}/cognee/graph-database-password"
+      description   = "Brain/Cognee remote graph store password"
       secret_string = "PLACEHOLDER_SET_VIA_CLI"
     }
   }
@@ -82,6 +102,11 @@ locals {
     for index, subnet_id in var.subnet_ids : tostring(index) => subnet_id
   }
 
+  brain_artifact_object_arns = [
+    for prefix in var.brain_artifacts_prefixes :
+    "${var.brain_artifacts_bucket_arn}/${trim(prefix, "/")}/*"
+  ]
+
   base_environment = [
     { name = "DB_PROVIDER", value = "postgres" },
     { name = "DB_HOST", value = var.db_host },
@@ -99,10 +124,18 @@ locals {
     { name = "GRAPH_DATABASE_URL", value = local.graph_db_url },
     { name = "DATA_ROOT_DIRECTORY", value = local.data_root_directory },
     { name = "SYSTEM_ROOT_DIRECTORY", value = local.system_root_directory },
+    { name = "BRAIN_TENANT_ID", value = var.brain_tenant_id },
+    { name = "BRAIN_INSTANCE_KEY", value = local.normalized_brain_instance_key },
+    { name = "BRAIN_STORAGE_TIER", value = var.brain_storage_tier },
+    { name = "BRAIN_S3_ARTIFACT_ROOT", value = var.brain_s3_artifact_root },
+    { name = "BRAIN_S3_MANIFEST_ROOT", value = var.brain_s3_manifest_root },
+    { name = "BRAIN_S3_VAULT_PROJECTION_ROOT", value = var.brain_s3_vault_projection_root },
+    { name = "NEPTUNE_GRAPH_ID", value = var.neptune_graph_id },
+    { name = "NEPTUNE_ENDPOINT", value = var.neptune_endpoint },
     { name = "TELEMETRY_DISABLED", value = "true" },
-    { name = "REQUIRE_AUTHENTICATION", value = "false" },
-    { name = "ENABLE_BACKEND_ACCESS_CONTROL", value = "false" },
-    { name = "CORS_ALLOWED_ORIGINS", value = "" },
+    { name = "REQUIRE_AUTHENTICATION", value = tostring(var.require_authentication) },
+    { name = "ENABLE_BACKEND_ACCESS_CONTROL", value = tostring(var.enable_backend_access_control) },
+    { name = "CORS_ALLOWED_ORIGINS", value = var.cors_allowed_origins },
     { name = "AWS_DEFAULT_REGION", value = data.aws_region.current.name },
     { name = "AWS_REGION", value = data.aws_region.current.name },
     # litellm's default embedding timeout (30s) is too tight for a batch of
@@ -184,9 +217,16 @@ resource "aws_secretsmanager_secret_version" "cognee" {
 resource "terraform_data" "configuration_guardrails" {
   input = {
     backend_mode                 = var.backend_mode
+    brain_tenant_id              = var.brain_tenant_id
+    brain_instance_key           = local.normalized_brain_instance_key
+    brain_storage_tier           = var.brain_storage_tier
     desired_count                = var.desired_count
-    vector_db_url                = var.vector_db_url
-    graph_database_url           = var.graph_database_url
+    vector_db_url                = local.vector_db_url
+    vector_db_provider           = var.vector_db_provider
+    graph_database_url           = local.graph_db_url
+    graph_database_provider      = var.graph_database_provider
+    neptune_graph_id             = var.neptune_graph_id
+    neptune_endpoint             = var.neptune_endpoint
     llm_provider                 = var.llm_provider
     embedding_provider           = var.embedding_provider
     db_password_secret_arn       = local.effective_db_password_secret_arn
@@ -202,8 +242,53 @@ resource "terraform_data" "configuration_guardrails" {
     }
 
     precondition {
-      condition     = var.backend_mode != "remote" || (var.vector_db_url != "" && var.graph_database_url != "")
-      error_message = "remote backend mode requires both vector_db_url and graph_database_url."
+      condition = (
+        var.brain_storage_tier != "default" ||
+        (
+          var.backend_mode == "dogfood" &&
+          var.vector_db_provider == "lancedb" &&
+          var.graph_database_provider == "kuzu" &&
+          var.desired_count == 1
+        )
+      )
+      error_message = "default Brain tier must use dogfood backend mode, lancedb vectors, kuzu graph storage, and desired_count = 1."
+    }
+
+    precondition {
+      condition = (
+        var.brain_storage_tier != "production" ||
+        (
+          var.backend_mode == "remote" &&
+          var.vector_db_provider == "neptune_analytics" &&
+          var.graph_database_provider == "neptune_analytics" &&
+          var.neptune_graph_id != "" &&
+          var.neptune_endpoint != ""
+        )
+      )
+      error_message = "production Brain tier must use remote mode with Neptune Analytics graph/vector providers, neptune_graph_id, and neptune_endpoint."
+    }
+
+    precondition {
+      condition     = !contains(["opensearch", "opensearch_serverless", "aoss"], lower(var.vector_db_provider))
+      error_message = "Company Brain production must not use direct OpenSearch vector storage; use Neptune Analytics for production graph/vector."
+    }
+
+    precondition {
+      condition     = var.private_substrate_mode
+      error_message = "Company Brain substrate must remain private/internal-only."
+    }
+
+    precondition {
+      condition = (
+        var.backend_mode != "remote" ||
+        (
+          local.vector_db_url != "" &&
+          local.graph_db_url != "" &&
+          local.vector_db_url != "${local.system_root_directory}/databases/cognee.lancedb" &&
+          local.graph_db_url != "${local.system_root_directory}/databases/cognee.kuzu"
+        )
+      )
+      error_message = "remote backend mode requires vector and graph URLs, or Neptune Analytics providers with neptune_endpoint."
     }
 
     precondition {
@@ -313,6 +398,59 @@ resource "aws_iam_role_policy" "bedrock_access" {
       Effect   = "Allow"
       Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
       Resource = var.bedrock_model_resource_arns
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "brain_artifacts" {
+  count = var.brain_artifacts_bucket_arn != "" && length(var.brain_artifacts_prefixes) > 0 ? 1 : 0
+
+  name = "brain-artifacts"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = var.brain_artifacts_bucket_arn
+        Condition = {
+          StringLike = {
+            "s3:prefix" = [for prefix in var.brain_artifacts_prefixes : "${trim(prefix, "/")}/*"]
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:GetObjectVersion",
+        ]
+        Resource = local.brain_artifact_object_arns
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "neptune_graph_access" {
+  count = var.neptune_graph_arn != "" ? 1 : 0
+
+  name = "neptune-graph-access"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "neptune-graph:GetGraph",
+        "neptune-graph:ReadDataViaQuery",
+        "neptune-graph:WriteDataViaQuery",
+      ]
+      Resource = var.neptune_graph_arn
     }]
   })
 }
@@ -448,7 +586,7 @@ resource "aws_security_group_rule" "aurora_from_cognee" {
 ################################################################################
 
 resource "aws_lb" "cognee" {
-  name               = "tw-${var.stage}-cognee"
+  name               = local.resource_short_name
   internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
@@ -458,7 +596,7 @@ resource "aws_lb" "cognee" {
 }
 
 resource "aws_lb_target_group" "cognee" {
-  name        = "tw-${var.stage}-cognee"
+  name        = local.resource_short_name
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
@@ -513,7 +651,7 @@ resource "aws_efs_mount_target" "cognee" {
 ################################################################################
 
 resource "aws_cloudwatch_log_group" "cognee" {
-  name              = "/thinkwork/${var.stage}/cognee"
+  name              = local.log_group_name
   retention_in_days = var.log_retention_days
 
   tags = { Name = "${local.name}-logs" }
