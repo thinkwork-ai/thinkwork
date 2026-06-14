@@ -7,7 +7,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - Started: 2026-06-14
 - Active branch: `codex/thnk-24-u2-release-update-jobs`
 - Active unit: U2, release update job substrate
-- Linear state: In Progress
+- Linear state: Verification
 
 ## Context Discovery
 
@@ -55,11 +55,12 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   `codex/thnk-24-u2-release-update-jobs`.
 - 2026-06-14: Implemented U2 release update job/event schema, GraphQL query,
   generated client types, and focused resolver coverage.
+- 2026-06-14: Opened U2 PR and moved THNK-24 to Verification.
 
 ## Implementation Units
 
 - U1. Extend release manifest runner metadata: merged in PR #2473.
-- U2. Add release update job substrate: implemented locally; pending commit/PR/CI.
+- U2. Add release update job substrate: PR open; pending CI/review.
 - U3. Implement release preflight service: pending.
 - U4. Add safe runner refresh remediation: pending.
 - U5. Dispatch and monitor reviewed release updates: pending.
@@ -69,6 +70,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 ## PRs
 
 - U1: https://github.com/thinkwork-ai/thinkwork/pull/2473 merged
+- U2: https://github.com/thinkwork-ai/thinkwork/pull/2475
 
 ## CI / Verification
 
