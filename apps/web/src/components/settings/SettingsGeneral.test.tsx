@@ -1,10 +1,4 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { queryDocs, useQueryMock, startReleaseUpdateMock } = vi.hoisted(() => ({
@@ -154,7 +148,7 @@ describe("SettingsGeneral releases", () => {
     expect(screen.getByText("c".repeat(64))).toBeTruthy();
   });
 
-  it("confirms a selected release before starting deployment", async () => {
+  it("confirms a selected release before requiring preflight review", async () => {
     render(<SettingsGeneral />);
 
     fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
@@ -165,51 +159,37 @@ describe("SettingsGeneral releases", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm Deploy" }));
 
-    await waitFor(() =>
-      expect(startReleaseUpdateMock).toHaveBeenCalledWith({
-        input: {
-          version: "v0.1.0-canary.134",
-          manifestUrl:
-            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.134/thinkwork-release.json",
-          manifestSha256: "a".repeat(64),
-          idempotencyKey: "settings-release-v0.1.0-canary.134",
-        },
-      }),
-    );
     expect(
-      await screen.findByText("Deployment controller started"),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "arn:aws:states:us-east-1:123456789012:execution:thinkwork-dev-deployment:release-134",
+      await screen.findByText(
+        "Deployment failed before the controller started",
       ),
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "thinkwork-dev-evidence/settings/releases/v0.1.0-canary.134/run-1",
+        "Release updates now require preflight review before dispatch.",
       ),
     ).toBeTruthy();
+    expect(startReleaseUpdateMock).not.toHaveBeenCalled();
   });
 
-  it("shows inline deployment progress immediately after confirmation", async () => {
-    startReleaseUpdateMock.mockReturnValueOnce(new Promise(() => undefined));
+  it("does not show controller progress before reviewed dispatch exists", async () => {
     render(<SettingsGeneral />);
 
     fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm Deploy" }));
 
     expect(
-      await screen.findByText("Starting deployment controller"),
+      await screen.findByText(
+        "Deployment failed before the controller started",
+      ),
     ).toBeTruthy();
     expect(screen.getByText("Submit release request")).toBeTruthy();
-    expect(screen.getByText("in progress")).toBeTruthy();
+    expect(screen.getByText("failed")).toBeTruthy();
     expect(screen.getAllByText("v0.1.0-canary.134").length).toBeGreaterThan(1);
+    expect(screen.queryByText("Starting deployment controller")).toBeNull();
   });
 
-  it("shows the deployment API error inline", async () => {
-    startReleaseUpdateMock.mockResolvedValueOnce({
-      error: { message: "Deployment controller is not configured." },
-    });
+  it("keeps the old direct mutation unused even when it would fail", async () => {
     render(<SettingsGeneral />);
 
     fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
@@ -221,8 +201,11 @@ describe("SettingsGeneral releases", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("Deployment controller is not configured."),
+      screen.getByText(
+        "Release updates now require preflight review before dispatch.",
+      ),
     ).toBeTruthy();
+    expect(startReleaseUpdateMock).not.toHaveBeenCalled();
   });
 });
 

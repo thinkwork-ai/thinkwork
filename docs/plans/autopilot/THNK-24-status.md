@@ -92,6 +92,10 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   button path from invoking an unsafe manifest-only update before U6 replaces
   it with the full review workflow.
 - 2026-06-14: Opened U5 PR and moved THNK-24 to Verification.
+- 2026-06-14: U5 PR CI first pass failed in `test` because
+  `SettingsGeneral.test.tsx` still asserted the removed direct release dispatch
+  success/error path. Updated the tests to assert the U5 preflight-required
+  blocker instead.
 
 ## Implementation Units
 
@@ -198,6 +202,10 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U5 `git diff --check`: passed.
 - U5 `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`:
   passed.
+- U5 PR CI first pass: `cla`, `lint`, `typecheck`, and `verify` passed;
+  `test` failed on stale `SettingsGeneral` direct-dispatch expectations.
+- U5 `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsGeneral.test.tsx`:
+  passed after updating the stale expectations.
 
 ## Blockers
 
