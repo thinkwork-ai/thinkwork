@@ -50,7 +50,12 @@ Plan: `docs/plans/2026-06-14-005-feat-company-brain-first-party-tool-plan.md`
 ## PR / CI / Merge Log
 
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2468
-- CI: pending.
+- CI: passed on rebased head `c50dfa16c`:
+  - CLA Assistant / `cla`: pass
+  - Lint / `lint`: pass
+  - Supply Chain / `verify`: pass
+  - Typecheck / `typecheck`: pass
+  - Test / `test`: pass
 - Merge: pending.
 
 ## Decisions
