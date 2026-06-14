@@ -28,7 +28,11 @@ import {
 import { GraphQLError } from "graphql";
 import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
-import { claimEvalBaselineForRun } from "../../../lib/evals/eval-baseline-agent.js";
+import {
+  checkSkillEvalEligibility,
+  claimEvalBaselineForRun,
+  type SkillEvalEligibility,
+} from "../../../lib/evals/eval-baseline-agent.js";
 import {
   archiveSkillCandidateDataset,
   ensureSkillDatasetSeeded,
@@ -268,6 +272,40 @@ export const evalResultTypeResolvers = {
     if (projection === undefined || projection === null) return null;
     return JSON.stringify(projection);
   },
+};
+
+// Lazy eligibility for the SkillEvalScore type (Skill Tests & Evals — run
+// gating). `evaluable`/`ineligibleReason` read catalog WIRING.md, so they are
+// FIELD resolvers — computed only when the detail surface requests them, never
+// on the cheap list cell. Both fields share one read per parent via the memo.
+const skillEvalEligibilityMemo = new WeakMap<
+  object,
+  Promise<SkillEvalEligibility>
+>();
+function resolveSkillEvalEligibility(parent: {
+  tenantId?: string | null;
+  skillSlug: string;
+}): Promise<SkillEvalEligibility> {
+  // Fail-closed paths (tenant mismatch) carry no tenantId → not evaluable,
+  // no reason (the caller can't run it anyway).
+  if (!parent.tenantId) {
+    return Promise.resolve({ evaluable: false, reason: null });
+  }
+  let cached = skillEvalEligibilityMemo.get(parent);
+  if (!cached) {
+    cached = checkSkillEvalEligibility(parent.tenantId, parent.skillSlug);
+    skillEvalEligibilityMemo.set(parent, cached);
+  }
+  return cached;
+}
+
+export const skillEvalScoreTypeResolvers = {
+  evaluable: async (parent: { tenantId?: string | null; skillSlug: string }) =>
+    (await resolveSkillEvalEligibility(parent)).evaluable,
+  ineligibleReason: async (parent: {
+    tenantId?: string | null;
+    skillSlug: string;
+  }) => (await resolveSkillEvalEligibility(parent)).reason,
 };
 
 export function placeholderStatusForEvalRun(runStatus: string) {

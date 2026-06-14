@@ -1,5 +1,6 @@
 import { Outlet, createRootRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { Toaster } from "@thinkwork/ui";
 import { getDesktopBridge } from "@/lib/desktop-runtime";
 
 export const Route = createRootRoute({
@@ -12,6 +13,9 @@ function RootLayout() {
       <DesktopOAuthRouteListener />
       <DesktopOpenThreadListener />
       <Outlet />
+      {/* App-wide toast host. Without this, sonner's `toast()` calls (flag
+          dialog, settings saves, eval run errors, …) render nothing. */}
+      <Toaster richColors closeButton />
     </>
   );
 }

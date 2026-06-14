@@ -391,6 +391,55 @@ async function readObject(
   }
 }
 
+export interface SkillEvalEligibility {
+  /** True when the catalog skill can be materialized for an isolated eval. */
+  evaluable: boolean;
+  /** Human reason it is NOT evaluable; null when evaluable. */
+  reason: string | null;
+}
+
+/**
+ * Whether a catalog skill can be RUN in an isolated eval (Skill Tests &
+ * Evals — run eligibility). Mirrors the eval-baseline `installSkill`
+ * materialization requirement EXACTLY — catalog `WIRING.md` present + a
+ * usable wiring choice (the same requirement as a normal catalog install,
+ * `catalog-install.ts`). The UI reads this to gate "Run evals now" so the
+ * operator never picks a skill that can only fail with
+ * EvalBaselineMaterializationError. A flagged case can still be SEEDED into
+ * a not-yet-evaluable skill's dataset (forward-looking); only the run is
+ * gated.
+ */
+export async function checkSkillEvalEligibility(
+  tenantId: string,
+  skillSlug: string,
+): Promise<SkillEvalEligibility> {
+  const tenantSlug = await resolveTenantSlug(tenantId);
+  const bucket = workspaceBucketOrThrow();
+  const s3 = makeS3();
+  const wiringMd = await readObject(
+    s3,
+    bucket,
+    `tenants/${tenantSlug}/skill-catalog/${skillSlug}/WIRING.md`,
+  );
+  if (wiringMd == null) {
+    return {
+      evaluable: false,
+      reason:
+        "This skill has no WIRING.md, so it can't be materialized for an isolated eval. Add a WIRING.md to the catalog skill to run evals.",
+    };
+  }
+  try {
+    firstWiringChoiceId(wiringMd);
+  } catch {
+    return {
+      evaluable: false,
+      reason:
+        "This skill's WIRING.md has no wiring suggestions, so it can't be materialized for an isolated eval.",
+    };
+  }
+  return { evaluable: true, reason: null };
+}
+
 const EVAL_BASELINE_LOCK_KEY = "eval-baseline-run";
 
 /**

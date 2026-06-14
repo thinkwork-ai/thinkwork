@@ -355,6 +355,7 @@ describe("readSkillEvalScore", () => {
     expect(score).toEqual({
       skillSlug: "x",
       datasetSlug: "skill-x",
+      tenantId: "tenant-1",
       rated: false,
       passRate: null,
       regression: false,
