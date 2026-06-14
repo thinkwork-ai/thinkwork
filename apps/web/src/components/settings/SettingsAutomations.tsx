@@ -322,6 +322,25 @@ export function SettingsAutomations({
       title="Automations"
       description="Schedule recurring agent jobs and review their run history."
       loading={!jobs && !error}
+      headerActionKey={JSON.stringify(displayState)}
+      headerActions={
+        error ? undefined : (
+          <DisplayViewControl
+            state={displayState}
+            modes={[
+              { value: "table", label: "Table" },
+              { value: "list", label: "List" },
+            ]}
+            groups={AUTOMATIONS_DISPLAY_CONFIG.groups}
+            subgroups={AUTOMATIONS_DISPLAY_CONFIG.subgroups}
+            sorts={AUTOMATIONS_DISPLAY_CONFIG.sorts}
+            properties={AUTOMATIONS_DISPLAY_CONFIG.properties}
+            onStateChange={onDisplayStateChange ?? (() => {})}
+            triggerVariant="icon"
+            triggerLabel="Display"
+          />
+        )
+      }
       toolbar={
         error ? (
           <p className="text-sm text-destructive">{error}</p>
@@ -332,18 +351,6 @@ export function SettingsAutomations({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="max-w-sm"
-            />
-            <DisplayViewControl
-              state={displayState}
-              modes={[
-                { value: "table", label: "Table" },
-                { value: "list", label: "List" },
-              ]}
-              groups={AUTOMATIONS_DISPLAY_CONFIG.groups}
-              subgroups={AUTOMATIONS_DISPLAY_CONFIG.subgroups}
-              sorts={AUTOMATIONS_DISPLAY_CONFIG.sorts}
-              properties={AUTOMATIONS_DISPLAY_CONFIG.properties}
-              onStateChange={onDisplayStateChange ?? (() => {})}
             />
           </div>
         )
@@ -412,7 +419,7 @@ function AutomationListRow({
           </span>
         ) : null}
       </span>
-      <span className="ml-auto flex shrink-0 flex-wrap justify-end gap-1.5">
+      <span className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
         {properties.map((property) => (
           <AutomationPropertyChip
             key={property}

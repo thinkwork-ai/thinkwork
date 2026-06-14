@@ -51,7 +51,11 @@ describe("DisplayViewControl", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /display/i }));
 
-    expect(screen.getByRole("button", { name: /table/i })).toBeTruthy();
+    const tableTab = screen.getByRole("button", { name: /table/i });
+    expect(tableTab).toBeTruthy();
+    expect(tableTab.getAttribute("aria-pressed")).toBe("true");
+    expect(tableTab.className).toContain("h-6");
+    expect(tableTab.className).toContain("ring-border");
     expect(screen.getByRole("button", { name: /list/i })).toBeTruthy();
     expect(screen.queryByText("Board")).toBeNull();
     expect(screen.queryByText("Map")).toBeNull();
@@ -114,5 +118,35 @@ describe("DisplayViewControl", () => {
       view: "list",
       properties: [],
     });
+  });
+
+  it("can render the display trigger as a muted icon button", async () => {
+    render(
+      <DisplayViewControl
+        state={state}
+        modes={[
+          { value: "table", label: "Table" },
+          { value: "list", label: "List" },
+        ]}
+        groups={[
+          { value: "none", label: "None" },
+          { value: "status", label: "Status" },
+        ]}
+        subgroups={[
+          { value: "none", label: "None" },
+          { value: "type", label: "Type" },
+        ]}
+        sorts={[{ value: "name", label: "Name" }]}
+        properties={[{ value: "status", label: "Status" }]}
+        onStateChange={vi.fn()}
+        triggerVariant="icon"
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Display" });
+    expect(trigger.className).toContain("size-8");
+    expect(trigger.className).toContain("text-muted-foreground/70");
+    expect(trigger.className).toContain("hover:text-foreground/85");
+    expect(trigger.textContent).toBe("Display");
   });
 });

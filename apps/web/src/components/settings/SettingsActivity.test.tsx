@@ -94,12 +94,17 @@ vi.mock("@thinkwork/ui", () => ({
     modes,
     onStateChange,
     state,
+    triggerVariant,
   }: {
     modes: Array<{ value: "table" | "list"; label: string }>;
     state: { view: "table" | "list" };
+    triggerVariant?: "button" | "icon";
     onStateChange: (state: unknown) => void;
   }) => (
-    <div data-testid="activity-display-control">
+    <div
+      data-testid="activity-display-control"
+      data-trigger-variant={triggerVariant ?? "button"}
+    >
       {modes.map((mode) => (
         <button
           key={mode.value}
@@ -318,6 +323,12 @@ describe("SettingsActivity", () => {
     );
 
     expect(screen.getByTestId("activity-list-view")).toBeTruthy();
+    renderHeaderAction();
+    expect(
+      screen
+        .getByTestId("activity-display-control")
+        .getAttribute("data-trigger-variant"),
+    ).toBe("icon");
     expect(screen.getByText("Table")).toBeTruthy();
     expect(screen.getByText("List")).toBeTruthy();
     expect(screen.queryByText("Board")).toBeNull();
@@ -351,11 +362,17 @@ describe("SettingsActivity", () => {
     });
 
     reexecuteThreadsMock.mockClear();
-    // The refresh control lives in the Threads toolbar (the tabbed Activity page
-    // owns the header now, so there's no per-tab header action).
+    renderHeaderAction();
     fireEvent.click(screen.getByRole("button", { name: "Refresh activity" }));
     expect(reexecuteThreadsMock).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });
   });
 });
+
+function renderHeaderAction() {
+  const lastCall = usePageHeaderActionsMock.mock.calls.at(-1);
+  const action = lastCall?.[0]?.action;
+  if (!action) throw new Error("Expected Activity header action");
+  return render(<>{action}</>);
+}

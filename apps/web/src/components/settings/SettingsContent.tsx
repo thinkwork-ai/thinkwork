@@ -9,8 +9,23 @@ import { LoadingShimmer } from "@/components/LoadingShimmer";
  * not rendering it — without a conditional `null` hook call that would clobber
  * the parent's breadcrumb when an embedded child mounts/unmounts.
  */
-function TablePaneHeader({ title }: { title: string }) {
-  usePageHeaderActions({ title, breadcrumbs: [{ label: title }] });
+function TablePaneHeader({
+  title,
+  actions,
+  actionKey,
+}: {
+  title: string;
+  actions?: ReactNode;
+  actionKey?: string;
+}) {
+  usePageHeaderActions({
+    title,
+    breadcrumbs: [{ label: title }],
+    action: actions ?? undefined,
+    actionKey: actions
+      ? `settings-table-pane:${title}:${actionKey ?? "action"}`
+      : undefined,
+  });
   return null;
 }
 
@@ -109,6 +124,8 @@ export const settingsLinkActionClassName =
 export function SettingsTablePane({
   title,
   description,
+  headerActions,
+  headerActionKey,
   actions,
   toolbar,
   loading,
@@ -117,6 +134,8 @@ export function SettingsTablePane({
 }: {
   title: string;
   description?: string;
+  headerActions?: ReactNode;
+  headerActionKey?: string;
   actions?: ReactNode;
   toolbar?: ReactNode;
   /** When true, render a centered loading shimmer in the table area (the
@@ -133,7 +152,13 @@ export function SettingsTablePane({
   // link) share a row above the table in the content body.
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
-      {embedded ? null : <TablePaneHeader title={title} />}
+      {embedded ? null : (
+        <TablePaneHeader
+          title={title}
+          actions={headerActions}
+          actionKey={headerActionKey}
+        />
+      )}
       <SettingsPageTitle title={title} description={description} />
       {toolbar || actions ? (
         <div className="mb-3 flex shrink-0 items-center justify-between gap-3">

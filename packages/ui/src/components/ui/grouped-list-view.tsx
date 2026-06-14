@@ -133,7 +133,7 @@ function GroupSection<Row>({
         className={cn(
           "flex h-9 w-full items-center gap-2 bg-muted/70 px-3 text-left text-xs font-medium text-muted-foreground",
           depth === 0 && "sticky top-0 z-10 backdrop-blur",
-          depth > 0 && "h-8 bg-background px-6",
+          depth > 0 && "h-8 bg-background px-3",
         )}
         onClick={() => onToggle(collapseId)}
       >

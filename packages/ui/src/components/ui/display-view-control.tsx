@@ -65,6 +65,8 @@ export interface DisplayViewControlProps<
   properties: DisplayControlOption<Property>[];
   onStateChange: (state: DisplayControlState<Group, Sort, Property>) => void;
   align?: "start" | "center" | "end";
+  triggerVariant?: "button" | "icon";
+  triggerLabel?: string;
   className?: string;
 }
 
@@ -89,6 +91,8 @@ export function DisplayViewControl<
   properties,
   onStateChange,
   align = "end",
+  triggerVariant = "button",
+  triggerLabel = "Display",
   className,
 }: DisplayViewControlProps<Group, Sort, Property>) {
   const [draftState, setDraftState] = React.useState(state);
@@ -116,34 +120,58 @@ export function DisplayViewControl<
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={cn("h-8 gap-2", className)}
-        >
-          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-          Display
-        </Button>
+        {triggerVariant === "icon" ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className={cn(
+              "size-8 text-muted-foreground/70 hover:bg-white/[0.05] hover:text-foreground/85",
+              className,
+            )}
+            aria-label={triggerLabel}
+            title={triggerLabel}
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{triggerLabel}</span>
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={cn("h-8 gap-2", className)}
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            {triggerLabel}
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent align={align} className="w-80 gap-3">
         <PopoverHeader>
           <PopoverTitle>Display</PopoverTitle>
         </PopoverHeader>
 
-        <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
+        <div className="grid grid-cols-2 gap-0.5 rounded-md bg-muted/70 p-0.5">
           {modes.map((mode) => {
             const Icon = modeIcons[mode.value];
+            const isActive = draftState.view === mode.value;
             return (
               <Button
                 key={mode.value}
                 type="button"
-                variant={draftState.view === mode.value ? "secondary" : "ghost"}
+                variant="ghost"
                 size="sm"
-                className="h-8 justify-center gap-2"
+                className={cn(
+                  "h-6 justify-center gap-1.5 rounded-[min(var(--radius-md),8px)] px-2 text-xs",
+                  isActive
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border hover:bg-background"
+                    : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
+                )}
+                aria-pressed={isActive}
                 onClick={() => emit({ view: mode.value })}
               >
-                <Icon className="h-4 w-4" aria-hidden="true" />
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                 {mode.label}
               </Button>
             );
