@@ -109,6 +109,26 @@ export function skillEvalDatasetSlug(skillSlug: string): string {
   return slug;
 }
 
+/**
+ * Suffix on the live skill dataset slug for the TRANSIENT candidate
+ * staging dataset (Skill Tests & Evals U6). A gated UPDATE scores the
+ * candidate version's cases against this staging slug WITHOUT mutating the
+ * installed version's `skill-<slug>` dataset or its score — the swap (and
+ * promotion of the staging dataset to the live slug) happens only after
+ * the gate passes. The suffix keeps the staging dataset inside the guarded
+ * `skill-` namespace (`isSkillDatasetSlug` stays true), and the slug is
+ * validated (length budget: `skill-` + `-candidate` = 16 chars overhead).
+ */
+export const SKILL_CANDIDATE_DATASET_SUFFIX = "-candidate";
+
+/** Live skill dataset slug → candidate staging dataset slug. Validated. */
+export function skillCandidateDatasetSlug(skillSlug: string): string {
+  const slug = `${skillEvalDatasetSlug(skillSlug)}${SKILL_CANDIDATE_DATASET_SUFFIX}`;
+  // The candidate slug is also an S3 key segment — guard length/charset.
+  assertValidDatasetSlug(slug);
+  return slug;
+}
+
 /** True for a dataset slug produced by skillEvalDatasetSlug. */
 export function isSkillDatasetSlug(slug: string): boolean {
   return slug.startsWith(SKILL_DATASET_SLUG_PREFIX);
@@ -319,11 +339,25 @@ function computeBundledSetSha(cases: ValidatedCase[]): string {
 // ---------------------------------------------------------------------------
 
 export async function seedSkillDataset(
-  ctx: { tenantId: string; tenantSlug: string; skillSlug: string },
+  ctx: {
+    tenantId: string;
+    tenantSlug: string;
+    skillSlug: string;
+    /**
+     * Dataset slug override (Skill Tests & Evals U6). Defaults to the
+     * live `skill-<slug>` dataset; the gated-update path passes the
+     * candidate staging slug (`skillCandidateDatasetSlug`) so the
+     * candidate's cases land in the transient staging dataset WITHOUT
+     * touching the installed version's live dataset. Validated as an S3
+     * key segment.
+     */
+    datasetSlug?: string;
+  },
   inputs: SkillCaseInput[],
   deps: SkillDatasetSeedDeps,
 ): Promise<SkillDatasetSeedResult> {
-  const datasetSlug = skillEvalDatasetSlug(ctx.skillSlug);
+  const datasetSlug = ctx.datasetSlug ?? skillEvalDatasetSlug(ctx.skillSlug);
+  assertValidDatasetSlug(datasetSlug);
   const dctx: DatasetContext = {
     tenantId: ctx.tenantId,
     tenantSlug: ctx.tenantSlug,
@@ -548,6 +582,13 @@ export async function ensureSkillDatasetSeeded(
   tenantId: string,
   skillSlug: string,
   inputs: SkillCaseInput[],
+  /**
+   * Dataset slug override (Skill Tests & Evals U6) — defaults to the live
+   * `skill-<slug>` dataset. The gated-update path passes the candidate
+   * staging slug so the candidate's cases are scored without mutating the
+   * installed version's live dataset.
+   */
+  datasetSlug: string = skillEvalDatasetSlug(skillSlug),
 ): Promise<SkillDatasetSeedResult> {
   const [tenant] = await db
     .select({ slug: tenants.slug })
@@ -559,7 +600,7 @@ export async function ensureSkillDatasetSeeded(
     );
     return {
       action: "skipped",
-      datasetSlug: skillEvalDatasetSlug(skillSlug),
+      datasetSlug,
       addedCaseIds: [],
       updatedCaseIds: [],
       removedCaseIds: [],
@@ -576,7 +617,7 @@ export async function ensureSkillDatasetSeeded(
       process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
   });
   return seedSkillDataset(
-    { tenantId, tenantSlug: tenant.slug, skillSlug },
+    { tenantId, tenantSlug: tenant.slug, skillSlug, datasetSlug },
     inputs,
     {
       storage: createS3DatasetStorage({ client, bucket }),
@@ -601,6 +642,14 @@ export async function ensureSkillDatasetSeeded(
 export async function archiveSkillDatasetIfExists(
   tenantId: string,
   skillSlug: string,
+  /**
+   * Dataset slug override (Skill Tests & Evals U6) — defaults to the live
+   * `skill-<slug>` dataset. The gated-update path passes the candidate
+   * staging slug to archive the TRANSIENT staging dataset once a held
+   * update is applied/promoted (or abandoned) without touching the live
+   * dataset.
+   */
+  datasetSlug: string = skillEvalDatasetSlug(skillSlug),
 ): Promise<{ action: "archived" | "absent" | "already-archived" }> {
   const [tenant] = await db
     .select({ slug: tenants.slug })
@@ -617,7 +666,6 @@ export async function archiveSkillDatasetIfExists(
   });
   const storage = createS3DatasetStorage({ client, bucket });
   const store = createDrizzleDatasetIndexStore();
-  const datasetSlug = skillEvalDatasetSlug(skillSlug);
   const manifestContent = await storage.read(
     evalDatasetManifestKey(tenant.slug, datasetSlug),
   );
@@ -631,4 +679,22 @@ export async function archiveSkillDatasetIfExists(
     store,
   );
   return { action: "archived" };
+}
+
+/**
+ * Archive a skill's TRANSIENT candidate staging dataset (Skill Tests &
+ * Evals U6). Thin wrapper passing the candidate slug to
+ * `archiveSkillDatasetIfExists` — used by the apply path to retire the
+ * staging dataset once the held update is promoted, and defensively after
+ * a gated launch so an abandoned candidate doesn't linger as a live row.
+ */
+export async function archiveSkillCandidateDataset(
+  tenantId: string,
+  skillSlug: string,
+): Promise<{ action: "archived" | "absent" | "already-archived" }> {
+  return archiveSkillDatasetIfExists(
+    tenantId,
+    skillSlug,
+    skillCandidateDatasetSlug(skillSlug),
+  );
 }

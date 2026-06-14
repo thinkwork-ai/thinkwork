@@ -2440,6 +2440,7 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
   answerUserQuestion: UserQuestion;
+  applySkillUpdate: SkillUpdateApplyResult;
   approveInboxItem: InboxItem;
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   approveOntologyChangeSet: OntologyChangeSet;
@@ -2645,6 +2646,7 @@ export type Mutation = {
   setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
+  setSkillEvalGate: SkillEvalGate;
   setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
@@ -2793,6 +2795,14 @@ export type MutationAdminUpdateAppletSourceArgs = {
 export type MutationAnswerUserQuestionArgs = {
   answers: Scalars['AWSJSON']['input'];
   questionId: Scalars['ID']['input'];
+};
+
+
+export type MutationApplySkillUpdateArgs = {
+  agentId: Scalars['ID']['input'];
+  override?: InputMaybe<Scalars['Boolean']['input']>;
+  skillSlug: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -3544,6 +3554,12 @@ export type MutationSetManagedApplicationDeploymentArgs = {
 export type MutationSetRoutineTriggerArgs = {
   input: RoutineTriggerInput;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type MutationSetSkillEvalGateArgs = {
+  tenantId: Scalars['ID']['input'];
+  threshold?: InputMaybe<Scalars['Float']['input']>;
 };
 
 
@@ -4515,6 +4531,7 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
+  skillEvalGate: SkillEvalGate;
   skillEvalScore: SkillEvalScore;
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
@@ -5207,6 +5224,11 @@ export type QueryScheduledJobsArgs = {
 
 export type QuerySingleAgentPerformanceArgs = {
   agentId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillEvalGateArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -6088,6 +6110,12 @@ export type SkillCatalogRebuildResult = {
   tenantSlug: Scalars['String']['output'];
 };
 
+export type SkillEvalGate = {
+  __typename?: 'SkillEvalGate';
+  enabled: Scalars['Boolean']['output'];
+  threshold?: Maybe<Scalars['Float']['output']>;
+};
+
 export type SkillEvalScore = {
   __typename?: 'SkillEvalScore';
   datasetSlug: Scalars['String']['output'];
@@ -6123,6 +6151,15 @@ export type SkillRun = {
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type SkillUpdateApplyResult = {
+  __typename?: 'SkillUpdateApplyResult';
+  applied: Scalars['Boolean']['output'];
+  blocked: Scalars['Boolean']['output'];
+  overridden: Scalars['Boolean']['output'];
+  passRate?: Maybe<Scalars['Float']['output']>;
+  threshold?: Maybe<Scalars['Float']['output']>;
 };
 
 export type SlackUserLink = {

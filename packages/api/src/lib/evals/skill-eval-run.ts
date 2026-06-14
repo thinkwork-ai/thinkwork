@@ -124,9 +124,21 @@ async function markRunFailed(runId: string, message: string): Promise<void> {
 export async function launchSkillEvalRun(args: {
   tenantId: string;
   skillSlug: string;
+  /**
+   * Dataset slug override (Skill Tests & Evals U6). Defaults to the live
+   * `skill-<slug>` dataset. The gated-update path passes the candidate
+   * STAGING slug (`skillCandidateDatasetSlug`): the run then targets the
+   * staging dataset (run.dataset_id = staging dataset, candidate cases)
+   * while `claimEvalBaselineForRun` still materializes the catalog
+   * (= candidate) skill content — so the run scores candidate-content
+   * against candidate-cases without touching the installed version's live
+   * dataset or score.
+   */
+  datasetSlugOverride?: string;
 }): Promise<SkillEvalLaunchResult> {
   const { tenantId, skillSlug } = args;
-  const datasetSlug = skillEvalDatasetSlug(skillSlug);
+  const datasetSlug =
+    args.datasetSlugOverride ?? skillEvalDatasetSlug(skillSlug);
 
   // 1. Resolve the dataset. No manifest (skill never seeded cases) →
   //    unrated, never an error (R3).
@@ -218,8 +230,15 @@ export async function launchSkillEvalRun(args: {
 export async function readSkillEvalScore(
   tenantId: string,
   skillSlug: string,
+  /**
+   * Dataset slug override (Skill Tests & Evals U6). Defaults to the live
+   * `skill-<slug>` dataset. The apply path passes the candidate STAGING
+   * slug to read the held update candidate's latest score (against the
+   * staging dataset) without touching the live dataset.
+   */
+  datasetSlugOverride?: string,
 ): Promise<SkillEvalScore> {
-  const datasetSlug = skillEvalDatasetSlug(skillSlug);
+  const datasetSlug = datasetSlugOverride ?? skillEvalDatasetSlug(skillSlug);
 
   const unrated = (): SkillEvalScore => ({
     skillSlug,

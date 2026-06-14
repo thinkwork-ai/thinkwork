@@ -22,6 +22,16 @@ export type CatalogReinstallOptions = {
   tenantSlug: string;
   targetPrefix: string;
   slug: string;
+  /**
+   * Read-only staging (Skill Tests & Evals U6). When true, computes
+   * `source_sha256`, reads the bundled `eval_cases`, and determines
+   * noop-vs-update (candidate sha === installed ref sha) but performs NO
+   * delete/copy/ref-write — the workspace swap is NOT applied. The gated
+   * update path uses this to read the candidate's cases and detect an
+   * update WITHOUT swapping; the swap happens later via applySkillUpdate.
+   * `reinstalled_paths` is always `[]` on a dry run.
+   */
+  dryRun?: boolean;
 };
 
 export type CatalogReinstallResult = {
@@ -103,6 +113,19 @@ export async function reinstallCatalogSkill(
     return {
       ok: true,
       noop: true,
+      reinstalled_paths: [],
+      source_sha256: sourceSha256,
+      eval_cases: evalCases,
+    };
+  }
+
+  // Dry run (Skill Tests & Evals U6): the candidate differs from the
+  // installed version, but the gated path reads the candidate cases and
+  // detects the update WITHOUT swapping — no delete/copy/ref-write. The
+  // swap is deferred to applySkillUpdate once the gate passes.
+  if (options.dryRun) {
+    return {
+      ok: true,
       reinstalled_paths: [],
       source_sha256: sourceSha256,
       eval_cases: evalCases,

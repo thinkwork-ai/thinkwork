@@ -14,6 +14,7 @@ import {
   evalResults,
   evalTestCases,
   agents,
+  tenants,
   threadTurns,
 } from "@thinkwork/database-pg/schema";
 import {
@@ -29,11 +30,18 @@ import { DEFAULT_EVAL_MODEL_ID } from "../../../lib/evals/agentcore-direct.js";
 import { resolveTenantPlatformAgent } from "../../../lib/agents/tenant-platform-agent.js";
 import { claimEvalBaselineForRun } from "../../../lib/evals/eval-baseline-agent.js";
 import {
+  archiveSkillCandidateDataset,
+  ensureSkillDatasetSeeded,
   isSkillDatasetSlug,
+  skillCandidateDatasetSlug,
   SKILL_DATASET_SLUG_PREFIX,
   skillEvalDatasetSlug,
 } from "../../../lib/evals/skill-dataset.js";
 import { readSkillEvalScore } from "../../../lib/evals/skill-eval-run.js";
+import {
+  getSkillEvalGateThreshold,
+  setSkillEvalGateThreshold,
+} from "../../../lib/evals/skill-eval-gate.js";
 import { getTenantModelCatalogEntry } from "../../../lib/model-catalog/tenant-catalog.js";
 import { notifyEvalRunUpdate } from "../../../lib/eval-notify.js";
 import { requireTenantAdmin } from "../core/authz.js";
@@ -828,6 +836,25 @@ const skillEvalScore = async (
   return readSkillEvalScore(tenantId, args.skillSlug);
 };
 
+/**
+ * Per-tenant skill-update gate read (Skill Tests & Evals U6). Read-path
+ * tenant gate matching the other evaluations queries: scope through
+ * `resolveReadTenantId`, fail closed to a neutral "off" gate (the type is
+ * non-nullable — never null) on a tenant mismatch.
+ */
+const skillEvalGate = async (
+  _p: any,
+  args: { tenantId: string },
+  ctx: GraphQLContext,
+) => {
+  const tenantId = await resolveReadTenantId(ctx);
+  if (!tenantId || tenantId !== args.tenantId) {
+    return { enabled: false, threshold: null };
+  }
+  const threshold = await getSkillEvalGateThreshold(tenantId);
+  return { enabled: threshold != null, threshold };
+};
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
@@ -1469,6 +1496,193 @@ const overrideEvalResult = async (
 };
 
 // ---------------------------------------------------------------------------
+// Skill-update gate (Skill Tests & Evals U6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Set or clear the per-tenant skill-update gate threshold (Skill Tests &
+ * Evals U6). Arg-derived operator gate (no row exists yet). A finite
+ * threshold in [0, 1] enables the gate (upsert); null clears it. An
+ * out-of-range threshold is a BAD_USER_INPUT error, never persisted.
+ */
+const setSkillEvalGate = async (
+  _p: any,
+  args: { tenantId: string; threshold?: number | null },
+  ctx: GraphQLContext,
+) => {
+  await requireTenantAdmin(ctx, args.tenantId);
+  const threshold = args.threshold ?? null;
+  if (
+    threshold !== null &&
+    (!Number.isFinite(threshold) || threshold < 0 || threshold > 1)
+  ) {
+    throw evalBadInput("Gate threshold must be a number in [0, 1].");
+  }
+  try {
+    await setSkillEvalGateThreshold(args.tenantId, threshold);
+  } catch (err) {
+    // The lib re-validates the range — surface as BAD_USER_INPUT, not a 500.
+    throw evalBadInput(err instanceof Error ? err.message : String(err));
+  }
+  return { enabled: threshold != null, threshold };
+};
+
+/**
+ * Resolve a tenant-scoped agent's workspace target prefix
+ * (`tenants/<tenant-slug>/agents/<agent-folder>/`) for the apply swap.
+ * Returns null when the agent doesn't belong to the tenant or has no slug
+ * — the caller fails closed (the swap never reaches a foreign workspace).
+ */
+async function resolveAgentTargetPrefix(
+  tenantId: string,
+  agentId: string,
+): Promise<{ tenantSlug: string; targetPrefix: string } | null> {
+  const [agent] = await db
+    .select({
+      slug: agents.slug,
+      workspaceFolderName: agents.workspace_folder_name,
+      tenantId: agents.tenant_id,
+    })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)));
+  if (!agent?.slug || agent.tenantId !== tenantId) return null;
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  if (!tenant?.slug) return null;
+  const folder = agent.workspaceFolderName ?? agent.slug;
+  return {
+    tenantSlug: tenant.slug,
+    targetPrefix: `tenants/${tenant.slug}/agents/${folder}/`,
+  };
+}
+
+interface ApplySkillUpdateArgs {
+  tenantId: string;
+  skillSlug: string;
+  agentId: string;
+  override?: boolean | null;
+}
+
+/**
+ * Apply a HELD skill update (Skill Tests & Evals U6). The gated reinstall
+ * path (workspace-files.ts) DEFERS the swap when a candidate scores below
+ * the tenant gate; this mutation lets an operator apply it once the
+ * candidate passes, or override it.
+ *
+ * Reads the candidate's score from the TRANSIENT staging dataset
+ * (`skill-<slug>-candidate`). If the candidate is rated and its pass rate
+ * clears the gate (or `override` is true), it performs the REAL
+ * `reinstallCatalogSkill` swap, then PROMOTES: re-seeds the LIVE
+ * `skill-<slug>` dataset from the now-current catalog cases and ARCHIVES
+ * the staging dataset. Below threshold without override → blocked (no
+ * swap). Operator-gated; agent + dataset are tenant-scoped.
+ */
+const applySkillUpdate = async (
+  _p: any,
+  args: ApplySkillUpdateArgs,
+  ctx: GraphQLContext,
+) => {
+  await requireTenantAdmin(ctx, args.tenantId);
+  const override = args.override === true;
+
+  const threshold = await getSkillEvalGateThreshold(args.tenantId);
+  const candidateDatasetSlug = skillCandidateDatasetSlug(args.skillSlug);
+
+  // Candidate score is read from the staging dataset — never the live one.
+  const candidate = await readSkillEvalScore(
+    args.tenantId,
+    args.skillSlug,
+    candidateDatasetSlug,
+  );
+  const passRate = candidate.passRate;
+
+  const passesGate =
+    candidate.rated &&
+    passRate != null &&
+    threshold != null &&
+    passRate >= threshold;
+
+  if (!passesGate && !override) {
+    // Below threshold (or unscored) without override → no swap.
+    return {
+      applied: false,
+      blocked: true,
+      overridden: false,
+      passRate,
+      threshold,
+    };
+  }
+
+  if (override && !passesGate) {
+    console.warn(
+      `[skill-eval] applySkillUpdate OVERRIDE: tenant=${args.tenantId} skill=${args.skillSlug} ` +
+        `passRate=${passRate ?? "null"} threshold=${threshold ?? "null"} — swapping past the gate.`,
+    );
+  }
+
+  const targetInfo = await resolveAgentTargetPrefix(
+    args.tenantId,
+    args.agentId,
+  );
+  if (!targetInfo) {
+    throw evalNotFound(
+      `Agent ${args.agentId} not found in tenant ${args.tenantId}.`,
+    );
+  }
+
+  // Perform the REAL swap. Heavy deps (S3 client, catalog reinstaller,
+  // runtime config) are dynamic-imported so they never land in the
+  // resolver's static graph (which partially-mocked test suites stub).
+  const { getConfig } = await import("@thinkwork/runtime-config");
+  const { S3Client } = await import("@aws-sdk/client-s3");
+  const { reinstallCatalogSkill } =
+    await import("../../../lib/catalog-reinstall.js");
+  const bucket = getConfig("WORKSPACE_BUCKET");
+  if (!bucket) {
+    throw new Error("WORKSPACE_BUCKET is not configured");
+  }
+  const s3 = new S3Client({
+    region:
+      process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1",
+  });
+  const swap = await reinstallCatalogSkill({
+    s3,
+    bucket,
+    tenantSlug: targetInfo.tenantSlug,
+    targetPrefix: targetInfo.targetPrefix,
+    slug: args.skillSlug,
+  });
+
+  // PROMOTE: re-seed the LIVE dataset from the now-current catalog cases
+  // (the candidate's cases become canonical), then archive the transient
+  // staging dataset. Defensive — the swap already landed, so a promotion
+  // hiccup logs but does not unwind the (now-applied) update.
+  try {
+    await ensureSkillDatasetSeeded(
+      args.tenantId,
+      args.skillSlug,
+      swap.eval_cases,
+    );
+    await archiveSkillCandidateDataset(args.tenantId, args.skillSlug);
+  } catch (err) {
+    console.error(
+      `[skill-eval] applySkillUpdate promotion (live re-seed/archive) failed for ` +
+        `${args.skillSlug}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  return {
+    applied: true,
+    blocked: false,
+    overridden: override && !passesGate,
+    passRate,
+    threshold,
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -1483,6 +1697,7 @@ export const evaluationsQueries = {
   evalTestCase,
   evalTestCaseHistory,
   skillEvalScore,
+  skillEvalGate,
 };
 
 export const evaluationsMutations = {
@@ -1494,4 +1709,6 @@ export const evaluationsMutations = {
   deleteEvalTestCase,
   seedEvalTestCases,
   overrideEvalResult,
+  setSkillEvalGate,
+  applySkillUpdate,
 };

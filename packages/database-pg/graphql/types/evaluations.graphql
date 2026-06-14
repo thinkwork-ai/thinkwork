@@ -275,6 +275,37 @@ type EvalTimeSeriesPoint {
   failed: Int!
 }
 
+# ────────────────────────────────────────────────────────────────────
+# Skill-update gate (Skill Tests & Evals U6)
+#
+# A per-tenant threshold that HOLDS a skill UPDATE swap when the candidate
+# version scores below it. `enabled` is true when a gate row exists; no row
+# = no gate (nothing blocks). Per-tenant single threshold in v1.
+# ────────────────────────────────────────────────────────────────────
+
+type SkillEvalGate {
+  # True when a gate row exists for the tenant (the gate is on).
+  enabled: Boolean!
+  # The threshold (0.0–1.0); null when the gate is off.
+  threshold: Float
+}
+
+# Result of applying (or attempting to apply) a HELD skill update
+# (Skill Tests & Evals U6). `applied` swaps the candidate in and promotes
+# its staging dataset; `blocked` is the below-threshold-no-override arm.
+type SkillUpdateApplyResult {
+  # The candidate's swap was performed (gate passed or override).
+  applied: Boolean!
+  # The candidate scored below threshold and was not overridden — no swap.
+  blocked: Boolean!
+  # The swap was forced past a below-threshold candidate via override.
+  overridden: Boolean!
+  # The candidate's latest staging pass rate (0.0–1.0); null when unscored.
+  passRate: Float
+  # The gate threshold in effect; null when no gate is set.
+  threshold: Float
+}
+
 type EvalRunsPage {
   items: [EvalRun!]!
   totalCount: Int!
@@ -465,6 +496,9 @@ extend type Query {
   # Operator-gated; tenant-scoped. Returns an "unrated" score (rated:
   # false) for a skill with no enabled cases — never null.
   skillEvalScore(tenantId: ID!, skillSlug: String!): SkillEvalScore!
+  # Per-tenant skill-update gate (Skill Tests & Evals U6). Tenant-scoped
+  # read; `enabled` is false (threshold null) when no gate is set.
+  skillEvalGate(tenantId: ID!): SkillEvalGate!
 }
 
 extend type Mutation {
@@ -535,4 +569,19 @@ extend type Mutation {
   ): EvalReplayAllowedTool!
   # Remove an override entry by id (gate is row-derived → tenant admin).
   removeEvalReplayToolOverride(id: ID!): Boolean!
+  # Set or clear the per-tenant skill-update gate threshold (Skill Tests &
+  # Evals U6). Operator-gated (requireTenantAdmin). A finite threshold in
+  # [0, 1] enables the gate (upsert); null clears it (the gate goes off).
+  setSkillEvalGate(tenantId: ID!, threshold: Float): SkillEvalGate!
+  # Apply a HELD skill update (Skill Tests & Evals U6). Operator-gated.
+  # Reads the candidate's staging score; if it passes the gate (or
+  # override is true) performs the real workspace swap, promotes the live
+  # dataset, and archives the staging dataset. Below threshold without
+  # override → blocked (no swap).
+  applySkillUpdate(
+    tenantId: ID!
+    skillSlug: String!
+    agentId: ID!
+    override: Boolean
+  ): SkillUpdateApplyResult!
 }

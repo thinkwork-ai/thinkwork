@@ -232,6 +232,42 @@ describe("launchSkillEvalRun", () => {
     expect(updateSets).toHaveLength(0);
   });
 
+  it("datasetSlugOverride targets the staging dataset while the skill drives materialization (U6)", async () => {
+    mockResolveDatasetForLaunch.mockResolvedValueOnce({
+      id: "ds-candidate",
+      version: 1,
+    });
+    selectQueue.push([{ enabledCount: 2 }]);
+    mockGetTenantModelCatalogEntry.mockResolvedValueOnce({ enabled: true });
+    insertResults.push([{ id: "run-c" }]);
+    mockClaimEvalBaselineForRun.mockResolvedValueOnce({
+      id: "agent-1",
+      slug: "agent-slug",
+      skillSlug: "x",
+    });
+
+    const result = await launchSkillEvalRun({
+      tenantId: "tenant-1",
+      skillSlug: "x",
+      datasetSlugOverride: "skill-x-candidate",
+    });
+
+    expect(result).toEqual({ status: "launched", runId: "run-c" });
+    // The run targets the STAGING dataset, not the live skill-x dataset.
+    expect(mockResolveDatasetForLaunch).toHaveBeenCalledWith(
+      "tenant-1",
+      "skill-x-candidate",
+    );
+    expect(insertValues[0]).toMatchObject({ dataset_id: "ds-candidate" });
+    // The baseline still materializes the catalog (= candidate) skill content
+    // by skill slug — the override only changes which dataset is scored.
+    expect(mockClaimEvalBaselineForRun).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      skillSlug: "x",
+      runId: "run-c",
+    });
+  });
+
   it("busy: a baseline claim conflict marks the run failed and returns busy", async () => {
     mockResolveDatasetForLaunch.mockResolvedValueOnce({
       id: "ds-1",
@@ -380,5 +416,35 @@ describe("readSkillEvalScore", () => {
     expect(score.passRate).toBe(null);
     expect(score.regression).toBe(false);
     expect(score.lastRunId).toBe(null);
+  });
+
+  it("datasetSlugOverride reads the staging dataset's score (U6)", async () => {
+    selectQueue.push([{ id: "ds-candidate" }]); // staging dataset row
+    selectQueue.push([{ totalCases: 2 }]);
+    selectQueue.push([
+      { id: "run-c", passRate: "0.6000", completedAt: new Date() },
+    ]);
+    const score = await readSkillEvalScore(
+      "tenant-1",
+      "x",
+      "skill-x-candidate",
+    );
+    // The reported dataset slug is the staging slug, not the live skill-x.
+    expect(score.datasetSlug).toBe("skill-x-candidate");
+    expect(score.rated).toBe(true);
+    expect(score.passRate).toBe(0.6);
+    expect(score.lastRunId).toBe("run-c");
+  });
+
+  it("unrated staging dataset (no row) reports the staging slug, unrated (U6)", async () => {
+    selectQueue.push([]); // no staging dataset row
+    const score = await readSkillEvalScore(
+      "tenant-1",
+      "x",
+      "skill-x-candidate",
+    );
+    expect(score.datasetSlug).toBe("skill-x-candidate");
+    expect(score.rated).toBe(false);
+    expect(score.passRate).toBe(null);
   });
 });
