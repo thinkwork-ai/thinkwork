@@ -25,6 +25,7 @@ import {
   ArrowLeft,
   CheckCheck,
   ChevronDown,
+  ChevronsDown,
   ChevronsUp,
   Clock,
   GitBranch,
@@ -668,6 +669,9 @@ export function ChatSidebar() {
   const collapseAllSpaces = useCallback(() => {
     setCollapsedSpaceIds(new Set(contextualSpaces.map((space) => space.id)));
   }, [contextualSpaces]);
+  const expandAllSpaces = useCallback(() => {
+    setCollapsedSpaceIds(new Set());
+  }, []);
   const searchThreads = useMemo(
     () =>
       sortThreadsByActivityDesc(searchData?.threadsPaged?.items ?? []).filter(
@@ -910,6 +914,7 @@ export function ChatSidebar() {
                 openSpaceIds={openSpaceIds}
                 locallyReadThreadIds={locallyReadThreadIds}
                 onSpaceOpenChange={setSpaceOpen}
+                onExpandAll={expandAllSpaces}
                 onCollapseAll={collapseAllSpaces}
                 onActivate={activateThread}
                 onPin={pinThread}
@@ -1570,6 +1575,7 @@ function SpacesListSection({
   openSpaceIds,
   locallyReadThreadIds,
   onSpaceOpenChange,
+  onExpandAll,
   onCollapseAll,
   onActivate,
   onPin,
@@ -1587,6 +1593,7 @@ function SpacesListSection({
   openSpaceIds: ReadonlySet<string>;
   locallyReadThreadIds: ReadonlySet<string>;
   onSpaceOpenChange: (spaceId: string, open: boolean) => void;
+  onExpandAll: () => void;
   onCollapseAll: () => void;
   onActivate: (threadId: string) => void;
   onPin?: (threadId: string) => void;
@@ -1595,7 +1602,10 @@ function SpacesListSection({
   if (spacesFetching && !hasLoadedSpaces) {
     return (
       <div className="space-y-0.5">
-        <SpacesSectionHeader onCollapseAll={onCollapseAll} />
+        <SpacesSectionHeader
+          onExpandAll={onExpandAll}
+          onCollapseAll={onCollapseAll}
+        />
         <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
           Loading Spaces...
         </p>
@@ -1606,7 +1616,10 @@ function SpacesListSection({
   if (spaces.length === 0) {
     return (
       <div className="space-y-0.5">
-        <SpacesSectionHeader onCollapseAll={onCollapseAll} />
+        <SpacesSectionHeader
+          onExpandAll={onExpandAll}
+          onCollapseAll={onCollapseAll}
+        />
         <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
           No Spaces yet
         </p>
@@ -1616,7 +1629,10 @@ function SpacesListSection({
 
   return (
     <div className="space-y-0.5">
-      <SpacesSectionHeader onCollapseAll={onCollapseAll} />
+      <SpacesSectionHeader
+        onExpandAll={onExpandAll}
+        onCollapseAll={onCollapseAll}
+      />
       <div className="space-y-0.5">
         {spaces.map((space) => (
           <SpaceThreadSection
@@ -1642,8 +1658,10 @@ function SpacesListSection({
 }
 
 function SpacesSectionHeader({
+  onExpandAll,
   onCollapseAll,
 }: {
+  onExpandAll: () => void;
   onCollapseAll: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1669,6 +1687,10 @@ function SpacesSectionHeader({
           className="z-[1000] w-48"
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
+          <DropdownMenuItem onSelect={onExpandAll}>
+            <ChevronsDown className="size-4" />
+            Expand all Spaces
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onCollapseAll}>
             <ChevronsUp className="size-4" />
             Collapse all Spaces
@@ -1786,7 +1808,6 @@ function SpaceThreadSection({
       <div
         className={cn(
           "group/section-row flex h-8 w-full min-w-0 items-center rounded-md pr-1 transition-colors hover:bg-sidebar-accent",
-          isActiveSpace && "bg-sidebar-accent",
         )}
       >
         <CollapsibleTrigger asChild>
@@ -1816,32 +1837,28 @@ function SpaceThreadSection({
             <ChevronDown className="h-4 w-4 shrink-0 opacity-0 transition-all duration-150 ease-out group-hover/space-trigger:opacity-100 group-data-[state=closed]/space:-rotate-90" />
           </button>
         </CollapsibleTrigger>
-        {open ? (
-          <>
-            <Link
-              to="/new"
-              search={{ spaceId: space.id }}
-              onClick={requestSpacesComposerFocus}
-              aria-label={`New thread in ${label}`}
-              title="New thread"
-              className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
-            >
-              <SquarePen className="size-3" />
-            </Link>
-            <SectionHeaderControls
-              sectionId={sectionId}
-              label={label}
-              unreadThreadIds={unreadThreadIds}
-              filterOn={filterOn}
-              scopeSpaceId={space.id}
-              scopeSpaceName={label}
-              onMarkSectionRead={onMarkSectionRead}
-            />
-          </>
-        ) : null}
+        <Link
+          to="/new"
+          search={{ spaceId: space.id }}
+          onClick={requestSpacesComposerFocus}
+          aria-label={`New thread in ${label}`}
+          title="New thread"
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/45 opacity-0 outline-none transition-opacity hover:text-sidebar-accent-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-hover/section-row:opacity-100 [@media(hover:none)]:opacity-100"
+        >
+          <SquarePen className="size-3" />
+        </Link>
+        <SectionHeaderControls
+          sectionId={sectionId}
+          label={label}
+          unreadThreadIds={unreadThreadIds}
+          filterOn={filterOn}
+          scopeSpaceId={space.id}
+          scopeSpaceName={label}
+          onMarkSectionRead={onMarkSectionRead}
+        />
       </div>
       <CollapsibleContent>
-        <SidebarGroupContent>
+        <SidebarGroupContent className="pt-0.5">
           {threads.length === 0 ? (
             <Link
               to="/spaces/$spaceId"

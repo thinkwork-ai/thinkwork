@@ -724,7 +724,7 @@ describe("ChatSidebar", () => {
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
   });
 
-  it("collapses all open Space rows from the Spaces section menu", () => {
+  it("expands and collapses all Space rows from the Spaces section menu", () => {
     tenantMock.mockReturnValue({ tenantId: "tenant-1" });
     locationMock.mockReturnValue({
       pathname: "/threads",
@@ -734,6 +734,9 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar />);
 
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /new thread in customer onboarding/i }),
+    ).toBeTruthy();
 
     fireEvent.click(
       within(sectionMenu(/spaces options/i)).getByRole("button", {
@@ -745,9 +748,14 @@ describe("ChatSidebar", () => {
       screen.getByRole("button", { name: /toggle customer onboarding/i }),
     ).toBeTruthy();
     expect(screen.queryByText("Recent Space thread")).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /new thread in customer onboarding/i }),
+    ).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /toggle customer onboarding/i }),
+      within(sectionMenu(/spaces options/i)).getByRole("button", {
+        name: /expand all spaces/i,
+      }),
     );
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
   });
