@@ -30,6 +30,7 @@ import { Route as AuthedSettingsLocalWorkspaceRouteImport } from "./routes/_auth
 import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_authed/settings.knowledge-graph";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsCrmRouteImport } from "./routes/_authed/settings.crm";
+import { Route as AuthedSettingsBrainOperationsRouteImport } from "./routes/_authed/settings.brain-operations";
 import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/settings.billing";
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
 import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
@@ -205,6 +206,12 @@ const AuthedSettingsCrmRoute = AuthedSettingsCrmRouteImport.update({
   path: "/crm",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
+const AuthedSettingsBrainOperationsRoute =
+  AuthedSettingsBrainOperationsRouteImport.update({
+    id: "/brain-operations",
+    path: "/brain-operations",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsBillingRoute = AuthedSettingsBillingRouteImport.update({
   id: "/billing",
   path: "/billing",
@@ -609,6 +616,7 @@ export interface FileRoutesByFullPath {
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
+  "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
@@ -692,6 +700,7 @@ export interface FileRoutesByTo {
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
+  "/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
   "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
@@ -783,6 +792,7 @@ export interface FileRoutesById {
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
+  "/_authed/settings/brain-operations": typeof AuthedSettingsBrainOperationsRoute;
   "/_authed/settings/crm": typeof AuthedSettingsCrmRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
@@ -873,6 +883,7 @@ export interface FileRouteTypes {
     | "/settings/analytics"
     | "/settings/artifacts"
     | "/settings/billing"
+    | "/settings/brain-operations"
     | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
@@ -956,6 +967,7 @@ export interface FileRouteTypes {
     | "/settings/activity"
     | "/settings/analytics"
     | "/settings/billing"
+    | "/settings/brain-operations"
     | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
@@ -1046,6 +1058,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/analytics"
     | "/_authed/settings/artifacts"
     | "/_authed/settings/billing"
+    | "/_authed/settings/brain-operations"
     | "/_authed/settings/crm"
     | "/_authed/settings/general"
     | "/_authed/settings/knowledge-graph"
@@ -1275,6 +1288,13 @@ declare module "@tanstack/react-router" {
       path: "/crm";
       fullPath: "/settings/crm";
       preLoaderRoute: typeof AuthedSettingsCrmRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/brain-operations": {
+      id: "/_authed/settings/brain-operations";
+      path: "/brain-operations";
+      fullPath: "/settings/brain-operations";
+      preLoaderRoute: typeof AuthedSettingsBrainOperationsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/billing": {
@@ -1914,6 +1934,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
   AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRouteWithChildren;
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
+  AuthedSettingsBrainOperationsRoute: typeof AuthedSettingsBrainOperationsRoute;
   AuthedSettingsCrmRoute: typeof AuthedSettingsCrmRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeGraphRoute: typeof AuthedSettingsKnowledgeGraphRoute;
@@ -1964,6 +1985,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAnalyticsRoute: AuthedSettingsAnalyticsRoute,
   AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRouteWithChildren,
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
+  AuthedSettingsBrainOperationsRoute: AuthedSettingsBrainOperationsRoute,
   AuthedSettingsCrmRoute: AuthedSettingsCrmRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeGraphRoute: AuthedSettingsKnowledgeGraphRoute,

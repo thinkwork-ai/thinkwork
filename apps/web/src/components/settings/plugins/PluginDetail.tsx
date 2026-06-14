@@ -482,6 +482,17 @@ export function PluginDetail() {
         {isCompanyBrain && (install || hasActiveEntitlement) ? (
           <SettingsSection label="Workspace">
             <SettingsRow
+              label="Brain operations"
+              description="Inspect substrate status, migration posture, evidence, and operator actions."
+            >
+              <Button asChild type="button" variant="outline" size="sm">
+                <Link to="/settings/brain-operations">
+                  <Settings2 className="size-4" />
+                  Open operations
+                </Link>
+              </Button>
+            </SettingsRow>
+            <SettingsRow
               label="Memory / Ontology"
               description="Open the graph workspace powered by Company Brain."
             >

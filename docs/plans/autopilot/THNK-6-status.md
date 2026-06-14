@@ -2,7 +2,7 @@
 
 Linear issue: THNK-6 - ThinkWork Brain
 Target branch: `main`
-Current implementation branch: `codex/thnk-6-u5b-migration-aware-reads`
+Current implementation branch: `codex/thnk-6-u6-brain-operations-ui`
 Plan: `docs/plans/2026-06-14-004-feat-company-brain-remaining-substrate-plan.md`
 Status doc created: 2026-06-14
 
@@ -11,9 +11,9 @@ Status doc created: 2026-06-14
 - THNK-15, the Company Brain premium plugin shell blocker, is Done.
 - THNK-17, THNK-18, THNK-19, and THNK-20 are Done and merged to `main`.
 - U4 migration orchestration is merged to `main`.
-- Remaining parent-scope units are U5b migration-aware reads, U6 Brain
-  operations UI, and U7 docs/smoke closure.
-- This branch starts U5b: migration-aware Brain reads.
+- Remaining parent-scope units are U6 Brain operations UI and U7 docs/smoke
+  closure.
+- This branch implements U6: Brain operations UI and action model.
 
 ## Discovery
 
@@ -145,6 +145,46 @@ proof`, which is 100% complete.
   migration-aware Company Brain Context Engine reads.
 - 2026-06-14: Attempted to move THNK-6 to `Verification` for U5b, but the
   Linear connector returned `401 token_revoked`.
+- 2026-06-14: Dispatcher moved THNK-6 to `Verification` and added the PR
+  [#2462](https://github.com/thinkwork-ai/thinkwork/pull/2462) tracking
+  comment externally because the Linear connector token was revoked.
+- 2026-06-14: U5b PR
+  [#2462](https://github.com/thinkwork-ai/thinkwork/pull/2462) passed CI
+  (`cla`, `lint`, `verify`, `test`, `typecheck`) and was squash-merged to
+  `main` at `248f5816`.
+- 2026-06-14: Deleted the merged remote U5b branch and force-deleted the local
+  U5b branch after squash merge.
+- 2026-06-14: Created branch
+  `codex/thnk-6-u6-brain-operations-ui` from updated `origin/main`.
+- 2026-06-14: Implemented U6 Brain operations UI:
+  operator-guarded `/settings/brain-operations` route, Company Brain plugin
+  deep link, tenant-safe status cards, backend/operator evidence redaction,
+  migration action buttons backed by U4 mutations, failure/rollback controls,
+  active-migration request guard, terminal rollback retry handling, and links
+  to ontology, tools, billing, and plugin lifecycle surfaces.
+- 2026-06-14: U6 generated web GraphQL documents/types and route tree after
+  adding the Brain operations route and mutation documents.
+- 2026-06-14: U6 local verification passed:
+  `pnpm --filter @thinkwork/web codegen`,
+  `pnpm --filter @thinkwork/web test -- src/components/settings/brain/BrainOperationsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx`
+  (20 tests passed), `pnpm --filter @thinkwork/web typecheck`,
+  `pnpm --filter @thinkwork/web build`, and `git diff --check`.
+- 2026-06-14: U6 broader web verification passed before the final retry-guard
+  patch: `pnpm --filter @thinkwork/web test` (164 files passed, 1,219 tests
+  passed). The affected Brain operations tests were rerun and passed after the
+  retry-guard patch.
+- 2026-06-14: U6 browser smoke attempted with the in-app Browser on local
+  Vite. The browser tab crashed before rendering the route; the dev server
+  stayed healthy and `curl -I http://localhost:5174/settings/brain-operations`
+  returned HTTP 200 with the Vite shell. Visual inspection remains limited by
+  the browser runtime crash.
+- 2026-06-14: `pnpm exec prettier --write ...` was attempted for U6, but this
+  workspace does not expose a `prettier` binary through pnpm exec in the
+  current install (`Command "prettier" not found`). Formatting was kept
+  consistent manually and `git diff --check` passed.
+- 2026-06-14: Opened U6 PR
+  [#2464](https://github.com/thinkwork-ai/thinkwork/pull/2464) for the Brain
+  operations UI and action model.
 
 ## Linear State Changes
 
@@ -155,6 +195,16 @@ proof`, which is 100% complete.
   then back to `In Progress` to start U5b.
 - 2026-06-14: U5b Linear move to `Verification` failed because the Linear
   OAuth token was revoked.
+- 2026-06-14: Dispatcher externally moved THNK-6 to `Verification` and added a
+  U5b PR [#2462](https://github.com/thinkwork-ai/thinkwork/pull/2462)
+  tracking comment because the local Linear connector remained revoked.
+- Desired next Linear update from dispatcher for U6: keep THNK-6 in
+  `Verification` and add a comment: "Opened U6 PR for Brain operations UI:
+  https://github.com/thinkwork-ai/thinkwork/pull/2464. Local verification: web
+  codegen, focused Brain operations/plugin tests, web typecheck, web build,
+  git diff check, full web test pre-final guard patch, focused rerun after
+  guard patch. Browser visual smoke was attempted; in-app Browser tab crashed,
+  while local Vite route returned HTTP 200."
 
 ## PR / CI Log
 
@@ -166,8 +216,13 @@ proof`, which is 100% complete.
   the PR was squash-merged to `main`.
 - 2026-06-14: Opened U5b PR
   [#2462](https://github.com/thinkwork-ai/thinkwork/pull/2462) for
-  migration-aware Brain reads. CI follow-up is blocked on Linear credential
-  reauthentication because autopilot tracking state can no longer be updated.
+  migration-aware Brain reads.
+- 2026-06-14: U5b PR
+  [#2462](https://github.com/thinkwork-ai/thinkwork/pull/2462) CI passed and
+  the PR was squash-merged to `main`.
+- 2026-06-14: Opened U6 PR
+  [#2464](https://github.com/thinkwork-ai/thinkwork/pull/2464) for Brain
+  operations UI and action model.
 
 ## Decisions
 
@@ -181,6 +236,8 @@ proof`, which is 100% complete.
 
 ## Blockers
 
-- Linear connector credentials are blocked: moving THNK-6 to `Verification`
-  for U5b failed with `401 token_revoked`. A Linear comment could not be added
-  for the same reason.
+- Linear connector credentials remain unavailable locally with
+  `401 token_revoked`; dispatcher is applying required Linear state/comment
+  updates externally while GitHub/repo workflow continues.
+- U6 visual browser smoke is limited by an in-app Browser tab crash. HTTP route
+  smoke, production build, typecheck, and tests passed.

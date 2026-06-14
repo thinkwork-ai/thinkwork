@@ -483,7 +483,7 @@ describe("PluginDetail", () => {
     });
   });
 
-  it("shows Company Brain workspace and adoption evidence once entitled", () => {
+  it("shows Company Brain operations, workspace, and adoption evidence once entitled", () => {
     paramsState.pluginKey = "company-brain";
     mockQueries({
       install: companyBrainInstall,
@@ -495,6 +495,8 @@ describe("PluginDetail", () => {
     expect(screen.queryByText("Premium access")).toBeNull();
     expect(screen.queryByText("Entitled")).toBeNull();
     expect(screen.getByText(/Adoption plan verifies/i)).toBeTruthy();
+    const operations = screen.getByRole("link", { name: /open operations/i });
+    expect(operations.getAttribute("href")).toBe("/settings/brain-operations");
     const link = screen.getByRole("link", { name: /open ontology/i });
     expect(link.getAttribute("href")).toBe("/settings/memory/knowledge-graph");
   });

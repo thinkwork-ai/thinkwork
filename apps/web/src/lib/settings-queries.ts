@@ -179,6 +179,46 @@ export const SettingsCompanyBrainStatusQuery = graphql(`
   }
 `);
 
+export const SettingsRequestCompanyBrainProductionMigrationMutation = graphql(`
+  mutation SettingsRequestCompanyBrainProductionMigration(
+    $input: RequestCompanyBrainProductionMigrationInput!
+  ) {
+    requestCompanyBrainProductionMigration(input: $input) {
+      id
+      phase
+      status
+      fromStorageTier
+      toStorageTier
+      requestedAt
+      startedAt
+      completedAt
+      rollbackWindowClosesAt
+      errorMessage
+      validationSummary
+    }
+  }
+`);
+
+export const SettingsUpdateCompanyBrainMigrationMutation = graphql(`
+  mutation SettingsUpdateCompanyBrainMigration(
+    $input: UpdateCompanyBrainMigrationInput!
+  ) {
+    updateCompanyBrainMigration(input: $input) {
+      id
+      phase
+      status
+      fromStorageTier
+      toStorageTier
+      requestedAt
+      startedAt
+      completedAt
+      rollbackWindowClosesAt
+      errorMessage
+      validationSummary
+    }
+  }
+`);
+
 export const SettingsDeploymentReleasesQuery = graphql(`
   query SettingsDeploymentReleases($limit: Int) {
     deploymentReleases(limit: $limit) {
