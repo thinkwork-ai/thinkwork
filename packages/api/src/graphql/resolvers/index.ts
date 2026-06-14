@@ -55,6 +55,7 @@ import {
   evalReplayAllowlistMutations,
 } from "./evaluations/replay-allowlist.js";
 import { wikiQueries, wikiMutations } from "./wiki/index.js";
+import { brainQueries } from "./brain/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import {
   skillCatalogMutations,
@@ -115,6 +116,7 @@ export const queryResolvers: Record<string, any> = {
   ...evalDatasetQueries,
   ...evalReplayAllowlistQueries,
   ...wikiQueries,
+  ...brainQueries,
   ...skillRunsQueries,
   ...skillCatalogQueries,
   ...runtimeQueries,

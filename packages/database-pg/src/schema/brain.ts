@@ -35,10 +35,15 @@ import {
   uniqueIndex,
   index,
   check,
+  foreignKey,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import { tenants } from "./core";
+import { tenants, users } from "./core";
+import {
+  managedApplicationDeploymentJobs,
+  managedApplications,
+} from "./deployments";
 
 // ---------------------------------------------------------------------------
 // Schema handle
@@ -80,6 +85,456 @@ export const TENANT_ENTITY_FACET_TYPES = [
 ] as const;
 
 export type TenantEntityFacetType = (typeof TENANT_ENTITY_FACET_TYPES)[number];
+
+export const BRAIN_STORAGE_TIERS = ["default", "production"] as const;
+
+export type BrainStorageTier = (typeof BRAIN_STORAGE_TIERS)[number];
+
+export const BRAIN_SUBSTRATE_STATUSES = [
+  "not_installed",
+  "provisioning",
+  "ready",
+  "degraded",
+  "failed",
+  "migrating",
+  "disabled",
+] as const;
+
+export type BrainSubstrateStatus = (typeof BRAIN_SUBSTRATE_STATUSES)[number];
+
+export const BRAIN_SUBSTRATE_HEALTH_STATUSES = [
+  "unknown",
+  "healthy",
+  "degraded",
+  "failed",
+  "disabled",
+] as const;
+
+export type BrainSubstrateHealthStatus =
+  (typeof BRAIN_SUBSTRATE_HEALTH_STATUSES)[number];
+
+export const BRAIN_ACTIVE_BACKENDS = [
+  "none",
+  "default",
+  "production",
+  "legacy_cognee",
+] as const;
+
+export type BrainActiveBackend = (typeof BRAIN_ACTIVE_BACKENDS)[number];
+
+export const BRAIN_MIGRATION_PHASES = [
+  "none",
+  "requested",
+  "snapshotting",
+  "provisioning",
+  "replaying",
+  "validating",
+  "cutover",
+  "completed",
+  "failed",
+  "rolled_back",
+] as const;
+
+export type BrainMigrationPhase = (typeof BRAIN_MIGRATION_PHASES)[number];
+
+export const BRAIN_MIGRATION_STATUSES = [
+  "none",
+  "requested",
+  "running",
+  "completed",
+  "failed",
+  "rolled_back",
+  "canceled",
+] as const;
+
+export type BrainMigrationStatus = (typeof BRAIN_MIGRATION_STATUSES)[number];
+
+export const BRAIN_ARTIFACT_MANIFEST_KINDS = [
+  "source_artifact",
+  "ingestion_manifest",
+  "migration_snapshot",
+  "vault_projection",
+  "export",
+] as const;
+
+export type BrainArtifactManifestKind =
+  (typeof BRAIN_ARTIFACT_MANIFEST_KINDS)[number];
+
+export const BRAIN_ARTIFACT_MANIFEST_STATUSES = [
+  "active",
+  "superseded",
+  "deleted",
+  "failed",
+] as const;
+
+export type BrainArtifactManifestStatus =
+  (typeof BRAIN_ARTIFACT_MANIFEST_STATUSES)[number];
+
+// ---------------------------------------------------------------------------
+// brain.substrate_states — Company Brain storage/runtime posture
+// ---------------------------------------------------------------------------
+
+export const brainSubstrateStates = brain.table(
+  "substrate_states",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    managed_application_id: uuid("managed_application_id"),
+    latest_deployment_job_id: uuid("latest_deployment_job_id"),
+    storage_tier: text("storage_tier").notNull().default("default"),
+    active_backend: text("active_backend").notNull().default("none"),
+    status: text("status").notNull().default("not_installed"),
+    health_status: text("health_status").notNull().default("unknown"),
+    backend_mode: text("backend_mode"),
+    graph_provider: text("graph_provider"),
+    vector_provider: text("vector_provider"),
+    embedding_model: text("embedding_model"),
+    vector_dimension: integer("vector_dimension"),
+    cognee_version: text("cognee_version"),
+    cognee_endpoint: text("cognee_endpoint"),
+    s3_artifact_root: text("s3_artifact_root"),
+    s3_manifest_root: text("s3_manifest_root"),
+    s3_vault_projection_root: text("s3_vault_projection_root"),
+    neptune_graph_id: text("neptune_graph_id"),
+    neptune_endpoint: text("neptune_endpoint"),
+    efs_file_system_id: text("efs_file_system_id"),
+    production_posture: text("production_posture"),
+    latest_ingest_at: timestamp("latest_ingest_at", { withTimezone: true }),
+    latest_projection_at: timestamp("latest_projection_at", {
+      withTimezone: true,
+    }),
+    ingestion_queue_depth: integer("ingestion_queue_depth")
+      .notNull()
+      .default(0),
+    failed_ingest_count: integer("failed_ingest_count").notNull().default(0),
+    graph_entity_count: integer("graph_entity_count"),
+    graph_edge_count: integer("graph_edge_count"),
+    source_artifact_count: integer("source_artifact_count"),
+    vault_projection_count: integer("vault_projection_count"),
+    ontology_version: text("ontology_version"),
+    launch_capabilities: jsonb("launch_capabilities").notNull().default({}),
+    optional_capabilities: jsonb("optional_capabilities").notNull().default({}),
+    operator_evidence: jsonb("operator_evidence").notNull().default({}),
+    last_failure_message: text("last_failure_message"),
+    last_failure_at: timestamp("last_failure_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    foreignKey({
+      name: "substrate_states_managed_application_id_fk",
+      columns: [table.managed_application_id],
+      foreignColumns: [managedApplications.id],
+    }).onDelete("set null"),
+    foreignKey({
+      name: "substrate_states_latest_deployment_job_id_fk",
+      columns: [table.latest_deployment_job_id],
+      foreignColumns: [managedApplicationDeploymentJobs.id],
+    }).onDelete("set null"),
+    uniqueIndex("brain_substrate_states_tenant_uidx").on(table.tenant_id),
+    index("brain_substrate_states_tenant_status_idx").on(
+      table.tenant_id,
+      table.status,
+    ),
+    index("brain_substrate_states_managed_app_idx").on(
+      table.managed_application_id,
+    ),
+    index("brain_substrate_states_latest_job_idx").on(
+      table.latest_deployment_job_id,
+    ),
+    index("brain_substrate_states_storage_tier_idx").on(table.storage_tier),
+    check(
+      "brain_substrate_states_tier_allowed",
+      sql`${table.storage_tier} IN ('default','production')`,
+    ),
+    check(
+      "brain_substrate_states_backend_allowed",
+      sql`${table.active_backend} IN ('none','default','production','legacy_cognee')`,
+    ),
+    check(
+      "brain_substrate_states_status_allowed",
+      sql`${table.status} IN ('not_installed','provisioning','ready','degraded','failed','migrating','disabled')`,
+    ),
+    check(
+      "brain_substrate_states_health_allowed",
+      sql`${table.health_status} IN ('unknown','healthy','degraded','failed','disabled')`,
+    ),
+    check(
+      "brain_substrate_states_vector_positive",
+      sql`${table.vector_dimension} IS NULL OR ${table.vector_dimension} > 0`,
+    ),
+    check(
+      "brain_substrate_states_queue_nonneg",
+      sql`${table.ingestion_queue_depth} >= 0`,
+    ),
+    check(
+      "brain_substrate_states_failed_nonneg",
+      sql`${table.failed_ingest_count} >= 0`,
+    ),
+    check(
+      "brain_substrate_states_entity_nonneg",
+      sql`${table.graph_entity_count} IS NULL OR ${table.graph_entity_count} >= 0`,
+    ),
+    check(
+      "brain_substrate_states_edge_nonneg",
+      sql`${table.graph_edge_count} IS NULL OR ${table.graph_edge_count} >= 0`,
+    ),
+    check(
+      "brain_substrate_states_artifact_nonneg",
+      sql`${table.source_artifact_count} IS NULL OR ${table.source_artifact_count} >= 0`,
+    ),
+    check(
+      "brain_substrate_states_projection_nonneg",
+      sql`${table.vault_projection_count} IS NULL OR ${table.vault_projection_count} >= 0`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// brain.substrate_migrations — tier migration/cutover state
+// ---------------------------------------------------------------------------
+
+export const brainSubstrateMigrations = brain.table(
+  "substrate_migrations",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    substrate_id: uuid("substrate_id"),
+    from_storage_tier: text("from_storage_tier").notNull().default("default"),
+    to_storage_tier: text("to_storage_tier").notNull().default("production"),
+    phase: text("phase").notNull().default("none"),
+    status: text("status").notNull().default("none"),
+    requested_by_user_id: uuid("requested_by_user_id"),
+    deployment_job_id: uuid("deployment_job_id"),
+    embedding_model: text("embedding_model"),
+    vector_dimension: integer("vector_dimension"),
+    validation_summary: jsonb("validation_summary").notNull().default({}),
+    operator_evidence: jsonb("operator_evidence").notNull().default({}),
+    error_message: text("error_message"),
+    requested_at: timestamp("requested_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    started_at: timestamp("started_at", { withTimezone: true }),
+    completed_at: timestamp("completed_at", { withTimezone: true }),
+    rollback_window_closes_at: timestamp("rollback_window_closes_at", {
+      withTimezone: true,
+    }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    foreignKey({
+      name: "substrate_migrations_substrate_id_fk",
+      columns: [table.substrate_id],
+      foreignColumns: [brainSubstrateStates.id],
+    }).onDelete("set null"),
+    foreignKey({
+      name: "substrate_migrations_requested_by_user_id_fk",
+      columns: [table.requested_by_user_id],
+      foreignColumns: [users.id],
+    }).onDelete("set null"),
+    foreignKey({
+      name: "substrate_migrations_deployment_job_id_fk",
+      columns: [table.deployment_job_id],
+      foreignColumns: [managedApplicationDeploymentJobs.id],
+    }).onDelete("set null"),
+    index("brain_substrate_migrations_tenant_status_idx").on(
+      table.tenant_id,
+      table.status,
+    ),
+    index("brain_substrate_migrations_tenant_phase_idx").on(
+      table.tenant_id,
+      table.phase,
+    ),
+    index("brain_substrate_migrations_substrate_created_idx").on(
+      table.substrate_id,
+      table.created_at,
+    ),
+    index("brain_substrate_migrations_job_idx").on(table.deployment_job_id),
+    check(
+      "brain_substrate_migrations_from_tier_allowed",
+      sql`${table.from_storage_tier} IN ('default','production')`,
+    ),
+    check(
+      "brain_substrate_migrations_to_tier_allowed",
+      sql`${table.to_storage_tier} IN ('default','production')`,
+    ),
+    check(
+      "brain_substrate_migrations_phase_allowed",
+      sql`${table.phase} IN ('none','requested','snapshotting','provisioning','replaying','validating','cutover','completed','failed','rolled_back')`,
+    ),
+    check(
+      "brain_substrate_migrations_status_allowed",
+      sql`${table.status} IN ('none','requested','running','completed','failed','rolled_back','canceled')`,
+    ),
+    check(
+      "brain_substrate_migrations_vector_positive",
+      sql`${table.vector_dimension} IS NULL OR ${table.vector_dimension} > 0`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// brain.substrate_events — operational event log
+// ---------------------------------------------------------------------------
+
+export const brainSubstrateEvents = brain.table(
+  "substrate_events",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    substrate_id: uuid("substrate_id"),
+    migration_id: uuid("migration_id"),
+    deployment_job_id: uuid("deployment_job_id"),
+    event_type: text("event_type").notNull(),
+    message: text("message").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    evidence_uri: text("evidence_uri"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    foreignKey({
+      name: "substrate_events_substrate_id_fk",
+      columns: [table.substrate_id],
+      foreignColumns: [brainSubstrateStates.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "substrate_events_migration_id_fk",
+      columns: [table.migration_id],
+      foreignColumns: [brainSubstrateMigrations.id],
+    }).onDelete("set null"),
+    foreignKey({
+      name: "substrate_events_deployment_job_id_fk",
+      columns: [table.deployment_job_id],
+      foreignColumns: [managedApplicationDeploymentJobs.id],
+    }).onDelete("set null"),
+    index("brain_substrate_events_tenant_created_idx").on(
+      table.tenant_id,
+      table.created_at,
+    ),
+    index("brain_substrate_events_substrate_created_idx").on(
+      table.substrate_id,
+      table.created_at,
+    ),
+    index("brain_substrate_events_migration_idx").on(table.migration_id),
+    index("brain_substrate_events_deployment_job_idx").on(
+      table.deployment_job_id,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// brain.artifact_manifests — replayable Brain source/vault artifacts
+// ---------------------------------------------------------------------------
+
+export const brainArtifactManifests = brain.table(
+  "artifact_manifests",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    substrate_id: uuid("substrate_id"),
+    migration_id: uuid("migration_id"),
+    manifest_kind: text("manifest_kind").notNull(),
+    storage_tier: text("storage_tier").notNull().default("default"),
+    source_family: text("source_family"),
+    source_id_hash: text("source_id_hash"),
+    manifest_uri: text("manifest_uri").notNull(),
+    artifact_root_uri: text("artifact_root_uri"),
+    vault_projection_root_uri: text("vault_projection_root_uri"),
+    checksum_sha256: text("checksum_sha256"),
+    object_count: integer("object_count").notNull().default(0),
+    source_count: integer("source_count").notNull().default(0),
+    embedding_model: text("embedding_model"),
+    vector_dimension: integer("vector_dimension"),
+    ontology_version: text("ontology_version"),
+    status: text("status").notNull().default("active"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    foreignKey({
+      name: "artifact_manifests_substrate_id_fk",
+      columns: [table.substrate_id],
+      foreignColumns: [brainSubstrateStates.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "artifact_manifests_migration_id_fk",
+      columns: [table.migration_id],
+      foreignColumns: [brainSubstrateMigrations.id],
+    }).onDelete("set null"),
+    uniqueIndex("brain_artifact_manifests_manifest_uri_uidx").on(
+      table.manifest_uri,
+    ),
+    index("brain_artifact_manifests_tenant_kind_idx").on(
+      table.tenant_id,
+      table.manifest_kind,
+    ),
+    index("brain_artifact_manifests_substrate_kind_idx").on(
+      table.substrate_id,
+      table.manifest_kind,
+    ),
+    index("brain_artifact_manifests_migration_idx").on(table.migration_id),
+    index("brain_artifact_manifests_source_idx").on(
+      table.tenant_id,
+      table.source_family,
+      table.source_id_hash,
+    ),
+    check(
+      "brain_artifact_manifests_kind_allowed",
+      sql`${table.manifest_kind} IN ('source_artifact','ingestion_manifest','migration_snapshot','vault_projection','export')`,
+    ),
+    check(
+      "brain_artifact_manifests_tier_allowed",
+      sql`${table.storage_tier} IN ('default','production')`,
+    ),
+    check(
+      "brain_artifact_manifests_status_allowed",
+      sql`${table.status} IN ('active','superseded','deleted','failed')`,
+    ),
+    check(
+      "brain_artifact_manifests_object_nonneg",
+      sql`${table.object_count} >= 0`,
+    ),
+    check(
+      "brain_artifact_manifests_source_nonneg",
+      sql`${table.source_count} >= 0`,
+    ),
+    check(
+      "brain_artifact_manifests_vector_positive",
+      sql`${table.vector_dimension} IS NULL OR ${table.vector_dimension} > 0`,
+    ),
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // brain.pages — tenant-shared structured entity pages
@@ -426,6 +881,91 @@ export const tenantEntityExternalRefsRelations = relations(
     tenant: one(tenants, {
       fields: [tenantEntityExternalRefs.tenant_id],
       references: [tenants.id],
+    }),
+  }),
+);
+
+export const brainSubstrateStatesRelations = relations(
+  brainSubstrateStates,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [brainSubstrateStates.tenant_id],
+      references: [tenants.id],
+    }),
+    managedApplication: one(managedApplications, {
+      fields: [brainSubstrateStates.managed_application_id],
+      references: [managedApplications.id],
+    }),
+    latestDeploymentJob: one(managedApplicationDeploymentJobs, {
+      fields: [brainSubstrateStates.latest_deployment_job_id],
+      references: [managedApplicationDeploymentJobs.id],
+    }),
+    migrations: many(brainSubstrateMigrations),
+    events: many(brainSubstrateEvents),
+    artifactManifests: many(brainArtifactManifests),
+  }),
+);
+
+export const brainSubstrateMigrationsRelations = relations(
+  brainSubstrateMigrations,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [brainSubstrateMigrations.tenant_id],
+      references: [tenants.id],
+    }),
+    substrate: one(brainSubstrateStates, {
+      fields: [brainSubstrateMigrations.substrate_id],
+      references: [brainSubstrateStates.id],
+    }),
+    requestedByUser: one(users, {
+      fields: [brainSubstrateMigrations.requested_by_user_id],
+      references: [users.id],
+    }),
+    deploymentJob: one(managedApplicationDeploymentJobs, {
+      fields: [brainSubstrateMigrations.deployment_job_id],
+      references: [managedApplicationDeploymentJobs.id],
+    }),
+    events: many(brainSubstrateEvents),
+    artifactManifests: many(brainArtifactManifests),
+  }),
+);
+
+export const brainSubstrateEventsRelations = relations(
+  brainSubstrateEvents,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [brainSubstrateEvents.tenant_id],
+      references: [tenants.id],
+    }),
+    substrate: one(brainSubstrateStates, {
+      fields: [brainSubstrateEvents.substrate_id],
+      references: [brainSubstrateStates.id],
+    }),
+    migration: one(brainSubstrateMigrations, {
+      fields: [brainSubstrateEvents.migration_id],
+      references: [brainSubstrateMigrations.id],
+    }),
+    deploymentJob: one(managedApplicationDeploymentJobs, {
+      fields: [brainSubstrateEvents.deployment_job_id],
+      references: [managedApplicationDeploymentJobs.id],
+    }),
+  }),
+);
+
+export const brainArtifactManifestsRelations = relations(
+  brainArtifactManifests,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [brainArtifactManifests.tenant_id],
+      references: [tenants.id],
+    }),
+    substrate: one(brainSubstrateStates, {
+      fields: [brainArtifactManifests.substrate_id],
+      references: [brainSubstrateStates.id],
+    }),
+    migration: one(brainSubstrateMigrations, {
+      fields: [brainArtifactManifests.migration_id],
+      references: [brainSubstrateMigrations.id],
     }),
   }),
 );

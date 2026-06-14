@@ -1,0 +1,76 @@
+type CompanyBrainCapability {
+  key: String!
+  status: String!
+  message: String
+  source: String
+}
+
+type CompanyBrainCapabilities {
+  launch: [CompanyBrainCapability!]!
+  optional: [CompanyBrainCapability!]!
+}
+
+type CompanyBrainOperationalCounters {
+  ingestionQueueDepth: Int!
+  failedIngestCount: Int!
+  graphEntityCount: Int
+  graphEdgeCount: Int
+  sourceArtifactCount: Int
+  vaultProjectionCount: Int
+  latestIngestAt: AWSDateTime
+  latestProjectionAt: AWSDateTime
+  ontologyVersion: String
+}
+
+type CompanyBrainMigrationStatus {
+  id: ID
+  phase: String!
+  status: String!
+  fromStorageTier: String
+  toStorageTier: String
+  requestedAt: AWSDateTime
+  startedAt: AWSDateTime
+  completedAt: AWSDateTime
+  rollbackWindowClosesAt: AWSDateTime
+  errorMessage: String
+  validationSummary: AWSJSON
+}
+
+type CompanyBrainOperatorEvidence {
+  managedApplicationId: ID
+  latestDeploymentJobId: ID
+  backendMode: String
+  graphProvider: String
+  vectorProvider: String
+  embeddingModel: String
+  vectorDimension: Int
+  cogneeVersion: String
+  cogneeEndpoint: String
+  s3ArtifactRoot: String
+  s3ManifestRoot: String
+  s3VaultProjectionRoot: String
+  neptuneGraphId: String
+  neptuneEndpoint: String
+  efsFileSystemId: String
+  productionPosture: String
+  operatorEvidence: AWSJSON
+  migrationEvidence: AWSJSON
+}
+
+type CompanyBrainStatus {
+  tenantId: ID!
+  storageTier: String!
+  activeBackend: String!
+  status: String!
+  healthStatus: String!
+  counters: CompanyBrainOperationalCounters!
+  capabilities: CompanyBrainCapabilities!
+  migration: CompanyBrainMigrationStatus!
+  evidence: CompanyBrainOperatorEvidence
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+extend type Query {
+  companyBrainStatus: CompanyBrainStatus!
+}
