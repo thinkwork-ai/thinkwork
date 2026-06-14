@@ -33,6 +33,7 @@ import {
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
+import { EVAL_BASELINE_AGENT_SOURCE } from "../../../lib/evals/eval-baseline-agent.js";
 
 interface ToolInventoryAgent {
   id: string;
@@ -102,6 +103,8 @@ export async function tenantToolInventory(
           and(
             eq(agents.tenant_id, args.tenantId),
             ne(agents.status, "archived"),
+            // Hide the hidden eval-baseline agent (Skill Tests & Evals U3).
+            ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
           ),
         ),
       db
@@ -146,6 +149,7 @@ export async function tenantToolInventory(
           and(
             eq(agents.tenant_id, args.tenantId),
             ne(agents.status, "archived"),
+            ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
             eq(agentSkills.enabled, true),
           ),
         ),
