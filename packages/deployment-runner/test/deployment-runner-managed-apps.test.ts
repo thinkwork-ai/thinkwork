@@ -27,7 +27,8 @@ describe("managed app deployment adapters", () => {
           dbPasswordSecretArn:
             "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
           dbName: "thinkwork_cognee",
-          backendMode: "dogfood",
+          brainTenantId: "tenant-1",
+          brainInstanceKey: "tenant-abc123",
           bedrockModelResourceArns: [
             "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0",
           ],
@@ -44,6 +45,12 @@ describe("managed app deployment adapters", () => {
           "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
         cognee_db_name: "thinkwork_cognee",
         cognee_backend_mode: "dogfood",
+        cognee_brain_tenant_id: "tenant-1",
+        cognee_brain_instance_key: "tenant-abc123",
+        cognee_brain_storage_tier: "default",
+        cognee_private_substrate_mode: true,
+        cognee_vector_db_provider: "lancedb",
+        cognee_graph_database_provider: "kuzu",
       }),
     );
     expect(summary.smokeContracts).toContainEqual(
@@ -52,6 +59,79 @@ describe("managed app deployment adapters", () => {
       }),
     );
     expect(summary.statusOutputs).toContain("cognee_endpoint");
+    expect(summary.statusOutputs).toContain("cognee_brain_storage_tier");
+  });
+
+  it("maps production Brain tier config to Neptune Analytics providers", () => {
+    const plan = buildManagedAppPlan({
+      appKey: "cognee",
+      operation: "ENABLE",
+      desiredConfig: {
+        imageUri: `public.ecr.aws/thinkwork/cognee@sha256:${imageDigest}`,
+        dbPasswordSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
+        brainTenantId: "tenant-1",
+        brainInstanceKey: "tenant-prod",
+        brainStorageTier: "production",
+        brainS3ArtifactRoot: "s3://brain/tenants/tenant-1/artifacts/",
+        brainS3ManifestRoot: "s3://brain/tenants/tenant-1/manifests/",
+        brainS3VaultProjectionRoot:
+          "s3://brain/tenants/tenant-1/vault-projections/",
+        brainArtifactsBucketArn: "arn:aws:s3:::brain",
+        brainArtifactsPrefixes: ["tenants/tenant-1/artifacts"],
+        neptuneGraphId: "g-123",
+        neptuneGraphArn:
+          "arn:aws:neptune-graph:us-east-1:123456789012:graph/g-123",
+        neptuneEndpoint: "https://g-123.neptune-graph.us-east-1.amazonaws.com",
+        bedrockModelResourceArns: [
+          "arn:aws:bedrock:us-east-1:123456789012:foundation-model/amazon.titan-embed-text-v2:0",
+        ],
+      },
+    });
+
+    expect(plan.terraformVariables).toEqual(
+      expect.objectContaining({
+        cognee_backend_mode: "remote",
+        cognee_brain_storage_tier: "production",
+        cognee_vector_db_provider: "neptune_analytics",
+        cognee_graph_database_provider: "neptune_analytics",
+        cognee_vector_db_url:
+          "https://g-123.neptune-graph.us-east-1.amazonaws.com",
+        cognee_graph_database_url:
+          "https://g-123.neptune-graph.us-east-1.amazonaws.com",
+        cognee_neptune_graph_id: "g-123",
+        cognee_neptune_graph_arn:
+          "arn:aws:neptune-graph:us-east-1:123456789012:graph/g-123",
+        cognee_neptune_endpoint:
+          "https://g-123.neptune-graph.us-east-1.amazonaws.com",
+        cognee_brain_artifacts_bucket_arn: "arn:aws:s3:::brain",
+        cognee_brain_artifacts_prefixes: ["tenants/tenant-1/artifacts"],
+      }),
+    );
+    expect(plan.dataImpact.resources.join("\n")).toMatch(
+      /Canonical Company Brain S3 artifacts/,
+    );
+    expect(plan.dataImpact.resources.join("\n")).toMatch(
+      /Production tier uses Cognee-supported Neptune Analytics/,
+    );
+  });
+
+  it("rejects unsupported Brain storage tiers before Terraform runs", () => {
+    expect(() =>
+      buildManagedAppPlan({
+        appKey: "cognee",
+        operation: "ENABLE",
+        desiredConfig: {
+          imageUri: `public.ecr.aws/thinkwork/cognee@sha256:${imageDigest}`,
+          dbPasswordSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:cognee",
+          brainStorageTier: "opensearch",
+          bedrockModelResourceArns: [
+            "arn:aws:bedrock:us-east-1:123456789012:foundation-model/amazon.titan-embed-text-v2:0",
+          ],
+        },
+      }),
+    ).toThrow(/brainStorageTier must be default or production/);
   });
 
   it("fails Cognee enable plans without required image and secrets", () => {
@@ -285,6 +365,15 @@ describe("managed app deployment adapters", () => {
       getManagedAppAdapter("cognee").extractStatus({
         cognee_enabled: { value: true },
         cognee_endpoint: { value: "http://internal-alb" },
+        cognee_brain_instance_key: { value: "tenant-abc123" },
+        cognee_brain_storage_tier: { value: "production" },
+        cognee_vector_db_provider: { value: "neptune_analytics" },
+        cognee_graph_database_provider: { value: "neptune_analytics" },
+        cognee_neptune_graph_id: { value: "g-123" },
+        cognee_s3_artifact_root: {
+          value: "s3://brain/tenants/tenant-1/artifacts/",
+        },
+        cognee_private_substrate_mode: { value: true },
       }),
     ).toEqual(
       expect.objectContaining({
@@ -292,6 +381,15 @@ describe("managed app deployment adapters", () => {
         runtimeEnabled: true,
         endpoint: "http://internal-alb",
         status: "running",
+        evidence: expect.objectContaining({
+          brainInstanceKey: "tenant-abc123",
+          storageTier: "production",
+          vectorProvider: "neptune_analytics",
+          graphProvider: "neptune_analytics",
+          neptuneGraphId: "g-123",
+          s3ArtifactRoot: "s3://brain/tenants/tenant-1/artifacts/",
+          privateSubstrateMode: true,
+        }),
       }),
     );
   });

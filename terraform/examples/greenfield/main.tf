@@ -147,6 +147,78 @@ variable "cognee_desired_count" {
   default     = 1
 }
 
+variable "cognee_brain_tenant_id" {
+  description = "Tenant ID for a tenant-scoped Company Brain substrate instance. Empty preserves legacy stage-wide Cognee names."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_instance_key" {
+  description = "Stable tenant-scoped Brain instance key used to derive resource names."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_storage_tier" {
+  description = "Company Brain storage tier: default or production."
+  type        = string
+  default     = "default"
+}
+
+variable "cognee_brain_s3_artifact_root" {
+  description = "Canonical Company Brain S3 root URI for source artifacts."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_s3_manifest_root" {
+  description = "Canonical Company Brain S3 root URI for ingestion manifests."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_s3_vault_projection_root" {
+  description = "Canonical Company Brain S3 root URI for vault/materialized projections."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_artifacts_bucket_arn" {
+  description = "Optional canonical Company Brain artifacts bucket ARN for scoped task-role access."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_artifacts_prefixes" {
+  description = "Tenant/stage prefixes inside cognee_brain_artifacts_bucket_arn the Brain task may access."
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_private_substrate_mode" {
+  description = "Whether the Company Brain substrate is private/internal-only."
+  type        = bool
+  default     = true
+}
+
+variable "cognee_require_authentication" {
+  description = "Passed to Cognee REQUIRE_AUTHENTICATION."
+  type        = bool
+  default     = false
+}
+
+variable "cognee_enable_backend_access_control" {
+  description = "Passed to Cognee ENABLE_BACKEND_ACCESS_CONTROL."
+  type        = bool
+  default     = false
+}
+
+variable "cognee_cors_allowed_origins" {
+  description = "Passed to Cognee CORS_ALLOWED_ORIGINS."
+  type        = string
+  default     = ""
+}
+
 variable "cognee_llm_provider" {
   description = "Cognee LLM provider."
   type        = string
@@ -227,6 +299,30 @@ variable "cognee_graph_database_username" {
 
 variable "cognee_graph_database_password_secret_arn" {
   description = "Optional Secrets Manager ARN for remote Cognee graph store password."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_neptune_graph_id" {
+  description = "Neptune Analytics graph ID used by the production Brain tier."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_neptune_graph_arn" {
+  description = "Optional Neptune Analytics graph ARN for scoped task-role access."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_neptune_endpoint" {
+  description = "Neptune Analytics endpoint used by the production Brain tier."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_production_posture" {
+  description = "Operator evidence string for production-tier approval/readiness posture."
   type        = string
   default     = ""
 }
@@ -711,6 +807,18 @@ module "thinkwork" {
   cognee_allowed_internal_security_group_ids = var.cognee_allowed_internal_security_group_ids
   cognee_backend_mode                        = var.cognee_backend_mode
   cognee_desired_count                       = var.cognee_desired_count
+  cognee_brain_tenant_id                     = var.cognee_brain_tenant_id
+  cognee_brain_instance_key                  = var.cognee_brain_instance_key
+  cognee_brain_storage_tier                  = var.cognee_brain_storage_tier
+  cognee_brain_s3_artifact_root              = var.cognee_brain_s3_artifact_root
+  cognee_brain_s3_manifest_root              = var.cognee_brain_s3_manifest_root
+  cognee_brain_s3_vault_projection_root      = var.cognee_brain_s3_vault_projection_root
+  cognee_brain_artifacts_bucket_arn          = var.cognee_brain_artifacts_bucket_arn
+  cognee_brain_artifacts_prefixes            = var.cognee_brain_artifacts_prefixes
+  cognee_private_substrate_mode              = var.cognee_private_substrate_mode
+  cognee_require_authentication              = var.cognee_require_authentication
+  cognee_enable_backend_access_control       = var.cognee_enable_backend_access_control
+  cognee_cors_allowed_origins                = var.cognee_cors_allowed_origins
   cognee_llm_provider                        = var.cognee_llm_provider
   cognee_llm_model                           = var.cognee_llm_model
   cognee_llm_api_key_secret_arn              = var.cognee_llm_api_key_secret_arn
@@ -725,6 +833,10 @@ module "thinkwork" {
   cognee_graph_database_url                  = var.cognee_graph_database_url
   cognee_graph_database_username             = var.cognee_graph_database_username
   cognee_graph_database_password_secret_arn  = var.cognee_graph_database_password_secret_arn
+  cognee_neptune_graph_id                    = var.cognee_neptune_graph_id
+  cognee_neptune_graph_arn                   = var.cognee_neptune_graph_arn
+  cognee_neptune_endpoint                    = var.cognee_neptune_endpoint
+  cognee_production_posture                  = var.cognee_production_posture
   cognee_bedrock_model_resource_arns         = var.cognee_bedrock_model_resource_arns
   cognee_kms_key_arns                        = var.cognee_kms_key_arns
   twenty_provisioned                         = var.twenty_provisioned
@@ -1019,6 +1131,26 @@ output "cognee_endpoint" {
 output "cognee_log_group_name" {
   description = "CloudWatch log group for Cognee (null when enable_cognee = false)"
   value       = module.thinkwork.cognee_log_group_name
+}
+
+output "cognee_brain_storage_tier" {
+  description = "Company Brain storage tier (null when enable_cognee = false)"
+  value       = module.thinkwork.cognee_brain_storage_tier
+}
+
+output "cognee_brain_instance_key" {
+  description = "Tenant-scoped Company Brain instance key (null for legacy stage-wide instances)"
+  value       = module.thinkwork.cognee_brain_instance_key
+}
+
+output "cognee_s3_artifact_root" {
+  description = "Canonical Company Brain S3 source artifact root"
+  value       = module.thinkwork.cognee_s3_artifact_root
+}
+
+output "cognee_neptune_graph_id" {
+  description = "Neptune Analytics graph ID for production Company Brain"
+  value       = module.thinkwork.cognee_neptune_graph_id
 }
 
 output "twenty_provisioned" {

@@ -421,6 +421,83 @@ variable "cognee_desired_count" {
   default     = 1
 }
 
+variable "cognee_brain_tenant_id" {
+  description = "Tenant ID for a tenant-scoped Company Brain substrate instance. Empty preserves the legacy stage-wide Cognee resource names."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_instance_key" {
+  description = "Stable tenant-scoped Brain instance key used to derive Cognee/Brain resource names."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_storage_tier" {
+  description = "Company Brain storage tier: default or production."
+  type        = string
+  default     = "default"
+
+  validation {
+    condition     = contains(["default", "production"], var.cognee_brain_storage_tier)
+    error_message = "cognee_brain_storage_tier must be default or production."
+  }
+}
+
+variable "cognee_brain_s3_artifact_root" {
+  description = "Canonical Company Brain S3 root URI for source artifacts."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_s3_manifest_root" {
+  description = "Canonical Company Brain S3 root URI for ingestion manifests."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_s3_vault_projection_root" {
+  description = "Canonical Company Brain S3 root URI for vault/materialized projections."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_artifacts_bucket_arn" {
+  description = "Optional canonical Company Brain artifacts bucket ARN for scoped task-role access."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_brain_artifacts_prefixes" {
+  description = "Tenant/stage prefixes inside cognee_brain_artifacts_bucket_arn the Brain task may access."
+  type        = list(string)
+  default     = []
+}
+
+variable "cognee_private_substrate_mode" {
+  description = "Whether the Company Brain substrate is private/internal-only."
+  type        = bool
+  default     = true
+}
+
+variable "cognee_require_authentication" {
+  description = "Passed to Cognee REQUIRE_AUTHENTICATION."
+  type        = bool
+  default     = false
+}
+
+variable "cognee_enable_backend_access_control" {
+  description = "Passed to Cognee ENABLE_BACKEND_ACCESS_CONTROL."
+  type        = bool
+  default     = false
+}
+
+variable "cognee_cors_allowed_origins" {
+  description = "Passed to Cognee CORS_ALLOWED_ORIGINS. Keep empty for internal-only Company Brain substrate."
+  type        = string
+  default     = ""
+}
+
 variable "cognee_llm_provider" {
   description = "Cognee LLM provider"
   type        = string
@@ -501,6 +578,30 @@ variable "cognee_graph_database_username" {
 
 variable "cognee_graph_database_password_secret_arn" {
   description = "Optional Secrets Manager ARN for a remote graph store password"
+  type        = string
+  default     = ""
+}
+
+variable "cognee_neptune_graph_id" {
+  description = "Neptune Analytics graph ID used by the production Brain tier."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_neptune_graph_arn" {
+  description = "Optional Neptune Analytics graph ARN for scoped task-role access."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_neptune_endpoint" {
+  description = "Neptune Analytics endpoint used by the production Brain tier."
+  type        = string
+  default     = ""
+}
+
+variable "cognee_production_posture" {
+  description = "Operator evidence string for production-tier approval/readiness posture."
   type        = string
   default     = ""
 }

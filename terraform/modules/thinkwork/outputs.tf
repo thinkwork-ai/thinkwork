@@ -212,6 +212,41 @@ output "cognee_backend_mode" {
   value       = local.cognee_enabled ? module.cognee[0].cognee_backend_mode : null
 }
 
+output "cognee_brain_instance_key" {
+  description = "Tenant-scoped Company Brain instance key (null when enable_cognee = false or legacy stage-wide mode)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_brain_instance_key : null
+}
+
+output "cognee_brain_tenant_id" {
+  description = "Tenant ID owning this Company Brain substrate instance (null when enable_cognee = false or legacy stage-wide mode)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_brain_tenant_id : null
+}
+
+output "cognee_brain_storage_tier" {
+  description = "Company Brain storage tier (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_brain_storage_tier : null
+}
+
+output "cognee_graph_database_provider" {
+  description = "Cognee graph provider selected for Company Brain (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_graph_database_provider : null
+}
+
+output "cognee_vector_db_provider" {
+  description = "Cognee vector provider selected for Company Brain (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_vector_db_provider : null
+}
+
+output "cognee_embedding_model" {
+  description = "Embedding model selected for Company Brain (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_embedding_model : null
+}
+
+output "cognee_embedding_dimensions" {
+  description = "Embedding vector dimension selected for Company Brain (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_embedding_dimensions : null
+}
+
 output "cognee_cluster_arn" {
   description = "ECS cluster ARN for the Cognee service (null when enable_cognee = false)"
   value       = local.cognee_enabled ? module.cognee[0].cognee_cluster_arn : null
@@ -255,6 +290,41 @@ output "brain_artifacts_bucket_arn" {
 output "cognee_storage_file_system_id" {
   description = "EFS file system ID backing Cognee writable data/system directories (null when enable_cognee = false)"
   value       = local.cognee_enabled ? module.cognee[0].cognee_storage_file_system_id : null
+}
+
+output "cognee_s3_artifact_root" {
+  description = "Canonical Company Brain S3 source artifact root (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_s3_artifact_root : null
+}
+
+output "cognee_s3_manifest_root" {
+  description = "Canonical Company Brain S3 ingestion manifest root (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_s3_manifest_root : null
+}
+
+output "cognee_s3_vault_projection_root" {
+  description = "Canonical Company Brain S3 vault projection root (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_s3_vault_projection_root : null
+}
+
+output "cognee_neptune_graph_id" {
+  description = "Neptune Analytics graph ID for production Company Brain (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_neptune_graph_id : null
+}
+
+output "cognee_neptune_endpoint" {
+  description = "Neptune Analytics endpoint for production Company Brain (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_neptune_endpoint : null
+}
+
+output "cognee_private_substrate_mode" {
+  description = "Whether Company Brain substrate is private/internal-only (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_private_substrate_mode : null
+}
+
+output "cognee_production_posture" {
+  description = "Operator evidence string for production-tier approval/readiness posture (null when enable_cognee = false)."
+  value       = local.cognee_enabled ? module.cognee[0].cognee_production_posture : null
 }
 
 output "twenty_provisioned" {

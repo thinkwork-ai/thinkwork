@@ -12,6 +12,8 @@ import {
   stringOutput,
 } from "./utils.js";
 
+const BRAIN_STORAGE_TIERS = ["default", "production"] as const;
+
 const smokeContracts = [
   {
     id: "cognee-health",
@@ -27,6 +29,20 @@ const statusOutputs = [
   "cognee_cluster_arn",
   "cognee_service_name",
   "cognee_storage_file_system_id",
+  "cognee_brain_instance_key",
+  "cognee_brain_tenant_id",
+  "cognee_brain_storage_tier",
+  "cognee_graph_database_provider",
+  "cognee_vector_db_provider",
+  "cognee_embedding_model",
+  "cognee_embedding_dimensions",
+  "cognee_s3_artifact_root",
+  "cognee_s3_manifest_root",
+  "cognee_s3_vault_projection_root",
+  "cognee_neptune_graph_id",
+  "cognee_neptune_endpoint",
+  "cognee_private_substrate_mode",
+  "cognee_production_posture",
 ] as const;
 
 const enableRequiredInputs: RequiredManagedAppInput[] = [
@@ -66,10 +82,27 @@ export const cogneeAdapter: ManagedAppAdapter = {
       };
     }
 
+    const brainStorageTier = normalizeBrainStorageTier(desiredConfig);
     const llmProvider =
       optionalString(desiredConfig, "llmProvider") ?? "bedrock";
     const embeddingProvider =
       optionalString(desiredConfig, "embeddingProvider") ?? "bedrock";
+    const backendMode =
+      optionalString(desiredConfig, "backendMode") ??
+      (brainStorageTier === "production" ? "remote" : "dogfood");
+    const vectorDbProvider =
+      optionalString(desiredConfig, "vectorDbProvider") ??
+      (brainStorageTier === "production" ? "neptune_analytics" : "lancedb");
+    const graphDatabaseProvider =
+      optionalString(desiredConfig, "graphDatabaseProvider") ??
+      (brainStorageTier === "production" ? "neptune_analytics" : "kuzu");
+    const neptuneEndpoint = optionalString(desiredConfig, "neptuneEndpoint");
+    const vectorDbUrl =
+      optionalString(desiredConfig, "vectorDbUrl") ??
+      (brainStorageTier === "production" ? neptuneEndpoint : undefined);
+    const graphDatabaseUrl =
+      optionalString(desiredConfig, "graphDatabaseUrl") ??
+      (brainStorageTier === "production" ? neptuneEndpoint : undefined);
     const bedrockModelResourceArns = optionalStringArray(
       desiredConfig,
       "bedrockModelResourceArns",
@@ -106,8 +139,48 @@ export const cogneeAdapter: ManagedAppAdapter = {
         desiredConfig,
         "allowedInternalSecurityGroupIds",
       ),
-      cognee_backend_mode: optionalString(desiredConfig, "backendMode"),
+      cognee_backend_mode: backendMode,
       cognee_desired_count: optionalNumber(desiredConfig, "desiredCount"),
+      cognee_brain_tenant_id: optionalString(desiredConfig, "brainTenantId"),
+      cognee_brain_instance_key: optionalString(
+        desiredConfig,
+        "brainInstanceKey",
+      ),
+      cognee_brain_storage_tier: brainStorageTier,
+      cognee_brain_s3_artifact_root: optionalString(
+        desiredConfig,
+        "brainS3ArtifactRoot",
+      ),
+      cognee_brain_s3_manifest_root: optionalString(
+        desiredConfig,
+        "brainS3ManifestRoot",
+      ),
+      cognee_brain_s3_vault_projection_root: optionalString(
+        desiredConfig,
+        "brainS3VaultProjectionRoot",
+      ),
+      cognee_brain_artifacts_bucket_arn: optionalString(
+        desiredConfig,
+        "brainArtifactsBucketArn",
+      ),
+      cognee_brain_artifacts_prefixes: optionalStringArray(
+        desiredConfig,
+        "brainArtifactsPrefixes",
+      ),
+      cognee_private_substrate_mode:
+        optionalBoolean(desiredConfig, "privateSubstrateMode") ?? true,
+      cognee_require_authentication: optionalBoolean(
+        desiredConfig,
+        "requireAuthentication",
+      ),
+      cognee_enable_backend_access_control: optionalBoolean(
+        desiredConfig,
+        "enableBackendAccessControl",
+      ),
+      cognee_cors_allowed_origins: optionalString(
+        desiredConfig,
+        "corsAllowedOrigins",
+      ),
       cognee_llm_provider: llmProvider,
       cognee_llm_model: optionalString(desiredConfig, "llmModel"),
       cognee_llm_api_key_secret_arn: optionalString(
@@ -124,23 +197,14 @@ export const cogneeAdapter: ManagedAppAdapter = {
         desiredConfig,
         "embeddingApiKeySecretArn",
       ),
-      cognee_vector_db_provider: optionalString(
-        desiredConfig,
-        "vectorDbProvider",
-      ),
-      cognee_vector_db_url: optionalString(desiredConfig, "vectorDbUrl"),
+      cognee_vector_db_provider: vectorDbProvider,
+      cognee_vector_db_url: vectorDbUrl,
       cognee_vector_db_key_secret_arn: optionalString(
         desiredConfig,
         "vectorDbKeySecretArn",
       ),
-      cognee_graph_database_provider: optionalString(
-        desiredConfig,
-        "graphDatabaseProvider",
-      ),
-      cognee_graph_database_url: optionalString(
-        desiredConfig,
-        "graphDatabaseUrl",
-      ),
+      cognee_graph_database_provider: graphDatabaseProvider,
+      cognee_graph_database_url: graphDatabaseUrl,
       cognee_graph_database_username: optionalString(
         desiredConfig,
         "graphDatabaseUsername",
@@ -151,26 +215,46 @@ export const cogneeAdapter: ManagedAppAdapter = {
       ),
       cognee_bedrock_model_resource_arns: bedrockModelResourceArns,
       cognee_kms_key_arns: optionalStringArray(desiredConfig, "kmsKeyArns"),
+      cognee_neptune_graph_id: optionalString(
+        desiredConfig,
+        "neptuneGraphId",
+      ),
+      cognee_neptune_graph_arn: optionalString(
+        desiredConfig,
+        "neptuneGraphArn",
+      ),
+      cognee_neptune_endpoint: neptuneEndpoint,
+      cognee_production_posture: optionalString(
+        desiredConfig,
+        "productionPosture",
+      ),
     });
   },
   dataImpact(operation) {
     if (operation !== "DESTROY") {
       return {
         destructive: false,
-        summary: "No destructive Cognee teardown requested.",
-        resources: [],
+        summary:
+          "No destructive Company Brain substrate teardown requested. Provisioning or upgrades may create tenant-scoped Brain runtime resources.",
+        resources: [
+          "Canonical Company Brain S3 artifacts, ingestion manifests, migration snapshots, vault projections, and exports remain the replay source of truth.",
+          "Default tier uses Cognee Postgres metadata plus local LanceDB/Kuzu graph/vector stores on the task storage substrate.",
+          "Production tier uses Cognee-supported Neptune Analytics graph/vector resources when selected.",
+        ],
       };
     }
     return {
       destructive: true,
       summary:
-        "Cognee destroy deletes the knowledge graph runtime and app-owned graph/vector data.",
+        "Company Brain substrate destroy deletes the internal runtime and non-canonical graph/vector working stores.",
       resources: [
-        "Cognee ECS cluster, task definition, service, task/execution IAM roles, and internal ALB resources",
-        "Encrypted EFS file system, access point, mount targets, graph/vector data, and system scratch directories",
-        "Dedicated Cognee database, least-privilege database role, and password secret",
-        "Provider and graph/vector database secrets owned by the Cognee module",
-        "CloudWatch log groups and deployment evidence artifacts for the Cognee job",
+        "Tenant-scoped Brain ECS cluster, task definition, service, task/execution IAM roles, and internal ALB resources",
+        "Encrypted EFS file system, access point, mount targets, default-tier LanceDB/Kuzu graph/vector data, and system scratch directories",
+        "Dedicated Brain/Cognee Postgres metadata database, least-privilege database role, and password secret",
+        "Production-tier Neptune Analytics graph/vector resources referenced by the instance configuration",
+        "Provider and graph/vector database secrets owned by the Brain substrate module",
+        "CloudWatch log groups and deployment evidence artifacts for the Brain substrate job",
+        "Canonical Company Brain S3 artifacts/manifests are not destroyed by this module and must follow the artifact retention/deletion workflow.",
       ],
     };
   },
@@ -200,14 +284,106 @@ export const cogneeAdapter: ManagedAppAdapter = {
         logGroupName: stringOutput(terraformOutputs, "cognee_log_group_name"),
         clusterArn: stringOutput(terraformOutputs, "cognee_cluster_arn"),
         serviceName: stringOutput(terraformOutputs, "cognee_service_name"),
+        brainInstanceKey: stringOutput(
+          terraformOutputs,
+          "cognee_brain_instance_key",
+        ),
+        brainTenantId: stringOutput(
+          terraformOutputs,
+          "cognee_brain_tenant_id",
+        ),
+        storageTier: stringOutput(
+          terraformOutputs,
+          "cognee_brain_storage_tier",
+        ),
+        backendMode: stringOutput(terraformOutputs, "cognee_backend_mode"),
+        graphProvider: stringOutput(
+          terraformOutputs,
+          "cognee_graph_database_provider",
+        ),
+        vectorProvider: stringOutput(
+          terraformOutputs,
+          "cognee_vector_db_provider",
+        ),
+        embeddingModel: stringOutput(
+          terraformOutputs,
+          "cognee_embedding_model",
+        ),
+        vectorDimension: numberOutput(
+          terraformOutputs,
+          "cognee_embedding_dimensions",
+        ),
+        s3ArtifactRoot: stringOutput(
+          terraformOutputs,
+          "cognee_s3_artifact_root",
+        ),
+        s3ManifestRoot: stringOutput(
+          terraformOutputs,
+          "cognee_s3_manifest_root",
+        ),
+        s3VaultProjectionRoot: stringOutput(
+          terraformOutputs,
+          "cognee_s3_vault_projection_root",
+        ),
+        neptuneGraphId: stringOutput(
+          terraformOutputs,
+          "cognee_neptune_graph_id",
+        ),
+        neptuneEndpoint: stringOutput(
+          terraformOutputs,
+          "cognee_neptune_endpoint",
+        ),
         storageFileSystemId: stringOutput(
           terraformOutputs,
           "cognee_storage_file_system_id",
+        ),
+        privateSubstrateMode: boolOutput(
+          terraformOutputs,
+          "cognee_private_substrate_mode",
+        ),
+        productionPosture: stringOutput(
+          terraformOutputs,
+          "cognee_production_posture",
         ),
       },
     };
   },
 };
+
+function normalizeBrainStorageTier(
+  desiredConfig: Record<string, unknown> | undefined,
+): (typeof BRAIN_STORAGE_TIERS)[number] {
+  const tier =
+    optionalString(desiredConfig, "brainStorageTier") ??
+    optionalString(desiredConfig, "storageTier") ??
+    "default";
+  if (!BRAIN_STORAGE_TIERS.includes(tier as (typeof BRAIN_STORAGE_TIERS)[number])) {
+    throw new Error("Cognee brainStorageTier must be default or production");
+  }
+  return tier as (typeof BRAIN_STORAGE_TIERS)[number];
+}
+
+function optionalBoolean(
+  desiredConfig: Record<string, unknown> | undefined,
+  key: string,
+): boolean | undefined {
+  const value = desiredConfig?.[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function numberOutput(
+  terraformOutputs: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = terraformOutputs[key];
+  const outputValue =
+    value && typeof value === "object" && "value" in value
+      ? (value as { value?: unknown }).value
+      : value;
+  return typeof outputValue === "number" && Number.isFinite(outputValue)
+    ? outputValue
+    : null;
+}
 
 function compactObject(
   value: Record<string, unknown>,

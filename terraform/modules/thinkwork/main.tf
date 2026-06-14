@@ -209,6 +209,7 @@ resource "terraform_data" "cognee_configuration_guardrails" {
 
   input = {
     cognee_backend_mode            = var.cognee_backend_mode
+    cognee_brain_storage_tier      = var.cognee_brain_storage_tier
     cognee_desired_count           = var.cognee_desired_count
     cognee_image_uri               = var.cognee_image_uri
     cognee_db_name                 = var.cognee_db_name
@@ -251,8 +252,52 @@ resource "terraform_data" "cognee_configuration_guardrails" {
     }
 
     precondition {
-      condition     = var.cognee_backend_mode != "remote" || (var.cognee_vector_db_url != "" && var.cognee_graph_database_url != "")
-      error_message = "cognee_backend_mode = remote requires cognee_vector_db_url and cognee_graph_database_url."
+      condition = (
+        var.cognee_brain_storage_tier != "default" ||
+        (
+          var.cognee_backend_mode == "dogfood" &&
+          var.cognee_vector_db_provider == "lancedb" &&
+          var.cognee_graph_database_provider == "kuzu" &&
+          var.cognee_desired_count == 1
+        )
+      )
+      error_message = "cognee_brain_storage_tier = default requires dogfood backend mode, lancedb vectors, kuzu graph storage, and desired_count = 1."
+    }
+
+    precondition {
+      condition = (
+        var.cognee_brain_storage_tier != "production" ||
+        (
+          var.cognee_backend_mode == "remote" &&
+          var.cognee_vector_db_provider == "neptune_analytics" &&
+          var.cognee_graph_database_provider == "neptune_analytics" &&
+          var.cognee_neptune_graph_id != "" &&
+          var.cognee_neptune_endpoint != ""
+        )
+      )
+      error_message = "cognee_brain_storage_tier = production requires remote mode with Neptune Analytics graph/vector providers, cognee_neptune_graph_id, and cognee_neptune_endpoint."
+    }
+
+    precondition {
+      condition     = !contains(["opensearch", "opensearch_serverless", "aoss"], lower(var.cognee_vector_db_provider))
+      error_message = "Company Brain production must not use direct OpenSearch vector storage; use Neptune Analytics for production graph/vector."
+    }
+
+    precondition {
+      condition = (
+        var.cognee_backend_mode != "remote" ||
+        (
+          (
+            var.cognee_vector_db_url != "" ||
+            (var.cognee_vector_db_provider == "neptune_analytics" && var.cognee_neptune_endpoint != "")
+          ) &&
+          (
+            var.cognee_graph_database_url != "" ||
+            (var.cognee_graph_database_provider == "neptune_analytics" && var.cognee_neptune_endpoint != "")
+          )
+        )
+      )
+      error_message = "cognee_backend_mode = remote requires vector/graph URLs, or Neptune Analytics providers with cognee_neptune_endpoint."
     }
 
     precondition {
@@ -1008,6 +1053,19 @@ module "cognee" {
   desired_count = var.cognee_desired_count
   backend_mode  = var.cognee_backend_mode
 
+  brain_tenant_id                = var.cognee_brain_tenant_id
+  brain_instance_key             = var.cognee_brain_instance_key
+  brain_storage_tier             = var.cognee_brain_storage_tier
+  brain_s3_artifact_root         = var.cognee_brain_s3_artifact_root
+  brain_s3_manifest_root         = var.cognee_brain_s3_manifest_root
+  brain_s3_vault_projection_root = var.cognee_brain_s3_vault_projection_root
+  brain_artifacts_bucket_arn     = var.cognee_brain_artifacts_bucket_arn
+  brain_artifacts_prefixes       = var.cognee_brain_artifacts_prefixes
+  private_substrate_mode         = var.cognee_private_substrate_mode
+  require_authentication         = var.cognee_require_authentication
+  enable_backend_access_control  = var.cognee_enable_backend_access_control
+  cors_allowed_origins           = var.cognee_cors_allowed_origins
+
   llm_provider           = var.cognee_llm_provider
   llm_model              = var.cognee_llm_model
   llm_api_key_secret_arn = var.cognee_llm_api_key_secret_arn
@@ -1025,6 +1083,11 @@ module "cognee" {
   graph_database_url                 = var.cognee_graph_database_url
   graph_database_username            = var.cognee_graph_database_username
   graph_database_password_secret_arn = var.cognee_graph_database_password_secret_arn
+
+  neptune_graph_id   = var.cognee_neptune_graph_id
+  neptune_graph_arn  = var.cognee_neptune_graph_arn
+  neptune_endpoint   = var.cognee_neptune_endpoint
+  production_posture = var.cognee_production_posture
 
   bedrock_model_resource_arns = var.cognee_bedrock_model_resource_arns
   kms_key_arns                = var.cognee_kms_key_arns

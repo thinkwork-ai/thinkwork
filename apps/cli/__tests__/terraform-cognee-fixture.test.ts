@@ -123,12 +123,16 @@ describe("U1 - Cognee Terraform app module", () => {
     );
   });
 
-  it("does not expose phase-1 public endpoint, CORS, or auth variables", () => {
+  it("keeps the endpoint private while making security posture explicit", () => {
     const vars = read(COGNEE_VARS);
+    const source = read(COGNEE_MAIN);
 
     expect(vars).not.toMatch(/public_endpoint/);
-    expect(vars).not.toMatch(/cors/i);
-    expect(vars).not.toMatch(/require_auth/i);
+    expect(vars).toMatch(/variable "private_substrate_mode"/);
+    expect(vars).toMatch(/variable "require_authentication"/);
+    expect(vars).toMatch(/variable "enable_backend_access_control"/);
+    expect(vars).toMatch(/variable "cors_allowed_origins"/);
+    expect(source).toMatch(/Company Brain substrate must remain private/);
   });
 
   it("injects credentials through ECS secrets instead of plaintext provider env vars", () => {
@@ -176,6 +180,9 @@ describe("U1 - Cognee Terraform app module", () => {
     expect(source).toMatch(/managed_secret_specs/);
     expect(source).toMatch(
       /thinkwork\/\$\{var\.stage\}\/cognee\/db-credentials/,
+    );
+    expect(source).toMatch(
+      /thinkwork\/\$\{var\.stage\}\/brain\/\$\{local\.normalized_brain_instance_key\}\/db-credentials/,
     );
     expect(source).toMatch(/resource "aws_secretsmanager_secret" "cognee"/);
     expect(source).toMatch(/for_each\s*=\s*local\.managed_secrets/);
@@ -235,9 +242,44 @@ describe("U1 - Cognee Terraform app module", () => {
     );
     expect(source).toMatch(/precondition/);
     expect(source).toMatch(/var\.desired_count == 1/);
-    expect(source).toMatch(/var\.vector_db_url != ""/);
-    expect(source).toMatch(/var\.graph_database_url != ""/);
+    expect(source).toMatch(/production Brain tier must use remote mode/);
+    expect(source).toMatch(/var\.vector_db_provider == "neptune_analytics"/);
+    expect(source).toMatch(/var\.graph_database_provider == "neptune_analytics"/);
+    expect(source).toMatch(/var\.neptune_endpoint != ""/);
     expect(source).toMatch(/length\(var\.bedrock_model_resource_arns\) > 0/);
+  });
+
+  it("derives tenant-scoped Brain names, logs, secret paths, and data-store URLs", () => {
+    const source = read(COGNEE_MAIN);
+    const vars = read(COGNEE_VARS);
+
+    expect(vars).toMatch(/variable "brain_tenant_id"/);
+    expect(vars).toMatch(/variable "brain_instance_key"/);
+    expect(vars).toMatch(/variable "brain_storage_tier"/);
+    expect(source).toMatch(/normalized_brain_instance_key/);
+    expect(source).toMatch(/tenant_scoped_brain_instance/);
+    expect(source).toMatch(/thinkwork-\$\{var\.stage\}-cb-\$\{local\.brain_instance_hash\}/);
+    expect(source).toMatch(
+      /\/thinkwork\/\$\{var\.stage\}\/brain\/\$\{local\.normalized_brain_instance_key\}\/cognee/,
+    );
+    expect(source).toMatch(/var\.vector_db_provider == "neptune_analytics"/);
+    expect(source).toMatch(/var\.graph_database_provider == "neptune_analytics"/);
+    expect(source).toMatch(/var\.neptune_endpoint/);
+  });
+
+  it("scopes optional Brain S3 and Neptune IAM to tenant resources", () => {
+    const source = read(COGNEE_MAIN);
+    const vars = read(COGNEE_VARS);
+
+    expect(vars).toMatch(/variable "brain_artifacts_bucket_arn"/);
+    expect(vars).toMatch(/variable "brain_artifacts_prefixes"/);
+    expect(vars).toMatch(/variable "neptune_graph_arn"/);
+    expect(source).toMatch(/resource "aws_iam_role_policy" "brain_artifacts"/);
+    expect(source).toMatch(/"s3:prefix"/);
+    expect(source).toMatch(/local\.brain_artifact_object_arns/);
+    expect(source).toMatch(/resource "aws_iam_role_policy" "neptune_graph_access"/);
+    expect(source).toMatch(/neptune-graph:ReadDataViaQuery/);
+    expect(source).toMatch(/Resource = var\.neptune_graph_arn/);
   });
 
   it("rejects risky defaults before parent-module wiring", () => {
@@ -271,6 +313,9 @@ describe("U1 - Cognee Terraform app module", () => {
     expect(source).toMatch(/output "cognee_task_role_arn"/);
     expect(source).toMatch(/output "cognee_backend_mode"/);
     expect(source).toMatch(/output "cognee_storage_file_system_id"/);
+    expect(source).toMatch(/output "cognee_brain_storage_tier"/);
+    expect(source).toMatch(/output "cognee_vector_db_provider"/);
+    expect(source).toMatch(/output "cognee_neptune_graph_id"/);
   });
 
   it("documents the phase-1 network, backend, and secret contracts", () => {
@@ -280,6 +325,9 @@ describe("U1 - Cognee Terraform app module", () => {
     expect(source).toMatch(/assign_public_ip = true/);
     expect(source).toMatch(/desired_count = 1/);
     expect(source).toMatch(/ECS secret injection/);
+    expect(source).toMatch(/tenant-scoped/);
+    expect(source).toMatch(/default/);
+    expect(source).toMatch(/production/);
   });
 });
 
@@ -358,8 +406,10 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
       /cognee_backend_mode = dogfood requires cognee_desired_count = 1/,
     );
     expect(guardrails).toMatch(
-      /cognee_backend_mode = remote requires cognee_vector_db_url/,
+      /cognee_backend_mode = remote requires vector\/graph URLs/,
     );
+    expect(guardrails).toMatch(/cognee_brain_storage_tier = production/);
+    expect(guardrails).toMatch(/cognee_neptune_endpoint/);
     expect(guardrails).toMatch(/Non-Bedrock Cognee LLM or embedding providers/);
     expect(guardrails).toMatch(/Bedrock Cognee providers require explicit/);
   });
@@ -373,6 +423,9 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     expect(outputs).toMatch(/output "cognee_task_role_arn"/);
     expect(outputs).toMatch(/output "cognee_backend_mode"/);
     expect(outputs).toMatch(/output "cognee_storage_file_system_id"/);
+    expect(outputs).toMatch(/output "cognee_brain_storage_tier"/);
+    expect(outputs).toMatch(/output "cognee_s3_artifact_root"/);
+    expect(outputs).toMatch(/output "cognee_neptune_graph_id"/);
     expect(outputs).toMatch(/local\.cognee_enabled \? module\.cognee\[0\]/);
     expect(outputs).toMatch(/: null/);
   });
