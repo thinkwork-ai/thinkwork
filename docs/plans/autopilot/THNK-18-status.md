@@ -4,6 +4,7 @@ Linear issue: THNK-18 - U2: Add tenant-scoped Cognee Brain provisioning contract
 Parent: THNK-6 - ThinkWork Brain
 Milestone: Company Brain dogfood proof
 Branch: `codex/thnk-18-brain-provisioning-contract`
+PR: https://github.com/thinkwork-ai/thinkwork/pull/2459
 Target branch: `main`
 Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 
@@ -12,7 +13,7 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 - THNK-15 is Done and unblocks the Company Brain plugin shell dependency.
 - THNK-17, THNK-19, and THNK-20 are Done on `main`.
 - THNK-18 moved from `Ready to Work` to `In Progress` on 2026-06-14 when implementation began.
-- Implementation is complete locally on one PR-sized unit; PR/CI/merge steps are pending.
+- Implementation is complete locally on one PR-sized unit; PR #2459 is open and awaiting CI/review.
 
 ## Discovery
 
@@ -56,6 +57,8 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 - 2026-06-14: Seeded net-new Company Brain Cognee provisioning jobs with tenant-derived `brainTenantId`, stable `brainInstanceKey`, default tier, and private-substrate mode while preserving existing/adopted desired config for no-change evidence.
 - 2026-06-14: Updated Cognee Terraform module and composite/greenfield wiring for tenant-derived resource names, tenant-scoped log/secret paths, default local stores, production Neptune endpoint handling, and evidence outputs.
 - 2026-06-14: Documented the deployment-runner payload/state strategy and tier/security contracts in `terraform/modules/app/cognee/README.md`.
+- 2026-06-14: Opened PR #2459: https://github.com/thinkwork-ai/thinkwork/pull/2459.
+- 2026-06-14: Moved THNK-18 to `Verification`.
 
 ## Verification
 
@@ -75,6 +78,7 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 ## Linear State Changes
 
 - 2026-06-14: Moved THNK-18 from `Ready to Work` to `In Progress`.
+- 2026-06-14: Moved THNK-18 from `In Progress` to `Verification` after opening PR #2459.
 
 ## Blockers
 
