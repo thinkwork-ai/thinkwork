@@ -38,7 +38,8 @@ updated: 2026-06-14
 
 ## PRs
 
-- Pending.
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2486
+- State: draft, opened 2026-06-14.
 
 ## CI / Validation
 
@@ -53,6 +54,11 @@ updated: 2026-06-14
   surfaced hundreds of pre-existing formatting warnings outside THNK-26. The
   temporary dependency change was reverted and touched files were checked with
   file-scoped Prettier instead.
+
+## Linear State Changes
+
+- 2026-06-14: `Ready to Work` -> `In Progress` when implementation began.
+- 2026-06-14: planned move to `Verification` after PR creation.
 
 ## Decisions
 
