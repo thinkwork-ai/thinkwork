@@ -2,7 +2,7 @@
 
 Linear issue: THNK-6 - ThinkWork Brain
 Target branch: `main`
-Current implementation branch: `codex/thnk-6-u4-migration-orchestration`
+Current implementation branch: `codex/thnk-6-u5b-migration-aware-reads`
 Plan: `docs/plans/2026-06-14-004-feat-company-brain-remaining-substrate-plan.md`
 Status doc created: 2026-06-14
 
@@ -10,9 +10,10 @@ Status doc created: 2026-06-14
 
 - THNK-15, the Company Brain premium plugin shell blocker, is Done.
 - THNK-17, THNK-18, THNK-19, and THNK-20 are Done and merged to `main`.
-- Remaining parent-scope units are U4 migration orchestration, U5b
-  migration-aware reads, U6 Brain operations UI, and U7 docs/smoke closure.
-- This branch starts U4: default-to-production migration orchestration.
+- U4 migration orchestration is merged to `main`.
+- Remaining parent-scope units are U5b migration-aware reads, U6 Brain
+  operations UI, and U7 docs/smoke closure.
+- This branch starts U5b: migration-aware Brain reads.
 
 ## Discovery
 
@@ -119,18 +120,43 @@ proof`, which is 100% complete.
 - 2026-06-14: Opened U4 PR
   [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461) and moved
   THNK-6 to `Verification`.
+- 2026-06-14: U4 PR
+  [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461) passed CI
+  (`cla`, `lint`, `verify`, `typecheck`, `test`) and was squash-merged to
+  `main` at `619ff085`.
+- 2026-06-14: Deleted the merged remote U4 branch and force-deleted the local
+  U4 branch after squash merge.
+- 2026-06-14: Created branch
+  `codex/thnk-6-u5b-migration-aware-reads` from updated `origin/main` and
+  moved THNK-6 back to `In Progress` for U5b.
+- 2026-06-14: Implemented U5b migration-aware Brain reads in the Company Brain
+  Context Engine provider: reads stay on the active backend, provider status
+  and hit provenance now report redacted active/shadow/fallback/vault read
+  posture, validation summaries are allowlisted, unsupported active backends
+  are skipped, and tenant-visible read metadata no longer exposes internal
+  graph/vector backend names.
+- 2026-06-14: U5b verification passed:
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/context-engine/providers/company-brain.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`, and
+  `pnpm --filter @thinkwork/api test` (501 files passed, 4,797 tests passed,
+  existing skipped live/integration cases remained skipped).
 
 ## Linear State Changes
 
 - 2026-06-14: Moved THNK-6 from `Ready to Work` to `In Progress`.
 - 2026-06-14: Moved THNK-6 from `In Progress` to `Verification` after opening
   U4 PR [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461).
+- 2026-06-14: Moved THNK-6 from `Verification` to `Done` after U4 merged,
+  then back to `In Progress` to start U5b.
 
 ## PR / CI Log
 
 - 2026-06-14: Opened U4 PR
   [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461) for Company
   Brain default-to-production migration orchestration.
+- 2026-06-14: U4 PR
+  [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461) CI passed and
+  the PR was squash-merged to `main`.
 
 ## Decisions
 

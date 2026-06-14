@@ -41,6 +41,7 @@ describe("Company Brain Context Engine provider", () => {
   it("returns active substrate Brain hits with bounded provenance", async () => {
     const provider = createCompanyBrainContextProvider({
       loadSubstrateState: async () => readySubstrate,
+      loadLatestMigration: async () => null,
       searchPages: async () => [
         {
           id: "page-acme",
@@ -106,6 +107,20 @@ describe("Company Brain Context Engine provider", () => {
       state: "ok",
       metadata: {
         activeBackend: "default",
+        readPosture: {
+          active: expect.objectContaining({
+            backend: "default",
+            role: "active",
+            state: "serving",
+          }),
+          shadow: null,
+          fallback: null,
+          vault: expect.objectContaining({
+            role: "vault",
+            state: "available",
+          }),
+          migration: null,
+        },
         retrievalOptions: {
           sourceKind: "thread",
           datasetId: "dogfood-renewal",
@@ -119,14 +134,21 @@ describe("Company Brain Context Engine provider", () => {
       },
     });
     expect(result.hits[0]).toMatchObject({
-      id: "brain:page-acme",
+      id: "brain:entity:customer:acme",
       providerId: "brain",
       family: "brain",
       sourceFamily: "brain",
       provenance: {
+        sourceId: "brain:entity:customer:acme",
         metadata: {
           retrievalKind: "graph",
           instructionBoundary: "untrusted_source_data",
+          readPosture: {
+            active: expect.objectContaining({
+              backend: "default",
+              role: "active",
+            }),
+          },
           artifactManifests: [
             expect.objectContaining({
               kind: "source_artifact",
@@ -149,6 +171,182 @@ describe("Company Brain Context Engine provider", () => {
     });
     expect(JSON.stringify(result)).not.toContain("source-artifacts/");
     expect(JSON.stringify(result)).not.toContain("s3://");
+    expect(JSON.stringify(result).toLowerCase()).not.toContain("cognee");
+    expect(JSON.stringify(result).toLowerCase()).not.toContain("neptune");
+  });
+
+  it("reports shadow production migration reads while serving default", async () => {
+    const provider = createCompanyBrainContextProvider({
+      loadSubstrateState: async () => ({
+        ...readySubstrate,
+        status: "migrating",
+        health_status: "degraded",
+      }),
+      loadLatestMigration: async () => ({
+        id: "migration-1",
+        phase: "validating",
+        status: "running",
+        from_storage_tier: "default",
+        to_storage_tier: "production",
+        validation_summary: {
+          validationPassed: false,
+          vectorIndexHealthy: true,
+          retrievalParityPassed: false,
+          vectorDimension: 1024,
+          backendEvidenceUri: "s3://private-bucket/evidence.json",
+        },
+        error_message: null,
+        rollback_window_closes_at: null,
+        updated_at: new Date("2026-06-14T10:08:00.000Z"),
+      }),
+      searchPages: async () => [
+        {
+          id: "page-acme",
+          type: "entity",
+          entity_subtype: "customer",
+          slug: "acme",
+          title: "Acme",
+          summary: "Acme renewal is at risk.",
+          body_md: null,
+          last_compiled_at: new Date("2026-06-14T09:00:00.000Z"),
+          updated_at: new Date("2026-06-14T09:30:00.000Z"),
+          score: 0.8,
+        },
+      ],
+      loadArtifactManifests: async () => [
+        {
+          id: "manifest-vault",
+          manifest_kind: "vault_projection",
+          storage_tier: "default",
+          source_family: "wiki",
+          source_kind: "wiki",
+          source_type: "wiki_vault_projection",
+          source_id_hash: "hash-vault",
+          object_count: 1,
+          source_count: 1,
+          checksum_sha256: "checksum-vault",
+          status: "active",
+          metadata: {},
+          updated_at: new Date("2026-06-14T09:20:00.000Z"),
+        },
+      ],
+    });
+
+    const result = await provider.query(request);
+
+    expect(result.status).toMatchObject({
+      state: "stale",
+      metadata: {
+        readPosture: {
+          active: expect.objectContaining({
+            backend: "default",
+            storageTier: "default",
+            role: "active",
+          }),
+          shadow: expect.objectContaining({
+            backend: "production",
+            storageTier: "production",
+            role: "shadow",
+            state: "shadowing",
+          }),
+          fallback: null,
+          vault: expect.objectContaining({
+            role: "vault",
+            state: "available",
+          }),
+          migration: {
+            id: "migration-1",
+            phase: "validating",
+            status: "running",
+            fromStorageTier: "default",
+            toStorageTier: "production",
+            validation: {
+              validationPassed: false,
+              vectorIndexHealthy: true,
+              retrievalParityPassed: false,
+              vectorDimension: 1024,
+            },
+            rollbackWindowClosesAt: null,
+          },
+        },
+        vaultProvenance: {
+          available: true,
+          projectionCount: 1,
+          canonicalStorage: false,
+        },
+      },
+    });
+    expect(result.hits[0]?.provenance.metadata).toMatchObject({
+      readPosture: {
+        active: expect.objectContaining({ backend: "default" }),
+        shadow: expect.objectContaining({ backend: "production" }),
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("s3://private-bucket");
+    expect(JSON.stringify(result).toLowerCase()).not.toContain("cognee");
+    expect(JSON.stringify(result).toLowerCase()).not.toContain("neptune");
+  });
+
+  it("reports default fallback during production rollback window", async () => {
+    const provider = createCompanyBrainContextProvider({
+      loadSubstrateState: async () => ({
+        ...readySubstrate,
+        storage_tier: "production",
+        active_backend: "production",
+      }),
+      loadLatestMigration: async () => ({
+        id: "migration-2",
+        phase: "completed",
+        status: "completed",
+        from_storage_tier: "default",
+        to_storage_tier: "production",
+        validation_summary: {
+          validationPassed: true,
+          vectorIndexHealthy: true,
+          retrievalParityPassed: true,
+          graphEntityCount: 17,
+          rawBackend: "neptune",
+        },
+        error_message: null,
+        rollback_window_closes_at: "2026-06-21T10:00:00.000Z",
+        updated_at: new Date("2026-06-14T10:09:00.000Z"),
+      }),
+      searchPages: async () => [],
+      loadArtifactManifests: async () => [],
+    });
+
+    const result = await provider.query(request);
+
+    expect(result.status).toMatchObject({
+      state: "stale",
+      metadata: {
+        readPosture: {
+          active: expect.objectContaining({
+            backend: "production",
+            role: "active",
+          }),
+          shadow: null,
+          fallback: expect.objectContaining({
+            backend: "default",
+            role: "fallback",
+            state: "available",
+          }),
+          migration: {
+            id: "migration-2",
+            phase: "completed",
+            status: "completed",
+            validation: {
+              validationPassed: true,
+              vectorIndexHealthy: true,
+              retrievalParityPassed: true,
+              graphEntityCount: 17,
+            },
+            rollbackWindowClosesAt: "2026-06-21T10:00:00.000Z",
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(result).toLowerCase()).not.toContain("neptune");
   });
 
   it("reports explicit provider status when retrieval is disabled", async () => {
@@ -197,6 +395,33 @@ describe("Company Brain Context Engine provider", () => {
         state: "skipped",
         reason: "Company Brain substrate is not installed for this tenant",
         metadata: { activeBackend: "none", storageTier: null },
+      },
+    });
+    expect(searchPages).not.toHaveBeenCalled();
+  });
+
+  it("skips substrates without a readable active backend", async () => {
+    const searchPages = vi.fn(async () => []);
+    const provider = createCompanyBrainContextProvider({
+      loadSubstrateState: async () => ({
+        ...readySubstrate,
+        active_backend: "none",
+      }),
+      searchPages,
+      loadArtifactManifests: async () => [],
+    });
+
+    const result = await provider.query(request);
+
+    expect(result).toMatchObject({
+      hits: [],
+      status: {
+        state: "skipped",
+        reason: "Company Brain active backend is not readable",
+        metadata: {
+          activeBackend: "none",
+          storageTier: "default",
+        },
       },
     });
     expect(searchPages).not.toHaveBeenCalled();
