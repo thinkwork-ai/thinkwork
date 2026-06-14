@@ -7,7 +7,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - Started: 2026-06-14
 - Active branch: `codex/thnk-24-u1-runner-metadata`
 - Active unit: U1, release manifest runner metadata
-- Linear state: In Progress
+- Linear state: Verification
 
 ## Context Discovery
 
@@ -47,11 +47,11 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - 2026-06-14: Added local implementation plan and autopilot status ledger.
 - 2026-06-14: Implemented U1 release manifest runner script metadata and
   release bundle staging.
+- 2026-06-14: Opened U1 PR and moved THNK-24 to Verification.
 
 ## Implementation Units
 
-- U1. Extend release manifest runner metadata: implemented locally; pending
-  commit/PR/CI.
+- U1. Extend release manifest runner metadata: PR open; pending CI/review.
 - U2. Add release update job substrate: pending.
 - U3. Implement release preflight service: pending.
 - U4. Add safe runner refresh remediation: pending.
@@ -61,7 +61,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 
 ## PRs
 
-- None yet.
+- U1: https://github.com/thinkwork-ai/thinkwork/pull/2473
 
 ## CI / Verification
 
