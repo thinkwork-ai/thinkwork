@@ -8,7 +8,7 @@ Milestone: Company Brain dogfood proof
 
 - Branch: `codex/thnk-20-context-engine-brain-reads`
 - Plan: `docs/plans/2026-06-14-002-feat-context-engine-brain-reads-plan.md`
-- Linear state: moved from `Ready to Work` to `In Progress` on 2026-06-14 when implementation began.
+- Linear state: moved from `Ready to Work` to `In Progress` on 2026-06-14 when implementation began; moved to `Verification` after PR #2455 opened.
 - Implementation grouping: one PR for THNK-20 because the issue has no child issues and the scope is one cohesive retrieval proof.
 
 ## Discovery
@@ -49,6 +49,7 @@ Milestone: Company Brain dogfood proof
 - 2026-06-14: Added THNK-20 implementation plan and this status doc.
 - 2026-06-14: Added Company Brain Context Engine provider, Brain retrieval option parsing, untrusted source-data formatting, provider tests, MCP boundary tests, and read-only smoke/docs updates.
 - 2026-06-14: Ran Compound Engineering code-review pass locally per repo subagent compatibility rules. Fixed one review finding: Brain search now normalizes terms and escapes SQL `ILIKE` wildcards so punctuation-only or wildcard-only queries cannot broaden to arbitrary active Brain pages.
+- 2026-06-14: Opened PR #2455 and moved THNK-20 to `Verification`.
 
 ## Verification Log
 
@@ -63,7 +64,8 @@ Milestone: Company Brain dogfood proof
 
 ## PR / CI Log
 
-- Pending.
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2455
+- CI: pending.
 
 ## Blockers
 
