@@ -116,14 +116,21 @@ proof`, which is 100% complete.
   Optional `canvas` native build still failed on local Node 25 because
   `pkg-config`/pixman were unavailable; the API/client verification above did
   not require `canvas`.
+- 2026-06-14: Opened U4 PR
+  [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461) and moved
+  THNK-6 to `Verification`.
 
 ## Linear State Changes
 
 - 2026-06-14: Moved THNK-6 from `Ready to Work` to `In Progress`.
+- 2026-06-14: Moved THNK-6 from `In Progress` to `Verification` after opening
+  U4 PR [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461).
 
 ## PR / CI Log
 
-- No THNK-6 parent PR opened yet.
+- 2026-06-14: Opened U4 PR
+  [#2461](https://github.com/thinkwork-ai/thinkwork/pull/2461) for Company
+  Brain default-to-production migration orchestration.
 
 ## Decisions
 
