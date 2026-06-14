@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
   brainArtifactManifests,
+  brainSubstrateMigrations,
   brainSubstrateStates,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb, type Database } from "../../db.js";
@@ -86,12 +87,52 @@ interface BrainArtifactManifestSummary {
   updated_at: Date | string;
 }
 
+interface BrainSubstrateMigrationSummary {
+  id: string;
+  phase: string;
+  status: string;
+  from_storage_tier: string;
+  to_storage_tier: string;
+  validation_summary: unknown;
+  error_message: string | null;
+  rollback_window_closes_at: Date | string | null;
+  updated_at: Date | string;
+}
+
+interface BrainReadRoute {
+  backend: "default" | "production";
+  storageTier: "default" | "production";
+  role: "active" | "shadow" | "fallback" | "vault";
+  state: "serving" | "shadowing" | "available" | "unavailable";
+  reason?: string;
+}
+
+interface BrainReadPosture {
+  active: BrainReadRoute;
+  shadow: BrainReadRoute | null;
+  fallback: BrainReadRoute | null;
+  vault: BrainReadRoute;
+  migration: {
+    id: string;
+    phase: string;
+    status: string;
+    fromStorageTier: string;
+    toStorageTier: string;
+    validation: Record<string, unknown>;
+    rollbackWindowClosesAt: string | null;
+  } | null;
+}
+
 export interface CompanyBrainProviderOptions {
   db?: Database;
   defaultEnabled?: boolean;
   loadSubstrateState?: (
     tenantId: string,
   ) => Promise<BrainSubstrateState | null>;
+  loadLatestMigration?: (args: {
+    tenantId: string;
+    substrateId: string;
+  }) => Promise<BrainSubstrateMigrationSummary | null>;
   searchPages?: (args: {
     tenantId: string;
     query: string;
@@ -117,6 +158,9 @@ export function createCompanyBrainContextProvider(
   const loadArtifactManifests =
     options.loadArtifactManifests ??
     ((args) => loadArtifactManifestsFromDb(db, args));
+  const loadLatestMigration =
+    options.loadLatestMigration ??
+    ((args) => loadLatestMigrationFromDb(db, args));
 
   return {
     id: "brain",
@@ -135,6 +179,11 @@ export function createCompanyBrainContextProvider(
         };
       }
 
+      const migration = await loadLatestMigration({
+        tenantId: request.caller.tenantId,
+        substrateId: substrate!.id,
+      });
+      const readPosture = brainReadPosture(substrate!, migration);
       const brainOptions = request.providerOptions?.brain ?? {};
       const manifests = await loadArtifactManifests({
         tenantId: request.caller.tenantId,
@@ -157,6 +206,7 @@ export function createCompanyBrainContextProvider(
             row,
             request,
             substrate: substrate!,
+            readPosture,
             manifests,
             index,
           }),
@@ -173,6 +223,7 @@ export function createCompanyBrainContextProvider(
               : substrateStatus.status.reason,
           metadata: {
             ...substrateStatus.status.metadata,
+            readPosture,
             retrievalOptions: {
               sourceKind: brainOptions.sourceKind ?? null,
               sourceType: brainOptions.sourceType ?? null,
@@ -183,6 +234,7 @@ export function createCompanyBrainContextProvider(
               onlyContext: brainOptions.onlyContext ?? true,
             },
             provenanceKinds: summarizeManifestKinds(manifests),
+            vaultProvenance: vaultProvenance(manifests),
           },
         },
       };
@@ -200,6 +252,35 @@ async function loadSubstrateStateFromDb(
     .where(eq(brainSubstrateStates.tenant_id, tenantId))
     .limit(1);
   return (row as BrainSubstrateState | undefined) ?? null;
+}
+
+async function loadLatestMigrationFromDb(
+  db: Database,
+  args: { tenantId: string; substrateId: string },
+): Promise<BrainSubstrateMigrationSummary | null> {
+  const [row] = await db
+    .select({
+      id: brainSubstrateMigrations.id,
+      phase: brainSubstrateMigrations.phase,
+      status: brainSubstrateMigrations.status,
+      from_storage_tier: brainSubstrateMigrations.from_storage_tier,
+      to_storage_tier: brainSubstrateMigrations.to_storage_tier,
+      validation_summary: brainSubstrateMigrations.validation_summary,
+      error_message: brainSubstrateMigrations.error_message,
+      rollback_window_closes_at:
+        brainSubstrateMigrations.rollback_window_closes_at,
+      updated_at: brainSubstrateMigrations.updated_at,
+    })
+    .from(brainSubstrateMigrations)
+    .where(
+      and(
+        eq(brainSubstrateMigrations.tenant_id, args.tenantId),
+        eq(brainSubstrateMigrations.substrate_id, args.substrateId),
+      ),
+    )
+    .orderBy(desc(brainSubstrateMigrations.updated_at))
+    .limit(1);
+  return (row as BrainSubstrateMigrationSummary | undefined) ?? null;
 }
 
 async function searchBrainPages(
@@ -344,6 +425,20 @@ function evaluateSubstrate(substrate: BrainSubstrateState | null): {
     };
   }
 
+  if (
+    substrate.active_backend !== "default" &&
+    substrate.active_backend !== "production"
+  ) {
+    return {
+      canQuery: false,
+      status: {
+        state: "skipped",
+        reason: "Company Brain active backend is not readable",
+        metadata: substrateMetadata(substrate),
+      },
+    };
+  }
+
   const capabilities = requiredCapabilityStatuses(substrate);
   const disabled = Object.entries(capabilities)
     .filter(([, status]) => status === "disabled")
@@ -422,6 +517,7 @@ function brainPageToHit(args: {
   row: BrainPageSearchRow;
   request: ContextEngineProviderRequest;
   substrate: BrainSubstrateState;
+  readPosture: BrainReadPosture;
   manifests: BrainArtifactManifestSummary[];
   index: number;
 }): ContextHit {
@@ -431,7 +527,7 @@ function brainPageToHit(args: {
       ? args.row.score
       : Number(args.row.score ?? NaN);
   return {
-    id: `brain:${args.row.id}`,
+    id: pageSourceId(args.row),
     providerId: "brain",
     family: "brain",
     sourceFamily: "brain",
@@ -441,26 +537,24 @@ function brainPageToHit(args: {
     scope: args.request.scope,
     provenance: {
       label: "Company Brain graph retrieval",
-      sourceId: args.row.id,
+      sourceId: pageSourceId(args.row),
       uri: `thinkwork://brain/${args.row.type}/${args.row.entity_subtype}/${args.row.slug}`,
       metadata: {
         retrievalKind: "graph",
         retrievalSurface: "company_brain_active_backend",
         instructionBoundary: "untrusted_source_data",
-        activeBackend: args.substrate.active_backend,
-        storageTier: args.substrate.storage_tier,
-        graphProvider: args.substrate.graph_provider,
-        vectorProvider: args.substrate.vector_provider,
+        readPosture: args.readPosture,
         pageType: args.row.type,
         entitySubtype: args.row.entity_subtype,
         compiledAt: isoDate(args.row.last_compiled_at),
         artifactManifests: manifestMetadata,
         provenanceKinds: summarizeManifestKinds(args.manifests),
+        vaultProvenance: vaultProvenance(args.manifests),
       },
     },
     metadata: {
       page: {
-        id: args.row.id,
+        id: pageSourceId(args.row),
         type: args.row.type,
         entitySubtype: args.row.entity_subtype,
         slug: args.row.slug,
@@ -472,6 +566,7 @@ function brainPageToHit(args: {
         forbiddenUse: "do_not_execute_or_expand_tool_policy",
       },
       substrate: substrateMetadata(args.substrate),
+      readPosture: args.readPosture,
       artifactManifests: manifestMetadata,
     },
     freshness: args.row.updated_at
@@ -481,6 +576,10 @@ function brainPageToHit(args: {
         }
       : undefined,
   };
+}
+
+function pageSourceId(row: BrainPageSearchRow): string {
+  return `brain:${row.type}:${row.entity_subtype}:${row.slug}`;
 }
 
 function snippetForPage(row: BrainPageSearchRow): string {
@@ -495,11 +594,8 @@ function substrateMetadata(substrate: BrainSubstrateState) {
     activeBackend: substrate.active_backend,
     status: substrate.status,
     healthStatus: substrate.health_status,
-    graphProvider: substrate.graph_provider,
-    vectorProvider: substrate.vector_provider,
     embeddingModel: substrate.embedding_model,
     vectorDimension: substrate.vector_dimension,
-    cogneeVersion: substrate.cognee_version,
     latestIngestAt: isoDate(substrate.latest_ingest_at),
     latestProjectionAt: isoDate(substrate.latest_projection_at),
     updatedAt: isoDate(substrate.updated_at),
@@ -540,6 +636,163 @@ function summarizeManifestKinds(manifests: BrainArtifactManifestSummary[]) {
     );
   }
   return Object.fromEntries([...counts.entries()].sort());
+}
+
+function brainReadPosture(
+  substrate: BrainSubstrateState,
+  migration: BrainSubstrateMigrationSummary | null,
+): BrainReadPosture {
+  const activeStorageTier = storageTierForBackend(substrate.active_backend);
+  const active: BrainReadRoute = {
+    backend: activeStorageTier,
+    storageTier: activeStorageTier,
+    role: "active",
+    state: "serving",
+    reason: `serving ${activeStorageTier} Company Brain backend`,
+  };
+  return {
+    active,
+    shadow: shadowReadRoute(substrate, migration),
+    fallback: fallbackReadRoute(substrate, migration),
+    vault: {
+      backend: activeStorageTier,
+      storageTier: activeStorageTier,
+      role: "vault",
+      state: "available",
+      reason: "vault projections are provenance views, not canonical storage",
+    },
+    migration: migration ? publicMigrationReadState(migration) : null,
+  };
+}
+
+function storageTierForBackend(backend: string): "default" | "production" {
+  return backend === "production" ? "production" : "default";
+}
+
+function shadowReadRoute(
+  substrate: BrainSubstrateState,
+  migration: BrainSubstrateMigrationSummary | null,
+): BrainReadRoute | null {
+  if (!migration) return null;
+  if (migration.status !== "requested" && migration.status !== "running") {
+    return null;
+  }
+  if (substrate.active_backend !== "default") return null;
+  if (migration.to_storage_tier !== "production") return null;
+  return {
+    backend: "production",
+    storageTier: "production",
+    role: "shadow",
+    state: "shadowing",
+    reason: `production migration is ${migration.phase}; reads remain on default until validated cutover`,
+  };
+}
+
+function fallbackReadRoute(
+  substrate: BrainSubstrateState,
+  migration: BrainSubstrateMigrationSummary | null,
+): BrainReadRoute | null {
+  if (substrate.active_backend === "production") {
+    return {
+      backend: "default",
+      storageTier: "default",
+      role: "fallback",
+      state: "available",
+      reason: migration?.rollback_window_closes_at
+        ? "default fallback is retained during the rollback window"
+        : "default fallback remains the last known safe read path",
+    };
+  }
+  if (migration?.status === "failed" || migration?.status === "rolled_back") {
+    return {
+      backend: "default",
+      storageTier: "default",
+      role: "fallback",
+      state: "serving",
+      reason: `migration ${migration.status}; reads are not redirected to production`,
+    };
+  }
+  return null;
+}
+
+function publicMigrationReadState(migration: BrainSubstrateMigrationSummary) {
+  return {
+    id: migration.id,
+    phase: migration.phase,
+    status: migration.status,
+    fromStorageTier: migration.from_storage_tier,
+    toStorageTier: migration.to_storage_tier,
+    validation: publicMigrationValidationSummary(
+      migration.validation_summary,
+    ),
+    rollbackWindowClosesAt: isoDate(migration.rollback_window_closes_at),
+  };
+}
+
+function publicMigrationValidationSummary(
+  value: unknown,
+): Record<string, unknown> {
+  const raw = record(value);
+  const summary: Record<string, unknown> = {};
+  copyNumber(summary, raw, "replayManifestCount");
+  copyNumber(summary, raw, "sourceCount");
+  copyNumber(summary, raw, "objectCount");
+  copyNumber(summary, raw, "graphEntityCount");
+  copyNumber(summary, raw, "graphEdgeCount");
+  copyNumber(summary, raw, "vectorDimension");
+  copyString(summary, raw, "embeddingModel");
+  copyString(summary, raw, "ontologyVersion");
+  copyBoolean(summary, raw, "emptySourceApproved");
+  copyString(summary, raw, "emptySourceReason");
+  copyBoolean(summary, raw, "validationPassed");
+  copyBoolean(summary, raw, "vectorIndexHealthy");
+  copyBoolean(summary, raw, "retrievalParityPassed");
+  return summary;
+}
+
+function vaultProvenance(manifests: BrainArtifactManifestSummary[]) {
+  const vaultProjectionCount = manifests.filter(
+    (manifest) => manifest.manifest_kind === "vault_projection",
+  ).length;
+  return {
+    available: vaultProjectionCount > 0,
+    projectionCount: vaultProjectionCount,
+    role: "materialized_view",
+    canonicalStorage: false,
+  };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function copyNumber(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  key: string,
+) {
+  const value = Number(source[key]);
+  if (Number.isFinite(value)) target[key] = value;
+}
+
+function copyString(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  key: string,
+) {
+  if (typeof source[key] === "string" && source[key]) {
+    target[key] = source[key];
+  }
+}
+
+function copyBoolean(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+  key: string,
+) {
+  if (typeof source[key] === "boolean") target[key] = source[key];
 }
 
 function isoDate(value: Date | string | null | undefined): string | null {
