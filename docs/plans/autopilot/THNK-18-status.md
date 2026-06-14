@@ -13,7 +13,7 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 - THNK-15 is Done and unblocks the Company Brain plugin shell dependency.
 - THNK-17, THNK-19, and THNK-20 are Done on `main`.
 - THNK-18 moved from `Ready to Work` to `In Progress` on 2026-06-14 when implementation began.
-- Implementation is complete locally on one PR-sized unit; PR #2459 is open and awaiting CI/review.
+- Implementation is complete locally on one PR-sized unit; PR #2459 is open with required CI passing.
 
 ## Discovery
 
@@ -59,6 +59,7 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 - 2026-06-14: Documented the deployment-runner payload/state strategy and tier/security contracts in `terraform/modules/app/cognee/README.md`.
 - 2026-06-14: Opened PR #2459: https://github.com/thinkwork-ai/thinkwork/pull/2459.
 - 2026-06-14: Moved THNK-18 to `Verification`.
+- 2026-06-14: PR #2459 CI passed: CLA, lint, verify, typecheck, and test.
 
 ## Verification
 
@@ -74,6 +75,7 @@ Plan: `docs/plans/2026-06-14-003-feat-brain-provisioning-contract-plan.md`
 - 2026-06-14: `terraform -chdir=terraform/examples/greenfield init -backend=false && terraform -chdir=terraform/examples/greenfield validate` passed; generated `.terraform` files were removed.
 - 2026-06-14: `git diff --check` passed.
 - 2026-06-14: `pnpm exec prettier --write ...` could not run because the workspace format script references `prettier` but the root workspace does not declare a Prettier dependency.
+- 2026-06-14: GitHub PR #2459 checks passed: CLA, lint, verify, typecheck, and test.
 
 ## Linear State Changes
 
