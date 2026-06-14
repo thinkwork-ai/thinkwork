@@ -5,9 +5,9 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 ## Current State
 
 - Started: 2026-06-14
-- Active branch: `codex/thnk-24-u7-release-runbook`
-- Active unit: U7, docs, runbooks, and verification coverage
-- Linear state: Verification
+- Active branch: none
+- Active unit: complete
+- Linear state: Done
 
 ## Context Discovery
 
@@ -116,6 +116,9 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   preflight/review workflow from Admin Settings, Release Manifests, and
   GitHub-free customer deployment docs.
 - 2026-06-14: Opened U7 PR and moved THNK-24 to Verification.
+- 2026-06-14: U7 PR passed CI, squash-merged, and had its remote/local branch
+  cleaned up.
+- 2026-06-14: Moved THNK-24 to Done after all implementation units merged.
 
 ## Implementation Units
 
@@ -125,8 +128,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U4. Add safe runner refresh remediation: merged in PR #2478.
 - U5. Dispatch and monitor reviewed release updates: merged in PR #2479.
 - U6. Build Settings release safety workflow: merged in PR #2482.
-- U7. Update docs, runbooks, and verification coverage: PR open; pending
-  CI/review.
+- U7. Update docs, runbooks, and verification coverage: merged in PR #2483.
 
 ## PRs
 
@@ -136,7 +138,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U4: https://github.com/thinkwork-ai/thinkwork/pull/2478 merged
 - U5: https://github.com/thinkwork-ai/thinkwork/pull/2479 merged
 - U6: https://github.com/thinkwork-ai/thinkwork/pull/2482 merged
-- U7: https://github.com/thinkwork-ai/thinkwork/pull/2483
+- U7: https://github.com/thinkwork-ai/thinkwork/pull/2483 merged
 
 ## CI / Verification
 
@@ -248,6 +250,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U7 `pnpm dlx prettier@3.5.3 --write ...`: applied Markdown wrapping to the
   new runbook and verification checklist.
 - U7 `pnpm --filter @thinkwork/docs build`: passed.
+- U7 PR CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed.
 
 ## Blockers
 
