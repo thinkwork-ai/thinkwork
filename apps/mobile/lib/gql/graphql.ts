@@ -650,6 +650,85 @@ export type CheckoutThreadInput = {
   runId: Scalars['String']['input'];
 };
 
+export type CompanyBrainCapabilities = {
+  __typename?: 'CompanyBrainCapabilities';
+  launch: Array<CompanyBrainCapability>;
+  optional: Array<CompanyBrainCapability>;
+};
+
+export type CompanyBrainCapability = {
+  __typename?: 'CompanyBrainCapability';
+  key: Scalars['String']['output'];
+  message?: Maybe<Scalars['String']['output']>;
+  source?: Maybe<Scalars['String']['output']>;
+  status: Scalars['String']['output'];
+};
+
+export type CompanyBrainMigrationStatus = {
+  __typename?: 'CompanyBrainMigrationStatus';
+  completedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  fromStorageTier?: Maybe<Scalars['String']['output']>;
+  id?: Maybe<Scalars['ID']['output']>;
+  phase: Scalars['String']['output'];
+  requestedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  rollbackWindowClosesAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: Scalars['String']['output'];
+  toStorageTier?: Maybe<Scalars['String']['output']>;
+  validationSummary?: Maybe<Scalars['AWSJSON']['output']>;
+};
+
+export type CompanyBrainOperationalCounters = {
+  __typename?: 'CompanyBrainOperationalCounters';
+  failedIngestCount: Scalars['Int']['output'];
+  graphEdgeCount?: Maybe<Scalars['Int']['output']>;
+  graphEntityCount?: Maybe<Scalars['Int']['output']>;
+  ingestionQueueDepth: Scalars['Int']['output'];
+  latestIngestAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  latestProjectionAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  ontologyVersion?: Maybe<Scalars['String']['output']>;
+  sourceArtifactCount?: Maybe<Scalars['Int']['output']>;
+  vaultProjectionCount?: Maybe<Scalars['Int']['output']>;
+};
+
+export type CompanyBrainOperatorEvidence = {
+  __typename?: 'CompanyBrainOperatorEvidence';
+  backendMode?: Maybe<Scalars['String']['output']>;
+  cogneeEndpoint?: Maybe<Scalars['String']['output']>;
+  cogneeVersion?: Maybe<Scalars['String']['output']>;
+  efsFileSystemId?: Maybe<Scalars['String']['output']>;
+  embeddingModel?: Maybe<Scalars['String']['output']>;
+  graphProvider?: Maybe<Scalars['String']['output']>;
+  latestDeploymentJobId?: Maybe<Scalars['ID']['output']>;
+  managedApplicationId?: Maybe<Scalars['ID']['output']>;
+  migrationEvidence?: Maybe<Scalars['AWSJSON']['output']>;
+  neptuneEndpoint?: Maybe<Scalars['String']['output']>;
+  neptuneGraphId?: Maybe<Scalars['String']['output']>;
+  operatorEvidence?: Maybe<Scalars['AWSJSON']['output']>;
+  productionPosture?: Maybe<Scalars['String']['output']>;
+  s3ArtifactRoot?: Maybe<Scalars['String']['output']>;
+  s3ManifestRoot?: Maybe<Scalars['String']['output']>;
+  s3VaultProjectionRoot?: Maybe<Scalars['String']['output']>;
+  vectorDimension?: Maybe<Scalars['Int']['output']>;
+  vectorProvider?: Maybe<Scalars['String']['output']>;
+};
+
+export type CompanyBrainStatus = {
+  __typename?: 'CompanyBrainStatus';
+  activeBackend: Scalars['String']['output'];
+  capabilities: CompanyBrainCapabilities;
+  counters: CompanyBrainOperationalCounters;
+  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  evidence?: Maybe<CompanyBrainOperatorEvidence>;
+  healthStatus: Scalars['String']['output'];
+  migration: CompanyBrainMigrationStatus;
+  status: Scalars['String']['output'];
+  storageTier: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+};
+
 export enum ComplianceActorType {
   Agent = 'AGENT',
   System = 'SYSTEM',
@@ -4239,6 +4318,7 @@ export type Query = {
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
+  companyBrainStatus: CompanyBrainStatus;
   /**
    * Single event by event_id. Non-operator callers reading another tenant's
    * event_id see null (existence-oracle defense — SQL filter applies in the

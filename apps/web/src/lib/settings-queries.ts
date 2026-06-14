@@ -107,6 +107,78 @@ export const SettingsDeploymentStatusQuery = graphql(`
   }
 `);
 
+export const SettingsCompanyBrainStatusQuery = graphql(`
+  query SettingsCompanyBrainStatus {
+    companyBrainStatus {
+      tenantId
+      storageTier
+      activeBackend
+      status
+      healthStatus
+      counters {
+        ingestionQueueDepth
+        failedIngestCount
+        graphEntityCount
+        graphEdgeCount
+        sourceArtifactCount
+        vaultProjectionCount
+        latestIngestAt
+        latestProjectionAt
+        ontologyVersion
+      }
+      capabilities {
+        launch {
+          key
+          status
+          message
+          source
+        }
+        optional {
+          key
+          status
+          message
+          source
+        }
+      }
+      migration {
+        id
+        phase
+        status
+        fromStorageTier
+        toStorageTier
+        requestedAt
+        startedAt
+        completedAt
+        rollbackWindowClosesAt
+        errorMessage
+        validationSummary
+      }
+      evidence {
+        managedApplicationId
+        latestDeploymentJobId
+        backendMode
+        graphProvider
+        vectorProvider
+        embeddingModel
+        vectorDimension
+        cogneeVersion
+        cogneeEndpoint
+        s3ArtifactRoot
+        s3ManifestRoot
+        s3VaultProjectionRoot
+        neptuneGraphId
+        neptuneEndpoint
+        efsFileSystemId
+        productionPosture
+        operatorEvidence
+        migrationEvidence
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
 export const SettingsDeploymentReleasesQuery = graphql(`
   query SettingsDeploymentReleases($limit: Int) {
     deploymentReleases(limit: $limit) {
