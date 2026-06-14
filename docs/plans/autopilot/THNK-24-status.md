@@ -5,9 +5,9 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 ## Current State
 
 - Started: 2026-06-14
-- Active branch: `codex/thnk-24-u2-release-update-jobs`
-- Active unit: U2, release update job substrate
-- Linear state: Verification
+- Active branch: `codex/thnk-24-u3-release-preflight`
+- Active unit: U3, release preflight service
+- Linear state: In Progress
 
 ## Context Discovery
 
@@ -62,12 +62,20 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   `packages/database-pg/drizzle/0169_release_update_jobs.sql` through `psql`
   using the deployed dev database secret, then reran the scoped drift reporter
   and confirmed all declared objects are present.
+- 2026-06-14: U2 PR passed refreshed CI after rebasing onto `main`,
+  squash-merged, and had its remote/local branch cleaned up.
+- 2026-06-14: Moved THNK-24 back to In Progress for U3 and created branch
+  `codex/thnk-24-u3-release-preflight`.
+- 2026-06-14: Implemented U3 release preflight substrate: additive GraphQL
+  mutation, manifest validation, runner hash compatibility, preserved config
+  summary, Route53 IAM drift detection, release-update job/event persistence,
+  generated client types, and read-only Terraform IAM grants.
 
 ## Implementation Units
 
 - U1. Extend release manifest runner metadata: merged in PR #2473.
-- U2. Add release update job substrate: PR open; pending CI/review.
-- U3. Implement release preflight service: pending.
+- U2. Add release update job substrate: merged in PR #2475.
+- U3. Implement release preflight service: implemented locally; pending PR.
 - U4. Add safe runner refresh remediation: pending.
 - U5. Dispatch and monitor reviewed release updates: pending.
 - U6. Build Settings release safety workflow: pending.
@@ -76,7 +84,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 ## PRs
 
 - U1: https://github.com/thinkwork-ai/thinkwork/pull/2473 merged
-- U2: https://github.com/thinkwork-ai/thinkwork/pull/2475
+- U2: https://github.com/thinkwork-ai/thinkwork/pull/2475 merged
 
 ## CI / Verification
 
@@ -114,6 +122,27 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U2 scoped drift reporter:
   `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0169_release_update_jobs.sql`:
   passed after migration application.
+- U2 PR CI after rebase: `cla`, `lint`, `test`, `typecheck`,
+  `Migration Drift Precheck (dev)`, and `verify` passed.
+- U3 `pnpm install`: passed and updated the lockfile for API AWS SDK and
+  release-manifest dependencies.
+- U3 `pnpm schema:build`: passed; AppSync subscription schema unchanged.
+- U3 `pnpm --filter thinkwork-cli codegen`: passed.
+- U3 `pnpm --filter @thinkwork/web codegen`: passed.
+- U3 `pnpm --filter @thinkwork/mobile codegen`: passed.
+- U3 `pnpm --filter @thinkwork/api codegen`: no-op; package has no codegen
+  script.
+- U3 `pnpm --filter @thinkwork/api exec vitest run src/lib/deployments/release-preflight.test.ts src/graphql/resolvers/deployments/release-update-jobs.test.ts`:
+  passed.
+- U3 `pnpm --filter @thinkwork/api typecheck`: passed.
+- U3 `pnpm --filter @thinkwork/database-pg typecheck`: passed.
+- U3 `pnpm --filter @thinkwork/web typecheck`: passed.
+- U3 `pnpm --filter thinkwork-cli typecheck`: passed.
+- U3 `pnpm --filter @thinkwork/mobile typecheck`: no-op; package has no
+  typecheck script.
+- U3 `pnpm dlx prettier@3.5.3 --check ...`: passed for hand-authored touched
+  files.
+- U3 `terraform fmt terraform/modules/app/lambda-api/iam-grouped.tf`: passed.
 
 ## Blockers
 

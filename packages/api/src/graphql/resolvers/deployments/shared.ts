@@ -70,6 +70,9 @@ export interface DeploymentProfileConfig extends DeploymentControllerConfig {
   releaseVersion: string | null;
   releaseManifestUrl: string | null;
   releaseManifestSha256: string | null;
+  releaseManifestSignatureUrl: string | null;
+  releaseManifestTrustPolicy: string | null;
+  releaseManifestTrustedKeysJson: string | null;
   runnerProjectName: string | null;
 }
 
@@ -251,6 +254,29 @@ export async function appendJobEvent(args: {
   await insert;
 }
 
+export async function appendReleaseUpdateEvent(args: {
+  tenantId: string;
+  jobId: string;
+  eventType: string;
+  message: string;
+  payload?: Record<string, unknown>;
+  idempotencyKey?: string;
+}) {
+  const insert = db.insert(releaseUpdateEvents).values({
+    tenant_id: args.tenantId,
+    job_id: args.jobId,
+    event_type: args.eventType,
+    message: args.message,
+    payload: args.payload ?? {},
+    idempotency_key: args.idempotencyKey,
+  });
+  if (args.idempotencyKey) {
+    await insert.onConflictDoNothing();
+    return;
+  }
+  await insert;
+}
+
 export async function defaultStartExecution(input: {
   stateMachineArn: string;
   name: string;
@@ -308,6 +334,9 @@ export async function resolveDeploymentProfileConfig(): Promise<DeploymentProfil
     releaseVersion: null,
     releaseManifestUrl: null,
     releaseManifestSha256: null,
+    releaseManifestSignatureUrl: null,
+    releaseManifestTrustPolicy: null,
+    releaseManifestTrustedKeysJson: null,
     stateMachineArn: null,
     evidenceBucket: deploymentEvidenceBucket(),
     runnerProjectName: null,
@@ -341,6 +370,18 @@ export async function resolveDeploymentProfileConfig(): Promise<DeploymentProfil
       releaseVersion: stringField(profile, "releaseVersion"),
       releaseManifestUrl: stringField(profile, "releaseManifestUrl"),
       releaseManifestSha256: stringField(profile, "releaseManifestSha256"),
+      releaseManifestSignatureUrl: stringField(
+        profile,
+        "releaseManifestSignatureUrl",
+      ),
+      releaseManifestTrustPolicy: stringField(
+        profile,
+        "releaseManifestTrustPolicy",
+      ),
+      releaseManifestTrustedKeysJson: stringField(
+        profile,
+        "releaseManifestTrustedKeysJson",
+      ),
       stateMachineArn: stringField(controller, "stateMachineArn"),
       evidenceBucket: stringField(controller, "evidenceBucketName"),
       runnerProjectName: stringField(controller, "codebuildProjectName"),
@@ -363,6 +404,9 @@ export async function resolveDeploymentStatusPointerConfig(
     releaseVersion: null,
     releaseManifestUrl: null,
     releaseManifestSha256: null,
+    releaseManifestSignatureUrl: null,
+    releaseManifestTrustPolicy: null,
+    releaseManifestTrustedKeysJson: null,
     stateMachineArn: null,
     evidenceBucket,
     runnerProjectName: null,
@@ -398,6 +442,15 @@ export async function resolveDeploymentStatusPointerConfig(
       releaseVersion: stringField(activeRelease, "version"),
       releaseManifestUrl: stringField(activeRelease, "manifestUrl"),
       releaseManifestSha256: stringField(activeRelease, "manifestSha256"),
+      releaseManifestSignatureUrl: stringField(
+        activeRelease,
+        "manifestSignatureUrl",
+      ),
+      releaseManifestTrustPolicy: stringField(
+        activeRelease,
+        "manifestTrustPolicy",
+      ),
+      releaseManifestTrustedKeysJson: null,
       stateMachineArn: stringField(controller, "stateMachineArn"),
       evidenceBucket,
       runnerProjectName: stringField(controller, "codebuildProjectName"),
@@ -437,6 +490,15 @@ export function deploymentProfileConfigFromEnv(): DeploymentProfileConfig {
       process.env.THINKWORK_RELEASE_MANIFEST_SHA256 ||
         process.env.VITE_RELEASE_MANIFEST_SHA256,
     ),
+    releaseManifestSignatureUrl: stringEnv(
+      process.env.THINKWORK_RELEASE_MANIFEST_SIGNATURE_URL,
+    ),
+    releaseManifestTrustPolicy: stringEnv(
+      process.env.THINKWORK_RELEASE_MANIFEST_TRUST_POLICY,
+    ),
+    releaseManifestTrustedKeysJson: stringEnv(
+      process.env.THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON,
+    ),
     stateMachineArn: stringEnv(
       process.env.THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN ||
         getConfig("DEPLOYMENT_STATE_MACHINE_ARN") ||
@@ -469,6 +531,14 @@ export function mergeDeploymentProfileConfig(
       primary.releaseManifestUrl ?? fallback.releaseManifestUrl,
     releaseManifestSha256:
       primary.releaseManifestSha256 ?? fallback.releaseManifestSha256,
+    releaseManifestSignatureUrl:
+      primary.releaseManifestSignatureUrl ??
+      fallback.releaseManifestSignatureUrl,
+    releaseManifestTrustPolicy:
+      primary.releaseManifestTrustPolicy ?? fallback.releaseManifestTrustPolicy,
+    releaseManifestTrustedKeysJson:
+      primary.releaseManifestTrustedKeysJson ??
+      fallback.releaseManifestTrustedKeysJson,
     stateMachineArn: primary.stateMachineArn ?? fallback.stateMachineArn,
     evidenceBucket: primary.evidenceBucket ?? fallback.evidenceBucket,
     runnerProjectName: primary.runnerProjectName ?? fallback.runnerProjectName,
