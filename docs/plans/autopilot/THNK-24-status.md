@@ -5,8 +5,8 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 ## Current State
 
 - Started: 2026-06-14
-- Active branch: `codex/thnk-24-u1-runner-metadata`
-- Active unit: U1, release manifest runner metadata
+- Active branch: `codex/thnk-24-u2-release-update-jobs`
+- Active unit: U2, release update job substrate
 - Linear state: Verification
 
 ## Context Discovery
@@ -48,11 +48,25 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - 2026-06-14: Implemented U1 release manifest runner script metadata and
   release bundle staging.
 - 2026-06-14: Opened U1 PR and moved THNK-24 to Verification.
+- 2026-06-14: U1 PR passed required CI, was rebased onto current `main`,
+  passed refreshed CI, squash-merged, and had its remote/local branch cleaned
+  up.
+- 2026-06-14: Moved THNK-24 back to In Progress for U2 and created branch
+  `codex/thnk-24-u2-release-update-jobs`.
+- 2026-06-14: Implemented U2 release update job/event schema, GraphQL query,
+  generated client types, and focused resolver coverage.
+- 2026-06-14: Opened U2 PR and moved THNK-24 to Verification.
+- 2026-06-14: U2 CI `Migration Drift Precheck (dev)` failed because the new
+  hand-rolled migration objects were not yet present in the dev database.
+- 2026-06-14: Applied the scoped U2 dev migration
+  `packages/database-pg/drizzle/0169_release_update_jobs.sql` through `psql`
+  using the deployed dev database secret, then reran the scoped drift reporter
+  and confirmed all declared objects are present.
 
 ## Implementation Units
 
-- U1. Extend release manifest runner metadata: PR open; pending CI/review.
-- U2. Add release update job substrate: pending.
+- U1. Extend release manifest runner metadata: merged in PR #2473.
+- U2. Add release update job substrate: PR open; pending CI/review.
 - U3. Implement release preflight service: pending.
 - U4. Add safe runner refresh remediation: pending.
 - U5. Dispatch and monitor reviewed release updates: pending.
@@ -61,7 +75,8 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 
 ## PRs
 
-- U1: https://github.com/thinkwork-ai/thinkwork/pull/2473
+- U1: https://github.com/thinkwork-ai/thinkwork/pull/2473 merged
+- U2: https://github.com/thinkwork-ai/thinkwork/pull/2475
 
 ## CI / Verification
 
@@ -78,6 +93,27 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   exposes the binary. Used `pnpm dlx prettier@3.5.3` for formatting instead.
 - `pnpm install`: completed; optional `canvas` native build emitted the known
   Node 25/pkg-config warning while installation still exited successfully.
+- U1 PR CI after rebase: `cla`, `lint`, `test`, `typecheck`, and `verify`
+  passed.
+- U2 `pnpm schema:build`: passed; AppSync subscription schema unchanged.
+- U2 `pnpm --filter thinkwork-cli codegen`: passed.
+- U2 `pnpm --filter @thinkwork/web codegen`: passed.
+- U2 `pnpm --filter @thinkwork/mobile codegen`: passed.
+- U2 `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/deployments/release-update-jobs.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts`:
+  passed.
+- U2 `pnpm --filter @thinkwork/api typecheck`: passed.
+- U2 `pnpm --filter @thinkwork/database-pg typecheck`: passed.
+- U2 `pnpm dlx prettier@3.5.3 --check ...`: passed for hand-authored touched
+  files. Generated GraphQL bundles were left in native codegen format.
+- U2 PR CI first pass: `cla`, `lint`, `typecheck`, and `verify` passed;
+  `Migration Drift Precheck (dev)` failed before the dev hand-rolled migration
+  was applied; `test` was still running when the failure was triaged.
+- U2 scoped dev migration application:
+  `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0169_release_update_jobs.sql`:
+  passed.
+- U2 scoped drift reporter:
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0169_release_update_jobs.sql`:
+  passed after migration application.
 
 ## Blockers
 

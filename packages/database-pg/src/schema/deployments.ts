@@ -136,6 +136,95 @@ export const managedApplicationDeploymentEvents = pgTable(
   ],
 );
 
+export const releaseUpdateJobs = pgTable(
+  "release_update_jobs",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("preflight_pending"),
+    idempotency_key: text("idempotency_key").notNull(),
+    requested_by_user_id: uuid("requested_by_user_id"),
+    target_release_version: text("target_release_version").notNull(),
+    current_release_version: text("current_release_version"),
+    manifest_url: text("manifest_url").notNull(),
+    manifest_sha256: text("manifest_sha256").notNull(),
+    manifest_signed: boolean("manifest_signed").notNull().default(false),
+    manifest_trust_policy: text("manifest_trust_policy"),
+    terraform_module_version: text("terraform_module_version"),
+    preflight_summary: jsonb("preflight_summary").notNull().default({}),
+    preserved_config_summary: jsonb("preserved_config_summary")
+      .notNull()
+      .default({}),
+    remediation_summary: jsonb("remediation_summary").notNull().default({}),
+    state_machine_arn: text("state_machine_arn"),
+    execution_arn: text("execution_arn"),
+    codebuild_build_arn: text("codebuild_build_arn"),
+    evidence_bucket: text("evidence_bucket"),
+    evidence_prefix: text("evidence_prefix"),
+    status_pointer_bucket: text("status_pointer_bucket"),
+    status_pointer_key: text("status_pointer_key"),
+    final_status: jsonb("final_status").notNull().default({}),
+    failure_category: text("failure_category"),
+    failure_message: text("failure_message"),
+    recovery_action: text("recovery_action"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("release_update_jobs_tenant_idempotency_uidx").on(
+      table.tenant_id,
+      table.idempotency_key,
+    ),
+    index("release_update_jobs_tenant_status_idx").on(
+      table.tenant_id,
+      table.status,
+    ),
+    index("release_update_jobs_tenant_target_idx").on(
+      table.tenant_id,
+      table.target_release_version,
+    ),
+  ],
+);
+
+export const releaseUpdateEvents = pgTable(
+  "release_update_events",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    job_id: uuid("job_id")
+      .notNull()
+      .references(() => releaseUpdateJobs.id, { onDelete: "cascade" }),
+    event_type: text("event_type").notNull(),
+    message: text("message").notNull(),
+    payload: jsonb("payload").notNull().default({}),
+    idempotency_key: text("idempotency_key"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("release_update_events_job_created_idx").on(
+      table.job_id,
+      table.created_at,
+    ),
+    uniqueIndex("release_update_events_idempotency_uidx")
+      .on(table.job_id, table.idempotency_key)
+      .where(sql`${table.idempotency_key} IS NOT NULL`),
+  ],
+);
+
 export const customerDeploymentSessions = pgTable(
   "customer_deployment_sessions",
   {

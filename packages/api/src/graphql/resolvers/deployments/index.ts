@@ -2,6 +2,7 @@ import { managedApplications_ as managedApplications } from "./managedApplicatio
 import { managedApplicationDeployment } from "./managedApplicationDeployment.query.js";
 import { deploymentEvidence } from "./deploymentEvidence.query.js";
 import { deploymentReleases } from "./deploymentReleases.query.js";
+import { releaseUpdateJob } from "./releaseUpdateJob.query.js";
 import { startDeploymentReleaseUpdate } from "./startDeploymentReleaseUpdate.mutation.js";
 import { startManagedApplicationPlan } from "./startManagedApplicationPlan.mutation.js";
 import { approveManagedApplicationDeployment } from "./approveManagedApplicationDeployment.mutation.js";
@@ -12,6 +13,7 @@ export const deploymentQueries = {
   managedApplicationDeployment,
   deploymentEvidence,
   deploymentReleases,
+  releaseUpdateJob,
 };
 
 export const deploymentMutations = {

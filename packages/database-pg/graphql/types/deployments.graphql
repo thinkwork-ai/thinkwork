@@ -82,6 +82,46 @@ type DeploymentReleaseUpdate {
   message: String!
 }
 
+type ReleaseUpdateJob {
+  id: ID!
+  tenantId: ID!
+  status: String!
+  requestedByUserId: ID
+  targetReleaseVersion: String!
+  currentReleaseVersion: String
+  manifestUrl: String!
+  manifestSha256: String!
+  manifestSigned: Boolean!
+  manifestTrustPolicy: String
+  terraformModuleVersion: String
+  preflightSummary: AWSJSON!
+  preservedConfigSummary: AWSJSON!
+  remediationSummary: AWSJSON!
+  stateMachineArn: String
+  executionArn: String
+  codebuildBuildArn: String
+  evidenceBucket: String
+  evidencePrefix: String
+  statusPointerBucket: String
+  statusPointerKey: String
+  finalStatus: AWSJSON!
+  failureCategory: String
+  failureMessage: String
+  recoveryAction: String
+  events: [ReleaseUpdateEvent!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type ReleaseUpdateEvent {
+  id: ID!
+  jobId: ID!
+  eventType: String!
+  message: String!
+  payload: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
 input StartDeploymentReleaseUpdateInput {
   version: String!
   manifestUrl: String!
@@ -135,6 +175,7 @@ extend type Query {
   managedApplicationDeployment(jobId: ID!): ManagedApplicationDeploymentJob
   deploymentEvidence(jobId: ID!): DeploymentEvidence!
   deploymentReleases(limit: Int): [DeploymentRelease!]!
+  releaseUpdateJob(jobId: ID!): ReleaseUpdateJob
 }
 
 extend type Mutation {
