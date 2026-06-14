@@ -2619,6 +2619,7 @@ export type Mutation = {
   renameTenantSlug: Tenant;
   reorderPinnedThreads: Array<PinnedThread>;
   reorderQuickActions: Array<UserQuickAction>;
+  requestCompanyBrainProductionMigration: CompanyBrainMigrationStatus;
   requestRevision: InboxItem;
   /**
    * Admin-only replay: clear the compile cursor for (tenant, user). If
@@ -2692,6 +2693,7 @@ export type Mutation = {
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgentProfile: AgentProfile;
   updateArtifact: Artifact;
+  updateCompanyBrainMigration: CompanyBrainMigrationStatus;
   updateEvalDataset: EvalDataset;
   updateEvalDatasetCase: EvalTestCase;
   updateEvalTestCase: EvalTestCase;
@@ -3451,6 +3453,11 @@ export type MutationReorderQuickActionsArgs = {
 };
 
 
+export type MutationRequestCompanyBrainProductionMigrationArgs = {
+  input: RequestCompanyBrainProductionMigrationInput;
+};
+
+
 export type MutationRequestRevisionArgs = {
   id: Scalars['ID']['input'];
   input: RequestRevisionInput;
@@ -3713,6 +3720,11 @@ export type MutationUpdateAgentProfileArgs = {
 export type MutationUpdateArtifactArgs = {
   id: Scalars['ID']['input'];
   input: UpdateArtifactInput;
+};
+
+
+export type MutationUpdateCompanyBrainMigrationArgs = {
+  input: UpdateCompanyBrainMigrationInput;
 };
 
 
@@ -5635,6 +5647,15 @@ export type ReorderQuickActionsInput = {
   tenantId: Scalars['ID']['input'];
 };
 
+export type RequestCompanyBrainProductionMigrationInput = {
+  allowEmptySourceSet?: InputMaybe<Scalars['Boolean']['input']>;
+  embeddingModel?: InputMaybe<Scalars['String']['input']>;
+  emptySourceReason?: InputMaybe<Scalars['String']['input']>;
+  operatorEvidence?: InputMaybe<Scalars['AWSJSON']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  vectorDimension?: InputMaybe<Scalars['Int']['input']>;
+};
+
 export type RequestRevisionInput = {
   reviewNotes: Scalars['String']['input'];
 };
@@ -7264,6 +7285,17 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<ArtifactType>;
+};
+
+export type UpdateCompanyBrainMigrationInput = {
+  errorMessage?: InputMaybe<Scalars['String']['input']>;
+  migrationId: Scalars['ID']['input'];
+  operatorEvidence?: InputMaybe<Scalars['AWSJSON']['input']>;
+  phase: Scalars['String']['input'];
+  rollbackWindowClosesAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  validationSummary?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type UpdateEvalDatasetCaseInput = {

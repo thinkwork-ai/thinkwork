@@ -71,6 +71,35 @@ type CompanyBrainStatus {
   updatedAt: AWSDateTime
 }
 
+input RequestCompanyBrainProductionMigrationInput {
+  tenantId: ID
+  embeddingModel: String
+  vectorDimension: Int
+  allowEmptySourceSet: Boolean
+  emptySourceReason: String
+  operatorEvidence: AWSJSON
+}
+
+input UpdateCompanyBrainMigrationInput {
+  tenantId: ID
+  migrationId: ID!
+  phase: String!
+  status: String
+  validationSummary: AWSJSON
+  operatorEvidence: AWSJSON
+  errorMessage: String
+  rollbackWindowClosesAt: AWSDateTime
+}
+
 extend type Query {
   companyBrainStatus: CompanyBrainStatus!
+}
+
+extend type Mutation {
+  requestCompanyBrainProductionMigration(
+    input: RequestCompanyBrainProductionMigrationInput!
+  ): CompanyBrainMigrationStatus!
+  updateCompanyBrainMigration(
+    input: UpdateCompanyBrainMigrationInput!
+  ): CompanyBrainMigrationStatus!
 }
