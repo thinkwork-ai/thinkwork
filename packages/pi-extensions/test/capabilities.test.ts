@@ -241,6 +241,7 @@ describe("U7 capability extensions", () => {
     await toExtensionFactory(extension, {})(api);
 
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      "query_brain_context",
       "query_context",
       "query_memory_context",
       "query_wiki_context",
@@ -265,6 +266,126 @@ describe("U7 capability extensions", () => {
     });
     expect((result.content?.[0] as { text: string }).text).toBe(
       "company brain result",
+    );
+  });
+
+  it("context-engine forwards Brain-specific query and detail arguments", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        result: {
+          content: [{ type: "text", text: "brain shortlist" }],
+        },
+      }),
+    );
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(
+      createContextEngineExtension({
+        enabled: true,
+        apiUrl: "https://api.example.com",
+        apiSecret: "secret",
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        fetchImpl,
+      }),
+      {},
+    )(api);
+
+    const tool = getTool(tools, "query_brain_context");
+    expect(tool.description).toContain("tenant-shared Company Brain");
+    expect(tool.description).toContain("query_memory_context");
+    expect(tool.description).toContain("detailIds");
+
+    const result = await tool.execute(
+      "call-1",
+      {
+        query: "Acme renewal",
+        mode: "answer",
+        scope: "team",
+        depth: "deep",
+        limit: 5,
+        sourceKind: "thread",
+        sourceType: "thread_message",
+        datasetId: "dogfood-renewal",
+        nodeSetIds: ["customer-success"],
+        topK: 7,
+        onlyContext: true,
+        detailIds: ["brain:acme"],
+        detailIndexes: [2],
+      },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    const fetchCalls = fetchImpl.mock.calls as unknown as FetchCall[];
+    const body = JSON.parse(String(fetchCalls[0]![1]?.body));
+    expect(body).toMatchObject({
+      method: "tools/call",
+      params: {
+        name: "query_brain_context",
+        arguments: {
+          query: "Acme renewal",
+          mode: "answer",
+          scope: "team",
+          depth: "deep",
+          limit: 5,
+          sourceKind: "thread",
+          sourceType: "thread_message",
+          datasetId: "dogfood-renewal",
+          nodeSetIds: ["customer-success"],
+          topK: 7,
+          onlyContext: true,
+          detailIds: ["brain:acme"],
+          detailIndexes: [2],
+        },
+      },
+    });
+    expect((result.content?.[0] as { text: string }).text).toBe(
+      "brain shortlist",
+    );
+  });
+
+  it("context-engine keeps disabled and empty Brain query behavior explicit", async () => {
+    const disabled = makeFakeApi();
+    const disabledExtension = createContextEngineExtension({
+      enabled: false,
+      apiUrl: "https://api.example.com",
+      apiSecret: "secret",
+      tenantId: "tenant-1",
+      userId: "user-1",
+      agentId: "agent-1",
+    });
+    await toExtensionFactory(disabledExtension, {})(disabled.api);
+    expect(disabledExtension.toolNames).toEqual([]);
+    expect(disabled.tools).toEqual([]);
+
+    const fetchImpl = vi.fn(async () => Response.json({ result: {} }));
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(
+      createContextEngineExtension({
+        enabled: true,
+        apiUrl: "https://api.example.com",
+        apiSecret: "secret",
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        fetchImpl,
+      }),
+      {},
+    )(api);
+
+    const result = await getTool(tools, "query_brain_context").execute(
+      "call-1",
+      { query: "   " },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect((result.content?.[0] as { text: string }).text).toBe(
+      "query_brain_context requires a non-empty query.",
     );
   });
 

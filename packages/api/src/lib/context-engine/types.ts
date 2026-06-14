@@ -81,10 +81,8 @@ export interface ContextEngineRequest {
   caller: ContextEngineCaller;
 }
 
-export interface ContextEngineProviderRequest extends Omit<
-  ContextEngineRequest,
-  "providers"
-> {
+export interface ContextEngineProviderRequest
+  extends Omit<ContextEngineRequest, "providers"> {
   limit: number;
   mode: ContextEngineMode;
   scope: ContextEngineScope;
@@ -195,6 +193,29 @@ export interface ContextEngineAnswer {
   hitIds: string[];
 }
 
+export interface ContextEngineProgressiveHit {
+  index: number;
+  id: string;
+  title: string;
+  family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
+  description: string;
+  scope: ContextEngineScope;
+  provenance?: Pick<ContextHitProvenance, "label" | "uri" | "sourceId">;
+  providerId: string;
+  providerStatus?: ContextProviderStatusState;
+  score?: number | null;
+  rank?: number | null;
+}
+
+export interface ContextEngineDetailStatus {
+  selector: string | number;
+  state: "found" | "not_found" | "invalid";
+  id?: string;
+  index?: number;
+  reason?: string;
+}
+
 export interface ContextEngineResponse {
   query: string;
   mode: ContextEngineMode;
@@ -203,6 +224,26 @@ export interface ContextEngineResponse {
   hits: ContextHit[];
   providers: ContextProviderStatus[];
   answer?: ContextEngineAnswer;
+  progressive?: {
+    type: "shortlist";
+    entries: ContextEngineProgressiveHit[];
+    detailRequest: {
+      tool: "query_brain_context";
+      selectors: {
+        detailIds: string[];
+        detailIndexes: number[];
+      };
+      guidance: string;
+    };
+  };
+  details?: {
+    type: "selected";
+    requested: {
+      detailIds: string[];
+      detailIndexes: number[];
+    };
+    statuses: ContextEngineDetailStatus[];
+  };
   traceId?: string | null;
 }
 

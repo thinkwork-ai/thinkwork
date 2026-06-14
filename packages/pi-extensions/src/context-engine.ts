@@ -33,6 +33,7 @@ const MISSING_IDENTITY =
 const TOOL_NAMES = [
   "query_context",
   "query_memory_context",
+  "query_brain_context",
   "query_wiki_context",
 ] as const;
 
@@ -170,6 +171,57 @@ export function createContextEngineExtension(
         ),
       };
 
+      const brainParams = {
+        ...sharedParams,
+        sourceKind: Type.Optional(
+          Type.String({
+            description:
+              "Optional Company Brain source family hint, such as thread or document.",
+          }),
+        ),
+        sourceType: Type.Optional(
+          Type.String({
+            description:
+              "Optional Company Brain source type hint, such as thread_message.",
+          }),
+        ),
+        datasetId: Type.Optional(
+          Type.String({
+            description:
+              "Optional Company Brain dataset or dogfood fixture id.",
+          }),
+        ),
+        nodeSetIds: Type.Optional(
+          Type.Array(Type.String(), {
+            description: "Optional Company Brain node-set filters.",
+          }),
+        ),
+        topK: Type.Optional(
+          Type.Number({
+            description:
+              "Brain retrieval candidate count, 1-50. Defaults to limit.",
+          }),
+        ),
+        onlyContext: Type.Optional(
+          Type.Boolean({
+            description:
+              "Return source context only, without asking Brain to synthesize an answer.",
+          }),
+        ),
+        detailIds: Type.Optional(
+          Type.Array(Type.String(), {
+            description:
+              "Stable Company Brain hit ids from a previous shortlist to expand.",
+          }),
+        ),
+        detailIndexes: Type.Optional(
+          Type.Array(Type.Number(), {
+            description:
+              "1-based Company Brain result indexes from a previous shortlist to expand.",
+          }),
+        ),
+      };
+
       const queryContext: ToolDefinition = {
         name: "query_context",
         label: "Company Brain",
@@ -264,6 +316,77 @@ export function createContextEngineExtension(
         },
       };
 
+      const queryBrainContext: ToolDefinition = {
+        name: "query_brain_context",
+        label: "Company Brain Search",
+        description:
+          "Search only tenant-shared Company Brain business/domain context. " +
+          "Use this for governed customers, opportunities, commitments, risks, " +
+          "stakeholders, products, relationships, and cited provenance. " +
+          "Use query_memory_context for raw Hindsight Memory and " +
+          "query_wiki_context for compiled page lookup. Initial results are " +
+          "shortlists; call again with detailIds or detailIndexes to expand " +
+          "selected Brain results.",
+        parameters: Type.Object(brainParams),
+        executionMode: "sequential",
+        async execute(_id, params) {
+          const typed = recordOf(params);
+          const query = String(typed.query ?? "").trim();
+          if (!query) {
+            return textResult(
+              "query_brain_context requires a non-empty query.",
+              { ok: false },
+            );
+          }
+          const result = await jsonRpc("query_brain_context", {
+            query,
+            mode: normalizeMode(typed.mode),
+            scope: normalizeScope(typed.scope),
+            depth: normalizeDepth(typed.depth),
+            limit: normalizeLimit(typed.limit),
+            ...(typed.topK !== undefined || typed.limit !== undefined
+              ? { topK: normalizeLimit(typed.topK ?? typed.limit) }
+              : {}),
+            ...(typeof typed.sourceKind === "string" && typed.sourceKind.trim()
+              ? { sourceKind: typed.sourceKind.trim() }
+              : {}),
+            ...(typeof typed.sourceType === "string" && typed.sourceType.trim()
+              ? { sourceType: typed.sourceType.trim() }
+              : {}),
+            ...(typeof typed.datasetId === "string" && typed.datasetId.trim()
+              ? { datasetId: typed.datasetId.trim() }
+              : {}),
+            ...(Array.isArray(typed.nodeSetIds)
+              ? {
+                  nodeSetIds: typed.nodeSetIds.filter(
+                    (item): item is string => typeof item === "string",
+                  ),
+                }
+              : {}),
+            ...(typeof typed.onlyContext === "boolean"
+              ? { onlyContext: typed.onlyContext }
+              : {}),
+            ...(Array.isArray(typed.detailIds)
+              ? {
+                  detailIds: typed.detailIds.filter(
+                    (item): item is string => typeof item === "string",
+                  ),
+                }
+              : {}),
+            ...(Array.isArray(typed.detailIndexes)
+              ? {
+                  detailIndexes: typed.detailIndexes
+                    .map((item) =>
+                      typeof item === "number" ? item : Number(item),
+                    )
+                    .filter((item) => Number.isInteger(item) && item >= 1),
+                }
+              : {}),
+          });
+          return textResult(renderResult(result));
+        },
+      };
+
       const queryWikiContext: ToolDefinition = {
         name: "query_wiki_context",
         label: "Wiki Search",
@@ -296,6 +419,7 @@ export function createContextEngineExtension(
 
       pi.registerTool(queryContext);
       pi.registerTool(queryMemoryContext);
+      pi.registerTool(queryBrainContext);
       pi.registerTool(queryWikiContext);
     },
   });
