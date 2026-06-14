@@ -22,7 +22,8 @@ describe("SettingsActivityHome", () => {
 
   it("publishes Analytics and Threads tabs into the page header", () => {
     expect(source).toContain("showOperatorAnalytics");
-    expect(source).toContain("tabs: showOperatorAnalytics");
+    expect(source).toContain("const headerTabs = showOperatorAnalytics");
+    expect(source).toContain("tabs: headerTabs");
     expect(source).toContain('{ to: ANALYTICS, label: "Analytics" }');
     expect(source).toContain('{ to: THREADS, label: "Threads" }');
     expect(source).toContain(": undefined");

@@ -1,9 +1,11 @@
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   ACTIVITY_DISPLAY_CONFIG,
   SettingsActivity,
+  type SettingsActivityDisplayState,
 } from "@/components/settings/SettingsActivity";
 import { SettingsAnalytics } from "@/components/settings/SettingsAnalytics";
 import {
@@ -36,6 +38,10 @@ export function SettingsActivityHome() {
   const showOperatorAnalytics = roleResolved && isOperator;
   const activeTab = showOperatorAnalytics ? tabForPath(pathname) : "threads";
   const navigate = useNavigate();
+  const [threadsHeaderAction, setThreadsHeaderAction] = useState<{
+    action: ReactNode;
+    actionKey: string;
+  } | null>(null);
 
   // Loose read: this component mounts on both /settings/activity (Analytics, no
   // `day`) and /settings/activity/threads (Threads, where `day` is validated by
@@ -43,17 +49,67 @@ export function SettingsActivityHome() {
   // via the same isActivityDay guard the route uses.
   const search = useSearch({ strict: false }) as Record<string, unknown>;
   const selectedDay = isActivityDay(search.day) ? search.day : null;
-  const displayState = normalizeDisplayState(search, ACTIVITY_DISPLAY_CONFIG);
+  const rawDisplayState = normalizeDisplayState(
+    search,
+    ACTIVITY_DISPLAY_CONFIG,
+  );
+  const displayStateKey = JSON.stringify(rawDisplayState);
+  const displayState = useMemo(
+    () => rawDisplayState,
+    // Keep display state referentially stable across parent-only header updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [displayStateKey],
+  );
+  const headerTabs = showOperatorAnalytics
+    ? [
+        { to: ANALYTICS, label: "Analytics" },
+        { to: THREADS, label: "Threads" },
+      ]
+    : undefined;
+  const handleSelectedDayChange = useCallback(
+    (nextDay: string | null) =>
+      navigate({
+        to: THREADS,
+        search: (previous) => ({
+          ...displayStateToSearch(
+            normalizeDisplayState(previous, ACTIVITY_DISPLAY_CONFIG),
+            ACTIVITY_DISPLAY_CONFIG,
+          ),
+          ...(nextDay ? { day: nextDay } : { day: undefined }),
+        }),
+        replace: false,
+      }),
+    [navigate],
+  );
+  const handleDisplayStateChange = useCallback(
+    (nextState: SettingsActivityDisplayState) =>
+      navigate({
+        to: THREADS,
+        search: (previous) => ({
+          ...displayStateToSearch(nextState, ACTIVITY_DISPLAY_CONFIG),
+          ...(isActivityDay(previous.day) ? { day: previous.day } : {}),
+        }),
+        replace: true,
+      }),
+    [navigate],
+  );
+  const handleThreadsHeaderActionChange = useCallback(
+    (next: { action: ReactNode; actionKey: string } | null) => {
+      setThreadsHeaderAction((current) => {
+        if (!next) return current ? null : current;
+        return current?.actionKey === next.actionKey ? current : next;
+      });
+    },
+    [],
+  );
 
   usePageHeaderActions({
     title: "Activity",
     breadcrumbs: [{ label: "Activity" }],
-    tabs: showOperatorAnalytics
-      ? [
-          { to: ANALYTICS, label: "Analytics" },
-          { to: THREADS, label: "Threads" },
-        ]
-      : undefined,
+    tabs: headerTabs,
+    action: activeTab === "threads" ? threadsHeaderAction?.action : undefined,
+    actionKey:
+      activeTab === "threads" ? threadsHeaderAction?.actionKey : undefined,
   });
 
   return (
@@ -62,30 +118,10 @@ export function SettingsActivityHome() {
         <SettingsActivity
           embedded
           selectedDay={selectedDay}
-          onSelectedDayChange={(nextDay) =>
-            navigate({
-              to: THREADS,
-              search: (previous) => ({
-                ...displayStateToSearch(
-                  normalizeDisplayState(previous, ACTIVITY_DISPLAY_CONFIG),
-                  ACTIVITY_DISPLAY_CONFIG,
-                ),
-                ...(nextDay ? { day: nextDay } : { day: undefined }),
-              }),
-              replace: false,
-            })
-          }
+          onSelectedDayChange={handleSelectedDayChange}
           displayState={displayState}
-          onDisplayStateChange={(nextState) =>
-            navigate({
-              to: THREADS,
-              search: (previous) => ({
-                ...displayStateToSearch(nextState, ACTIVITY_DISPLAY_CONFIG),
-                ...(isActivityDay(previous.day) ? { day: previous.day } : {}),
-              }),
-              replace: true,
-            })
-          }
+          onHeaderActionChange={handleThreadsHeaderActionChange}
+          onDisplayStateChange={handleDisplayStateChange}
         />
       ) : (
         <SettingsAnalytics embedded />

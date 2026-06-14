@@ -96,6 +96,36 @@ describe("GroupedListView", () => {
     expect(screen.getByRole("button", { name: /disabled 1/i })).toBeTruthy();
   });
 
+  it("keeps subgroup header counts aligned with parent group counts", () => {
+    render(
+      <GroupedListView
+        groups={[
+          {
+            id: "daily",
+            label: "Daily",
+            rows: [],
+            subgroups: [
+              {
+                id: "scheduled",
+                label: "Scheduled",
+                rows: [{ id: "one", title: "Daily scheduled" }],
+              },
+            ],
+          },
+        ]}
+        getRowId={(row) => row.id}
+        renderRow={(row) => <span>{row.title}</span>}
+      />,
+    );
+
+    const subgroupHeader = screen.getByRole("button", {
+      name: /scheduled 1/i,
+    });
+    expect(subgroupHeader.className).toContain("px-3");
+    expect(subgroupHeader.className).not.toContain("pl-6");
+    expect(subgroupHeader.className).not.toContain("px-6");
+  });
+
   it("collapses repeated subgroup ids independently per parent group", () => {
     render(
       <GroupedListView

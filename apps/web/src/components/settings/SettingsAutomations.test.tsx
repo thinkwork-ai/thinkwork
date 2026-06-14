@@ -20,15 +20,18 @@ vi.mock("@/lib/api-fetch", () => ({
 vi.mock("@/components/settings/SettingsContent", () => ({
   SettingsTablePane: ({
     children,
+    headerActions,
     toolbar,
     title,
   }: {
     children: React.ReactNode;
+    headerActions?: React.ReactNode;
     toolbar?: React.ReactNode;
     title?: string;
   }) => (
     <section>
       <h1>{title}</h1>
+      <div data-testid="settings-header-actions">{headerActions}</div>
       <div>{toolbar}</div>
       {children}
     </section>
@@ -78,12 +81,17 @@ vi.mock("@thinkwork/ui", () => ({
     modes,
     onStateChange,
     state,
+    triggerVariant,
   }: {
     modes: Array<{ value: "table" | "list"; label: string }>;
     state: { view: "table" | "list" };
+    triggerVariant?: "button" | "icon";
     onStateChange: (state: unknown) => void;
   }) => (
-    <div data-testid="automation-display-control">
+    <div
+      data-testid="automation-display-control"
+      data-trigger-variant={triggerVariant ?? "button"}
+    >
       {modes.map((mode) => (
         <button
           key={mode.value}
@@ -172,6 +180,16 @@ afterEach(() => {
 });
 
 describe("SettingsAutomations", () => {
+  it("defaults Automations to the table view", async () => {
+    expect(AUTOMATIONS_DISPLAY_CONFIG.defaults.view).toBe("table");
+
+    render(<SettingsAutomations />);
+
+    await screen.findByText("Daily digest");
+    expect(screen.getByTestId("automations-table-view")).toBeTruthy();
+    expect(screen.queryByTestId("automations-list-view")).toBeNull();
+  });
+
   it("keeps search filtering when switching from table to list", async () => {
     const onDisplayStateChange = vi.fn();
 
@@ -183,6 +201,16 @@ describe("SettingsAutomations", () => {
     );
 
     await screen.findByText("Daily digest");
+    expect(
+      screen
+        .getByTestId("settings-header-actions")
+        .contains(screen.getByTestId("automation-display-control")),
+    ).toBe(true);
+    expect(
+      screen
+        .getByTestId("automation-display-control")
+        .getAttribute("data-trigger-variant"),
+    ).toBe("icon");
     fireEvent.change(screen.getByPlaceholderText("Search automations…"), {
       target: { value: "weekly" },
     });

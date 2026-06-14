@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Activity, MessageSquare, RefreshCw, Search } from "lucide-react";
@@ -205,14 +211,28 @@ interface SettingsActivityProps {
   onSelectedDayChange?: (day: string | null) => void;
   displayState?: SettingsActivityDisplayState;
   onDisplayStateChange?: (state: SettingsActivityDisplayState) => void;
+  onHeaderActionChange?: (
+    next: {
+      action: ReactNode;
+      actionKey: string;
+    } | null,
+  ) => void;
 }
 
-// Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
-// as a child so the embedded variant can suppress it without a conditional hook.
-function ActivityHeader() {
+// Null-rendering header publisher for standalone use. The tabbed Activity home
+// owns the shared header and receives actions through onHeaderActionChange.
+function ActivityHeader({
+  action,
+  actionKey,
+}: {
+  action?: ReactNode;
+  actionKey?: string;
+}) {
   usePageHeaderActions({
     title: "Activity",
     breadcrumbs: [{ label: "Activity" }],
+    action,
+    actionKey,
   });
   return null;
 }
@@ -223,6 +243,7 @@ export function SettingsActivity({
   onSelectedDayChange,
   displayState = ACTIVITY_DISPLAY_CONFIG.defaults,
   onDisplayStateChange,
+  onHeaderActionChange,
 }: SettingsActivityProps) {
   const { isOperator, roleResolved, tenantId } = useTenant();
   const navigate = useNavigate();
@@ -387,10 +408,56 @@ export function SettingsActivity({
   );
 
   const loading = fetching && !data;
+  const headerActionKey = `threads:${fetching ? "fetching" : "idle"}:${JSON.stringify(displayState)}`;
+  const headerActions = useMemo(
+    () => (
+      <div className="flex items-center gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="size-8 text-muted-foreground/70 hover:bg-white/[0.05] hover:text-foreground/85"
+          onClick={refreshAll}
+          disabled={fetching}
+          aria-label="Refresh activity"
+          title="Refresh activity"
+        >
+          <RefreshCw
+            className={cn("h-4 w-4", fetching && "animate-spin")}
+            aria-hidden="true"
+          />
+          <span className="sr-only">Refresh activity</span>
+        </Button>
+        <DisplayViewControl
+          state={displayState}
+          modes={[
+            { value: "table", label: "Table" },
+            { value: "list", label: "List" },
+          ]}
+          groups={ACTIVITY_DISPLAY_CONFIG.groups}
+          subgroups={ACTIVITY_DISPLAY_CONFIG.subgroups}
+          sorts={ACTIVITY_DISPLAY_CONFIG.sorts}
+          properties={ACTIVITY_DISPLAY_CONFIG.properties}
+          onStateChange={onDisplayStateChange ?? (() => {})}
+          triggerVariant="icon"
+          triggerLabel="Display"
+        />
+      </div>
+    ),
+    [displayState, fetching, onDisplayStateChange, refreshAll],
+  );
+
+  useEffect(() => {
+    if (!onHeaderActionChange) return;
+    onHeaderActionChange({ action: headerActions, actionKey: headerActionKey });
+    return () => onHeaderActionChange(null);
+  }, [headerActionKey, headerActions, onHeaderActionChange]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col p-6">
-      {embedded ? null : <ActivityHeader />}
+      {embedded ? null : (
+        <ActivityHeader action={headerActions} actionKey={headerActionKey} />
+      )}
       <div className="mb-4 shrink-0">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Threads
@@ -415,22 +482,6 @@ export function SettingsActivity({
               itemCount={allItems.length}
               selectedDay={selectedDay}
               onClearDay={() => handleSelectDay(null)}
-              onRefresh={refreshAll}
-              fetching={fetching}
-              displayControl={
-                <DisplayViewControl
-                  state={displayState}
-                  modes={[
-                    { value: "table", label: "Table" },
-                    { value: "list", label: "List" },
-                  ]}
-                  groups={ACTIVITY_DISPLAY_CONFIG.groups}
-                  subgroups={ACTIVITY_DISPLAY_CONFIG.subgroups}
-                  sorts={ACTIVITY_DISPLAY_CONFIG.sorts}
-                  properties={ACTIVITY_DISPLAY_CONFIG.properties}
-                  onStateChange={onDisplayStateChange ?? (() => {})}
-                />
-              }
             />
             {error ? (
               <p className="shrink-0 text-sm text-destructive">
@@ -489,18 +540,12 @@ function ActivityToolbar({
   itemCount,
   selectedDay,
   onClearDay,
-  onRefresh,
-  fetching,
-  displayControl,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
   itemCount: number;
   selectedDay: string | null;
   onClearDay: () => void;
-  onRefresh: () => void;
-  fetching: boolean;
-  displayControl?: React.ReactNode;
 }) {
   return (
     <div
@@ -517,24 +562,9 @@ function ActivityToolbar({
           aria-label="Search activity"
         />
       </label>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={onRefresh}
-        disabled={fetching}
-        aria-label="Refresh activity"
-        title="Refresh activity"
-      >
-        <RefreshCw
-          className={cn("h-4 w-4", fetching && "animate-spin")}
-          aria-hidden="true"
-        />
-      </Button>
       <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
         {itemCount} item{itemCount === 1 ? "" : "s"}
       </span>
-      {displayControl}
       {selectedDay ? (
         <span className="flex shrink-0 items-center gap-2">
           <Badge variant="secondary" className="whitespace-nowrap text-xs">
@@ -576,7 +606,7 @@ function ActivityListRow({
           fallbackSkills
         />
       </span>
-      <span className="ml-auto flex shrink-0 flex-wrap justify-end gap-1.5">
+      <span className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
         {properties.map((property) => (
           <ActivityPropertyChip
             key={property}
