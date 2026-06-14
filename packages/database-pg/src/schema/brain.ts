@@ -44,6 +44,7 @@ import {
   managedApplicationDeploymentJobs,
   managedApplications,
 } from "./deployments";
+import { knowledgeGraphIngestRuns } from "./knowledge-graph";
 
 // ---------------------------------------------------------------------------
 // Schema handle
@@ -460,20 +461,33 @@ export const brainArtifactManifests = brain.table(
       .notNull(),
     substrate_id: uuid("substrate_id"),
     migration_id: uuid("migration_id"),
+    ingest_run_id: uuid("ingest_run_id"),
     manifest_kind: text("manifest_kind").notNull(),
     storage_tier: text("storage_tier").notNull().default("default"),
     source_family: text("source_family"),
+    source_kind: text("source_kind"),
+    source_type: text("source_type"),
+    source_ids: text("source_ids")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
     source_id_hash: text("source_id_hash"),
     manifest_uri: text("manifest_uri").notNull(),
     artifact_root_uri: text("artifact_root_uri"),
     vault_projection_root_uri: text("vault_projection_root_uri"),
+    object_version_id: text("object_version_id"),
+    content_type: text("content_type"),
+    content_encoding: text("content_encoding"),
+    byte_length: integer("byte_length"),
     checksum_sha256: text("checksum_sha256"),
     object_count: integer("object_count").notNull().default(0),
     source_count: integer("source_count").notNull().default(0),
     embedding_model: text("embedding_model"),
     vector_dimension: integer("vector_dimension"),
     ontology_version: text("ontology_version"),
+    ontology_mechanism: text("ontology_mechanism"),
     status: text("status").notNull().default("active"),
+    metadata: jsonb("metadata").notNull().default({}),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -492,6 +506,11 @@ export const brainArtifactManifests = brain.table(
       columns: [table.migration_id],
       foreignColumns: [brainSubstrateMigrations.id],
     }).onDelete("set null"),
+    foreignKey({
+      name: "artifact_manifests_ingest_run_id_fk",
+      columns: [table.ingest_run_id],
+      foreignColumns: [knowledgeGraphIngestRuns.id],
+    }).onDelete("set null"),
     uniqueIndex("brain_artifact_manifests_manifest_uri_uidx").on(
       table.manifest_uri,
     ),
@@ -504,9 +523,15 @@ export const brainArtifactManifests = brain.table(
       table.manifest_kind,
     ),
     index("brain_artifact_manifests_migration_idx").on(table.migration_id),
+    index("brain_artifact_manifests_ingest_run_idx").on(table.ingest_run_id),
     index("brain_artifact_manifests_source_idx").on(
       table.tenant_id,
       table.source_family,
+      table.source_id_hash,
+    ),
+    index("brain_artifact_manifests_source_kind_idx").on(
+      table.tenant_id,
+      table.source_kind,
       table.source_id_hash,
     ),
     check(
@@ -522,12 +547,20 @@ export const brainArtifactManifests = brain.table(
       sql`${table.status} IN ('active','superseded','deleted','failed')`,
     ),
     check(
+      "brain_artifact_manifests_source_kind_allowed",
+      sql`${table.source_kind} IS NULL OR ${table.source_kind} IN ('thread','wiki','brain','observations')`,
+    ),
+    check(
       "brain_artifact_manifests_object_nonneg",
       sql`${table.object_count} >= 0`,
     ),
     check(
       "brain_artifact_manifests_source_nonneg",
       sql`${table.source_count} >= 0`,
+    ),
+    check(
+      "brain_artifact_manifests_byte_nonneg",
+      sql`${table.byte_length} IS NULL OR ${table.byte_length} >= 0`,
     ),
     check(
       "brain_artifact_manifests_vector_positive",

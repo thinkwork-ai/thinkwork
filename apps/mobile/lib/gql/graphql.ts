@@ -1644,6 +1644,43 @@ export type KnowledgeBaseRetrievalResult = {
   status: Scalars['String']['output'];
 };
 
+export enum KnowledgeGraphArtifactManifestKind {
+  Export = 'EXPORT',
+  IngestionManifest = 'INGESTION_MANIFEST',
+  MigrationSnapshot = 'MIGRATION_SNAPSHOT',
+  SourceArtifact = 'SOURCE_ARTIFACT',
+  VaultProjection = 'VAULT_PROJECTION'
+}
+
+export enum KnowledgeGraphArtifactManifestStatus {
+  Active = 'ACTIVE',
+  Deleted = 'DELETED',
+  Failed = 'FAILED',
+  Superseded = 'SUPERSEDED'
+}
+
+export type KnowledgeGraphArtifactManifestSummary = {
+  __typename?: 'KnowledgeGraphArtifactManifestSummary';
+  artifactKind: KnowledgeGraphArtifactManifestKind;
+  byteLength?: Maybe<Scalars['Int']['output']>;
+  checksumSha256?: Maybe<Scalars['String']['output']>;
+  contentEncoding?: Maybe<Scalars['String']['output']>;
+  contentType?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  embeddingModel?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  objectCount: Scalars['Int']['output'];
+  objectRef: Scalars['String']['output'];
+  ontologyMechanism?: Maybe<Scalars['String']['output']>;
+  ontologyVersion?: Maybe<Scalars['String']['output']>;
+  sourceCount: Scalars['Int']['output'];
+  sourceKind?: Maybe<KnowledgeGraphSourceKind>;
+  sourceType?: Maybe<Scalars['String']['output']>;
+  status: KnowledgeGraphArtifactManifestStatus;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  vectorDimension?: Maybe<Scalars['Int']['output']>;
+};
+
 export type KnowledgeGraphDeploymentChange = {
   __typename?: 'KnowledgeGraphDeploymentChange';
   desiredEnabled: Scalars['Boolean']['output'];
@@ -1767,6 +1804,7 @@ export type KnowledgeGraphHealthCheck = {
 
 export type KnowledgeGraphIngestRun = {
   __typename?: 'KnowledgeGraphIngestRun';
+  artifactManifests: Array<KnowledgeGraphArtifactManifestSummary>;
   cogneeDatasetId?: Maybe<Scalars['String']['output']>;
   cogneeDatasetName: Scalars['String']['output'];
   createdAt: Scalars['AWSDateTime']['output'];
@@ -1863,6 +1901,7 @@ export type KnowledgeGraphSearchResult = {
 };
 
 export enum KnowledgeGraphSourceKind {
+  Brain = 'BRAIN',
   Observations = 'OBSERVATIONS',
   Thread = 'THREAD',
   Wiki = 'WIKI'

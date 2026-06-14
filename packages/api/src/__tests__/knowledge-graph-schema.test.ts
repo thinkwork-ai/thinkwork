@@ -48,6 +48,19 @@ describe("Knowledge Graph GraphQL contract", () => {
       "CANCELED",
       "STALE_NOOP",
     ]);
+    expect(enumValues("KnowledgeGraphSourceKind")).toEqual([
+      "THREAD",
+      "WIKI",
+      "BRAIN",
+      "OBSERVATIONS",
+    ]);
+    expect(enumValues("KnowledgeGraphArtifactManifestKind")).toEqual([
+      "SOURCE_ARTIFACT",
+      "INGESTION_MANIFEST",
+      "MIGRATION_SNAPSHOT",
+      "VAULT_PROJECTION",
+      "EXPORT",
+    ]);
     expect(enumValues("KnowledgeGraphGroundingStatus")).toEqual([
       "GROUNDED",
       "UNAPPROVED_TYPE",
@@ -76,6 +89,35 @@ describe("Knowledge Graph GraphQL contract", () => {
         "evidenceCount",
         "diagnosticCount",
         "messageCount",
+        "artifactManifests",
+      ]),
+    );
+    expect(typeFields("KnowledgeGraphArtifactManifestSummary")).toEqual(
+      expect.arrayContaining([
+        "id",
+        "artifactKind",
+        "status",
+        "sourceKind",
+        "sourceType",
+        "objectRef",
+        "checksumSha256",
+        "objectCount",
+        "sourceCount",
+        "contentType",
+        "contentEncoding",
+        "byteLength",
+        "embeddingModel",
+        "vectorDimension",
+        "ontologyVersion",
+        "ontologyMechanism",
+      ]),
+    );
+    expect(typeFields("KnowledgeGraphArtifactManifestSummary")).not.toEqual(
+      expect.arrayContaining([
+        "manifestUri",
+        "artifactRootUri",
+        "vaultProjectionRootUri",
+        "sourceIds",
       ]),
     );
     expect(typeFields("KnowledgeGraphEntity")).toEqual(

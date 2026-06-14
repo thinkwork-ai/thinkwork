@@ -224,7 +224,8 @@ locals {
       BEDROCK_MODEL_ID = var.wiki_compile_model_id
     }
     "wiki-export" = {
-      WIKI_EXPORT_BUCKET = aws_s3_bucket.wiki_exports.bucket
+      WIKI_EXPORT_BUCKET     = aws_s3_bucket.wiki_exports.bucket
+      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
     }
     "oauth-authorize"     = local.slack_handler_env
     "oauth-callback"      = local.slack_handler_env
@@ -256,9 +257,10 @@ locals {
       DATABASE_CLUSTER_ARN = var.db_cluster_arn
     }
     "knowledge-graph-thread-ingest" = {
-      COGNEE_ENDPOINT     = var.cognee_endpoint
-      COGNEE_BACKEND_MODE = var.cognee_backend_mode
-      COGNEE_INGEST_MODE  = "remember"
+      COGNEE_ENDPOINT        = var.cognee_endpoint
+      COGNEE_BACKEND_MODE    = var.cognee_backend_mode
+      COGNEE_INGEST_MODE     = "remember"
+      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
     }
     # Observations → Knowledge Graph worker (plan 2026-06-09-004 U5).
     # add_cognify pins the incremental ingest path into the stable
@@ -269,6 +271,7 @@ locals {
       COGNEE_ENDPOINT                 = var.cognee_endpoint
       COGNEE_BACKEND_MODE             = var.cognee_backend_mode
       COGNEE_INGEST_MODE              = "add_cognify"
+      BRAIN_ARTIFACTS_BUCKET          = aws_s3_bucket.brain_artifacts.bucket
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
       # Per-run candidate cap: bounds classifier cost AND keeps each Cognee
       # cognify small enough to index within budget on the single dogfood
@@ -1527,6 +1530,182 @@ resource "aws_s3_bucket_lifecycle_configuration" "wiki_exports" {
       days = 30
     }
   }
+}
+
+# Canonical Company Brain artifact store. Unlike wiki_exports, this bucket
+# is the durable replay/projection substrate for Brain source artifacts,
+# ingestion manifests, migration snapshots, vault projections, and exports.
+resource "aws_s3_bucket" "brain_artifacts" {
+  bucket        = "thinkwork-${var.stage}-brain-artifacts"
+  force_destroy = var.stage == "dev"
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-brain-artifacts"
+    Purpose = "company-brain-artifacts"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "brain_artifacts" {
+  bucket                  = aws_s3_bucket.brain_artifacts.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "brain_artifacts" {
+  bucket = aws_s3_bucket.brain_artifacts.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "brain_artifacts" {
+  bucket = aws_s3_bucket.brain_artifacts.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = var.brain_artifacts_kms_key_arn != "" ? "aws:kms" : "AES256"
+      kms_master_key_id = var.brain_artifacts_kms_key_arn != "" ? var.brain_artifacts_kms_key_arn : null
+    }
+
+    bucket_key_enabled = var.brain_artifacts_kms_key_arn != ""
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "brain_artifacts" {
+  bucket = aws_s3_bucket.brain_artifacts.id
+
+  rule {
+    id     = "source-artifacts-transition"
+    status = "Enabled"
+
+    filter {
+      prefix = "source-artifacts/"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "STANDARD_IA"
+    }
+
+    noncurrent_version_transition {
+      noncurrent_days = 90
+      storage_class   = "STANDARD_IA"
+    }
+  }
+
+  rule {
+    id     = "ingestion-manifests-transition"
+    status = "Enabled"
+
+    filter {
+      prefix = "ingestion-manifests/"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "STANDARD_IA"
+    }
+
+    noncurrent_version_transition {
+      noncurrent_days = 90
+      storage_class   = "STANDARD_IA"
+    }
+  }
+
+  rule {
+    id     = "migration-snapshots-transition"
+    status = "Enabled"
+
+    filter {
+      prefix = "migration-snapshots/"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "STANDARD_IA"
+    }
+
+    noncurrent_version_transition {
+      noncurrent_days = 90
+      storage_class   = "STANDARD_IA"
+    }
+  }
+
+  rule {
+    id     = "vault-projections-transition"
+    status = "Enabled"
+
+    filter {
+      prefix = "vault-projections/"
+    }
+
+    transition {
+      days          = 90
+      storage_class = "STANDARD_IA"
+    }
+
+    noncurrent_version_transition {
+      noncurrent_days = 90
+      storage_class   = "STANDARD_IA"
+    }
+  }
+
+  rule {
+    id     = "exports-expiration"
+    status = "Enabled"
+
+    filter {
+      prefix = "exports/"
+    }
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    expiration {
+      days = 365
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 365
+    }
+  }
+}
+
+data "aws_iam_policy_document" "brain_artifacts_bucket" {
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = ["s3:*"]
+
+    resources = [
+      aws_s3_bucket.brain_artifacts.arn,
+      "${aws_s3_bucket.brain_artifacts.arn}/*",
+    ]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "brain_artifacts" {
+  bucket = aws_s3_bucket.brain_artifacts.id
+  policy = data.aws_iam_policy_document.brain_artifacts_bucket.json
+
+  depends_on = [aws_s3_bucket_public_access_block.brain_artifacts]
 }
 
 resource "aws_iam_role" "scheduler" {

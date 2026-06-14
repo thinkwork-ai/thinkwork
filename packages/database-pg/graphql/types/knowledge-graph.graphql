@@ -10,7 +10,23 @@ enum KnowledgeGraphIngestStatus {
 enum KnowledgeGraphSourceKind {
   THREAD
   WIKI
+  BRAIN
   OBSERVATIONS
+}
+
+enum KnowledgeGraphArtifactManifestKind {
+  SOURCE_ARTIFACT
+  INGESTION_MANIFEST
+  MIGRATION_SNAPSHOT
+  VAULT_PROJECTION
+  EXPORT
+}
+
+enum KnowledgeGraphArtifactManifestStatus {
+  ACTIVE
+  SUPERSEDED
+  DELETED
+  FAILED
 }
 
 enum KnowledgeGraphGroundingStatus {
@@ -62,6 +78,28 @@ type KnowledgeGraphIngestRun {
   input: AWSJSON!
   metrics: AWSJSON!
   metadata: AWSJSON!
+  artifactManifests: [KnowledgeGraphArtifactManifestSummary!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type KnowledgeGraphArtifactManifestSummary {
+  id: ID!
+  artifactKind: KnowledgeGraphArtifactManifestKind!
+  status: KnowledgeGraphArtifactManifestStatus!
+  sourceKind: KnowledgeGraphSourceKind
+  sourceType: String
+  objectRef: String!
+  checksumSha256: String
+  objectCount: Int!
+  sourceCount: Int!
+  contentType: String
+  contentEncoding: String
+  byteLength: Int
+  embeddingModel: String
+  vectorDimension: Int
+  ontologyVersion: String
+  ontologyMechanism: String
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
