@@ -1597,6 +1597,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             tenantId: wakeup.tenant_id,
             renderedPrefix: renderedWorkspacePrefix,
             hydrateManifest: renderedWorkspace.hydrateManifest,
+            // U7: same shape as chat-agent-invoke (dispatch parity) — the
+            // turn's effective active skill ids, via the shared writer.
+            activeSkills: skillsConfig.map((s) => s.skillId),
             source: "wakeup-processor",
           });
         }

@@ -28,7 +28,30 @@ export type CatalogInstallResult = {
   installed_paths: string[];
   context_md_changed_path: "CONTEXT.md";
   source_sha256: string;
+  /**
+   * Bundled eval case files (`evals/*.json`) read from the catalog folder
+   * during this install, surfaced for the caller to seed the per-skill
+   * eval dataset (Skill Tests & Evals U2). Empty when the skill bundles
+   * no cases — an "unrated" skill, never an error.
+   */
+  eval_cases: { fileName: string; content: string }[];
 };
+
+/**
+ * Extract bundled eval case files from a catalog file listing. Convention:
+ * `evals/<name>.json`, one case per file (the seeder validates content).
+ * Nested dirs and non-json files are ignored.
+ */
+export function extractBundledEvalCases(
+  files: { relativePath: string; content: string }[],
+): { fileName: string; content: string }[] {
+  return files
+    .filter((file) => /^evals\/[^/]+\.json$/i.test(file.relativePath))
+    .map((file) => ({
+      fileName: file.relativePath.slice("evals/".length),
+      content: file.content,
+    }));
+}
 
 export class CatalogInstallError extends Error {
   constructor(
@@ -184,6 +207,7 @@ export async function installCatalogSkill(
     ].sort(),
     context_md_changed_path: "CONTEXT.md",
     source_sha256: sourceSha256,
+    eval_cases: extractBundledEvalCases(files),
   };
 }
 

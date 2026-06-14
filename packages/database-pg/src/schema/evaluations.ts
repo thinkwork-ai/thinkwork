@@ -51,7 +51,7 @@ export const evalDatasets = pgTable(
       .notNull(),
     slug: text("slug").notNull(),
     name: text("name"),
-    kind: text("kind").notNull().default("custom"), // 'baseline' | 'custom'
+    kind: text("kind").notNull().default("custom"), // 'baseline' | 'custom' | 'skill' (no CHECK — widened by app enum normalizeEvalDatasetKind)
     // version: monotonically bumped on every dataset mutation; runs pin it.
     version: integer("version").notNull().default(1),
     // manifest_sha: sha256 of the S3 dataset.json content — the drift
@@ -373,8 +373,44 @@ export const evalReplayToolAllowlist = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// eval_skill_gate — per-tenant skill-update gate threshold
+// (Skill Tests & Evals U6).
+//
+// A skill UPDATE whose candidate version scores below this threshold is
+// HELD: the workspace swap is deferred until an operator applies it once
+// the candidate passes (or overrides). A row's PRESENCE = the gate is
+// enabled for the tenant; no row = no gate (nothing blocks). Initial
+// install is never gated; unrated skills (no bundled cases) are never
+// gated. Per-tenant single threshold in v1 — tenant_id is the PRIMARY
+// KEY, so a tenant carries at most one gate row (per-skill thresholds are
+// deferred). Hand-rolled migration 0168_eval_skill_gate.sql.
+// ---------------------------------------------------------------------------
+
+export const evalSkillGate = pgTable("eval_skill_gate", {
+  tenant_id: uuid("tenant_id")
+    .primaryKey()
+    .references(() => tenants.id),
+  // threshold: fraction in [0, 1] (same scale as eval_runs.pass_rate).
+  // Guarded by a CHECK (threshold >= 0 AND threshold <= 1) in 0166.
+  threshold: numeric("threshold", { precision: 5, scale: 4 }).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  updated_at: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
+
+export const evalSkillGateRelations = relations(evalSkillGate, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [evalSkillGate.tenant_id],
+    references: [tenants.id],
+  }),
+}));
 
 export const evalReplayToolAllowlistRelations = relations(
   evalReplayToolAllowlist,

@@ -95,6 +95,15 @@ describe("wakeup dispatch sites (source contract)", () => {
     expect(source).toContain("threadTurnId: run.id,");
   });
 
+  it("populates activeSkills via the shared writer (U7 dispatch parity)", () => {
+    // Both builders MUST pass activeSkills — a field in only one builder is
+    // the documented wakeup-parity footgun (mirror assertion lives in the
+    // chat-agent-invoke projection test).
+    expect(source).toContain(
+      "activeSkills: skillsConfig.map((s) => s.skillId)",
+    );
+  });
+
   it("the single write lands after render success and BEFORE the primary invoke", () => {
     const renderAt = source.indexOf(
       "renderedWorkspace = await renderWorkspaceTupleForWakeup(",

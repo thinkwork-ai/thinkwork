@@ -182,6 +182,17 @@ export interface WorkspaceProjectionSnapshot {
   agentsMdHistoryKey: string | null;
   /** The PROMPT_FILES actually present in the rendered workspace. */
   injectedFiles: string[];
+  /**
+   * Skill ids active/available for this turn (the resolved effective skill
+   * set — Skill Tests & Evals U7). Named `activeSkills`, not `routedSkills`:
+   * the API knows which skills were active for the turn, not which the model
+   * routed to inside AgentCore. Used by the flag-thread flow (U8) to suggest
+   * skill-attribution candidates (intersected there with the tenant's
+   * installed catalog skills to drop always-on defaults/built-ins). Omitted
+   * on turns dispatched before this field shipped — consumers treat absence
+   * as "unknown, fall back".
+   */
+  activeSkills?: string[];
   /** ISO-8601 — when the render this snapshot describes was generated. */
   generatedAt: string;
 }
@@ -244,6 +255,12 @@ function sourceEtagSummary(
 export function buildWorkspaceProjectionSnapshot(input: {
   renderedPrefix: string;
   manifest?: WorkspaceProjectionManifestLike | null;
+  /**
+   * Skill ids active for the turn (U7). Threaded identically through both
+   * dispatch builders via the shared writer so the snapshot shape stays at
+   * parity. Omitted from the snapshot when not provided.
+   */
+  activeSkills?: string[];
   /** Injectable for tests; defaults to `new Date()`. */
   now?: () => Date;
 }): WorkspaceProjectionSnapshot {
@@ -277,6 +294,9 @@ export function buildWorkspaceProjectionSnapshot(input: {
     injectedFiles: WORKSPACE_PROJECTION_PROMPT_FILES.filter((file) =>
       presentPaths.has(file),
     ),
+    // Only present when the caller supplied it, so old turns / callers that
+    // don't pass it keep the prior snapshot shape (absence = "unknown").
+    ...(input.activeSkills ? { activeSkills: input.activeSkills } : {}),
     generatedAt:
       manifest.generatedAt ?? (input.now?.() ?? new Date()).toISOString(),
   };
@@ -335,6 +355,13 @@ export async function recordDispatchWorkspaceProjectionSnapshot(input: {
   tenantId?: string;
   renderedPrefix: string;
   hydrateManifest?: WorkspaceProjectionManifestLike | null;
+  /**
+   * Skill ids active for the turn (U7). Both dispatch builders MUST pass
+   * this through the shared writer so the snapshot carries `activeSkills`
+   * identically — a field populated in only one builder is the documented
+   * wakeup-parity footgun the parity test guards against.
+   */
+  activeSkills?: string[];
   /** Log tag, e.g. "chat-agent-invoke" / "wakeup-processor". */
   source: string;
   db?: Database;
@@ -343,6 +370,7 @@ export async function recordDispatchWorkspaceProjectionSnapshot(input: {
     const snapshot = buildWorkspaceProjectionSnapshot({
       renderedPrefix: input.renderedPrefix,
       manifest: input.hydrateManifest,
+      activeSkills: input.activeSkills,
     });
     await writeWorkspaceProjectionSnapshot(input.threadTurnId, snapshot, {
       tenantId: input.tenantId,

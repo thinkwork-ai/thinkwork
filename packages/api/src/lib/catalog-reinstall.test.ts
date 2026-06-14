@@ -185,6 +185,77 @@ describe("reinstallCatalogSkill", () => {
     ).toBe(false);
   });
 
+  it("dryRun returns eval_cases + detects an update without any S3 delete/copy/put (U6)", async () => {
+    mockInstalledSkill("a".repeat(64)); // installed ref differs from catalog
+    // Catalog skill carrying a bundled eval case under evals/.
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/finance-audit-xls/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md" },
+          { Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md" },
+          {
+            Key: "tenants/acme/skill-catalog/finance-audit-xls/evals/case-a.json",
+          },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/finance-audit-xls/SKILL.md",
+      })
+      .resolves(body("# Finance Audit v2\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/finance-audit-xls/WIRING.md",
+      })
+      .resolves(body("## Wiring\n"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/finance-audit-xls/evals/case-a.json",
+      })
+      .resolves(body('{"query":"q","rubric":"r"}'));
+
+    const result = await reinstallCatalogSkill({
+      ...reinstallOptions(),
+      dryRun: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.noop).toBeUndefined(); // a real update was detected
+    expect(result.reinstalled_paths).toEqual([]);
+    expect(result.eval_cases).toEqual([
+      { fileName: "case-a.json", content: '{"query":"q","rubric":"r"}' },
+    ]);
+    // No swap: zero delete/copy/put.
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
+  it("dryRun on an unchanged skill still returns noop + eval_cases, no writes (U6)", async () => {
+    const currentSha = catalogSha();
+    mockInstalledSkill(currentSha);
+    mockCatalogSkill();
+
+    const result = await reinstallCatalogSkill({
+      ...reinstallOptions(),
+      dryRun: true,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      noop: true,
+      reinstalled_paths: [],
+      source_sha256: currentSha,
+      eval_cases: [],
+    });
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
   it("returns noop when the installed ref already matches the catalog sha", async () => {
     const currentSha = catalogSha();
     mockInstalledSkill(currentSha);
@@ -197,6 +268,7 @@ describe("reinstallCatalogSkill", () => {
       noop: true,
       reinstalled_paths: [],
       source_sha256: currentSha,
+      eval_cases: [],
     });
     expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
     expect(s3Mock.commandCalls(CopyObjectCommand)).toHaveLength(0);

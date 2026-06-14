@@ -1051,6 +1051,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               tenantId,
               renderedPrefix: renderedWorkspacePrefix,
               hydrateManifest: renderedWorkspace.hydrateManifest,
+              // U7: the turn's effective active skill ids (flag-thread
+              // attribution intersects these with installed catalog skills).
+              activeSkills: skillsConfig.map((s) => s.skillId),
               source: "chat-agent-invoke",
             });
           }

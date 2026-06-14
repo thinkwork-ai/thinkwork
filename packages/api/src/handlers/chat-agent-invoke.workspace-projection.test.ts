@@ -83,6 +83,14 @@ describe("chat dispatch site (source contract)", () => {
     expect(source).toContain(`source: "chat-agent-invoke",`);
   });
 
+  it("populates activeSkills via the shared writer (U7 dispatch parity)", () => {
+    // Mirror of the wakeup-processor parity assertion — both dispatch
+    // builders pass activeSkills through the same writer.
+    expect(source).toContain(
+      "activeSkills: skillsConfig.map((s) => s.skillId)",
+    );
+  });
+
   it("writes the snapshot BEFORE the AgentCore invoke (crashed turns keep it)", () => {
     const writeAt = source.indexOf(
       "recordDispatchWorkspaceProjectionSnapshot({",

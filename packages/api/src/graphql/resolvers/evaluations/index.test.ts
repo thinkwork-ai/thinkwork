@@ -20,7 +20,15 @@ const {
   mockRequireTenantAdmin,
   mockGetTenantModelCatalogEntry,
   mockResolveTenantPlatformAgent,
+  mockClaimEvalBaselineForRun,
   mockLambdaSend,
+  mockGetSkillEvalGateThreshold,
+  mockSetSkillEvalGateThreshold,
+  mockReadSkillEvalScore,
+  mockEnsureSkillDatasetSeeded,
+  mockArchiveSkillCandidateDataset,
+  mockReinstallCatalogSkill,
+  mockGetConfig,
   resetState,
 } = vi.hoisted(() => {
   const selectQueue: unknown[][] = [];
@@ -49,10 +57,18 @@ const {
     mockRequireTenantAdmin: vi.fn(),
     mockGetTenantModelCatalogEntry: vi.fn(),
     mockResolveTenantPlatformAgent: vi.fn(),
+    mockClaimEvalBaselineForRun: vi.fn(),
     mockLambdaSend: vi.fn(),
     mockEnsureBaselineDatasetSeeded: vi.fn(),
     mockResolveDatasetForLaunch: vi.fn(),
     mockDeleteRunSnapshotForTenant: vi.fn(),
+    mockGetSkillEvalGateThreshold: vi.fn(),
+    mockSetSkillEvalGateThreshold: vi.fn(),
+    mockReadSkillEvalScore: vi.fn(),
+    mockEnsureSkillDatasetSeeded: vi.fn(),
+    mockArchiveSkillCandidateDataset: vi.fn(),
+    mockReinstallCatalogSkill: vi.fn(),
+    mockGetConfig: vi.fn(),
     resetState: () => {
       selectQueue.length = 0;
       selectWheres.length = 0;
@@ -185,6 +201,14 @@ vi.mock("../../../lib/agents/tenant-platform-agent.js", () => ({
   resolveTenantPlatformAgent: mockResolveTenantPlatformAgent,
 }));
 
+// Skill-eval runs (Skill Tests & Evals U4) claim the eval-baseline agent
+// instead of the platform agent. The claim's S3/DB internals are unit-tested
+// in ../../../lib/evals/eval-baseline-agent.test.ts; here it's a spy so the
+// routing decision is observable without real S3.
+vi.mock("../../../lib/evals/eval-baseline-agent.js", () => ({
+  claimEvalBaselineForRun: mockClaimEvalBaselineForRun,
+}));
+
 // Both seed entry points route through the U5 baseline-dataset seeder;
 // the heavy S3/index logic is unit-tested in
 // ../../../lib/evals/baseline-dataset.test.ts against fakes.
@@ -212,6 +236,47 @@ vi.mock("@aws-sdk/client-lambda", () => ({
     constructor(input: unknown) {
       this.input = input;
     }
+  },
+}));
+
+// Skill-update gate (Skill Tests & Evals U6): the gate config lib and the
+// skill score read are spies so the apply/block/override decision is
+// observable without S3/DB. The pure slug helpers stay real so startEvalRun's
+// skill-arm routing (isSkillDatasetSlug) is exercised unchanged.
+vi.mock("../../../lib/evals/skill-eval-gate.js", () => ({
+  getSkillEvalGateThreshold: mockGetSkillEvalGateThreshold,
+  setSkillEvalGateThreshold: mockSetSkillEvalGateThreshold,
+}));
+
+vi.mock("../../../lib/evals/skill-eval-run.js", () => ({
+  readSkillEvalScore: mockReadSkillEvalScore,
+}));
+
+vi.mock("../../../lib/evals/skill-dataset.js", () => ({
+  // Pure helpers reimplemented faithfully (no heavy deps) so routing logic
+  // runs for real; the S3/DB-touching seed/archive are spies.
+  SKILL_DATASET_SLUG_PREFIX: "skill-",
+  isSkillDatasetSlug: (slug: string) => slug.startsWith("skill-"),
+  skillEvalDatasetSlug: (skillSlug: string) => `skill-${skillSlug}`,
+  skillCandidateDatasetSlug: (skillSlug: string) =>
+    `skill-${skillSlug}-candidate`,
+  ensureSkillDatasetSeeded: mockEnsureSkillDatasetSeeded,
+  archiveSkillCandidateDataset: mockArchiveSkillCandidateDataset,
+}));
+
+// applySkillUpdate dynamic-imports the catalog reinstaller + runtime config
+// + S3 client for the real swap; spy them so the swap is observable.
+vi.mock("../../../lib/catalog-reinstall.js", () => ({
+  reinstallCatalogSkill: mockReinstallCatalogSkill,
+}));
+
+vi.mock("@thinkwork/runtime-config", () => ({
+  getConfig: mockGetConfig,
+}));
+
+vi.mock("@aws-sdk/client-s3", () => ({
+  S3Client: class {
+    constructor(_cfg?: unknown) {}
   },
 }));
 
@@ -257,6 +322,35 @@ beforeEach(() => {
   });
   mockResolveDatasetForLaunch.mockResolvedValue({ id: "ds-1", version: 7 });
   mockDeleteRunSnapshotForTenant.mockResolvedValue(0);
+  mockGetSkillEvalGateThreshold.mockResolvedValue(null);
+  mockSetSkillEvalGateThreshold.mockResolvedValue(undefined);
+  mockReadSkillEvalScore.mockResolvedValue({
+    skillSlug: "x",
+    datasetSlug: "skill-x-candidate",
+    rated: true,
+    passRate: 0.9,
+    regression: false,
+    lastRunId: "run-c",
+    lastRunAt: null,
+    totalCases: 3,
+  });
+  mockEnsureSkillDatasetSeeded.mockResolvedValue({
+    action: "seeded",
+    datasetSlug: "skill-x",
+    addedCaseIds: [],
+    updatedCaseIds: [],
+    removedCaseIds: [],
+    skipped: [],
+    bundledCaseCount: 3,
+  });
+  mockArchiveSkillCandidateDataset.mockResolvedValue({ action: "archived" });
+  mockReinstallCatalogSkill.mockResolvedValue({
+    ok: true,
+    reinstalled_paths: ["skills/x/SKILL.md"],
+    source_sha256: "b".repeat(64),
+    eval_cases: [{ fileName: "case-a.json", content: "{}" }],
+  });
+  mockGetConfig.mockReturnValue("workspace-bucket");
 });
 
 describe("placeholderStatusForEvalRun", () => {
@@ -1101,6 +1195,36 @@ describe("run scope pinning + cancel semantics (U6)", () => {
     expect(result).toMatchObject({ id: "run-1", datasetId: "ds-1" });
   });
 
+  it("startEvalRun routes a skill dataset to the eval-baseline agent (U4), not the platform agent", async () => {
+    mockResolveDatasetForLaunch.mockResolvedValue({
+      id: "ds-skill",
+      version: 1,
+    });
+    mockClaimEvalBaselineForRun.mockResolvedValue({
+      id: "eval-baseline-1",
+      slug: "eb-1",
+      skillSlug: "crm-helper",
+    });
+    insertResults.push([runRow]);
+    selectQueue.push([{ ...runRow, agent_id: "eval-baseline-1" }]);
+
+    await evaluationsMutations.startEvalRun(
+      {},
+      { tenantId: "tenant-1", input: { datasetSlug: "skill-crm-helper" } },
+      adminCtx,
+    );
+
+    // Skill slug → claim the re-materialized baseline agent (isolated run).
+    expect(mockClaimEvalBaselineForRun).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      skillSlug: "crm-helper",
+      runId: "run-1",
+    });
+    // A skill run must NEVER resolve the tenant platform agent.
+    expect(mockResolveTenantPlatformAgent).not.toHaveBeenCalled();
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1); // runner dispatched
+  });
+
   it("startEvalRun rejects combining datasetSlug with categories or testCaseIds", async () => {
     await expect(
       evaluationsMutations.startEvalRun(
@@ -1757,5 +1881,262 @@ describe("operator verdict override (U9)", () => {
     expect(mockNotifyEvalRunUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ runId: "run-1", status: "running", passed: 2 }),
     );
+  });
+});
+
+describe("skill-update gate (U6)", () => {
+  // The agent target resolution does two selects: agent row, then tenant row.
+  function queueAgentTarget() {
+    selectQueue.push([
+      {
+        slug: "marco",
+        workspaceFolderName: "marco",
+        tenantId: "tenant-1",
+      },
+    ]);
+    selectQueue.push([{ slug: "acme" }]);
+  }
+
+  describe("skillEvalGate query", () => {
+    it("reports enabled + threshold when a gate is set", async () => {
+      mockGetSkillEvalGateThreshold.mockResolvedValueOnce(0.7);
+      const result = await evaluationsQueries.skillEvalGate(
+        {},
+        { tenantId: "tenant-1" },
+        adminCtx,
+      );
+      expect(result).toEqual({ enabled: true, threshold: 0.7 });
+    });
+
+    it("reports disabled when no gate row exists", async () => {
+      mockGetSkillEvalGateThreshold.mockResolvedValueOnce(null);
+      const result = await evaluationsQueries.skillEvalGate(
+        {},
+        { tenantId: "tenant-1" },
+        adminCtx,
+      );
+      expect(result).toEqual({ enabled: false, threshold: null });
+    });
+
+    it("fails closed (off) for a cross-tenant read without touching the lib", async () => {
+      const result = await evaluationsQueries.skillEvalGate(
+        {},
+        { tenantId: "tenant-2" },
+        adminCtx,
+      );
+      expect(result).toEqual({ enabled: false, threshold: null });
+      expect(mockGetSkillEvalGateThreshold).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("setSkillEvalGate mutation", () => {
+    it("operator sets a threshold (upsert) and returns enabled", async () => {
+      const result = await evaluationsMutations.setSkillEvalGate(
+        {},
+        { tenantId: "tenant-1", threshold: 0.8 },
+        adminCtx,
+      );
+      expect(mockRequireTenantAdmin).toHaveBeenCalledWith(adminCtx, "tenant-1");
+      expect(mockSetSkillEvalGateThreshold).toHaveBeenCalledWith(
+        "tenant-1",
+        0.8,
+      );
+      expect(result).toEqual({ enabled: true, threshold: 0.8 });
+    });
+
+    it("null threshold clears the gate (returns disabled)", async () => {
+      const result = await evaluationsMutations.setSkillEvalGate(
+        {},
+        { tenantId: "tenant-1", threshold: null },
+        adminCtx,
+      );
+      expect(mockSetSkillEvalGateThreshold).toHaveBeenCalledWith(
+        "tenant-1",
+        null,
+      );
+      expect(result).toEqual({ enabled: false, threshold: null });
+    });
+
+    it("rejects an out-of-range threshold before any write", async () => {
+      await expect(
+        evaluationsMutations.setSkillEvalGate(
+          {},
+          { tenantId: "tenant-1", threshold: 1.5 },
+          adminCtx,
+        ),
+      ).rejects.toThrow(/\[0, 1\]/);
+      expect(mockSetSkillEvalGateThreshold).not.toHaveBeenCalled();
+    });
+
+    it("non-admin is forbidden before any write", async () => {
+      mockRequireTenantAdmin.mockRejectedValueOnce(forbidden);
+      await expect(
+        evaluationsMutations.setSkillEvalGate(
+          {},
+          { tenantId: "tenant-2", threshold: 0.5 },
+          adminCtx,
+        ),
+      ).rejects.toThrow("Tenant admin role required");
+      expect(mockSetSkillEvalGateThreshold).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("applySkillUpdate mutation", () => {
+    it("applies the swap when the candidate clears the gate, then promotes", async () => {
+      mockGetSkillEvalGateThreshold.mockResolvedValueOnce(0.7);
+      mockReadSkillEvalScore.mockResolvedValueOnce({
+        skillSlug: "x",
+        datasetSlug: "skill-x-candidate",
+        rated: true,
+        passRate: 0.85,
+        regression: false,
+        lastRunId: "run-c",
+        lastRunAt: null,
+        totalCases: 3,
+      });
+      queueAgentTarget();
+
+      const result = await evaluationsMutations.applySkillUpdate(
+        {},
+        { tenantId: "tenant-1", skillSlug: "x", agentId: "agent-1" },
+        adminCtx,
+      );
+
+      expect(mockRequireTenantAdmin).toHaveBeenCalledWith(adminCtx, "tenant-1");
+      // Candidate read targets the STAGING dataset.
+      expect(mockReadSkillEvalScore).toHaveBeenCalledWith(
+        "tenant-1",
+        "x",
+        "skill-x-candidate",
+      );
+      // The real swap ran against the tenant-scoped agent workspace.
+      expect(mockReinstallCatalogSkill).toHaveBeenCalledTimes(1);
+      expect(mockReinstallCatalogSkill.mock.calls[0][0]).toMatchObject({
+        tenantSlug: "acme",
+        targetPrefix: "tenants/acme/agents/marco/",
+        slug: "x",
+      });
+      // Promotion: live re-seed (no override slug) + archive the staging set.
+      expect(mockEnsureSkillDatasetSeeded).toHaveBeenCalledWith(
+        "tenant-1",
+        "x",
+        [{ fileName: "case-a.json", content: "{}" }],
+      );
+      expect(mockArchiveSkillCandidateDataset).toHaveBeenCalledWith(
+        "tenant-1",
+        "x",
+      );
+      expect(result).toEqual({
+        applied: true,
+        blocked: false,
+        overridden: false,
+        passRate: 0.85,
+        threshold: 0.7,
+      });
+    });
+
+    it("blocks (no swap) when the candidate scores below the threshold without override", async () => {
+      mockGetSkillEvalGateThreshold.mockResolvedValueOnce(0.7);
+      mockReadSkillEvalScore.mockResolvedValueOnce({
+        skillSlug: "x",
+        datasetSlug: "skill-x-candidate",
+        rated: true,
+        passRate: 0.4,
+        regression: false,
+        lastRunId: "run-c",
+        lastRunAt: null,
+        totalCases: 3,
+      });
+
+      const result = await evaluationsMutations.applySkillUpdate(
+        {},
+        { tenantId: "tenant-1", skillSlug: "x", agentId: "agent-1" },
+        adminCtx,
+      );
+
+      expect(result).toEqual({
+        applied: false,
+        blocked: true,
+        overridden: false,
+        passRate: 0.4,
+        threshold: 0.7,
+      });
+      // No swap, no promotion.
+      expect(mockReinstallCatalogSkill).not.toHaveBeenCalled();
+      expect(mockEnsureSkillDatasetSeeded).not.toHaveBeenCalled();
+    });
+
+    it("override forces the swap past a below-threshold candidate (overridden:true)", async () => {
+      mockGetSkillEvalGateThreshold.mockResolvedValueOnce(0.7);
+      mockReadSkillEvalScore.mockResolvedValueOnce({
+        skillSlug: "x",
+        datasetSlug: "skill-x-candidate",
+        rated: true,
+        passRate: 0.4,
+        regression: false,
+        lastRunId: "run-c",
+        lastRunAt: null,
+        totalCases: 3,
+      });
+      queueAgentTarget();
+
+      const result = await evaluationsMutations.applySkillUpdate(
+        {},
+        {
+          tenantId: "tenant-1",
+          skillSlug: "x",
+          agentId: "agent-1",
+          override: true,
+        },
+        adminCtx,
+      );
+
+      expect(mockReinstallCatalogSkill).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        applied: true,
+        blocked: false,
+        overridden: true,
+        passRate: 0.4,
+        threshold: 0.7,
+      });
+    });
+
+    it("rejects when the agent does not belong to the tenant (no swap)", async () => {
+      mockGetSkillEvalGateThreshold.mockResolvedValueOnce(0.7);
+      mockReadSkillEvalScore.mockResolvedValueOnce({
+        skillSlug: "x",
+        datasetSlug: "skill-x-candidate",
+        rated: true,
+        passRate: 0.9,
+        regression: false,
+        lastRunId: "run-c",
+        lastRunAt: null,
+        totalCases: 3,
+      });
+      selectQueue.push([]); // agent row not found in tenant
+
+      await expect(
+        evaluationsMutations.applySkillUpdate(
+          {},
+          { tenantId: "tenant-1", skillSlug: "x", agentId: "foreign-agent" },
+          adminCtx,
+        ),
+      ).rejects.toThrow(/not found in tenant/);
+      expect(mockReinstallCatalogSkill).not.toHaveBeenCalled();
+    });
+
+    it("non-admin is forbidden before any read or swap", async () => {
+      mockRequireTenantAdmin.mockRejectedValueOnce(forbidden);
+      await expect(
+        evaluationsMutations.applySkillUpdate(
+          {},
+          { tenantId: "tenant-2", skillSlug: "x", agentId: "agent-1" },
+          adminCtx,
+        ),
+      ).rejects.toThrow("Tenant admin role required");
+      expect(mockRequireTenantAdmin).toHaveBeenCalledWith(adminCtx, "tenant-2");
+      expect(mockGetSkillEvalGateThreshold).not.toHaveBeenCalled();
+      expect(mockReinstallCatalogSkill).not.toHaveBeenCalled();
+    });
   });
 });

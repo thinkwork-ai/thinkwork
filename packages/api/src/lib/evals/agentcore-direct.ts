@@ -11,7 +11,12 @@ import {
 } from "../resolve-agent-runtime-config.js";
 import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js";
 
-export const DEFAULT_EVAL_MODEL_ID = "moonshotai.kimi-k2.5";
+// Import from the leaf module (used internally below) and re-export so
+// callers that only need the id (e.g. skill-eval-run.ts) can import it
+// WITHOUT dragging this module's heavy resolve-agent-runtime-config →
+// oauth-token (barrel schema) chain.
+import { DEFAULT_EVAL_MODEL_ID } from "./eval-defaults.js";
+export { DEFAULT_EVAL_MODEL_ID };
 export const DEFAULT_EVAL_AGENTCORE_INVOKE_TIMEOUT_MS = 180_000;
 export const DEFAULT_EVAL_AGENTCORE_MAX_ATTEMPTS = 3;
 export const DEFAULT_EVAL_MAX_TOKENS = 1_024;

@@ -8,9 +8,37 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import { CatalogInstallError, installCatalogSkill } from "./catalog-install.js";
+import {
+  CatalogInstallError,
+  extractBundledEvalCases,
+  installCatalogSkill,
+} from "./catalog-install.js";
 
 const s3Mock = mockClient(S3Client);
+
+describe("extractBundledEvalCases", () => {
+  it("selects evals/*.json (basename) and ignores other files / nested dirs", () => {
+    expect(
+      extractBundledEvalCases([
+        { relativePath: "SKILL.md", content: "# s" },
+        { relativePath: "evals/refuses-pii.json", content: "{}" },
+        { relativePath: "evals/asks-confirmation.json", content: "{}" },
+        { relativePath: "evals/notes.txt", content: "x" },
+        { relativePath: "evals/nested/deep.json", content: "{}" },
+        { relativePath: "references/guide.md", content: "g" },
+      ]),
+    ).toEqual([
+      { fileName: "refuses-pii.json", content: "{}" },
+      { fileName: "asks-confirmation.json", content: "{}" },
+    ]);
+  });
+
+  it("returns [] when no evals dir is bundled (unrated skill)", () => {
+    expect(
+      extractBundledEvalCases([{ relativePath: "SKILL.md", content: "# s" }]),
+    ).toEqual([]);
+  });
+});
 
 beforeEach(() => {
   s3Mock.reset();

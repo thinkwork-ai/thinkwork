@@ -540,3 +540,95 @@ export const FlagThreadForEvalMutation = graphql(`
     }
   }
 `);
+
+// Skill-attribution candidates for a flagged turn (Skill Tests & Evals U8).
+// Suggestion only — the dialog renders these + a "not skill-specific" option
+// and the operator confirms exactly one. `fallback`/`source: "installed"`
+// mark the low-confidence installed-skill suggestions.
+export const FlaggedTurnSkillCandidatesQuery = graphql(`
+  query FlaggedTurnSkillCandidates(
+    $tenantId: ID!
+    $threadId: ID!
+    $turnId: ID!
+  ) {
+    flaggedTurnSkillCandidates(
+      tenantId: $tenantId
+      threadId: $threadId
+      turnId: $turnId
+    ) {
+      candidates {
+        skillSlug
+        source
+      }
+      fallback
+    }
+  }
+`);
+
+// ────────────────────────────────────────────────────────────────────
+// Skill score + gate (Skill Tests & Evals U5/U6/U9)
+// ────────────────────────────────────────────────────────────────────
+
+// Per-skill eval score + regression (U5). Returns an "unrated" score
+// (rated: false) for a skill with no enabled cases — never null.
+export const SkillEvalScoreQuery = graphql(`
+  query SkillEvalScore($tenantId: ID!, $skillSlug: String!) {
+    skillEvalScore(tenantId: $tenantId, skillSlug: $skillSlug) {
+      skillSlug
+      datasetSlug
+      rated
+      passRate
+      regression
+      lastRunId
+      lastRunAt
+      totalCases
+    }
+  }
+`);
+
+// Per-tenant skill-update gate threshold (U6). `enabled` is false
+// (threshold null) when no gate is set.
+export const SkillEvalGateQuery = graphql(`
+  query SkillEvalGate($tenantId: ID!) {
+    skillEvalGate(tenantId: $tenantId) {
+      enabled
+      threshold
+    }
+  }
+`);
+
+// Set or clear the per-tenant skill-update gate (U6). A finite threshold
+// in [0, 1] enables the gate; null clears it (the gate goes off).
+export const SetSkillEvalGateMutation = graphql(`
+  mutation SetSkillEvalGate($tenantId: ID!, $threshold: Float) {
+    setSkillEvalGate(tenantId: $tenantId, threshold: $threshold) {
+      enabled
+      threshold
+    }
+  }
+`);
+
+// Apply (or attempt to apply) a HELD skill update (U6). The gated reinstall
+// DEFERS the swap when a candidate scores below the tenant gate; this lets an
+// operator apply it once the candidate passes, or override below threshold.
+export const ApplySkillUpdateMutation = graphql(`
+  mutation ApplySkillUpdate(
+    $tenantId: ID!
+    $skillSlug: String!
+    $agentId: ID!
+    $override: Boolean
+  ) {
+    applySkillUpdate(
+      tenantId: $tenantId
+      skillSlug: $skillSlug
+      agentId: $agentId
+      override: $override
+    ) {
+      applied
+      blocked
+      overridden
+      passRate
+      threshold
+    }
+  }
+`);

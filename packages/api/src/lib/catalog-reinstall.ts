@@ -8,6 +8,7 @@ import {
   type S3Client,
 } from "@aws-sdk/client-s3";
 import { isBuiltinToolSlug } from "./builtin-tool-slugs.js";
+import { extractBundledEvalCases } from "./catalog-install.js";
 import { computeCatalogSkillSha } from "./catalog-skill-sha.js";
 import {
   isCatalogRef,
@@ -21,6 +22,16 @@ export type CatalogReinstallOptions = {
   tenantSlug: string;
   targetPrefix: string;
   slug: string;
+  /**
+   * Read-only staging (Skill Tests & Evals U6). When true, computes
+   * `source_sha256`, reads the bundled `eval_cases`, and determines
+   * noop-vs-update (candidate sha === installed ref sha) but performs NO
+   * delete/copy/ref-write — the workspace swap is NOT applied. The gated
+   * update path uses this to read the candidate's cases and detect an
+   * update WITHOUT swapping; the swap happens later via applySkillUpdate.
+   * `reinstalled_paths` is always `[]` on a dry run.
+   */
+  dryRun?: boolean;
 };
 
 export type CatalogReinstallResult = {
@@ -28,6 +39,13 @@ export type CatalogReinstallResult = {
   reinstalled_paths: string[];
   source_sha256: string;
   noop?: true;
+  /**
+   * Bundled eval case files (`evals/*.json`) from the (post-reinstall)
+   * catalog folder, surfaced for the caller to re-sync the per-skill eval
+   * dataset (Skill Tests & Evals U2). Present on both the changed and
+   * no-op paths so the dataset heals even if it was never created.
+   */
+  eval_cases: { fileName: string; content: string }[];
 };
 
 export class CatalogReinstallError extends Error {
@@ -90,12 +108,27 @@ export async function reinstallCatalogSkill(
     })),
   );
   const sourceSha256 = computeCatalogSkillSha(catalogFiles);
+  const evalCases = extractBundledEvalCases(catalogFiles);
   if (sourceSha256 === catalogRef.source_sha256) {
     return {
       ok: true,
       noop: true,
       reinstalled_paths: [],
       source_sha256: sourceSha256,
+      eval_cases: evalCases,
+    };
+  }
+
+  // Dry run (Skill Tests & Evals U6): the candidate differs from the
+  // installed version, but the gated path reads the candidate cases and
+  // detects the update WITHOUT swapping — no delete/copy/ref-write. The
+  // swap is deferred to applySkillUpdate once the gate passes.
+  if (options.dryRun) {
+    return {
+      ok: true,
+      reinstalled_paths: [],
+      source_sha256: sourceSha256,
+      eval_cases: evalCases,
     };
   }
 
@@ -161,6 +194,7 @@ export async function reinstallCatalogSkill(
       `skills/${slug}/.catalog-ref.json`,
     ].sort(),
     source_sha256: sourceSha256,
+    eval_cases: evalCases,
   };
 }
 

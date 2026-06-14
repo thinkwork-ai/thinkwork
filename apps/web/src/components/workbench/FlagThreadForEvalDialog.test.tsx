@@ -16,6 +16,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMutation, useQuery } from "urql";
+import { FlaggedTurnSkillCandidatesQuery } from "@/lib/evaluation-queries";
 import { FlagThreadForEvalDialog } from "./FlagThreadForEvalDialog";
 
 vi.mock("urql", async (importOriginal) => {
@@ -40,12 +41,16 @@ vi.mock("@tanstack/react-router", async () => {
 const flagMutation = vi.fn();
 
 let datasetsData: unknown;
+let candidatesData: unknown;
 
 function setupMocks() {
-  vi.mocked(useQuery).mockImplementation(
-    () =>
-      [{ data: datasetsData, fetching: false, stale: false }, vi.fn()] as never,
-  );
+  vi.mocked(useQuery).mockImplementation((args) => {
+    const data =
+      args.query === FlaggedTurnSkillCandidatesQuery
+        ? candidatesData
+        : datasetsData;
+    return [{ data, fetching: false, stale: false }, vi.fn()] as never;
+  });
   vi.mocked(useMutation).mockImplementation(
     () => [{ fetching: false, stale: false }, flagMutation] as never,
   );
@@ -65,6 +70,9 @@ function renderDialog() {
 
 beforeEach(() => {
   datasetsData = { evalDatasets: [] };
+  candidatesData = {
+    flaggedTurnSkillCandidates: { candidates: [], fallback: false },
+  };
   flagMutation.mockReset();
   flagMutation.mockResolvedValue({
     data: { flagThreadForEval: { dataset: { slug: "d" } } },
@@ -189,6 +197,76 @@ describe("FlagThreadForEvalDialog", () => {
         newDatasetName: null,
         resolutionTarget: "Should refuse.",
         outcomeKind: "security",
+      },
+    });
+  });
+
+  it("suggests the first skill candidate and submits skillSlug attribution", async () => {
+    candidatesData = {
+      flaggedTurnSkillCandidates: {
+        candidates: [
+          { skillSlug: "web-research", source: "active" },
+          { skillSlug: "summarize", source: "active" },
+        ],
+        fallback: false,
+      },
+    };
+    setupMocks();
+    renderDialog();
+
+    // Skill mode: the custom-dataset picker is replaced by the attribution
+    // picker — no dataset trigger, no new-name input.
+    await waitFor(() =>
+      expect(screen.getByTestId("flag-eval-attribution-trigger")).toBeTruthy(),
+    );
+    expect(screen.queryByTestId("flag-eval-dataset-trigger")).toBeNull();
+    expect(screen.queryByTestId("flag-eval-new-dataset-name")).toBeNull();
+
+    fireEvent.change(screen.getByTestId("flag-eval-resolution-target"), {
+      target: { value: "Should cite a source." },
+    });
+    fireEvent.click(screen.getByTestId("flag-eval-submit"));
+
+    await waitFor(() => expect(flagMutation).toHaveBeenCalledTimes(1));
+    expect(flagMutation).toHaveBeenCalledWith({
+      input: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        skillSlug: "web-research",
+        attributionFallback: false,
+        resolutionTarget: "Should cite a source.",
+        outcomeKind: "quality",
+      },
+    });
+  });
+
+  it("stamps attributionFallback for installed-skill fallback candidates", async () => {
+    candidatesData = {
+      flaggedTurnSkillCandidates: {
+        candidates: [{ skillSlug: "legacy-skill", source: "installed" }],
+        fallback: true,
+      },
+    };
+    setupMocks();
+    renderDialog();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("flag-eval-attribution-trigger")).toBeTruthy(),
+    );
+    fireEvent.change(screen.getByTestId("flag-eval-resolution-target"), {
+      target: { value: "Should refuse." },
+    });
+    fireEvent.click(screen.getByTestId("flag-eval-submit"));
+
+    await waitFor(() => expect(flagMutation).toHaveBeenCalledTimes(1));
+    expect(flagMutation).toHaveBeenCalledWith({
+      input: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        skillSlug: "legacy-skill",
+        attributionFallback: true,
+        resolutionTarget: "Should refuse.",
+        outcomeKind: "quality",
       },
     });
   });

@@ -105,6 +105,15 @@ import {
 } from "./src/lib/catalog-uninstall.js";
 import { computeCatalogSkillShaBySlug } from "./src/lib/catalog-skill-sha.js";
 import {
+  archiveSkillCandidateDataset,
+  archiveSkillDatasetIfExists,
+  ensureSkillDatasetSeeded,
+  skillCandidateDatasetSlug,
+  type SkillCaseInput,
+} from "./src/lib/evals/skill-dataset.js";
+import { launchSkillEvalRun } from "./src/lib/evals/skill-eval-run.js";
+import { getSkillEvalGateThreshold } from "./src/lib/evals/skill-eval-gate.js";
+import {
   reindexCatalogSkill,
   listIndexedSkills,
 } from "./src/lib/catalog-index.js";
@@ -1600,6 +1609,180 @@ async function handleDelete(
   return json(200, { ok: true, ...(indexWarning ? { indexWarning } : {}) });
 }
 
+/**
+ * Sync a skill's bundled eval cases into its per-skill eval dataset
+ * (Skill Tests & Evals U2) and kick off the async scored run (U5 — the
+ * Phase-C seam goes live). Defensive: a seeding OR launch failure must
+ * never break the install/reinstall — it logs and folds a warning/status
+ * into the response. A skill with no bundled cases is "unrated" — nothing
+ * surfaced, no run launched, never an error.
+ */
+async function syncSkillEvalDataset(
+  tenantId: string,
+  slug: string,
+  evalCases: SkillCaseInput[],
+): Promise<{
+  evalDataset?: { slug: string; cases: number; skipped: number };
+  evalDatasetWarning?: string;
+  evalRun?: { status: string };
+}> {
+  let result;
+  try {
+    result = await ensureSkillDatasetSeeded(tenantId, slug, evalCases);
+    if (result.skipped.length > 0) {
+      console.warn(
+        `[skill-eval] ${slug}: ${result.skipped.length} bundled case(s) skipped: ` +
+          result.skipped.map((s) => `${s.fileName} (${s.reason})`).join("; "),
+      );
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[skill-eval] failed to sync eval dataset for skill ${slug}: ${msg}`,
+    );
+    return {
+      evalDatasetWarning: `Skill installed but eval dataset sync failed: ${msg}`,
+    };
+  }
+
+  if (result.action === "skipped") return {}; // unrated — nothing to surface
+
+  // The seed left the dataset rated → fire the async scored run. The
+  // launcher self-guards (returns "unrated"/"busy"/"skipped" and never
+  // throws), so this can't break the install — but wrap defensively too.
+  let evalRunStatus = "skipped";
+  try {
+    const launch = await launchSkillEvalRun({ tenantId, skillSlug: slug });
+    evalRunStatus = launch.status;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[skill-eval] failed to launch scored run for skill ${slug}: ${msg}`,
+    );
+  }
+
+  return {
+    evalDataset: {
+      slug: result.datasetSlug,
+      cases: result.bundledCaseCount,
+      skipped: result.skipped.length,
+    },
+    evalRun: { status: evalRunStatus },
+  };
+}
+
+/** Archive a skill's eval dataset on uninstall (defensive, see above). */
+async function archiveSkillEvalDataset(
+  tenantId: string,
+  slug: string,
+): Promise<{ evalDatasetWarning?: string }> {
+  try {
+    await archiveSkillDatasetIfExists(tenantId, slug);
+    return {};
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[skill-eval] failed to archive eval dataset for skill ${slug}: ${msg}`,
+    );
+    return {
+      evalDatasetWarning: `Skill uninstalled but eval dataset archive failed: ${msg}`,
+    };
+  }
+}
+
+/**
+ * Stage a GATED skill update (Skill Tests & Evals U6). Called only when a
+ * gate is set AND the candidate is a real update AND it carries cases —
+ * the workspace swap is DEFERRED. The candidate's bytes are NOT swapped
+ * here; instead its cases are seeded into a TRANSIENT staging dataset
+ * (`skill-<slug>-candidate`) and a candidate run is launched against
+ * staging (the run materializes the catalog = candidate skill content on
+ * the eval-baseline agent). The operator applies the swap via
+ * `applySkillUpdate` once the candidate passes (or overrides).
+ *
+ * Defensive: any eval error must not corrupt state. On a staging/scoring
+ * failure the swap stays HELD (never silently applied) and the warning is
+ * surfaced — the operator can retry the gated apply.
+ */
+type GatedStageOutcome =
+  // The candidate is unrated (no valid cases) — R9: unrated must NOT
+  // block, so the caller falls through to the normal (real swap) path.
+  | { held: false }
+  // The swap is HELD pending the gate; the candidate is scored against the
+  // transient staging dataset.
+  | {
+      held: true;
+      candidateDatasetSlug: string;
+      evalRun?: { status: string };
+      evalDatasetWarning?: string;
+    };
+
+async function stageGatedSkillUpdate(
+  tenantId: string,
+  slug: string,
+  evalCases: SkillCaseInput[],
+): Promise<GatedStageOutcome> {
+  const candidateDatasetSlug = skillCandidateDatasetSlug(slug);
+  let seed;
+  try {
+    seed = await ensureSkillDatasetSeeded(
+      tenantId,
+      slug,
+      evalCases,
+      candidateDatasetSlug,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[skill-eval] failed to seed gated candidate dataset for skill ${slug}: ${msg}`,
+    );
+    // Seeding the candidate failed — stay HELD (never silently swap) and
+    // surface the warning so the operator can retry the gated apply.
+    return {
+      held: true,
+      candidateDatasetSlug,
+      evalDatasetWarning: `Skill update held by the eval gate, but candidate staging failed: ${msg}`,
+    };
+  }
+
+  if (seed.skipped.length > 0) {
+    console.warn(
+      `[skill-eval] ${slug} (candidate): ${seed.skipped.length} bundled case(s) skipped: ` +
+        seed.skipped.map((s) => `${s.fileName} (${s.reason})`).join("; "),
+    );
+  }
+
+  // Candidate produced no valid cases → unrated. R9: unrated never gates —
+  // archive the (empty) staging dataset and let the caller swap normally.
+  if (seed.action === "skipped" || seed.bundledCaseCount === 0) {
+    await archiveSkillCandidateDataset(tenantId, slug).catch(() => {});
+    return { held: false };
+  }
+
+  try {
+    const launch = await launchSkillEvalRun({
+      tenantId,
+      skillSlug: slug,
+      datasetSlugOverride: candidateDatasetSlug,
+    });
+    return {
+      held: true,
+      candidateDatasetSlug,
+      evalRun: { status: launch.status },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[skill-eval] failed to launch gated candidate run for skill ${slug}: ${msg}`,
+    );
+    return {
+      held: true,
+      candidateDatasetSlug,
+      evalDatasetWarning: `Skill update held by the eval gate, but candidate scoring failed: ${msg}`,
+    };
+  }
+}
+
 async function handleInstallSkill(
   deps: HandlerDeps,
   slug: string,
@@ -1655,11 +1838,14 @@ async function handleInstallSkill(
     "install-skill",
   );
   if (refreshError) return refreshError;
+  const { eval_cases, ...installResult } = result;
+  const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
   return json(200, {
-    ...result,
+    ...installResult,
     ...(derive.result.warnings.length > 0
       ? { deriveWarnings: derive.result.warnings }
       : {}),
+    ...evalSync,
   });
 }
 
@@ -1712,11 +1898,13 @@ async function handleUninstallSkill(
     "uninstall-skill",
   );
   if (refreshError) return refreshError;
+  const evalArchive = await archiveSkillEvalDataset(tenantId, slug);
   return json(200, {
     ...result,
     ...(derive.result.warnings.length > 0
       ? { deriveWarnings: derive.result.warnings }
       : {}),
+    ...evalArchive,
   });
 }
 
@@ -1734,6 +1922,73 @@ async function handleReinstallSkill(
       error: "reinstall-skill requires an agent target",
       code: "unsupported_target",
     });
+  }
+
+  // Skill-update gate (Skill Tests & Evals U6). When the tenant has opted
+  // into a gate, a real UPDATE that carries cases must NOT swap inline —
+  // its candidate is scored against a transient staging dataset and the
+  // swap is HELD pending an operator apply (applySkillUpdate). We learn
+  // noop-vs-update + the candidate cases via a READ-ONLY dry-run reinstall
+  // (no delete/copy/ref-write) so detection itself never swaps. Resolving
+  // the gate is defensive — a gate-read error must never break a reinstall.
+  let gateThreshold: number | null = null;
+  try {
+    gateThreshold = await getSkillEvalGateThreshold(tenantId);
+  } catch (err) {
+    console.error(
+      `[skill-eval] failed to read skill-eval gate for ${slug}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+
+  if (gateThreshold != null) {
+    let dryRun;
+    try {
+      dryRun = await reinstallCatalogSkill({
+        s3,
+        bucket: bucket(),
+        tenantSlug: target.tenantSlug,
+        targetPrefix: target.prefix,
+        slug,
+        dryRun: true,
+      });
+    } catch (err) {
+      if (err instanceof CatalogReinstallError) {
+        return json(err.status, {
+          ok: false,
+          error: err.message,
+          code: err.code,
+        });
+      }
+      throw err;
+    }
+
+    // A real update (not noop) with candidate cases → DEFER the swap. The
+    // candidate is staged + scored; the response signals the held state.
+    // An unrated candidate (no valid cases) falls through to a real swap
+    // (R9: unrated never gates).
+    if (!dryRun.noop && dryRun.eval_cases.length > 0) {
+      const staged = await stageGatedSkillUpdate(
+        tenantId,
+        slug,
+        dryRun.eval_cases,
+      );
+      if (staged.held) {
+        // The workspace is NOT reinstalled — no manifest/derive/agentsMd
+        // refresh. The operator applies the swap via applySkillUpdate.
+        return json(200, {
+          ok: true,
+          gated: true,
+          candidateDatasetSlug: staged.candidateDatasetSlug,
+          ...(staged.evalRun ? { evalRun: staged.evalRun } : {}),
+          ...(staged.evalDatasetWarning
+            ? { evalDatasetWarning: staged.evalDatasetWarning }
+            : {}),
+        });
+      }
+      // staged.held === false → unrated candidate; fall through to swap.
+    }
   }
 
   let result;
@@ -1773,11 +2028,14 @@ async function handleReinstallSkill(
     "reinstall-skill",
   );
   if (refreshError) return refreshError;
+  const { eval_cases, ...reinstallResult } = result;
+  const evalSync = await syncSkillEvalDataset(tenantId, slug, eval_cases);
   return json(200, {
-    ...result,
+    ...reinstallResult,
     ...(derive.result.warnings.length > 0
       ? { deriveWarnings: derive.result.warnings }
       : {}),
+    ...evalSync,
   });
 }
 

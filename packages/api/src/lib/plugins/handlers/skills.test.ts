@@ -85,6 +85,9 @@ type FakeSkillsDeps = SkillsHandlerDeps & {
   uninstall: ReturnType<typeof vi.fn>;
   reindex: ReturnType<typeof vi.fn>;
   regenerate: ReturnType<typeof vi.fn>;
+  seedSkillEvalDataset: ReturnType<typeof vi.fn>;
+  archiveSkillEvalDataset: ReturnType<typeof vi.fn>;
+  launchSkillEvalRun: ReturnType<typeof vi.fn>;
 };
 
 function deps(
@@ -109,6 +112,24 @@ function deps(
     reindex: vi.fn(async () => ({ slug: "x", action: "upserted" as const })),
     regenerate: vi.fn(async () => undefined),
     resolvePlatformAgent: vi.fn(async () => ({ slug: "agent-1" }) as never),
+    // Default to no-op spies so tests never hit the real eval seeder/AWS.
+    seedSkillEvalDataset: vi.fn(async () => ({
+      action: "seeded" as const,
+      datasetSlug: "skill-x",
+      addedCaseIds: [],
+      updatedCaseIds: [],
+      removedCaseIds: [],
+      skipped: [],
+      bundledCaseCount: 0,
+    })),
+    archiveSkillEvalDataset: vi.fn(async () => ({
+      action: "archived" as const,
+    })),
+    // U5: no-op launcher so tests never hit AWS / the eval-runner.
+    launchSkillEvalRun: vi.fn(async () => ({
+      status: "launched" as const,
+      runId: "run-1",
+    })),
     ...overrides,
   } as FakeSkillsDeps;
 }
@@ -232,6 +253,117 @@ describe("provisionPluginSkillsComponent", () => {
     expect(wiringPuts).toHaveLength(1);
     expect(wiringPuts[0]!.body).toBe("# custom");
   });
+
+  it("syncs bundled evals/*.json into the per-skill eval dataset (U2 plugin path)", async () => {
+    const s3 = fakeS3();
+    const d = deps(s3);
+    await provisionPluginSkillsComponent({
+      tenantId: "tenant-1",
+      component: {
+        ...component,
+        skills: [
+          {
+            slug: "lastmile--crm-basics",
+            skillMd: "# s",
+            supportingFiles: [
+              { path: "references/guide.md", content: "# guide" },
+              {
+                path: "evals/refuses-pii.json",
+                content: JSON.stringify({ query: "q", rubric: "must refuse" }),
+              },
+            ],
+          },
+        ],
+      },
+      deps: d,
+    });
+
+    expect(d.seedSkillEvalDataset).toHaveBeenCalledWith(
+      "tenant-1",
+      "lastmile--crm-basics",
+      [
+        {
+          fileName: "refuses-pii.json",
+          content: JSON.stringify({ query: "q", rubric: "must refuse" }),
+        },
+      ],
+    );
+  });
+
+  it("does not call the eval seeder for a skill bundling no cases (unrated)", async () => {
+    const s3 = fakeS3();
+    const d = deps(s3);
+    await provisionPluginSkillsComponent({
+      tenantId: "tenant-1",
+      component,
+      deps: d,
+    });
+    expect(d.seedSkillEvalDataset).not.toHaveBeenCalled();
+    expect(d.launchSkillEvalRun).not.toHaveBeenCalled();
+  });
+
+  it("launches the async scored run after seeding a rated skill (U5 plugin path)", async () => {
+    const s3 = fakeS3();
+    const d = deps(s3);
+    await provisionPluginSkillsComponent({
+      tenantId: "tenant-1",
+      component: {
+        ...component,
+        skills: [
+          {
+            slug: "lastmile--crm-basics",
+            skillMd: "# s",
+            supportingFiles: [
+              {
+                path: "evals/refuses-pii.json",
+                content: JSON.stringify({ query: "q", rubric: "must refuse" }),
+              },
+            ],
+          },
+        ],
+      },
+      deps: d,
+    });
+    expect(d.launchSkillEvalRun).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      skillSlug: "lastmile--crm-basics",
+    });
+  });
+
+  it("does not launch a scored run when the seed reports skipped (unrated)", async () => {
+    const s3 = fakeS3();
+    const d = deps(s3, {
+      seedSkillEvalDataset: vi.fn(async () => ({
+        action: "skipped" as const,
+        datasetSlug: "skill-x",
+        addedCaseIds: [],
+        updatedCaseIds: [],
+        removedCaseIds: [],
+        skipped: [],
+        bundledCaseCount: 0,
+      })),
+    });
+    await provisionPluginSkillsComponent({
+      tenantId: "tenant-1",
+      component: {
+        ...component,
+        skills: [
+          {
+            slug: "lastmile--crm-basics",
+            skillMd: "# s",
+            supportingFiles: [
+              {
+                path: "evals/refuses-pii.json",
+                content: JSON.stringify({ query: "q", rubric: "must refuse" }),
+              },
+            ],
+          },
+        ],
+      },
+      deps: d,
+    });
+    expect(d.launchSkillEvalRun).not.toHaveBeenCalled();
+  });
 });
 
 describe("teardownPluginSkillsComponent", () => {
@@ -284,6 +416,24 @@ describe("teardownPluginSkillsComponent", () => {
     });
     expect(d.uninstall).toHaveBeenCalledWith(
       expect.objectContaining({ slug: "lastmile--crm-basics" }),
+    );
+  });
+
+  it("archives the per-skill eval dataset on teardown (U2)", async () => {
+    const s3 = fakeS3();
+    const d = deps(s3);
+    await teardownPluginSkillsComponent({
+      tenantId: "tenant-1",
+      component,
+      handlerRef: {
+        workspaceFolders: ["skills/lastmile--crm-basics/"],
+        agentSlug: "agent-1",
+      },
+      deps: d,
+    });
+    expect(d.archiveSkillEvalDataset).toHaveBeenCalledWith(
+      "tenant-1",
+      "lastmile--crm-basics",
     );
   });
 });

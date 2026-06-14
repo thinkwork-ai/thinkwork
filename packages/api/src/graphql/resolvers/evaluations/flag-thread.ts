@@ -32,6 +32,7 @@ import {
   threads,
 } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
+import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 import {
   EVAL_DATASET_SLUG_RE,
   assertValidCaseId,
@@ -41,6 +42,11 @@ import {
   type DatasetContext,
   type EvalCaseOutcomeKind,
 } from "../../../lib/evals/dataset-store.js";
+import {
+  isSkillDatasetSlug,
+  skillEvalDatasetSlug,
+} from "../../../lib/evals/skill-dataset.js";
+import { listIndexedSkills } from "../../../lib/catalog-index.js";
 import {
   buildFlaggedCaseCore,
   buildThreadSnapshot,
@@ -82,6 +88,17 @@ const IN_FLIGHT_TURN_STATUSES = new Set([
 /** Slug budget is 64; keep room for collision suffixes (-2 … -99). */
 const DATASET_SLUG_BASE_MAX = 60;
 
+/**
+ * Tag stamped on a flagged case whose skill attribution came from the
+ * low-confidence INSTALLED-skill fallback (Skill Tests & Evals U8): the
+ * turn carried no recorded `activeSkills`, so the operator picked from the
+ * tenant's currently-installed catalog skills, which may differ from what
+ * was active when the (older) turn ran. The tag lets a later audit
+ * quarantine a possible misattribution. NOT applied when the operator
+ * picked an `active`-source candidate (high confidence).
+ */
+const ATTRIBUTION_FALLBACK_TAG = "attribution:fallback";
+
 export function slugifyDatasetName(name: string): string {
   const base = name
     .toLowerCase()
@@ -101,6 +118,21 @@ export function slugifyDatasetName(name: string): string {
 interface FlagThreadForEvalInput {
   threadId: string;
   turnId: string;
+  /**
+   * Skill attribution (Skill Tests & Evals U8). When provided, the case
+   * routes into that skill's per-skill dataset (`skill-<slug>`), which is
+   * created on demand if the skill has shipped no bundled cases yet.
+   * Mutually exclusive with datasetSlug / newDatasetName.
+   */
+  skillSlug?: string | null;
+  /**
+   * True when the operator picked the skill from the low-confidence
+   * INSTALLED-skill fallback (the turn had no recorded activeSkills) rather
+   * than an `active`-source candidate. Stamps the case with
+   * `attribution:fallback` so a later audit can quarantine a possible
+   * misattribution. Only meaningful alongside skillSlug.
+   */
+  attributionFallback?: boolean | null;
   datasetSlug?: string | null;
   newDatasetName?: string | null;
   resolutionTarget: string;
@@ -128,13 +160,37 @@ const flagThreadForEval = async (
   if (outcomeKind !== "security" && outcomeKind !== "quality") {
     throw badInput(`Invalid outcome kind: must be 'security' or 'quality'.`);
   }
+  // Three-way attribution (U8): exactly one of skillSlug (route into the
+  // skill's `skill-<slug>` dataset), datasetSlug (existing custom dataset),
+  // or newDatasetName (create a custom dataset). "Not skill-specific" is
+  // the existing datasetSlug/newDatasetName path, unchanged.
+  const skillSlug = input.skillSlug?.trim() || null;
   const existingSlug = input.datasetSlug?.trim() || null;
   const newDatasetName = input.newDatasetName?.trim() || null;
-  if ((existingSlug == null) === (newDatasetName == null)) {
+  const targetCount =
+    (skillSlug == null ? 0 : 1) +
+    (existingSlug == null ? 0 : 1) +
+    (newDatasetName == null ? 0 : 1);
+  if (targetCount !== 1) {
     throw badInput(
-      "Provide exactly one of datasetSlug (existing dataset) or newDatasetName (create one).",
+      "Provide exactly one of skillSlug (attribute to a skill), datasetSlug (existing dataset), or newDatasetName (create one).",
     );
   }
+  // Validate skillSlug shape up front (path-traversal guard) — it must form
+  // a valid `skill-<slug>` dataset slug. skillEvalDatasetSlug throws on a
+  // skill slug that overflows the dataset slug budget; surface as bad input.
+  if (skillSlug) {
+    try {
+      skillEvalDatasetSlug(skillSlug);
+    } catch (err) {
+      throw badInput(
+        `Invalid skillSlug "${skillSlug}": ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+  const attributionFallback = input.attributionFallback === true;
   if (existingSlug && !EVAL_DATASET_SLUG_RE.test(existingSlug)) {
     throw badInput(`Invalid dataset slug "${existingSlug}".`);
   }
@@ -190,7 +246,38 @@ const flagThreadForEval = async (
 
   // Tenant triangle (3): resolve the target dataset under THIS tenant.
   let datasetSlug: string;
-  if (existingSlug) {
+  if (skillSlug) {
+    // Skill attribution: route into the skill's per-skill dataset. ENSURE
+    // it exists — a skill that shipped no bundled cases has no dataset yet,
+    // so create one (kind:'skill') on demand. An existing skill dataset is
+    // a valid flag target (unlike the baseline-suite rejection below).
+    datasetSlug = skillEvalDatasetSlug(skillSlug);
+    const datasetRow = await loadDatasetRow(tenantId, datasetSlug);
+    if (datasetRow) {
+      if (datasetRow.archived_at) {
+        throw badInput(`Skill dataset ${datasetSlug} is archived.`);
+      }
+    } else {
+      const dctx: DatasetContext = {
+        tenantId,
+        tenantSlug,
+        slug: datasetSlug,
+      };
+      try {
+        await createDatasetInStore(
+          dctx,
+          { name: `Skill: ${skillSlug}`, kind: "skill" },
+          storage,
+          store,
+        );
+      } catch (err) {
+        // Tolerate an "already exists" race (a concurrent flag or an
+        // install-time seeder created it between the read and the write).
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/already exists/i.test(message)) throw badInput(message);
+      }
+    }
+  } else if (existingSlug) {
     const datasetRow = await loadDatasetRow(tenantId, existingSlug);
     if (!datasetRow) {
       // Tenant-scoped lookup: a dataset belonging to another tenant can
@@ -286,6 +373,14 @@ const flagThreadForEval = async (
     resolutionTarget,
     outcomeKind,
   });
+  // A skill-attributed case must NOT carry BUNDLED_CASE_TAG (origin:bundled)
+  // — buildFlaggedCaseCore never adds it, so the case survives a skill
+  // re-sync (the seeder only reconciles bundled cases). A low-confidence
+  // INSTALLED-skill fallback attribution is tagged so an audit can
+  // quarantine a possible misattribution.
+  if (skillSlug && attributionFallback) {
+    core.tags = [...core.tags, ATTRIBUTION_FALLBACK_TAG];
+  }
   await putEvalDatasetCase(dctx, core, null, storage, store);
 
   const datasetRow = await loadDatasetRowOrThrow(tenantId, datasetSlug);
@@ -297,6 +392,144 @@ const flagThreadForEval = async (
   };
 };
 
+// ---------------------------------------------------------------------------
+// flaggedTurnSkillCandidates — attribution suggestions (Skill Tests & Evals U8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read-path tenant scoping — mirrors resolveReadTenantId in datasets.ts /
+ * index.ts. `ctx.auth.tenantId` is null for Google-federated callers until
+ * the Cognito pre-token trigger lands, so fall back to the DB-backed
+ * resolver. Returns null when no tenant resolves; the caller fails closed.
+ */
+async function resolveReadTenantId(
+  ctx: GraphQLContext,
+): Promise<string | null> {
+  return ctx.auth?.tenantId ?? (await resolveCallerTenantId(ctx));
+}
+
+interface SkillAttributionCandidate {
+  skillSlug: string;
+  /** "active" (intersected from the turn's recorded skills) | "installed". */
+  source: "active" | "installed";
+}
+
+/**
+ * Suggest skill-attribution candidates for a flagged turn (U8). Suggestion
+ * only — the system NEVER auto-attributes; the dialog (U9) renders these +
+ * a "not skill-specific" option and the operator confirms exactly one.
+ *
+ * Tenant discipline mirrors the mutation: verify the turn belongs to the
+ * thread AND the caller's tenant; a cross-tenant/nonexistent thread or a
+ * turn that isn't this thread's surfaces as NOT_FOUND (no existence oracle).
+ *
+ * Logic:
+ *   - Read the turn's `context_snapshot.workspace_projection.activeSkills`
+ *     (U7) and intersect with the tenant's installed catalog skill slugs —
+ *     those are high-confidence `source:"active"`, `fallback:false`.
+ *   - If the turn carries NO activeSkills (older turn) OR the intersection
+ *     is empty, fall back to the tenant's installed catalog skills as
+ *     low-confidence `source:"installed"`, `fallback:true`.
+ */
+const flaggedTurnSkillCandidates = async (
+  _p: unknown,
+  args: { tenantId: string; threadId: string; turnId: string },
+  ctx: GraphQLContext,
+): Promise<{ candidates: SkillAttributionCandidate[]; fallback: boolean }> => {
+  const tenantId = await resolveReadTenantId(ctx);
+  // Fail closed on a tenant mismatch — same NOT_FOUND outcome a foreign
+  // thread id gets, so the read leaks no existence signal.
+  if (!tenantId || tenantId !== args.tenantId) {
+    throw notFound("Thread not found");
+  }
+
+  // The thread must exist under this tenant.
+  const [thread] = await db
+    .select({ id: threads.id, tenant_id: threads.tenant_id })
+    .from(threads)
+    .where(eq(threads.id, args.threadId));
+  if (!thread || thread.tenant_id !== tenantId) {
+    throw notFound("Thread not found");
+  }
+
+  // The turn must belong to this thread + tenant.
+  const [turn] = await db
+    .select({
+      id: threadTurns.id,
+      tenant_id: threadTurns.tenant_id,
+      thread_id: threadTurns.thread_id,
+      context_snapshot: threadTurns.context_snapshot,
+    })
+    .from(threadTurns)
+    .where(eq(threadTurns.id, args.turnId));
+  if (!turn || turn.thread_id !== thread.id || turn.tenant_id !== tenantId) {
+    throw notFound("Turn not found");
+  }
+
+  // The tenant's installed catalog skills — the universe attribution maps
+  // into (intersected with active skills, or the fallback set itself).
+  const installed = await listIndexedSkills(tenantId);
+  const installedSlugs = new Set(installed.map((s) => s.slug));
+
+  // The turn's recorded active skill ids (U7). Absent on older turns.
+  const snapshot = turn.context_snapshot as Record<string, unknown> | null;
+  const projection = (snapshot?.workspace_projection ?? null) as Record<
+    string,
+    unknown
+  > | null;
+  const rawActive = projection?.activeSkills;
+  const activeSkills = Array.isArray(rawActive)
+    ? rawActive.filter((s): s is string => typeof s === "string")
+    : [];
+
+  // Intersect active skills down to real catalog skills (drops always-on
+  // defaults/built-ins that aren't installed catalog skills). De-dup while
+  // preserving the recorded order.
+  const seen = new Set<string>();
+  const activeCandidates: SkillAttributionCandidate[] = [];
+  for (const slug of activeSkills) {
+    if (!installedSlugs.has(slug) || seen.has(slug)) continue;
+    seen.add(slug);
+    activeCandidates.push({ skillSlug: slug, source: "active" });
+  }
+
+  if (activeCandidates.length > 0) {
+    return { candidates: activeCandidates, fallback: false };
+  }
+
+  // Fallback (low-confidence): the turn had no usable activeSkills, so
+  // suggest from the tenant's currently-installed catalog skills — which
+  // may differ from what was active in an old turn. fallback:true signals
+  // the dialog to pass attributionFallback through to the mutation.
+  const installedCandidates: SkillAttributionCandidate[] = installed
+    .filter((s) => isInstalledSkillSlug(s.slug))
+    .map((s) => ({ skillSlug: s.slug, source: "installed" }));
+  return { candidates: installedCandidates, fallback: true };
+};
+
+/**
+ * Guard a candidate slug so it can become a `skill-<slug>` dataset slug
+ * downstream (the mutation validates the same way). A catalog slug that
+ * would overflow the dataset slug budget is dropped from suggestions
+ * rather than offered as an un-attributable candidate.
+ */
+function isInstalledSkillSlug(slug: string): boolean {
+  // A skill dataset slug is `skill-<slug>`; offering a candidate the
+  // mutation would reject is pointless — and a slug that already looks like
+  // a skill dataset slug is not itself an installable catalog skill.
+  if (isSkillDatasetSlug(slug)) return false;
+  try {
+    skillEvalDatasetSlug(slug);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const flagThreadMutations = {
   flagThreadForEval,
+};
+
+export const flagThreadQueries = {
+  flaggedTurnSkillCandidates,
 };

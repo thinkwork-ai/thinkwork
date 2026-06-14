@@ -100,8 +100,20 @@ input FlagThreadForEvalInput {
   threadId: ID!
   # Must be a completed turn of the thread — in-flight turns are rejected.
   turnId: ID!
-  # Exactly one of datasetSlug (existing custom dataset; baseline is not
-  # a valid target) or newDatasetName (creates a custom dataset).
+  # Three-way attribution (Skill Tests & Evals U8): exactly one of
+  # skillSlug (route the case into that skill's `skill-<slug>` dataset,
+  # created on demand if the skill shipped no bundled cases yet),
+  # datasetSlug (existing custom dataset; baseline is not a valid target),
+  # or newDatasetName (creates a custom dataset). The system never
+  # auto-attributes — the operator confirms exactly one skill or "not
+  # skill-specific" (the datasetSlug/newDatasetName path).
+  skillSlug: String
+  # True when the operator picked the skill from the low-confidence
+  # INSTALLED-skill fallback (the turn carried no recorded activeSkills)
+  # rather than an `active`-source candidate. Stamps the case with the
+  # `attribution:fallback` tag so a later audit can quarantine a possible
+  # misattribution. Only meaningful alongside skillSlug.
+  attributionFallback: Boolean
   datasetSlug: String
   newDatasetName: String
   # Required, non-empty after trim: what "fixed" looks like. Becomes the
@@ -109,6 +121,35 @@ input FlagThreadForEvalInput {
   resolutionTarget: String!
   # 'security' | 'quality' — tagged onto the case.
   outcomeKind: String!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Flagged-turn skill-attribution candidates (Skill Tests & Evals U8)
+#
+# Suggests which skill a flagged turn's bad output could be attributed
+# to. Suggestion only — the system NEVER auto-attributes; the dialog
+# (U9) renders these + a "not skill-specific" option and the operator
+# confirms exactly one, passing attributionFallback through to
+# flagThreadForEval when picking a fallback candidate.
+# ────────────────────────────────────────────────────────────────────
+
+type SkillAttributionCandidate {
+  # An installed catalog skill slug the operator may attribute the case to.
+  skillSlug: String!
+  # 'active' — intersected from the turn's recorded activeSkills (U7);
+  # high confidence. 'installed' — the turn had no usable activeSkills, so
+  # this comes from the tenant's currently-installed catalog skills (low
+  # confidence; pair with attributionFallback on the mutation).
+  source: String!
+}
+
+type SkillAttributionCandidates {
+  candidates: [SkillAttributionCandidate!]!
+  # True when the candidates are the low-confidence installed-skill
+  # fallback (the turn carried no usable activeSkills). The dialog passes
+  # attributionFallback=true to flagThreadForEval when the operator picks
+  # one of these.
+  fallback: Boolean!
 }
 
 # ────────────────────────────────────────────────────────────────────
@@ -240,12 +281,70 @@ type EvalSummary {
   regressionCount: Int!
 }
 
+# ────────────────────────────────────────────────────────────────────
+# Per-skill score (Skill Tests & Evals U5)
+#
+# Projects the per-skill eval dataset (slug `skill-<skillSlug>`) into the
+# score install/update surfaces. `rated` is false for a skill with no
+# enabled cases — "unrated" is a neutral state, never a failure.
+# `regression` is true only when the latest completed scored run scored
+# below the previous one (same current scoring version), so a baseline or
+# scoring-version change never reads as a skill regression.
+# ────────────────────────────────────────────────────────────────────
+
+type SkillEvalScore {
+  skillSlug: String!
+  # The derived dataset slug (`skill-<skillSlug>`).
+  datasetSlug: String!
+  # True once the dataset carries at least one enabled case.
+  rated: Boolean!
+  # Latest completed scored run's pass rate (0.0–1.0); null when unrated /
+  # no score yet.
+  passRate: Float
+  # Latest completed run scored below the previous completed run.
+  regression: Boolean!
+  lastRunId: ID
+  lastRunAt: AWSDateTime
+  totalCases: Int!
+}
+
 type EvalTimeSeriesPoint {
   day: String!
   passRate: Float
   runCount: Int!
   passed: Int!
   failed: Int!
+}
+
+# ────────────────────────────────────────────────────────────────────
+# Skill-update gate (Skill Tests & Evals U6)
+#
+# A per-tenant threshold that HOLDS a skill UPDATE swap when the candidate
+# version scores below it. `enabled` is true when a gate row exists; no row
+# = no gate (nothing blocks). Per-tenant single threshold in v1.
+# ────────────────────────────────────────────────────────────────────
+
+type SkillEvalGate {
+  # True when a gate row exists for the tenant (the gate is on).
+  enabled: Boolean!
+  # The threshold (0.0–1.0); null when the gate is off.
+  threshold: Float
+}
+
+# Result of applying (or attempting to apply) a HELD skill update
+# (Skill Tests & Evals U6). `applied` swaps the candidate in and promotes
+# its staging dataset; `blocked` is the below-threshold-no-override arm.
+type SkillUpdateApplyResult {
+  # The candidate's swap was performed (gate passed or override).
+  applied: Boolean!
+  # The candidate scored below threshold and was not overridden — no swap.
+  blocked: Boolean!
+  # The swap was forced past a below-threshold candidate via override.
+  overridden: Boolean!
+  # The candidate's latest staging pass rate (0.0–1.0); null when unscored.
+  passRate: Float
+  # The gate threshold in effect; null when no gate is set.
+  threshold: Float
 }
 
 type EvalRunsPage {
@@ -434,6 +533,24 @@ extend type Query {
   # the cached tenant_mcp_servers.tools list (approved + enabled servers); no
   # live MCP discovery.
   evalReplayAvailableMcpTools(tenantId: ID!): [EvalReplayMcpServer!]!
+  # Per-skill eval score + regression (Skill Tests & Evals U5).
+  # Operator-gated; tenant-scoped. Returns an "unrated" score (rated:
+  # false) for a skill with no enabled cases — never null.
+  skillEvalScore(tenantId: ID!, skillSlug: String!): SkillEvalScore!
+  # Per-tenant skill-update gate (Skill Tests & Evals U6). Tenant-scoped
+  # read; `enabled` is false (threshold null) when no gate is set.
+  skillEvalGate(tenantId: ID!): SkillEvalGate!
+  # Skill-attribution candidates for a flagged turn (Skill Tests & Evals
+  # U8). Read-gated; verifies the turn belongs to the thread + tenant
+  # (NOT_FOUND on mismatch, no existence oracle). Returns active-skill
+  # candidates intersected from the turn's recorded activeSkills, else the
+  # low-confidence installed-skill fallback. Suggestion only — never
+  # auto-attributes.
+  flaggedTurnSkillCandidates(
+    tenantId: ID!
+    threadId: ID!
+    turnId: ID!
+  ): SkillAttributionCandidates!
 }
 
 extend type Mutation {
@@ -504,4 +621,19 @@ extend type Mutation {
   ): EvalReplayAllowedTool!
   # Remove an override entry by id (gate is row-derived → tenant admin).
   removeEvalReplayToolOverride(id: ID!): Boolean!
+  # Set or clear the per-tenant skill-update gate threshold (Skill Tests &
+  # Evals U6). Operator-gated (requireTenantAdmin). A finite threshold in
+  # [0, 1] enables the gate (upsert); null clears it (the gate goes off).
+  setSkillEvalGate(tenantId: ID!, threshold: Float): SkillEvalGate!
+  # Apply a HELD skill update (Skill Tests & Evals U6). Operator-gated.
+  # Reads the candidate's staging score; if it passes the gate (or
+  # override is true) performs the real workspace swap, promotes the live
+  # dataset, and archives the staging dataset. Below threshold without
+  # override → blocked (no swap).
+  applySkillUpdate(
+    tenantId: ID!
+    skillSlug: String!
+    agentId: ID!
+    override: Boolean
+  ): SkillUpdateApplyResult!
 }

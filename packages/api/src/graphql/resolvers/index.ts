@@ -49,7 +49,10 @@ import {
   evalDatasetQueries,
   evalDatasetMutations,
 } from "./evaluations/datasets.js";
-import { flagThreadMutations } from "./evaluations/flag-thread.js";
+import {
+  flagThreadMutations,
+  flagThreadQueries,
+} from "./evaluations/flag-thread.js";
 import {
   evalReplayAllowlistQueries,
   evalReplayAllowlistMutations,
@@ -114,6 +117,7 @@ export const queryResolvers: Record<string, any> = {
   ...recipeQueries,
   ...evaluationsQueries,
   ...evalDatasetQueries,
+  ...flagThreadQueries,
   ...evalReplayAllowlistQueries,
   ...wikiQueries,
   ...brainQueries,
