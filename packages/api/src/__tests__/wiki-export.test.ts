@@ -116,6 +116,7 @@ beforeEach(() => {
   selectDistinctResults.length = 0;
   mockS3Send.mockResolvedValue({});
   process.env.WIKI_EXPORT_BUCKET = "wiki-exports-test";
+  delete process.env.BRAIN_ARTIFACTS_BUCKET;
 });
 
 describe("wiki-export tenant scope", () => {

@@ -7,6 +7,7 @@ import {
 import {
   serializeIngestRun,
   toDbEnum,
+  type KnowledgeGraphArtifactManifestRow,
   type KnowledgeGraphIngestRunRow,
 } from "./mappers.js";
 
@@ -54,13 +55,72 @@ export async function knowledgeGraphIngestRuns(
      ORDER BY created_at DESC
      LIMIT ${limit}
   `);
+  const rows =
+    (result as unknown as { rows?: KnowledgeGraphIngestRunRow[] }).rows ?? [];
+  if (rows.length === 0) return [];
 
-  return (
-    (result as unknown as { rows?: KnowledgeGraphIngestRunRow[] }).rows ?? []
-  ).map(serializeIngestRun);
+  const manifestsByRunId = await loadArtifactManifestsByRunId(
+    ctx,
+    scope.tenantId,
+    rows.map((row) => row.id),
+  );
+
+  return rows.map((row) =>
+    serializeIngestRun(row, {
+      artifactManifests: manifestsByRunId.get(row.id) ?? [],
+    }),
+  );
 }
 
 function clampLimit(value: number | null | undefined): number {
   if (!Number.isFinite(value ?? NaN)) return 25;
   return Math.max(1, Math.min(100, Math.floor(value!)));
+}
+
+async function loadArtifactManifestsByRunId(
+  ctx: GraphQLContext,
+  tenantId: string,
+  runIds: string[],
+): Promise<Map<string, KnowledgeGraphArtifactManifestRow[]>> {
+  const runIdFilters = runIds.map((runId) => sql`${runId}`);
+  const result = await ctx.db.execute(sql`
+    SELECT
+      id,
+      tenant_id,
+      ingest_run_id,
+      manifest_kind,
+      source_kind,
+      source_type,
+      manifest_uri,
+      artifact_root_uri,
+      vault_projection_root_uri,
+      checksum_sha256,
+      object_count,
+      source_count,
+      content_type,
+      content_encoding,
+      byte_length,
+      embedding_model,
+      vector_dimension,
+      ontology_version,
+      ontology_mechanism,
+      status,
+      created_at,
+      updated_at
+      FROM brain.artifact_manifests
+     WHERE tenant_id = ${tenantId}
+       AND ingest_run_id IN (${sql.join(runIdFilters, sql`, `)})
+     ORDER BY created_at ASC
+  `);
+  const rows =
+    (result as unknown as { rows?: KnowledgeGraphArtifactManifestRow[] })
+      .rows ?? [];
+  const manifestsByRunId = new Map<string, KnowledgeGraphArtifactManifestRow[]>();
+  for (const row of rows) {
+    if (!row.ingest_run_id) continue;
+    const bucket = manifestsByRunId.get(row.ingest_run_id) ?? [];
+    bucket.push(row);
+    manifestsByRunId.set(row.ingest_run_id, bucket);
+  }
+  return manifestsByRunId;
 }

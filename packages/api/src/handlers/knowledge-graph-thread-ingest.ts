@@ -1,6 +1,10 @@
 import type { Database } from "../lib/db.js";
 import { db as defaultDb } from "../lib/db.js";
 import { CogneeClient } from "../lib/knowledge-graph/cognee-client.js";
+import {
+  redactedSourceRef,
+  writeKnowledgeGraphIngestArtifacts,
+} from "../lib/knowledge-graph/artifacts.js";
 import { normalizeCogneeGraph } from "../lib/knowledge-graph/normalizer.js";
 import { loadApprovedOntologyExport } from "../lib/knowledge-graph/ontology-export.js";
 import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
@@ -82,6 +86,12 @@ export async function processKnowledgeGraphThreadIngest(
         `Knowledge Graph ${run.source_kind} ingest found no eligible source text`,
       );
     }
+    const artifactWrite = await writeKnowledgeGraphIngestArtifacts({
+      db: database,
+      run,
+      source,
+      ontology,
+    });
 
     const client = deps.cogneeClient ?? new CogneeClient();
     const ingest = await client.ingestDocument({
@@ -120,12 +130,17 @@ export async function processKnowledgeGraphThreadIngest(
       ontologyMechanism: ontology.mechanism,
       sourceMetrics: {
         sourceKind: run.source_kind,
-        sourceRef: run.source_ref,
+        sourceRefHash: redactedSourceRef(run.source_ref),
         sourceLabel: run.source_label,
         sourcePacketCount: source.packetCount,
         sourceRelationshipCount: source.relationships.length,
         skippedSourceCount: source.skippedCount,
         sourceDiagnostics: source.diagnostics,
+        brainArtifactsEnabled: artifactWrite.enabled,
+        sourceArtifactChecksum:
+          artifactWrite.sourceArtifact?.checksumSha256 ?? null,
+        ingestionManifestChecksum:
+          artifactWrite.ingestionManifest?.checksumSha256 ?? null,
         cogneePipelineRunId: ingest.pipelineRunId,
         cogneeIndexStatus: indexing.status,
         cogneeIndexRawStatus: indexing.rawStatus,
@@ -144,6 +159,7 @@ export async function processKnowledgeGraphThreadIngest(
       status: "succeeded",
       metrics: {
         sourceKind: run.source_kind,
+        sourceRefHash: redactedSourceRef(run.source_ref),
         sourcePacketCount: source.packetCount,
         sourceRelationshipCount: source.relationships.length,
         skippedSourceCount: source.skippedCount,
@@ -167,7 +183,7 @@ export async function processKnowledgeGraphThreadIngest(
       error: message,
       metrics: {
         sourceKind: run.source_kind,
-        sourceRef: run.source_ref,
+        sourceRefHash: redactedSourceRef(run.source_ref),
       },
     });
     console.error("[knowledge-graph-thread-ingest] failed", {
@@ -175,7 +191,7 @@ export async function processKnowledgeGraphThreadIngest(
       tenantId: run.tenant_id,
       threadId: run.thread_id,
       sourceKind: run.source_kind,
-      sourceRef: run.source_ref,
+      sourceRefHash: redactedSourceRef(run.source_ref),
       error: message,
     });
     return {

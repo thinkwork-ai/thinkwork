@@ -61,6 +61,12 @@ variable "bucket_arn" {
   type        = string
 }
 
+variable "brain_artifacts_kms_key_arn" {
+  description = "Optional KMS key ARN used to encrypt canonical Company Brain artifacts. AES256 encryption is used when unset."
+  type        = string
+  default     = ""
+}
+
 variable "enable_workspace_orchestration" {
   description = "Enable S3 EventBridge/SQS routing for workspace file orchestration."
   type        = bool

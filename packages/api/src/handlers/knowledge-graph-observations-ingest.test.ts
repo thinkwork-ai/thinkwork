@@ -259,6 +259,7 @@ beforeEach(() => {
     ],
   });
   delete process.env.KG_OBS_MAX_CANDIDATES_PER_RUN;
+  delete process.env.BRAIN_ARTIFACTS_BUCKET;
 });
 
 describe("knowledge-graph-observations-ingest handler", () => {

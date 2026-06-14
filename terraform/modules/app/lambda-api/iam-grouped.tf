@@ -107,6 +107,25 @@ locals {
         Action   = ["s3:PutObject", "s3:AbortMultipartUpload"]
         Resource = "${aws_s3_bucket.wiki_exports.arn}/*"
       },
+      # Canonical Company Brain artifacts: durable source artifacts,
+      # ingestion manifests, migration snapshots, vault projections, and
+      # exports. Tenant-visible APIs redact object keys; Lambdas need object
+      # read/write for replay and list access for migration enumeration.
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+          "s3:PutObject",
+          "s3:AbortMultipartUpload",
+        ]
+        Resource = "${aws_s3_bucket.brain_artifacts.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.brain_artifacts.arn
+      },
       # (was inline policy "cognito-access")
       {
         Effect = "Allow"
@@ -325,6 +344,21 @@ locals {
           [for q in aws_sqs_queue.workspace_event : q.arn],
           [for q in aws_sqs_queue.workspace_event_dlq : q.arn],
         )
+      },
+    ] : [],
+    var.brain_artifacts_kms_key_arn != "" ? [
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+        ]
+        Resource = var.brain_artifacts_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.amazonaws.com"
+          }
+        }
       },
     ] : [],
   )

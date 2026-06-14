@@ -127,6 +127,7 @@ beforeEach(() => {
     nodes: [{ id: "acme", label: "Acme", type: "Company", properties: {} }],
     edges: [],
   });
+  delete process.env.BRAIN_ARTIFACTS_BUCKET;
 });
 
 describe("knowledge-graph-thread-ingest handler", () => {
