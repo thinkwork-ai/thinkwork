@@ -17,7 +17,7 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentC
 - Tenant S3 skill catalogs — per-tenant folders at `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; installed skills materialize into workspace `skills/<slug>/` folders
 - `packages/system-workspace` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
 - `terraform/modules/{foundation,data,app,thinkwork}` — three-tier Terraform Registry modules (`thinkwork-ai/thinkwork/aws`)
-- `docs/` — Astro Starlight docs site; also holds `plans/`, `brainstorms/`, `solutions/` — prior-session institutional knowledge worth grepping before starting non-trivial work
+- `docs/` — Astro Starlight docs site; also holds `plans/`, `brainstorms/`, and `solutions/`; `docs/solutions/` contains documented bugs, patterns, workflow issues, and decisions organized by category with YAML frontmatter (`module`, `problem_type`, `tags`), relevant when implementing or debugging in documented areas
 - `CONCEPTS.md` — shared domain vocabulary (entities, named processes, status concepts); relevant when orienting to the codebase or discussing domain terms
 
 ## Tooling ground rules
