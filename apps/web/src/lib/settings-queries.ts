@@ -255,6 +255,118 @@ export const SettingsStartDeploymentReleaseUpdateMutation = graphql(`
   }
 `);
 
+export const SettingsStartReleaseUpdatePreflightMutation = graphql(`
+  mutation SettingsStartReleaseUpdatePreflight(
+    $input: StartReleaseUpdatePreflightInput!
+  ) {
+    startReleaseUpdatePreflight(input: $input) {
+      id
+      status
+      targetReleaseVersion
+      currentReleaseVersion
+      manifestSha256
+      manifestSigned
+      manifestTrustPolicy
+      terraformModuleVersion
+      preflightSummary
+      preservedConfigSummary
+      remediationSummary
+      stateMachineArn
+      executionArn
+      codebuildBuildArn
+      evidenceBucket
+      evidencePrefix
+      statusPointerBucket
+      statusPointerKey
+      finalStatus
+      failureCategory
+      failureMessage
+      recoveryAction
+      events {
+        id
+        eventType
+        message
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
+export const SettingsReleaseUpdateJobQuery = graphql(`
+  query SettingsReleaseUpdateJob($jobId: ID!) {
+    releaseUpdateJob(jobId: $jobId) {
+      id
+      status
+      targetReleaseVersion
+      currentReleaseVersion
+      manifestSha256
+      manifestSigned
+      manifestTrustPolicy
+      terraformModuleVersion
+      preflightSummary
+      preservedConfigSummary
+      remediationSummary
+      stateMachineArn
+      executionArn
+      codebuildBuildArn
+      evidenceBucket
+      evidencePrefix
+      statusPointerBucket
+      statusPointerKey
+      finalStatus
+      failureCategory
+      failureMessage
+      recoveryAction
+      events {
+        id
+        eventType
+        message
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
+export const SettingsRemediateReleaseRunnerMutation = graphql(`
+  mutation SettingsRemediateReleaseRunner(
+    $input: RemediateReleaseRunnerInput!
+  ) {
+    remediateReleaseRunner(input: $input) {
+      id
+      status
+      targetReleaseVersion
+      currentReleaseVersion
+      manifestSha256
+      manifestSigned
+      manifestTrustPolicy
+      terraformModuleVersion
+      preflightSummary
+      preservedConfigSummary
+      remediationSummary
+      stateMachineArn
+      executionArn
+      codebuildBuildArn
+      evidenceBucket
+      evidencePrefix
+      statusPointerBucket
+      statusPointerKey
+      finalStatus
+      failureCategory
+      failureMessage
+      recoveryAction
+      events {
+        id
+        eventType
+        message
+        payload
+        createdAt
+      }
+    }
+  }
+`);
+
 export const SettingsSetKnowledgeGraphDeploymentMutation = graphql(`
   mutation SettingsSetKnowledgeGraphDeployment($enabled: Boolean!) {
     setKnowledgeGraphDeployment(input: { enabled: $enabled }) {

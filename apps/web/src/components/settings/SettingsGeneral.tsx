@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
   Button,
@@ -35,6 +35,10 @@ import {
 import {
   SettingsDeploymentReleasesQuery,
   SettingsDeploymentStatusQuery,
+  SettingsReleaseUpdateJobQuery,
+  SettingsRemediateReleaseRunnerMutation,
+  SettingsStartDeploymentReleaseUpdateMutation,
+  SettingsStartReleaseUpdatePreflightMutation,
 } from "@/lib/settings-queries";
 import {
   SettingsHeader,
@@ -192,39 +196,49 @@ interface DeploymentReleaseRow {
   htmlUrl: string;
   manifestUrl: string;
   manifestSha256: string;
+  signatureUrl?: string | null;
   signed: boolean;
   deployable: boolean;
 }
 
-interface DeploymentReleaseUpdateJobResult {
+interface ReleaseUpdateJobRow {
   id: string;
   status: string;
   targetReleaseVersion: string;
+  currentReleaseVersion?: string | null;
+  manifestSha256: string;
+  manifestSigned: boolean;
+  manifestTrustPolicy?: string | null;
+  terraformModuleVersion?: string | null;
+  preflightSummary: Record<string, unknown>;
+  preservedConfigSummary: Record<string, unknown>;
+  remediationSummary: Record<string, unknown>;
   executionArn?: string | null;
   stateMachineArn?: string | null;
+  codebuildBuildArn?: string | null;
   evidenceBucket?: string | null;
   evidencePrefix?: string | null;
+  statusPointerBucket?: string | null;
+  statusPointerKey?: string | null;
+  finalStatus: Record<string, unknown>;
+  failureCategory?: string | null;
   failureMessage?: string | null;
   recoveryAction?: string | null;
+  events?: Array<{
+    id: string;
+    eventType: string;
+    message: string;
+    payload: Record<string, unknown>;
+    createdAt?: string | null;
+  }>;
 }
 
-type DeploymentProgressState =
-  | {
-      phase: "starting";
-      release: DeploymentReleaseRow;
-      message: string;
-    }
-  | {
-      phase: "accepted";
-      release: DeploymentReleaseRow;
-      message: string;
-      result: DeploymentReleaseUpdateJobResult;
-    }
-  | {
-      phase: "failed";
-      release: DeploymentReleaseRow;
-      message: string;
-    };
+interface ReleaseWorkflowState {
+  release: DeploymentReleaseRow;
+  job?: ReleaseUpdateJobRow | null;
+  message?: string | null;
+  error?: string | null;
+}
 
 function DeploymentReleasesSection({
   enabled,
@@ -237,42 +251,158 @@ function DeploymentReleasesSection({
 }) {
   const [selectedRelease, setSelectedRelease] =
     useState<DeploymentReleaseRow | null>(null);
-  const [deploymentProgress, setDeploymentProgress] =
-    useState<DeploymentProgressState | null>(null);
+  const [workflow, setWorkflow] = useState<ReleaseWorkflowState | null>(null);
   const [result] = useQuery({
     query: SettingsDeploymentReleasesQuery,
     variables: { limit: 5 },
     pause: !enabled,
   });
+  const [preflightState, startPreflight] = useMutation(
+    SettingsStartReleaseUpdatePreflightMutation,
+  );
+  const [runnerState, remediateRunner] = useMutation(
+    SettingsRemediateReleaseRunnerMutation,
+  );
+  const [dispatchState, startReleaseUpdate] = useMutation(
+    SettingsStartDeploymentReleaseUpdateMutation,
+  );
+  const jobId = workflow?.job?.id ?? "";
+  const [jobResult, refreshReleaseJob] = useQuery({
+    query: SettingsReleaseUpdateJobQuery,
+    variables: { jobId },
+    pause: !jobId,
+    requestPolicy: "network-only",
+  });
   const releases = (result.data?.deploymentReleases ??
     []) as DeploymentReleaseRow[];
+  const polledJob =
+    (jobResult.data?.releaseUpdateJob as ReleaseUpdateJobRow | null) ?? null;
+  const activeJob = polledJob ?? workflow?.job ?? null;
   const deploymentCompleted =
-    deploymentProgress?.phase === "accepted" &&
-    deploymentProgress.release.version === currentReleaseVersion;
-  const deploymentBusy = false;
+    activeJob?.status === "succeeded" &&
+    activeJob.targetReleaseVersion === currentReleaseVersion;
+  const deploymentBusy =
+    preflightState.fetching || runnerState.fetching || dispatchState.fetching;
 
   useEffect(() => {
-    if (deploymentProgress?.phase !== "accepted" || deploymentCompleted) {
+    if (!activeJob || activeJob.status !== "updating") {
       return;
     }
     const interval = window.setInterval(() => {
+      refreshReleaseJob({ requestPolicy: "network-only" });
       onRefreshDeploymentStatus?.();
     }, 8000);
     return () => window.clearInterval(interval);
   }, [
-    deploymentCompleted,
-    deploymentProgress?.phase,
+    activeJob?.id,
+    activeJob?.status,
     onRefreshDeploymentStatus,
+    refreshReleaseJob,
   ]);
 
-  async function confirmDeploy() {
-    if (!selectedRelease) return;
-    const release = selectedRelease;
+  async function beginPreflight(release: DeploymentReleaseRow) {
     setSelectedRelease(null);
-    const message =
-      "Release updates now require preflight review before dispatch.";
-    setDeploymentProgress({ phase: "failed", release, message });
-    toast.error("Release preflight required", { description: message });
+    setWorkflow({
+      release,
+      message: "Running release preflight.",
+      error: null,
+    });
+    const response = await startPreflight({
+      input: {
+        version: release.version,
+        manifestUrl: release.manifestUrl,
+        manifestSha256: release.manifestSha256,
+        signatureUrl: release.signatureUrl,
+        signed: release.signed,
+        idempotencyKey: `settings-release-preflight-${release.version}`,
+      },
+    });
+    if (response.error) {
+      const message = response.error.message;
+      setWorkflow({ release, error: message });
+      toast.error("Release preflight failed", { description: message });
+      return;
+    }
+    const job = response.data
+      ?.startReleaseUpdatePreflight as ReleaseUpdateJobRow | null;
+    if (!job) {
+      const message = "The deployment API returned no preflight job.";
+      setWorkflow({ release, error: message });
+      toast.error("Release preflight failed", { description: message });
+      return;
+    }
+    setWorkflow({
+      release,
+      job,
+      message: releaseJobMessage(job),
+      error: null,
+    });
+    if (hasBlockers(job)) {
+      toast.message("Release preflight needs attention", {
+        description: releaseJobMessage(job),
+      });
+      return;
+    }
+    toast.success("Release preflight passed", {
+      description: releaseJobMessage(job),
+    });
+  }
+
+  async function refreshRunner(job: ReleaseUpdateJobRow) {
+    if (!workflow) return;
+    const response = await remediateRunner({
+      input: {
+        jobId: job.id,
+        idempotencyKey: `settings-release-runner-${job.id}`,
+      },
+    });
+    if (response.error) {
+      const message = response.error.message;
+      setWorkflow({ ...workflow, job, error: message });
+      toast.error("Runner refresh failed", { description: message });
+      return;
+    }
+    const updated = response.data
+      ?.remediateReleaseRunner as ReleaseUpdateJobRow | null;
+    if (!updated) return;
+    setWorkflow({
+      ...workflow,
+      job: updated,
+      message: releaseJobMessage(updated),
+      error: null,
+    });
+    toast.success("Runner refreshed", {
+      description: releaseJobMessage(updated),
+    });
+  }
+
+  async function dispatchUpdate(job: ReleaseUpdateJobRow) {
+    if (!workflow) return;
+    const response = await startReleaseUpdate({
+      input: {
+        jobId: job.id,
+        idempotencyKey: `settings-release-dispatch-${job.id}`,
+      },
+    });
+    if (response.error) {
+      const message = response.error.message;
+      setWorkflow({ ...workflow, job, error: message });
+      toast.error("Release dispatch failed", { description: message });
+      return;
+    }
+    const updated = response.data
+      ?.startDeploymentReleaseUpdate as ReleaseUpdateJobRow | null;
+    if (!updated) return;
+    setWorkflow({
+      ...workflow,
+      job: updated,
+      message: releaseJobMessage(updated),
+      error: null,
+    });
+    onRefreshDeploymentStatus?.();
+    toast.success("Release update started", {
+      description: releaseJobMessage(updated),
+    });
   }
 
   return (
@@ -299,17 +429,27 @@ function DeploymentReleasesSection({
                 onClick={() => setSelectedRelease(release)}
                 disabled={!release.deployable || deploymentBusy}
               >
-                Deploy
+                Review
               </Button>
             </ReleaseRow>
           ))}
         </div>
       )}
 
-      {deploymentProgress ? (
-        <DeploymentProgressPanel
-          progress={deploymentProgress}
+      {workflow ? (
+        <ReleaseWorkflowPanel
+          release={workflow.release}
+          job={activeJob}
+          busy={deploymentBusy || jobResult.fetching}
           completed={deploymentCompleted}
+          message={workflow.error ?? workflow.message}
+          error={workflow.error}
+          onRunPreflight={() => beginPreflight(workflow.release)}
+          onRefreshRunner={
+            activeJob ? () => refreshRunner(activeJob) : undefined
+          }
+          onDispatch={activeJob ? () => dispatchUpdate(activeJob) : undefined}
+          onClose={() => setWorkflow(null)}
         />
       ) : null}
 
@@ -321,9 +461,9 @@ function DeploymentReleasesSection({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Deploy release?</DialogTitle>
+            <DialogTitle>Review release?</DialogTitle>
             <DialogDescription>
-              Start the deployment controller for this ThinkWork environment.
+              Run preflight before dispatching this ThinkWork environment.
             </DialogDescription>
           </DialogHeader>
           {selectedRelease ? (
@@ -347,8 +487,11 @@ function DeploymentReleasesSection({
             >
               Cancel
             </Button>
-            <Button onClick={confirmDeploy} disabled={deploymentBusy}>
-              {deploymentBusy ? "Starting…" : "Confirm Deploy"}
+            <Button
+              onClick={() => selectedRelease && beginPreflight(selectedRelease)}
+              disabled={deploymentBusy}
+            >
+              {deploymentBusy ? "Checking…" : "Run Preflight"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -357,25 +500,47 @@ function DeploymentReleasesSection({
   );
 }
 
-function DeploymentProgressPanel({
-  progress,
+function ReleaseWorkflowPanel({
+  release,
+  job,
+  busy,
   completed,
+  message,
+  error,
+  onRunPreflight,
+  onRefreshRunner,
+  onDispatch,
+  onClose,
 }: {
-  progress: DeploymentProgressState;
+  release: DeploymentReleaseRow;
+  job: ReleaseUpdateJobRow | null;
+  busy: boolean;
   completed: boolean;
+  message?: string | null;
+  error?: string | null;
+  onRunPreflight: () => void;
+  onRefreshRunner?: () => void;
+  onDispatch?: () => void;
+  onClose: () => void;
 }) {
   const steps = useMemo(
-    () => deploymentSteps(progress.phase, completed),
-    [completed, progress.phase],
+    () => releaseSteps(job, busy, completed),
+    [busy, completed, job],
   );
-  const result = progress.phase === "accepted" ? progress.result : null;
-  const title = completed
-    ? "Deployment completed"
-    : progress.phase === "failed"
-      ? "Deployment failed before the controller started"
-      : progress.phase === "accepted"
-        ? "Deployment controller started"
-        : "Starting deployment controller";
+  const title = releaseWorkflowTitle(job, busy, completed);
+  const blockers = blockersFor(job);
+  const warnings = warningsFor(job);
+  const runner = objectValue(objectValue(job?.preflightSummary).runner);
+  const iam = objectValue(objectValue(job?.preflightSummary).iam);
+  const preserved = objectValue(
+    objectValue(job?.preservedConfigSummary).fields,
+  );
+  const runnerRefresh = objectValue(
+    objectValue(job?.remediationSummary).runnerRefresh,
+  );
+  const canRefreshRunner =
+    runnerRefresh.required === true && Boolean(onRefreshRunner);
+  const canDispatch = Boolean(job && isDispatchable(job) && onDispatch);
 
   return (
     <div
@@ -384,15 +549,20 @@ function DeploymentProgressPanel({
       aria-live="polite"
     >
       <div className="mb-4">
-        <div className="font-medium">{title}</div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="font-medium">{title}</div>
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+        </div>
         <div
           className={
-            progress.phase === "failed"
+            error || job?.status === "failed"
               ? "text-destructive"
               : "text-muted-foreground"
           }
         >
-          {progress.message}
+          {message ?? releaseJobMessage(job)}
         </div>
       </div>
 
@@ -406,58 +576,328 @@ function DeploymentProgressPanel({
         ))}
       </div>
 
-      <div className="grid gap-3">
-        <ConfirmFact label="Release" value={progress.release.version} />
-        {result ? (
-          <>
-            <ConfirmFact label="Execution" value={result.executionArn ?? ""} />
-            <ConfirmFact
-              label="Evidence"
-              value={
-                result.evidenceBucket
-                  ? `${result.evidenceBucket}/${result.evidencePrefix}`
-                  : (result.evidencePrefix ?? "")
-              }
-            />
-          </>
+      <div className="grid gap-3 md:grid-cols-2">
+        <ConfirmFact
+          label="Current release"
+          value={job?.currentReleaseVersion ?? "unknown"}
+        />
+        <ConfirmFact label="Target release" value={release.version} />
+        <ConfirmFact label="Manifest SHA" value={release.manifestSha256} />
+        <ConfirmFact
+          label="Manifest trust"
+          value={
+            job
+              ? `${job.manifestSigned ? "signed" : "unsigned"} · ${
+                  job.manifestTrustPolicy ?? "default"
+                }`
+              : release.signed
+                ? "signed"
+                : "unsigned"
+          }
+        />
+        <ConfirmFact
+          label="Runner"
+          value={runnerStatusText(runner, runnerRefresh)}
+        />
+        <ConfirmFact label="IAM" value={stringValue(iam.status) || "pending"} />
+        <ConfirmFact
+          label="Customer domain"
+          value={stringValue(preserved.customerDomain) || "none"}
+        />
+        <ConfirmFact label="Domain flags" value={domainFlagsText(preserved)} />
+        <ConfirmFact label="SES sender" value={sesSenderText(preserved)} />
+        <ConfirmFact
+          label="Operators"
+          value={stringValue(preserved.platformOperatorEmails) || "unknown"}
+        />
+        <ConfirmFact
+          label="OAuth"
+          value={
+            preserved.googleOauthClientIdConfigured === true
+              ? "configured"
+              : "not configured"
+          }
+        />
+        <ConfirmFact
+          label="Optional apps"
+          value={optionalAppsText(objectValue(preserved.optionalApps))}
+        />
+        <ConfirmFact label="Execution" value={job?.executionArn ?? "pending"} />
+        <ConfirmFact
+          label="CodeBuild"
+          value={job?.codebuildBuildArn ?? "pending"}
+        />
+        <ConfirmFact label="Evidence" value={evidenceText(job)} />
+        <ConfirmFact label="Status pointer" value={statusPointerText(job)} />
+      </div>
+
+      {blockers.length > 0 ? (
+        <ReleaseNotice
+          tone="danger"
+          title="Blocking checks"
+          items={blockers.map(blockerText)}
+        />
+      ) : null}
+
+      {warnings.length > 0 ? (
+        <ReleaseNotice
+          tone="warning"
+          title="Warnings"
+          items={warnings.map(blockerText)}
+        />
+      ) : null}
+
+      {job?.failureMessage ? (
+        <ReleaseNotice
+          tone="danger"
+          title="Failure"
+          items={[
+            job.failureMessage,
+            job.recoveryAction ?? "Review deployment evidence before retrying.",
+          ]}
+        />
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {!job || job.status === "failed" ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRunPreflight}
+            disabled={busy}
+          >
+            Run Preflight
+          </Button>
+        ) : null}
+        {canRefreshRunner ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onRefreshRunner}
+            disabled={busy}
+          >
+            Refresh Runner
+          </Button>
+        ) : null}
+        {canDispatch ? (
+          <Button size="sm" onClick={onDispatch} disabled={busy}>
+            Start Update
+          </Button>
         ) : null}
       </div>
     </div>
   );
 }
 
-function deploymentSteps(
-  phase: DeploymentProgressState["phase"],
+function releaseSteps(
+  job: ReleaseUpdateJobRow | null,
+  busy: boolean,
   completed: boolean,
 ) {
-  if (phase === "failed") {
+  if (!job) {
     return [
-      { label: "Submit release request", state: "failed" as const },
-      { label: "Start deployment controller", state: "pending" as const },
-      { label: "Run Terraform update", state: "pending" as const },
-      { label: "Record deployment evidence", state: "pending" as const },
+      {
+        label: "Run preflight",
+        state: busy ? ("active" as const) : ("pending" as const),
+      },
+      { label: "Review checks", state: "pending" as const },
+      { label: "Start controller", state: "pending" as const },
+      { label: "Record evidence", state: "pending" as const },
     ];
   }
-  if (phase === "starting") {
+  if (job.status === "failed") {
     return [
-      { label: "Submit release request", state: "active" as const },
-      { label: "Start deployment controller", state: "pending" as const },
-      { label: "Run Terraform update", state: "pending" as const },
-      { label: "Record deployment evidence", state: "pending" as const },
+      { label: "Run preflight", state: "complete" as const },
+      { label: "Review checks", state: "complete" as const },
+      { label: "Start controller", state: "failed" as const },
+      { label: "Record evidence", state: "pending" as const },
     ];
   }
   return [
-    { label: "Submit release request", state: "complete" as const },
-    { label: "Start deployment controller", state: "complete" as const },
+    { label: "Run preflight", state: "complete" as const },
     {
-      label: "Run Terraform update",
-      state: completed ? ("complete" as const) : ("active" as const),
+      label: "Review checks",
+      state: hasBlockers(job) ? ("failed" as const) : ("complete" as const),
     },
     {
-      label: "Record deployment evidence",
+      label: "Start controller",
+      state:
+        job.status === "updating"
+          ? ("active" as const)
+          : job.executionArn
+            ? ("complete" as const)
+            : ("pending" as const),
+    },
+    {
+      label: "Record evidence",
       state: completed ? ("complete" as const) : ("pending" as const),
     },
   ];
+}
+
+function releaseWorkflowTitle(
+  job: ReleaseUpdateJobRow | null,
+  busy: boolean,
+  completed: boolean,
+): string {
+  if (completed) return "Release update completed";
+  if (!job) return busy ? "Running release preflight" : "Release preflight";
+  if (job.status === "updating") return "Deployment controller running";
+  if (job.status === "failed") return "Release update failed";
+  if (hasBlockers(job)) return "Release checks need attention";
+  return "Release ready for dispatch";
+}
+
+function ReleaseNotice({
+  tone,
+  title,
+  items,
+}: {
+  tone: "danger" | "warning";
+  title: string;
+  items: string[];
+}) {
+  const color =
+    tone === "danger"
+      ? "border-destructive/40 text-destructive"
+      : "border-amber-500/40 text-amber-700 dark:text-amber-300";
+  return (
+    <div className={`mt-4 rounded-lg border p-3 ${color}`}>
+      <div className="text-sm font-medium">{title}</div>
+      <ul className="mt-2 space-y-1 text-sm">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function releaseJobMessage(job: ReleaseUpdateJobRow | null): string {
+  if (!job) return "Run release preflight.";
+  if (job.status === "preflight_ready") {
+    return `Preflight passed for ${job.targetReleaseVersion}.`;
+  }
+  if (job.status === "runner_remediated") {
+    return "Runner refresh completed; release is ready for dispatch.";
+  }
+  if (job.status === "preflight_blocked") {
+    return job.recoveryAction ?? "Resolve blocking checks before dispatch.";
+  }
+  if (job.status === "updating") {
+    return "Deployment controller accepted the reviewed release update.";
+  }
+  if (job.status === "succeeded") {
+    return `Release update completed for ${job.targetReleaseVersion}.`;
+  }
+  if (job.status === "failed") {
+    return job.failureMessage ?? "Deployment controller reported a failure.";
+  }
+  return job.status;
+}
+
+function isDispatchable(job: ReleaseUpdateJobRow): boolean {
+  return (
+    (job.status === "preflight_ready" || job.status === "runner_remediated") &&
+    !hasBlockers(job)
+  );
+}
+
+function hasBlockers(job: ReleaseUpdateJobRow): boolean {
+  return blockersFor(job).length > 0;
+}
+
+function blockersFor(
+  job: ReleaseUpdateJobRow | null,
+): Record<string, unknown>[] {
+  if (!job) return [];
+  const preflight = objectValue(job.preflightSummary);
+  if (Array.isArray(preflight.blockers)) {
+    return preflight.blockers.filter(isRecord);
+  }
+  return [];
+}
+
+function warningsFor(
+  job: ReleaseUpdateJobRow | null,
+): Record<string, unknown>[] {
+  if (!job) return [];
+  const preflight = objectValue(job.preflightSummary);
+  if (Array.isArray(preflight.warnings)) {
+    return preflight.warnings.filter(isRecord);
+  }
+  return [];
+}
+
+function blockerText(blocker: Record<string, unknown>): string {
+  const message = stringValue(blocker.message);
+  const category = stringValue(blocker.category);
+  const recovery = stringValue(blocker.recoveryAction);
+  return [message || category || "Check failed", recovery]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function runnerStatusText(
+  runner: Record<string, unknown>,
+  runnerRefresh: Record<string, unknown>,
+): string {
+  if (runnerRefresh.completed === true) return "refreshed";
+  if (runnerRefresh.required === true) return "refresh required";
+  return stringValue(runner.status) || "pending";
+}
+
+function domainFlagsText(fields: Record<string, unknown>): string {
+  return [
+    fields.customerDomainDelegated === true ? "delegated" : "not delegated",
+    fields.customerDomainLegacyRetired === true
+      ? "legacy retired"
+      : "legacy active",
+  ].join(" · ");
+}
+
+function sesSenderText(fields: Record<string, unknown>): string {
+  const ses = objectValue(fields.sesSender);
+  return (
+    stringValue(ses.cognitoFromEmailAddress) ||
+    stringValue(ses.cognitoEmailSourceArn) ||
+    "default"
+  );
+}
+
+function optionalAppsText(optionalApps: Record<string, unknown>): string {
+  const enabled = [
+    optionalApps.hindsight === true ? "hindsight" : null,
+    optionalApps.cognee === true ? "cognee" : null,
+    optionalApps.twenty === true ? "twenty" : null,
+  ].filter(Boolean);
+  return enabled.length ? enabled.join(", ") : "none";
+}
+
+function evidenceText(job: ReleaseUpdateJobRow | null): string {
+  if (!job?.evidencePrefix) return "pending";
+  return job.evidenceBucket
+    ? `${job.evidenceBucket}/${job.evidencePrefix}`
+    : job.evidencePrefix;
+}
+
+function statusPointerText(job: ReleaseUpdateJobRow | null): string {
+  if (!job?.statusPointerBucket || !job.statusPointerKey) return "pending";
+  return `${job.statusPointerBucket}/${job.statusPointerKey}`;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
 }
 
 function DeploymentStep({

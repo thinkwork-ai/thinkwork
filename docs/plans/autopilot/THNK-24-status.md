@@ -5,8 +5,8 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 ## Current State
 
 - Started: 2026-06-14
-- Active branch: `codex/thnk-24-u5-reviewed-dispatch`
-- Active unit: U5, dispatch and monitor reviewed release updates
+- Active branch: `codex/thnk-24-u6-settings-release-workflow`
+- Active unit: U6, Settings release safety workflow
 - Linear state: Verification
 
 ## Context Discovery
@@ -96,6 +96,17 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   `SettingsGeneral.test.tsx` still asserted the removed direct release dispatch
   success/error path. Updated the tests to assert the U5 preflight-required
   blocker instead.
+- 2026-06-14: U5 PR passed refreshed CI after rebasing onto `main`,
+  squash-merged, and had its remote/local branch cleaned up.
+- 2026-06-14: Moved THNK-24 back to In Progress for U6 and created branch
+  `codex/thnk-24-u6-settings-release-workflow`.
+- 2026-06-14: Implemented U6 Settings release safety workflow: release rows
+  now open a preflight review dialog, Settings runs
+  `startReleaseUpdatePreflight` before dispatch, surfaces preserved customer
+  config and blocking checks, offers safe runner refresh remediation, dispatches
+  only a reviewed job, and polls the release-update job while the deployment
+  controller runs.
+- 2026-06-14: Opened U6 PR and moved THNK-24 to Verification.
 
 ## Implementation Units
 
@@ -103,9 +114,8 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U2. Add release update job substrate: merged in PR #2475.
 - U3. Implement release preflight service: merged in PR #2476.
 - U4. Add safe runner refresh remediation: merged in PR #2478.
-- U5. Dispatch and monitor reviewed release updates: PR open; pending
-  CI/review.
-- U6. Build Settings release safety workflow: pending.
+- U5. Dispatch and monitor reviewed release updates: merged in PR #2479.
+- U6. Build Settings release safety workflow: PR open; pending CI/review.
 - U7. Update docs, runbooks, and verification coverage: pending.
 
 ## PRs
@@ -114,7 +124,8 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U2: https://github.com/thinkwork-ai/thinkwork/pull/2475 merged
 - U3: https://github.com/thinkwork-ai/thinkwork/pull/2476 merged
 - U4: https://github.com/thinkwork-ai/thinkwork/pull/2478 merged
-- U5: https://github.com/thinkwork-ai/thinkwork/pull/2479
+- U5: https://github.com/thinkwork-ai/thinkwork/pull/2479 merged
+- U6: https://github.com/thinkwork-ai/thinkwork/pull/2482
 
 ## CI / Verification
 
@@ -206,6 +217,21 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   `test` failed on stale `SettingsGeneral` direct-dispatch expectations.
 - U5 `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsGeneral.test.tsx`:
   passed after updating the stale expectations.
+- U5 PR CI after rebase: `cla`, `lint`, `test`, `typecheck`, and `verify`
+  passed.
+- U6 `pnpm --filter @thinkwork/web codegen`: passed.
+- U6 `pnpm --filter @thinkwork/web typecheck`: passed.
+- U6 `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsGeneral.test.tsx`:
+  passed.
+- U6 `pnpm dlx prettier@3.5.3 --check apps/web/src/components/settings/SettingsGeneral.tsx apps/web/src/components/settings/SettingsGeneral.test.tsx apps/web/src/lib/settings-queries.ts docs/plans/autopilot/THNK-24-status.md`:
+  passed.
+- U6 `git diff --check`: passed.
+- U6 browser verification: copied the main checkout web `.env`, opened
+  `http://localhost:5174/settings/general`, confirmed the Deployment releases
+  list renders `Review` actions, and opened the review dialog showing
+  preflight-first copy plus `Cancel` and `Run Preflight`. Did not click
+  `Run Preflight` in the live dev environment because that would trigger an
+  operational backend action.
 
 ## Blockers
 
