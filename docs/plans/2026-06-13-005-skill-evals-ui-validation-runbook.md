@@ -130,7 +130,7 @@ cd /Users/ericodom/Projects/thinkwork/.claude/worktrees/skill-evals-work/apps/cl
 pnpm dev -- deploy -s dev        # deploys the current branch's stack to dev
 ```
 
-(0166_eval_skill_gate.sql is **already applied** to dev, so the migration precheck
+(0168_eval_skill_gate.sql is **already applied** to dev, so the migration precheck
 will pass.) After it completes, hard-refresh the web app.
 
 ---

@@ -76,9 +76,10 @@ Add queries/mutations in `apps/web/src/lib/evaluation-queries.ts` /
 - On-demand run: `startEvalRun(tenantId, { datasetSlug: "skill-<slug>" })`
 
 ## Before any merge
-1. **Apply migration `0166_eval_skill_gate.sql` to dev** (needs AWS-resolved DATABASE_URL —
-   Eric's auth): `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0166_eval_skill_gate.sql`.
+1. **Apply migration `0168_eval_skill_gate.sql` to dev** (needs AWS-resolved DATABASE_URL —
+   Eric's auth): `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0168_eval_skill_gate.sql`.
    The `deploy.yml` migration-precheck gate verifies the `-- creates:` markers post-apply.
+   (Renumbered from 0166 after rebasing onto main's 0166/0167; already applied to dev.)
 2. **Validate the backend on dev**: install a skill with bundled `evals/*.json` → a
    `skill-<slug>` dataset appears (`evalDatasets`); a scored run executes against the
    eval-baseline agent (verify the invoked workspace has only that skill); `skillEvalScore`

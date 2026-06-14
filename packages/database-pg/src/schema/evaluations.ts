@@ -383,7 +383,7 @@ export const evalReplayToolAllowlist = pgTable(
 // install is never gated; unrated skills (no bundled cases) are never
 // gated. Per-tenant single threshold in v1 — tenant_id is the PRIMARY
 // KEY, so a tenant carries at most one gate row (per-skill thresholds are
-// deferred). Hand-rolled migration 0166_eval_skill_gate.sql.
+// deferred). Hand-rolled migration 0168_eval_skill_gate.sql.
 // ---------------------------------------------------------------------------
 
 export const evalSkillGate = pgTable("eval_skill_gate", {

@@ -6,11 +6,13 @@
 --          gate (nothing blocks). Initial install is never gated; unrated
 --          skills (no bundled cases) are never gated.
 -- Plan: docs/plans/2026-06-13-003-feat-skill-tests-and-evals-plan.md (U6)
--- Apply manually: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0166_eval_skill_gate.sql
+-- Apply manually: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0168_eval_skill_gate.sql
 --
 -- Hand-rolled (NOT registered in meta/_journal.json — the journal snapshot
 -- stopped at 0020; repo convention is psql-applied files gated by the
--- db:migrate-manual drift reporter).
+-- db:migrate-manual drift reporter). Renumbered 0166 → 0168 after rebasing
+-- onto main, which landed 0166/0167 (company-brain); the table was already
+-- applied to dev under the old name (rename is file-only, no DB change).
 --
 -- Semantics:
 --   * Per-tenant single threshold (v1) — tenant_id is the PRIMARY KEY, so
