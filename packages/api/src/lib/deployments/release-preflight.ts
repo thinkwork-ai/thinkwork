@@ -11,7 +11,11 @@ import {
   ListAttachedRolePoliciesCommand,
   ListRolePoliciesCommand,
 } from "@aws-sdk/client-iam";
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { GetParametersCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { releaseUpdateJobs } from "@thinkwork/database-pg/schema";
 import {
@@ -55,16 +59,30 @@ export interface ReleasePreflightDeps {
   fetch?: typeof fetch;
   profile?: DeploymentProfileConfig;
   readS3Object?: (bucket: string, key: string) => Promise<Uint8Array | null>;
+  writeS3Object?: (
+    bucket: string,
+    key: string,
+    body: Uint8Array | string,
+    contentType?: string,
+  ) => Promise<void>;
   readCodeBuildServiceRoleArn?: (projectName: string) => Promise<string | null>;
   readIamPolicyDocuments?: (
     roleArn: string,
   ) => Promise<Array<Record<string, unknown>>>;
   readReleaseSelection?: () => Promise<Partial<DeploymentProfileConfig>>;
+  now?: () => Date;
 }
 
 export interface StartedReleaseUpdatePreflight {
   job: ReleaseUpdateJobRow;
   events: unknown[];
+}
+
+export interface RemediateReleaseRunnerArgs {
+  tenantId: string;
+  requestedByUserId: string | null;
+  jobId: string;
+  idempotencyKey?: string | null;
 }
 
 interface Blocker {
@@ -241,6 +259,154 @@ export async function startReleaseUpdatePreflightJob(
 
   return {
     job,
+    events: await loadReleaseUpdateEvents(args.tenantId, job.id),
+  };
+}
+
+export async function remediateReleaseRunnerJob(
+  args: RemediateReleaseRunnerArgs,
+  deps: ReleasePreflightDeps = {},
+): Promise<StartedReleaseUpdatePreflight> {
+  const [job] = await db
+    .select()
+    .from(releaseUpdateJobs)
+    .where(
+      and(
+        eq(releaseUpdateJobs.tenant_id, args.tenantId),
+        eq(releaseUpdateJobs.id, args.jobId),
+      ),
+    )
+    .limit(1);
+  if (!job) {
+    throw new Error("Release update job was not found");
+  }
+  const runnerRefresh = runnerRefreshSummary(job);
+  if (!runnerRefresh.required) {
+    throw new Error("Release update job does not require runner remediation");
+  }
+  if (!job.evidence_bucket) {
+    throw new Error("Release update job has no evidence bucket");
+  }
+  const source = runnerRefresh.source;
+  if (!source?.url || !source.sha256) {
+    throw new Error("Selected release does not provide runner script metadata");
+  }
+  if (!releaseTrustAllowsRunnerRemediation(job)) {
+    throw new Error("Runner remediation requires a trusted release target");
+  }
+
+  const existing = await readS3Object(
+    job.evidence_bucket,
+    RUNNER_SCRIPT_KEY,
+    deps,
+  );
+  if (!existing) {
+    throw new Error("Current deployment runner script is missing");
+  }
+  const previousSha256 = sha256Hex(Buffer.from(existing));
+  const targetBytes = await fetchRunnerScript(source.url, deps.fetch ?? fetch);
+  const targetSha256 = sha256Hex(targetBytes);
+  if (targetSha256 !== source.sha256) {
+    throw new Error(
+      `Runner script SHA-256 mismatch: expected ${source.sha256}, got ${targetSha256}`,
+    );
+  }
+
+  const now = deps.now ? deps.now() : new Date();
+  const timestamp = now.toISOString().replace(/[-:.]/g, "").replace("Z", "Z");
+  const backupKey = `runner/backups/${timestamp}-${job.id}-thinkwork-runner.py`;
+  const evidenceKey = `release-updates/${job.id}/runner-remediation/${timestamp}.json`;
+  const evidence = {
+    schemaVersion: 1,
+    jobId: job.id,
+    tenantId: args.tenantId,
+    requestedByUserId: args.requestedByUserId,
+    remediatedAt: now.toISOString(),
+    runnerKey: RUNNER_SCRIPT_KEY,
+    backupKey,
+    targetSourceUrl: source.url,
+    previousSha256,
+    targetSha256,
+  };
+  await writeS3Object(
+    job.evidence_bucket,
+    backupKey,
+    existing,
+    "text/x-python",
+    deps,
+  );
+  await writeS3Object(
+    job.evidence_bucket,
+    RUNNER_SCRIPT_KEY,
+    targetBytes,
+    "text/x-python",
+    deps,
+  );
+  await writeS3Object(
+    job.evidence_bucket,
+    evidenceKey,
+    `${JSON.stringify(evidence, null, 2)}\n`,
+    "application/json",
+    deps,
+  );
+
+  const preflightSummary = updatePreflightAfterRunnerRemediation(
+    objectValue(job.preflight_summary),
+    {
+      previousSha256,
+      targetSha256,
+      backupKey,
+      evidenceKey,
+      remediatedAt: now.toISOString(),
+    },
+  );
+  const remediationSummary = {
+    ...objectValue(job.remediation_summary),
+    runnerRefresh: {
+      ...runnerRefresh,
+      required: false,
+      completed: true,
+      backupKey,
+      evidenceKey,
+      previousSha256,
+      targetSha256,
+      remediatedAt: now.toISOString(),
+    },
+  };
+  const remainingBlockers = Array.isArray(preflightSummary.blockers)
+    ? preflightSummary.blockers
+    : [];
+  const status =
+    remainingBlockers.length > 0 ? "preflight_blocked" : "runner_remediated";
+  const firstBlocker = remainingBlockers[0] as Blocker | undefined;
+  const [updated] = await db
+    .update(releaseUpdateJobs)
+    .set({
+      status,
+      preflight_summary: preflightSummary,
+      remediation_summary: remediationSummary,
+      failure_category: firstBlocker?.category,
+      failure_message: firstBlocker?.message,
+      recovery_action: firstBlocker?.recoveryAction,
+      updated_at: new Date(),
+    })
+    .where(eq(releaseUpdateJobs.id, job.id))
+    .returning();
+
+  const idempotencyKey =
+    args.idempotencyKey?.trim() || `${job.id}:runner-remediated`;
+  await appendReleaseUpdateEvent({
+    tenantId: args.tenantId,
+    jobId: job.id,
+    eventType: "runner_remediated",
+    message:
+      "Deployment runner script was refreshed from the selected release.",
+    payload: evidence,
+    idempotencyKey,
+  });
+
+  return {
+    job: updated ?? job,
     events: await loadReleaseUpdateEvents(args.tenantId, job.id),
   };
 }
@@ -618,6 +784,103 @@ async function readS3Object(
   }
 }
 
+async function writeS3Object(
+  bucket: string,
+  key: string,
+  body: Uint8Array | string,
+  contentType: string,
+  deps: ReleasePreflightDeps,
+) {
+  if (deps.writeS3Object) {
+    await deps.writeS3Object(bucket, key, body, contentType);
+    return;
+  }
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: typeof body === "string" ? body : Buffer.from(body),
+      ContentType: contentType,
+      ServerSideEncryption: "AES256",
+    }),
+  );
+}
+
+async function fetchRunnerScript(
+  url: string,
+  fetchImpl: typeof fetch,
+): Promise<Buffer> {
+  const response = await fetchImpl(url, {
+    headers: { "User-Agent": "thinkwork-deployment-preflight" },
+  });
+  if (!response.ok) {
+    throw new Error("Unable to download selected release runner script");
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+function runnerRefreshSummary(job: ReleaseUpdateJobRow): {
+  required: boolean;
+  source?: { url?: string | null; sha256?: string | null };
+  [key: string]: unknown;
+} {
+  const summary = objectValue(job.remediation_summary);
+  const runnerRefresh = objectValue(summary.runnerRefresh);
+  return {
+    ...runnerRefresh,
+    required: runnerRefresh.required === true,
+    source: objectValue(runnerRefresh.source) as {
+      url?: string | null;
+      sha256?: string | null;
+    },
+  };
+}
+
+function releaseTrustAllowsRunnerRemediation(
+  job: ReleaseUpdateJobRow,
+): boolean {
+  if (job.manifest_signed) return true;
+  return (
+    job.manifest_trust_policy === "allow_unsigned_canary" &&
+    job.target_release_version.includes("canary")
+  );
+}
+
+function updatePreflightAfterRunnerRemediation(
+  summary: Record<string, unknown>,
+  evidence: {
+    previousSha256: string;
+    targetSha256: string;
+    backupKey: string;
+    evidenceKey: string;
+    remediatedAt: string;
+  },
+): Record<string, unknown> {
+  const blockers = Array.isArray(summary.blockers)
+    ? summary.blockers.filter((blocker) => {
+        if (!blocker || typeof blocker !== "object") return true;
+        return (
+          (blocker as Record<string, unknown>).category !==
+          "runner_compatibility"
+        );
+      })
+    : [];
+  return {
+    ...summary,
+    blocked: blockers.length > 0,
+    blockers,
+    runner: {
+      ...objectValue(summary.runner),
+      status: "remediated",
+      currentSha256: evidence.targetSha256,
+      previousSha256: evidence.previousSha256,
+      backupKey: evidence.backupKey,
+      remediationEvidenceKey: evidence.evidenceKey,
+      remediatedAt: evidence.remediatedAt,
+    },
+  };
+}
+
 async function defaultReadCodeBuildServiceRoleArn(
   projectName: string,
 ): Promise<string | null> {
@@ -730,6 +993,12 @@ function policyAllowsRoute53(policy: Record<string, unknown>): boolean {
       );
     });
   });
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function compactProfile(

@@ -138,6 +138,11 @@ input StartReleaseUpdatePreflightInput {
   idempotencyKey: String
 }
 
+input RemediateReleaseRunnerInput {
+  jobId: ID!
+  idempotencyKey: String
+}
+
 type BootstrapCredentialLease {
   id: ID!
   sessionId: ID!
@@ -191,6 +196,7 @@ extend type Mutation {
   startReleaseUpdatePreflight(
     input: StartReleaseUpdatePreflightInput!
   ): ReleaseUpdateJob!
+  remediateReleaseRunner(input: RemediateReleaseRunnerInput!): ReleaseUpdateJob!
   startDeploymentReleaseUpdate(
     input: StartDeploymentReleaseUpdateInput!
   ): DeploymentReleaseUpdate!

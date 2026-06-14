@@ -2608,6 +2608,7 @@ export type Mutation = {
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
   releaseThread: Thread;
+  remediateReleaseRunner: ReleaseUpdateJob;
   removeEvalDatasetCase: EvalDataset;
   removeEvalReplayToolOverride: Scalars['Boolean']['output'];
   removeInboxItemLink: Scalars['Boolean']['output'];
@@ -3393,6 +3394,11 @@ export type MutationRejectOntologyChangeSetArgs = {
 export type MutationReleaseThreadArgs = {
   id: Scalars['ID']['input'];
   input: ReleaseThreadInput;
+};
+
+
+export type MutationRemediateReleaseRunnerArgs = {
+  input: RemediateReleaseRunnerInput;
 };
 
 
@@ -5693,6 +5699,11 @@ export type ReleaseUpdateJob = {
   tenantId: Scalars['ID']['output'];
   terraformModuleVersion?: Maybe<Scalars['String']['output']>;
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type RemediateReleaseRunnerInput = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  jobId: Scalars['ID']['input'];
 };
 
 export type ReorderQuickActionsInput = {

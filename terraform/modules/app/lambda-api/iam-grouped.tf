@@ -235,18 +235,21 @@ locals {
       },
     ],
     # (was standalone managed policy "lambda_deployment_evidence_read")
-    # Read-only access to the deployment evidence bucket: graphql-http's
-    # deployments resolvers read deployment/status/current.json (deployed-
-    # release pointer behind Settings > General and the sidebar release
-    # label) and session evidence artifacts. Without this the S3 read fails
-    # with a 403 that is indistinguishable from "no pointer yet" and the UI
-    # shows "unknown".
+    # Access to the deployment evidence bucket: graphql-http's deployments
+    # resolvers read deployment/status/current.json (deployed-release pointer
+    # behind Settings > General and the sidebar release label) and session
+    # evidence artifacts. Settings release-update remediation also writes a
+    # backed-up runner, refreshed runner, and evidence JSON into this same
+    # bucket after verifying the selected release metadata. Without the reads
+    # the UI shows "unknown"; without PutObject the safe Settings runner
+    # refresh path cannot replace the old manual AWS CLI step.
     var.deployment_evidence_bucket != "" ? [
       {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
           "s3:ListBucket",
+          "s3:PutObject",
         ]
         Resource = [
           "arn:aws:s3:::${var.deployment_evidence_bucket}",
