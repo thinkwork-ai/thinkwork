@@ -11,6 +11,8 @@ import {
   ChartTooltip,
   ChartTooltipContent,
   DataTable,
+  DisplayViewControl,
+  GroupedListView,
   Input,
   type ChartConfig,
 } from "@thinkwork/ui";
@@ -25,6 +27,16 @@ import {
 } from "@/lib/graphql-queries";
 import { cn, relativeTime } from "@/lib/utils";
 import {
+  displayStateToSearch,
+  groupDisplayRows,
+  type DisplayGroupingOption,
+  type DisplayListConfig,
+  type DisplayListState,
+  type DisplaySortOption,
+} from "@/lib/list-view-display";
+import {
+  activityRecencyBucket,
+  activityRecencyLabel,
   buildLast30DaysCounts,
   filterActivityItems,
   formatActivityDay,
@@ -40,6 +52,139 @@ import {
 
 const RECENT_ACTIVITY_LIMIT = 200;
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
+
+type ActivityGroup = "recency" | "status" | "type" | "agent";
+type ActivitySort =
+  | "updated"
+  | "title"
+  | "status"
+  | "type"
+  | "cost"
+  | "duration";
+type ActivityProperty =
+  | "status"
+  | "type"
+  | "agent"
+  | "duration"
+  | "cost"
+  | "updated";
+
+export type SettingsActivityDisplayState = DisplayListState<
+  ActivityGroup,
+  ActivitySort,
+  ActivityProperty
+>;
+
+export const ACTIVITY_DISPLAY_CONFIG: DisplayListConfig<
+  ActivityGroup,
+  ActivitySort,
+  ActivityProperty
+> = {
+  modes: ["table", "list"],
+  groups: [
+    { value: "none", label: "None" },
+    { value: "recency", label: "Recency" },
+    { value: "status", label: "Status" },
+    { value: "type", label: "Type" },
+    { value: "agent", label: "Agent" },
+  ],
+  subgroups: [
+    { value: "none", label: "None" },
+    { value: "status", label: "Status" },
+    { value: "type", label: "Type" },
+    { value: "agent", label: "Agent" },
+  ],
+  sorts: [
+    { value: "updated", label: "Updated" },
+    { value: "title", label: "Title" },
+    { value: "status", label: "Status" },
+    { value: "type", label: "Type" },
+    { value: "cost", label: "Cost" },
+    { value: "duration", label: "Duration" },
+  ],
+  properties: [
+    { value: "status", label: "Status" },
+    { value: "type", label: "Type" },
+    { value: "agent", label: "Agent" },
+    { value: "duration", label: "Duration" },
+    { value: "cost", label: "Cost" },
+    { value: "updated", label: "Updated" },
+  ],
+  defaults: {
+    view: "table",
+    group: "recency",
+    subgroup: "status",
+    sort: "updated",
+    dir: "desc",
+    showEmptyGroups: true,
+    showEmptySubgroups: false,
+    properties: ["status", "type", "agent", "duration", "cost", "updated"],
+  },
+};
+
+const activityGroupingOptions: DisplayGroupingOption<
+  ActivityGroup,
+  ActivityItem
+>[] = [
+  {
+    value: "recency",
+    label: "Recency",
+    group: (item) => activityRecencyBucket(item.timestamp),
+    labelFor: activityRecencyLabel,
+    emptyKeys: [
+      { key: "today", label: "Today" },
+      { key: "yesterday", label: "Yesterday" },
+      { key: "last7", label: "Last 7 days" },
+      { key: "older", label: "Older" },
+      { key: "unknown", label: "Unknown" },
+    ],
+  },
+  {
+    value: "status",
+    label: "Status",
+    group: (item) => item.status,
+    labelFor: (key) => key.replace(/_/g, " "),
+  },
+  {
+    value: "type",
+    label: "Type",
+    group: (item) => item.type,
+    labelFor: (key) => TYPE_LABELS[key as ActivityItem["type"]] ?? key,
+  },
+  {
+    value: "agent",
+    label: "Agent",
+    group: (item) => item.agentName ?? "Unassigned",
+    labelFor: (key) => key,
+  },
+];
+
+const activitySortOptions: DisplaySortOption<ActivitySort, ActivityItem>[] = [
+  {
+    value: "updated",
+    compare: (left, right) => left.timestamp - right.timestamp,
+  },
+  {
+    value: "title",
+    compare: (left, right) => left.title.localeCompare(right.title),
+  },
+  {
+    value: "status",
+    compare: (left, right) => left.status.localeCompare(right.status),
+  },
+  {
+    value: "type",
+    compare: (left, right) => left.type.localeCompare(right.type),
+  },
+  {
+    value: "cost",
+    compare: (left, right) => (left.cost ?? 0) - (right.cost ?? 0),
+  },
+  {
+    value: "duration",
+    compare: (left, right) => (left.duration ?? 0) - (right.duration ?? 0),
+  },
+];
 
 const activityChartConfig = {
   count: { label: "Activity", color: "hsl(217, 91%, 60%)" },
@@ -58,6 +203,8 @@ interface SettingsActivityProps {
   embedded?: boolean;
   selectedDay?: string | null;
   onSelectedDayChange?: (day: string | null) => void;
+  displayState?: SettingsActivityDisplayState;
+  onDisplayStateChange?: (state: SettingsActivityDisplayState) => void;
 }
 
 // Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
@@ -74,6 +221,8 @@ export function SettingsActivity({
   embedded,
   selectedDay = null,
   onSelectedDayChange,
+  displayState = ACTIVITY_DISPLAY_CONFIG.defaults,
+  onDisplayStateChange,
 }: SettingsActivityProps) {
   const { isOperator, roleResolved, tenantId } = useTenant();
   const navigate = useNavigate();
@@ -127,6 +276,21 @@ export function SettingsActivity({
   const filtered = useMemo(
     () => filterActivityItems(allItems, { search, day: selectedDay }),
     [allItems, search, selectedDay],
+  );
+  const listGroups = useMemo(
+    () =>
+      groupDisplayRows({
+        rows: filtered,
+        group: displayState.group,
+        subgroup: displayState.subgroup,
+        sort: displayState.sort,
+        dir: displayState.dir,
+        showEmptyGroups: displayState.showEmptyGroups,
+        showEmptySubgroups: displayState.showEmptySubgroups,
+        groupingOptions: activityGroupingOptions,
+        sortOptions: activitySortOptions,
+      }),
+    [displayState, filtered],
   );
 
   const columns = useMemo<ColumnDef<ActivityItem>[]>(
@@ -209,14 +373,17 @@ export function SettingsActivity({
       navigate({
         to: "/settings/activity/$threadId",
         params: { threadId: item.threadId },
-        search: selectedDay ? { day: selectedDay } : {},
+        search: {
+          ...displayStateToSearch(displayState, ACTIVITY_DISPLAY_CONFIG),
+          ...(selectedDay ? { day: selectedDay } : {}),
+        },
         state: (previous) => ({
           ...previous,
           threadTitleFallback: { threadId: item.threadId, title: item.title },
         }),
       });
     },
-    [navigate, selectedDay],
+    [displayState, navigate, selectedDay],
   );
 
   const loading = fetching && !data;
@@ -250,6 +417,20 @@ export function SettingsActivity({
               onClearDay={() => handleSelectDay(null)}
               onRefresh={refreshAll}
               fetching={fetching}
+              displayControl={
+                <DisplayViewControl
+                  state={displayState}
+                  modes={[
+                    { value: "table", label: "Table" },
+                    { value: "list", label: "List" },
+                  ]}
+                  groups={ACTIVITY_DISPLAY_CONFIG.groups}
+                  subgroups={ACTIVITY_DISPLAY_CONFIG.subgroups}
+                  sorts={ACTIVITY_DISPLAY_CONFIG.sorts}
+                  properties={ACTIVITY_DISPLAY_CONFIG.properties}
+                  onStateChange={onDisplayStateChange ?? (() => {})}
+                />
+              }
             />
             {error ? (
               <p className="shrink-0 text-sm text-destructive">
@@ -257,22 +438,43 @@ export function SettingsActivity({
               </p>
             ) : null}
             <div className="min-h-0 flex-1">
-              <DataTable
-                columns={columns}
-                data={filtered}
-                hideHeader
-                scrollable
-                allowHorizontalScroll={false}
-                pageSize={10}
-                tableClassName="table-fixed"
-                onRowClick={handleRowClick}
-                emptyState={
-                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                    <Activity className="h-5 w-5" />
-                    <span>No activity</span>
-                  </div>
-                }
-              />
+              {displayState.view === "list" ? (
+                <GroupedListView
+                  groups={listGroups}
+                  getRowId={(item) => item.id}
+                  renderRow={(item) => (
+                    <ActivityListRow
+                      item={item}
+                      properties={displayState.properties}
+                      onClick={() => handleRowClick(item)}
+                    />
+                  )}
+                  emptyState={
+                    <div className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                      <Activity className="h-5 w-5" />
+                      <span>No activity</span>
+                    </div>
+                  }
+                  data-testid="activity-list-view"
+                />
+              ) : (
+                <DataTable
+                  columns={columns}
+                  data={filtered}
+                  hideHeader
+                  scrollable
+                  allowHorizontalScroll={false}
+                  pageSize={10}
+                  tableClassName="table-fixed"
+                  onRowClick={handleRowClick}
+                  emptyState={
+                    <div className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                      <Activity className="h-5 w-5" />
+                      <span>No activity</span>
+                    </div>
+                  }
+                />
+              )}
             </div>
           </div>
         )}
@@ -289,6 +491,7 @@ function ActivityToolbar({
   onClearDay,
   onRefresh,
   fetching,
+  displayControl,
 }: {
   search: string;
   onSearchChange: (value: string) => void;
@@ -297,6 +500,7 @@ function ActivityToolbar({
   onClearDay: () => void;
   onRefresh: () => void;
   fetching: boolean;
+  displayControl?: React.ReactNode;
 }) {
   return (
     <div
@@ -330,6 +534,7 @@ function ActivityToolbar({
       <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
         {itemCount} item{itemCount === 1 ? "" : "s"}
       </span>
+      {displayControl}
       {selectedDay ? (
         <span className="flex shrink-0 items-center gap-2">
           <Badge variant="secondary" className="whitespace-nowrap text-xs">
@@ -346,6 +551,104 @@ function ActivityToolbar({
       ) : null}
     </div>
   );
+}
+
+function ActivityListRow({
+  item,
+  properties,
+  onClick,
+}: {
+  item: ActivityItem;
+  properties: ActivityProperty[];
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full min-w-0 items-center gap-3 text-left"
+      onClick={onClick}
+    >
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+        <InlineShortcutText
+          text={item.title}
+          fallbackAgentProfiles
+          fallbackMentions
+          fallbackSkills
+        />
+      </span>
+      <span className="ml-auto flex shrink-0 flex-wrap justify-end gap-1.5">
+        {properties.map((property) => (
+          <ActivityPropertyChip
+            key={property}
+            item={item}
+            property={property}
+          />
+        ))}
+      </span>
+    </button>
+  );
+}
+
+function ActivityPropertyChip({
+  item,
+  property,
+}: {
+  item: ActivityItem;
+  property: ActivityProperty;
+}) {
+  switch (property) {
+    case "status":
+      return (
+        <Badge
+          variant="secondary"
+          className={cn(
+            "max-w-32 truncate text-xs capitalize",
+            STATUS_COLORS[item.status] ?? "bg-muted text-muted-foreground",
+          )}
+        >
+          {item.status.replace(/_/g, " ")}
+        </Badge>
+      );
+    case "type":
+      return (
+        <Badge
+          variant="secondary"
+          className={cn(
+            "gap-1 whitespace-nowrap text-xs",
+            TYPE_COLORS[item.type],
+          )}
+        >
+          <MessageSquare className="h-3 w-3" />
+          {TYPE_LABELS[item.type]}
+        </Badge>
+      );
+    case "agent":
+      return (
+        <span className="text-xs text-muted-foreground">
+          {item.agentName ?? "Unassigned"}
+        </span>
+      );
+    case "duration":
+      return (
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {formatDuration(item.duration)}
+        </span>
+      );
+    case "cost":
+      return (
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {formatCost(item.cost)}
+        </span>
+      );
+    case "updated":
+      return (
+        <span className="text-xs text-muted-foreground">
+          {item.timestamp
+            ? relativeTime(new Date(item.timestamp).toISOString())
+            : "—"}
+        </span>
+      );
+  }
 }
 
 function ActivityChart({

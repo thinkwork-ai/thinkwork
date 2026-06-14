@@ -10,8 +10,10 @@ import {
   Combobox,
   CopyableRow,
   DataTable,
+  DisplayViewControl,
   Dialog,
   FilterBarSearch,
+  GroupedListView,
   InputGroup,
   MultiSelect,
   Sidebar,
@@ -84,12 +86,14 @@ describe("@thinkwork/ui barrel exports", () => {
     expect(ChartContainer).toBeDefined();
   });
 
-  it("exposes the 7 non-stock custom components from the root barrel", () => {
+  it("exposes the non-stock custom components from the root barrel", () => {
     expect(BadgeSelectorText).toBeDefined();
     expect(MultiSelect).toBeDefined();
     expect(CopyableRow).toBeDefined();
     expect(InputGroup).toBeDefined();
     expect(DataTable).toBeDefined();
+    expect(DisplayViewControl).toBeDefined();
+    expect(GroupedListView).toBeDefined();
     expect(FilterBarSearch).toBeDefined();
     expect(Combobox).toBeDefined();
     expect(Spinner).toBeDefined();
