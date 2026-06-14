@@ -265,8 +265,43 @@ function migrationStatus(row: BrainSubstrateMigrationRow | null) {
     completedAt: isoDate(row.completed_at),
     rollbackWindowClosesAt: isoDate(row.rollback_window_closes_at),
     errorMessage: row.error_message,
-    validationSummary: jsonScalar(row.validation_summary),
+    validationSummary: jsonScalar(
+      publicMigrationValidationSummary(row.validation_summary),
+    ),
   };
+}
+
+function publicMigrationValidationSummary(value: unknown): JsonRecord {
+  const raw = jsonRecord(value);
+  const summary: JsonRecord = {};
+  copyNumber(summary, raw, "replayManifestCount");
+  copyNumber(summary, raw, "sourceCount");
+  copyNumber(summary, raw, "objectCount");
+  copyNumber(summary, raw, "graphEntityCount");
+  copyNumber(summary, raw, "graphEdgeCount");
+  copyNumber(summary, raw, "vectorDimension");
+  copyString(summary, raw, "embeddingModel");
+  copyString(summary, raw, "ontologyVersion");
+  copyBoolean(summary, raw, "emptySourceApproved");
+  copyString(summary, raw, "emptySourceReason");
+  copyBoolean(summary, raw, "validationPassed");
+  copyBoolean(summary, raw, "vectorIndexHealthy");
+  copyBoolean(summary, raw, "retrievalParityPassed");
+  return summary;
+}
+
+function copyNumber(target: JsonRecord, source: JsonRecord, key: string) {
+  const value = Number(source[key]);
+  if (Number.isFinite(value)) target[key] = value;
+}
+
+function copyString(target: JsonRecord, source: JsonRecord, key: string) {
+  const value = stringValue(source[key]);
+  if (value) target[key] = value;
+}
+
+function copyBoolean(target: JsonRecord, source: JsonRecord, key: string) {
+  if (typeof source[key] === "boolean") target[key] = source[key];
 }
 
 function evidence(

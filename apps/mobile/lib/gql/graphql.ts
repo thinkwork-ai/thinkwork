@@ -1455,10 +1455,12 @@ export type EvalTimeSeriesPoint = {
 };
 
 export type FlagThreadForEvalInput = {
+  attributionFallback?: InputMaybe<Scalars['Boolean']['input']>;
   datasetSlug?: InputMaybe<Scalars['String']['input']>;
   newDatasetName?: InputMaybe<Scalars['String']['input']>;
   outcomeKind: Scalars['String']['input'];
   resolutionTarget: Scalars['String']['input'];
+  skillSlug?: InputMaybe<Scalars['String']['input']>;
   threadId: Scalars['ID']['input'];
   turnId: Scalars['ID']['input'];
 };
@@ -2440,6 +2442,7 @@ export type Mutation = {
   addThreadDependency: ThreadDependency;
   adminUpdateAppletSource: SaveAppletPayload;
   answerUserQuestion: UserQuestion;
+  applySkillUpdate: SkillUpdateApplyResult;
   approveInboxItem: InboxItem;
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   approveOntologyChangeSet: OntologyChangeSet;
@@ -2616,6 +2619,7 @@ export type Mutation = {
   renameTenantSlug: Tenant;
   reorderPinnedThreads: Array<PinnedThread>;
   reorderQuickActions: Array<UserQuickAction>;
+  requestCompanyBrainProductionMigration: CompanyBrainMigrationStatus;
   requestRevision: InboxItem;
   /**
    * Admin-only replay: clear the compile cursor for (tenant, user). If
@@ -2645,6 +2649,7 @@ export type Mutation = {
   setKnowledgeGraphDeployment: KnowledgeGraphDeploymentChange;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   setRoutineTrigger: RoutineTrigger;
+  setSkillEvalGate: SkillEvalGate;
   setSpaceEmailTriggers: Space;
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
@@ -2688,6 +2693,7 @@ export type Mutation = {
   unregisterPushToken: Scalars['Boolean']['output'];
   updateAgentProfile: AgentProfile;
   updateArtifact: Artifact;
+  updateCompanyBrainMigration: CompanyBrainMigrationStatus;
   updateEvalDataset: EvalDataset;
   updateEvalDatasetCase: EvalTestCase;
   updateEvalTestCase: EvalTestCase;
@@ -2793,6 +2799,14 @@ export type MutationAdminUpdateAppletSourceArgs = {
 export type MutationAnswerUserQuestionArgs = {
   answers: Scalars['AWSJSON']['input'];
   questionId: Scalars['ID']['input'];
+};
+
+
+export type MutationApplySkillUpdateArgs = {
+  agentId: Scalars['ID']['input'];
+  override?: InputMaybe<Scalars['Boolean']['input']>;
+  skillSlug: Scalars['String']['input'];
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -3439,6 +3453,11 @@ export type MutationReorderQuickActionsArgs = {
 };
 
 
+export type MutationRequestCompanyBrainProductionMigrationArgs = {
+  input: RequestCompanyBrainProductionMigrationInput;
+};
+
+
 export type MutationRequestRevisionArgs = {
   id: Scalars['ID']['input'];
   input: RequestRevisionInput;
@@ -3544,6 +3563,12 @@ export type MutationSetManagedApplicationDeploymentArgs = {
 export type MutationSetRoutineTriggerArgs = {
   input: RoutineTriggerInput;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type MutationSetSkillEvalGateArgs = {
+  tenantId: Scalars['ID']['input'];
+  threshold?: InputMaybe<Scalars['Float']['input']>;
 };
 
 
@@ -3695,6 +3720,11 @@ export type MutationUpdateAgentProfileArgs = {
 export type MutationUpdateArtifactArgs = {
   id: Scalars['ID']['input'];
   input: UpdateArtifactInput;
+};
+
+
+export type MutationUpdateCompanyBrainMigrationArgs = {
+  input: UpdateCompanyBrainMigrationInput;
 };
 
 
@@ -4426,6 +4456,7 @@ export type Query = {
   evalTestCaseHistory: Array<EvalResult>;
   evalTestCases: Array<EvalTestCase>;
   evalTimeSeries: Array<EvalTimeSeriesPoint>;
+  flaggedTurnSkillCandidates: SkillAttributionCandidates;
   inboxItem?: Maybe<InboxItem>;
   inboxItems: Array<InboxItem>;
   knowledgeBase?: Maybe<KnowledgeBase>;
@@ -4515,6 +4546,8 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
+  skillEvalGate: SkillEvalGate;
+  skillEvalScore: SkillEvalScore;
   skillRun?: Maybe<SkillRun>;
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
@@ -4909,6 +4942,13 @@ export type QueryEvalTimeSeriesArgs = {
 };
 
 
+export type QueryFlaggedTurnSkillCandidatesArgs = {
+  tenantId: Scalars['ID']['input'];
+  threadId: Scalars['ID']['input'];
+  turnId: Scalars['ID']['input'];
+};
+
+
 export type QueryInboxItemArgs = {
   id: Scalars['ID']['input'];
 };
@@ -5206,6 +5246,17 @@ export type QueryScheduledJobsArgs = {
 
 export type QuerySingleAgentPerformanceArgs = {
   agentId: Scalars['ID']['input'];
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillEvalGateArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillEvalScoreArgs = {
+  skillSlug: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
 };
 
@@ -5594,6 +5645,15 @@ export type ReorderQuickActionsInput = {
   orderedIds: Array<Scalars['ID']['input']>;
   scope?: InputMaybe<QuickActionScope>;
   tenantId: Scalars['ID']['input'];
+};
+
+export type RequestCompanyBrainProductionMigrationInput = {
+  allowEmptySourceSet?: InputMaybe<Scalars['Boolean']['input']>;
+  embeddingModel?: InputMaybe<Scalars['String']['input']>;
+  emptySourceReason?: InputMaybe<Scalars['String']['input']>;
+  operatorEvidence?: InputMaybe<Scalars['AWSJSON']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  vectorDimension?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type RequestRevisionInput = {
@@ -6038,6 +6098,18 @@ export type SetSpaceToolsInput = {
   tenantId: Scalars['ID']['input'];
 };
 
+export type SkillAttributionCandidate = {
+  __typename?: 'SkillAttributionCandidate';
+  skillSlug: Scalars['String']['output'];
+  source: Scalars['String']['output'];
+};
+
+export type SkillAttributionCandidates = {
+  __typename?: 'SkillAttributionCandidates';
+  candidates: Array<SkillAttributionCandidate>;
+  fallback: Scalars['Boolean']['output'];
+};
+
 /**
  * One entry in a tenant's skill catalog, read from the derived skill_catalog
  * index. Powers pickers like the composer slash-command (force-pin a skill onto
@@ -6081,6 +6153,24 @@ export type SkillCatalogRebuildResult = {
   tenantSlug: Scalars['String']['output'];
 };
 
+export type SkillEvalGate = {
+  __typename?: 'SkillEvalGate';
+  enabled: Scalars['Boolean']['output'];
+  threshold?: Maybe<Scalars['Float']['output']>;
+};
+
+export type SkillEvalScore = {
+  __typename?: 'SkillEvalScore';
+  datasetSlug: Scalars['String']['output'];
+  lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastRunId?: Maybe<Scalars['ID']['output']>;
+  passRate?: Maybe<Scalars['Float']['output']>;
+  rated: Scalars['Boolean']['output'];
+  regression: Scalars['Boolean']['output'];
+  skillSlug: Scalars['String']['output'];
+  totalCases: Scalars['Int']['output'];
+};
+
 export type SkillRun = {
   __typename?: 'SkillRun';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -6104,6 +6194,15 @@ export type SkillRun = {
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type SkillUpdateApplyResult = {
+  __typename?: 'SkillUpdateApplyResult';
+  applied: Scalars['Boolean']['output'];
+  blocked: Scalars['Boolean']['output'];
+  overridden: Scalars['Boolean']['output'];
+  passRate?: Maybe<Scalars['Float']['output']>;
+  threshold?: Maybe<Scalars['Float']['output']>;
 };
 
 export type SlackUserLink = {
@@ -7186,6 +7285,17 @@ export type UpdateArtifactInput = {
   summary?: InputMaybe<Scalars['String']['input']>;
   title?: InputMaybe<Scalars['String']['input']>;
   type?: InputMaybe<ArtifactType>;
+};
+
+export type UpdateCompanyBrainMigrationInput = {
+  errorMessage?: InputMaybe<Scalars['String']['input']>;
+  migrationId: Scalars['ID']['input'];
+  operatorEvidence?: InputMaybe<Scalars['AWSJSON']['input']>;
+  phase: Scalars['String']['input'];
+  rollbackWindowClosesAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  validationSummary?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
 export type UpdateEvalDatasetCaseInput = {

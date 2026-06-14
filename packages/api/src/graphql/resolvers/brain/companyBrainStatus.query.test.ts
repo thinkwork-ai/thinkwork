@@ -202,7 +202,13 @@ describe("companyBrainStatus", () => {
         efs_file_system_id: "fs-1234567890",
         production_posture: "active",
       }),
-      migration: migration(),
+      migration: migration({
+        validation_summary: {
+          validationPassed: true,
+          vectorDimension: 1024,
+          rawS3Uri: "s3://private-bucket/key",
+        },
+      }),
     });
 
     const result = await mod.companyBrainStatus(null, {}, serviceCtx, reader);
@@ -215,7 +221,10 @@ describe("companyBrainStatus", () => {
         id: "migration-1",
         phase: "validating",
         status: "running",
-        validationSummary: JSON.stringify({ replayed: true }),
+        validationSummary: JSON.stringify({
+          vectorDimension: 1024,
+          validationPassed: true,
+        }),
       },
       evidence: {
         managedApplicationId: "app-1",
@@ -239,6 +248,7 @@ describe("companyBrainStatus", () => {
     expect(JSON.stringify(result.evidence).toLowerCase()).not.toContain(
       "opensearch",
     );
+    expect(result.migration.validationSummary).not.toContain("s3://");
   });
 
   it("keeps explicit substrate state authoritative over legacy Cognee env status", async () => {
