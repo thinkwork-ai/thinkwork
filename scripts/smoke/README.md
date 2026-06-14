@@ -37,6 +37,7 @@ This kit fills the gap.
 | `deployment-teardown-readiness-smoke.mjs`    | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                                                                                                           |
 | `lastmile-plugin-smoke.mjs`                  | LastMile plugin smoke. Dry-run by default. Phase 1: live OAuth discovery drift guard + `installPlugin` + prints the `activatePlugin` authorize URL; a manual browser OAuth consent sits in between; phase 2 (`--post-activation`): per-user activation status plus MCP tool-surface inclusion/exclusion via `/api/mcp/tools/list`. |
 | `company-brain-plugin-smoke.mjs`             | Company Brain premium plugin smoke. Dry-run by default. Live mode proves catalog visibility, premium key-gating, optional generated/backdoor key redemption through `installPlugin`, persistent entitlement state, Brain substrate deployment evidence, and the Memory / Ontology route contract.                                  |
+| `company-brain-context-engine-smoke.mjs`     | Read-only Company Brain Context Engine smoke. Dry-run by default. Live mode calls `/mcp/context-engine` with service auth, checks `query_brain_context` provider status/provenance/source-boundary metadata, and compares the named workflow with `query_memory_context`.                                                          |
 
 ## Quick start — run the full smoke suite
 
@@ -146,6 +147,33 @@ equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
   is active.
 - Company Brain plugin detail remains `/settings/plugins/company-brain`, and
   Memory / Ontology remains `/settings/memory/knowledge-graph`.
+
+## Company Brain Context Engine smoke
+
+The Company Brain Context Engine smoke is read-only and dry-run by default:
+
+```sh
+node scripts/smoke/company-brain-context-engine-smoke.mjs
+
+SMOKE_ENABLE_COMPANY_BRAIN_CONTEXT=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_USER_ID=<tenant-user-id> \
+  SMOKE_COMPANY_BRAIN_CONTEXT_QUERY="Acme renewal risk" \
+  SMOKE_COMPANY_BRAIN_EXPECTED_TERM="procurement" \
+  node scripts/smoke/company-brain-context-engine-smoke.mjs
+```
+
+Live mode requires `/mcp/context-engine` service credentials from `apps/web/.env`
+or equivalent `CONTEXT_ENGINE_MCP_URL` plus `API_AUTH_SECRET`/`THINKWORK_API_SECRET`.
+Passing live mode means:
+
+- `query_brain_context` returns Company Brain hits through Context Engine.
+- Brain provider status exposes the active backend/provenance posture.
+- Brain hits carry untrusted source-data boundary metadata.
+- the named workflow is better than memory-only by hit count or an expected-term
+  match in the Brain response.
+- `query_memory_context` remains separate Hindsight retrieval, not a hidden
+  fallback for Brain-only calls.
 
 ## GitHub-free foundation smoke
 

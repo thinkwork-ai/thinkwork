@@ -60,6 +60,14 @@ export interface ContextProviderOptions {
     queryMode?: "recall" | "reflect";
     includeLegacyBanks?: boolean;
   };
+  brain?: {
+    sourceKind?: string;
+    sourceType?: string;
+    datasetId?: string;
+    nodeSetIds?: string[];
+    topK?: number;
+    onlyContext?: boolean;
+  };
 }
 
 export interface ContextEngineRequest {
