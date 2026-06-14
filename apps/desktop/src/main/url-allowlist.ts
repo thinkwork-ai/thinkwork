@@ -4,6 +4,8 @@ const THINKWORK_HTTPS_ORIGIN_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)*thinkwork\.ai$/i;
 const THINKWORK_GITHUB_ORG_PATTERN =
   /^https:\/\/github\.com\/thinkwork-ai(?:\/|$)/i;
+const AUTHKIT_HTTPS_ORIGIN_PATTERN =
+  /^https:\/\/([a-z0-9-]+\.)*authkit\.app$/i;
 
 export function isAllowedExternalUrl(url: string): boolean {
   let parsed: URL;
@@ -16,6 +18,7 @@ export function isAllowedExternalUrl(url: string): boolean {
   const origin = parsed.origin;
   return (
     THINKWORK_HTTPS_ORIGIN_PATTERN.test(origin) ||
+    AUTHKIT_HTTPS_ORIGIN_PATTERN.test(origin) ||
     THINKWORK_GITHUB_ORG_PATTERN.test(parsed.href)
   );
 }
