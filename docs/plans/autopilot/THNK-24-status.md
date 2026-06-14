@@ -7,7 +7,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - Started: 2026-06-14
 - Active branch: `codex/thnk-24-u4-runner-remediation`
 - Active unit: U4, safe runner refresh remediation
-- Linear state: In Progress
+- Linear state: Verification
 
 ## Context Discovery
 
@@ -79,13 +79,14 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
   mutation, runner backup/refresh/evidence writes, job/event updates,
   generated client types, focused remediation test coverage, and scoped
   deployment evidence S3 write permission.
+- 2026-06-14: Opened U4 PR and moved THNK-24 to Verification.
 
 ## Implementation Units
 
 - U1. Extend release manifest runner metadata: merged in PR #2473.
 - U2. Add release update job substrate: merged in PR #2475.
 - U3. Implement release preflight service: merged in PR #2476.
-- U4. Add safe runner refresh remediation: implemented locally; pending PR.
+- U4. Add safe runner refresh remediation: PR open; pending CI/review.
 - U5. Dispatch and monitor reviewed release updates: pending.
 - U6. Build Settings release safety workflow: pending.
 - U7. Update docs, runbooks, and verification coverage: pending.
@@ -95,6 +96,7 @@ Linear: https://linear.app/thinkworkai/issue/THNK-24/make-settings-release-upgra
 - U1: https://github.com/thinkwork-ai/thinkwork/pull/2473 merged
 - U2: https://github.com/thinkwork-ai/thinkwork/pull/2475 merged
 - U3: https://github.com/thinkwork-ai/thinkwork/pull/2476 merged
+- U4: https://github.com/thinkwork-ai/thinkwork/pull/2478
 
 ## CI / Verification
 
