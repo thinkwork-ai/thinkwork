@@ -72,6 +72,36 @@ The Deployment card is where operators check "what's actually deployed and is it
   Settings page can lag reality until the cache is refreshed.
 </Aside>
 
+## Releases
+
+For operator-owned external environments, **Settings -> General -> Releases**
+is the canonical release-upgrade path. Release rows use **Review** instead of a
+direct deploy action. The review flow runs a release-update preflight job before
+the deployment controller can start.
+
+Preflight shows the selected release contract and customer-specific settings
+that must survive the update:
+
+- current and target release
+- manifest URL, SHA-256, signed/unsigned trust posture, and trust policy
+- deployed S3 runner compatibility
+- known IAM drift such as missing customer-domain Route53 actions
+- customer domain and delegation flags
+- SES sender settings
+- platform operator emails
+- Google OAuth configured flag
+- optional app flags
+- deployment evidence prefix and final status pointer
+
+If the runner is stale and remediation is available, Settings offers
+**Refresh Runner**. This backs up the frozen S3 runner, uploads the selected
+release runner, and records evidence before dispatch is allowed. IAM drift is
+detect-and-block at v1; Settings should not silently patch customer IAM.
+
+Only a ready or remediated preflight job can be dispatched. When dispatch
+starts, the page displays the Step Functions execution, CodeBuild build,
+evidence location, final status, and any failure recovery action.
+
 ## Resources & URLs
 
 The last card is a list of copyable rows for the infrastructure endpoints the operator uses day-to-day:
@@ -94,6 +124,10 @@ Every row has a copy button that yanks the value to the clipboard. The rows are 
 | ------------------------ | -------------------------------------- |
 | `TenantDetailQuery($id)` | Tenant identity + settings             |
 | `DeploymentStatusQuery`  | Deployment metadata and service health |
+
+Release-upgrade operations additionally use the release-update job mutations
+and queries: `startReleaseUpdatePreflight`, `remediateReleaseRunner`,
+`startDeploymentReleaseUpdate`, and `releaseUpdateJob`.
 
 Both queries run on page mount and are cached by urql. Refreshing the page re-fetches.
 
@@ -144,9 +178,24 @@ The deliberately heavy use of "No — Terraform" is the design philosophy: tenan
 3. Check `Hindsight: Enabled` (if that's the expected backend)
 4. If either is Disabled, the tenant config doesn't match expectations and a Terraform update + redeploy is needed
 
+### Upgrade an external customer release
+
+1. Open `/settings/general`
+2. Check the Deployment card and confirm stage, account, current release, runner, and evidence bucket
+3. Scroll to Releases and click **Review** on the target release
+4. Confirm release version, manifest URL, and SHA-256
+5. Click **Run Preflight**
+6. Review preserved customer config and blockers
+7. Use **Refresh Runner** only when Settings offers it for a runner mismatch
+8. Click **Start Update** only when Settings reports the release is ready for dispatch
+9. Record the Step Functions execution, CodeBuild build, evidence prefix, and final status
+
 ## Known limits
 
 - **Everything is read-only.** There are no toggles, no save buttons, no inline edits. If you want to change a setting, you change Terraform.
+- **Release upgrades are gated.** The Releases section can start reviewed
+  release-update jobs, but it must pass preflight before dispatch. It does not
+  make Settings a general-purpose live configuration editor.
 - **Deployment status can lag.** The underlying query reads cached metadata, not live CloudFormation, so recent changes may not appear until the cache refreshes.
 - **No tenant rename UI.** Rename is a Terraform + database migration.
 - **No per-tenant logs link.** The Resources card lists storage endpoints but doesn't link directly to CloudWatch log groups or metrics.
@@ -159,3 +208,5 @@ The deliberately heavy use of "No — Terraform" is the design philosophy: tenan
 - [Deploy Configuration](/deploy/configuration/) — the Terraform reference for every field on this page
 - [CLI](/applications/cli/) — the tool used to change Terraform-backed settings and redeploy
 - [Architecture](/architecture/) — how the tenant fits into the three-tier deployment model
+- `docs/runbooks/settings-release-upgrades.md` — external customer release upgrade runbook
+- `docs/verification/settings-release-upgrade-safety.md` — release workflow verification checklist

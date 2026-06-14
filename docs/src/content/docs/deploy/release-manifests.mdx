@@ -119,6 +119,29 @@ Release upgrade evidence should record:
 - post-upgrade foundation smoke result
 - managed-app smoke results for enabled apps
 
+## Settings Preflight Contract
+
+The Settings release workflow consumes the release manifest before dispatching
+the customer deployment controller. The preflight job must verify and persist:
+
+- target manifest URL and SHA-256
+- manifest signed/unsigned state and trust policy
+- selected release Terraform module or bundle version
+- selected release runner script path, SHA-256, and size
+- deployed frozen S3 runner compatibility
+- preserved customer configuration summary
+- known IAM drift checks required by the selected release class
+- evidence bucket/prefix and final status pointer
+
+Dispatch must use the release-update job id created by preflight. It must not
+restart the old direct path that sends only release version, manifest URL, and
+manifest SHA-256 to the controller.
+
+The preflight summary is intentionally operator-facing. It should make customer
+domain, delegated/legacy-retired flags, SES sender settings, platform operator
+emails, identity/OAuth posture, and optional app flags visible before the
+operator can start the controller.
+
 ## Failure Triage
 
 | Failure                            | Meaning                                                                                         |
@@ -132,9 +155,15 @@ Release upgrade evidence should record:
 | Compatibility mismatch             | Upgrade the CLI/runner or choose a compatible release.                                          |
 | Missing managed-app smoke metadata | The release is not usable for managed-app deployment.                                           |
 | Missing managed-app runtime image  | The release advertises an app that cannot be deployed from its manifest.                        |
+| Runner mismatch                    | Refresh the S3 runner from the selected trusted release before dispatch.                        |
+| IAM drift                          | Block dispatch until the live CodeBuild role can satisfy the selected release class.            |
 
 ## Operator Notes
 
 ThinkWork can continue to publish release assets from the ThinkWork-owned GitHub
 project. Customer deployments consume signed release artifacts from the release
 manifest; they do not need a customer source repo or customer GitHub Actions.
+
+See `docs/runbooks/settings-release-upgrades.md` for the operator runbook and
+`docs/verification/settings-release-upgrade-safety.md` for the regression
+checklist.
