@@ -104,6 +104,9 @@ function pluginMcpAuthFields(
     return {
       auth_type: "user_headers",
       auth_config: {
+        ...(component.auth.bearer
+          ? { bearerCredentialKey: component.auth.bearer.credentialKey }
+          : {}),
         headers: component.auth.headers.map((header) => ({
           name: header.name,
           credentialKey: header.credentialKey,

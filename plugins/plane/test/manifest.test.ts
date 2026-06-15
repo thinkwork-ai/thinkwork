@@ -65,7 +65,7 @@ describe("Plane plugin manifest", () => {
     ).toEqual(["mcp-server", "infrastructure", "skills"]);
   });
 
-  it("declares a user-scoped Plane MCP endpoint with PAT headers", () => {
+  it("declares a user-scoped Plane MCP endpoint with PAT bearer auth", () => {
     const mcp = mcpComponent();
     expect(mcp).toMatchObject({
       type: "mcp-server",
@@ -78,13 +78,12 @@ describe("Plane plugin manifest", () => {
       },
       auth: {
         mode: "user-provided-headers",
+        bearer: {
+          credentialKey: "apiKey",
+          displayName: "Plane personal access token",
+          secret: true,
+        },
         headers: [
-          {
-            name: "x-api-key",
-            credentialKey: "apiKey",
-            displayName: "Plane personal access token",
-            secret: true,
-          },
           {
             name: "x-workspace-slug",
             credentialKey: "workspaceSlug",

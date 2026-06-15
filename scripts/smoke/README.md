@@ -147,7 +147,9 @@ SMOKE_ENABLE_PLANE_MCP=1 \
 ```
 
 Direct mode verifies Plane MCP itself. After Plane is installed as a ThinkWork
-plugin, use proxy mode to exercise the ThinkWork `/api/mcp` path:
+plugin, use proxy mode to exercise the ThinkWork `/api/mcp` path. The
+`SMOKE_PLANE_API_KEY` value is a Plane personal access token; the smoke sends it
+to Plane MCP as bearer auth with the workspace slug header.
 
 ```sh
 SMOKE_ENABLE_PLANE_MCP=1 \

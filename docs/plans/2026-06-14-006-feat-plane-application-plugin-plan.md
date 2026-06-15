@@ -67,9 +67,10 @@ changes the dependency shape.
 
 ### U5. Per-User Plane MCP Activation
 
-Extend plugin MCP activation/runtime dispatch to support Plane HTTP PAT header
-auth (`x-api-key`, `x-workspace-slug`) or prove an OAuth bridge. Do not use a
-tenant-wide fallback.
+Extend plugin MCP activation/runtime dispatch to support Plane HTTP PAT bearer
+auth plus auxiliary workspace headers (`Authorization: Bearer <PAT>`,
+`x-workspace-slug`) or prove an OAuth bridge. Do not use a tenant-wide
+fallback.
 
 ### U6. Plane Issue-Loop Skill
 
@@ -100,8 +101,8 @@ Document install, park, destroy, activation, smoke, and known limitations.
 
 ## Key Risks
 
-- Plane MCP HTTP PAT requires custom headers that the current ThinkWork MCP
-  dispatch contract does not yet model.
+- Plane MCP HTTP PAT requires bearer auth plus custom workspace headers that the
+  current ThinkWork MCP dispatch contract does not yet model together.
 - Plane self-hosting for ThinkWork is deliberately tighter than Plane's
   multi-service reference topology: one ECS task with Plane AIO, MCP, and
   task-local Redis/RabbitMQ sidecars. Terraform must not create separate

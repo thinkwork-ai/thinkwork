@@ -15,7 +15,7 @@
  *
  * Direct Plane MCP mode:
  *   SMOKE_PLANE_MCP_URL=https://plane.example.com/mcp
- *   SMOKE_PLANE_API_KEY=<Plane PAT>
+ *   SMOKE_PLANE_API_KEY=<Plane PAT sent as Authorization: Bearer>
  *   SMOKE_PLANE_WORKSPACE_SLUG=<workspace-slug>
  *
  * ThinkWork proxy mode (optional, after plugin install + agent assignment):
@@ -200,7 +200,7 @@ async function runLiveSmoke() {
   }
   const readableIdentifier = workItemIdentifier(existing, project);
   const readExisting = await client.call("retrieve_work_item_by_identifier", {
-    work_item_identifier: readableIdentifier,
+    ...workItemIdentifierArgs(existing, project),
     expand: "assignees,labels,state",
   });
   pass("read seeded work item by readable identifier", {
@@ -380,7 +380,7 @@ async function createNewWorkItem(client, projectId) {
 async function readWorkItemByIdentifier(client, item, project) {
   const identifier = workItemIdentifier(item, project);
   const read = await client.call("retrieve_work_item_by_identifier", {
-    work_item_identifier: identifier,
+    ...workItemIdentifierArgs(item, project),
   });
   pass("read newly created work item", {
     identifier,
@@ -426,7 +426,7 @@ function makeDirectMcpClient() {
   return {
     async listTools() {
       return mcpRequest("tools/list", {}, directMcpUrl, {
-        "x-api-key": planeApiKey,
+        authorization: `Bearer ${planeApiKey}`,
         "x-workspace-slug": workspaceSlug,
       }).then((result) => result.tools ?? []);
     },
@@ -436,7 +436,7 @@ function makeDirectMcpClient() {
         { name: tool, arguments: args },
         directMcpUrl,
         {
-          "x-api-key": planeApiKey,
+          authorization: `Bearer ${planeApiKey}`,
           "x-workspace-slug": workspaceSlug,
         },
       ).then(parseMcpToolResult);
@@ -587,29 +587,42 @@ async function gql(query, variables, principalId) {
 }
 
 function parseMcpProxyContent(response) {
-  if (response.structuredContent) return response.structuredContent;
+  if (response.structuredContent) return unwrapToolPayload(response.structuredContent);
   const text = response.content?.find?.((item) => item.type === "text")?.text;
   if (!text) return response;
   try {
-    return JSON.parse(text);
+    return unwrapToolPayload(JSON.parse(text));
   } catch {
     return { text };
   }
 }
 
 function parseMcpToolResult(result) {
-  if (result.structuredContent) return result.structuredContent;
+  if (result.structuredContent) return unwrapToolPayload(result.structuredContent);
   const text = result.content?.find?.((item) => item.type === "text")?.text;
   if (!text) return result;
   try {
-    return JSON.parse(text);
+    return unwrapToolPayload(JSON.parse(text));
   } catch {
     return { text };
   }
 }
 
+function unwrapToolPayload(value) {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.prototype.hasOwnProperty.call(value, "result")
+  ) {
+    return value.result;
+  }
+  return value;
+}
+
 function normalizeList(value) {
   if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.result)) return value.result;
   if (Array.isArray(value?.results)) return value.results;
   if (Array.isArray(value?.result?.records)) return value.result.records;
   if (Array.isArray(value?.records)) return value.records;
@@ -617,13 +630,29 @@ function normalizeList(value) {
 }
 
 function workItemIdentifier(item, project) {
+  const args = workItemIdentifierArgs(item, project);
+  return `${args.project_identifier}-${args.issue_identifier}`;
+}
+
+function workItemIdentifierArgs(item, project) {
   const explicit = first(item.identifier, item.work_item_identifier);
-  if (explicit) return String(explicit);
+  if (explicit) {
+    const parts = String(explicit).match(/^(.+)-(\d+)$/);
+    if (parts) {
+      return {
+        project_identifier: parts[1],
+        issue_identifier: Number(parts[2]),
+      };
+    }
+  }
   const sequence = first(item.sequence_id, item.issue_identifier);
   if (!sequence) {
     throw new Error(`Work item ${idOf(item)} has no sequence_id/identifier.`);
   }
-  return `${project.identifier}-${sequence}`;
+  return {
+    project_identifier: project.identifier,
+    issue_identifier: Number(sequence),
+  };
 }
 
 function idOf(value) {

@@ -88,7 +88,7 @@ app-specific settings page.
 | Server     | Owner              | Authentication model                              | Operator action                                                                                     |
 | ---------- | ------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Twenty CRM | Twenty managed app | Per-user OAuth against the managed Twenty runtime | Users connect their own OAuth token; repair the row from Settings -> CRM                            |
-| Plane      | Plane plugin       | Per-user Plane PAT + workspace slug headers       | Users activate Plane from Settings -> Plugins; repair by reinstalling or repairing the Plane plugin |
+| Plane      | Plane plugin       | Per-user Plane PAT bearer auth + workspace header | Users activate Plane from Settings -> Plugins; repair by reinstalling or repairing the Plane plugin |
 
 System-managed rows should not be duplicated with manual registrations. If a
 row is missing or stale, use the app page's install/repair action so ThinkWork
@@ -97,8 +97,8 @@ can preserve managed metadata, default-agent assignment, and secret references.
 Plane is the first plugin-managed MCP row that uses per-user header activation
 instead of OAuth. Its activation stores the current user's Plane personal access
 token and workspace slug as user-scoped secrets, then sends them to Plane as
-`x-api-key` and `x-workspace-slug`. Do not configure a tenant-wide Plane API key
-or a second manual Plane MCP row.
+`Authorization: Bearer <PAT>` plus `x-workspace-slug`. Do not configure a
+tenant-wide Plane API key or a second manual Plane MCP row.
 
 ### OAuth flow from the admin UI
 

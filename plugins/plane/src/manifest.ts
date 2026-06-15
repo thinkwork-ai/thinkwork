@@ -16,9 +16,10 @@
  *   - The `skills` component seeds the first workflow skill so agents can
  *     work Plane issues with context-first read/write discipline.
  *   - The `mcp-server` component resolves the tenant Plane endpoint from the
- *     managed-app public URL and uses user-provided header auth. Each user
- *     activates with their own Plane PAT (`x-api-key`) and workspace slug
- *     (`x-workspace-slug`); no tenant-wide key is declared or accepted.
+ *     managed-app public URL and uses user-provided bearer + header auth. Each
+ *     user activates with their own Plane PAT (`Authorization: Bearer`) and
+ *     workspace slug (`x-workspace-slug`); no tenant-wide key is declared or
+ *     accepted.
  */
 
 import type {
@@ -106,13 +107,12 @@ const PLANE_MCP_COMPONENT: McpServerComponent = {
   },
   auth: {
     mode: "user-provided-headers",
+    bearer: {
+      credentialKey: "apiKey",
+      displayName: "Plane personal access token",
+      secret: true,
+    },
     headers: [
-      {
-        name: "x-api-key",
-        credentialKey: "apiKey",
-        displayName: "Plane personal access token",
-        secret: true,
-      },
       {
         name: "x-workspace-slug",
         credentialKey: "workspaceSlug",
@@ -121,7 +121,7 @@ const PLANE_MCP_COMPONENT: McpServerComponent = {
     ],
   },
   toolNotes: [
-    "Plane MCP HTTP PAT mode requires x-api-key and x-workspace-slug headers; readable issue ids such as ENG-42 must be resolved to UUIDs before UUID-only tool calls.",
+    "Plane MCP HTTP PAT mode requires Authorization: Bearer <PAT> plus the x-workspace-slug header; readable issue ids such as ENG-42 must be resolved to UUIDs before UUID-only tool calls.",
   ],
 };
 

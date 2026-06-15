@@ -21,10 +21,10 @@ Issue: THNK-27 Add Plane Plugin
   service/task. Plane AIO still requires `REDIS_URL` and `AMQP_URL`, so those
   must be task-local loopback sidecars, not separate managed Redis/Valkey,
   RabbitMQ/Amazon MQ, or per-service Plane ECS services.
-- Plane MCP HTTP PAT mode requires `x-api-key` and `x-workspace-slug` request
-  headers. U5 adds a user-provided header auth mode that stores those values in
-  per-user plugin activation secrets and emits them only for the active
-  requester.
+- Plane MCP HTTP PAT mode requires `Authorization: Bearer <PAT>` plus the
+  `x-workspace-slug` request header. U5 adds a user-provided auth mode that
+  stores those values in per-user plugin activation secrets and emits them only
+  for the active requester.
 
 ## Implementation Units
 
@@ -153,6 +153,23 @@ deployment-runner-managed-apps.test.ts` passed.
 - U7: `git diff --check` passed.
 - U7: PR #2494 CI passed (`cla`, `lint`, `verify`, `typecheck`, `test`) and
   was squash-merged.
+- Verification: dev Plane runtime is live in AWS ECS/Fargate as one Plane ECS
+  service/task with app, MCP, Redis, and RabbitMQ containers. The public Plane
+  app is reachable at `https://plane.thinkwork.ai/`, and the Plane MCP endpoint
+  is reachable at `https://plane.thinkwork.ai/http/api-key/mcp`.
+- Verification: created a dev smoke Plane admin/workspace through Plane's
+  native first-admin and workspace APIs, then minted a Plane PAT for MCP smoke
+  use. The PAT is stored only in a local smoke credential file, not in docs.
+- Verification: direct write-enabled Plane MCP smoke passed against the live
+  Plane MCP endpoint with `Authorization: Bearer <PAT>` plus
+  `x-workspace-slug`; it authenticated `get_me`, found the seed project,
+  created/read smoke work items, and wrote a smoke comment.
+- Verification: ThinkWork proxy smoke activated the Plane plugin credentials
+  for the current user, but the deployed API returned
+  `MCP upstream failure: MCP server plane--issues returned 401`. The deployed
+  MCP row still advertises the old `x-api-key` Plane auth_config, so proxy
+  verification is blocked until the bearer-plus-workspace auth fix in this
+  branch is merged and deployed, then the user reactivates Plane credentials.
 - U8: implementation in progress on `codex/thnk-27-plane-release-wiring`;
   promoted Plane into the published plugin catalog, default release
   manifest managed-app descriptors, and managed-app controller readiness smoke
@@ -205,10 +222,10 @@ scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed dry-run mode.
   adapter stays hidden from the generic managed-app catalog because Plane is
   installed through the plugin catalog and uses the adapter only as its
   infrastructure backing.
-- Plane's MCP component now uses `auth.mode: user-provided-headers`; user
-  activations store PAT/workspace values per requester in
-  `user_plugin_activation_tokens` secrets, while `tenant_mcp_servers.auth_config`
-  stores only non-secret header binding metadata.
+- Plane's MCP component now uses `auth.mode: user-provided-headers` with a
+  bearer PAT binding; user activations store PAT/workspace values per requester
+  in `user_plugin_activation_tokens` secrets, while
+  `tenant_mcp_servers.auth_config` stores only non-secret binding metadata.
 - U5 groups user-provided header credentials by normalized MCP resource before
   writing secrets so multiple components sharing one endpoint retain the full
   header set.

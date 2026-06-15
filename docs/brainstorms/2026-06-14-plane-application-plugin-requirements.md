@@ -56,8 +56,9 @@ ThinkWork issue tracker.
   Cloud, local Docker Compose, or a local-only Plane runtime.
 - Use per-user Plane activation. The current ThinkWork MCP manifest/runtime
   supports OAuth and bearer-token dispatch, while Plane HTTP PAT mode requires
-  `x-api-key` and `x-workspace-slug` headers; that activation/runtime contract
-  is an explicit implementation dependency before registering an MCP component.
+  `Authorization: Bearer <PAT>` plus the `x-workspace-slug` header; that
+  activation/runtime contract is an explicit implementation dependency before
+  registering an MCP component.
 
 ## Sources
 

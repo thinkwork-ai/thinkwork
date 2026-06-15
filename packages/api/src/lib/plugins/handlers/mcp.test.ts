@@ -323,13 +323,12 @@ describe("user-provided header auth (THNK-27 U5)", () => {
       },
       auth: {
         mode: "user-provided-headers",
+        bearer: {
+          credentialKey: "apiKey",
+          displayName: "Plane personal access token",
+          secret: true,
+        },
         headers: [
-          {
-            name: "x-api-key",
-            credentialKey: "apiKey",
-            displayName: "Plane personal access token",
-            secret: true,
-          },
           {
             name: "x-workspace-slug",
             credentialKey: "workspaceSlug",
@@ -367,8 +366,8 @@ describe("user-provided header auth (THNK-27 U5)", () => {
       url: "https://plane.tenant.example.com/http/api-key/mcp",
       auth_type: "user_headers",
       auth_config: {
+        bearerCredentialKey: "apiKey",
         headers: [
-          { name: "x-api-key", credentialKey: "apiKey" },
           { name: "x-workspace-slug", credentialKey: "workspaceSlug" },
         ],
       },

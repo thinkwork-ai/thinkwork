@@ -88,13 +88,12 @@ function planeVersion(): PluginVersion {
         endpointUrl: "https://plane.example.invalid/http/api-key/mcp",
         auth: {
           mode: "user-provided-headers",
+          bearer: {
+            credentialKey: "apiKey",
+            displayName: "Plane personal access token",
+            secret: true,
+          },
           headers: [
-            {
-              name: "x-api-key",
-              credentialKey: "apiKey",
-              displayName: "Plane personal access token",
-              secret: true,
-            },
             {
               name: "x-workspace-slug",
               credentialKey: "workspaceSlug",
@@ -536,7 +535,7 @@ describe("completeActivation", () => {
 });
 
 describe("activatePluginWithCredentials (THNK-27 U5)", () => {
-  it("stores Plane PAT headers as a user-scoped plugin activation secret", async () => {
+  it("stores Plane PAT bearer auth and workspace header as a user-scoped plugin activation secret", async () => {
     const h = buildHarness(planeVersion());
     const install = h.store.installs.get(h.installId)!;
     install.plugin_key = "plane";
@@ -580,9 +579,10 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
     ) as Record<string, unknown>;
     expect(secret).toMatchObject({
       auth_type: "user-provided-headers",
+      access_token: "plane_pat_user_123",
+      token_type: "Bearer",
       resource: "https://plane.example.invalid/http/api-key/mcp",
       headers: {
-        "x-api-key": "plane_pat_user_123",
         "x-workspace-slug": "eng",
       },
     });

@@ -78,8 +78,8 @@ MCP tools commonly use these patterns:
   self-service flow for mobile users.
 - **Per-user plugin headers** when a plugin needs user-scoped non-OAuth
   credentials. Plane uses this mode: each user activates the Plane plugin with a
-  personal access token and workspace slug, and ThinkWork sends them as
-  `x-api-key` and `x-workspace-slug` only for that requester.
+  personal access token and workspace slug, and ThinkWork sends them as bearer
+  auth plus `x-workspace-slug` only for that requester.
 
 <Aside type="note">
   If a per-user OAuth token is missing, ThinkWork can skip that MCP server for

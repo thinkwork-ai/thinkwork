@@ -413,7 +413,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     warn.mockRestore();
   });
 
-  it("Plane-style user_headers plugin servers resolve headers from the requester's activation secret", async () => {
+  it("Plane-style user_headers plugin servers resolve bearer plus headers from the requester's activation secret", async () => {
     mockJoinRows.mockReturnValue([
       pluginRow("issues", {
         slug: "plane--issues",
@@ -421,8 +421,8 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
         url: "https://plane.example.invalid/http/api-key/mcp",
         auth_type: "user_headers",
         auth_config: {
+          bearerCredentialKey: "apiKey",
           headers: [
-            { name: "x-api-key", credentialKey: "apiKey" },
             { name: "x-workspace-slug", credentialKey: "workspaceSlug" },
           ],
         },
@@ -442,8 +442,9 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       ref,
       JSON.stringify({
         auth_type: "user-provided-headers",
+        access_token: "plane_pat_user_123",
+        token_type: "Bearer",
         headers: {
-          "x-api-key": "plane_pat_user_123",
           "x-workspace-slug": "eng",
         },
         resource: "https://plane.example.invalid/http/api-key/mcp",
@@ -462,9 +463,9 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       name: "plane--issues",
       url: "https://plane.example.invalid/http/api-key/mcp",
       auth: {
-        type: "headers",
+        type: "bearer",
+        token: "plane_pat_user_123",
         headers: {
-          "x-api-key": "plane_pat_user_123",
           "x-workspace-slug": "eng",
         },
       },
