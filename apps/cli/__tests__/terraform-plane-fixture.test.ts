@@ -143,6 +143,9 @@ describe("Plane Terraform app module", () => {
     expect(source).toMatch(
       /amqp:\/\/\$\{var\.rabbitmq_username\}:\$\{var\.rabbitmq_password\}@127\.0\.0\.1/,
     );
+    expect(source).toMatch(/name = "RABBITMQ_ERLANG_COOKIE"/);
+    expect(source).toMatch(/name = "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS"/);
+    expect(source).toMatch(/-setcookie \$\{var\.rabbitmq_erlang_cookie\}/);
     expect(readme).toMatch(/runtime_enabled = false/);
     expect(readme).toMatch(/parks the compact Plane ECS service/);
     expect(readme).toMatch(/one ECS service/);

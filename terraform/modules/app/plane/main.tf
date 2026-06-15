@@ -192,6 +192,7 @@ locals {
         { name = "RABBITMQ_DEFAULT_PASS", value = var.rabbitmq_password },
         { name = "RABBITMQ_DEFAULT_VHOST", value = var.rabbitmq_vhost },
         { name = "RABBITMQ_ERLANG_COOKIE", value = var.rabbitmq_erlang_cookie },
+        { name = "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS", value = "-setcookie ${var.rabbitmq_erlang_cookie}" },
       ]
       secrets = []
       health_check = {
