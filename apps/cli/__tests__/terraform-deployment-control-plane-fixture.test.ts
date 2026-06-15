@@ -92,9 +92,21 @@ describe("deployment control plane Terraform fixture", () => {
     expect(runner).toMatch(/profile\/web-env/);
     expect(runner).toMatch(/VITE_GRAPHQL_HTTP_URL/);
     expect(runner).toMatch(/VITE_COGNITO_DOMAIN/);
-    expect(runner).toMatch(/enable_cognee\s+= false/);
-    expect(runner).toMatch(/twenty_provisioned\s+= false/);
-    expect(runner).toMatch(/twenty_runtime_enabled\s+= false/);
+    expect(runner).toMatch(/managed_app_terraform_overrides/);
+    expect(runner).toMatch(
+      /"enable_cognee": bool\(state_output\(current_outputs, "cognee_enabled", False\)\)/,
+    );
+    expect(runner).toMatch(
+      /"twenty_provisioned": bool\(state_output\(current_outputs, "twenty_provisioned", False\)\)/,
+    );
+    expect(runner).toMatch(
+      /"twenty_runtime_enabled": bool\(\s*state_output\(current_outputs, "twenty_runtime_enabled", False\)/,
+    );
+    expect(runner).toMatch(/enable_cognee\s+= var\.enable_cognee/);
+    expect(runner).toMatch(/twenty_provisioned\s+= var\.twenty_provisioned/);
+    expect(runner).toMatch(
+      /twenty_runtime_enabled\s+= var\.twenty_runtime_enabled/,
+    );
     expect(runner).toMatch(/enable_stripe_billing\s+= false/);
     expect(runner).toMatch(/enable_slack_workspace_app\s+= false/);
     expect(source).toMatch(/aws_cloudwatch_log_group" "state_machine"/);
