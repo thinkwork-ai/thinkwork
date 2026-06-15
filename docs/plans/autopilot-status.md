@@ -109,8 +109,8 @@ status: in_progress
   build warning under Node 25.6.0 because `pkg-config` is unavailable. U7 PR
   #2446 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`)
   and was squash merged. U8 local checks: `node --check
-  scripts/smoke/company-brain-plugin-smoke.mjs` passed; `node
-  scripts/smoke/company-brain-plugin-smoke.mjs` dry-run passed and emitted the
+  plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` passed; `node
+  plugins/company-brain/smoke/company-brain-plugin-smoke.mjs` dry-run passed and emitted the
   expected evidence envelope. U8 PR #2447 initially passed required CI but was
   behind `main`; after rebasing onto `origin/main`, it passed required CI
   (`cla`, `lint`, `verify`, `typecheck`, and `test`) again and was squash
@@ -2546,8 +2546,8 @@ database`, `Empty Kestra retained storage before destructive destroy`, and
   `pnpm test:release && pnpm --filter @thinkwork/release-manifest test`
   passed.
 - U5 local:
-  `node scripts/smoke/cognee-managed-app-smoke.mjs` and
-  `node scripts/smoke/twenty-managed-app-smoke.mjs` both skipped live mode as
+  `node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` and
+  `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` both skipped live mode as
   expected in dry-run.
 - U5 local:
   `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
@@ -2683,8 +2683,8 @@ U7c files>`; and `git diff --check`.
   25/pkg-config but did not fail install.
 - U8 local verification passed:
   `node scripts/smoke/foundation-bootstrap-smoke.mjs`;
-  `node scripts/smoke/cognee-managed-app-smoke.mjs`;
-  `node scripts/smoke/twenty-managed-app-smoke.mjs`;
+  `node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`;
+  `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs`;
   `pnpm --filter @thinkwork/docs build`;
   `pnpm dlx prettier --check <touched U8 files>`; and `git diff --check`.
 - U8 docs build emitted existing docs-site warnings for the missing i18n
@@ -2792,7 +2792,7 @@ U7c files>`; and `git diff --check`.
   Remote branch was deleted; local U5 branch and worktree were removed.
 - 2026-06-06: Created U6 worktree from `origin/main` at `2ef9d592` on branch
   `codex/twenty-mcp-u6-e2e-proof`.
-- 2026-06-06: Added `scripts/smoke/twenty-mcp-oauth-smoke.mjs` for dry-run
+- 2026-06-06: Added `plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs` for dry-run
   and opt-in live verification of Twenty OAuth metadata, current-user managed
   MCP visibility, MCP proxy `tools/list`, and optional assigned-opportunities
   `tools/call` through ThinkWork runtime auth.
@@ -2904,9 +2904,9 @@ src/components/settings/ManagedApplicationsSection.test.tsx` passed.
   passed.
 - U5 local: `pnpm --filter @thinkwork/api typecheck` passed.
 - U5 local: `pnpm --filter @thinkwork/spaces typecheck` passed.
-- U6 local: `node scripts/smoke/twenty-mcp-oauth-smoke.mjs` passed dry-run.
+- U6 local: `node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs` passed dry-run.
 - U6 live read-only:
-  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 node scripts/smoke/twenty-mcp-oauth-smoke.mjs`
+  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`
   failed at the expected managed-row gate because `/api/skills/user-mcp-servers`
   did not return **Twenty CRM** for the authenticated dev user.
 - U6 local:
@@ -2916,11 +2916,11 @@ src/components/settings/ManagedApplicationsSection.test.tsx` passed.
   `pnpm --filter @thinkwork/spaces exec vitest run src/components/settings/SettingsMcpServerDetail.test.tsx src/lib/mcp-api.test.ts`
   passed.
 - U6 live:
-  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 node scripts/smoke/twenty-mcp-oauth-smoke.mjs`
+  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`
   passed after managed MCP recovery and user OAuth; `tools/list` returned the
   Twenty runtime tools.
 - U6 live:
-  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 SMOKE_TWENTY_MCP_CALL=1 SMOKE_TWENTY_USER_EMAIL=eric@thinkwork.ai node scripts/smoke/twenty-mcp-oauth-smoke.mjs`
+  `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 SMOKE_TWENTY_MCP_CALL=1 SMOKE_TWENTY_USER_EMAIL=eric@thinkwork.ai node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`
   passed and found 5 Twenty opportunity records assigned to Eric.
 - U6 local UI:
   `pnpm --filter @thinkwork/spaces dev --host 127.0.0.1 --port 5175` served
@@ -10941,7 +10941,7 @@ None.
 | U3 - Deploy workflow and generated templates           | `codex/twenty-crm-u3-workflows`  | [#2125](https://github.com/thinkwork-ai/thinkwork/pull/2125) | Merged | `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-twenty-fixture.test.ts` passed; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter thinkwork-cli test` passed (56 files, 379 tests); `pnpm dlx prettier@3.8.2 --check --ignore-unknown ...` passed; `terraform -chdir=apps/cli/src/commands/enterprise/templates/deploy-repo/terraform fmt -check` passed; `git diff --check` passed; Ruby YAML parse passed for `.github/workflows/deploy.yml` and `.github/workflows/verify.yml`; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Squash merged as `37854e42`. `pnpm install` exited successfully but logged the same optional `canvas` native build failure under Node 25 because `pkg-config`/pixman were unavailable after the prebuilt binary 404. Adds GitHub deploy/verify wiring and generated Terraform template propagation for Twenty.                                                                                                            |
 | U4 - Managed application GraphQL API                   | `codex/twenty-crm-u4-graphql`    | [#2126](https://github.com/thinkwork-ai/thinkwork/pull/2126) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; focused API resolver/contract suite passed (143 tests); full `pnpm --filter @thinkwork/api test` passed (419 files, 3621 tests); `pnpm --filter @thinkwork/api typecheck` passed; `pnpm schema:build` passed; codegen passed for `thinkwork-cli`, `@thinkwork/admin`, `@thinkwork/mobile`, and `@thinkwork/spaces`; generated GraphQL files were formatted with Prettier; `pnpm --filter thinkwork-cli typecheck` passed; `pnpm --filter @thinkwork/admin build` passed; `pnpm --filter @thinkwork/spaces typecheck` passed; `pnpm --filter @thinkwork/mobile test` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `c08e5595`. Adds managed app status for Cognee and Twenty, Twenty deploy variable mutation semantics, and Twenty public `/healthz` probe.                                                                                                                                                                                                                                                                |
 | U5/U6 - Spaces managed apps UI and generated artifacts | `codex/twenty-crm-u5-ui`         | [#2128](https://github.com/thinkwork-ai/thinkwork/pull/2128) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; `pnpm --filter @thinkwork/spaces codegen` passed; focused/rebase settings suite passed (6 files, 23 tests); `pnpm --filter @thinkwork/spaces typecheck` passed; `pnpm --filter @thinkwork/spaces build` passed; full `pnpm --filter @thinkwork/spaces test` passed after rebase (117 files, 842 tests); `git diff --check` passed; `curl -I --max-time 10 http://localhost:5175/settings/general` returned `200 OK`; headless Chrome captured `http://localhost:5175/settings/general` to `/tmp/thinkwork-u5-screens-localhost/settings-general.png` and confirmed the unauthenticated login screen renders without route crash; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Squash merged as `065e2e56`. Groups U6 generated Spaces GraphQL and TanStack route artifacts with U5 because the UI route/query changes require them. Browser verification could not reach operator settings content without an authenticated localhost session; component/source tests cover Managed Applications, CRM, and nav/route gating behavior.                                                                   |
-| U7 - Docs, runbook notes, and deployment smoke         | `codex/twenty-crm-u7-docs-smoke` | [#2129](https://github.com/thinkwork-ai/thinkwork/pull/2129) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; `node --check scripts/smoke/twenty-managed-app-smoke.mjs` passed; `node scripts/smoke/twenty-managed-app-smoke.mjs` dry-run passed; `SMOKE_ENABLE_TWENTY_MANAGED_APP=1 SMOKE_TERRAFORM_DIR=/tmp/thinkwork-no-such-terraform node scripts/smoke/twenty-managed-app-smoke.mjs` skipped unprovisioned state clearly; `SMOKE_ENABLE_TWENTY_MANAGED_APP=1 SMOKE_TWENTY_URL=http://example.com node scripts/smoke/twenty-managed-app-smoke.mjs` failed as expected with the HTTPS guard; `pnpm --filter @thinkwork/docs build` passed; `git diff --check` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `ee9e4555`. Adds operator docs and read-only post-deploy smoke coverage for Twenty CRM managed-app deployments.                                                                                                                                                                                                                                                                                          |
+| U7 - Docs, runbook notes, and deployment smoke         | `codex/twenty-crm-u7-docs-smoke` | [#2129](https://github.com/thinkwork-ai/thinkwork/pull/2129) | Merged | `pnpm install` completed with the known optional `canvas` native build warning under Node 25; `node --check plugins/twenty/smoke/twenty-managed-app-smoke.mjs` passed; `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` dry-run passed; `SMOKE_ENABLE_TWENTY_MANAGED_APP=1 SMOKE_TERRAFORM_DIR=/tmp/thinkwork-no-such-terraform node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` skipped unprovisioned state clearly; `SMOKE_ENABLE_TWENTY_MANAGED_APP=1 SMOKE_TWENTY_URL=http://example.com node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` failed as expected with the HTTPS guard; `pnpm --filter @thinkwork/docs build` passed; `git diff --check` passed; GitHub checks passed: `cla`, `lint`, `test`, `typecheck`, and `verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Squash merged as `ee9e4555`. Adds operator docs and read-only post-deploy smoke coverage for Twenty CRM managed-app deployments.                                                                                                                                                                                                                                                                                          |
 
 ## Open Blockers
 

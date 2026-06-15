@@ -10,6 +10,10 @@ describe("verify-plugin-source-boundary", () => {
   it("accepts plugin-specific source inside the owning plugin package", async () => {
     await withFixture(async (dir) => {
       await writeFixtureFile(dir, "plugins/plane/src/manifest.ts");
+      await writeFixtureFile(
+        dir,
+        "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
+      );
 
       const result = await scanFixture(dir);
 

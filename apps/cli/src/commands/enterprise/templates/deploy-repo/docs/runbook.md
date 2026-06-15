@@ -188,12 +188,12 @@ Run managed-app smokes after deploy, destroy, park, or release upgrade jobs:
 SMOKE_ENABLE_COGNEE_MANAGED_APP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_EVIDENCE_FILE=deploy-artifacts/cognee-smoke.json \
-  node scripts/smoke/cognee-managed-app-smoke.mjs
+  node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs
 
 SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_EVIDENCE_FILE=deploy-artifacts/twenty-smoke.json \
-  node scripts/smoke/twenty-managed-app-smoke.mjs
+  node plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 ```
 
 Cognee and Twenty smokes skip with explicit evidence when the app is not

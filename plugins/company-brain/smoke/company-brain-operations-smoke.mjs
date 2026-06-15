@@ -23,7 +23,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { attachSmokeEvidence } from "./deployment-evidence.mjs";
+import { attachSmokeEvidence } from "../../../scripts/smoke/deployment-evidence.mjs";
 
 const LIVE_ENABLED = process.env.SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS === "1";
 const MUTATION_ENABLED =

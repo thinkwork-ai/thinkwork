@@ -20,7 +20,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { attachSmokeEvidence } from "./deployment-evidence.mjs";
+import { attachSmokeEvidence } from "../../../scripts/smoke/deployment-evidence.mjs";
 
 const LIVE_ENABLED = process.env.SMOKE_ENABLE_COGNEE_MANAGED_APP === "1";
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15_000);

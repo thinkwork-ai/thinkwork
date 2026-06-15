@@ -77,7 +77,7 @@ full resource IDs, or environment values.
 
 - Terraform plan artifact from GitHub Actions or deployment controller using the
   shared dev backend.
-- `scripts/smoke/cognee-managed-app-smoke.mjs` with live smoke enabled.
+- `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` with live smoke enabled.
 - Read-only ECS describe checks for both the Brain cluster and legacy Cognee
   cluster.
 - HTTP GraphQL deployment status and Knowledge Graph health check.

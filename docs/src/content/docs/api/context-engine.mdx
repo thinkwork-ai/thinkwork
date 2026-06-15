@@ -85,7 +85,7 @@ When Context Engine is enabled for a first-party Pi runtime, the Pi Context Engi
 
 `query_brain_context` should be the model's first choice for governed tenant-shared business/domain context such as customers, opportunities, commitments, risks, stakeholders, products, relationships, and cited provenance. Use `query_memory_context` for raw Hindsight Memory and `query_wiki_context` for compiled page/entity/topic lookup. Raw ontology admin APIs, raw Cognee, Neptune, S3, and storage backends are not runtime tools.
 
-Use `scripts/smoke/company-brain-context-engine-smoke.mjs` after deploy to verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path. Use `scripts/smoke/company-brain-operations-smoke.mjs` to verify the GraphQL operations posture and redaction contract; it is read-only unless `SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1` is explicitly set.
+Use `plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs` after deploy to verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path. Use `plugins/company-brain/smoke/company-brain-operations-smoke.mjs` to verify the GraphQL operations posture and redaction contract; it is read-only unless `SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1` is explicitly set.
 
 ## Admin Verification
 

@@ -10,7 +10,7 @@ LastMile is a first-party MCP and skill plugin package for the THNK-31
 - `src/manifest.ts` owns the LastMile catalog manifest.
 - `src/discovery.fixture.ts` owns the recorded OAuth protected-resource
   metadata fixture used by drift tests.
+- `smoke/lastmile-plugin-smoke.mjs` owns the LastMile live plugin smoke.
 
-This package currently owns the catalog manifest and discovery fixture while
-LastMile smoke coverage remains in the shared smoke kit until the smoke
-extension-point migration moves plugin-specific smokes behind plugin packages.
+This package owns the catalog manifest, discovery fixture, and live plugin
+smoke.

@@ -25,7 +25,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { attachSmokeEvidence } from "./deployment-evidence.mjs";
+import { attachSmokeEvidence } from "../../../scripts/smoke/deployment-evidence.mjs";
 
 const LIVE_ENABLED = process.env.SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN === "1";
 const PLUGIN_KEY = "company-brain";
@@ -265,9 +265,14 @@ function assertCatalogEntry(entry) {
   if (substrate?.type === "infrastructure") {
     pass("manifest declares the Brain substrate infrastructure component");
   } else {
-    failCheck("manifest declares the Brain substrate infrastructure component", {
-      components: entry.versions?.flatMap((version) => version.components ?? []),
-    });
+    failCheck(
+      "manifest declares the Brain substrate infrastructure component",
+      {
+        components: entry.versions?.flatMap(
+          (version) => version.components ?? [],
+        ),
+      },
+    );
   }
 }
 
@@ -406,9 +411,12 @@ function assertEntitlement(entitlement, { allowMissing }) {
       grantedAt: entitlement.grantedAt,
     });
   } else {
-    failCheck("catalog exposes an active persistent Company Brain entitlement", {
-      entitlement: summarizeEntitlement(entitlement),
-    });
+    failCheck(
+      "catalog exposes an active persistent Company Brain entitlement",
+      {
+        entitlement: summarizeEntitlement(entitlement),
+      },
+    );
   }
 }
 
@@ -468,7 +476,10 @@ function assertInstallEvidence(install) {
     pass("new provision/adoption path reached normal approval state", {
       deploymentJobId: handlerRef.deploymentJobId,
     });
-  } else if (install.state === "installed" || substrate.state === "provisioned") {
+  } else if (
+    install.state === "installed" ||
+    substrate.state === "provisioned"
+  ) {
     pass("Company Brain substrate is already provisioned", {
       installState: install.state,
       substrateState: substrate.state,

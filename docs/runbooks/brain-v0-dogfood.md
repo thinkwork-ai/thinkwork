@@ -9,8 +9,8 @@
 - `scripts/post-deploy/brain-v0-smoke.sh` passes.
 - Company Brain is installed for the tenant and the plugin detail page links to
   **Brain operations**.
-- `node scripts/smoke/company-brain-operations-smoke.mjs` dry-run passes.
-- `node scripts/smoke/company-brain-context-engine-smoke.mjs` dry-run passes.
+- `node plugins/company-brain/smoke/company-brain-operations-smoke.mjs` dry-run passes.
+- `node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs` dry-run passes.
 
 ## Substrate Checks
 
@@ -22,7 +22,7 @@ SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
   SMOKE_MEMBER_USER_ID=<tenant-member-user-id> \
-  node scripts/smoke/company-brain-operations-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
 ```
 
 Passing live mode means `companyBrainStatus` reports the current storage tier,
@@ -40,7 +40,7 @@ SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS=1 \
   SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
-  node scripts/smoke/company-brain-operations-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
 ```
 
 The mutation path sends no request unless the tenant is ready on the default
@@ -58,7 +58,7 @@ SMOKE_ENABLE_COMPANY_BRAIN_CONTEXT=1 \
   SMOKE_USER_ID=<tenant-user-id> \
   SMOKE_COMPANY_BRAIN_CONTEXT_QUERY="Acme renewal risk" \
   SMOKE_COMPANY_BRAIN_EXPECTED_TERM="procurement" \
-  node scripts/smoke/company-brain-context-engine-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs
 ```
 
 Passing live mode means `query_brain_context` returns Company Brain context

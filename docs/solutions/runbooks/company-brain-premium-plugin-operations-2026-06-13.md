@@ -165,7 +165,7 @@ through the existing managed application plan dialog. If the component is
 Dry-run:
 
 ```sh
-node scripts/smoke/company-brain-plugin-smoke.mjs
+node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
 ```
 
 Live with an existing issued or dev/test backdoor key:
@@ -175,7 +175,7 @@ SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
   SMOKE_COMPANY_BRAIN_INSTALL_KEY=<issued-or-backdoor-key> \
-  node scripts/smoke/company-brain-plugin-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
 ```
 
 Live with key issuance inside the smoke:
@@ -186,7 +186,7 @@ SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1 \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
   SMOKE_COMPANY_BRAIN_ISSUE_KEY=1 \
   SMOKE_PLATFORM_OPERATOR_USER_ID=<platform-operator-user-id> \
-  node scripts/smoke/company-brain-plugin-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
 ```
 
 The smoke proves catalog visibility, missing/invalid key failures, persistent

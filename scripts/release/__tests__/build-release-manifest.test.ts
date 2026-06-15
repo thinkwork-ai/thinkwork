@@ -333,7 +333,7 @@ test("CLI build script includes default managed apps when no overrides are passe
     manifest.managedApps
       .find((app) => app.id === "twenty")
       ?.smokeContracts?.map((contract) => contract.command),
-    ["scripts/smoke/twenty-managed-app-smoke.mjs"],
+    ["plugins/twenty/smoke/twenty-managed-app-smoke.mjs"],
   );
 });
 
@@ -456,7 +456,7 @@ test("spec parsers reject incomplete artifact and image definitions", () => {
   );
   assert.deepEqual(
     parseManagedAppSpec(
-      "id=twenty,displayName=Twenty CRM,requiredArtifacts=twenty-module,smokeCommand=scripts/smoke/twenty-managed-app-smoke.mjs",
+      "id=twenty,displayName=Twenty CRM,requiredArtifacts=twenty-module,smokeCommand=plugins/twenty/smoke/twenty-managed-app-smoke.mjs",
     ),
     {
       id: "twenty",
@@ -466,7 +466,7 @@ test("spec parsers reject incomplete artifact and image definitions", () => {
       smokeContracts: [
         {
           id: "twenty-smoke",
-          command: "scripts/smoke/twenty-managed-app-smoke.mjs",
+          command: "plugins/twenty/smoke/twenty-managed-app-smoke.mjs",
           required: true,
         },
       ],

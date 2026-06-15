@@ -4,7 +4,7 @@
  *
  * Asserts the published manifest against the RFC 9728 protected-resource
  * metadata captured from LastMile's live develop-stage servers. The live
- * half of this guard lives in `scripts/smoke/lastmile-plugin-smoke.mjs`,
+ * half of this guard lives in `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs`,
  * which re-fetches the same endpoints; this test pins the manifest to the
  * recorded fixture so the two can only drift apart loudly.
  */

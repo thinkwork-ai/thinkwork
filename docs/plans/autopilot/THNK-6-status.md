@@ -199,10 +199,10 @@ proof`, which is 100% complete.
   default/production tier posture and restricted MCP access, and the Brain v0
   dogfood runbook validation flow.
 - 2026-06-14: U7 smoke verification passed:
-  `node --check scripts/smoke/company-brain-operations-smoke.mjs`,
-  `node --check scripts/smoke/company-brain-context-engine-smoke.mjs`,
-  `scripts/smoke/company-brain-operations-smoke.mjs`,
-  `scripts/smoke/company-brain-context-engine-smoke.mjs`,
+  `node --check plugins/company-brain/smoke/company-brain-operations-smoke.mjs`,
+  `node --check plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs`,
+  `plugins/company-brain/smoke/company-brain-operations-smoke.mjs`,
+  `plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs`,
   `pnpm --filter @thinkwork/docs build`, and `git diff --check`.
 - 2026-06-14: Opened U7 PR
   [#2465](https://github.com/thinkwork-ai/thinkwork/pull/2465) for Company

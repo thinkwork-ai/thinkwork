@@ -408,7 +408,7 @@ apps/web/src/routes/_authed/settings.plugins.company-brain.tsx
 apps/web/src/routes/_authed/settings.applications.cognee.tsx
 apps/web/src/components/settings/SettingsMemoryHome.tsx
 
-scripts/smoke/company-brain-plugin-smoke.mjs
+plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
 docs/solutions/<optional-after-implementation>.md
 ```
 
@@ -747,7 +747,7 @@ shipping.
 
 **Primary files:**
 
-- `scripts/smoke/company-brain-plugin-smoke.mjs`
+- `plugins/company-brain/smoke/company-brain-plugin-smoke.mjs`
 - `docs/solutions/<optional-after-implementation>.md`
 - `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`
 

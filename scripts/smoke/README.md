@@ -88,11 +88,11 @@ been run there first (usually the deploy workflow handles this).
 The Twenty CRM smoke is read-only and dry-run by default:
 
 ```sh
-node scripts/smoke/twenty-managed-app-smoke.mjs
+node plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 
 SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
-  node scripts/smoke/twenty-managed-app-smoke.mjs
+  node plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 ```
 
 Live mode reads `terraform/examples/greenfield` outputs unless
@@ -172,13 +172,13 @@ The Company Brain plugin smoke is dry-run by default and never starts a live
 install unless `SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1` is set:
 
 ```sh
-node scripts/smoke/company-brain-plugin-smoke.mjs
+node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
 
 SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
   SMOKE_COMPANY_BRAIN_INSTALL_KEY=<issued-or-dev-backdoor-key> \
-  node scripts/smoke/company-brain-plugin-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
 ```
 
 To mint a one-time key during the smoke instead of passing an existing key,
@@ -190,7 +190,7 @@ SMOKE_ENABLE_COMPANY_BRAIN_PLUGIN=1 \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
   SMOKE_COMPANY_BRAIN_ISSUE_KEY=1 \
   SMOKE_PLATFORM_OPERATOR_USER_ID=<platform-operator-user-id> \
-  node scripts/smoke/company-brain-plugin-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-plugin-smoke.mjs
 ```
 
 Live mode requires deployed GraphQL credentials from `apps/web/.env` or
@@ -214,13 +214,13 @@ equivalent `VITE_GRAPHQL_HTTP_URL`/`GRAPHQL_HTTP_URL` plus
 The Company Brain operations smoke is read-only and dry-run by default:
 
 ```sh
-node scripts/smoke/company-brain-operations-smoke.mjs
+node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
 
 SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
   SMOKE_MEMBER_USER_ID=<tenant-member-user-id> \
-  node scripts/smoke/company-brain-operations-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
 ```
 
 Live read-only mode requires deployed GraphQL credentials from `apps/web/.env`
@@ -243,7 +243,7 @@ SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS=1 \
   SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_ADMIN_USER_ID=<tenant-admin-user-id> \
-  node scripts/smoke/company-brain-operations-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-operations-smoke.mjs
 ```
 
 The mutation path only sends `requestCompanyBrainProductionMigration` when the
@@ -256,14 +256,14 @@ actions.
 The Company Brain Context Engine smoke is read-only and dry-run by default:
 
 ```sh
-node scripts/smoke/company-brain-context-engine-smoke.mjs
+node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs
 
 SMOKE_ENABLE_COMPANY_BRAIN_CONTEXT=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_USER_ID=<tenant-user-id> \
   SMOKE_COMPANY_BRAIN_CONTEXT_QUERY="Acme renewal risk" \
   SMOKE_COMPANY_BRAIN_EXPECTED_TERM="procurement" \
-  node scripts/smoke/company-brain-context-engine-smoke.mjs
+  node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs
 ```
 
 Live mode requires `/mcp/context-engine` service credentials from `apps/web/.env`

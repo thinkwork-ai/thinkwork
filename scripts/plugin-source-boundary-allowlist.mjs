@@ -114,47 +114,23 @@ export const pluginSourceBoundaryAllowlist = [
   },
   {
     path: "packages/plugin-catalog/src/__tests__/company-brain-manifest.test.ts",
-    reason: "legacy catalog wrapper test until compatibility paths are removed",
+    reason:
+      "catalog aggregate regression test until package-local parity moves",
   },
   {
     path: "packages/plugin-catalog/src/__tests__/lastmile-discovery.test.ts",
-    reason: "legacy catalog wrapper test until compatibility paths are removed",
+    reason:
+      "catalog aggregate regression test until package-local parity moves",
   },
   {
     path: "packages/plugin-catalog/src/__tests__/plane-manifest.test.ts",
-    reason: "legacy catalog wrapper test until compatibility paths are removed",
+    reason:
+      "catalog aggregate regression test until package-local parity moves",
   },
   {
     path: "packages/plugin-catalog/src/__tests__/twenty-manifest.test.ts",
-    reason: "legacy catalog wrapper test until compatibility paths are removed",
-  },
-  {
-    path: "scripts/smoke/cognee-managed-app-smoke.mjs",
-    reason: "legacy Cognee smoke until smoke extensions move",
-  },
-  {
-    path: "scripts/smoke/company-brain-context-engine-smoke.mjs",
-    reason: "legacy Company Brain smoke until smoke extensions move",
-  },
-  {
-    path: "scripts/smoke/company-brain-operations-smoke.mjs",
-    reason: "legacy Company Brain smoke until smoke extensions move",
-  },
-  {
-    path: "scripts/smoke/company-brain-plugin-smoke.mjs",
-    reason: "legacy Company Brain smoke until smoke extensions move",
-  },
-  {
-    path: "scripts/smoke/lastmile-plugin-smoke.mjs",
-    reason: "legacy LastMile smoke until smoke extensions move",
-  },
-  {
-    path: "scripts/smoke/twenty-managed-app-smoke.mjs",
-    reason: "legacy Twenty smoke until smoke extensions move",
-  },
-  {
-    path: "scripts/smoke/twenty-mcp-oauth-smoke.mjs",
-    reason: "legacy Twenty smoke until smoke extensions move",
+    reason:
+      "catalog aggregate regression test until package-local parity moves",
   },
   {
     path: "terraform/modules/app/cognee/README.md",

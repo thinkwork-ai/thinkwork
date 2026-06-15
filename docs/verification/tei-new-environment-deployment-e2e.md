@@ -174,11 +174,11 @@ Runtime smoke evidence:
   - Cognito domain validation passed.
   - Runtime-config-derived deployment profile included all required v1 client
     binding fields.
-- `node scripts/smoke/cognee-managed-app-smoke.mjs` passed with evidence at
+- `node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` passed with evidence at
   `/tmp/thinkwork-tei-smoke-proof-150/cognee-smoke-150.json`; it explicitly
   skipped live Cognee probing because Cognee is not enabled for this base TEI
   stage.
-- `node scripts/smoke/twenty-managed-app-smoke.mjs` passed with evidence at
+- `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` passed with evidence at
   `/tmp/thinkwork-tei-smoke-proof-150/twenty-smoke-150.json`; it explicitly
   skipped live Twenty probing because Twenty CRM is not provisioned for this
   base TEI stage.
@@ -328,11 +328,11 @@ Runtime smoke evidence:
     `thinkwork-tei-e2e-deployment-orchestrator`, CodeBuild project
     `thinkwork-tei-e2e-deployment-runner`, and evidence bucket
     `thinkwork-tei-e2e-637423202447-deploy-evidence`.
-- `node scripts/smoke/cognee-managed-app-smoke.mjs` passed in live mode as an
+- `node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` passed in live mode as an
   explicit skip because Cognee is not enabled for this base TEI stage; local
   evidence:
   `/tmp/thinkwork-tei-smoke-proof/cognee-smoke-148.json`.
-- `node scripts/smoke/twenty-managed-app-smoke.mjs` passed in live mode as an
+- `node plugins/twenty/smoke/twenty-managed-app-smoke.mjs` passed in live mode as an
   explicit skip because Twenty CRM is not provisioned for this base TEI stage;
   local evidence:
   `/tmp/thinkwork-tei-smoke-proof/twenty-smoke-148.json`.
@@ -807,7 +807,7 @@ SMOKE_TERRAFORM_DIR="$DEPLOY_ROOT/terraform" \
 SMOKE_EVIDENCE_FILE="$DEPLOY_ROOT/deploy-artifacts/twenty-smoke.json" \
 AWS_PROFILE="$AWS_PROFILE" \
 AWS_REGION="$AWS_REGION" \
-node /Users/ericodom/Projects/thinkwork/scripts/smoke/twenty-managed-app-smoke.mjs
+node /Users/ericodom/Projects/thinkwork/plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 ```
 
 Cognee Knowledge Graph, after choosing a tenant and thread:

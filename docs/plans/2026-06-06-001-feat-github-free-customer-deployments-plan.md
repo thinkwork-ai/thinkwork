@@ -853,8 +853,8 @@ semantics.
 - Create: `packages/deployment-runner/src/apps/cognee.ts`
 - Create: `packages/deployment-runner/src/apps/twenty.ts`
 - Create: `packages/deployment-runner/src/apps/registry.ts`
-- Create: `scripts/smoke/cognee-managed-app-smoke.mjs`
-- Create: `scripts/smoke/twenty-managed-app-smoke.mjs`
+- Create: `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`
+- Create: `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
 - Test: `apps/cli/__tests__/terraform-cognee-fixture.test.ts`
 - Test: `apps/cli/__tests__/terraform-twenty-fixture.test.ts`
 - Test: `packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
@@ -1144,8 +1144,8 @@ GitHub-dependent path.
 - Create: `docs/src/content/docs/deploy/release-manifests.mdx`
 - Modify: `apps/cli/src/commands/enterprise/templates/deploy-repo/docs/runbook.md`
 - Create: `scripts/smoke/foundation-bootstrap-smoke.mjs`
-- Modify: `scripts/smoke/cognee-managed-app-smoke.mjs`
-- Modify: `scripts/smoke/twenty-managed-app-smoke.mjs`
+- Modify: `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`
+- Modify: `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
 
 **Approach:**
 - Document the operator path: CLI bootstrap, generated URL login, first admin

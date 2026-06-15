@@ -18,7 +18,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { attachSmokeEvidence } from "./deployment-evidence.mjs";
+import { attachSmokeEvidence } from "../../../scripts/smoke/deployment-evidence.mjs";
 
 const LIVE_ENABLED = process.env.SMOKE_ENABLE_TWENTY_MANAGED_APP === "1";
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15_000);
@@ -322,11 +322,7 @@ function bool(value) {
 function loadEnvFile() {
   const explicit = process.env.COMPUTER_ENV_FILE;
   if (explicit === "none") return {};
-  const candidates = [
-    explicit,
-    "apps/web/.env",
-    ".env",
-  ].filter(Boolean);
+  const candidates = [explicit, "apps/web/.env", ".env"].filter(Boolean);
 
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);

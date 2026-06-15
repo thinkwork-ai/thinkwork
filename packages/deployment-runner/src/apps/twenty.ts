@@ -15,7 +15,7 @@ import {
 const smokeContracts = [
   {
     id: "twenty-health",
-    command: "scripts/smoke/twenty-managed-app-smoke.mjs",
+    command: "plugins/twenty/smoke/twenty-managed-app-smoke.mjs",
     required: true,
   },
 ] as const;

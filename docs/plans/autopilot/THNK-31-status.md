@@ -54,6 +54,8 @@ project_context: TEI ThinkWork
   `main` as `44a7e75aa27bb95a2676d583cd2b18b00f2f11d6`.
 - #2529 `test(plugins): enforce plugin source boundary` merged into `main` as
   `1199f741ff8107d78bb1d659ac8c954495c6446a`.
+- #2530 `refactor(plugins): remove catalog compatibility wrappers` merged into
+  `main` as `7106af539b43f3a91d816878babc87a6958fabfa`.
 
 ## Current Plane Package Slice
 
@@ -170,6 +172,29 @@ project_context: TEI ThinkWork
 
 - `pnpm --filter @thinkwork/plugin-catalog test`
 - `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm lint:plugin-source`
+- `pnpm test:plugin-source-boundary`
+
+## Current Plugin Smoke Package Slice
+
+- Started from fresh `origin/main` at `7106af539` in branch
+  `codex/thnk-31-plugin-smoke-packages`.
+- Moving LastMile, Twenty, and Company Brain/Cognee smoke scripts from the
+  shared smoke kit into owning `plugins/<plugin-key>/smoke/` folders.
+- Updating deployment-runner, release-manifest, smoke README, docs, and runbook
+  references to use plugin-owned smoke command paths.
+- Teaching the plugin source boundary guard that Cognee substrate source under
+  `plugins/company-brain/` is owned by the Company Brain plugin.
+- PR #2531 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2531`
+
+### Verification
+
+- `node --check` on moved plugin smoke scripts
+- Dry-run execution for moved plugin smoke scripts
+- `pnpm --filter @thinkwork/deployment-runner test`
+- `pnpm exec tsx --test scripts/release/__tests__/build-release-manifest.test.ts`
+- `pnpm --filter @thinkwork/release-manifest test`
 - `pnpm lint:plugin-source`
 - `pnpm test:plugin-source-boundary`
 

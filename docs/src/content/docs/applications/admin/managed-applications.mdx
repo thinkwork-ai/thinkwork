@@ -159,11 +159,11 @@ After the deploy workflow finishes, run the managed-app smoke from the repo
 root:
 
 ```sh
-node scripts/smoke/twenty-managed-app-smoke.mjs
+node plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 
 SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
-  node scripts/smoke/twenty-managed-app-smoke.mjs
+  node plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 ```
 
 Dry-run mode prints the live-mode requirements and exits successfully. Live
@@ -176,7 +176,7 @@ After the CRM runtime is healthy and the user has connected Twenty from
 Settings -> MCP Servers, run the MCP OAuth smoke:
 
 ```sh
-node scripts/smoke/twenty-mcp-oauth-smoke.mjs
+node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs
 
 SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
   SMOKE_API_BASE_URL=<api-url> \
@@ -184,7 +184,7 @@ SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_USER_ID=<user-id> \
   SMOKE_AGENT_ID=<agent-id> \
-  node scripts/smoke/twenty-mcp-oauth-smoke.mjs
+  node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs
 ```
 
 Dry-run mode prints the required live-mode inputs. Live mode verifies Twenty
@@ -204,7 +204,7 @@ SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_USER_ID=<user-id> \
   SMOKE_AGENT_ID=<agent-id> \
-  node scripts/smoke/twenty-mcp-oauth-smoke.mjs
+  node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs
 ```
 
 After Plane is healthy and a user has activated the plugin, run:

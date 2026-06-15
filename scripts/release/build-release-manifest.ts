@@ -729,7 +729,7 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
       smokeContracts: [
         {
           id: "cognee-health",
-          command: "scripts/smoke/cognee-managed-app-smoke.mjs",
+          command: "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
           required: true,
         },
       ],
@@ -761,7 +761,7 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
       smokeContracts: [
         {
           id: "twenty-health",
-          command: "scripts/smoke/twenty-managed-app-smoke.mjs",
+          command: "plugins/twenty/smoke/twenty-managed-app-smoke.mjs",
           required: true,
         },
       ],
