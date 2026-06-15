@@ -94,7 +94,7 @@ output "cognee_production_posture" {
 }
 
 output "cognee_cluster_arn" {
-  description = "ECS cluster ARN for the Cognee service"
+  description = "Company Brain ECS cluster ARN hosting the Cognee service"
   value       = aws_ecs_cluster.main.arn
 }
 

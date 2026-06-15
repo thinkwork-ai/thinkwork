@@ -6,6 +6,7 @@ import {
   readManagedApplications,
   readTwentyStatus,
 } from "./managedApplications.js";
+import { resolveCogneeClusterIdentity } from "./cogneeClusterIdentity.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 import { enrichManagedApplicationsWithMcpState } from "../../../lib/managed-mcp-applications.js";
 import {
@@ -62,11 +63,12 @@ export const deploymentStatus = async (
   const cogneeServiceName =
     process.env.COGNEE_SERVICE_NAME ||
     (cognee.enabled ? `thinkwork-${stage}-cognee` : null);
-  const cogneeClusterArn =
-    process.env.COGNEE_CLUSTER_ARN ||
-    (cognee.enabled && accountId
-      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-cognee-cluster`
-      : null);
+  const cogneeCluster = resolveCogneeClusterIdentity({
+    enabled: cognee.enabled,
+    stage,
+    region,
+    accountId,
+  });
 
   return {
     stage,
@@ -100,7 +102,7 @@ export const deploymentStatus = async (
       process.env.COGNEE_LOG_GROUP_NAME ||
       (cognee.enabled ? `/thinkwork/${stage}/cognee` : null),
     cogneeBackendMode: cognee.backendMode,
-    cogneeClusterArn,
+    cogneeClusterArn: cogneeCluster.clusterArn,
     cogneeServiceName,
     twentyProvisioned: twenty.provisioned,
     twentyRuntimeEnabled: twenty.runtimeEnabled,

@@ -69,6 +69,7 @@ if (!LIVE_ENABLED) {
             verifies: [
               "cognee_enabled false skips cleanly",
               "enabled Cognee resolves endpoint and log/status outputs",
+              "Terraform and GraphQL cluster identity normalize to brain-cluster",
               "GraphQL knowledgeGraphHealthCheck reports healthy",
               "optional direct /health probe succeeds when explicitly enabled",
             ],
@@ -119,6 +120,7 @@ async function runLiveSmoke() {
   if (!status.endpoint) {
     throw new Error("Cognee is enabled but no endpoint was resolved.");
   }
+  const clusterIdentity = assertClusterIdentity({ terraform, graphql, status });
 
   const graphqlHealth =
     apiUrl && (apiSecret || apiKey)
@@ -152,6 +154,7 @@ async function runLiveSmoke() {
 
   return {
     status,
+    clusterIdentity,
     graphqlHealth,
     directHealth,
     terraform,
@@ -163,6 +166,13 @@ function resolveStatus({ terraform, graphql }) {
   const app = graphql?.deploymentStatus?.managedApplications?.find(
     (entry) => entry.key === "cognee",
   );
+  const terraformClusterName = clusterNameFromArnOrName(
+    terraform.cognee_cluster_arn,
+  );
+  const deploymentClusterName = clusterNameFromArnOrName(
+    graphql?.deploymentStatus?.cogneeClusterArn,
+  );
+  const managedAppClusterName = clusterNameFromArnOrName(app?.clusterArn);
   return {
     enabled: bool(
       firstDefined(
@@ -180,6 +190,91 @@ function resolveStatus({ terraform, graphql }) {
     source: app ? "graphql" : terraform.available ? "terraform" : "env",
     status: app?.status ?? null,
     message: app?.message ?? null,
+    serviceName: first(
+      app?.serviceName,
+      graphql?.deploymentStatus?.cogneeServiceName,
+      terraform.cognee_service_name,
+    ),
+    terraformClusterName,
+    deploymentClusterName,
+    managedAppClusterName,
+    healthCheckTargetCluster:
+      deploymentClusterName || managedAppClusterName || terraformClusterName,
+  };
+}
+
+function assertClusterIdentity({ terraform, graphql, status }) {
+  if (!terraform.available) {
+    throw new Error(
+      `Cognee is enabled but Terraform output was not available: ${terraform.reason ?? "unknown reason"}`,
+    );
+  }
+  if (!terraform.cognee_cluster_arn) {
+    throw new Error(
+      "Cognee is enabled but Terraform output cognee_cluster_arn is missing.",
+    );
+  }
+
+  const app = graphql?.deploymentStatus?.managedApplications?.find(
+    (entry) => entry.key === "cognee",
+  );
+  const entries = [
+    ["terraform.cognee_cluster_arn", terraform.cognee_cluster_arn],
+    [
+      "deploymentStatus.cogneeClusterArn",
+      graphql?.deploymentStatus?.cogneeClusterArn,
+    ],
+    ["managedApplications[cognee].clusterArn", app?.clusterArn],
+  ].filter(([, value]) => Boolean(value));
+
+  if (entries.length < 2) {
+    throw new Error(
+      "Cognee cluster identity needs Terraform output plus at least one GraphQL status source.",
+    );
+  }
+
+  const names = entries.map(([label, value]) => [
+    label,
+    clusterNameFromArnOrName(value),
+  ]);
+  const [firstLabel, firstName] = names[0];
+  if (!firstName) {
+    throw new Error(`${firstLabel} did not include an ECS cluster name.`);
+  }
+
+  for (const [label, name] of names.slice(1)) {
+    if (name !== firstName) {
+      throw new Error(
+        `Cognee cluster identity mismatch: ${firstLabel}=${firstName}, ${label}=${name}`,
+      );
+    }
+  }
+
+  if (!firstName.endsWith("-brain-cluster")) {
+    const reason = first(env.SMOKE_COGNEE_CLUSTER_BREAK_GLASS_REASON);
+    const owner = first(env.SMOKE_COGNEE_CLUSTER_BREAK_GLASS_OWNER);
+    if (!reason || !owner) {
+      throw new Error(
+        `Cognee cluster ${firstName} is not Brain-named; set break-glass reason and owner only for temporary recovery.`,
+      );
+    }
+  }
+
+  return {
+    expectedClusterName: firstName,
+    serviceName: status.serviceName,
+    terraformClusterArnPresent: Boolean(terraform.cognee_cluster_arn),
+    deploymentStatusClusterArnPresent: Boolean(
+      graphql?.deploymentStatus?.cogneeClusterArn,
+    ),
+    managedApplicationClusterArnPresent: Boolean(app?.clusterArn),
+    healthCheckTargetCluster: status.healthCheckTargetCluster,
+    breakGlass: firstName.endsWith("-brain-cluster")
+      ? null
+      : {
+          owner: env.SMOKE_COGNEE_CLUSTER_BREAK_GLASS_OWNER,
+          reason: env.SMOKE_COGNEE_CLUSTER_BREAK_GLASS_REASON,
+        },
   };
 }
 
@@ -247,12 +342,16 @@ async function readGraphqlStatus() {
         region
         cogneeEnabled
         cogneeEndpoint
+        cogneeClusterArn
+        cogneeServiceName
         managedApplications {
           key
           status
           provisioned
           runtimeEnabled
           url
+          clusterArn
+          serviceName
           message
         }
       }
@@ -312,14 +411,17 @@ function bool(value) {
   return value === true || value === "true" || value === "1";
 }
 
+function clusterNameFromArnOrName(value) {
+  if (!value || typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const slashIndex = trimmed.lastIndexOf("/");
+  return slashIndex >= 0 ? trimmed.slice(slashIndex + 1) : trimmed;
+}
+
 function loadEnvFile() {
   const explicit = process.env.COMPUTER_ENV_FILE;
   if (explicit === "none") return {};
-  const candidates = [
-    explicit,
-    "apps/web/.env",
-    ".env",
-  ].filter(Boolean);
+  const candidates = [explicit, "apps/web/.env", ".env"].filter(Boolean);
 
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);

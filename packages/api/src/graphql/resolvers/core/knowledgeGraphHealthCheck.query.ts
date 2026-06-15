@@ -12,6 +12,7 @@ import {
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
+import { resolveCogneeClusterIdentity } from "./cogneeClusterIdentity.js";
 import { readCogneeStatus } from "./managedApplications.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 
@@ -41,8 +42,15 @@ function cogneeServiceName(stage: string): string {
   return process.env.COGNEE_SERVICE_NAME || `thinkwork-${stage}-cognee`;
 }
 
-function cogneeClusterName(stage: string): string {
-  return process.env.COGNEE_CLUSTER_ARN || `thinkwork-${stage}-cognee-cluster`;
+function cogneeClusterRef(stage: string): string {
+  return (
+    resolveCogneeClusterIdentity({
+      enabled: true,
+      stage,
+      region: regionName(),
+      accountId: process.env.AWS_ACCOUNT_ID || null,
+    }).clusterRef || `thinkwork-${stage}-brain-cluster`
+  );
 }
 
 function cogneeTargetGroupName(stage: string): string {
@@ -78,7 +86,7 @@ export async function probeCogneeAwsHealth(): Promise<CogneeAwsHealth> {
   const stage = stageName();
   const region = regionName();
   const serviceName = cogneeServiceName(stage);
-  const cluster = cogneeClusterName(stage);
+  const cluster = cogneeClusterRef(stage);
   const targetGroupName = cogneeTargetGroupName(stage);
   const ecs = new ECSClient({ region, requestHandler: requestHandler() });
   const elbv2 = new ElasticLoadBalancingV2Client({

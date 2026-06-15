@@ -126,24 +126,27 @@ Expected cost drivers are the always-on Fargate task, the internal ALB, EFS stor
 
 After apply, inspect these Terraform outputs:
 
-| Output                                       | Use                                                |
-| -------------------------------------------- | -------------------------------------------------- |
-| `cognee_enabled`                             | Confirms the stage is actually opted in.           |
-| `cognee_endpoint`                            | Internal ALB URL for the Cognee API.               |
-| `cognee_log_group_name`                      | CloudWatch logs for startup and provider failures. |
-| `cognee_backend_mode`                        | Confirms dogfood vs. remote graph/vector storage.  |
-| `cognee_cluster_arn` / `cognee_service_name` | ECS service event and health investigation.        |
-| `cognee_storage_file_system_id`              | Terraform-owned EFS data/system volume.            |
+| Output                                       | Use                                                                                                                          |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `cognee_enabled`                             | Confirms the stage is actually opted in.                                                                                     |
+| `cognee_endpoint`                            | Internal ALB URL for the Cognee API.                                                                                         |
+| `cognee_log_group_name`                      | CloudWatch logs for startup and provider failures.                                                                           |
+| `cognee_backend_mode`                        | Confirms dogfood vs. remote graph/vector storage.                                                                            |
+| `cognee_cluster_arn` / `cognee_service_name` | ECS service event and health investigation. Legacy stage-wide clusters are Brain-named while Cognee remains the service/key. |
+| `cognee_storage_file_system_id`              | Terraform-owned EFS data/system volume.                                                                                      |
 
 Run a post-deploy smoke check before treating the stage as ready:
 
 1. Confirm `cognee_enabled` is `true` and `cognee_backend_mode` matches the rollout plan.
-2. Confirm the internal ALB health check is healthy and `cognee_endpoint` is reachable from the intended caller network or security group.
-3. Check `cognee_log_group_name` for startup errors. Provider, database, graph, vector, and filesystem failures should be loud in logs.
-4. Confirm Cognee reports the configured LLM, embedding, graph, and vector providers.
-5. Confirm a simple provider-backed operation can reach Bedrock or the selected external provider.
+2. Confirm `cognee_cluster_arn`, GraphQL deployment status, managed-app status, ECS service identity, and the Knowledge Graph health probe all agree on the Brain cluster for legacy stage-wide deployments.
+3. Confirm the internal ALB health check is healthy and `cognee_endpoint` is reachable from the intended caller network or security group.
+4. Check `cognee_log_group_name` for startup errors. Provider, database, graph, vector, and filesystem failures should be loud in logs.
+5. Confirm Cognee reports the configured LLM, embedding, graph, and vector providers.
+6. Confirm a simple provider-backed operation can reach Bedrock or the selected external provider.
 
 Terraform success is not the same as product readiness. It proves the infrastructure graph applied and, when steady-state waiting is enabled, ECS stabilized. It does not prove that provider secrets are populated, that graph/vector data is correct, or that Brain materialization has changed.
+
+When committing rollout proof, sanitize account IDs, raw secret ARNs, full AWS resource IDs, and environment values. Raw smoke output belongs in restricted deployment evidence storage; docs should carry only the redacted conclusion and enough named checks for an operator to reproduce it.
 
 To roll back the substrate, set `enable_cognee = false` and apply through the normal pipeline. Snapshot or export persistent data first if it matters: Terraform-owned EFS may be destroyed, while remote graph/vector stores may retain data outside Terraform. Do not delete production graph, vector, or EFS data by hand unless a separate incident response authorizes the cleanup.
 
