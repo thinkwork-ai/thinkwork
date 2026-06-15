@@ -957,6 +957,12 @@ variable "plane_web_desired_count" {
   default     = 1
 }
 
+variable "plane_web_container_port" {
+  description = "Plane AIO HTTP listener/container port exposed through the public ALB."
+  type        = number
+  default     = 8080
+}
+
 variable "plane_api_desired_count" {
   description = "Desired Plane API task count when plane_runtime_enabled is true."
   type        = number

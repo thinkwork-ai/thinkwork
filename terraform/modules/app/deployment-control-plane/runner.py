@@ -850,6 +850,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "plane_domain": "",
         "plane_public_url": "",
         "plane_certificate_arn": "",
+        "plane_web_container_port": 8080,
     }
 
     if app_key != "plane":
@@ -978,6 +979,11 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
                 manifest_images,
                 "certificateArn",
                 "THINKWORK_PLANE_CERTIFICATE_ARN",
+            ),
+            "plane_web_container_port": int(
+                desired_config.get("webContainerPort")
+                or desired_config.get("listenHttpPort")
+                or os.environ.get("THINKWORK_PLANE_WEB_CONTAINER_PORT", "8080")
             ),
             "deployment_control_plane_create_secret_placeholders": True,
         }
@@ -2492,6 +2498,10 @@ variable "plane_certificate_arn" {{
   type = string
 }}
 
+variable "plane_web_container_port" {{
+  type = number
+}}
+
 module "thinkwork" {{
   source  = {hcl_string(terraform_module_source)}
 {module_version_line}
@@ -2588,6 +2598,7 @@ module "thinkwork" {{
   plane_domain                            = var.plane_domain
   plane_public_url                        = var.plane_public_url
   plane_certificate_arn                   = var.plane_certificate_arn
+  plane_web_container_port                = var.plane_web_container_port
 
   enable_stripe_billing      = false
   enable_slack_workspace_app = false

@@ -198,6 +198,10 @@ export const planeAdapter: ManagedAppAdapter = {
         "certificateArn",
         "Plane certificateArn",
       ),
+      plane_web_container_port:
+        optionalNumber(desiredConfig, "webContainerPort") ??
+        optionalNumber(desiredConfig, "listenHttpPort") ??
+        8080,
       plane_domain: optionalString(desiredConfig, "domain"),
       plane_web_desired_count:
         optionalNumber(desiredConfig, "appDesiredCount") ??

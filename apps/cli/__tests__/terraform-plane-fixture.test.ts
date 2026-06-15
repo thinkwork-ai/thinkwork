@@ -94,6 +94,8 @@ describe("Plane Terraform app module", () => {
     expect(source).toMatch(/resource "aws_lb_listener" "http_redirect"/);
     expect(source).toMatch(/status_code\s*=\s*"HTTP_301"/);
     expect(vars).toMatch(/variable "web_container_port"/);
+    expect(vars).toMatch(/default\s*=\s*8080/);
+    expect(source).toMatch(/name = "LISTEN_HTTP_PORT"/);
   });
 
   it("models Plane as one ECS service with AIO and MCP containers", () => {
@@ -196,6 +198,7 @@ describe("Plane Terraform app module", () => {
     expect(vars).toMatch(/variable "plane_runtime_enabled"/);
     expect(vars).toMatch(/variable "plane_image_uri"/);
     expect(vars).toMatch(/variable "plane_s3_bucket_name"/);
+    expect(vars).toMatch(/variable "plane_web_container_port"/);
     expect(source).toMatch(/plane_domain.*plane\.\$\{var\.www_domain\}/);
     expect(planeModule).toMatch(
       /count\s*=\s*local\.plane_provisioned \? 1 : 0/,
@@ -203,6 +206,9 @@ describe("Plane Terraform app module", () => {
     expect(planeModule).toMatch(/source\s*=\s*"\.\.\/app\/plane"/);
     expect(planeModule).toMatch(
       /runtime_enabled\s*=\s*local\.plane_runtime_enabled/,
+    );
+    expect(planeModule).toMatch(
+      /web_container_port\s*=\s*var\.plane_web_container_port/,
     );
     expect(planeModule).toMatch(
       /s3_bucket_name\s*=\s*var\.plane_s3_bucket_name/,

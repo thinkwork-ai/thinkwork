@@ -137,6 +137,7 @@ locals {
   base_environment = [
     { name = "DOMAIN_NAME", value = trimprefix(var.public_url, "https://") },
     { name = "SITE_ADDRESS", value = ":${var.web_container_port}" },
+    { name = "LISTEN_HTTP_PORT", value = tostring(var.web_container_port) },
     { name = "APP_PROTOCOL", value = "http" },
     { name = "WEB_URL", value = var.public_url },
     { name = "INTEGRATION_CALLBACK_BASE_URL", value = var.public_url },

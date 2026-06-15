@@ -430,6 +430,7 @@ resource "terraform_data" "plane_configuration_guardrails" {
     plane_s3_bucket_name                    = var.plane_s3_bucket_name
     plane_public_url                        = local.plane_public_url
     plane_certificate_arn                   = local.plane_certificate_arn
+    plane_web_container_port                = var.plane_web_container_port
     public_subnet_count                     = length(module.vpc.public_subnet_ids)
     private_subnet_count                    = length(module.vpc.private_subnet_ids)
   }
@@ -1273,6 +1274,7 @@ module "plane" {
 
   runtime_enabled           = local.plane_runtime_enabled
   web_desired_count         = var.plane_web_desired_count
+  web_container_port        = var.plane_web_container_port
   api_desired_count         = var.plane_api_desired_count
   worker_desired_count      = var.plane_worker_desired_count
   beat_worker_desired_count = var.plane_beat_worker_desired_count
