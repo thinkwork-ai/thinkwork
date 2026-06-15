@@ -185,6 +185,8 @@ project_context: TEI ThinkWork
   references to use plugin-owned smoke command paths.
 - Teaching the plugin source boundary guard that Cognee substrate source under
   `plugins/company-brain/` is owned by the Company Brain plugin.
+- PR #2531 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2531`
 
 ### Verification
 
