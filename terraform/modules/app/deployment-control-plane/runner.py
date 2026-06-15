@@ -731,6 +731,31 @@ def current_terraform_outputs(stage):
     return outputs if isinstance(outputs, dict) else {}
 
 
+def configure_cloudflare_provider_auth(stage):
+    if os.environ.get("CLOUDFLARE_API_TOKEN"):
+        return
+    parameter_name = f"/thinkwork/{stage}/cloudflare-namespace-token"
+    try:
+        token = output(
+            [
+                "aws",
+                "ssm",
+                "get-parameter",
+                "--name",
+                parameter_name,
+                "--with-decryption",
+                "--query",
+                "Parameter.Value",
+                "--output",
+                "text",
+            ]
+        )
+    except Exception:
+        return
+    if token:
+        os.environ["CLOUDFLARE_API_TOKEN"] = token
+
+
 def state_output(outputs, name, default=None):
     value = outputs.get(name)
     if isinstance(value, dict) and "value" in value:
@@ -3353,6 +3378,8 @@ def main():
     }
     write_evidence("running", vars_json)
 
+    if vars_json.get("plane_dns_enabled"):
+        configure_cloudflare_provider_auth(vars_json["stage"])
     configure_terraform_provider_mirror()
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
     workspace = vars_json["stage"]

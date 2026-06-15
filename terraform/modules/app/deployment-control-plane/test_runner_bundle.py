@@ -1080,6 +1080,38 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
     )
 
 
+def test_configure_cloudflare_provider_auth_reads_stage_ssm_without_tfvars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    calls: list[list[str]] = []
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+
+    def fake_output(args: list[str], **_kwargs) -> str:
+        calls.append(args)
+        return "cf-token"
+
+    monkeypatch.setattr(runner, "output", fake_output)
+
+    runner.configure_cloudflare_provider_auth("dev")
+
+    assert os.environ["CLOUDFLARE_API_TOKEN"] == "cf-token"
+    assert calls == [
+        [
+            "aws",
+            "ssm",
+            "get-parameter",
+            "--name",
+            "/thinkwork/dev/cloudflare-namespace-token",
+            "--with-decryption",
+            "--query",
+            "Parameter.Value",
+            "--output",
+            "text",
+        ]
+    ]
+
+
 def test_configure_terraform_provider_mirror_seeds_cloudflare_for_codebuild(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
