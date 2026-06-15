@@ -424,7 +424,12 @@ variable "rabbitmq_engine_version" {
 variable "rabbitmq_instance_type" {
   description = "Amazon MQ broker instance type for Plane RabbitMQ."
   type        = string
-  default     = "mq.t3.micro"
+  default     = "mq.m7g.medium"
+
+  validation {
+    condition     = can(regex("^mq\\.(m5\\.(large|xlarge|2xlarge|4xlarge)|m7g\\.(medium|large|xlarge|2xlarge|4xlarge|8xlarge|12xlarge|16xlarge))$", var.rabbitmq_instance_type))
+    error_message = "rabbitmq_instance_type must be an Amazon MQ RabbitMQ-supported instance type such as mq.m7g.medium or mq.m5.large."
+  }
 }
 
 variable "rabbitmq_admin_username" {
