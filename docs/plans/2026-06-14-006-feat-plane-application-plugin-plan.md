@@ -49,13 +49,16 @@ Tests:
 Add `terraform/modules/app/plane` and wire `terraform/modules/thinkwork` plus
 greenfield examples. Use a compact ECS/Fargate runtime: one Plane all-in-one
 application container plus the separate Plane MCP sidecar in one ECS service
-and task definition. Use the dedicated Postgres contract, S3, public HTTPS ALB,
+and task definition. Plane AIO is not dependency-free: satisfy its required
+`REDIS_URL` and `AMQP_URL` with private in-task loopback sidecars, not managed
+AWS services. Use the dedicated Postgres contract, S3, public HTTPS ALB,
 CloudWatch evidence, and retained park/destroy semantics.
 
 Stop-the-line rule: do not add or approve a Plane plan that provisions
 per-service Plane ECS services, ElastiCache/Redis/Valkey, Amazon MQ/RabbitMQ,
 or more than one Plane ECS service. If these appear in Terraform plan output,
-abort the apply and fix the module first.
+abort the apply and fix the module first. Do not remove the Plane AIO
+`REDIS_URL` or `AMQP_URL`; they must stay pointed at task-local sidecars.
 
 ### U5. Per-User Plane MCP Activation
 
@@ -87,8 +90,9 @@ Document install, park, destroy, activation, smoke, and known limitations.
 - Plane MCP HTTP PAT requires custom headers that the current ThinkWork MCP
   dispatch contract does not yet model.
 - Plane self-hosting for ThinkWork is deliberately tighter than Plane's
-  multi-service reference topology: one AIO app container plus the MCP sidecar.
-  Terraform must not create separate Redis/RabbitMQ managed services for Plane.
+  multi-service reference topology: one ECS task with Plane AIO, MCP, and
+  task-local Redis/RabbitMQ sidecars. Terraform must not create separate
+  Redis/RabbitMQ managed services for Plane.
 - The catalog must not expose Plane as installable until the runtime module and
   auth path are executable.
 

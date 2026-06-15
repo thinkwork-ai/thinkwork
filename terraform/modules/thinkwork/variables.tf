@@ -910,7 +910,7 @@ variable "plane_aes_secret_key_secret_arn" {
 }
 
 variable "plane_amqp_url_secret_arn" {
-  description = "Deprecated no-op. Compact Plane AIO does not inject AMQP_URL."
+  description = "Deprecated no-op. Plane AIO AMQP_URL is generated from the in-task RabbitMQ sidecar."
   type        = string
   default     = ""
 }

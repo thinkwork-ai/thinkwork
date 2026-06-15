@@ -138,6 +138,28 @@ variable "mcp_image_uri" {
   }
 }
 
+variable "redis_image_uri" {
+  description = "Redis sidecar image URI pinned to a reviewed immutable digest. Plane AIO requires REDIS_URL, but this remains an in-task loopback dependency, not ElastiCache."
+  type        = string
+  default     = "public.ecr.aws/docker/library/redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
+
+  validation {
+    condition     = var.redis_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.redis_image_uri))
+    error_message = "redis_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "rabbitmq_image_uri" {
+  description = "RabbitMQ sidecar image URI pinned to a reviewed immutable digest. Plane AIO requires AMQP_URL, but this remains an in-task loopback dependency, not Amazon MQ."
+  type        = string
+  default     = "public.ecr.aws/docker/library/rabbitmq:3.13-alpine@sha256:d7af1c87c5f1eda13fcfca06db452bf3aeab6619fc3358b68535c0c02c4e52bc"
+
+  validation {
+    condition     = var.rabbitmq_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.rabbitmq_image_uri))
+    error_message = "rabbitmq_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
 variable "runtime_enabled" {
   description = "Whether the compact Plane ECS service should run. Set false to park runtime while retaining data resources."
   type        = bool
@@ -225,6 +247,37 @@ variable "mcp_container_port" {
   description = "Plane MCP server HTTP port"
   type        = number
   default     = 8211
+}
+
+variable "redis_container_port" {
+  description = "Redis sidecar port exposed only on the ECS task loopback network."
+  type        = number
+  default     = 6379
+}
+
+variable "rabbitmq_container_port" {
+  description = "RabbitMQ sidecar AMQP port exposed only on the ECS task loopback network."
+  type        = number
+  default     = 5672
+}
+
+variable "rabbitmq_username" {
+  description = "RabbitMQ sidecar username used only by the Plane AIO container over task loopback."
+  type        = string
+  default     = "plane"
+}
+
+variable "rabbitmq_password" {
+  description = "RabbitMQ sidecar password used only by the Plane AIO container over task loopback."
+  type        = string
+  default     = "plane"
+  sensitive   = true
+}
+
+variable "rabbitmq_vhost" {
+  description = "RabbitMQ sidecar vhost used only by the Plane AIO container over task loopback."
+  type        = string
+  default     = "plane"
 }
 
 variable "web_command" {
@@ -316,7 +369,7 @@ variable "aes_secret_key_secret_arn" {
 }
 
 variable "amqp_url_secret_arn" {
-  description = "Deprecated no-op. Compact Plane AIO does not inject AMQP_URL."
+  description = "Deprecated no-op. Plane AIO AMQP_URL is generated from the in-task RabbitMQ sidecar."
   type        = string
   default     = ""
 }

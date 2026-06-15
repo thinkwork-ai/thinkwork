@@ -134,6 +134,6 @@ output "plane_aes_secret_key_secret_arn" {
 }
 
 output "plane_amqp_url_secret_arn" {
-  description = "Deprecated compatibility output. Compact Plane AIO does not inject AMQP_URL."
+  description = "Deprecated compatibility output. Plane AIO AMQP_URL is generated from the in-task RabbitMQ sidecar."
   value       = null
 }

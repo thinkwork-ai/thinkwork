@@ -17,10 +17,10 @@ Issue: THNK-27 Add Plane Plugin
 - Linear documents point to repo-local requirements and plan files that were not
   present on `origin/main`; this branch restores concise repo-local copies from
   Linear context.
-- Plane must be verified in ThinkWork as the compact AIO runtime: one Plane
-  application container plus one MCP sidecar in a single ECS service/task.
-  Separate managed Redis/Valkey, RabbitMQ/Amazon MQ, or per-service Plane ECS
-  services are explicitly out of scope for THNK-27 verification.
+- Plane must be verified in ThinkWork as the compact AIO runtime: one ECS
+  service/task. Plane AIO still requires `REDIS_URL` and `AMQP_URL`, so those
+  must be task-local loopback sidecars, not separate managed Redis/Valkey,
+  RabbitMQ/Amazon MQ, or per-service Plane ECS services.
 - Plane MCP HTTP PAT mode requires `x-api-key` and `x-workspace-slug` request
   headers. U5 adds a user-provided header auth mode that stores those values in
   per-user plugin activation secrets and emits them only for the active

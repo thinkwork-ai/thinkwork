@@ -106,7 +106,7 @@ describe("Plane Terraform app module", () => {
     expect(source).toMatch(/name = "LISTEN_HTTP_PORT"/);
   });
 
-  it("models Plane as one ECS service with AIO and MCP containers", () => {
+  it("models Plane as one ECS service with AIO, MCP, and in-task dependency containers", () => {
     const source = read(PLANE_MAIN);
     const containerSpecs = firstNestedBlock(source, "container_specs = {");
     const ecsService = firstNestedBlock(
@@ -116,6 +116,8 @@ describe("Plane Terraform app module", () => {
 
     expect(containerSpecs).toMatch(/app\s*=\s*{/);
     expect(containerSpecs).toMatch(/mcp\s*=\s*{/);
+    expect(containerSpecs).toMatch(/redis\s*=\s*{/);
+    expect(containerSpecs).toMatch(/rabbitmq\s*=\s*{/);
     expect(containerSpecs).not.toMatch(/worker\s*=\s*{/);
     expect(source).toMatch(/resource "aws_ecs_task_definition" "plane"/);
     expect(ecsService).toMatch(
@@ -135,12 +137,16 @@ describe("Plane Terraform app module", () => {
     expect(ecsServiceResources).toHaveLength(1);
     expect(source).not.toMatch(/resource "aws_elasticache_/);
     expect(source).not.toMatch(/resource "aws_mq_broker"/);
-    expect(source).not.toMatch(/name = "REDIS_URL"/);
-    expect(source).not.toMatch(/name = "AMQP_URL"/);
+    expect(source).toMatch(/name = "REDIS_URL"/);
+    expect(source).toMatch(/redis:\/\/127\.0\.0\.1/);
+    expect(source).toMatch(/name = "AMQP_URL"/);
+    expect(source).toMatch(
+      /amqp:\/\/\$\{var\.rabbitmq_username\}:\$\{var\.rabbitmq_password\}@127\.0\.0\.1/,
+    );
     expect(readme).toMatch(/runtime_enabled = false/);
     expect(readme).toMatch(/parks the compact Plane ECS service/);
     expect(readme).toMatch(/one ECS service/);
-    expect(readme).toMatch(/two containers/);
+    expect(readme).toMatch(/four containers/);
   });
 
   it("injects Plane secrets through ECS secret references", () => {

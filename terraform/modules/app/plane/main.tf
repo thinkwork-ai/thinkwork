@@ -1,8 +1,9 @@
 ################################################################################
 # Plane (Optional Managed App) - App Module
 #
-# Provisions Plane as a compact AWS-native runtime: one ECS/Fargate service
-# with the Plane all-in-one app container and the Plane MCP sidecar. Do not add
+# Provisions Plane as a compact AWS-native runtime: one ECS/Fargate service.
+# Plane AIO bundles Plane's app services, but still requires Redis and RabbitMQ
+# URLs. Keep those as private loopback sidecars inside this task; do not add
 # separately managed Redis/Valkey, RabbitMQ/Amazon MQ, or per-service Plane ECS
 # services to this module.
 ################################################################################
@@ -127,6 +128,8 @@ locals {
     { name = "AWS_S3_BUCKET_NAME", value = var.s3_bucket_name },
     { name = "FILE_SIZE_LIMIT", value = tostring(var.file_size_limit) },
     { name = "ENABLE_SIGNUP", value = tostring(var.enable_signup) },
+    { name = "REDIS_URL", value = "redis://127.0.0.1:${var.redis_container_port}" },
+    { name = "AMQP_URL", value = "amqp://${var.rabbitmq_username}:${var.rabbitmq_password}@127.0.0.1:${var.rabbitmq_container_port}/${var.rabbitmq_vhost}" },
   ]
 
   mcp_environment = [
@@ -158,6 +161,46 @@ locals {
   ]
 
   container_specs = {
+    redis = {
+      display_name   = "redis"
+      image          = var.redis_image_uri
+      command        = []
+      port           = var.redis_container_port
+      public_service = false
+      health_path    = null
+      depends_on     = []
+      environment    = []
+      secrets        = []
+      health_check = {
+        command     = ["CMD-SHELL", "redis-cli ping | grep PONG"]
+        interval    = 10
+        timeout     = 5
+        retries     = 6
+        startPeriod = 10
+      }
+    }
+    rabbitmq = {
+      display_name   = "rabbitmq"
+      image          = var.rabbitmq_image_uri
+      command        = []
+      port           = var.rabbitmq_container_port
+      public_service = false
+      health_path    = null
+      depends_on     = []
+      environment = [
+        { name = "RABBITMQ_DEFAULT_USER", value = var.rabbitmq_username },
+        { name = "RABBITMQ_DEFAULT_PASS", value = var.rabbitmq_password },
+        { name = "RABBITMQ_DEFAULT_VHOST", value = var.rabbitmq_vhost },
+      ]
+      secrets = []
+      health_check = {
+        command     = ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+        interval    = 15
+        timeout     = 10
+        retries     = 10
+        startPeriod = 30
+      }
+    }
     app = {
       display_name   = "app"
       image          = local.effective_app_image_uri
@@ -165,8 +208,13 @@ locals {
       port           = var.web_container_port
       public_service = true
       health_path    = "/"
-      environment    = local.base_environment
-      secrets        = concat(local.container_secrets, local.optional_container_secrets)
+      depends_on = [
+        { containerName = "plane-redis", condition = "HEALTHY" },
+        { containerName = "plane-rabbitmq", condition = "HEALTHY" },
+      ]
+      environment  = local.base_environment
+      secrets      = concat(local.container_secrets, local.optional_container_secrets)
+      health_check = null
     }
     mcp = {
       display_name   = "mcp"
@@ -175,8 +223,10 @@ locals {
       port           = var.mcp_container_port
       public_service = true
       health_path    = "/http/api-key/mcp"
+      depends_on     = []
       environment    = local.mcp_environment
       secrets        = local.mcp_container_secrets
+      health_check   = null
     }
   }
 
@@ -259,6 +309,8 @@ resource "terraform_data" "configuration_guardrails" {
     image_uri                         = var.image_uri
     app_image_uri                     = local.effective_app_image_uri
     mcp_image_uri                     = var.mcp_image_uri
+    redis_image_uri                   = var.redis_image_uri
+    rabbitmq_image_uri                = var.rabbitmq_image_uri
     public_url                        = var.public_url
     certificate_arn                   = var.certificate_arn
     db_url_secret_arn                 = local.effective_db_url_secret_arn
@@ -282,6 +334,14 @@ resource "terraform_data" "configuration_guardrails" {
         var.mcp_image_uri != ""
       )
       error_message = "Plane requires AIO app and MCP image URIs pinned to immutable digests."
+    }
+
+    precondition {
+      condition = (
+        var.redis_image_uri != "" &&
+        var.rabbitmq_image_uri != ""
+      )
+      error_message = "Plane AIO requires in-task Redis and RabbitMQ sidecar image URIs pinned to immutable digests."
     }
 
     precondition {
@@ -685,32 +745,36 @@ resource "aws_ecs_task_definition" "plane" {
 
   container_definitions = jsonencode([
     for key, container in local.container_specs :
-    {
-      name      = "plane-${container.display_name}"
-      image     = container.image
-      essential = true
-      command   = container.command
+    merge(
+      {
+        name      = "plane-${container.display_name}"
+        image     = container.image
+        essential = true
+        command   = container.command
 
-      portMappings = [
-        {
-          containerPort = container.port
-          hostPort      = container.port
-          protocol      = "tcp"
+        portMappings = [
+          {
+            containerPort = container.port
+            hostPort      = container.port
+            protocol      = "tcp"
+          }
+        ]
+
+        environment = container.environment
+        secrets     = container.secrets
+
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            awslogs-group         = aws_cloudwatch_log_group.service[key].name
+            awslogs-region        = data.aws_region.current.name
+            awslogs-stream-prefix = container.display_name
+          }
         }
-      ]
-
-      environment = container.environment
-      secrets     = container.secrets
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.service[key].name
-          awslogs-region        = data.aws_region.current.name
-          awslogs-stream-prefix = container.display_name
-        }
-      }
-    }
+      },
+      length(container.depends_on) > 0 ? { dependsOn = container.depends_on } : {},
+      container.health_check != null ? { healthCheck = container.health_check } : {},
+    )
   ])
 }
 

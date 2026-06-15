@@ -6,13 +6,17 @@ ThinkWork. The Plane runtime topology is intentionally compact:
 - public HTTPS ALB for the Plane web service
 - one ECS/Fargate service running the Plane all-in-one container, plus the
   Plane MCP sidecar needed for ThinkWork agent access
+- in-task loopback Redis and RabbitMQ sidecars, because the upstream Plane AIO
+  image still requires `REDIS_URL` and `AMQP_URL`
 - S3 for Plane file uploads and attachments
 - CloudWatch log groups for the Plane AIO and MCP containers
 - Secrets Manager references for database, app, and S3 credentials
 
 Do not add separately managed Redis/Valkey, RabbitMQ/Amazon MQ, or per-service
 Plane ECS services to this module. The accepted v1 shape is one ECS service,
-one task definition, two containers: `plane-app` and `plane-mcp`.
+one task definition, and four containers: `plane-app`, `plane-mcp`,
+`plane-redis`, and `plane-rabbitmq`. Redis and RabbitMQ must remain private to
+the task; they are not separately managed infrastructure.
 
 The parent ThinkWork module owns whether this module is instantiated. Once it is
 instantiated, `runtime_enabled = false` parks the compact Plane ECS service at desired
@@ -49,6 +53,8 @@ Plane requires infrastructure-level secrets in environment variables:
 - `AES_SECRET_KEY`
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
+- `REDIS_URL` (generated as task-local loopback)
+- `AMQP_URL` (generated as task-local loopback)
 
 The module injects these values through ECS secrets. It never places database
 URLs, app secrets, or S3 credentials into plaintext task-definition
@@ -58,10 +64,10 @@ workflow.
 
 ## Runtime Lifecycle
 
-| `runtime_enabled` | Compact ECS service | Retained resources                                |
-| ----------------- | ------------------- | ------------------------------------------------- |
-| `true`            | `web_desired_count` | All resources                                     |
-| `false`           | `0`                 | Database, S3, secrets, logs, ALB                  |
+| `runtime_enabled` | Compact ECS service | Retained resources               |
+| ----------------- | ------------------- | -------------------------------- |
+| `true`            | `web_desired_count` | All resources                    |
+| `false`           | `0`                 | Database, S3, secrets, logs, ALB |
 
 Destroying retained Plane data is intentionally separate from parking. A
 destructive deployment job must inventory/drop the dedicated database, storage
