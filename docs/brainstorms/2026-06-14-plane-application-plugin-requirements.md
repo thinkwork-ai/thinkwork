@@ -27,7 +27,11 @@ ThinkWork issue tracker.
 - Runtime data must use dedicated Postgres and S3-compatible storage. Plane AIO
   also requires Redis and RabbitMQ URLs, but THNK-27 must satisfy those with
   private task-local loopback sidecars inside the same ECS task, not with
-  ElastiCache, Amazon MQ, or any separately managed Redis/RabbitMQ runtime.
+  ElastiCache, Amazon MQ, or any separately managed Redis/RabbitMQ runtime by
+  default. Managed dependencies such as Valkey/Redis, RabbitMQ/Amazon MQ, or
+  Elasticsearch/OpenSearch are allowed only when live deployment evidence proves
+  the compact sidecar topology cannot satisfy Plane's runtime contract; record
+  the evidence and resource impact in Linear before approving that plan.
 - The accepted v1 runtime shape is one ECS service and task definition with
   `plane-app`, `plane-mcp`, `plane-redis`, and `plane-rabbitmq` containers.
 - Park preserves Plane data, files, credentials, and the re-enable path; destroy

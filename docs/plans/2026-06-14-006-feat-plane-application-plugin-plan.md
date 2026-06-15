@@ -56,9 +56,14 @@ CloudWatch evidence, and retained park/destroy semantics.
 
 Stop-the-line rule: do not add or approve a Plane plan that provisions
 per-service Plane ECS services, ElastiCache/Redis/Valkey, Amazon MQ/RabbitMQ,
-or more than one Plane ECS service. If these appear in Terraform plan output,
-abort the apply and fix the module first. Do not remove the Plane AIO
-`REDIS_URL` or `AMQP_URL`; they must stay pointed at task-local sidecars.
+Elasticsearch/OpenSearch, or more than one Plane ECS service speculatively. If
+live deployment evidence proves the compact sidecar topology cannot work, a
+managed dependency is allowed as an explicit exception after recording the
+evidence, rationale, and resource impact in Linear. If these resources appear
+in Terraform plan output without that evidence trail, abort the apply and fix
+the module first. Do not remove the Plane AIO `REDIS_URL` or `AMQP_URL`; they
+must stay pointed at task-local sidecars unless the evidence-backed exception
+changes the dependency shape.
 
 ### U5. Per-User Plane MCP Activation
 

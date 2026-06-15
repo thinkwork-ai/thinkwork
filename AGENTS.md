@@ -117,13 +117,17 @@ task definition containing these containers:
 - `plane-redis` as a task-local loopback Redis sidecar
 - `plane-rabbitmq` as a task-local loopback RabbitMQ sidecar
 
-Never add or approve per-service Plane ECS services, Amazon MQ/RabbitMQ,
-ElastiCache/Redis/Valkey, or any other separately managed Plane runtime
-dependency. `REDIS_URL` and `AMQP_URL` must stay on the Plane AIO container and
-must point to the task-local sidecars. If a Plane plan includes `aws_mq_broker`,
-`aws_elasticache_*`, separately managed Redis/RabbitMQ/Valkey resources, or more
-than one Plane ECS service, stop before apply, comment on the Linear issue, and
-fix the module first.
+Do not add per-service Plane ECS services. Do not add Amazon MQ/RabbitMQ,
+ElastiCache/Redis/Valkey, Elasticsearch/OpenSearch, or any other separately
+managed Plane runtime dependency speculatively. `REDIS_URL` and `AMQP_URL` must
+stay on the Plane AIO container and point to the task-local sidecars by default.
+If runtime evidence proves the compact task-local shape cannot work, a managed
+dependency is allowed as an explicit exception: first comment on the Linear
+issue with the evidence, rationale, resource impact, and revised plan, then
+inspect the Terraform plan before applying. If a Plane plan includes
+`aws_mq_broker`, `aws_elasticache_*`, `aws_opensearch*`, separately managed
+Redis/RabbitMQ/Valkey resources, or more than one Plane ECS service without that
+evidence trail, stop before apply and fix the module first.
 
 ### Web dev server
 
