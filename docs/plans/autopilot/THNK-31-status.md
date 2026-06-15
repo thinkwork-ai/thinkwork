@@ -46,6 +46,8 @@ project_context: TEI ThinkWork
   `main` as `e6fbbfa4d08050d83b326f85f71ecc6454de1b82`.
 - #2524 `refactor(plugins): move Plane smoke scripts into plugin package`
   merged into `main` as `defd784dc2d49ef9412638a865fe25778a428c37`.
+- #2526 `refactor(plugins): move Twenty and Company Brain manifests` merged
+  into `main` as `ab297af54197daa85d94ea96ff37b6d7f8521297`.
 
 ## Current Plane Package Slice
 
@@ -86,6 +88,25 @@ project_context: TEI ThinkWork
 - `pnpm --filter @thinkwork/plugin-twenty test && pnpm --filter @thinkwork/plugin-twenty typecheck`
 - `pnpm --filter @thinkwork/plugin-company-brain test && pnpm --filter @thinkwork/plugin-company-brain typecheck`
 - `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/twenty-manifest-parity.test.ts src/lib/plugins/plane-manifest-parity.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+
+## Current LastMile Package Slice
+
+- Started from fresh `origin/main` at `ab297af54` in branch
+  `codex/thnk-31-lastmile-package`.
+- Moving LastMile catalog manifest and recorded OAuth discovery fixture into
+  `plugins/lastmile/`.
+- Keeping validated/re-export compatibility wrappers under
+  `packages/plugin-catalog/src/plugins/lastmile/`.
+- Emptying the catalog legacy migration list now that every first-party catalog
+  manifest is owned by a root plugin package.
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm --filter @thinkwork/plugin-lastmile test && pnpm --filter @thinkwork/plugin-lastmile typecheck`
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/catalog-source.test.ts`
 - `pnpm --filter @thinkwork/api typecheck`
 
 ## Verification Notes

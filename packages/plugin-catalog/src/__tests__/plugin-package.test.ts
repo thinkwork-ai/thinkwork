@@ -10,6 +10,7 @@ describe("first-party plugin packages", () => {
   it("registers Plane from the root plugin package boundary", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
       "company-brain",
+      "lastmile",
       "plane",
       "twenty",
     ]);
