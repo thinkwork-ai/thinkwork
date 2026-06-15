@@ -13,6 +13,10 @@
  *   - OAuth servers use the same per-user `oauth` auth_type as existing
  *     rows, with `auth_config.oauth_resource` carrying the RFC 8707
  *     resource indicator (matches `managedTwentyAuthConfig`).
+ *   - User-provided header servers use `auth_type: 'user_headers'`; their
+ *     `auth_config` stores only header-name/credential-key bindings. Actual
+ *     values live in user_plugin_activation_tokens secrets and resolve at
+ *     dispatch time for the requester.
  *
  * Direct-add coexistence: when a `manual` row already points at the same
  * endpoint URL, provisioning adopts that row in place instead of creating a
@@ -94,6 +98,17 @@ function pluginMcpAuthFields(
     return {
       auth_type: "oauth",
       auth_config: { oauth_resource: endpointUrl },
+    };
+  }
+  if (component.auth.mode === "user-provided-headers") {
+    return {
+      auth_type: "user_headers",
+      auth_config: {
+        headers: component.auth.headers.map((header) => ({
+          name: header.name,
+          credentialKey: header.credentialKey,
+        })),
+      },
     };
   }
   return { auth_type: "none", auth_config: null };

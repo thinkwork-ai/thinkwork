@@ -752,12 +752,27 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
         ? (record.auth as Record<string, unknown>)
         : undefined;
     const bearer = asString(auth?.token) || asString(record.bearer);
-    if (!url || !serverName || !bearer) return [];
+    const authHeaders =
+      auth?.headers && typeof auth.headers === "object"
+        ? stringRecord(auth.headers as Record<string, unknown>)
+        : {};
+    const extraHeaders = {
+      ...stringRecord(record.extraHeaders),
+      ...authHeaders,
+    };
+    if (
+      !url ||
+      !serverName ||
+      (!bearer && Object.keys(extraHeaders).length === 0)
+    ) {
+      return [];
+    }
     return [
       {
         serverName,
         url,
-        bearer,
+        ...(bearer ? { bearer } : {}),
+        ...(Object.keys(extraHeaders).length > 0 ? { extraHeaders } : {}),
         transport: record.transport === "sse" ? "sse" : "streamable-http",
         toolWhitelist: Array.isArray(record.tools)
           ? (record.tools.filter(
@@ -767,6 +782,16 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
       } as McpServerConfig,
     ];
   });
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[0] === "string" && typeof entry[1] === "string",
+    ),
+  );
 }
 
 function instrumentSessionStore(

@@ -256,6 +256,33 @@ describe("buildMcpTools — Authorization shape", () => {
     );
   });
 
+  it("connects header-only MCP configs without inventing Authorization", async () => {
+    const store = new HandleStore();
+    const captured: any = {};
+    const tools = await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "plane--issues",
+          url: "https://plane.example.invalid/mcp",
+          extraHeaders: {
+            "x-api-key": "plane_pat_user_123",
+            "x-workspace-slug": "eng",
+          },
+        },
+      ],
+      handleStore: store,
+      connectMcpServer: captureFakeConnect(captured),
+    });
+
+    expect(tools).toHaveLength(1);
+    expect(captured.headers).toMatchObject({
+      "x-api-key": "plane_pat_user_123",
+      "x-workspace-slug": "eng",
+    });
+    expect(captured.headers.Authorization).toBeUndefined();
+    expect(store.size).toBe(0);
+  });
+
   it("strips lowercase 'authorization' from extraHeaders so the bearer cannot ride alongside the handle", async () => {
     // HTTP header keys are case-insensitive on the wire. Without case-
     // normalisation a JS object would carry both keys, and downstream

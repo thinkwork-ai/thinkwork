@@ -15,6 +15,7 @@ const {
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
   mockStartActivation,
+  mockActivateWithCredentials,
   mockDeactivateActivation,
   mockCutoverTwenty,
   mockIssuePremiumInstallKey,
@@ -27,6 +28,7 @@ const {
   mockResolveCallerTenantId: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
   mockStartActivation: vi.fn(),
+  mockActivateWithCredentials: vi.fn(),
   mockDeactivateActivation: vi.fn(),
   mockCutoverTwenty: vi.fn(),
   mockIssuePremiumInstallKey: vi.fn(),
@@ -72,6 +74,7 @@ vi.mock("../../../lib/plugins/activation.js", async (importOriginal) => {
     ...actual,
     createDefaultPluginActivationDeps: () => activationDepsHolder.current,
     startActivation: mockStartActivation,
+    activatePluginWithCredentials: mockActivateWithCredentials,
     deactivateActivation: mockDeactivateActivation,
   };
 });
@@ -87,19 +90,22 @@ vi.mock("../../../lib/plugins/twenty-cutover.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../lib/plugins/premium-entitlements.js", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("../../../lib/plugins/premium-entitlements.js")
-    >();
-  return {
-    ...actual,
-    createDefaultPremiumEntitlementDeps: () => ({ mocked: true }),
-    issuePremiumInstallKey: mockIssuePremiumInstallKey,
-    redeemPremiumInstallKey: mockRedeemPremiumInstallKey,
-    revokePremiumInstallKey: mockRevokePremiumInstallKey,
-  };
-});
+vi.mock(
+  "../../../lib/plugins/premium-entitlements.js",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("../../../lib/plugins/premium-entitlements.js")
+      >();
+    return {
+      ...actual,
+      createDefaultPremiumEntitlementDeps: () => ({ mocked: true }),
+      issuePremiumInstallKey: mockIssuePremiumInstallKey,
+      redeemPremiumInstallKey: mockRedeemPremiumInstallKey,
+      revokePremiumInstallKey: mockRevokePremiumInstallKey,
+    };
+  },
+);
 
 import type { PluginVersion } from "@thinkwork/plugin-catalog";
 import type {
@@ -112,6 +118,7 @@ import {
 } from "../../../lib/plugins/testing.js";
 import {
   activatePlugin,
+  activatePluginWithCredentials,
   cutoverTwentyPlugin,
   deactivatePlugin,
   installPlugin,
@@ -217,6 +224,20 @@ beforeEach(() => {
   mockStartActivation.mockResolvedValue({
     authorizeUrl: "https://auth.example.invalid/authorize?state=signed",
   });
+  mockActivateWithCredentials.mockImplementation(
+    async ({
+      userId,
+      pluginInstallId,
+    }: {
+      userId: string;
+      pluginInstallId: string;
+    }) =>
+      store.seedActivation({
+        user_id: userId,
+        plugin_install_id: pluginInstallId,
+        granted_scopes: [],
+      }),
+  );
   mockIssuePremiumInstallKey.mockResolvedValue({
     rawKey: "twpi_test_key",
     key: {
@@ -437,6 +458,68 @@ describe("activatePlugin (U6)", () => {
       ),
     ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
     expect(mockStartActivation).not.toHaveBeenCalled();
+  });
+});
+
+describe("activatePluginWithCredentials (THNK-27 U5)", () => {
+  it("is member-level, binds the caller, and never accepts a user id from input", async () => {
+    await installPlugin(
+      null,
+      { input: { pluginKey: "lastmile", idempotencyKey: "i-credentials" } },
+      CTX,
+    );
+    const installId = [...store.installs.keys()][0]!;
+    mockRequireTenantAdmin.mockClear();
+
+    const result = (await activatePluginWithCredentials(
+      null,
+      {
+        input: {
+          installId,
+          credentials: [
+            { key: "apiKey", value: "plane-pat" },
+            { key: "workspaceSlug", value: "eng" },
+          ],
+        },
+      },
+      CTX,
+    )) as Record<string, unknown>;
+
+    expect(mockRequireTenantAdmin).not.toHaveBeenCalled();
+    expect(mockActivateWithCredentials).toHaveBeenCalledWith(
+      {
+        userId: "user-1",
+        tenantId: "tenant-1",
+        pluginInstallId: installId,
+        credentials: {
+          apiKey: "plane-pat",
+          workspaceSlug: "eng",
+        },
+      },
+      activationDepsHolder.current,
+    );
+    expect(result).toMatchObject({
+      userId: "user-1",
+      pluginKey: "lastmile",
+      status: "active",
+      grantedScopes: [],
+    });
+  });
+
+  it("rejects blank credential keys before storing secrets", async () => {
+    await expect(
+      activatePluginWithCredentials(
+        null,
+        {
+          input: {
+            installId: "install-1",
+            credentials: [{ key: "", value: "plane-pat" }],
+          },
+        },
+        CTX,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expect(mockActivateWithCredentials).not.toHaveBeenCalled();
   });
 });
 

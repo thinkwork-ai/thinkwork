@@ -97,7 +97,8 @@ function splitQualifiedToolName(
 function targetFor(config: McpServerConfig) {
   return {
     url: config.url,
-    token: config.auth?.token,
+    token: config.auth?.type === "bearer" ? config.auth.token : undefined,
+    headers: config.auth?.type === "headers" ? config.auth.headers : undefined,
     name: config.name,
   };
 }

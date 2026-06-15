@@ -181,6 +181,17 @@ input ActivatePluginInput {
   returnTo: String
 }
 
+input PluginCredentialValueInput {
+  key: String!
+  value: String!
+}
+
+input ActivatePluginWithCredentialsInput {
+  installId: ID!
+  "Per-user credential values keyed by the plugin manifest's credentialKey fields."
+  credentials: [PluginCredentialValueInput!]!
+}
+
 input DeactivatePluginInput {
   installId: ID!
 }
@@ -294,6 +305,14 @@ extend type Mutation {
   covering all the plugin's MCP servers. Returns the authorize URL.
   """
   activatePlugin(input: ActivatePluginInput!): ActivatePluginResult!
+  """
+  Store per-user credentials for plugins whose MCP servers declare
+  user-provided header auth (for example Plane PAT + workspace slug). Values
+  are stored only as token secrets and are never exposed through GraphQL.
+  """
+  activatePluginWithCredentials(
+    input: ActivatePluginWithCredentialsInput!
+  ): UserPluginActivation!
   """
   Disconnect the calling user's activation: deletes stored token secrets and
   marks the activation revoked. Local-only — provider-side grants are not

@@ -310,6 +310,76 @@ describe("endpointFrom resolution (U10)", () => {
   });
 });
 
+describe("user-provided header auth (THNK-27 U5)", () => {
+  it("provisions Plane MCP rows with header bindings but no credential values", async () => {
+    const planeComponent: McpServerComponent = {
+      type: "mcp-server",
+      key: "issues",
+      displayName: "Plane work items",
+      endpointFrom: {
+        managedApp: "plane",
+        configKey: "publicUrl",
+        path: "/mcp",
+      },
+      auth: {
+        mode: "user-provided-headers",
+        headers: [
+          {
+            name: "x-api-key",
+            credentialKey: "apiKey",
+            displayName: "Plane personal access token",
+            secret: true,
+          },
+          {
+            name: "x-workspace-slug",
+            credentialKey: "workspaceSlug",
+            displayName: "Plane workspace slug",
+          },
+        ],
+      },
+    };
+    selectQueue.push([
+      {
+        desired_config: {
+          publicUrl: "https://plane.tenant.example.com/app",
+        },
+      },
+    ]);
+    selectQueue.push([]);
+    selectQueue.push([]);
+    returningQueue.push([{ id: "server-plane" }]);
+    selectQueue.push([]);
+
+    const ref = await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-plane",
+      pluginKey: "plane",
+      component: planeComponent,
+      db: mockDb as never,
+    });
+
+    expect(ref).toEqual({
+      tenantMcpServerId: "server-plane",
+      resolvedEndpointUrl: "https://plane.tenant.example.com/mcp",
+    });
+    expect(insertCalls[0]).toMatchObject({
+      slug: "plane--issues",
+      url: "https://plane.tenant.example.com/mcp",
+      auth_type: "user_headers",
+      auth_config: {
+        headers: [
+          { name: "x-api-key", credentialKey: "apiKey" },
+          { name: "x-workspace-slug", credentialKey: "workspaceSlug" },
+        ],
+      },
+      management_source: "plugin",
+      plugin_install_id: "install-plane",
+      status: "approved",
+    });
+    expect(JSON.stringify(insertCalls[0])).not.toContain("plane_pat");
+  });
+});
+
 describe("teardownPluginMcpComponent", () => {
   it("deletes token secrets, token rows, context tools, assignments, then the server row", async () => {
     selectQueue.push([

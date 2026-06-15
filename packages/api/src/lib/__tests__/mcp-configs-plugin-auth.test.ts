@@ -166,6 +166,11 @@ function resolver(
   });
 }
 
+function bearerToken(config: { auth?: unknown }): string | undefined {
+  const auth = config.auth as { type?: string; token?: string } | undefined;
+  return auth?.type === "bearer" ? auth.token : undefined;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   store = createInMemoryPluginEngineStore();
@@ -200,7 +205,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       "lastmile--tasks",
     ]);
     for (const config of configs) {
-      expect(config.auth?.token).toMatch(/^plugin-token-/);
+      expect(bearerToken(config)).toMatch(/^plugin-token-/);
     }
   });
 
@@ -233,10 +238,10 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     expect(configs).toHaveLength(2);
     const plugin = configs.find((config) => config.name === "lastmile--crm")!;
     const direct = configs.find((config) => config.name === "direct-server")!;
-    expect(plugin.auth?.token).toBe(
+    expect(bearerToken(plugin)).toBe(
       "plugin-token-https://crm.lastmile.invalid",
     );
-    expect(direct.auth?.token).toBe("direct-user-token");
+    expect(bearerToken(direct)).toBe("direct-user-token");
   });
 
   it("R16: a direct per_user_oauth server still resolves when there is NO requester (humanPairId only)", async () => {
@@ -259,7 +264,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       { pluginAuth: resolver() },
     );
     expect(configs).toHaveLength(1);
-    expect(configs[0]!.auth?.token).toBe("direct-user-token");
+    expect(bearerToken(configs[0]!)).toBe("direct-user-token");
   });
 
   it("FAIL CLOSED: a null requester excludes plugin servers entirely", async () => {
@@ -405,6 +410,96 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     );
     expect(configs).toHaveLength(1);
     expect(configs[0]!.auth).toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it("Plane-style user_headers plugin servers resolve headers from the requester's activation secret", async () => {
+    mockJoinRows.mockReturnValue([
+      pluginRow("issues", {
+        slug: "plane--issues",
+        name: "Plane work items",
+        url: "https://plane.example.invalid/mcp",
+        auth_type: "user_headers",
+        auth_config: {
+          headers: [
+            { name: "x-api-key", credentialKey: "apiKey" },
+            { name: "x-workspace-slug", credentialKey: "workspaceSlug" },
+          ],
+        },
+      }),
+    ]);
+    const activation = store.seedActivation({
+      user_id: REQUESTER,
+      plugin_install_id: INSTALL,
+    });
+    const ref = "thinkwork/test/plugin-header-auth/requester/plane";
+    store.seedToken({
+      activation_id: activation.id,
+      resource_indicator: "https://plane.example.invalid/mcp",
+      secret_ref: ref,
+    });
+    secrets.values.set(
+      ref,
+      JSON.stringify({
+        auth_type: "user-provided-headers",
+        headers: {
+          "x-api-key": "plane_pat_user_123",
+          "x-workspace-slug": "eng",
+        },
+        resource: "https://plane.example.invalid/mcp",
+      }),
+    );
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(1);
+    expect(configs[0]).toMatchObject({
+      name: "plane--issues",
+      url: "https://plane.example.invalid/mcp",
+      auth: {
+        type: "headers",
+        headers: {
+          "x-api-key": "plane_pat_user_123",
+          "x-workspace-slug": "eng",
+        },
+      },
+    });
+  });
+
+  it("Plane-style user_headers plugin servers fail closed when the requester has no header secret", async () => {
+    mockJoinRows.mockReturnValue([
+      pluginRow("issues", {
+        slug: "plane--issues",
+        name: "Plane work items",
+        url: "https://plane.example.invalid/mcp",
+        auth_type: "user_headers",
+        auth_config: {
+          headers: [{ name: "x-api-key", credentialKey: "apiKey" }],
+        },
+      }),
+    ]);
+    store.seedActivation({
+      user_id: REQUESTER,
+      plugin_install_id: INSTALL,
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("no active header credential record"),
+    );
     warn.mockRestore();
   });
 });

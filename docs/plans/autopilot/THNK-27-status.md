@@ -6,9 +6,10 @@ Issue: THNK-27 Add Plane Plugin
 
 - Linear state: `In Progress`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-terraform`.
-- Active unit: U4 Plane Terraform Runtime Module.
-- U4 local verification complete; PR open for CI/review.
+- Active branch: `codex/thnk-27-plane-mcp-activation`.
+- Active unit: U5 Per-User Plane MCP Activation.
+- U4 merged via PR #2491.
+- U5 PR #2492 opened; CI pending.
 
 ## Context Discovered
 
@@ -20,9 +21,9 @@ Issue: THNK-27 Add Plane Plugin
 - Plane docs confirm Docker self-hosting, external Postgres/Redis/S3 support,
   RabbitMQ variables, and an official MCP server.
 - Plane MCP HTTP PAT mode requires `x-api-key` and `x-workspace-slug` request
-  headers. Current ThinkWork plugin MCP dispatch supports OAuth/bearer and
-  `auth: none`, so Plane MCP activation is a later unit before publishing the
-  MCP component.
+  headers. U5 adds a user-provided header auth mode that stores those values in
+  per-user plugin activation secrets and emits them only for the active
+  requester.
 
 ## Implementation Units
 
@@ -30,7 +31,7 @@ Issue: THNK-27 Add Plane Plugin
 - [x] U2 Plugin Manifest and Catalog Entry
 - [x] U3 Plane Managed-App Adapter
 - [x] U4 Plane Terraform Runtime Module
-- [ ] U5 Per-User Plane MCP Activation
+- [x] U5 Per-User Plane MCP Activation
 - [ ] U6 Plane Issue-Loop Skill
 - [ ] U7 Plane Seed and End-to-End Smoke
 - [ ] U8 Release Packaging and Controller Wiring
@@ -48,8 +49,10 @@ Issue: THNK-27 Add Plane Plugin
   `https://github.com/thinkwork-ai/thinkwork/pull/2490` merged at
   `eee5b4d6df6221dfb69df89606f0603e63dcdb07`.
 - U4 Plane Terraform Runtime Module:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2491` opened from
-  `codex/thnk-27-plane-terraform`.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2491` merged at
+  `88263e18d13746f2838001df15aa9ec9f998f189`.
+- U5 Per-User Plane MCP Activation:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2492` opened; CI pending.
 
 ## Verification Log
 
@@ -74,7 +77,7 @@ Issue: THNK-27 Add Plane Plugin
   passed.
 - U4: `pnpm --filter thinkwork-cli typecheck` passed.
 - U4: `terraform -chdir=terraform/modules/app/plane init -backend=false &&
-  terraform -chdir=terraform/modules/app/plane validate` passed; generated
+terraform -chdir=terraform/modules/app/plane validate` passed; generated
   `.terraform/` and `.terraform.lock.hcl` artifacts were removed.
 - U4: `terraform -chdir=terraform/modules/thinkwork init -backend=false`
   passed, but direct `terraform validate` of the composite module reports the
@@ -82,18 +85,47 @@ Issue: THNK-27 Add Plane Plugin
   the aliased provider `aws.us_east_1`. Generated Terraform artifacts were
   removed.
 - U4: `terraform -chdir=terraform/examples/greenfield init -backend=false &&
-  terraform -chdir=terraform/examples/greenfield validate` passed; generated
+terraform -chdir=terraform/examples/greenfield validate` passed; generated
   `.terraform/` and `.terraform.lock.hcl` artifacts were removed.
+- U5: `pnpm --filter @thinkwork/plugin-catalog test -- contracts.test.ts
+plane-manifest.test.ts` passed.
+- U5: `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+- U5: `pnpm --filter @thinkwork/api test -- activation.test.ts mcp.test.ts
+mcp-configs-plugin-auth.test.ts mcp-client-call.test.ts
+plane-manifest-parity.test.ts plugins-resolvers.test.ts` passed with 87 tests,
+  including shared-endpoint header secret merge coverage.
+- U5: `pnpm --filter @thinkwork/api typecheck` passed.
+- U5: `pnpm --filter @thinkwork/agentcore-pi test -- mcp.test.ts
+server.test.ts` passed.
+- U5: `pnpm --filter @thinkwork/agentcore-pi typecheck` passed.
+- U5: `pnpm --filter @thinkwork/web typecheck` passed.
+- U5: `pnpm --filter @thinkwork/mobile typecheck` reported no matching
+  `typecheck` script.
+- U5: `pnpm --filter thinkwork-cli typecheck` passed.
+- U5: `pnpm schema:build` passed; `pnpm --filter @thinkwork/web codegen`,
+  `pnpm --filter @thinkwork/mobile codegen`, and
+  `pnpm --filter thinkwork-cli codegen` passed. `@thinkwork/api` has no
+  selected `codegen` script.
+- U5: `git diff --check` passed.
+- U5: Browser verification not applicable; this unit is backend/runtime
+  activation plumbing with no new local UI surface.
 
 ## Decisions
 
-- Do not register Plane in the published plugin catalog until the Terraform
-  module and per-user MCP activation path are executable.
+- Do not register Plane in the published plugin catalog until release packaging
+  and controller wiring are ready.
 - Start with the adapter contract and proof tests so later Terraform/catalog
   units have a stable shape.
 - Plane is registered in the deployment runner for contract proofing, but is
   hidden from the operator managed-app catalog with `catalogVisible: false`
   until the runtime module and release/controller wiring are ready.
 - Plane manifest is exported for tests and later units, but is not added to
-  `allPluginManifests` until the Terraform runtime and per-user MCP activation
-  path are executable.
+  `allPluginManifests` until release packaging/controller wiring and smoke
+  coverage are ready.
+- Plane's MCP component now uses `auth.mode: user-provided-headers`; user
+  activations store PAT/workspace values per requester in
+  `user_plugin_activation_tokens` secrets, while `tenant_mcp_servers.auth_config`
+  stores only non-secret header binding metadata.
+- U5 groups user-provided header credentials by normalized MCP resource before
+  writing secrets so multiple components sharing one endpoint retain the full
+  header set.

@@ -12,9 +12,10 @@
  *   - The `skills` component seeds the first workflow skill so agents can
  *     work Plane issues with context-first read/write discipline once the
  *     plugin is installable.
- *   - No `mcp-server` component is declared yet. Plane HTTP PAT mode requires
- *     `x-api-key` and `x-workspace-slug` headers, which the current plugin MCP
- *     auth contract does not model.
+ *   - The `mcp-server` component resolves the tenant Plane endpoint from the
+ *     managed-app public URL and uses user-provided header auth. Each user
+ *     activates with their own Plane PAT (`x-api-key`) and workspace slug
+ *     (`x-workspace-slug`); no tenant-wide key is declared or accepted.
  */
 
 import type { PluginManifest } from "../../contracts";
@@ -61,12 +62,43 @@ export const planeManifest: PluginManifest = {
   pluginKey: "plane",
   displayName: "Plane",
   description:
-    "Self-hosted Plane project management runtime with durable work items, workflow skills, and a planned user-scoped Plane MCP integration.",
+    "Self-hosted Plane project management runtime with durable work items, workflow skills, and user-scoped Plane MCP integration.",
   versions: [
     {
       version: "0.1.0",
       requiredOauthScopes: [],
       components: [
+        {
+          type: "mcp-server",
+          key: "issues",
+          displayName: "Plane work items",
+          description:
+            "Plane workspace, project, issue, cycle, module, page, and comment tools for the user's activated Plane workspace.",
+          endpointFrom: {
+            managedApp: "plane",
+            configKey: "publicUrl",
+            path: "/mcp",
+          },
+          auth: {
+            mode: "user-provided-headers",
+            headers: [
+              {
+                name: "x-api-key",
+                credentialKey: "apiKey",
+                displayName: "Plane personal access token",
+                secret: true,
+              },
+              {
+                name: "x-workspace-slug",
+                credentialKey: "workspaceSlug",
+                displayName: "Plane workspace slug",
+              },
+            ],
+          },
+          toolNotes: [
+            "Plane MCP HTTP PAT mode requires x-api-key and x-workspace-slug headers; readable issue ids such as ENG-42 must be resolved to UUIDs before UUID-only tool calls.",
+          ],
+        },
         {
           type: "infrastructure",
           key: "runtime",

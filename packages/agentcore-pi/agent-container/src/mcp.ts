@@ -210,11 +210,12 @@ export interface McpServerConfig {
   /** MCP server endpoint URL. */
   url: string;
   /**
-   * OAuth bearer for this server, scoped to the invoking user. The
-   * bearer is consumed at handle-mint time and never propagated past
-   * the trusted handler.
+   * OAuth bearer for this server, scoped to the invoking user. Header-auth
+   * servers omit it and rely on `extraHeaders` instead. When present, the
+   * bearer is consumed at handle-mint time and never propagated past the
+   * trusted handler.
    */
-  bearer: string;
+  bearer?: string;
   /**
    * Extra request headers (e.g. API version pins). The Authorization
    * header is always overwritten with the handle-shaped value, so any
@@ -501,11 +502,12 @@ function wrapMcpToolForModelRouting(input: {
 }
 
 /**
- * Build the MCP tool surface for one invocation. Per server: mint a
- * handle from the bearer, build the handle-shaped Authorization
- * header, call `connectMcpServer`, collect ToolDefs. A failure on one
- * server does not block the others; failed servers' handles are
- * revoked so the store doesn't accumulate dead entries.
+ * Build the MCP tool surface for one invocation. Per OAuth server: mint a
+ * handle from the bearer and build the handle-shaped Authorization header.
+ * Header-auth servers (e.g. Plane PAT mode) carry only their declared
+ * extraHeaders. A failure on one server does not block the others; failed
+ * OAuth server handles are revoked so the store doesn't accumulate dead
+ * entries.
  */
 export async function buildMcpTools(
   options: BuildMcpToolsOptions,
@@ -523,37 +525,43 @@ export async function buildMcpTools(
 
   const tools: AgentTool<any>[] = [];
   for (const config of mcpConfigs) {
+    const bearer =
+      typeof config.bearer === "string" && config.bearer.trim()
+        ? config.bearer
+        : null;
+    const extraHeaders = normaliseExtraHeaders(config.extraHeaders);
     if (
       !config?.serverName ||
       !config.url ||
-      typeof config.bearer !== "string" ||
-      !config.bearer.trim()
+      (!bearer && Object.keys(extraHeaders).length === 0)
     ) {
       // Skip incomplete configs rather than crashing the entire build.
       // Whitespace-only bearers are rejected here so they don't reach
       // HandleStore.mint (which throws — that throw would bubble out
-      // and kill the entire MCP build for one bad config).
-      continue;
-    }
-
-    let handle: string;
-    try {
-      handle = handleStore.mint(config.bearer);
-    } catch (err) {
-      // Bearer rejected by HandleStore (CRLF / NUL injection guard).
-      // Skip this server; surface the error through the callback so
-      // U9 can log it without aborting the build for the others.
-      onConnectError?.(err, config);
+      // and kill the entire MCP build for one bad config). Header-auth
+      // configs are allowed when they carry at least one extra header.
       continue;
     }
 
     const headers: Record<string, string> = {
-      ...normaliseExtraHeaders(config.extraHeaders),
+      ...extraHeaders,
+    };
+    let handle: string | null = null;
+    if (bearer) {
+      try {
+        handle = handleStore.mint(bearer);
+      } catch (err) {
+        // Bearer rejected by HandleStore (CRLF / NUL injection guard).
+        // Skip this server; surface the error through the callback so
+        // U9 can log it without aborting the build for the others.
+        onConnectError?.(err, config);
+        continue;
+      }
       // Always overwrite Authorization — even if the caller supplied a
       // Bearer token in extraHeaders, it must NEVER reach the connect
       // call. The handle scheme is the only auth that crosses.
-      Authorization: `${McpHandleAuthScheme} ${handle}`,
-    };
+      headers.Authorization = `${McpHandleAuthScheme} ${handle}`;
+    }
 
     try {
       const serverTools = await connectMcpServer({
@@ -580,7 +588,7 @@ export async function buildMcpTools(
       // invocations. Surface the error through onConnectError so U9
       // can log it. The agent loses one MCP server's tools but the
       // rest of the turn proceeds.
-      handleStore.revoke(handle);
+      if (handle) handleStore.revoke(handle);
       onConnectError?.(err, config);
     }
   }
