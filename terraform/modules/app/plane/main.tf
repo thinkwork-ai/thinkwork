@@ -232,9 +232,8 @@ locals {
 data "aws_region" "current" {}
 
 resource "random_password" "rabbitmq" {
-  length           = 32
-  special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+  length  = 32
+  special = false
 }
 
 resource "random_password" "secret_key" {
@@ -273,10 +272,6 @@ resource "aws_secretsmanager_secret_version" "plane" {
 
   secret_id     = aws_secretsmanager_secret.plane[each.key].id
   secret_string = each.value.secret_string
-
-  lifecycle {
-    ignore_changes = [secret_string]
-  }
 }
 
 ################################################################################
