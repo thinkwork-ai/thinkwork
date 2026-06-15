@@ -59,6 +59,8 @@ Issue: THNK-27 Add Plane Plugin
 - U7 Plane Seed and End-to-End Smoke:
   `https://github.com/thinkwork-ai/thinkwork/pull/2494` merged at
   `5b03cb749effca1e78420ab8a2588776ad9e927b`.
+- U8 Release Packaging and Controller Wiring:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2495` opened; CI pending.
 
 ## Verification Log
 
