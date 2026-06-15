@@ -53,7 +53,8 @@ Issue: THNK-27 Add Plane Plugin
 - U5 Per-User Plane MCP Activation:
   `https://github.com/thinkwork-ai/thinkwork/pull/2492` merged at
   `5920aa8b1fc9273a27ef978439783b096176884f`.
-- Pending: U6 branch `codex/thnk-27-plane-issue-loop-skill`.
+- U6 Plane Issue-Loop Skill:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2493` opened; CI pending.
 
 ## Verification Log
 
