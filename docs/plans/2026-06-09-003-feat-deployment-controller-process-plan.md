@@ -604,8 +604,8 @@ docs so the next environment is repeatable.
 - `docs/src/content/docs/deploy/managed-applications.mdx`
 - `docs/src/content/docs/deploy/deployment-profiles.mdx`
 - `scripts/smoke/foundation-bootstrap-smoke.mjs`
-- `scripts/smoke/cognee-managed-app-smoke.mjs`
-- `scripts/smoke/twenty-managed-app-smoke.mjs`
+- `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`
+- `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
 
 **Work:**
 

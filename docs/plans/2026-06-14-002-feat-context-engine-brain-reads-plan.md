@@ -206,7 +206,7 @@ The existing MCP handler already exposes `query_brain_context`, but the route cu
 
 **Files:**
 
-- Create: `scripts/smoke/company-brain-context-engine-smoke.mjs`
+- Create: `plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs`
 - Modify: `docs/src/content/docs/api/context-engine.mdx`
 - Modify: `docs/plans/autopilot/THNK-20-status.md`
 

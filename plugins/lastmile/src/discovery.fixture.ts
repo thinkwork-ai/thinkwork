@@ -7,7 +7,7 @@
  *   https://dev-mcp.lastmile-tei.com/.well-known/oauth-protected-resource/{crm,tasks,routing}
  *
  * `lastmile-discovery.test.ts` asserts the manifest against this fixture,
- * and `scripts/smoke/lastmile-plugin-smoke.mjs` re-fetches the live
+ * and `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs` re-fetches the live
  * endpoints to catch drift between LastMile's deployment and this
  * recording. If LastMile changes its auth server, resources, or scope
  * vocabulary, update this fixture AND the manifest together.

@@ -16,6 +16,14 @@ const DEFAULT_SCAN_ROOTS = [
   "terraform",
 ];
 const PLUGIN_KEYS = ["company-brain", "cognee", "lastmile", "plane", "twenty"];
+const PLUGIN_SOURCE_ROOTS = new Map([
+  ["company-brain", ["plugins/company-brain/"]],
+  // Cognee is the internal infrastructure substrate for Company Brain.
+  ["cognee", ["plugins/company-brain/"]],
+  ["lastmile", ["plugins/lastmile/"]],
+  ["plane", ["plugins/plane/"]],
+  ["twenty", ["plugins/twenty/"]],
+]);
 const SKIP_DIRS = new Set([
   ".git",
   ".terraform",
@@ -49,7 +57,8 @@ export async function findPluginSourceBoundaryViolations({
     }
 
     const outsideKeys = pluginKeys.filter(
-      (pluginKey) => !file.startsWith(`plugins/${pluginKey}/`),
+      (pluginKey) =>
+        !owningRoots(pluginKey).some((rootPath) => file.startsWith(rootPath)),
     );
     if (outsideKeys.length === 0) continue;
 
@@ -118,6 +127,10 @@ async function pathExists(path) {
 function matchingPluginKeys(file) {
   const normalized = file.toLowerCase();
   return PLUGIN_KEYS.filter((pluginKey) => normalized.includes(pluginKey));
+}
+
+function owningRoots(pluginKey) {
+  return PLUGIN_SOURCE_ROOTS.get(pluginKey) ?? [`plugins/${pluginKey}/`];
 }
 
 function findAllowlistEntry(file, entries) {

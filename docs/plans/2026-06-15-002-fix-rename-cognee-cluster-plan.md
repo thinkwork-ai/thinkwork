@@ -349,7 +349,7 @@ AWS ECS disagree on cluster identity.
 
 **Files:**
 
-- Modify: `scripts/smoke/cognee-managed-app-smoke.mjs`
+- Modify: `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`
 - Modify: `terraform/modules/app/cognee/README.md`
 - Modify: `docs/src/content/docs/guides/business-ontology-operations.mdx`
 
@@ -382,7 +382,7 @@ AWS ECS disagree on cluster identity.
 
 **Patterns to follow:**
 
-- Existing smoke evidence shape in `scripts/smoke/cognee-managed-app-smoke.mjs`.
+- Existing smoke evidence shape in `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs`.
 - Existing smoke expectations in `terraform/modules/app/cognee/README.md`.
 
 **Test scenarios:**

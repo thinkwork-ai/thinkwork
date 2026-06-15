@@ -89,11 +89,11 @@ Terraform when an optional app cannot be deployed from the selected release.
 
 The default release manifest currently advertises:
 
-| Managed app | Required runtime image | Smoke contract                                    |
-| ----------- | ---------------------- | ------------------------------------------------- |
-| Cognee      | `cognee`               | `scripts/smoke/cognee-managed-app-smoke.mjs`      |
-| Twenty CRM  | `twenty`               | `scripts/smoke/twenty-managed-app-smoke.mjs`      |
-| Plane       | `plane`                | `plugins/plane/smoke/plane-managed-app-smoke.mjs` |
+| Managed app | Required runtime image | Smoke contract                                             |
+| ----------- | ---------------------- | ---------------------------------------------------------- |
+| Cognee      | `cognee`               | `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` |
+| Twenty CRM  | `twenty`               | `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`        |
+| Plane       | `plane`                | `plugins/plane/smoke/plane-managed-app-smoke.mjs`          |
 
 Plane's release descriptor is only deploy-ready when the selected manifest
 contains a digest-pinned Plane runtime image. The image URI must use `@sha256:`

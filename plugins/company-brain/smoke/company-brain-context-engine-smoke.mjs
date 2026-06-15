@@ -26,7 +26,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { attachSmokeEvidence } from "./deployment-evidence.mjs";
+import { attachSmokeEvidence } from "../../../scripts/smoke/deployment-evidence.mjs";
 
 const LIVE_ENABLED = process.env.SMOKE_ENABLE_COMPANY_BRAIN_CONTEXT === "1";
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 20_000);
@@ -185,7 +185,7 @@ async function runLiveSmoke() {
     "Brain provider exposes migration-aware read posture",
     Boolean(
       brainProvider?.metadata?.readPosture?.active?.role === "active" &&
-        brainProvider.metadata.readPosture.vault?.role === "vault",
+      brainProvider.metadata.readPosture.vault?.role === "vault",
     ),
     { readPosture: brainProvider?.metadata?.readPosture ?? null },
   );

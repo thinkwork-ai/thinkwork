@@ -411,11 +411,7 @@ function requireEnv(label, value) {
 function loadEnvFile() {
   const explicit = process.env.COMPUTER_ENV_FILE;
   if (explicit === "none") return {};
-  const candidates = [
-    explicit,
-    "apps/web/.env",
-    ".env",
-  ].filter(Boolean);
+  const candidates = [explicit, "apps/web/.env", ".env"].filter(Boolean);
 
   for (const candidate of candidates) {
     const resolved = path.resolve(candidate);

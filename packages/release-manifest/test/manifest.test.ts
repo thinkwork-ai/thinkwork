@@ -94,7 +94,7 @@ function manifest(overrides: Partial<ThinkWorkReleaseManifest> = {}) {
         smokeContracts: [
           {
             id: "cognee-health",
-            command: "scripts/smoke/cognee-managed-app-smoke.mjs",
+            command: "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
             required: true,
           },
         ],
@@ -126,7 +126,7 @@ function manifest(overrides: Partial<ThinkWorkReleaseManifest> = {}) {
         smokeContracts: [
           {
             id: "twenty-health",
-            command: "scripts/smoke/twenty-managed-app-smoke.mjs",
+            command: "plugins/twenty/smoke/twenty-managed-app-smoke.mjs",
             required: true,
           },
         ],
@@ -236,7 +236,8 @@ describe("release manifest contract", () => {
             smokeContracts: [
               {
                 id: "cognee-health",
-                command: "scripts/smoke/cognee-managed-app-smoke.mjs",
+                command:
+                  "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
               },
             ],
           },

@@ -59,12 +59,12 @@ Cognee is destructive in v1 and removes app-owned runtime resources and data.
 Run the smoke after deploy or destroy:
 
 ```bash
-node scripts/smoke/cognee-managed-app-smoke.mjs
+node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs
 
 SMOKE_ENABLE_COGNEE_MANAGED_APP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_EVIDENCE_FILE=deploy-artifacts/cognee-smoke.json \
-  node scripts/smoke/cognee-managed-app-smoke.mjs
+  node plugins/company-brain/smoke/cognee-managed-app-smoke.mjs
 ```
 
 The smoke skips cleanly when Cognee is not enabled. When Cognee is enabled, it
@@ -80,12 +80,12 @@ is destructive in v1 and removes the managed runtime and app-owned state.
 Run the smoke after deploy, park, redeploy, or destroy:
 
 ```bash
-node scripts/smoke/twenty-managed-app-smoke.mjs
+node plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 
 SMOKE_ENABLE_TWENTY_MANAGED_APP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_EVIDENCE_FILE=deploy-artifacts/twenty-smoke.json \
-  node scripts/smoke/twenty-managed-app-smoke.mjs
+  node plugins/twenty/smoke/twenty-managed-app-smoke.mjs
 ```
 
 The smoke skips cleanly when Twenty is unprovisioned or parked. When the runtime

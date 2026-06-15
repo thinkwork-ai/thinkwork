@@ -709,7 +709,7 @@ Twenty does not silently deploy broken or unreachable.
 - Create: `docs/src/content/docs/applications/admin/managed-applications.mdx`
 - Modify: `docs/plans/cognee-terraform-infrastructure-autopilot-status.md` only
   if implementation needs to cross-link Cognee lessons
-- Create: `scripts/smoke/twenty-managed-app-smoke.mjs`
+- Create: `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
 - Test: `scripts/smoke-enterprise-deployment-template.sh` if deploy-template
   contents need a smoke assertion
 

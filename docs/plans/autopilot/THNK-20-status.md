@@ -62,7 +62,7 @@ Milestone: Company Brain dogfood proof
 - 2026-06-14: `pnpm --filter @thinkwork/api typecheck` passed.
 - 2026-06-14: `pnpm --filter @thinkwork/api lint` reported no lint script for the selected package.
 - 2026-06-14: `git diff --check` passed.
-- 2026-06-14: `node scripts/smoke/company-brain-context-engine-smoke.mjs` passed dry-run.
+- 2026-06-14: `node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs` passed dry-run.
 - 2026-06-14: `bash scripts/build-lambdas.sh mcp-context-engine` passed and built the MCP Context Engine Lambda artifact.
 
 ## PR / CI Log

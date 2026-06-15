@@ -244,7 +244,7 @@ SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_USER_ID=<user-id> \
   SMOKE_AGENT_ID=<agent-id> \
-  node scripts/smoke/twenty-mcp-oauth-smoke.mjs
+  node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs
 ```
 
 ## Why This Matters

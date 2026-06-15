@@ -522,7 +522,7 @@ apps/web/src/routes/_authed/settings.plugins.*.tsx
 
 - Modify: `packages/plugin-catalog/src/plugins/lastmile/manifest.ts` (real endpoints, auth domain, per-server resource indicators, scopes, skill bundle)
 - Create: bundled skill sources for the LastMile skills (location per U3 manifest contract)
-- Create: `scripts/smoke/lastmile-plugin-smoke.mjs`
+- Create: `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs`
 - Test: manifest validation against live discovery metadata (recorded fixture)
 
 **Approach:** The U6 pre-step's captured discovery metadata feeds the manifest (resource indicators and scopes recorded per server). If LastMile's authorization server lacks refresh tokens or DCR, document the degradation (activation lifetime) and adjust the flow before freeze. Smoke: install on dev, activate a test user, agent turn calls one tool per server.

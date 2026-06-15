@@ -55,7 +55,7 @@ describe("managed app deployment adapters", () => {
     );
     expect(summary.smokeContracts).toContainEqual(
       expect.objectContaining({
-        command: "scripts/smoke/cognee-managed-app-smoke.mjs",
+        command: "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
       }),
     );
     expect(summary.statusOutputs).toContain("cognee_endpoint");

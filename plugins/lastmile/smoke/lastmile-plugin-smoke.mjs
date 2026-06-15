@@ -124,11 +124,11 @@ if (!LIVE_ENABLED) {
           "set SMOKE_ENABLE_LASTMILE_PLUGIN=1 to run the LastMile plugin smoke",
         phases: {
           phase1:
-            "node scripts/smoke/lastmile-plugin-smoke.mjs — discovery drift guard + installPlugin + activatePlugin authorizeUrl",
+            "node plugins/lastmile/smoke/lastmile-plugin-smoke.mjs — discovery drift guard + installPlugin + activatePlugin authorizeUrl",
           manualStep:
             "open the printed authorizeUrl in a browser signed in as SMOKE_ACTIVATED_USER_ID and complete the WorkOS AuthKit consent",
           phase2:
-            "node scripts/smoke/lastmile-plugin-smoke.mjs --post-activation — activation + per-user tool surface assertions",
+            "node plugins/lastmile/smoke/lastmile-plugin-smoke.mjs --post-activation — activation + per-user tool surface assertions",
         },
         requiredWhenRunning: [
           "VITE_GRAPHQL_HTTP_URL or GRAPHQL_HTTP_URL",
@@ -217,7 +217,7 @@ async function runPhase1() {
   );
   console.log(`\n${activatePlugin.authorizeUrl}\n`);
   console.log(
-    "Then run: SMOKE_ENABLE_LASTMILE_PLUGIN=1 node scripts/smoke/lastmile-plugin-smoke.mjs --post-activation",
+    "Then run: SMOKE_ENABLE_LASTMILE_PLUGIN=1 node plugins/lastmile/smoke/lastmile-plugin-smoke.mjs --post-activation",
   );
 }
 

@@ -644,7 +644,7 @@ cleanup.
 
 **Files:**
 
-- Create: `scripts/smoke/twenty-mcp-oauth-smoke.mjs`
+- Create: `plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`
 - Modify: `docs/src/content/docs/applications/admin/managed-applications.mdx`
 - Modify: `docs/src/content/docs/concepts/connectors/mcp-tools.mdx`
 - Test: `apps/spaces/src/components/settings/SettingsMcpServerDetail.test.tsx`
@@ -672,7 +672,7 @@ cleanup.
 
 **Patterns to follow:**
 
-- `scripts/smoke/twenty-managed-app-smoke.mjs` for managed app smoke style.
+- `plugins/twenty/smoke/twenty-managed-app-smoke.mjs` for managed app smoke style.
 - `docs/src/content/docs/applications/admin/managed-applications.mdx` for
   operator docs.
 

@@ -190,8 +190,8 @@ cleans app data and MCP registration.
   `apps/web/src/components/settings/SettingsCogneeApplication.tsx`, and
   `apps/web/src/components/settings/managed-applications/*` are the Applications
   and detail-page UI patterns to extend.
-- `scripts/smoke/twenty-managed-app-smoke.mjs` and
-  `scripts/smoke/twenty-mcp-oauth-smoke.mjs` are the smoke proof shapes to copy:
+- `plugins/twenty/smoke/twenty-managed-app-smoke.mjs` and
+  `plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs` are the smoke proof shapes to copy:
   dry-run by default, optional live mode, Terraform/API status correlation, and
   evidence attachment.
 
@@ -873,8 +873,8 @@ AE5
 
 **Patterns to follow:**
 
-- `scripts/smoke/twenty-managed-app-smoke.mjs`
-- `scripts/smoke/twenty-mcp-oauth-smoke.mjs`
+- `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
+- `plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`
 - `scripts/smoke/deployment-evidence.mjs`
 
 **Test scenarios:**

@@ -314,7 +314,7 @@ shadow production state while preserving active-backend safety.
 - Modify: `packages/api/src/lib/context-engine/providers/company-brain.ts`
 - Modify: `packages/api/src/lib/context-engine/providers/company-brain.test.ts`
 - Modify: `packages/api/src/handlers/mcp-context-engine.requester-context.test.ts`
-- Modify: `scripts/smoke/company-brain-context-engine-smoke.mjs`
+- Modify: `plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs`
 - Modify: `docs/plans/autopilot/THNK-6-status.md`
 
 **Approach:**
@@ -424,8 +424,8 @@ through ThinkWork-owned surfaces.
 - Modify: `docs/src/content/docs/api/context-engine.mdx`
 - Modify: `docs/runbooks/brain-v0-dogfood.md`
 - Modify: `scripts/smoke/README.md`
-- Modify: `scripts/smoke/company-brain-context-engine-smoke.mjs`
-- Create or modify: `scripts/smoke/company-brain-operations-smoke.mjs`
+- Modify: `plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs`
+- Create or modify: `plugins/company-brain/smoke/company-brain-operations-smoke.mjs`
 - Modify: `docs/plans/autopilot/THNK-6-status.md`
 
 **Approach:**

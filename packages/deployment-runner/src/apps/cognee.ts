@@ -17,7 +17,7 @@ const BRAIN_STORAGE_TIERS = ["default", "production"] as const;
 const smokeContracts = [
   {
     id: "cognee-health",
-    command: "scripts/smoke/cognee-managed-app-smoke.mjs",
+    command: "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
     required: true,
   },
 ] as const;
