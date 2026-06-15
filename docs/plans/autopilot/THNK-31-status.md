@@ -76,6 +76,8 @@ project_context: TEI ThinkWork
 - Keeping validated compatibility wrappers under
   `packages/plugin-catalog/src/plugins/{twenty,company-brain}/manifest.ts`.
 - Shrinking the catalog legacy migration list to LastMile only.
+- PR #2526 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2526`
 
 ### Verification
 
