@@ -46,25 +46,25 @@ locals {
     }
     secret_key = {
       enabled       = var.create_secret_placeholders && var.secret_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/plane/secret-key"
+      name_prefix   = "thinkwork/${var.stage}/plane/secret-key-"
       description   = "Plane SECRET_KEY"
       secret_string = jsonencode({ SECRET_KEY = random_password.secret_key.result })
     }
     live_server_secret_key = {
       enabled       = var.create_secret_placeholders && var.live_server_secret_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/plane/live-server-secret-key"
+      name_prefix   = "thinkwork/${var.stage}/plane/live-server-secret-key-"
       description   = "Plane LIVE_SERVER_SECRET_KEY"
       secret_string = jsonencode({ LIVE_SERVER_SECRET_KEY = random_password.live_server_secret_key.result })
     }
     aes_secret_key = {
       enabled       = var.create_secret_placeholders && var.aes_secret_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/plane/aes-secret-key"
+      name_prefix   = "thinkwork/${var.stage}/plane/aes-secret-key-"
       description   = "Plane AES_SECRET_KEY"
       secret_string = jsonencode({ AES_SECRET_KEY = random_password.aes_secret_key.result })
     }
     amqp_url = {
       enabled     = var.create_secret_placeholders && var.amqp_url_secret_arn == ""
-      name        = "thinkwork/${var.stage}/plane/amqp-url"
+      name_prefix = "thinkwork/${var.stage}/plane/amqp-url-"
       description = "Plane AMQP_URL for the managed RabbitMQ broker"
       secret_string = jsonencode({
         AMQP_URL = "amqps://${var.rabbitmq_admin_username}:${random_password.rabbitmq.result}@${replace(aws_mq_broker.rabbitmq.instances[0].endpoints[0], "amqps://", "")}"
@@ -255,11 +255,15 @@ resource "random_password" "aes_secret_key" {
 resource "aws_secretsmanager_secret" "plane" {
   for_each = local.managed_secrets
 
-  name        = each.value.name
+  name        = try(each.value.name, null)
+  name_prefix = try(each.value.name_prefix, null)
   description = each.value.description
 
   tags = {
-    Name = each.value.name
+    Name = trimsuffix(
+      coalesce(try(each.value.name, null), try(each.value.name_prefix, null)),
+      "-",
+    )
     Role = "plane"
   }
 }
