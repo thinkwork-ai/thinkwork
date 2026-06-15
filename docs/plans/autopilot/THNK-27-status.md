@@ -6,9 +6,9 @@ Issue: THNK-27 Add Plane Plugin
 
 - Linear state: `In Progress`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-contract`.
-- Active unit: U1 Plane Contract Proof.
-- U1 local verification complete; PR open for CI/review.
+- Active branch: `codex/thnk-27-plane-manifest`.
+- Active unit: U2 Plugin Manifest and Catalog Entry.
+- U2 local verification complete; PR open for CI/review.
 
 ## Context Discovered
 
@@ -27,7 +27,7 @@ Issue: THNK-27 Add Plane Plugin
 ## Implementation Units
 
 - [x] U1 Plane Contract Proof
-- [ ] U2 Plugin Manifest and Catalog Entry
+- [x] U2 Plugin Manifest and Catalog Entry
 - [ ] U3 Plane Managed-App Adapter
 - [ ] U4 Plane Terraform Runtime Module
 - [ ] U5 Per-User Plane MCP Activation
@@ -39,8 +39,11 @@ Issue: THNK-27 Add Plane Plugin
 ## PRs
 
 - U1 Plane Contract Proof:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2488` opened from
-  `codex/thnk-27-plane-contract`.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2488` merged at
+  `d4614c5f78f325c8bde77e4e4be3147d640cc7bd`.
+- U2 Plugin Manifest and Catalog Entry:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2489` opened from
+  `codex/thnk-27-plane-manifest`.
 
 ## Verification Log
 
@@ -52,6 +55,10 @@ Issue: THNK-27 Add Plane Plugin
   invokes `prettier`, but Prettier is not installed or declared in this
   workspace. Touched files were formatted with
   `pnpm dlx prettier@3.6.2 --write ...`.
+- U2: `pnpm --filter @thinkwork/plugin-catalog test -- plane-manifest.test.ts`
+  passed.
+- U2: `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+- U2: `pnpm --filter @thinkwork/plugin-catalog test` passed.
 
 ## Decisions
 
@@ -62,3 +69,6 @@ Issue: THNK-27 Add Plane Plugin
 - Plane is registered in the deployment runner for contract proofing, but is
   hidden from the operator managed-app catalog with `catalogVisible: false`
   until the runtime module and release/controller wiring are ready.
+- Plane manifest is exported for tests and later units, but is not added to
+  `allPluginManifests` until the Terraform runtime and per-user MCP activation
+  path are executable.
