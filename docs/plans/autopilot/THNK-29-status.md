@@ -52,7 +52,7 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
     session has valid Cognito tokens.
   - PR #2513 merged into `main` as
     `c65071265aa674d374d904b139a4bcd5394968ca`.
-- U5 login reset UI slice in progress:
+- U5 login reset UI slice merged:
   - Branch: `codex/thnk-29-login-password-reset` from fresh `origin/main` at
     `c65071265aa674d374d904b139a4bcd5394968ca`.
   - Added a Reset password path inside the web email/password sign-in form when
@@ -65,6 +65,22 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
     and returns to sign-in with success guidance.
   - Expired temporary-password sign-in copy now directs users to Reset password
     instead of asking an operator to handle credentials.
+  - PR #2514 merged into `main` as
+    `efa454edaf239d99d4352ba8aa24ce5dcc69657e`.
+- U6 docs, rollout, and verification slice in progress:
+  - Branch: `codex/thnk-29-docs-verification` from fresh `origin/main` at
+    `efa454edaf239d99d4352ba8aa24ce5dcc69657e`.
+  - Updated Admin Humans documentation to describe Add user, Send invite,
+    Resend invite, and user-driven Reset password semantics.
+  - Updated Admin Authentication & Tenancy documentation with login reset
+    behavior and account-enumeration/error-copy expectations.
+  - Added `docs/verification/manual-user-setup-e2e.md` with deployed-stage
+    verification checklist, Cognito/SES prerequisites, evidence slots, and
+    redaction rules.
+  - Audited `apps/cli/src/commands/user.ts` and
+    `packages/api/src/handlers/tenants.ts`; CLI invite/reset-password and
+    legacy REST invite remain operator/CLI surfaces, while THNK-29 no-email
+    manual setup is the web GraphQL Settings surface.
 
 ## Verification Notes
 
@@ -98,3 +114,7 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
   - Browser smoke: started Vite at `http://127.0.0.1:5180/sign-in`, confirmed
     the login heading, Reset password action, reset request step, and enabled
     Send reset code state after entering an email.
+- Local checks for the U6 docs, rollout, and verification slice:
+  - `pnpm --filter @thinkwork/docs build`
+  - Direct Prettier check for touched files
+  - `git diff --check`
