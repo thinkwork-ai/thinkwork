@@ -32,9 +32,12 @@ describe("buildSignedCatalogJson", () => {
       document,
       trustedPublicKeyPem: keys.publicKeyPem,
     });
-    expect(verified.plugins.map((plugin) => plugin.pluginKey)).toContain(
+    expect(verified.plugins.map((plugin) => plugin.pluginKey)).toEqual([
+      "company-brain",
       "lastmile",
-    );
+      "plane",
+      "twenty",
+    ]);
     expect(verified.generatedAt).toBe("2026-06-12T00:00:00.000Z");
   });
 

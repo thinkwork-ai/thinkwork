@@ -11,6 +11,7 @@ import { twentyManifest } from "./twenty/manifest";
 export const allPluginManifests: readonly PluginManifest[] = [
   companyBrainManifest,
   lastmileManifest,
+  planeManifest,
   twentyManifest,
 ];
 

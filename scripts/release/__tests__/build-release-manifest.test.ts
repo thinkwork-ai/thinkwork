@@ -87,6 +87,14 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
           "sha256:3333333333333333333333333333333333333333333333333333333333333333",
         architecture: "amd64",
       },
+      {
+        name: "plane",
+        repository: "makeplane/plane",
+        tag: "v1.2.3-plane-amd64",
+        digest:
+          "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        architecture: "amd64",
+      },
       parseRuntimeImageSpec(
         "name=twenty,uri=twentycrm/twenty@sha256:5555555555555555555555555555555555555555555555555555555555555555,architecture=amd64",
       ),
@@ -132,7 +140,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   assert.equal(manifest.artifacts[0]?.sha256.length, 64);
   assert.deepEqual(
     manifest.runtimeImages.map((image) => image.name),
-    ["agentcore-pi-amd64", "agentcore-pi-arm64", "cognee", "twenty"],
+    ["agentcore-pi-amd64", "agentcore-pi-arm64", "cognee", "plane", "twenty"],
   );
   assert.equal(
     manifest.runtimeImages.find((image) => image.name === "agentcore-pi-amd64")
@@ -145,7 +153,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   );
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "twenty"],
+    ["cognee", "plane", "twenty"],
   );
   assert.deepEqual(
     Object.fromEntries(
@@ -153,6 +161,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     ),
     {
       cognee: ["cognee"],
+      plane: ["plane"],
       twenty: ["twenty"],
     },
   );
@@ -312,7 +321,13 @@ test("CLI build script includes default managed apps when no overrides are passe
   ) as ThinkWorkReleaseManifest;
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "twenty"],
+    ["cognee", "plane", "twenty"],
+  );
+  assert.deepEqual(
+    manifest.managedApps
+      .find((app) => app.id === "plane")
+      ?.smokeContracts?.map((contract) => contract.command),
+    ["scripts/smoke/plane-managed-app-smoke.mjs"],
   );
   assert.deepEqual(
     manifest.managedApps

@@ -1,6 +1,6 @@
 /**
- * THNK-27 U3 contract parity: Plane's draft plugin manifest must stay aligned
- * with the deployment-runner adapter before the manifest is published.
+ * THNK-27 contract parity: Plane's published plugin manifest must stay aligned
+ * with the deployment-runner adapter backing the infrastructure component.
  */
 
 import { describe, expect, it } from "vitest";
@@ -38,11 +38,11 @@ describe("plane manifest ↔ adapter parity", () => {
     }
   });
 
-  it("remains exported but unpublished until release/controller wiring lands", () => {
+  it("is registered in the published plugin catalog", () => {
     expect(planeManifest.pluginKey).toBe("plane");
     expect(
       allPluginManifests.map((candidate) => candidate.pluginKey),
-    ).not.toContain("plane");
+    ).toContain("plane");
   });
 
   it("declares Plane MCP through per-user header auth", () => {

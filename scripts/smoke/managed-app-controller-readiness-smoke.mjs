@@ -14,7 +14,7 @@
  *   SMOKE_DEPLOYMENT_SSM_PREFIX=/thinkwork/tei-e2e/deployment
  *   SMOKE_MANIFEST_URL=https://.../thinkwork-release.json
  *   SMOKE_MANIFEST_SHA256=<sha256>
- *   SMOKE_MANAGED_APP_KEYS=cognee,twenty
+ *   SMOKE_MANAGED_APP_KEYS=cognee,twenty,plane
  *   SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1
  *   SMOKE_EVIDENCE_FILE=/tmp/managed-app-controller-readiness.json
  */
@@ -36,7 +36,7 @@ const env = {
   ...process.env,
 };
 
-const DEFAULT_APP_KEYS = ["cognee", "twenty"];
+const DEFAULT_APP_KEYS = ["cognee", "twenty", "plane"];
 
 const dryRun = {
   requiredWhenRunning: [
@@ -47,7 +47,7 @@ const dryRun = {
   verifies: [
     "Selected release manifest URL and digest resolve from customer SSM or explicit env",
     "Release manifest digest matches the selected/pinned digest",
-    "Cognee and Twenty managed-app descriptors exist in the manifest",
+    "Selected managed-app descriptors exist in the manifest",
     "Descriptor Terraform module source/version match the selected release contract",
     "Required smoke commands exist in this checkout",
     "Required app images are present in runtimeImages when strict deploy-ready mode is enabled",

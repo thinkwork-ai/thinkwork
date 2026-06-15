@@ -1,17 +1,15 @@
 /**
- * Plane plugin manifest — v0.1.0 draft (THNK-27 U2).
+ * Plane plugin manifest — v0.1.0 (THNK-27).
  *
- * Plane is intentionally exported for parity tests and later implementation
- * units, but not registered in the published catalog list yet. Publication
- * waits for the Terraform runtime module and per-user MCP activation path to
- * be executable:
+ * Plane is registered in the published plugin catalog after the Terraform
+ * runtime, user-provided MCP header activation, smoke coverage, and release
+ * packaging paths are wired:
  *
  *   - The `infrastructure` component maps onto the `plane` deployment-runner
  *     adapter introduced by U1. `terraformInputs` mirrors the adapter's
  *     required inputs for ENABLE/UPGRADE.
  *   - The `skills` component seeds the first workflow skill so agents can
- *     work Plane issues with context-first read/write discipline once the
- *     plugin is installable.
+ *     work Plane issues with context-first read/write discipline.
  *   - The `mcp-server` component resolves the tenant Plane endpoint from the
  *     managed-app public URL and uses user-provided header auth. Each user
  *     activates with their own Plane PAT (`x-api-key`) and workspace slug
