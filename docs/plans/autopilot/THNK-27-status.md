@@ -6,9 +6,9 @@ Issue: THNK-27 Add Plane Plugin
 
 - Linear state: `In Progress`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-smoke`.
-- Active unit: U7 Plane Seed and End-to-End Smoke.
-- U6 merged via PR #2493.
+- Active branch: `codex/thnk-27-plane-release-wiring`.
+- Active unit: U8 Release Packaging and Controller Wiring.
+- U7 merged via PR #2494.
 
 ## Context Discovered
 
@@ -57,7 +57,8 @@ Issue: THNK-27 Add Plane Plugin
   `https://github.com/thinkwork-ai/thinkwork/pull/2493` merged at
   `393f257c1a1546d5eabc843f08c4c19af8c2ee88`.
 - U7 Plane Seed and End-to-End Smoke:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2494` opened; CI pending.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2494` merged at
+  `5b03cb749effca1e78420ab8a2588776ad9e927b`.
 
 ## Verification Log
 
@@ -139,19 +140,45 @@ scripts/smoke/plane-mcp-smoke.mjs` failed as expected with the missing Plane MCP
 deployment-runner-managed-apps.test.ts` passed.
 - U7: `pnpm --filter @thinkwork/deployment-runner typecheck` passed.
 - U7: `git diff --check` passed.
+- U7: PR #2494 CI passed (`cla`, `lint`, `verify`, `typecheck`, `test`) and
+  was squash-merged.
+- U8: implementation in progress on `codex/thnk-27-plane-release-wiring`;
+  promoted Plane into the published plugin catalog, default release
+  manifest managed-app descriptors, and managed-app controller readiness smoke
+  defaults.
+- U8: `pnpm --filter @thinkwork/plugin-catalog test -- plane-manifest.test.ts
+build-catalog.test.ts catalog.test.ts` passed.
+- U8: `pnpm --filter @thinkwork/api test -- plane-manifest-parity.test.ts
+catalog-source.test.ts` passed.
+- U8: `pnpm --filter @thinkwork/release-manifest test -- manifest.test.ts`
+  passed.
+- U8: `pnpm test:release` passed.
+- U8: `COMPUTER_ENV_FILE=none node
+scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed dry-run mode.
+- U8: a synthetic live-mode controller readiness run with an in-memory release
+  manifest passed with `SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1` and reported
+  Cognee, Twenty, and Plane as descriptor-ready and deploy-ready.
+- U8: `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+- U8: `pnpm --filter @thinkwork/api typecheck` passed.
+- U8: `pnpm --filter @thinkwork/release-manifest typecheck` passed.
+- U8: `pnpm dlx prettier@3.6.2 --write ...` reported all touched files
+  unchanged.
+- U8: `git diff --check` passed.
 
 ## Decisions
 
-- Do not register Plane in the published plugin catalog until release packaging
-  and controller wiring are ready.
+- U8 registers Plane in the published plugin catalog after release packaging,
+  controller readiness smoke, and end-to-end Plane smoke coverage are in place.
 - Start with the adapter contract and proof tests so later Terraform/catalog
   units have a stable shape.
 - Plane is registered in the deployment runner for contract proofing, but is
-  hidden from the operator managed-app catalog with `catalogVisible: false`
-  until the runtime module and release/controller wiring are ready.
-- Plane manifest is exported for tests and later units, but is not added to
-  `allPluginManifests` until release packaging/controller wiring and smoke
-  coverage are ready.
+  hidden from the operator managed-app catalog with `catalogVisible: false`;
+  Plane should surface through the plugin catalog while the adapter remains the
+  retained infrastructure backing.
+- Plane manifest is now added to `allPluginManifests`; the deployment-runner
+  adapter stays hidden from the generic managed-app catalog because Plane is
+  installed through the plugin catalog and uses the adapter only as its
+  infrastructure backing.
 - Plane's MCP component now uses `auth.mode: user-provided-headers`; user
   activations store PAT/workspace values per requester in
   `user_plugin_activation_tokens` secrets, while `tenant_mcp_servers.auth_config`

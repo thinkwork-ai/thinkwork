@@ -39,13 +39,13 @@ function mcpComponent(): McpServerComponent {
 }
 
 describe("Plane plugin manifest", () => {
-  it("validates as an unpublished Plane plugin draft", () => {
+  it("validates as a published Plane plugin", () => {
     const validated = validatePluginManifest(planeManifest);
     expect(validated.pluginKey).toBe("plane");
     expect(validated.versions[0].version).toBe("0.1.0");
     expect(
       allPluginManifests.map((candidate) => candidate.pluginKey),
-    ).not.toContain("plane");
+    ).toContain("plane");
     expect(
       validated.versions[0].components.map((component) => component.type),
     ).toEqual(["mcp-server", "infrastructure", "skills"]);
