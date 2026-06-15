@@ -988,7 +988,6 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "plane_secret_key_secret_arn": "",
         "plane_live_server_secret_key_secret_arn": "",
         "plane_aes_secret_key_secret_arn": "",
-        "plane_amqp_url_secret_arn": "",
         "plane_s3_access_key_id_secret_arn": "",
         "plane_s3_secret_access_key_secret_arn": "",
         "plane_s3_bucket_name": "",
@@ -1081,12 +1080,6 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
                 manifest_images,
                 "aesSecretKeySecretArn",
                 "THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN",
-            ),
-            "plane_amqp_url_secret_arn": config_value(
-                desired_config,
-                manifest_images,
-                "amqpUrlSecretArn",
-                "THINKWORK_PLANE_AMQP_URL_SECRET_ARN",
             ),
             "plane_s3_access_key_id_secret_arn": config_value(
                 desired_config,
@@ -2623,10 +2616,6 @@ variable "plane_aes_secret_key_secret_arn" {{
   type = string
 }}
 
-variable "plane_amqp_url_secret_arn" {{
-  type = string
-}}
-
 variable "plane_s3_access_key_id_secret_arn" {{
   type = string
 }}
@@ -2756,7 +2745,6 @@ module "thinkwork" {{
   plane_secret_key_secret_arn             = var.plane_secret_key_secret_arn
   plane_live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
   plane_aes_secret_key_secret_arn         = var.plane_aes_secret_key_secret_arn
-  plane_amqp_url_secret_arn               = var.plane_amqp_url_secret_arn
   plane_s3_access_key_id_secret_arn       = var.plane_s3_access_key_id_secret_arn
   plane_s3_secret_access_key_secret_arn   = var.plane_s3_secret_access_key_secret_arn
   plane_s3_bucket_name                    = var.plane_s3_bucket_name

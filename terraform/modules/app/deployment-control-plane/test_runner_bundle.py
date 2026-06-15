@@ -1073,8 +1073,11 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
     assert vars_json["plane_dns_enabled"] is True
     assert tfvars["cloudflare_zone_id"] == "zone_123"
     assert tfvars["plane_dns_enabled"] is True
+    assert "plane_amqp_url_secret_arn" not in tfvars
     assert 'resource "cloudflare_record" "plane"' in main_tf
     assert "content = module.thinkwork.plane_alb_dns_name" in main_tf
+    assert 'variable "plane_amqp_url_secret_arn"' not in main_tf
+    assert "plane_amqp_url_secret_arn" not in main_tf
     assert "-target=cloudflare_record.plane" in runner.managed_app_terraform_target_args(
         {"appKey": "plane"}
     )
