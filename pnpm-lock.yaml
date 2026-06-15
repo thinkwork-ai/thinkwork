@@ -1595,6 +1595,9 @@ importers:
 
   plugins/company-brain:
     devDependencies:
+      '@thinkwork/plugin-catalog':
+        specifier: workspace:*
+        version: link:../../packages/plugin-catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
@@ -1604,6 +1607,9 @@ importers:
 
   plugins/lastmile:
     devDependencies:
+      '@thinkwork/plugin-catalog':
+        specifier: workspace:*
+        version: link:../../packages/plugin-catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
@@ -1613,6 +1619,9 @@ importers:
 
   plugins/plane:
     devDependencies:
+      '@thinkwork/plugin-catalog':
+        specifier: workspace:*
+        version: link:../../packages/plugin-catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
@@ -1622,6 +1631,9 @@ importers:
 
   plugins/twenty:
     devDependencies:
+      '@thinkwork/plugin-catalog':
+        specifier: workspace:*
+        version: link:../../packages/plugin-catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
