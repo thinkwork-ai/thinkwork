@@ -4,12 +4,11 @@ Issue: THNK-27 Add Plane Plugin
 
 ## Current State
 
-- Linear state: `In Progress`; move to `Verification` after this status
-  closeout lands.
+- Linear state: `Verification`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-status-closeout`.
-- Active unit: Status closeout.
-- U9 merged via PR #2496.
+- Active branch: none; all implementation and closeout PRs are merged.
+- Active unit: Verification handoff.
+- Status closeout merged via PR #2497.
 
 ## Context Discovered
 
@@ -66,6 +65,9 @@ Issue: THNK-27 Add Plane Plugin
 - U9 Docs, Rollout, and Operator Copy:
   `https://github.com/thinkwork-ai/thinkwork/pull/2496` merged at
   `dfad727a09b65a350e6594f97025271968e575f6`.
+- Status closeout:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2497` merged at
+  `54124ab5d87e53f68e1e21bf3185ee7050db9b20`.
 
 ## Verification Log
 
@@ -183,6 +185,9 @@ scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed dry-run mode.
   was squash-merged.
 - Closeout: all planned THNK-27 units U1-U9 are merged; this status-only
   branch records the final merge state before moving THNK-27 to Verification.
+- Verification handoff: Linear THNK-27 moved from `In Progress` to
+  `Verification` after PR #2497 merged. Labels `Codex` and `Feature` were
+  preserved, and the issue remains assigned to Eric Odom.
 
 ## Decisions
 
