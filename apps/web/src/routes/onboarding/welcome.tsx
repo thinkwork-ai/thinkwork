@@ -430,13 +430,13 @@ function NewEnvironmentInstaller() {
                   <Field
                     label="Company"
                     name="customerName"
-                    placeholder="TEI"
+                    placeholder="Acme Inc"
                     required
                   />
                   <Field
                     label="Environment"
                     name="environmentName"
-                    placeholder="tei-e2e"
+                    placeholder="acme-prod"
                     required
                   />
                   <Field
@@ -472,14 +472,14 @@ function NewEnvironmentInstaller() {
                   <Field
                     label="First admin name"
                     name="adminName"
-                    placeholder="Eric Odom"
+                    placeholder="Jane Doe"
                     required
                   />
                   <Field
                     label="First admin email"
                     name="adminEmail"
                     type="email"
-                    placeholder="eric@example.com"
+                    placeholder="admin@example.com"
                     required
                   />
                   <div className="space-y-2">
