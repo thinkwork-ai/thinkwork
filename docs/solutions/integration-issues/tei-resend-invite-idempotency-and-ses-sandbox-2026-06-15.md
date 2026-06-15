@@ -1,6 +1,7 @@
 ---
 title: "THNK-28: TEI resend invite reports success without sending email"
 date: 2026-06-15
+last_updated: 2026-06-15
 category: integration-issues
 module: packages/api/src/graphql/resolvers/core/inviteMember.mutation.ts
 problem_type: integration_issue
@@ -11,10 +12,13 @@ symptoms:
   - "CloudTrail has no Cognito AdminCreateUser or AdminGetUser event during the reported resend window."
   - "The target Cognito user remains FORCE_CHANGE_PASSWORD with UserLastModifiedDate from 2026-06-10."
   - "TEI Cognito is now SES-backed, but the TEI SES account is still sandboxed."
-root_cause: application_idempotency_replay
-resolution_type: diagnosis_only
+root_cause: logic_error
+resolution_type: code_fix
 related_components:
+  - packages/api/src/graphql/resolvers/core/resendMemberInvite.mutation.ts
   - apps/web/src/components/settings/SettingsUserDetail.tsx
+  - apps/cli/src/commands/member.ts
+  - packages/lambda/admin-ops-mcp.ts
   - packages/api/src/lib/idempotency.ts
   - terraform/modules/foundation/cognito
 tags:
@@ -35,7 +39,11 @@ On 2026-06-15, Eric clicked **Resend invite** on
 `https://tei.thinkwork.ai/settings/users/...` for `eric@thinkwork.ai`. The UI
 reported **Invite resent**, but no email arrived.
 
-This was intentionally diagnosed without implementing the product fix.
+The initial debug artifact diagnosed the application idempotency replay without
+changing product code. A follow-up implementation then shipped the durable fix:
+a dedicated `resendMemberInvite` mutation, typed resend outcomes, web/CLI/admin
+ops parity, and regression coverage proving the old `inviteMember` namespace
+cannot suppress a human resend attempt.
 
 ## Smallest Meaningful Signal
 
@@ -165,35 +173,86 @@ approval, is a real Cognito/SES delivery attempt that may fail for unverified
 recipients. That failure should be surfaced to the operator instead of being
 reported as **Invite resent**.
 
-## Fix Plan
+## Fix Plan That Shipped
 
-Preferred product fix:
+The preferred product fix from the debug pass shipped in PR
+[#2509](https://github.com/thinkwork-ai/thinkwork/pull/2509), merged at
+`4dcfccf4fc6be980ff8b398d5d2e87c438833068`.
 
-1. Add a dedicated `resendMemberInvite` mutation rather than reusing
-   `inviteMember` for both "create member" and "attempt another delivery".
-2. Require tenant-admin authorization and resolve the member/user by member ID or
-   user ID, not by free-form email alone.
-3. Server-side, call `AdminGetUser`; allow resend only for
-   `FORCE_CHANGE_PASSWORD` or `UNCONFIRMED`; return a typed result for
-   `RESENT`, `NOT_PENDING`, and delivery failure.
-4. Use a separate mutation name and idempotency namespace from `inviteMember`.
-   If the UI supplies a key, it should be unique per human resend action but
-   stable across network retry of that same click.
-5. Update the Settings user detail button to call the dedicated resend mutation
-   and show success only when the server reports a delivery attempt.
-6. Add lightweight rate limiting or an operator confirmation if repeated resend
-   attempts become possible from the UI.
+### API contract
 
-Smallest acceptable code fix if a new mutation is too large:
+GraphQL now exposes a dedicated resend operation instead of overloading
+`inviteMember`:
 
-1. In `SettingsUserDetail`, pass a resend-specific `idempotencyKey` such as
-   `resend-invite:<memberId>:<crypto.randomUUID()>`.
-2. Update the button's test to assert `idempotencyKey` is present.
-3. Add an API test that seeds an idempotency row for the original invite and then
-   proves a resend-specific key still reaches `AdminCreateUser` with
-   `MessageAction=RESEND`.
-4. Add another API test that Cognito delivery errors are returned to the client,
-   not converted into a success message.
+```graphql
+input ResendMemberInviteInput {
+  memberId: ID!
+  idempotencyKey: String!
+}
+
+enum ResendMemberInviteStatus {
+  RESENT
+  NOT_PENDING
+  DELIVERY_FAILED
+}
+
+type ResendMemberInviteResult {
+  status: ResendMemberInviteStatus!
+  message: String!
+}
+```
+
+`resendMemberInvite` performs tenant-admin authorization first, resolves the
+tenant member and user server-side by `memberId`, checks Cognito status with
+`AdminGetUser`, and only attempts `AdminCreateUser` with `MessageAction=RESEND`
+for `FORCE_CHANGE_PASSWORD` or `UNCONFIRMED` users.
+
+### Idempotency boundary
+
+The mutation uses `mutationName: "resendMemberInvite"` and
+`clientKey: input.idempotencyKey`, with `inputs: { memberId }`. That separates
+the resend namespace from `inviteMember`, so a prior create/invite result cannot
+replay over a later resend click.
+
+The Cognito status lookup intentionally happens before `runWithIdempotency`.
+That keeps a transient `AdminGetUser` failure from poisoning the human click key
+before any delivery side effect occurs (session history).
+
+### Honest delivery results
+
+Known Cognito/SES delivery failures such as `CodeDeliveryFailureException` and
+`InvalidEmailRoleAccessPolicyException` return:
+
+```json
+{ "status": "DELIVERY_FAILED" }
+```
+
+The public message is normalized so the UI does not leak raw provider text,
+while the server logs the provider error name/message for operators (session
+history). Confirmed or otherwise non-pending Cognito users return
+`NOT_PENDING` without sending.
+
+### Web, CLI, and admin-ops parity
+
+`SettingsUserDetail` now renders the resend action only for resendable Cognito
+statuses, calls `SettingsResendMemberInviteMutation`, and creates a per-click key
+with the shape:
+
+```ts
+`resend-member-invite:${memberId}:${crypto.randomUUID()}`;
+```
+
+The UI treats only `RESENT` as success, suppresses duplicate in-flight clicks,
+and surfaces `NOT_PENDING` / `DELIVERY_FAILED` as non-success messages.
+
+The same capability is available to agent-native operator workflows:
+
+- `thinkwork member resend <memberId>`
+- `tenant_members_resend_invite` in admin-ops MCP
+
+This matters because tenant member administration should not have a web-only
+escape hatch; if a human operator can retry delivery, an authorized agent
+workflow needs the same typed operation.
 
 Ops prerequisite:
 
@@ -206,19 +265,36 @@ Ops prerequisite:
 
 ## Verification Plan For The Product Fix
 
-- API unit/integration test: existing pending user plus prior successful
-  `inviteMember` idempotency row still triggers a resend attempt through the
-  resend path.
-- API unit/integration test: confirmed Cognito users do not resend and return a
-  non-success typed result.
-- UI test: Settings user detail passes a resend-specific idempotency key or calls
-  the new mutation and does not show **Invite resent** on GraphQL/Cognito error.
-- Live TEI smoke, after SES production access: click resend for a controlled
-  pending user and verify CloudTrail, SES, and inbox evidence.
+The product fix was verified after PRs
+[#2504](https://github.com/thinkwork-ai/thinkwork/pull/2504),
+[#2509](https://github.com/thinkwork-ai/thinkwork/pull/2509), and
+[#2510](https://github.com/thinkwork-ai/thinkwork/pull/2510) merged.
 
-## Current Recommended Next Action
+Focused verification covered:
 
-Implement the product fix in a follow-up PR after this debug artifact lands.
-Treat idempotency replay as the immediate application bug, and SES sandbox as
-the next environment blocker that will surface once the resend call reaches
-Cognito.
+- API resolver tests for `resendMemberInvite`, tenant-admin auth before Cognito
+  work, server-side member/user resolution, pending status checks,
+  `MessageAction=RESEND`, `NOT_PENDING`, and typed `DELIVERY_FAILED`.
+- Idempotency regression tests proving the `inviteMember` namespace cannot
+  replay or suppress the dedicated resend path.
+- Web Settings tests proving the button calls the resend mutation with per-click
+  keys, does not call the old `inviteMember` mutation, suppresses duplicate
+  in-flight clicks, and only shows **Invite resent** on `RESENT`.
+- CLI registration/generator checks for `thinkwork member resend <memberId>`,
+  plus admin-ops tests proving `tenant_members_resend_invite` uses the dedicated
+  GraphQL resend mutation with resend-scoped idempotency keys.
+- Focused typechecks for API, web, CLI, lambda, and admin-ops, plus the web
+  production build.
+
+## Current Status
+
+THNK-28 is complete in product code. The durable engineering lesson is to model
+operator actions as distinct operations when their side effects differ. A
+"resend delivery" action is not a replay of "create or invite member"; it needs
+its own API contract, idempotency namespace, typed result surface, UI copy, and
+agent-native tool/CLI path.
+
+The remaining caveat is operational, not an application false-success bug: TEI
+SES sandbox or identity state can still block real delivery after Cognito is
+reached. Those known failures now surface as `DELIVERY_FAILED` instead of
+**Invite resent**.
