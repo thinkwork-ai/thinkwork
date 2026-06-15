@@ -796,6 +796,172 @@ variable "twenty_kms_key_arns" {
   default     = []
 }
 
+variable "plane_provisioned" {
+  description = "Provision the retained Plane managed-app substrate. Runtime can be parked independently with plane_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "plane_runtime_enabled" {
+  description = "Run Plane ECS services when the retained substrate is provisioned. Set false to park runtime while retaining data resources."
+  type        = bool
+  default     = false
+}
+
+variable "plane_image_uri" {
+  description = "Plane container image URI pinned to an immutable sha256 digest. Required when plane_provisioned = true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_image_uri))
+    error_message = "plane_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_db_url_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON DATABASE_URL field for the dedicated Plane database."
+  type        = string
+  default     = ""
+}
+
+variable "plane_secret_key_secret_arn" {
+  description = "Secrets Manager ARN containing Plane SECRET_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "plane_live_server_secret_key_secret_arn" {
+  description = "Secrets Manager ARN containing Plane LIVE_SERVER_SECRET_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "plane_aes_secret_key_secret_arn" {
+  description = "Secrets Manager ARN containing Plane AES_SECRET_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "plane_amqp_url_secret_arn" {
+  description = "Secrets Manager ARN containing Plane AMQP_URL."
+  type        = string
+  default     = ""
+}
+
+variable "plane_s3_access_key_id_secret_arn" {
+  description = "Secrets Manager ARN containing Plane AWS_ACCESS_KEY_ID for S3 uploads."
+  type        = string
+  default     = ""
+}
+
+variable "plane_s3_secret_access_key_secret_arn" {
+  description = "Secrets Manager ARN containing Plane AWS_SECRET_ACCESS_KEY for S3 uploads."
+  type        = string
+  default     = ""
+}
+
+variable "plane_s3_bucket_name" {
+  description = "S3 bucket name used for Plane file uploads. Required when plane_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "plane_domain" {
+  description = "Public hostname for Plane. Leave empty to derive plane.<www_domain> when www_domain is set."
+  type        = string
+  default     = ""
+}
+
+variable "plane_public_url" {
+  description = "Public HTTPS URL for Plane. Leave empty to derive https://<plane_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "plane_certificate_arn" {
+  description = "ACM certificate ARN for the Plane public ALB. Leave empty to reuse www_certificate_arn."
+  type        = string
+  default     = ""
+}
+
+variable "plane_web_desired_count" {
+  description = "Desired Plane web task count when plane_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "plane_api_desired_count" {
+  description = "Desired Plane API task count when plane_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "plane_worker_desired_count" {
+  description = "Desired Plane worker task count when plane_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "plane_beat_worker_desired_count" {
+  description = "Desired Plane beat worker task count when plane_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "plane_live_desired_count" {
+  description = "Desired Plane live task count when plane_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "plane_cache_engine" {
+  description = "ElastiCache engine for Plane. Prefer valkey; redis is available as a compatibility fallback."
+  type        = string
+  default     = "valkey"
+
+  validation {
+    condition     = contains(["valkey", "redis"], var.plane_cache_engine)
+    error_message = "plane_cache_engine must be valkey or redis."
+  }
+}
+
+variable "plane_cache_engine_version" {
+  description = "ElastiCache engine version for Plane."
+  type        = string
+  default     = "8.0"
+}
+
+variable "plane_cache_parameter_group_family" {
+  description = "ElastiCache parameter group family matching plane_cache_engine/plane_cache_engine_version."
+  type        = string
+  default     = "valkey8"
+}
+
+variable "plane_cache_node_type" {
+  description = "ElastiCache node type for Plane."
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "plane_cache_num_cache_clusters" {
+  description = "Number of cache nodes in the Plane replication group. Use 1 for the smallest v1 deployment."
+  type        = number
+  default     = 1
+}
+
+variable "plane_allowed_public_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the public Plane HTTPS ALB."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "plane_kms_key_arns" {
+  description = "Optional KMS key ARNs needed to decrypt Plane-injected secrets."
+  type        = list(string)
+  default     = []
+}
+
 variable "agentcore_memory_id" {
   description = "Optional pre-existing AgentCore Memory resource ID. When set, the agentcore-memory module skips provisioning and reuses this ID. Leave empty to auto-provision."
   type        = string

@@ -1,0 +1,66 @@
+# Plane App Module
+
+This module provisions the optional Plane managed application substrate for
+ThinkWork. It uses AWS-native retained resources:
+
+- public HTTPS ALB for the Plane web service
+- ECS/Fargate services for web, API, worker, beat worker, and live
+- ElastiCache Valkey/Redis for cache and coordination
+- Amazon MQ RabbitMQ for async work
+- S3 for Plane file uploads and attachments
+- CloudWatch log groups for every Plane service
+- Secrets Manager references for database, app, queue, and S3 credentials
+
+The parent ThinkWork module owns whether this module is instantiated. Once it is
+instantiated, `runtime_enabled = false` parks all Plane ECS services at desired
+count zero while retaining the database secret references, S3 bucket/objects,
+ElastiCache, RabbitMQ, log groups, ALB, and re-enable path.
+
+## Required Inputs
+
+- `stage`
+- `vpc_id`
+- `subnet_ids`
+- `db_security_group_id`
+- `public_url`
+- `certificate_arn`
+- `image_uri`
+- `s3_bucket_name`
+- `db_url_secret_arn` or `create_secret_placeholders = true`
+- `secret_key_secret_arn` or `create_secret_placeholders = true`
+- `live_server_secret_key_secret_arn` or `create_secret_placeholders = true`
+- `aes_secret_key_secret_arn` or `create_secret_placeholders = true`
+- `amqp_url_secret_arn` or `create_secret_placeholders = true`
+- `s3_access_key_id_secret_arn` or `create_secret_placeholders = true`
+- `s3_secret_access_key_secret_arn` or `create_secret_placeholders = true`
+
+`image_uri` must be pinned to an immutable `@sha256:` digest.
+
+## Secrets
+
+Plane requires infrastructure-level secrets in environment variables:
+
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `LIVE_SERVER_SECRET_KEY`
+- `AES_SECRET_KEY`
+- `AMQP_URL`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+The module injects these values through ECS secrets. It never places database
+URLs, app secrets, AMQP URLs, or S3 credentials into plaintext task-definition
+environment values. Placeholder secret containers can be created for early
+wiring, but real values are expected to be created or rotated by the deployment
+workflow.
+
+## Runtime Lifecycle
+
+| `runtime_enabled` | Web | API | Worker | Beat worker | Live | Retained resources |
+| ----------------- | --- | --- | ------ | ----------- | ---- | ------------------ |
+| `true`            | `web_desired_count` | `api_desired_count` | `worker_desired_count` | `beat_worker_desired_count` | `live_desired_count` | All resources |
+| `false`           | `0` | `0` | `0` | `0` | `0` | Database, S3, cache, RabbitMQ, secrets, logs, ALB |
+
+Destroying retained Plane data is intentionally separate from parking. A
+destructive deployment job must inventory/drop the dedicated database, storage
+objects, and secrets explicitly before the Terraform substrate is removed.

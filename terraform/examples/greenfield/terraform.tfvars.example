@@ -41,6 +41,26 @@ database_engine = "rds-postgres"
 # twenty_email_from_address         = "" # empty derives noreply@ses_inbound_domain for SES SMTP
 # twenty_email_from_name            = "ThinkWork CRM"
 #
+#   Plane is optional. First enable should set both booleans true after the
+#   deployment workflow has prepared a dedicated database URL secret, app
+#   secrets, AMQP URL secret, S3 credential secrets, and storage bucket. Later
+#   disable should leave plane_provisioned=true and set
+#   plane_runtime_enabled=false so Plane data/storage/cache/queue resources are
+#   retained.
+#
+# plane_provisioned                         = false
+# plane_runtime_enabled                     = false
+# plane_image_uri                           = "makeplane/plane@sha256:..."
+# plane_db_url_secret_arn                   = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/db-url-..."
+# plane_secret_key_secret_arn               = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/secret-key-..."
+# plane_live_server_secret_key_secret_arn   = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/live-server-secret-key-..."
+# plane_aes_secret_key_secret_arn           = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/aes-secret-key-..."
+# plane_amqp_url_secret_arn                 = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/amqp-url-..."
+# plane_s3_access_key_id_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/s3-access-key-id-..."
+# plane_s3_secret_access_key_secret_arn     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/s3-secret-access-key-..."
+# plane_s3_bucket_name                      = "thinkwork-dev-plane"
+# plane_public_url                          = "" # empty derives https://plane.<www_domain>
+# plane_certificate_arn                     = "" # empty creates a dedicated plane.<www_domain> certificate
 
 # Database master password — use a strong password
 db_password = "CHANGE_ME_strong_password_here"

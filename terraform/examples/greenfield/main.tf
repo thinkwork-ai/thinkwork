@@ -405,6 +405,84 @@ variable "twenty_certificate_arn" {
   default     = ""
 }
 
+variable "plane_provisioned" {
+  description = "Provision the retained Plane managed-app substrate. Runtime can be parked independently with plane_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "plane_runtime_enabled" {
+  description = "Run Plane ECS services when the retained substrate is provisioned."
+  type        = bool
+  default     = false
+}
+
+variable "plane_image_uri" {
+  description = "Plane container image URI pinned to an immutable sha256 digest. Required when plane_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "plane_db_url_secret_arn" {
+  description = "Secrets Manager ARN containing a JSON DATABASE_URL field for the dedicated Plane database."
+  type        = string
+  default     = ""
+}
+
+variable "plane_secret_key_secret_arn" {
+  description = "Secrets Manager ARN containing Plane SECRET_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "plane_live_server_secret_key_secret_arn" {
+  description = "Secrets Manager ARN containing Plane LIVE_SERVER_SECRET_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "plane_aes_secret_key_secret_arn" {
+  description = "Secrets Manager ARN containing Plane AES_SECRET_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "plane_amqp_url_secret_arn" {
+  description = "Secrets Manager ARN containing Plane AMQP_URL."
+  type        = string
+  default     = ""
+}
+
+variable "plane_s3_access_key_id_secret_arn" {
+  description = "Secrets Manager ARN containing Plane AWS_ACCESS_KEY_ID for S3 uploads."
+  type        = string
+  default     = ""
+}
+
+variable "plane_s3_secret_access_key_secret_arn" {
+  description = "Secrets Manager ARN containing Plane AWS_SECRET_ACCESS_KEY for S3 uploads."
+  type        = string
+  default     = ""
+}
+
+variable "plane_s3_bucket_name" {
+  description = "S3 bucket name used for Plane file uploads. Required when plane_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "plane_public_url" {
+  description = "Public HTTPS URL for Plane. Leave empty to derive https://plane.<www_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "plane_certificate_arn" {
+  description = "ACM certificate ARN for the Plane public ALB. Leave empty to create a dedicated plane.<www_domain> certificate when Plane is provisioned."
+  type        = string
+  default     = ""
+}
+
 variable "google_oauth_client_id" {
   description = "Google OAuth client ID (optional — leave empty to skip Google login)"
   type        = string
@@ -682,9 +760,12 @@ locals {
   sandbox_domain  = var.www_domain != "" ? "sandbox.${var.www_domain}" : ""
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
   crm_domain      = var.www_domain != "" ? "crm.${var.www_domain}" : ""
+  plane_domain    = var.www_domain != "" ? "plane.${var.www_domain}" : ""
   twenty_url      = var.twenty_public_url != "" ? var.twenty_public_url : (local.crm_domain != "" ? "https://${local.crm_domain}" : "")
+  plane_url       = var.plane_public_url != "" ? var.plane_public_url : (local.plane_domain != "" ? "https://${local.plane_domain}" : "")
 
   twenty_managed_certificate_enabled = local.www_dns_enabled && var.twenty_provisioned && var.twenty_certificate_arn == "" && local.crm_domain != ""
+  plane_managed_certificate_enabled  = local.www_dns_enabled && var.plane_provisioned && var.plane_certificate_arn == "" && local.plane_domain != ""
 }
 
 resource "aws_acm_certificate" "computer_sandbox" {
@@ -779,6 +860,52 @@ resource "aws_acm_certificate_validation" "twenty" {
   ]
 }
 
+resource "aws_acm_certificate" "plane" {
+  count = local.plane_managed_certificate_enabled ? 1 : 0
+
+  domain_name       = local.plane_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-plane"
+  }
+}
+
+resource "cloudflare_record" "plane_acm_validation" {
+  for_each = {
+    for dvo in flatten([
+      for cert in aws_acm_certificate.plane : tolist(cert.domain_validation_options)
+      ]) : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = var.cloudflare_zone_id
+  name    = trimsuffix(each.value.name, ".")
+  content = trimsuffix(each.value.value, ".")
+  type    = each.value.type
+  ttl     = 60
+  proxied = false
+  comment = "ACM DNS validation for ${each.key}"
+
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "plane" {
+  count = local.plane_managed_certificate_enabled ? 1 : 0
+
+  certificate_arn = aws_acm_certificate.plane[0].arn
+  validation_record_fqdns = [
+    for record in cloudflare_record.plane_acm_validation : record.hostname
+  ]
+}
+
 moved {
   from = module.www_dns[0].cloudflare_record.acm_validation["crm.thinkwork.ai"]
   to   = cloudflare_record.twenty_acm_validation["crm.thinkwork.ai"]
@@ -850,6 +977,19 @@ module "thinkwork" {
   twenty_email_from_name                     = var.twenty_email_from_name
   twenty_public_url                          = local.twenty_url
   twenty_certificate_arn                     = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.twenty_managed_certificate_enabled ? aws_acm_certificate_validation.twenty[0].certificate_arn : "")
+  plane_provisioned                          = var.plane_provisioned
+  plane_runtime_enabled                      = var.plane_runtime_enabled
+  plane_image_uri                            = var.plane_image_uri
+  plane_db_url_secret_arn                    = var.plane_db_url_secret_arn
+  plane_secret_key_secret_arn                = var.plane_secret_key_secret_arn
+  plane_live_server_secret_key_secret_arn    = var.plane_live_server_secret_key_secret_arn
+  plane_aes_secret_key_secret_arn            = var.plane_aes_secret_key_secret_arn
+  plane_amqp_url_secret_arn                  = var.plane_amqp_url_secret_arn
+  plane_s3_access_key_id_secret_arn          = var.plane_s3_access_key_id_secret_arn
+  plane_s3_secret_access_key_secret_arn      = var.plane_s3_secret_access_key_secret_arn
+  plane_s3_bucket_name                       = var.plane_s3_bucket_name
+  plane_public_url                           = local.plane_url
+  plane_certificate_arn                      = var.plane_certificate_arn != "" ? var.plane_certificate_arn : (local.plane_managed_certificate_enabled ? aws_acm_certificate_validation.plane[0].certificate_arn : "")
   google_oauth_client_id                     = var.google_oauth_client_id
   google_oauth_client_secret                 = var.google_oauth_client_secret
   pre_signup_lambda_zip                      = var.pre_signup_lambda_zip
@@ -1196,6 +1336,41 @@ output "twenty_worker_log_group_name" {
 output "twenty_cache_endpoint" {
   description = "ElastiCache primary endpoint for Twenty CRM (null when twenty_provisioned = false)"
   value       = module.thinkwork.twenty_cache_endpoint
+}
+
+output "plane_provisioned" {
+  description = "Whether the Plane retained managed-app substrate is provisioned"
+  value       = module.thinkwork.plane_provisioned
+}
+
+output "plane_runtime_enabled" {
+  description = "Whether Plane ECS services are enabled"
+  value       = module.thinkwork.plane_runtime_enabled
+}
+
+output "plane_url" {
+  description = "Public Plane URL (null when plane_provisioned = false)"
+  value       = module.thinkwork.plane_url
+}
+
+output "plane_cluster_arn" {
+  description = "ECS cluster ARN for Plane (null when plane_provisioned = false)"
+  value       = module.thinkwork.plane_cluster_arn
+}
+
+output "plane_web_service_name" {
+  description = "ECS service name for Plane web (null when plane_provisioned = false)"
+  value       = module.thinkwork.plane_web_service_name
+}
+
+output "plane_api_service_name" {
+  description = "ECS service name for Plane API (null when plane_provisioned = false)"
+  value       = module.thinkwork.plane_api_service_name
+}
+
+output "plane_cache_endpoint" {
+  description = "ElastiCache primary endpoint for Plane (null when plane_provisioned = false)"
+  value       = module.thinkwork.plane_cache_endpoint
 }
 
 output "agentcore_memory_id" {
