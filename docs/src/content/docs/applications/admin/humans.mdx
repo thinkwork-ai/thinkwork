@@ -1,134 +1,154 @@
 ---
 title: Admin — Humans
-description: Tenant user management — view members, invite new users, manage roles, and track invitation status.
+description: Tenant user management — add users, send invitations, manage roles, and track Cognito setup status.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-The Humans page is the tenant's user directory. It lists every person (and every service account) who has access to the tenant, their role, and their current status. From here operators invite new members, see who's pending acceptance, and manage the access that underpins every other admin feature.
+The Humans page is the tenant user directory. It lists every person who has
+access to the tenant, their role, their membership status, and their Cognito
+credential state. Operators use this surface to create access without email,
+send invitation email, resend pending invitations, and manage user roles.
 
-**Route:** `/humans`  
-**File:** `apps/web/src/routes/_authed/_tenant/humans/index.tsx`
+**Route:** `/settings/users`
+**File:** `apps/web/src/components/settings/SettingsUsers.tsx`
 
 ## The list
 
-A searchable `DataTable` with columns:
+A searchable table with columns:
 
-| Column | Notes |
-|---|---|
-| Name | Avatar with initials + display name |
-| Email | Primary identifier |
-| Role | Badge — Owner / Editor / Viewer |
-| Status | Badge — Active / Pending |
-| Joined | Relative timestamp (for active members) or "Invited" (for pending) |
+| Column  | Notes                                               |
+| ------- | --------------------------------------------------- |
+| User    | Avatar initials plus display name or email          |
+| Email   | Cognito sign-in email                               |
+| Role    | Tenant role badge                                   |
+| Status  | Membership status                                   |
+| Cognito | Credential/setup state from Cognito where available |
+| Added   | Relative creation time                              |
 
-A **Invite Member** button in the header opens the `InviteMemberDialog`.
+The action area exposes two distinct setup paths:
+
+- **Add user** creates tenant access without sending or claiming to send email.
+- **Send invite** creates or links the user and asks Cognito to deliver an
+  invitation email.
 
 ## Roles
 
-Three roles cover the common cases:
+Three roles cover the current tenant-access model:
 
-- **Owner** — full access to every admin surface. Can invite and remove other members, change roles, delete the tenant configuration, and touch billing
-- **Editor** — can create and edit agents, templates, skills, integrations, scheduled jobs, routines, and webhooks. Cannot manage members or tenant settings
-- **Viewer** — read-only access to all admin surfaces. Useful for auditors or stakeholders who need visibility but not authority
+- **Owner** — full access, including owner creation and sensitive tenant
+  administration.
+- **Admin** — can manage members and tenant settings, but cannot create or
+  promote another owner.
+- **Member** — regular tenant access without user-management authority.
 
-Role checks are enforced server-side. Even if the UI shows a button, the underlying mutation is rejected if the caller's role doesn't allow it.
+Role checks are enforced server-side. Add, invite, resend, role assignment, and
+removal all require an owner/admin membership before any Cognito or email side
+effect runs.
 
-## Inviting a new member
+## Add User
 
-The `InviteMemberDialog` captures:
+Choose **Add user** when an operator needs the person to exist in the tenant but
+does not want ThinkWork to send setup email.
 
-- **Email** — Cognito is the identity provider, so this is the email the user will authenticate with
-- **Role** — Owner / Editor / Viewer
-- **Optional message** — a short note included in the invitation email
+The dialog captures:
 
-Submitting the dialog fires a `CreateTenantMemberInvitationMutation` (likely routed through GraphQL). The backend:
+- **Email** — the user's Cognito sign-in email.
+- **Display name** — optional.
+- **Role** — owner, admin, or member, constrained by the caller's role.
 
-1. Creates a pending row in `tenant_members` with `status: pending`
-2. Issues a Cognito invitation or sends a SES email with a signup / acceptance link
-3. Returns the new row to the UI
+Submitting the dialog calls the GraphQL `addManualUser` mutation. The backend:
 
-The UI refetches `TenantMembersListQuery` after the mutation resolves and the new pending member appears in the list.
+1. Authorizes the caller as a tenant admin or owner.
+2. Rejects duplicate active membership before replaying idempotent results.
+3. Creates or repairs the Cognito user with `MessageAction=SUPPRESS`.
+4. Sets a generated permanent hidden password that is never returned or logged.
+5. Inserts the tenant membership only after Cognito is reset-capable.
+
+The operator never creates, views, copies, or distributes a password. The user
+sets their real password from the login page's **Reset password** path.
+
+## Send Invite
+
+Choose **Send invite** when the operator wants ThinkWork to attempt email
+delivery immediately.
+
+Submitting the dialog calls the GraphQL `inviteMember` mutation with a fresh
+per-submit idempotency key. Success means Cognito accepted a new create/send
+attempt. Delivery, configuration, sandbox, and Cognito failures remain visible
+instead of being converted into invitation-success copy.
 
 <Aside type="note">
-Exact delivery — Cognito admin_create_user vs a custom SES email — depends on how the tenant's user pool is configured. Most tenants use the Cognito admin_create_user flow, which ships an email with a temporary password that the invitee changes on first sign-in.
+  Email delivery still depends on the deployed Cognito and SES configuration.
+  `AdminCreateUser` acceptance proves Cognito attempted the flow; live inbox
+  receipt requires SES sender authorization, account sandbox/production posture,
+  and recipient eligibility.
 </Aside>
 
-## Accepting an invitation
+## Resend Invite
 
-From the invitee's side:
+User detail pages expose **Resend invite** only for pending/resendable Cognito
+states. Resend uses the dedicated `resendMemberInvite` GraphQL mutation keyed by
+tenant member ID. Each human click uses a fresh operation attempt and calls
+Cognito with `MessageAction=RESEND`; it does not replay an older
+`inviteMember` result as delivery success.
 
-1. They receive the invitation email
-2. They click the link, land at the admin app's `/sign-in` page
-3. They authenticate with the temporary password or via Google SSO
-4. The tenant pre-signup Lambda links them to the tenant and marks their `tenant_members` row as `active`
-5. They land in the authenticated layout as a member of the tenant
+Confirmed or non-pending users are not treated as successfully resent. Operators
+should direct password-capable users who need credentials to the login
+**Reset password** path.
 
-The admin app's user list flips the row from `pending` to `active` on the next refetch.
+## Reset Password
 
-## Principal types
+The public `/sign-in` page exposes **Reset password** whenever email/password
+sign-in is configured. The user enters their email, receives a Cognito reset
+code when the account is eligible, confirms the code with a new password, and
+returns to sign-in.
 
-The `tenant_members` table also carries a `principal_type` column that distinguishes:
+The request-code step uses neutral copy so the page does not casually enumerate
+accounts. Configuration, delivery, rate-limit, invalid/expired code, and
+password-policy failures remain visible and actionable.
 
-- **`user`** — a human member
-- **`service_account`** — a programmatic account used by BYOB agents and internal services
+## CLI and Legacy REST Parity
 
-The Humans page only shows `user` rows. Service accounts are managed through [Agent Invites](/applications/web/agent-invites/) and the credential vault, not through Humans.
+THNK-29 changes the web GraphQL Settings and login surfaces. Existing
+operator-oriented CLI/REST utilities were audited:
+
+- `thinkwork user invite` continues to be an email-delivery path backed by
+  `/api/tenants/:slug/invites`.
+- `thinkwork user reset-password` remains an admin-initiated Cognito
+  `admin-reset-user-password` helper for operators.
+- `/api/tenants/:slug/invites` remains CLI-facing invite behavior and does not
+  become the web manual-add path.
+
+Use Settings -> Users **Add user** for no-email manual setup in the web product
+surface. Use Settings -> Users **Send invite** or **Resend invite** when the
+desired side effect is email delivery.
 
 ## GraphQL
 
-| Query / Mutation | Purpose |
-|---|---|
-| `TenantMembersListQuery($tenantId)` | List members |
-| `CreateTenantMemberInvitationMutation` | Invite a new member |
+| Query / Mutation                          | Purpose                                           |
+| ----------------------------------------- | ------------------------------------------------- |
+| `tenantMembers(tenantId)`                 | List tenant members and Cognito setup state       |
+| `addManualUser(tenantId, input)`          | Create access without invitation email            |
+| `inviteMember(tenantId, input)`           | Create/link a member and attempt invitation email |
+| `resendMemberInvite(memberId, input)`     | Attempt fresh Cognito resend for a pending member |
+| `updateTenantMemberRole(memberId, input)` | Change a member's role                            |
+| `removeTenantMember(memberId)`            | Remove a member from the tenant                   |
 
-Role changes and member removal likely flow through additional mutations not directly visible in the Humans route — they may be exposed through a detail page not yet shipped or through a dialog on row click.
+## Known Limits
 
-## Data model
+- No bulk import, SCIM, or external directory sync in v1.
+- No operator-visible password assignment.
+- No "add now, send setup email later" manual-user action in v1. Use Send
+  invite when email delivery is desired at setup time.
+- SES sandbox or sender misconfiguration can block live email delivery even when
+  account creation succeeds.
 
-**`tenant_members`** — Aurora table with:
+## Related Pages
 
-- `id`, `tenant_id`, `principal_type` (user / service_account)
-- `email`, `name`
-- `role` (owner / editor / viewer)
-- `status` (active / pending)
-- `created_at`, `updated_at`
-
-The row is the source of truth for access control. Postgres row-level security policies on every other tenant table reference the current user's tenant membership to enforce isolation.
-
-## Workflows
-
-### Invite a new operator
-
-1. Click **Invite Member**
-2. Enter their email
-3. Choose Editor (most common for day-to-day operators) or Viewer (for read-only audit access)
-4. Submit
-5. The new member appears with `status: pending`
-6. They receive the Cognito invitation email
-7. After they sign in, their status flips to `active`
-
-### Demote a user from Editor to Viewer
-
-<Aside type="note">
-Role editing is not deeply visible in the current Humans route code — the list is read-oriented. The supported path today is through a detail-page form or an alternate admin channel. A future UI improvement would add an inline role dropdown to the Humans table.
-</Aside>
-
-### Remove a member
-
-1. Find the member in the list
-2. (Supported through the admin API; UI surface in the current release is limited)
-
-## Known limits
-
-- **No role editing UI in the current list.** Row-level role changes need a detail page or API call.
-- **No bulk invite.** Members are invited one at a time.
-- **No custom roles.** The three built-in roles are the only options; there's no per-capability permission grid.
-- **No delegated administration.** Owners have full authority; there's no "can invite but can't edit" middle ground.
-
-## Related pages
-
-- [Settings](/applications/web/settings/) — tenant configuration, plan, and deployment status
-- [Agent Invites](/applications/web/agent-invites/) — the BYOB equivalent for service accounts
-- [Authentication & Tenancy](/applications/web/authentication-and-tenancy/) — how members authenticate into the admin app
-- [Architecture → Multi-tenancy](/architecture/#multi-tenancy) — tenant isolation at the database level
+- [Authentication & Tenancy](/applications/admin/authentication-and-tenancy/) —
+  Cognito sign-in and login reset behavior
+- [Agent Invites](/applications/admin/agent-invites/) — BYOB service-account
+  registration
+- [Deploy Configuration](/deploy/configuration/) — Cognito and SES deployment
+  configuration

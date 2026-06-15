@@ -3,7 +3,7 @@ title: Admin — Authentication & Tenancy
 description: Cognito sign-in, tenant resolution, JWT plumbing, the authenticated layout, and the global dialogs and subscription wiring that sit underneath every admin page.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Every page in the admin app runs inside two nested layouts: `_authed` (is-signed-in guard) and `_authed/_tenant` (tenant-resolved shell). Understanding how those two layers work explains why the admin app feels the way it does — why pages load without a separate sign-in flow per page, why every query carries a tenant id, and where the realtime subscription plumbing lives.
 
@@ -18,7 +18,18 @@ Sign-in is Cognito-backed with two entry points:
 
 After authentication, the app stores the JWT in-memory, kicks off a background refresh loop (see [Token refresh](#token-refresh)), redirects to the authenticated layout, and preserves any `next` query parameter so the user lands on the page they were trying to reach.
 
-The sign-in page itself is small — a logo, the two entry points, and any invite-flow context (if the user was sent from a tenant invitation). Invites are handled at `/invite/:token` and flow through a separate adapter-selection → join-request → API-key-claim path before landing at sign-in.
+When email/password sign-in is configured, the page also exposes **Reset
+password**. This uses Cognito's forgot-password flow: the user requests a reset
+code by email, confirms the code with a new password, and returns to sign-in.
+The request step avoids casual account enumeration while still surfacing
+configuration, delivery, rate-limit, code, and password-policy failures. This is
+the credential-establishment path for manually added password users; operators
+do not create or distribute passwords.
+
+The sign-in page itself is small — a logo, the sign-in entry points, and any
+setup/recovery context. Human tenant setup is managed from Settings -> Users;
+BYOB agent invites are handled separately at `/invite/:token` and flow through
+adapter-selection -> join-request -> API-key-claim before landing at sign-in.
 
 ## The `_authed` guard
 
@@ -85,7 +96,9 @@ Every HTTP request (GraphQL queries and mutations, REST calls under `/api/...`) 
 `startTokenRefresh()` runs every 5 minutes in the background, calling `getIdToken()` from the auth context and updating `cachedToken`. The refresh is fire-and-forget from the request path's point of view — requests never wait on it.
 
 <Aside type="note">
-If the app sits idle long enough for the refresh token to expire (hours, not minutes), the next request returns 401 and the app forces a sign-out. There is no mid-request retry-with-refresh flow.
+  If the app sits idle long enough for the refresh token to expire (hours, not
+  minutes), the next request returns 401 and the app forces a sign-out. There is
+  no mid-request retry-with-refresh flow.
 </Aside>
 
 ### AppSync subscriptions
@@ -104,18 +117,18 @@ Each subscription re-executes the relevant queries (threads list, agent detail, 
 
 The admin app leans heavily on a small set of reusable primitives. Every page uses some or all of these:
 
-| Component | Purpose |
-|---|---|
-| `PageLayout` | Wraps every tenant page. Holds the header + scrollable content area |
-| `PageHeader` | Title + description + optional action buttons (used consistently) |
-| `PageSkeleton` | Shimmer loading placeholder while the first query resolves |
-| `EmptyState` | Icon + title + description + optional CTA for empty lists |
-| `DataTable` | TanStack Table wrapper — sortable, filterable, paginated, row-click navigable |
-| `StatusBadge` | Status → color mapping for thread statuses, agent statuses, and run statuses |
-| `Badge` | Generic label badge (outline / secondary variants) |
-| `Dialog` / `Sheet` / `Popover` | Radix primitives for modals, side panels, dropdowns |
-| `Tabs` | Tab panel wrapper used for agent detail, analytics views, and security tabs |
-| `InlineEditor` | In-place text editing with save-on-blur for titles and descriptions |
+| Component                      | Purpose                                                                       |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `PageLayout`                   | Wraps every tenant page. Holds the header + scrollable content area           |
+| `PageHeader`                   | Title + description + optional action buttons (used consistently)             |
+| `PageSkeleton`                 | Shimmer loading placeholder while the first query resolves                    |
+| `EmptyState`                   | Icon + title + description + optional CTA for empty lists                     |
+| `DataTable`                    | TanStack Table wrapper — sortable, filterable, paginated, row-click navigable |
+| `StatusBadge`                  | Status → color mapping for thread statuses, agent statuses, and run statuses  |
+| `Badge`                        | Generic label badge (outline / secondary variants)                            |
+| `Dialog` / `Sheet` / `Popover` | Radix primitives for modals, side panels, dropdowns                           |
+| `Tabs`                         | Tab panel wrapper used for agent detail, analytics views, and security tabs   |
+| `InlineEditor`                 | In-place text editing with save-on-blur for titles and descriptions           |
 
 The sidebar groups — Work, Agents, Manage, Other — are defined in `AppSidebar` and match the top-level route tree under `_authed/_tenant`.
 
