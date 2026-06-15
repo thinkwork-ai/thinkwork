@@ -121,6 +121,8 @@ project_context: TEI ThinkWork
   `plugins/<plugin-key>/` packages instead of legacy catalog plugin folders.
 - Updating authoring templates, scanner enforcement, publication references,
   and docs-site guidance for the TEI ThinkWork plugin package boundary.
+- PR #2528 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2528`
 
 ### Verification
 
