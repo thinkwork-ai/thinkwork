@@ -1,6 +1,6 @@
 # THNK-28 Autopilot Status
 
-Last updated: 2026-06-15T14:07:41Z
+Last updated: 2026-06-15T14:10:09Z
 
 ## Routing
 
@@ -8,6 +8,7 @@ Last updated: 2026-06-15T14:07:41Z
 - Dispatcher marker: `dispatcher:THNK-28:ReadyToWork:Codex`
 - Pass classification: Ready to Work implementation pass after Debug, not a Verification/Review rebound.
 - Branch: `codex/thnk-28-resend-member-invite`
+- Implementation PR: https://github.com/thinkwork-ai/thinkwork/pull/2509
 - Plan: `docs/plans/2026-06-15-001-fix-resend-member-invite-plan.md`
 
 ## Context Read
@@ -20,7 +21,7 @@ Last updated: 2026-06-15T14:07:41Z
 
 - Status at discovery: Ready to Work.
 - Current Linear status: In Progress.
-- Implementation state: local implementation and focused verification complete; PR/CI/merge pending.
+- Implementation state: PR #2509 opened; CI/merge pending.
 - Production mutation/cloud-change guard: no production GraphQL resend calls, Cognito admin mutations, SES production-access requests, or manual cloud changes will be performed.
 
 ## Progress Log
@@ -45,3 +46,4 @@ Last updated: 2026-06-15T14:07:41Z
   - Targeted `pnpm dlx prettier@3.8.2 --check` for hand-written files
 - 2026-06-15T14:03Z - Root `pnpm format:check` could not run as-is in this worktree because the root package does not declare/install a `prettier` binary; targeted Prettier check passed without rewriting generated GraphQL files.
 - 2026-06-15T14:07Z - Browser smoke attempted with the in-app Browser on `http://127.0.0.1:5180/settings/users`; the Browser URL policy blocked the auth redirect chain, so no live resend/UI click was attempted. Safer local checks passed: `curl -I http://127.0.0.1:5180/settings/users` returned HTTP 200 from Vite, and `pnpm --filter @thinkwork/web build` completed successfully. Dev server was stopped afterward.
+- 2026-06-15T14:10Z - Pushed branch and opened implementation PR #2509: https://github.com/thinkwork-ai/thinkwork/pull/2509.
