@@ -129,26 +129,6 @@ export const pluginSourceBoundaryAllowlist = [
     reason: "legacy catalog wrapper test until compatibility paths are removed",
   },
   {
-    path: "packages/plugin-catalog/src/plugins/company-brain/manifest.ts",
-    reason: "compatibility wrapper pending U9 removal",
-  },
-  {
-    path: "packages/plugin-catalog/src/plugins/lastmile/discovery.fixture.ts",
-    reason: "compatibility wrapper pending U9 removal",
-  },
-  {
-    path: "packages/plugin-catalog/src/plugins/lastmile/manifest.ts",
-    reason: "compatibility wrapper pending U9 removal",
-  },
-  {
-    path: "packages/plugin-catalog/src/plugins/plane/manifest.ts",
-    reason: "compatibility wrapper pending U9 removal",
-  },
-  {
-    path: "packages/plugin-catalog/src/plugins/twenty/manifest.ts",
-    reason: "compatibility wrapper pending U9 removal",
-  },
-  {
     path: "scripts/smoke/cognee-managed-app-smoke.mjs",
     reason: "legacy Cognee smoke until smoke extensions move",
   },

@@ -52,6 +52,8 @@ project_context: TEI ThinkWork
   as `56b6947157e8be462701fade77f58e7f7b252ed2`.
 - #2528 `docs(plugins): update plugin builder package workflow` merged into
   `main` as `44a7e75aa27bb95a2676d583cd2b18b00f2f11d6`.
+- #2529 `test(plugins): enforce plugin source boundary` merged into `main` as
+  `1199f741ff8107d78bb1d659ac8c954495c6446a`.
 
 ## Current Plane Package Slice
 
@@ -148,6 +150,24 @@ project_context: TEI ThinkWork
 
 - `node scripts/verify-plugin-source-boundary.mjs`
 - `node --test scripts/__tests__/verify-plugin-source-boundary.test.mjs`
+- `pnpm lint:plugin-source`
+- `pnpm test:plugin-source-boundary`
+
+## Current Catalog Wrapper Removal Slice
+
+- Started from fresh `origin/main` at `1199f741f` in branch
+  `codex/thnk-31-remove-catalog-wrappers`.
+- Removing the legacy `packages/plugin-catalog/src/plugins/<plugin-key>/`
+  manifest/discovery compatibility wrappers now that all first-party catalog
+  source is owned by root plugin packages.
+- Updating the LastMile discovery drift test to import the fixture directly
+  from `@thinkwork/plugin-lastmile`.
+- Shrinking the plugin source boundary allowlist by removing wrapper entries.
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
 - `pnpm lint:plugin-source`
 - `pnpm test:plugin-source-boundary`
 

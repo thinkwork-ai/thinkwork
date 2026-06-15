@@ -10,10 +10,10 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { lastmileDiscoveryFixture } from "@thinkwork/plugin-lastmile/discovery.fixture";
 
 import type { McpServerComponent } from "../contracts";
 import { lastmileManifest } from "../plugins";
-import { lastmileDiscoveryFixture } from "../plugins/lastmile/discovery.fixture";
 
 const SERVER_KEYS = ["crm", "tasks", "routing"] as const;
 
