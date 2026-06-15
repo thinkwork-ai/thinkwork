@@ -2,7 +2,7 @@
 issue: THNK-31
 title: "refactor: Co-locate application plugin source"
 updated: 2026-06-15
-dispatcher: dispatcher:THNK-31:ReadyToWork:Codex
+dispatcher: dispatcher:THNK-31:InProgress:Codex
 project_context: TEI ThinkWork
 ---
 
@@ -56,6 +56,8 @@ project_context: TEI ThinkWork
   `1199f741ff8107d78bb1d659ac8c954495c6446a`.
 - #2530 `refactor(plugins): remove catalog compatibility wrappers` merged into
   `main` as `7106af539b43f3a91d816878babc87a6958fabfa`.
+- #2531 `refactor(plugins): move plugin smoke scripts into packages` merged
+  into `main` as `db405051a6555a675c214f5bb67340dcba871c2d`.
 
 ## Current Plane Package Slice
 
@@ -198,6 +200,35 @@ project_context: TEI ThinkWork
 - `pnpm lint:plugin-source`
 - `pnpm test:plugin-source-boundary`
 
+## Current Plugin Catalog Test Package Slice
+
+- Started from fresh `origin/main` at `db405051a` in branch
+  `codex/thnk-31-plugin-catalog-tests`.
+- Moving plugin-specific catalog manifest/discovery tests into owning
+  `plugins/<plugin-key>/test/` folders.
+- Keeping catalog registration coverage in `@thinkwork/plugin-catalog` so
+  package-local tests validate their own plugin contracts while the shared
+  catalog remains the aggregate authority.
+- Shrinking the plugin source boundary allowlist by removing the package-local
+  parity test entries.
+- PR #2532 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2532`
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-company-brain test`
+- `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+- `pnpm --filter @thinkwork/plugin-lastmile test`
+- `pnpm --filter @thinkwork/plugin-lastmile typecheck`
+- `pnpm --filter @thinkwork/plugin-plane test`
+- `pnpm --filter @thinkwork/plugin-plane typecheck`
+- `pnpm --filter @thinkwork/plugin-twenty test`
+- `pnpm --filter @thinkwork/plugin-twenty typecheck`
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm lint:plugin-source`
+- `pnpm test:plugin-source-boundary`
+
 ## Verification Notes
 
 - `pnpm install --lockfile-only` completed after adding `plugins/*` and
@@ -220,6 +251,7 @@ project_context: TEI ThinkWork
 
 ## Next Steps
 
-- Open and merge the U1/U2 PR after CI passes.
-- Continue with Plane full-shape migration in a fresh branch from updated
-  `origin/main`.
+- Open and merge the plugin catalog test package PR after targeted checks and
+  CI pass.
+- Continue shrinking the remaining migration allowlist in fresh
+  `origin/main` worktrees, one implementation unit per PR.

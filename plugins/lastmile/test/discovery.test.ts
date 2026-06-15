@@ -10,15 +10,20 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { lastmileDiscoveryFixture } from "@thinkwork/plugin-lastmile/discovery.fixture";
 
-import type { McpServerComponent } from "../contracts";
-import { lastmileManifest } from "../plugins";
+import {
+  validatePluginManifest,
+  type McpServerComponent,
+} from "@thinkwork/plugin-catalog/contracts";
+
+import { lastmileDiscoveryFixture } from "../src/discovery.fixture";
+import { lastmileManifest } from "../src/manifest";
 
 const SERVER_KEYS = ["crm", "tasks", "routing"] as const;
+const validatedLastmileManifest = validatePluginManifest(lastmileManifest);
 
 function mcpServer(key: string): McpServerComponent {
-  const component = lastmileManifest.versions[0].components.find(
+  const component = validatedLastmileManifest.versions[0].components.find(
     (candidate) => candidate.type === "mcp-server" && candidate.key === key,
   );
   if (component?.type !== "mcp-server") {
@@ -29,7 +34,7 @@ function mcpServer(key: string): McpServerComponent {
 
 describe("lastmile manifest vs recorded discovery metadata", () => {
   it("declares exactly the three discovered MCP servers", () => {
-    const keys = lastmileManifest.versions[0].components
+    const keys = validatedLastmileManifest.versions[0].components
       .filter((component) => component.type === "mcp-server")
       .map((component) => component.key)
       .sort();
@@ -70,7 +75,7 @@ describe("lastmile manifest vs recorded discovery metadata", () => {
     (key) => {
       const recorded = lastmileDiscoveryFixture[key];
       expect(
-        [...lastmileManifest.versions[0].requiredOauthScopes].sort(),
+        [...validatedLastmileManifest.versions[0].requiredOauthScopes].sort(),
       ).toEqual([...recorded.scopes_supported].sort());
     },
   );

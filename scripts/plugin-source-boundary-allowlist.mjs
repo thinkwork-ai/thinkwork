@@ -113,26 +113,6 @@ export const pluginSourceBoundaryAllowlist = [
       "legacy Twenty deployment adapter until managed-app extensions move",
   },
   {
-    path: "packages/plugin-catalog/src/__tests__/company-brain-manifest.test.ts",
-    reason:
-      "catalog aggregate regression test until package-local parity moves",
-  },
-  {
-    path: "packages/plugin-catalog/src/__tests__/lastmile-discovery.test.ts",
-    reason:
-      "catalog aggregate regression test until package-local parity moves",
-  },
-  {
-    path: "packages/plugin-catalog/src/__tests__/plane-manifest.test.ts",
-    reason:
-      "catalog aggregate regression test until package-local parity moves",
-  },
-  {
-    path: "packages/plugin-catalog/src/__tests__/twenty-manifest.test.ts",
-    reason:
-      "catalog aggregate regression test until package-local parity moves",
-  },
-  {
     path: "terraform/modules/app/cognee/README.md",
     reason:
       "legacy Cognee Terraform module until Company Brain substrate moves",

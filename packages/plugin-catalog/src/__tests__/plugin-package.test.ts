@@ -4,7 +4,11 @@ import {
   PluginPackageError,
   defineFirstPartyPluginPackage,
 } from "../plugin-package";
-import { firstPartyPluginPackages, planePluginPackage } from "../plugins";
+import {
+  allPluginManifests,
+  firstPartyPluginPackages,
+  planePluginPackage,
+} from "../plugins";
 
 describe("first-party plugin packages", () => {
   it("registers Plane from the root plugin package boundary", () => {
@@ -16,6 +20,15 @@ describe("first-party plugin packages", () => {
     ]);
     expect(planePluginPackage.sourceRoot).toBe("plugins/plane");
     expect(planePluginPackage.manifest.pluginKey).toBe("plane");
+  });
+
+  it("publishes every first-party plugin manifest through the catalog aggregate", () => {
+    expect(allPluginManifests.map((manifest) => manifest.pluginKey)).toEqual([
+      "company-brain",
+      "lastmile",
+      "plane",
+      "twenty",
+    ]);
   });
 
   it("rejects package descriptors whose source root does not match the key", () => {
