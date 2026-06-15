@@ -2756,10 +2756,10 @@ describe("TaskThreadView", () => {
     expect(screen.queryByTestId("projected-workspace-panel")).toBeNull();
   });
 
-  it("expands a failed turn by default with the Run failed row visible", () => {
-    // R4: a failed turn defaults open so its error is not hidden behind a
-    // success-looking collapsed header. The header reads "Failed after Xs",
-    // never "Worked for Xs".
+  it("keeps a failed turn collapsed by default while preserving manual error details", () => {
+    // THNK-25: failed turns load collapsed so the detail rows do not mount
+    // open and then collapse, but the explicit failure header and manual
+    // disclosure still make the error discoverable.
     render(
       <TaskThreadView
         thread={{
@@ -2781,16 +2781,86 @@ describe("TaskThreadView", () => {
       />,
     );
     const disclosure = getThinkingDisclosure();
-    expect(disclosure.getAttribute("data-state")).toBe("open");
+    expect(disclosure.getAttribute("data-state")).toBe("closed");
+    expect(
+      screen.getByRole("button", { name: "Failed after 5s" }),
+    ).toBeTruthy();
     expect(screen.getByText(/^Failed after/)).toBeTruthy();
+    expect(screen.queryByText("Run failed")).toBeNull();
+    expect(screen.queryByText("Browser session timed out")).toBeNull();
+
+    openThinkingDisclosure();
     expect(screen.getByText("Run failed")).toBeTruthy();
     expect(screen.getByText("Browser session timed out")).toBeTruthy();
   });
 
-  it("defaults the turn surface closed for every non-failed status to prevent content shift", () => {
+  it("keeps a failed turn closed after the prior auto-close delay", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            title: "Failed turn",
+            lifecycleStatus: "COMPLETED",
+            messages: [{ id: "m1", role: "USER", content: "Reach the page" }],
+            turns: [
+              {
+                id: "turn-1",
+                status: "failed",
+                invocationSource: "chat_message",
+                startedAt: "2026-05-09T08:01:00Z",
+                finishedAt: "2026-05-09T08:01:05Z",
+                error: "Browser session timed out",
+              },
+            ],
+          }}
+        />,
+      );
+      const disclosure = getThinkingDisclosure();
+      expect(disclosure.getAttribute("data-state")).toBe("closed");
+
+      vi.advanceTimersByTime(1500);
+
+      expect(disclosure.getAttribute("data-state")).toBe("closed");
+      expect(screen.queryByText("Run failed")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps incomplete failed turns collapsed and failure-labeled", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Failed turn",
+          lifecycleStatus: "COMPLETED",
+          messages: [{ id: "m1", role: "USER", content: "Reach the page" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "failed",
+              invocationSource: "chat_message",
+            },
+          ],
+        }}
+      />,
+    );
+    const disclosure = getThinkingDisclosure();
+    expect(disclosure.getAttribute("data-state")).toBe("closed");
+    expect(screen.getByRole("button", { name: /^Failed/ })).toBeTruthy();
+    expect(screen.queryByText(/^Worked/)).toBeNull();
+
+    openThinkingDisclosure();
+    expect(screen.getByText("Run failed")).toBeTruthy();
+    expect(screen.getByText("No error detail was provided.")).toBeTruthy();
+  });
+
+  it("defaults the turn surface closed for every rendered status to prevent content shift", () => {
     // The user explicitly does not want streaming action rows pushing the
-    // page taller as a turn runs. Closing the surface by default keeps the
-    // viewport stable. Failed turns are the deliberate exception (open).
+    // page taller as a turn runs or after a failed turn loads. Closing the
+    // surface by default keeps the viewport stable.
     for (const status of [
       "running",
       "pending",
@@ -2798,6 +2868,7 @@ describe("TaskThreadView", () => {
       "claimed",
       "completed",
       "succeeded",
+      "failed",
       "cancelled",
       "timed_out",
     ] as const) {

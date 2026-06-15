@@ -75,13 +75,3 @@ const RUNNING_STATUSES = new Set(["running", "pending", "queued", "claimed"]);
 export function isRunningStatus(status: string | null | undefined): boolean {
   return RUNNING_STATUSES.has((status ?? "").toLowerCase().trim());
 }
-
-/**
- * Whether a non-success terminal turn should default to expanded so its
- * error is not hidden behind a collapsed "success-looking" header.
- */
-export function shouldDefaultExpand(
-  status: string | null | undefined,
-): boolean {
-  return (status ?? "").toLowerCase().trim() === "failed";
-}
