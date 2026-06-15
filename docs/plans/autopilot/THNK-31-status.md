@@ -100,6 +100,8 @@ project_context: TEI ThinkWork
   `packages/plugin-catalog/src/plugins/lastmile/`.
 - Emptying the catalog legacy migration list now that every first-party catalog
   manifest is owned by a root plugin package.
+- PR #2527 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2527`
 
 ### Verification
 
