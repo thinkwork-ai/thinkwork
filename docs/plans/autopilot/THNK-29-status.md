@@ -47,6 +47,20 @@ dispatcher: dispatcher:THNK-29:InProgress:Codex
   `08dcda665e14394ad8bc39fac034ca5597fe4016` and narrows non-Terraform source
   recovery runs to the API Lambda and API IAM Terraform targets. Full Terraform
   Apply remains the path for actual Terraform changes and manual dispatch.
+- PR #2521 merged into `main` as
+  `e468998e76dbc717b99396b3fd140d1ae8e5be85`; checks passed.
+- Follow-up deploy run `27564612118` selected the targeted API Lambda/IAM
+  recovery path for `e468998e76dbc717b99396b3fd140d1ae8e5be85`, but Terraform
+  still evaluated optional `module.www_dns[0].cloudflare_record.acm_validation`
+  resources and failed on pre-existing Cloudflare ACM validation records before
+  updating `thinkwork-dev-api-graphql-http`.
+- Third rebound refinement branch `codex/thnk-29-domainless-lambda-recovery`
+  starts from fresh `origin/main` at
+  `e468998e76dbc717b99396b3fd140d1ae8e5be85` and disables the optional
+  Cloudflare zone input only during non-Terraform targeted Lambda/IAM recovery
+  runs. The apex domain input remains set so URL derivation stays stable; full
+  Terraform Apply remains unchanged for Terraform source changes and manual
+  dispatch.
 
 ## Current Pass
 
