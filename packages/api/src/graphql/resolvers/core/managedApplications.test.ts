@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { TwentyStatusReaderDeps } from "./managedApplications.js";
+import type {
+  ManagedAppStatusReaderDeps,
+  TwentyStatusReaderDeps,
+} from "./managedApplications.js";
 
 let mod: typeof import("./managedApplications.js");
 
@@ -21,6 +24,20 @@ function twentyDeps(args: {
   };
 }
 
+function managedAppDeps(args: {
+  rows?: Partial<
+    Record<"twenty" | "plane", { desiredConfig: Record<string, unknown> }>
+  >;
+  lastSucceededOperations?: Partial<Record<"twenty" | "plane", string | null>>;
+}): ManagedAppStatusReaderDeps {
+  return {
+    getManagedApplicationRow: async (_tenantId, key = "twenty") =>
+      args.rows?.[key] ?? null,
+    getLatestSucceededJobOperation: async (_tenantId, key = "twenty") =>
+      args.lastSucceededOperations?.[key] ?? null,
+  };
+}
+
 describe("managed application status helpers", () => {
   it("normalizes known managed application aliases", () => {
     expect(mod.normalizeManagedApplicationKey("cognee")).toBe("cognee");
@@ -29,8 +46,126 @@ describe("managed application status helpers", () => {
     );
     expect(mod.normalizeManagedApplicationKey("crm")).toBe("twenty");
     expect(mod.normalizeManagedApplicationKey("twenty-crm")).toBe("twenty");
+    expect(mod.normalizeManagedApplicationKey("plane")).toBe("plane");
+    expect(mod.normalizeManagedApplicationKey("project-management")).toBe(
+      "plane",
+    );
     expect(mod.normalizeManagedApplicationKey("kestra")).toBeNull();
     expect(mod.normalizeManagedApplicationKey("unknown")).toBeNull();
+  });
+});
+
+describe("Plane status served from DB state", () => {
+  it("reports running after a succeeded ENABLE apply, with the URL from desired_config", async () => {
+    const app = await mod.readManagedApplication(
+      "plane",
+      "tenant-1",
+      managedAppDeps({
+        rows: {
+          plane: {
+            desiredConfig: { publicUrl: "https://plane.example.com" },
+          },
+        },
+        lastSucceededOperations: { plane: "ENABLE" },
+      }),
+    );
+    expect(app).toMatchObject({
+      key: "plane",
+      status: "running",
+      enabled: true,
+      provisioned: true,
+      runtimeEnabled: true,
+      url: "https://plane.example.com",
+      backendMode: "compact",
+      managedMcpInstallAvailable: true,
+    });
+  });
+
+  it("reports parked after a succeeded PARK apply", async () => {
+    const app = await mod.readManagedApplication(
+      "plane",
+      "tenant-1",
+      managedAppDeps({
+        rows: {
+          plane: {
+            desiredConfig: { publicUrl: "https://plane.example.com" },
+          },
+        },
+        lastSucceededOperations: { plane: "PARK" },
+      }),
+    );
+    expect(app).toMatchObject({
+      status: "parked",
+      enabled: false,
+      provisioned: true,
+      runtimeEnabled: false,
+      message:
+        "Plane runtime is parked; Plane data and app secrets are retained.",
+    });
+  });
+
+  it("reports disabled when no row or succeeded apply exists", async () => {
+    const noRow = await mod.readPlaneStatus(
+      "tenant-1",
+      managedAppDeps({}),
+    );
+    expect(noRow.provisioned).toBe(false);
+
+    const noSucceededApply = await mod.readManagedApplication(
+      "plane",
+      "tenant-1",
+      managedAppDeps({
+        rows: {
+          plane: {
+            desiredConfig: { publicUrl: "https://plane.example.com" },
+          },
+        },
+        lastSucceededOperations: { plane: null },
+      }),
+    );
+    expect(noSucceededApply).toMatchObject({
+      status: "disabled",
+      provisioned: false,
+      runtimeEnabled: false,
+      url: null,
+    });
+  });
+
+  it("derives the compact ECS service and log identifiers from stage + account", async () => {
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
+
+    const app = await mod.readManagedApplication(
+      "plane",
+      "tenant-1",
+      managedAppDeps({
+        rows: {
+          plane: {
+            desiredConfig: {
+              publicUrl: "https://plane.example.com",
+              s3BucketName: "custom-plane-bucket",
+            },
+          },
+        },
+        lastSucceededOperations: { plane: "ENABLE" },
+      }),
+    );
+
+    expect(app).toMatchObject({
+      key: "plane",
+      status: "running",
+      clusterArn:
+        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-plane-cluster",
+      serviceNames: ["thinkwork-dev-plane"],
+      logGroupNames: [
+        "/thinkwork/dev/plane/app",
+        "/thinkwork/dev/plane/mcp",
+        "/thinkwork/dev/plane/redis",
+        "/thinkwork/dev/plane/rabbitmq",
+      ],
+      storageBucketName: "custom-plane-bucket",
+    });
   });
 });
 
