@@ -291,7 +291,9 @@ function tenantScopedBrainInstanceKey(tenantId: string): string {
     .slice(0, 12)}`;
 }
 
-function compactRecord(value: Record<string, unknown>): Record<string, unknown> {
+function compactRecord(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => {
       if (entry === undefined || entry === null || entry === "") return false;
@@ -314,7 +316,8 @@ function planeDefaultDesiredConfig(): Record<string, unknown> {
     secretKeySecretArn: process.env.THINKWORK_PLANE_SECRET_KEY_SECRET_ARN,
     liveServerSecretKeySecretArn:
       process.env.THINKWORK_PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN,
-    aesSecretKeySecretArn: process.env.THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN,
+    aesSecretKeySecretArn:
+      process.env.THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN,
     amqpUrlSecretArn: process.env.THINKWORK_PLANE_AMQP_URL_SECRET_ARN,
     s3AccessKeyIdSecretArn:
       process.env.THINKWORK_PLANE_S3_ACCESS_KEY_ID_SECRET_ARN,
@@ -499,8 +502,8 @@ export async function provisionPluginInfraComponent(args: {
       : prior.operation === "ENABLE" || prior.operation === "UPGRADE"
         ? prior.operation
         : existing
-        ? "UPGRADE"
-        : "ENABLE";
+          ? "UPGRADE"
+          : "ENABLE";
 
   // Existing/adoption rows carry the operator-selected release. Net-new
   // provisioning intentionally passes null so the shared plan-job core can use

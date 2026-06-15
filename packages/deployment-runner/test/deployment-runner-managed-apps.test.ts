@@ -28,8 +28,7 @@ function planeDesiredConfig(extra: Record<string, unknown> = {}) {
       "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-amqp",
     s3BucketName: "thinkwork-dev-plane",
     publicUrl: "https://plane.example.com",
-    certificateArn:
-      "arn:aws:acm:us-east-1:123456789012:certificate/example",
+    certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/example",
     ...extra,
   };
 }

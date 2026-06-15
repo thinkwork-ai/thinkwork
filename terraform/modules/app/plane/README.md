@@ -58,10 +58,10 @@ workflow.
 
 ## Runtime Lifecycle
 
-| `runtime_enabled` | Compact ECS service | Retained resources |
-| ----------------- | ------------------- | ------------------ |
-| `true`            | `web_desired_count` | All resources |
-| `false`           | `0` | Database, S3, cache, RabbitMQ, secrets, logs, ALB |
+| `runtime_enabled` | Compact ECS service | Retained resources                                |
+| ----------------- | ------------------- | ------------------------------------------------- |
+| `true`            | `web_desired_count` | All resources                                     |
+| `false`           | `0`                 | Database, S3, cache, RabbitMQ, secrets, logs, ALB |
 
 Destroying retained Plane data is intentionally separate from parking. A
 destructive deployment job must inventory/drop the dedicated database, storage

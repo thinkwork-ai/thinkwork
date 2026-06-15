@@ -86,7 +86,9 @@ describe("Plane Terraform app module", () => {
     expect(source).toMatch(/resource "aws_lb" "plane"/);
     expect(source).toMatch(/internal\s*=\s*false/);
     expect(source).toMatch(/resource "aws_lb_target_group" "service"/);
-    expect(source).toMatch(/target_group_arn = aws_lb_target_group\.service\["app"\]\.arn/);
+    expect(source).toMatch(
+      /target_group_arn = aws_lb_target_group\.service\["app"\]\.arn/,
+    );
     expect(source).toMatch(/resource "aws_lb_listener" "https"/);
     expect(source).toMatch(/certificate_arn\s*=\s*var\.certificate_arn/);
     expect(source).toMatch(/resource "aws_lb_listener" "http_redirect"/);
