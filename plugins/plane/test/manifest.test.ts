@@ -5,11 +5,14 @@ import {
   type InfrastructureComponent,
   type McpServerComponent,
   type SkillsComponent,
-} from "../contracts";
-import { allPluginManifests, planeManifest } from "../plugins";
+} from "@thinkwork/plugin-catalog/contracts";
+
+import { planeManifest } from "../src/manifest";
+
+const validatedPlaneManifest = validatePluginManifest(planeManifest);
 
 function infrastructureComponent(): InfrastructureComponent {
-  const component = planeManifest.versions[0].components.find(
+  const component = validatedPlaneManifest.versions[0].components.find(
     (candidate) => candidate.type === "infrastructure",
   );
   if (component?.type !== "infrastructure") {
@@ -19,7 +22,7 @@ function infrastructureComponent(): InfrastructureComponent {
 }
 
 function skillsComponent(): SkillsComponent {
-  const component = planeManifest.versions[0].components.find(
+  const component = validatedPlaneManifest.versions[0].components.find(
     (candidate) => candidate.type === "skills",
   );
   if (component?.type !== "skills") {
@@ -29,7 +32,7 @@ function skillsComponent(): SkillsComponent {
 }
 
 function mcpComponent(): McpServerComponent {
-  const component = planeManifest.versions[0].components.find(
+  const component = validatedPlaneManifest.versions[0].components.find(
     (candidate) => candidate.type === "mcp-server",
   );
   if (component?.type !== "mcp-server") {
@@ -43,9 +46,6 @@ describe("Plane plugin manifest", () => {
     const validated = validatePluginManifest(planeManifest);
     expect(validated.pluginKey).toBe("plane");
     expect(validated.versions[0].version).toBe("0.1.0");
-    expect(
-      allPluginManifests.map((candidate) => candidate.pluginKey),
-    ).toContain("plane");
     expect(
       validated.versions[0].components.map((component) => component.type),
     ).toEqual(["mcp-server", "infrastructure", "skills"]);
@@ -127,6 +127,6 @@ describe("Plane plugin manifest", () => {
 
   it("uses header activation rather than OAuth scopes", () => {
     expect(mcpComponent().auth.mode).toBe("user-provided-headers");
-    expect(planeManifest.versions[0].requiredOauthScopes).toEqual([]);
+    expect(validatedPlaneManifest.versions[0].requiredOauthScopes).toEqual([]);
   });
 });

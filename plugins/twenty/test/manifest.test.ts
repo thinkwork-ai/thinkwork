@@ -3,17 +3,21 @@ import { describe, expect, it } from "vitest";
 import {
   PluginManifestError,
   validatePluginManifest,
+  type InfrastructureComponent,
   type McpServerComponent,
   type PluginManifest,
-} from "../contracts";
-import { allPluginManifests, twentyManifest } from "../plugins";
+} from "@thinkwork/plugin-catalog/contracts";
+
+import { twentyManifest } from "../src/manifest";
+
+const validatedTwentyManifest = validatePluginManifest(twentyManifest);
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function manifest(mutate?: (manifest: PluginManifest) => void): PluginManifest {
-  const copy = clone(twentyManifest);
+  const copy = validatePluginManifest(clone(twentyManifest));
   mutate?.(copy);
   return copy;
 }
@@ -28,13 +32,17 @@ function mcpComponent(m: PluginManifest): McpServerComponent {
   return component;
 }
 
-describe("twenty plugin manifest", () => {
-  it("is registered in the published catalog list", () => {
-    expect(
-      allPluginManifests.map((candidate) => candidate.pluginKey),
-    ).toContain("twenty");
-  });
+function infrastructureComponent(): InfrastructureComponent {
+  const component = validatedTwentyManifest.versions[0].components.find(
+    (candidate) => candidate.type === "infrastructure",
+  );
+  if (component?.type !== "infrastructure") {
+    throw new Error("twenty manifest is missing its infrastructure component");
+  }
+  return component;
+}
 
+describe("twenty plugin manifest", () => {
   it("validates: one endpointFrom mcp-server + one infrastructure component", () => {
     const validated = validatePluginManifest(twentyManifest);
     expect(validated.pluginKey).toBe("twenty");
@@ -57,10 +65,7 @@ describe("twenty plugin manifest", () => {
   });
 
   it("declares the infrastructure component against the twenty adapter key", () => {
-    const infra = twentyManifest.versions[0].components.find(
-      (component) => component.type === "infrastructure",
-    );
-    if (infra?.type !== "infrastructure") throw new Error("missing infra");
+    const infra = infrastructureComponent();
     expect(infra.managedAppKey).toBe("twenty");
     expect(Object.keys(infra.terraformInputs).sort()).toEqual([
       "certificateArn",
@@ -138,7 +143,7 @@ describe("twenty plugin manifest", () => {
   });
 
   it("allows empty requiredOauthScopes for a per-instance-only manifest", () => {
-    expect(twentyManifest.versions[0].requiredOauthScopes).toEqual([]);
+    expect(validatedTwentyManifest.versions[0].requiredOauthScopes).toEqual([]);
     expect(() => validatePluginManifest(twentyManifest)).not.toThrow();
   });
 });

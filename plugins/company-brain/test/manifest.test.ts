@@ -3,16 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   validatePluginManifest,
   type InfrastructureComponent,
-} from "../contracts";
-import { allPluginManifests, companyBrainManifest } from "../plugins";
+} from "@thinkwork/plugin-catalog/contracts";
+
+import { companyBrainManifest } from "../src/manifest";
 
 describe("Company Brain plugin manifest", () => {
-  it("is registered in the published catalog list", () => {
-    expect(
-      allPluginManifests.map((candidate) => candidate.pluginKey),
-    ).toContain("company-brain");
-  });
-
   it("validates as a premium infrastructure-only plugin", () => {
     const validated = validatePluginManifest(companyBrainManifest);
     expect(validated.pluginKey).toBe("company-brain");
