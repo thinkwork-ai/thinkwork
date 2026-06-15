@@ -23,8 +23,11 @@
 
 ## Planned Repo Changes
 
-- `packages/plugin-catalog/src/plugins/<plugin-key>/manifest.ts`
-- `packages/plugin-catalog/src/plugins/<plugin-key>/index.ts`
+- `plugins/<plugin-key>/package.json`
+- `plugins/<plugin-key>/tsconfig.json`
+- `plugins/<plugin-key>/README.md`
+- `plugins/<plugin-key>/src/index.ts`
+- `plugins/<plugin-key>/src/manifest.ts`
 - `packages/plugin-catalog/src/plugins/index.ts`
 - `packages/plugin-catalog/src/__tests__/<plugin-key>-manifest.test.ts`
 - Adapter follow-up paths if required:

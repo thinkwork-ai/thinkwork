@@ -72,14 +72,46 @@ describe("scan-plugin-builder-output", () => {
         join(dir, "publication-checklist.md"),
         "# Publication Checklist\n\n- [x] Secret exclusion reviewed.\n",
       );
-      await writeFile(
-        join(dir, "manifest.ts"),
-        'export const manifest = { pluginKey: "mcpherson-lakehouse", versions: [{ components: [{ type: "infrastructure", managedAppKey: "twenty" }] }] };\n',
-      );
+      await writePluginPackage(dir, {
+        pluginKey: "mcpherson-lakehouse",
+        managedAppKey: "twenty",
+      });
 
       const result = runScanner(dir);
       assert.equal(result.status, 0, result.stderr);
       assert.equal(JSON.parse(result.stdout).blockingCount, 0);
+    });
+  });
+
+  it("blocks legacy catalog plugin paths and incomplete package output", async () => {
+    await withTempDir(async (dir) => {
+      await writeFile(join(dir, "contribution-plan.md"), "# Plan\n");
+      await writeFile(join(dir, "publication-checklist.md"), "# Checklist\n");
+      await mkdir(
+        join(dir, "packages/plugin-catalog/src/plugins/mcpherson-lakehouse"),
+        { recursive: true },
+      );
+      await writeFile(
+        join(
+          dir,
+          "packages/plugin-catalog/src/plugins/mcpherson-lakehouse/manifest.ts",
+        ),
+        'export const manifest = { pluginKey: "mcpherson-lakehouse" };\n',
+      );
+
+      const result = runScanner(dir);
+      const parsed = JSON.parse(result.stdout);
+      assert.equal(result.status, 1);
+      assert.ok(
+        parsed.findings.some(
+          (finding) => finding.code === "legacy-catalog-plugin-path",
+        ),
+      );
+      assert.ok(
+        parsed.findings.some(
+          (finding) => finding.code === "missing-plugin-package-root",
+        ),
+      );
     });
   });
 
@@ -116,10 +148,10 @@ describe("scan-plugin-builder-output", () => {
     await withTempDir(async (dir) => {
       await writeFile(join(dir, "contribution-plan.md"), "# Plan\n");
       await writeFile(join(dir, "publication-checklist.md"), "# Checklist\n");
-      await writeFile(
-        join(dir, "manifest.ts"),
-        'export const manifest = { pluginKey: "mcpherson-lakehouse", versions: [{ components: [{ type: "infrastructure", managedAppKey: "lakehouse" }] }] };\n',
-      );
+      await writePluginPackage(dir, {
+        pluginKey: "mcpherson-lakehouse",
+        managedAppKey: "lakehouse",
+      });
 
       const blocked = runScanner(dir);
       assert.equal(blocked.status, 1);
@@ -141,6 +173,56 @@ describe("scan-plugin-builder-output", () => {
     });
   });
 });
+
+async function writePluginPackage(dir, { pluginKey, managedAppKey }) {
+  const root = join(dir, "plugins", pluginKey);
+  const manifestName = `${camelPluginKey(pluginKey)}Manifest`;
+  const packageExportName = `${camelPluginKey(pluginKey)}PluginPackage`;
+  await mkdir(join(root, "src"), { recursive: true });
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify(
+      {
+        name: `@thinkwork/plugin-${pluginKey}`,
+        version: "0.0.0",
+        private: true,
+        type: "module",
+        main: "./src/index.ts",
+        exports: {
+          ".": "./src/index.ts",
+          "./manifest": "./src/manifest.ts",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    join(root, "tsconfig.json"),
+    '{ "extends": "../../tsconfig.base.json", "include": ["./**/*.ts"] }\n',
+  );
+  await writeFile(join(root, "README.md"), `# ${pluginKey} Plugin\n`);
+  await writeFile(
+    join(root, "src/index.ts"),
+    [
+      `import { ${manifestName} } from "./manifest";`,
+      "",
+      `export const ${packageExportName} = {`,
+      `  packageKey: "${pluginKey}",`,
+      `  sourceRoot: "plugins/${pluginKey}",`,
+      `  manifest: ${manifestName},`,
+      "} as const;",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(root, "src/manifest.ts"),
+    `export const ${manifestName} = { pluginKey: "${pluginKey}", versions: [{ components: [{ type: "infrastructure", managedAppKey: "${managedAppKey}" }] }] };\n`,
+  );
+}
+
+function camelPluginKey(pluginKey) {
+  return pluginKey.replace(/-([a-z0-9])/g, (_, char) => char.toUpperCase());
+}
 
 async function withTempDir(fn) {
   const dir = await mkdtemp(join(tmpdir(), "plugin-builder-skill-"));

@@ -2,8 +2,13 @@
 
 ## Manifest and Catalog
 
+- [ ] Plugin source lives under `plugins/<plugin-key>/`.
+- [ ] `package.json` exposes `@thinkwork/plugin-<plugin-key>`.
+- [ ] `src/index.ts` exports a package descriptor with matching `packageKey`,
+      `sourceRoot`, and manifest.
 - [ ] Manifest validates with `validatePluginManifest`.
-- [ ] Manifest is registered in `packages/plugin-catalog/src/plugins/index.ts`.
+- [ ] Package descriptor is registered in
+      `packages/plugin-catalog/src/plugins/index.ts`.
 - [ ] Manifest-specific tests pass.
 - [ ] Catalog build/sign verification is run or documented for maintainer handoff.
 
