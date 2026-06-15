@@ -200,7 +200,7 @@ variable "cpu_architecture" {
 variable "web_container_port" {
   description = "Plane AIO container port exposed through the public ALB"
   type        = number
-  default     = 80
+  default     = 8080
 }
 
 variable "api_container_port" {
