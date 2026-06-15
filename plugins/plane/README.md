@@ -1,0 +1,16 @@
+# Plane Plugin
+
+Plane is the first THNK-31 proof plugin for the root-level `plugins/<plugin-key>/`
+package contract.
+
+## Package Contract
+
+- `package.json` exposes `@thinkwork/plugin-plane`.
+- `src/index.ts` exports `planePluginPackage`, a validated
+  `FirstPartyPluginPackage`.
+- `src/manifest.ts` owns the Plane catalog manifest.
+
+This package currently owns the catalog manifest while existing Plane
+deployment adapter, Terraform, smoke, and parity test source remains in legacy
+shared locations until the next migration units move them behind the same
+plugin boundary.
