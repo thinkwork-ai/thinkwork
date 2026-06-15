@@ -630,6 +630,8 @@ def validate_managed_app_plan_scope(payload, plan_json):
             continue
         if address.startswith("module.thinkwork.terraform_data.plane_configuration_guardrails"):
             continue
+        if address.startswith("cloudflare_record.plane"):
+            continue
         unsafe_changes.append(
             {
                 "address": address,

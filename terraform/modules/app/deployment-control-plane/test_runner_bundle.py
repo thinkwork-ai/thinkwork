@@ -1080,6 +1080,39 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
     )
 
 
+def test_validate_managed_app_plan_scope_allows_plane_dns_record() -> None:
+    runner = load_runner()
+
+    runner.validate_managed_app_plan_scope(
+        {"appKey": "plane"},
+        {
+            "resource_changes": [
+                {
+                    "address": "cloudflare_record.plane[0]",
+                    "change": {"actions": ["create"]},
+                }
+            ]
+        },
+    )
+
+
+def test_validate_managed_app_plan_scope_rejects_other_dns_records() -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="cloudflare_record.app"):
+        runner.validate_managed_app_plan_scope(
+            {"appKey": "plane"},
+            {
+                "resource_changes": [
+                    {
+                        "address": "cloudflare_record.app[0]",
+                        "change": {"actions": ["create"]},
+                    }
+                ]
+            },
+        )
+
+
 def test_configure_cloudflare_provider_auth_reads_stage_ssm_without_tfvars(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
