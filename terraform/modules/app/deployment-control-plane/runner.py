@@ -549,6 +549,17 @@ def is_managed_app_operation(payload):
     return bool(payload.get("appKey"))
 
 
+def configure_managed_app_evidence_prefix(payload):
+    if not is_managed_app_operation(payload):
+        return
+    os.environ["THINKWORK_MANAGED_APP_OPERATION"] = "true"
+    evidence = payload.get("evidence")
+    if isinstance(evidence, dict):
+        prefix = evidence.get("prefix")
+        if isinstance(prefix, str) and prefix:
+            os.environ["THINKWORK_EVIDENCE_PREFIX"] = prefix
+
+
 def validate_managed_app_plan_scope(payload, plan_json):
     if payload.get("appKey") != "plane":
         return
@@ -3017,6 +3028,8 @@ def write_deployment_status_pointer(status, vars_json=None, terraform_exit_code=
     write must never change the deploy result."""
     bucket = os.environ.get("THINKWORK_EVIDENCE_BUCKET")
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION")
+    if os.environ.get("THINKWORK_MANAGED_APP_OPERATION") == "true":
+        return
     if not bucket or action not in {"deploy", "update"}:
         return
     vars_json = vars_json or {}
@@ -3158,6 +3171,7 @@ def main():
     if action not in {"deploy", "update", "destroy", "plan", "status"}:
         raise RuntimeError(f"Unsupported deployment action: {action}")
     os.environ["THINKWORK_DEPLOYMENT_ACTION"] = action
+    configure_managed_app_evidence_prefix(payload)
 
     if action == "status":
         CONTROLLER_EVIDENCE = {
@@ -3240,7 +3254,11 @@ def main():
             )
 
     outputs_path = TF / "outputs.json"
-    if result.returncode == 0 and action in {"deploy", "update"}:
+    if (
+        result.returncode == 0
+        and action in {"deploy", "update"}
+        and not is_managed_app_operation(payload)
+    ):
         outputs_path.write_text(output(["terraform", "output", "-json"], cwd=TF), encoding="utf-8")
         TERRAFORM_EVIDENCE["outputs"] = {
             "fileName": "terraform-outputs.json",
