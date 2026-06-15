@@ -296,6 +296,14 @@ input AddTenantMemberInput {
   idempotencyKey: String
 }
 
+input AddManualUserInput {
+  email: String!
+  name: String
+  role: String
+  "Required per-submit idempotency key. Reuse the same value only when retrying the same submit."
+  idempotencyKey: String!
+}
+
 input UpdateTenantMemberInput {
   role: String
   status: String
@@ -415,6 +423,7 @@ extend type Mutation {
     key: String!
   ): ManagedApplicationMcpRegistration!
   addTenantMember(tenantId: ID!, input: AddTenantMemberInput!): TenantMember!
+  addManualUser(tenantId: ID!, input: AddManualUserInput!): TenantMember!
   updateTenantMember(id: ID!, input: UpdateTenantMemberInput!): TenantMember!
   "Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey."
   removeTenantMember(id: ID!, idempotencyKey: String): Boolean!

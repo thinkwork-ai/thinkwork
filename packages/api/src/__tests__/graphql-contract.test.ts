@@ -517,6 +517,31 @@ describe("GraphQL Schema Contract", () => {
       ]);
       expect(coreMutations.resendMemberInvite).toEqual(expect.any(Function));
     });
+
+    it("exposes manual user setup separately from email invite delivery", () => {
+      const mutation = schema.getMutationType() as any;
+      const input = schema.getType("AddManualUserInput") as any;
+
+      expect(mutation.getFields().addManualUser.type.toString()).toBe(
+        "TenantMember!",
+      );
+      expect(
+        mutation
+          .getFields()
+          .addManualUser.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([
+        ["tenantId", "ID!"],
+        ["input", "AddManualUserInput!"],
+      ]);
+      expect(input.getFields().email.type.toString()).toBe("String!");
+      expect(input.getFields().name.type.toString()).toBe("String");
+      expect(input.getFields().role.type.toString()).toBe("String");
+      expect(input.getFields().idempotencyKey.type.toString()).toBe("String!");
+      expect(coreMutations.addManualUser).toEqual(expect.any(Function));
+    });
   });
 
   describe("v1 Subscription surface", () => {
