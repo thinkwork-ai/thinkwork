@@ -36,7 +36,7 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
     resolver, generated client types, and regression tests from
     `4dcfccf4f fix: add dedicated member invite resend flow`.
   - U3 targeted tests passed during PR #2511 verification.
-- U4 Settings Users UI slice in progress:
+- U4 Settings Users UI slice merged:
   - Branch: `codex/thnk-29-settings-users-ui` from fresh `origin/main` at
     `8cfac030a2c1361a3558245cb00e4f5db8f86496`.
   - Split the Users action area into distinct Add user and Send invite buttons.
@@ -50,6 +50,21 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
     navigation to `/settings/users` redirected to sign-in, so authenticated
     Users-surface screenshot verification remains blocked until a local browser
     session has valid Cognito tokens.
+  - PR #2513 merged into `main` as
+    `c65071265aa674d374d904b139a4bcd5394968ca`.
+- U5 login reset UI slice in progress:
+  - Branch: `codex/thnk-29-login-password-reset` from fresh `origin/main` at
+    `c65071265aa674d374d904b139a4bcd5394968ca`.
+  - Added a Reset password path inside the web email/password sign-in form when
+    password sign-in is configured.
+  - Reset request calls Cognito `forgotPassword` with neutral account-existence
+    copy for unknown or ineligible users while surfacing configuration,
+    delivery, and rate-limit failures.
+  - Reset confirmation calls Cognito `confirmForgotPassword`, validates matching
+    passwords locally, maps invalid/expired code and password-policy failures,
+    and returns to sign-in with success guidance.
+  - Expired temporary-password sign-in copy now directs users to Reset password
+    instead of asking an operator to handle credentials.
 
 ## Verification Notes
 
@@ -70,3 +85,16 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
     `format` script references `prettier` without declaring it as a root
     dependency in this worktree install.
   - `terraform fmt -check terraform/modules/app/lambda-api/iam-grouped.tf`
+- Local checks for the U4 Settings Users UI slice:
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUsers.test.tsx src/components/settings/SettingsUserDetail.test.tsx`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - Direct Prettier check for touched files
+  - `git diff --check`
+- Local checks for the U5 login reset UI slice:
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/auth/EmailPasswordForm.test.tsx src/routes/-sign-in.test.tsx`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - Direct Prettier check for touched files
+  - `git diff --check`
+  - Browser smoke: started Vite at `http://127.0.0.1:5180/sign-in`, confirmed
+    the login heading, Reset password action, reset request step, and enabled
+    Send reset code state after entering an email.
