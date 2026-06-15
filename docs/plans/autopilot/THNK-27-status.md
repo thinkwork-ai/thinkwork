@@ -6,9 +6,9 @@ Issue: THNK-27 Add Plane Plugin
 
 - Linear state: `In Progress`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-issue-loop-skill`.
-- Active unit: U6 Plane Issue-Loop Skill.
-- U5 merged via PR #2492.
+- Active branch: `codex/thnk-27-plane-smoke`.
+- Active unit: U7 Plane Seed and End-to-End Smoke.
+- U6 merged via PR #2493.
 
 ## Context Discovered
 
@@ -32,7 +32,7 @@ Issue: THNK-27 Add Plane Plugin
 - [x] U4 Plane Terraform Runtime Module
 - [x] U5 Per-User Plane MCP Activation
 - [x] U6 Plane Issue-Loop Skill
-- [ ] U7 Plane Seed and End-to-End Smoke
+- [x] U7 Plane Seed and End-to-End Smoke
 - [ ] U8 Release Packaging and Controller Wiring
 - [ ] U9 Docs, Rollout, and Operator Copy
 
@@ -54,7 +54,9 @@ Issue: THNK-27 Add Plane Plugin
   `https://github.com/thinkwork-ai/thinkwork/pull/2492` merged at
   `5920aa8b1fc9273a27ef978439783b096176884f`.
 - U6 Plane Issue-Loop Skill:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2493` opened; CI pending.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2493` merged at
+  `393f257c1a1546d5eabc843f08c4c19af8c2ee88`.
+- Pending: U7 branch `codex/thnk-27-plane-smoke`.
 
 ## Verification Log
 
@@ -119,6 +121,23 @@ plane-manifest.test.ts` passed.
 - U6: `git diff --check` passed.
 - U6: Browser verification not applicable; this unit only updates bundled
   plugin skill prompt content.
+- U6: PR #2493 CI passed (`cla`, `lint`, `verify`, `typecheck`, `test`) and
+  was squash-merged.
+- U7: `node --check scripts/smoke/plane-managed-app-smoke.mjs && node --check
+scripts/smoke/plane-mcp-smoke.mjs` passed.
+- U7: `COMPUTER_ENV_FILE=none node scripts/smoke/plane-managed-app-smoke.mjs &&
+COMPUTER_ENV_FILE=none node scripts/smoke/plane-mcp-smoke.mjs` passed dry-run
+  mode.
+- U7: `COMPUTER_ENV_FILE=none SMOKE_ENABLE_PLANE_MANAGED_APP=1
+SMOKE_PLANE_URL=http://example.com node scripts/smoke/plane-managed-app-smoke.mjs`
+  failed as expected with the HTTPS guard.
+- U7: `COMPUTER_ENV_FILE=none SMOKE_ENABLE_PLANE_MCP=1 node
+scripts/smoke/plane-mcp-smoke.mjs` failed as expected with the missing Plane MCP
+  credential/env guard.
+- U7: `pnpm --filter @thinkwork/deployment-runner test --
+deployment-runner-managed-apps.test.ts` passed.
+- U7: `pnpm --filter @thinkwork/deployment-runner typecheck` passed.
+- U7: `git diff --check` passed.
 
 ## Decisions
 
@@ -142,3 +161,8 @@ plane-manifest.test.ts` passed.
 - U6 expands the bundled `plane--issue-loop` skill in the Plane manifest rather
   than creating a second skill source path; plugin skills currently seed from
   manifest `skillMd` strings.
+- U7 adds two live-gated smoke scripts: a read-only Plane managed-app health
+  smoke for deployment controller evidence and a Plane MCP seed/write smoke
+  with direct Plane MCP and optional ThinkWork proxy modes. The MCP write path
+  requires `SMOKE_PLANE_MCP_WRITE=1` so dry-run and read checks cannot mutate
+  Plane accidentally.

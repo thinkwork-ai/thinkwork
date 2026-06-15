@@ -144,6 +144,61 @@ describe("managed app deployment adapters", () => {
     ).toThrow(/bedrockModelResourceArns|imageUri|dbPasswordSecretArn/);
   });
 
+  it("maps Plane deploy config into Terraform variables and smoke evidence", () => {
+    const summary = buildPlanSummary({
+      evidenceBucket: "evidence-bucket",
+      input: {
+        phase: "plan",
+        tenantId: "tenant-1",
+        jobId: "job-plane-1",
+        appKey: "plane",
+        operation: "ENABLE",
+        releaseVersion: "1.2.3",
+        manifestDigest: digest,
+        desiredConfigVersion: "v1",
+        desiredConfig: {
+          imageUri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+          dbUrlSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-db",
+          secretKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-secret",
+          liveServerSecretKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
+          aesSecretKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
+          amqpUrlSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-amqp",
+          s3AccessKeyIdSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-access",
+          s3SecretAccessKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-secret",
+          s3BucketName: "thinkwork-plane-files",
+          publicUrl: "https://plane.example.com",
+          certificateArn:
+            "arn:aws:acm:us-east-1:123456789012:certificate/plane",
+        },
+      },
+    });
+
+    expect(summary.displayName).toBe("Plane");
+    expect(summary.terraformVariables).toEqual(
+      expect.objectContaining({
+        plane_provisioned: true,
+        plane_runtime_enabled: true,
+        plane_image_uri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+        plane_public_url: "https://plane.example.com",
+        plane_s3_bucket_name: "thinkwork-plane-files",
+      }),
+    );
+    expect(summary.smokeContracts).toContainEqual(
+      expect.objectContaining({
+        command: "scripts/smoke/plane-managed-app-smoke.mjs",
+      }),
+    );
+    expect(summary.statusOutputs).toContain("plane_url");
+    expect(summary.statusOutputs).toContain("plane_rabbitmq_broker_arn");
+  });
+
   it("hydrates managed app images from the verified release manifest contract", () => {
     const baseInput = {
       phase: "plan" as const,
