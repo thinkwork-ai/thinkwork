@@ -4,7 +4,7 @@ import { Command } from "commander";
 import { registerMemberCommand } from "../src/commands/member.js";
 
 describe("member command registration", () => {
-  it("registers `member` with list, invite, update, remove", () => {
+  it("registers `member` with list, invite, resend, update, remove", () => {
     const program = new Command();
     registerMemberCommand(program);
 
@@ -14,7 +14,7 @@ describe("member command registration", () => {
 
     const subNames = mem!.commands.map((c) => c.name());
     expect(subNames).toEqual(
-      expect.arrayContaining(["list", "invite", "update", "remove"]),
+      expect.arrayContaining(["list", "invite", "resend", "update", "remove"]),
     );
   });
 
@@ -38,6 +38,17 @@ describe("member command registration", () => {
     const roleOpt = invite.options.find((o) => o.long === "--role");
     expect(roleOpt?.defaultValue).toBe("member");
     expect(invite.helpInformation()).toMatch(/--name/);
+  });
+
+  it("member resend carries tenant targeting options", () => {
+    const program = new Command();
+    registerMemberCommand(program);
+    const resend = program.commands
+      .find((c) => c.name() === "member")!
+      .commands.find((c) => c.name() === "resend")!;
+    const help = resend.helpInformation();
+    expect(help).toMatch(/--stage/);
+    expect(help).toMatch(/--tenant/);
   });
 
   it("member remove carries --yes (destructive verb)", () => {

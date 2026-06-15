@@ -65,8 +65,9 @@ type Documents = {
     "\n  mutation CliLabelDelete($id: ID!) {\n    deleteThreadLabel(id: $id)\n  }\n": typeof types.CliLabelDeleteDocument,
     "\n  query CliLabelTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliLabelTenantBySlugDocument,
     "\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n": typeof types.CliMeDocument,
-    "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      createdAt\n    }\n  }\n": typeof types.CliTenantMembersDocument,
+    "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      cognitoStatus\n      createdAt\n    }\n  }\n": typeof types.CliTenantMembersDocument,
     "\n  mutation CliInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalId\n      role\n      status\n    }\n  }\n": typeof types.CliInviteMemberDocument,
+    "\n  mutation CliResendMemberInvite(\n    $tenantId: ID!\n    $input: ResendMemberInviteInput!\n  ) {\n    resendMemberInvite(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n": typeof types.CliResendMemberInviteDocument,
     "\n  mutation CliUpdateTenantMember($id: ID!, $input: UpdateTenantMemberInput!) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n    }\n  }\n": typeof types.CliUpdateTenantMemberDocument,
     "\n  mutation CliRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n": typeof types.CliRemoveTenantMemberDocument,
     "\n  query CliMemberTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliMemberTenantBySlugDocument,
@@ -204,8 +205,9 @@ const documents: Documents = {
     "\n  mutation CliLabelDelete($id: ID!) {\n    deleteThreadLabel(id: $id)\n  }\n": types.CliLabelDeleteDocument,
     "\n  query CliLabelTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliLabelTenantBySlugDocument,
     "\n  query CliMe {\n    me {\n      id\n      email\n      name\n      tenantId\n    }\n  }\n": types.CliMeDocument,
-    "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      createdAt\n    }\n  }\n": types.CliTenantMembersDocument,
+    "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      cognitoStatus\n      createdAt\n    }\n  }\n": types.CliTenantMembersDocument,
     "\n  mutation CliInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalId\n      role\n      status\n    }\n  }\n": types.CliInviteMemberDocument,
+    "\n  mutation CliResendMemberInvite(\n    $tenantId: ID!\n    $input: ResendMemberInviteInput!\n  ) {\n    resendMemberInvite(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n": types.CliResendMemberInviteDocument,
     "\n  mutation CliUpdateTenantMember($id: ID!, $input: UpdateTenantMemberInput!) {\n    updateTenantMember(id: $id, input: $input) {\n      id\n      role\n      status\n    }\n  }\n": types.CliUpdateTenantMemberDocument,
     "\n  mutation CliRemoveTenantMember($id: ID!) {\n    removeTenantMember(id: $id)\n  }\n": types.CliRemoveTenantMemberDocument,
     "\n  query CliMemberTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": types.CliMemberTenantBySlugDocument,
@@ -513,11 +515,15 @@ export function graphql(source: "\n  query CliMe {\n    me {\n      id\n      em
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      createdAt\n    }\n  }\n"];
+export function graphql(source: "\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      cognitoStatus\n      createdAt\n    }\n  }\n"): (typeof documents)["\n  query CliTenantMembers($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      id\n      tenantId\n      principalType\n      principalId\n      role\n      status\n      cognitoStatus\n      createdAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation CliInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalId\n      role\n      status\n    }\n  }\n"): (typeof documents)["\n  mutation CliInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalId\n      role\n      status\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CliResendMemberInvite(\n    $tenantId: ID!\n    $input: ResendMemberInviteInput!\n  ) {\n    resendMemberInvite(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n"): (typeof documents)["\n  mutation CliResendMemberInvite(\n    $tenantId: ID!\n    $input: ResendMemberInviteInput!\n  ) {\n    resendMemberInvite(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

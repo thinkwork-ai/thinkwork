@@ -367,6 +367,23 @@ input InviteMemberInput {
   idempotencyKey: String
 }
 
+input ResendMemberInviteInput {
+  memberId: ID!
+  "Required per-click idempotency key. Reuse the same value only when retrying the same click."
+  idempotencyKey: String!
+}
+
+enum ResendMemberInviteStatus {
+  RESENT
+  NOT_PENDING
+  DELIVERY_FAILED
+}
+
+type ResendMemberInviteResult {
+  status: ResendMemberInviteStatus!
+  message: String!
+}
+
 type BootstrapResult {
   user: User!
   tenant: Tenant!
@@ -402,6 +419,10 @@ extend type Mutation {
   "Remove a tenant member. idempotencyKey optional — see UpdateTenantInput.idempotencyKey."
   removeTenantMember(id: ID!, idempotencyKey: String): Boolean!
   inviteMember(tenantId: ID!, input: InviteMemberInput!): TenantMember!
+  resendMemberInvite(
+    tenantId: ID!
+    input: ResendMemberInviteInput!
+  ): ResendMemberInviteResult!
   updateUser(id: ID!, input: UpdateUserInput!): User!
   updateUserProfile(userId: ID!, input: UpdateUserProfileInput!): UserProfile!
   registerPushToken(input: RegisterPushTokenInput!): Boolean!

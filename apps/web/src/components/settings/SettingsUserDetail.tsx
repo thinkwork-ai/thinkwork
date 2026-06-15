@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { CheckIcon, CopyIcon, MailIcon, Trash2Icon } from "lucide-react";
@@ -28,8 +28,8 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsDeleteBudgetPolicyMutation,
-  SettingsInviteMemberMutation,
   SettingsRemoveTenantMemberMutation,
+  SettingsResendMemberInviteMutation,
   SettingsUserBudgetStatusQuery,
   SettingsTenantMembersQuery,
   SettingsUpsertBudgetPolicyMutation,
@@ -120,9 +120,7 @@ export function SettingsUserDetail() {
           canResendInvite ? (
             <ResendInviteButton
               tenantId={tenantId ?? ""}
-              email={user.email ?? ""}
-              name={user.name ?? ""}
-              role={member.role}
+              memberId={member.id}
             />
           ) : null
         }
@@ -199,39 +197,63 @@ function formatBudgetLimit(limitUsd: number | null | undefined): string {
 
 function ResendInviteButton({
   tenantId,
-  email,
-  name,
-  role,
+  memberId,
 }: {
   tenantId: string;
-  email: string;
-  name: string;
-  role: string;
+  memberId: string;
 }) {
-  const [{ fetching }, inviteMember] = useMutation(
-    SettingsInviteMemberMutation,
+  const [{ fetching }, resendMemberInvite] = useMutation(
+    SettingsResendMemberInviteMutation,
   );
+  const inFlightRef = useRef(false);
+  const [isResendInFlight, setIsResendInFlight] = useState(false);
+  const [notPending, setNotPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  async function onResendInvite() {
-    if (!tenantId || !email) return;
+  useEffect(() => {
+    inFlightRef.current = false;
+    setIsResendInFlight(false);
+    setNotPending(false);
     setMessage(null);
     setErrorMsg(null);
-    const result = await inviteMember({
-      tenantId,
-      input: {
-        email,
-        name: name || undefined,
-        role,
-      },
-    });
-    if (result.error) {
-      setErrorMsg(result.error.message);
-      return;
+  }, [memberId]);
+
+  async function onResendInvite() {
+    if (!tenantId || !memberId || inFlightRef.current || notPending) return;
+    inFlightRef.current = true;
+    setIsResendInFlight(true);
+    setMessage(null);
+    setErrorMsg(null);
+    try {
+      const result = await resendMemberInvite({
+        tenantId,
+        input: {
+          memberId,
+          idempotencyKey: createResendInviteIdempotencyKey(memberId),
+        },
+      });
+      if (result.error) {
+        setErrorMsg(result.error.message);
+        return;
+      }
+      const resend = result.data?.resendMemberInvite;
+      if (resend?.status === "RESENT") {
+        setMessage("Invite resent");
+        return;
+      }
+      if (resend?.status === "NOT_PENDING") {
+        setNotPending(true);
+      }
+      setErrorMsg(resend?.message ?? "Invite resend did not complete.");
+    } finally {
+      inFlightRef.current = false;
+      setIsResendInFlight(false);
     }
-    setMessage("Invite resent");
   }
+
+  const disabled =
+    fetching || isResendInFlight || notPending || !tenantId || !memberId;
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -240,11 +262,11 @@ function ResendInviteButton({
         variant="outline"
         size="sm"
         className="gap-1.5"
-        disabled={fetching || !tenantId || !email}
+        disabled={disabled}
         onClick={() => void onResendInvite()}
       >
         <MailIcon className="size-3.5" />
-        {fetching ? "Sending..." : "Resend invite"}
+        {fetching || isResendInFlight ? "Sending..." : "Resend invite"}
       </Button>
       {message ? (
         <span className="text-xs text-muted-foreground">{message}</span>
@@ -255,6 +277,10 @@ function ResendInviteButton({
       ) : null}
     </div>
   );
+}
+
+function createResendInviteIdempotencyKey(memberId: string): string {
+  return `resend-member-invite:${memberId}:${crypto.randomUUID()}`;
 }
 
 export type Profile = {

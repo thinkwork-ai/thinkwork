@@ -1390,6 +1390,18 @@ export const SettingsInviteMemberMutation = graphql(`
   }
 `);
 
+export const SettingsResendMemberInviteMutation = graphql(`
+  mutation SettingsResendMemberInvite(
+    $tenantId: ID!
+    $input: ResendMemberInviteInput!
+  ) {
+    resendMemberInvite(tenantId: $tenantId, input: $input) {
+      status
+      message
+    }
+  }
+`);
+
 // ─── Analytics (usage cost, operator-only) ───────────────────────────────
 
 export const SettingsCostSummaryQuery = graphql(`
