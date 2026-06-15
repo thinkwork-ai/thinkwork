@@ -210,14 +210,14 @@ SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
 After Plane is healthy and a user has activated the plugin, run:
 
 ```sh
-node scripts/smoke/plane-mcp-smoke.mjs
+node plugins/plane/smoke/plane-mcp-smoke.mjs
 
 SMOKE_ENABLE_PLANE_MCP=1 \
   SMOKE_PLANE_MCP_WRITE=1 \
   SMOKE_PLANE_MCP_URL=https://plane.example.com/mcp \
   SMOKE_PLANE_API_KEY=<plane-pat> \
   SMOKE_PLANE_WORKSPACE_SLUG=<workspace-slug> \
-  node scripts/smoke/plane-mcp-smoke.mjs
+  node plugins/plane/smoke/plane-mcp-smoke.mjs
 ```
 
 Use `SMOKE_PLANE_THINKWORK_PROXY=1` with an activated Cognito user token to

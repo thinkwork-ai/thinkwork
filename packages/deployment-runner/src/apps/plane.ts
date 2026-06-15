@@ -15,7 +15,7 @@ import {
 const smokeContracts = [
   {
     id: "plane-runtime-health",
-    command: "scripts/smoke/plane-managed-app-smoke.mjs",
+    command: "plugins/plane/smoke/plane-managed-app-smoke.mjs",
     required: true,
   },
 ] as const;
