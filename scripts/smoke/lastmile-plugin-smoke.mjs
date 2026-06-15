@@ -60,7 +60,7 @@ const CALL_ENABLED = process.env.SMOKE_LASTMILE_MCP_CALL === "1";
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 20_000);
 
 // Expected LastMile contract — MUST stay in sync with
-// packages/plugin-catalog/src/plugins/lastmile/manifest.ts and
+// plugins/lastmile/src/manifest.ts and
 // .../lastmile/discovery.fixture.ts (the unit test pins manifest↔fixture;
 // this smoke pins fixture↔live).
 const PLUGIN_KEY = "lastmile";

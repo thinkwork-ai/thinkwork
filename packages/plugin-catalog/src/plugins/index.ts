@@ -1,4 +1,3 @@
-import type { PluginManifest } from "../contracts";
 import { defineFirstPartyPluginPackage } from "../plugin-package";
 import { companyBrainPluginPackage as rawCompanyBrainPluginPackage } from "@thinkwork/plugin-company-brain";
 import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/plugin-lastmile";
@@ -36,16 +35,8 @@ export const firstPartyPluginPackages = [
 ] as const;
 
 /**
- * Temporary migration bridge for manifests that still live in the legacy
- * plugin-catalog tree. Empty once the first-party catalog manifests have moved;
- * keep the export until downstream checks no longer reference it.
- */
-export const legacyPluginManifestsDuringMigration = [] as const;
-
-/**
  * Every repo-authored manifest published to the catalog.
  */
-export const allPluginManifests: readonly PluginManifest[] = [
-  ...firstPartyPluginPackages.map((pluginPackage) => pluginPackage.manifest),
-  ...legacyPluginManifestsDuringMigration,
-].sort((a, b) => a.pluginKey.localeCompare(b.pluginKey));
+export const allPluginManifests = firstPartyPluginPackages
+  .map((pluginPackage) => pluginPackage.manifest)
+  .sort((a, b) => a.pluginKey.localeCompare(b.pluginKey));
