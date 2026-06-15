@@ -243,6 +243,8 @@ project_context: TEI ThinkWork
   infrastructure component resolves through the managed-app adapter registry.
 - Shrinking the plugin source boundary allowlist by removing the Plane and
   Twenty API manifest parity test entries.
+- PR #2534 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2534`
 
 ### Verification
 
