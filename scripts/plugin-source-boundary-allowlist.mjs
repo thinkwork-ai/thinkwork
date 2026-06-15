@@ -66,20 +66,12 @@ export const pluginSourceBoundaryAllowlist = [
     reason: "legacy LastMile adapter until API extension points move",
   },
   {
-    path: "packages/api/src/lib/plugins/plane-manifest-parity.test.ts",
-    reason: "legacy Plane parity test until plugin package tests own parity",
-  },
-  {
     path: "packages/api/src/lib/plugins/twenty-cutover.test.ts",
     reason: "legacy Twenty cutover helper until API extension points move",
   },
   {
     path: "packages/api/src/lib/plugins/twenty-cutover.ts",
     reason: "legacy Twenty cutover helper until API extension points move",
-  },
-  {
-    path: "packages/api/src/lib/plugins/twenty-manifest-parity.test.ts",
-    reason: "legacy Twenty parity test until plugin package tests own parity",
   },
   {
     path: "packages/api/test/integration/context-engine/company-brain-context.e2e.test.ts",

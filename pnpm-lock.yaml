@@ -1619,6 +1619,9 @@ importers:
 
   plugins/plane:
     devDependencies:
+      '@thinkwork/deployment-runner':
+        specifier: workspace:*
+        version: link:../../packages/deployment-runner
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../../packages/plugin-catalog
@@ -1631,6 +1634,9 @@ importers:
 
   plugins/twenty:
     devDependencies:
+      '@thinkwork/deployment-runner':
+        specifier: workspace:*
+        version: link:../../packages/deployment-runner
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../../packages/plugin-catalog

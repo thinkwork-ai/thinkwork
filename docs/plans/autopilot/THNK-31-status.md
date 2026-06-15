@@ -233,6 +233,30 @@ project_context: TEI ThinkWork
 - `pnpm lint:plugin-source`
 - `pnpm test:plugin-source-boundary`
 
+## Current API Manifest Parity Test Package Slice
+
+- Started from fresh `origin/main` at `b9e86176a` in branch
+  `codex/thnk-31-api-parity-tests`.
+- Moving Plane and Twenty manifest-to-deployment-runner parity assertions from
+  API plugin-named tests into the owning plugin packages.
+- Keeping API infrastructure handler coverage generic by asserting every catalog
+  infrastructure component resolves through the managed-app adapter registry.
+- Shrinking the plugin source boundary allowlist by removing the Plane and
+  Twenty API manifest parity test entries.
+- PR #2534 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2534`
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-plane test`
+- `pnpm --filter @thinkwork/plugin-plane typecheck`
+- `pnpm --filter @thinkwork/plugin-twenty test`
+- `pnpm --filter @thinkwork/plugin-twenty typecheck`
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/handlers/infra-adapter-registry.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm lint:plugin-source`
+- `pnpm test:plugin-source-boundary`
+
 ## Verification Notes
 
 - `pnpm install --lockfile-only` completed after adding `plugins/*` and

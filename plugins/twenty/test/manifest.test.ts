@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { managedAppRegistry } from "@thinkwork/deployment-runner/apps/registry";
 
 import {
   PluginManifestError,
@@ -42,6 +43,19 @@ function infrastructureComponent(): InfrastructureComponent {
   return component;
 }
 
+function adapterRequiredInputs(operation: "ENABLE" | "UPGRADE"): string[] {
+  const adapter = managedAppRegistry.find(
+    (candidate) => candidate.appKey === "twenty",
+  );
+  if (!adapter) {
+    throw new Error("Twenty managed-app adapter is not registered");
+  }
+  return adapter
+    .requiredInputs(operation)
+    .map((input) => input.key)
+    .sort();
+}
+
 describe("twenty plugin manifest", () => {
   it("validates: one endpointFrom mcp-server + one infrastructure component", () => {
     const validated = validatePluginManifest(twentyManifest);
@@ -78,6 +92,17 @@ describe("twenty plugin manifest", () => {
       expect(spec.description.length).toBeGreaterThan(0);
       expect(spec.type).toBe("string");
     }
+  });
+
+  it("keeps infrastructure inputs aligned with the managed-app adapter", () => {
+    const inputs = Object.keys(
+      infrastructureComponent().terraformInputs,
+    ).sort();
+    expect(inputs).toEqual(adapterRequiredInputs("ENABLE"));
+    expect(inputs).toEqual(adapterRequiredInputs("UPGRADE"));
+    expect(inputs).toContain(
+      mcpComponent(validatedTwentyManifest).endpointFrom?.configKey,
+    );
   });
 
   it("rejects a component declaring both endpointUrl and endpointFrom", () => {

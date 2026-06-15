@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { managedAppRegistry } from "@thinkwork/deployment-runner/apps/registry";
 
 import {
   validatePluginManifest,
@@ -39,6 +40,19 @@ function mcpComponent(): McpServerComponent {
     throw new Error("plane manifest is missing its mcp-server component");
   }
   return component;
+}
+
+function adapterRequiredInputs(operation: "ENABLE" | "UPGRADE"): string[] {
+  const adapter = managedAppRegistry.find(
+    (candidate) => candidate.appKey === "plane",
+  );
+  if (!adapter) {
+    throw new Error("Plane managed-app adapter is not registered");
+  }
+  return adapter
+    .requiredInputs(operation)
+    .map((input) => input.key)
+    .sort();
 }
 
 describe("Plane plugin manifest", () => {
@@ -105,6 +119,14 @@ describe("Plane plugin manifest", () => {
       expect(spec.description.length).toBeGreaterThan(0);
       expect(spec.type).toBe("string");
     }
+  });
+
+  it("keeps infrastructure inputs aligned with the managed-app adapter", () => {
+    const inputs = Object.keys(
+      infrastructureComponent().terraformInputs,
+    ).sort();
+    expect(inputs).toEqual(adapterRequiredInputs("ENABLE"));
+    expect(inputs).toEqual(adapterRequiredInputs("UPGRADE"));
   });
 
   it("bundles the Plane issue-loop skill", () => {
