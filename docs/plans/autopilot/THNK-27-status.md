@@ -6,9 +6,9 @@ Issue: THNK-27 Add Plane Plugin
 
 - Linear state: `In Progress`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-adapter-parity`.
-- Active unit: U3 Plane Managed-App Adapter.
-- U3 local verification complete; PR open for CI/review.
+- Active branch: `codex/thnk-27-plane-terraform`.
+- Active unit: U4 Plane Terraform Runtime Module.
+- U4 local verification complete; PR open for CI/review.
 
 ## Context Discovered
 
@@ -29,7 +29,7 @@ Issue: THNK-27 Add Plane Plugin
 - [x] U1 Plane Contract Proof
 - [x] U2 Plugin Manifest and Catalog Entry
 - [x] U3 Plane Managed-App Adapter
-- [ ] U4 Plane Terraform Runtime Module
+- [x] U4 Plane Terraform Runtime Module
 - [ ] U5 Per-User Plane MCP Activation
 - [ ] U6 Plane Issue-Loop Skill
 - [ ] U7 Plane Seed and End-to-End Smoke
@@ -45,8 +45,11 @@ Issue: THNK-27 Add Plane Plugin
   `https://github.com/thinkwork-ai/thinkwork/pull/2489` merged at
   `5d0ed19b39f40d15764c3a1463c9829d8989fd62`.
 - U3 Plane Managed-App Adapter:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2490` opened from
-  `codex/thnk-27-plane-adapter-parity`.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2490` merged at
+  `eee5b4d6df6221dfb69df89606f0603e63dcdb07`.
+- U4 Plane Terraform Runtime Module:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2491` opened from
+  `codex/thnk-27-plane-terraform`.
 
 ## Verification Log
 
@@ -67,6 +70,20 @@ Issue: THNK-27 Add Plane Plugin
 - U3: `pnpm --filter @thinkwork/api typecheck` passed.
 - U3: `pnpm --filter @thinkwork/plugin-catalog test -- plane-manifest.test.ts`
   passed.
+- U4: `pnpm --filter thinkwork-cli test -- terraform-plane-fixture.test.ts`
+  passed.
+- U4: `pnpm --filter thinkwork-cli typecheck` passed.
+- U4: `terraform -chdir=terraform/modules/app/plane init -backend=false &&
+  terraform -chdir=terraform/modules/app/plane validate` passed; generated
+  `.terraform/` and `.terraform.lock.hcl` artifacts were removed.
+- U4: `terraform -chdir=terraform/modules/thinkwork init -backend=false`
+  passed, but direct `terraform validate` of the composite module reports the
+  existing standalone validation limitation: the module requires callers to pass
+  the aliased provider `aws.us_east_1`. Generated Terraform artifacts were
+  removed.
+- U4: `terraform -chdir=terraform/examples/greenfield init -backend=false &&
+  terraform -chdir=terraform/examples/greenfield validate` passed; generated
+  `.terraform/` and `.terraform.lock.hcl` artifacts were removed.
 
 ## Decisions
 
