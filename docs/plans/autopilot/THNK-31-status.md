@@ -35,6 +35,10 @@ project_context: TEI ThinkWork
   - Updated the catalog manifest aggregate to consume root plugin packages plus
     a temporary legacy migration list for Company Brain, LastMile, and Twenty.
   - Added the missing repo brainstorm and plan documents referenced by Linear.
+- PR #2522 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2522`
+- Initial implementation commit:
+  `24cf19860 feat(plugins): add first-party plugin package contract`
 
 ## Verification Notes
 
