@@ -141,6 +141,8 @@ project_context: TEI ThinkWork
 - Wiring the guard into root lint and adding focused node tests for allowed
   plugin packages, misplaced source, shared false positives, documented
   migration paths, and stale allowlist entries.
+- PR #2529 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2529`
 
 ### Verification
 
