@@ -542,6 +542,13 @@ def managed_app_terraform_target_args(payload):
     ]
 
 
+def is_managed_app_operation(payload):
+    contract = payload.get("operationContract")
+    if isinstance(contract, dict) and contract.get("kind") == "managed_app":
+        return True
+    return bool(payload.get("appKey"))
+
+
 def validate_managed_app_plan_scope(payload, plan_json):
     if payload.get("appKey") != "plane":
         return
@@ -3168,7 +3175,11 @@ def main():
         return 0
 
     runner_secrets = secret_payload(payload)
-    static_files = sync_release_artifacts() if action in {"deploy", "update"} else {}
+    static_files = (
+        sync_release_artifacts()
+        if action in {"deploy", "update"} and not is_managed_app_operation(payload)
+        else {}
+    )
     vars_json = write_runner_files(payload, runner_secrets)
     controller_summary = controller_input_summary(payload)
     CONTROLLER_EVIDENCE = {
