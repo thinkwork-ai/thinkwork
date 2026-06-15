@@ -18,6 +18,7 @@ import {
   type ManagedAppKey,
   type ManagedAppOperation,
 } from "@thinkwork/deployment-runner/apps/registry";
+import { reconcileManagedApplicationDeploymentJobFromEvidence } from "../../../lib/deployments/reconcile-job-evidence.js";
 import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireTenantAdmin } from "../core/authz.js";
@@ -26,14 +27,18 @@ import {
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
 
-export const MANAGED_APP_CATALOG = [
+const MANAGED_APP_METADATA = [
   ...managedAppRegistry
-    .filter((adapter) => adapter.catalogVisible)
     .map((adapter) => ({
       key: adapter.appKey,
       displayName: adapter.displayName,
+      catalogVisible: adapter.catalogVisible,
     })),
 ] as const;
+
+export const MANAGED_APP_CATALOG = MANAGED_APP_METADATA.filter(
+  (adapter) => adapter.catalogVisible,
+);
 
 export type DeploymentOperation = ManagedAppOperation;
 
@@ -94,7 +99,7 @@ export async function requireDeploymentTenantAdmin(
 export function normalizeManagedAppKey(value: unknown): ManagedAppKey {
   const key = typeof value === "string" ? value.toLowerCase() : "";
   if (key === "knowledge-graph" || key === "knowledge_graph") return "cognee";
-  const app = MANAGED_APP_CATALOG.find((candidate) => candidate.key === key);
+  const app = MANAGED_APP_METADATA.find((candidate) => candidate.key === key);
   if (!app) {
     throw new GraphQLError("Unknown managed application key", {
       extensions: { code: "BAD_USER_INPUT" },
@@ -141,12 +146,17 @@ export async function ensureManagedApplication(args: {
       ),
     )
     .limit(1);
-  const catalog = MANAGED_APP_CATALOG.find((app) => app.key === args.key)!;
+  const metadata = MANAGED_APP_METADATA.find((app) => app.key === args.key);
+  if (!metadata) {
+    throw new GraphQLError("Unknown managed application key", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
   if (existing) {
     const [updated] = await db
       .update(managedApplications)
       .set({
-        display_name: catalog.displayName,
+        display_name: metadata.displayName,
         desired_status: args.desiredStatus,
         desired_config: args.desiredConfig,
         selected_release_version: args.releaseVersion,
@@ -163,7 +173,7 @@ export async function ensureManagedApplication(args: {
     .values({
       tenant_id: args.tenantId,
       key: args.key,
-      display_name: catalog.displayName,
+      display_name: metadata.displayName,
       desired_status: args.desiredStatus,
       desired_config: args.desiredConfig,
       selected_release_version: args.releaseVersion,
@@ -187,7 +197,8 @@ export async function loadDeploymentJobForTenant(
       ),
     )
     .limit(1);
-  return job ?? null;
+  if (!job) return null;
+  return reconcileManagedApplicationDeploymentJobFromEvidence(tenantId, job);
 }
 
 export async function loadJobEvents(tenantId: string, jobId: string) {
@@ -627,6 +638,8 @@ export function buildManagedAppControllerPayload(args: {
     releaseVersion: args.releaseVersion,
     manifestDigest: args.manifestDigest,
     releaseManifestUrl: manifestUrl,
+    releaseManifestSha256: args.manifestDigest,
+    terraformModuleVersion: args.releaseVersion,
     release: {
       version: args.releaseVersion,
       manifestUrl,

@@ -319,7 +319,7 @@ describe("user-provided header auth (THNK-27 U5)", () => {
       endpointFrom: {
         managedApp: "plane",
         configKey: "publicUrl",
-        path: "/mcp",
+        path: "/http/api-key/mcp",
       },
       auth: {
         mode: "user-provided-headers",
@@ -360,11 +360,11 @@ describe("user-provided header auth (THNK-27 U5)", () => {
 
     expect(ref).toEqual({
       tenantMcpServerId: "server-plane",
-      resolvedEndpointUrl: "https://plane.tenant.example.com/mcp",
+      resolvedEndpointUrl: "https://plane.tenant.example.com/http/api-key/mcp",
     });
     expect(insertCalls[0]).toMatchObject({
       slug: "plane--issues",
-      url: "https://plane.tenant.example.com/mcp",
+      url: "https://plane.tenant.example.com/http/api-key/mcp",
       auth_type: "user_headers",
       auth_config: {
         headers: [

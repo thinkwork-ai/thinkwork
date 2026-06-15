@@ -809,13 +809,79 @@ variable "plane_runtime_enabled" {
 }
 
 variable "plane_image_uri" {
-  description = "Plane container image URI pinned to an immutable sha256 digest. Required when plane_provisioned = true."
+  description = "Legacy single Plane image URI pinned to an immutable sha256 digest. Prefer per-service image variables."
   type        = string
   default     = ""
 
   validation {
     condition     = var.plane_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_image_uri))
     error_message = "plane_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_frontend_image_uri" {
+  description = "Plane frontend image URI pinned to an immutable sha256 digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_frontend_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_frontend_image_uri))
+    error_message = "plane_frontend_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_backend_image_uri" {
+  description = "Plane backend image URI pinned to an immutable sha256 digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_backend_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_backend_image_uri))
+    error_message = "plane_backend_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_space_image_uri" {
+  description = "Plane Space image URI pinned to an immutable sha256 digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_space_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_space_image_uri))
+    error_message = "plane_space_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_admin_image_uri" {
+  description = "Plane admin image URI pinned to an immutable sha256 digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_admin_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_admin_image_uri))
+    error_message = "plane_admin_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_live_image_uri" {
+  description = "Plane live image URI pinned to an immutable sha256 digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_live_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_live_image_uri))
+    error_message = "plane_live_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_mcp_image_uri" {
+  description = "Plane MCP server runtime image URI pinned to an immutable sha256 digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_mcp_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_mcp_image_uri))
+    error_message = "plane_mcp_image_uri must be empty or pinned to an immutable sha256 image digest."
   }
 }
 

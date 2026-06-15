@@ -13,6 +13,7 @@ import {
   managedApplicationDeploymentEvents,
   managedApplicationDeploymentJobs,
 } from "@thinkwork/database-pg/schema";
+import { reconcileManagedApplicationDeploymentJobFromEvidence } from "../deployments/reconcile-job-evidence.js";
 import { db as defaultDb } from "../../graphql/utils.js";
 
 type DbLike = typeof defaultDb;
@@ -54,6 +55,11 @@ export async function readDeploymentJobSnapshot(
     )
     .limit(1);
   if (!job) return null;
+  const reconciled = await reconcileManagedApplicationDeploymentJobFromEvidence(
+    tenantId,
+    job,
+    db,
+  );
 
   const [latest] = await db
     .select()
@@ -68,14 +74,14 @@ export async function readDeploymentJobSnapshot(
     .limit(1);
 
   return {
-    id: job.id,
-    status: job.status,
-    operation: job.operation,
-    appKey: job.app_key,
-    applicationId: job.application_id,
-    errorMessage: job.error_message,
-    evidenceBucket: job.evidence_bucket,
-    evidencePrefix: job.evidence_prefix,
+    id: reconciled.id,
+    status: reconciled.status,
+    operation: reconciled.operation,
+    appKey: reconciled.app_key,
+    applicationId: reconciled.application_id,
+    errorMessage: reconciled.error_message,
+    evidenceBucket: reconciled.evidence_bucket,
+    evidencePrefix: reconciled.evidence_prefix,
     latestEvent: latest
       ? {
           eventType: latest.event_type,

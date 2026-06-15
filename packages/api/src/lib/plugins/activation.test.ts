@@ -85,7 +85,7 @@ function planeVersion(): PluginVersion {
         type: "mcp-server",
         key: "issues",
         displayName: "Plane work items",
-        endpointUrl: "https://plane.example.invalid/mcp",
+        endpointUrl: "https://plane.example.invalid/http/api-key/mcp",
         auth: {
           mode: "user-provided-headers",
           headers: [
@@ -547,7 +547,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
       state: "provisioned",
       handler_ref: {
         tenantMcpServerId: "srv-plane",
-        resolvedEndpointUrl: "https://plane.example.invalid/mcp",
+        resolvedEndpointUrl: "https://plane.example.invalid/http/api-key/mcp",
       },
     });
 
@@ -573,14 +573,14 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
     const tokens = await h.store.listActivationTokens(activation.id);
     expect(tokens).toHaveLength(1);
     expect(tokens[0]!.resource_indicator).toBe(
-      "https://plane.example.invalid/mcp",
+      "https://plane.example.invalid/http/api-key/mcp",
     );
     const secret = JSON.parse(
       h.secrets.values.get(tokens[0]!.secret_ref)!,
     ) as Record<string, unknown>;
     expect(secret).toMatchObject({
       auth_type: "user-provided-headers",
-      resource: "https://plane.example.invalid/mcp",
+      resource: "https://plane.example.invalid/http/api-key/mcp",
       headers: {
         "x-api-key": "plane_pat_user_123",
         "x-workspace-slug": "eng",
@@ -602,7 +602,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
           type: "mcp-server",
           key: "issues",
           displayName: "Plane issues",
-          endpointUrl: "https://plane.example.invalid/mcp",
+          endpointUrl: "https://plane.example.invalid/http/api-key/mcp",
           auth: {
             mode: "user-provided-headers",
             headers: [
@@ -619,7 +619,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
           type: "mcp-server",
           key: "workspace",
           displayName: "Plane workspace",
-          endpointUrl: "https://plane.example.invalid/mcp",
+          endpointUrl: "https://plane.example.invalid/http/api-key/mcp",
           auth: {
             mode: "user-provided-headers",
             headers: [
@@ -643,7 +643,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         state: "provisioned",
         handler_ref: {
           tenantMcpServerId: `srv-plane-${componentKey}`,
-          resolvedEndpointUrl: "https://plane.example.invalid/mcp",
+          resolvedEndpointUrl: "https://plane.example.invalid/http/api-key/mcp",
         },
       });
     }
@@ -685,7 +685,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
       state: "provisioned",
       handler_ref: {
         tenantMcpServerId: "srv-plane",
-        resolvedEndpointUrl: "https://plane.example.invalid/mcp",
+        resolvedEndpointUrl: "https://plane.example.invalid/http/api-key/mcp",
       },
     });
 

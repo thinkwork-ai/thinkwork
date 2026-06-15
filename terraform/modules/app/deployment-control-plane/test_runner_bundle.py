@@ -731,8 +731,20 @@ def test_write_runner_files_persists_selected_release_to_controller_module(
     runner = load_runner()
     tf_dir = tmp_path / "terraform"
     old_manifest_url = "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.145/thinkwork-release.json"
-    new_manifest_url = "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.146/thinkwork-release.json"
-    new_manifest_sha = "c3189ff697f9e407ffea197b5298cbe87679ff207aa29b15f8d74f74569b8440"
+    new_manifest_path = tmp_path / "new-thinkwork-release.json"
+    new_manifest_git_sha = "c706fd93b917ee71a01add97ee7dc7c977cc2bb8"
+    new_manifest_sha = write_manifest(
+        new_manifest_path,
+        {
+            "schemaVersion": 1,
+            "release": {
+                "version": "v0.1.0-canary.146",
+                "gitSha": new_manifest_git_sha,
+                "createdAt": "2026-06-09T00:00:00.000Z",
+            },
+        },
+    )
+    new_manifest_url = file_url(new_manifest_path)
 
     monkeypatch.setattr(runner, "TF", tf_dir)
     monkeypatch.setattr(runner, "MANIFEST", tmp_path / "missing-manifest.json")
@@ -781,7 +793,7 @@ def test_write_runner_files_persists_selected_release_to_controller_module(
     assert tfvars["deployment_release_version"] == "v0.1.0-canary.146"
     assert tfvars["deployment_release_manifest_url"] == new_manifest_url
     assert old_manifest_url not in main_tf
-    assert 'ref=v0.1.0-canary.146' in main_tf
+    assert f"ref={new_manifest_git_sha}" in main_tf
     assert "deployment_release_manifest_signature_url" in main_tf
     assert "deployment_release_manifest_trusted_keys_json" in main_tf
     assert "deployment_terraform_module_source" in main_tf
@@ -791,7 +803,21 @@ def _cognito_email_runner_env(
     runner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
     tf_dir = tmp_path / "terraform"
-    manifest_url = "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.150/thinkwork-release.json"
+    manifest_path = tmp_path / "thinkwork-release.json"
+    manifest_sha = write_manifest(
+        manifest_path,
+        {
+            "schemaVersion": 1,
+            "release": {
+                "version": "v0.1.0-canary.150",
+                "gitSha": "abc123",
+                "createdAt": "2026-06-09T00:00:00.000Z",
+            },
+            "artifactBundles": [],
+            "artifacts": [],
+            "runtimeImages": [],
+        },
+    )
     monkeypatch.setattr(runner, "TF", tf_dir)
     monkeypatch.setattr(runner, "MANIFEST", tmp_path / "missing-manifest.json")
     monkeypatch.setenv("THINKWORK_STAGE", "tei-e2e")
@@ -802,11 +828,8 @@ def _cognito_email_runner_env(
     monkeypatch.setenv("THINKWORK_TERRAFORM_LOCK_TABLE", "thinkwork-locks")
     monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
     monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.150")
-    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", manifest_url)
-    monkeypatch.setenv(
-        "THINKWORK_RELEASE_MANIFEST_SHA256",
-        "f0a149db34d59e290fc4a43bc098a57539dcae508445e0fb626b8ce45f9eaf1c",
-    )
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", file_url(manifest_path))
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", manifest_sha)
     return tf_dir
 
 
@@ -1140,6 +1163,21 @@ def test_github_module_source_checks_out_https_repo() -> None:
         "github.com/thinkwork-ai/thinkwork//terraform/modules/thinkwork?ref=abc123",
         "main",
     ) == ("https://github.com/thinkwork-ai/thinkwork.git", "abc123")
+
+
+def test_git_module_source_ignores_registry_version() -> None:
+    runner = load_runner()
+
+    assert runner.terraform_module_source_and_version(
+        "git::https://github.com/thinkwork-ai/thinkwork.git"
+        "//terraform/modules/thinkwork?ref=codex/thnk-27-plane-deploy-fix",
+        "0.1.0-canary.189",
+        "v0.1.0-canary.189",
+    ) == (
+        "git::https://github.com/thinkwork-ai/thinkwork.git"
+        "//terraform/modules/thinkwork?ref=codex/thnk-27-plane-deploy-fix",
+        "",
+    )
 
 
 def test_safe_extract_rejects_archive_path_traversal(tmp_path: Path) -> None:

@@ -418,7 +418,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       pluginRow("issues", {
         slug: "plane--issues",
         name: "Plane work items",
-        url: "https://plane.example.invalid/mcp",
+        url: "https://plane.example.invalid/http/api-key/mcp",
         auth_type: "user_headers",
         auth_config: {
           headers: [
@@ -435,7 +435,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     const ref = "thinkwork/test/plugin-header-auth/requester/plane";
     store.seedToken({
       activation_id: activation.id,
-      resource_indicator: "https://plane.example.invalid/mcp",
+      resource_indicator: "https://plane.example.invalid/http/api-key/mcp",
       secret_ref: ref,
     });
     secrets.values.set(
@@ -446,7 +446,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
           "x-api-key": "plane_pat_user_123",
           "x-workspace-slug": "eng",
         },
-        resource: "https://plane.example.invalid/mcp",
+        resource: "https://plane.example.invalid/http/api-key/mcp",
       }),
     );
 
@@ -460,7 +460,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     expect(configs).toHaveLength(1);
     expect(configs[0]).toMatchObject({
       name: "plane--issues",
-      url: "https://plane.example.invalid/mcp",
+      url: "https://plane.example.invalid/http/api-key/mcp",
       auth: {
         type: "headers",
         headers: {
@@ -476,7 +476,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       pluginRow("issues", {
         slug: "plane--issues",
         name: "Plane work items",
-        url: "https://plane.example.invalid/mcp",
+        url: "https://plane.example.invalid/http/api-key/mcp",
         auth_type: "user_headers",
         auth_config: {
           headers: [{ name: "x-api-key", credentialKey: "apiKey" }],

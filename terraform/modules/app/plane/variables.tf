@@ -62,12 +62,79 @@ variable "certificate_arn" {
 }
 
 variable "image_uri" {
-  description = "Plane container image URI pinned to a reviewed immutable digest."
+  description = "Legacy single Plane image URI pinned to a reviewed immutable digest. Prefer the per-service image variables."
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(regex("@sha256:[0-9a-f]{64}$", var.image_uri))
-    error_message = "image_uri must be pinned to an immutable sha256 image digest."
+    condition     = var.image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.image_uri))
+    error_message = "image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "frontend_image_uri" {
+  description = "Plane frontend image URI pinned to a reviewed immutable digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.frontend_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.frontend_image_uri))
+    error_message = "frontend_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "backend_image_uri" {
+  description = "Plane backend image URI pinned to a reviewed immutable digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.backend_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.backend_image_uri))
+    error_message = "backend_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "space_image_uri" {
+  description = "Plane Space image URI pinned to a reviewed immutable digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.space_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.space_image_uri))
+    error_message = "space_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "admin_image_uri" {
+  description = "Plane admin image URI pinned to a reviewed immutable digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.admin_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.admin_image_uri))
+    error_message = "admin_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "live_image_uri" {
+  description = "Plane live image URI pinned to a reviewed immutable digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.live_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.live_image_uri))
+    error_message = "live_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "mcp_image_uri" {
+  description = "Plane MCP server runtime image URI pinned to a reviewed immutable digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.mcp_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.mcp_image_uri))
+    error_message = "mcp_image_uri must be empty or pinned to an immutable sha256 image digest."
   }
 }
 
@@ -151,7 +218,13 @@ variable "worker_container_port" {
 variable "live_container_port" {
   description = "Plane live container port"
   type        = number
-  default     = 3001
+  default     = 3000
+}
+
+variable "mcp_container_port" {
+  description = "Plane MCP server HTTP port"
+  type        = number
+  default     = 8211
 }
 
 variable "web_command" {
@@ -163,25 +236,35 @@ variable "web_command" {
 variable "api_command" {
   description = "Container command for the Plane API service"
   type        = list(string)
-  default     = []
+  default = [
+    "/bin/bash",
+    "-lc",
+    "python manage.py wait_for_db && python manage.py migrate && /code/bin/docker-entrypoint-api.sh",
+  ]
 }
 
 variable "worker_command" {
   description = "Container command for the Plane worker service"
   type        = list(string)
-  default     = []
+  default     = ["/code/bin/docker-entrypoint-worker.sh"]
 }
 
 variable "beat_worker_command" {
   description = "Container command for the Plane beat worker service"
   type        = list(string)
-  default     = []
+  default     = ["/code/bin/docker-entrypoint-beat.sh"]
 }
 
 variable "live_command" {
   description = "Container command for the Plane live service"
   type        = list(string)
   default     = []
+}
+
+variable "mcp_command" {
+  description = "Container command for the Plane MCP HTTP server"
+  type        = list(string)
+  default     = ["uvx", "plane-mcp-server", "http"]
 }
 
 variable "health_check_path" {

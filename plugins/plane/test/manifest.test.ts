@@ -74,7 +74,7 @@ describe("Plane plugin manifest", () => {
       endpointFrom: {
         managedApp: "plane",
         configKey: "publicUrl",
-        path: "/mcp",
+        path: "/http/api-key/mcp",
       },
       auth: {
         mode: "user-provided-headers",
@@ -103,17 +103,22 @@ describe("Plane plugin manifest", () => {
       managedAppKey: "plane",
     });
     expect(Object.keys(infra.terraformInputs).sort()).toEqual([
+      "adminImageUri",
       "aesSecretKeySecretArn",
       "amqpUrlSecretArn",
+      "backendImageUri",
       "certificateArn",
       "dbUrlSecretArn",
-      "imageUri",
+      "frontendImageUri",
+      "liveImageUri",
       "liveServerSecretKeySecretArn",
+      "mcpImageUri",
       "publicUrl",
       "s3AccessKeyIdSecretArn",
       "s3BucketName",
       "s3SecretAccessKeySecretArn",
       "secretKeySecretArn",
+      "spaceImageUri",
     ]);
     for (const spec of Object.values(infra.terraformInputs)) {
       expect(spec.description.length).toBeGreaterThan(0);

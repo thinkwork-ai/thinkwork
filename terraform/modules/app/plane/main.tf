@@ -27,6 +27,12 @@ locals {
   effective_cache_subnet_ids = length(var.cache_subnet_ids) > 0 ? var.cache_subnet_ids : var.subnet_ids
   effective_queue_subnet_ids = length(var.queue_subnet_ids) > 0 ? var.queue_subnet_ids : local.effective_cache_subnet_ids
 
+  effective_frontend_image_uri = var.frontend_image_uri != "" ? var.frontend_image_uri : var.image_uri
+  effective_backend_image_uri  = var.backend_image_uri != "" ? var.backend_image_uri : var.image_uri
+  effective_space_image_uri    = var.space_image_uri != "" ? var.space_image_uri : var.image_uri
+  effective_admin_image_uri    = var.admin_image_uri != "" ? var.admin_image_uri : var.image_uri
+  effective_live_image_uri     = var.live_image_uri != "" ? var.live_image_uri : var.image_uri
+
   redis_scheme = var.cache_transit_encryption_enabled ? "rediss" : "redis"
   redis_url    = "${local.redis_scheme}://${aws_elasticache_replication_group.plane.primary_endpoint_address}:${var.cache_port}"
 
@@ -41,19 +47,19 @@ locals {
       enabled       = var.create_secret_placeholders && var.secret_key_secret_arn == ""
       name          = "thinkwork/${var.stage}/plane/secret-key"
       description   = "Plane SECRET_KEY"
-      secret_string = jsonencode({ SECRET_KEY = "PLACEHOLDER_SET_VIA_CI" })
+      secret_string = jsonencode({ SECRET_KEY = random_password.secret_key.result })
     }
     live_server_secret_key = {
       enabled       = var.create_secret_placeholders && var.live_server_secret_key_secret_arn == ""
       name          = "thinkwork/${var.stage}/plane/live-server-secret-key"
       description   = "Plane LIVE_SERVER_SECRET_KEY"
-      secret_string = jsonencode({ LIVE_SERVER_SECRET_KEY = "PLACEHOLDER_SET_VIA_CI" })
+      secret_string = jsonencode({ LIVE_SERVER_SECRET_KEY = random_password.live_server_secret_key.result })
     }
     aes_secret_key = {
       enabled       = var.create_secret_placeholders && var.aes_secret_key_secret_arn == ""
       name          = "thinkwork/${var.stage}/plane/aes-secret-key"
       description   = "Plane AES_SECRET_KEY"
-      secret_string = jsonencode({ AES_SECRET_KEY = "PLACEHOLDER_SET_VIA_CI" })
+      secret_string = jsonencode({ AES_SECRET_KEY = random_password.aes_secret_key.result })
     }
     amqp_url = {
       enabled     = var.create_secret_placeholders && var.amqp_url_secret_arn == ""
@@ -62,18 +68,6 @@ locals {
       secret_string = jsonencode({
         AMQP_URL = "amqps://${var.rabbitmq_admin_username}:${random_password.rabbitmq.result}@${replace(aws_mq_broker.rabbitmq.instances[0].endpoints[0], "amqps://", "")}"
       })
-    }
-    s3_access_key_id = {
-      enabled       = var.create_secret_placeholders && var.s3_access_key_id_secret_arn == ""
-      name          = "thinkwork/${var.stage}/plane/s3-access-key-id"
-      description   = "Plane AWS_ACCESS_KEY_ID for S3 uploads"
-      secret_string = jsonencode({ AWS_ACCESS_KEY_ID = "PLACEHOLDER_SET_VIA_CI" })
-    }
-    s3_secret_access_key = {
-      enabled       = var.create_secret_placeholders && var.s3_secret_access_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/plane/s3-secret-access-key"
-      description   = "Plane AWS_SECRET_ACCESS_KEY for S3 uploads"
-      secret_string = jsonencode({ AWS_SECRET_ACCESS_KEY = "PLACEHOLDER_SET_VIA_CI" })
     }
   }
 
@@ -145,47 +139,127 @@ locals {
     { name = "LIVE_SERVER_SECRET_KEY", valueFrom = "${local.effective_live_server_secret_key_secret_arn}:LIVE_SERVER_SECRET_KEY::" },
     { name = "AES_SECRET_KEY", valueFrom = "${local.effective_aes_secret_key_secret_arn}:AES_SECRET_KEY::" },
     { name = "AMQP_URL", valueFrom = "${local.effective_amqp_url_secret_arn}:AMQP_URL::" },
-    { name = "AWS_ACCESS_KEY_ID", valueFrom = "${local.effective_s3_access_key_id_secret_arn}:AWS_ACCESS_KEY_ID::" },
-    { name = "AWS_SECRET_ACCESS_KEY", valueFrom = "${local.effective_s3_secret_access_key_secret_arn}:AWS_SECRET_ACCESS_KEY::" },
   ]
+
+  optional_container_secrets = concat(
+    local.effective_s3_access_key_id_secret_arn != "" ? [
+      { name = "AWS_ACCESS_KEY_ID", valueFrom = "${local.effective_s3_access_key_id_secret_arn}:AWS_ACCESS_KEY_ID::" },
+    ] : [],
+    local.effective_s3_secret_access_key_secret_arn != "" ? [
+      { name = "AWS_SECRET_ACCESS_KEY", valueFrom = "${local.effective_s3_secret_access_key_secret_arn}:AWS_SECRET_ACCESS_KEY::" },
+    ] : [],
+  )
 
   service_definitions = {
     web = {
       display_name   = "web"
+      image          = local.effective_frontend_image_uri
       command        = var.web_command
       port           = var.web_container_port
       desired_count  = var.web_desired_count
       public_service = true
+      health_path    = "/"
+    }
+    space = {
+      display_name   = "space"
+      image          = local.effective_space_image_uri
+      command        = []
+      port           = var.web_container_port
+      desired_count  = var.web_desired_count
+      public_service = true
+      health_path    = "/spaces/"
+    }
+    admin = {
+      display_name   = "admin"
+      image          = local.effective_admin_image_uri
+      command        = []
+      port           = var.web_container_port
+      desired_count  = var.web_desired_count
+      public_service = true
+      health_path    = "/god-mode/"
     }
     api = {
       display_name   = "api"
+      image          = local.effective_backend_image_uri
       command        = var.api_command
       port           = var.api_container_port
       desired_count  = var.api_desired_count
-      public_service = false
+      public_service = true
+      health_path    = "/api/"
     }
     worker = {
       display_name   = "worker"
+      image          = local.effective_backend_image_uri
       command        = var.worker_command
       port           = var.worker_container_port
       desired_count  = var.worker_desired_count
       public_service = false
+      health_path    = "/"
     }
     beat_worker = {
       display_name   = "beat-worker"
+      image          = local.effective_backend_image_uri
       command        = var.beat_worker_command
       port           = var.worker_container_port
       desired_count  = var.beat_worker_desired_count
       public_service = false
+      health_path    = "/"
     }
     live = {
       display_name   = "live"
+      image          = local.effective_live_image_uri
       command        = var.live_command
       port           = var.live_container_port
       desired_count  = var.live_desired_count
-      public_service = false
+      public_service = true
+      health_path    = "/live/"
+    }
+    mcp = {
+      display_name   = "mcp"
+      image          = var.mcp_image_uri
+      command        = var.mcp_command
+      port           = var.mcp_container_port
+      desired_count  = 1
+      public_service = true
+      health_path    = "/http/api-key/mcp"
     }
   }
+
+  public_services = {
+    for key, service in local.service_definitions : key => service if service.public_service
+  }
+
+  listener_rules = {
+    api = {
+      priority      = 10
+      service_key   = "api"
+      path_patterns = ["/api/*", "/auth/*", "/static/*"]
+    }
+    live = {
+      priority      = 20
+      service_key   = "live"
+      path_patterns = ["/live/*"]
+    }
+    space = {
+      priority      = 30
+      service_key   = "space"
+      path_patterns = ["/spaces/*"]
+    }
+    admin = {
+      priority      = 40
+      service_key   = "admin"
+      path_patterns = ["/god-mode/*"]
+    }
+    mcp = {
+      priority      = 50
+      service_key   = "mcp"
+      path_patterns = ["/http/*", "/.well-known/*"]
+    }
+  }
+
+  public_container_ports = toset([
+    for service in values(local.public_services) : tostring(service.port)
+  ])
 
   storage_bucket_arn = "arn:aws:s3:::${var.s3_bucket_name}"
 }
@@ -196,6 +270,21 @@ resource "random_password" "rabbitmq" {
   length           = 32
   special          = true
   override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+resource "random_password" "secret_key" {
+  length  = 50
+  special = false
+}
+
+resource "random_password" "live_server_secret_key" {
+  length  = 50
+  special = false
+}
+
+resource "random_password" "aes_secret_key" {
+  length  = 32
+  special = false
 }
 
 resource "aws_secretsmanager_secret" "plane" {
@@ -234,6 +323,12 @@ resource "terraform_data" "configuration_guardrails" {
     beat_worker_desired_count         = var.beat_worker_desired_count
     live_desired_count                = var.live_desired_count
     image_uri                         = var.image_uri
+    frontend_image_uri                = local.effective_frontend_image_uri
+    backend_image_uri                 = local.effective_backend_image_uri
+    space_image_uri                   = local.effective_space_image_uri
+    admin_image_uri                   = local.effective_admin_image_uri
+    live_image_uri                    = local.effective_live_image_uri
+    mcp_image_uri                     = var.mcp_image_uri
     public_url                        = var.public_url
     certificate_arn                   = var.certificate_arn
     db_url_secret_arn                 = local.effective_db_url_secret_arn
@@ -267,6 +362,18 @@ resource "terraform_data" "configuration_guardrails" {
     precondition {
       condition     = !var.runtime_enabled || var.live_desired_count > 0
       error_message = "runtime_enabled requires live_desired_count > 0."
+    }
+
+    precondition {
+      condition = (
+        local.effective_frontend_image_uri != "" &&
+        local.effective_backend_image_uri != "" &&
+        local.effective_space_image_uri != "" &&
+        local.effective_admin_image_uri != "" &&
+        local.effective_live_image_uri != "" &&
+        var.mcp_image_uri != ""
+      )
+      error_message = "Plane requires frontend, backend, space, admin, live, and MCP image URIs pinned to immutable digests."
     }
 
     precondition {
@@ -304,15 +411,6 @@ resource "terraform_data" "configuration_guardrails" {
       error_message = "Plane requires amqp_url_secret_arn or create_secret_placeholders = true."
     }
 
-    precondition {
-      condition     = local.effective_s3_access_key_id_secret_arn != ""
-      error_message = "Plane requires s3_access_key_id_secret_arn or create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = local.effective_s3_secret_access_key_secret_arn != ""
-      error_message = "Plane requires s3_secret_access_key_secret_arn or create_secret_placeholders = true."
-    }
   }
 }
 
@@ -419,12 +517,16 @@ resource "aws_security_group" "plane" {
   description = "Plane ECS tasks"
   vpc_id      = var.vpc_id
 
-  ingress {
-    description     = "Public ALB to Plane web"
-    from_port       = var.web_container_port
-    to_port         = var.web_container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+  dynamic "ingress" {
+    for_each = local.public_container_ports
+
+    content {
+      description     = "Public ALB to Plane service port ${ingress.value}"
+      from_port       = tonumber(ingress.value)
+      to_port         = tonumber(ingress.value)
+      protocol        = "tcp"
+      security_groups = [aws_security_group.alb.id]
+    }
   }
 
   egress {
@@ -545,25 +647,27 @@ resource "aws_lb" "plane" {
   tags = { Name = "${local.name}-alb" }
 }
 
-resource "aws_lb_target_group" "web" {
-  name        = "tw-${var.stage}-plane-web"
-  port        = var.web_container_port
+resource "aws_lb_target_group" "service" {
+  for_each = local.public_services
+
+  name        = "tw-${var.stage}-plane-${replace(each.value.display_name, "_", "-")}"
+  port        = each.value.port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "ip"
 
   health_check {
-    path                = var.health_check_path
-    port                = tostring(var.web_container_port)
+    path                = each.value.health_path
+    port                = tostring(each.value.port)
     protocol            = "HTTP"
     healthy_threshold   = 2
     unhealthy_threshold = 3
     timeout             = 10
     interval            = 30
-    matcher             = "200-399"
+    matcher             = "200-499"
   }
 
-  tags = { Name = "${local.name}-web-tg" }
+  tags = { Name = "${local.name}-${each.value.display_name}-tg" }
 }
 
 resource "aws_lb_listener" "https" {
@@ -575,7 +679,25 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.web.arn
+    target_group_arn = aws_lb_target_group.service["web"].arn
+  }
+}
+
+resource "aws_lb_listener_rule" "service_path" {
+  for_each = local.listener_rules
+
+  listener_arn = aws_lb_listener.https.arn
+  priority     = each.value.priority
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.service[each.value.service_key].arn
+  }
+
+  condition {
+    path_pattern {
+      values = each.value.path_patterns
+    }
   }
 }
 
@@ -742,7 +864,7 @@ resource "aws_ecs_task_definition" "service" {
   container_definitions = jsonencode([
     {
       name      = "plane-${each.value.display_name}"
-      image     = var.image_uri
+      image     = each.value.image
       essential = true
       command   = each.value.command
 
@@ -759,9 +881,12 @@ resource "aws_ecs_task_definition" "service" {
         [
           { name = "PORT", value = tostring(each.value.port) },
           { name = "PLANE_SERVICE", value = each.value.display_name },
+          { name = "API_BASE_URL", value = var.public_url },
+          { name = "PLANE_BASE_URL", value = var.public_url },
+          { name = "PLANE_INTERNAL_BASE_URL", value = var.public_url },
         ]
       )
-      secrets = local.container_secrets
+      secrets = concat(local.container_secrets, local.optional_container_secrets)
 
       logConfiguration = {
         logDriver = "awslogs"
@@ -799,7 +924,7 @@ resource "aws_ecs_service" "service" {
     for_each = each.value.public_service ? [1] : []
 
     content {
-      target_group_arn = aws_lb_target_group.web.arn
+      target_group_arn = aws_lb_target_group.service[each.key].arn
       container_name   = "plane-${each.value.display_name}"
       container_port   = each.value.port
     }

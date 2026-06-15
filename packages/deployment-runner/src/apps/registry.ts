@@ -109,6 +109,9 @@ export function resolveManagedAppDesiredConfig(args: {
   manifestImages?: Record<string, string>;
 }): Record<string, unknown> | undefined {
   if (args.operation === "DESTROY") return args.desiredConfig;
+  if (args.appKey === "plane") {
+    return resolvePlaneDesiredConfig(args.desiredConfig, args.manifestImages);
+  }
   if (
     typeof args.desiredConfig?.imageUri === "string" &&
     args.desiredConfig.imageUri.trim()
@@ -144,6 +147,39 @@ function manifestImageForApp(
       : appKey === "plane"
         ? ["plane", "plane-app", "managed-app-plane"]
         : [appKey, `managed-app-${appKey}`, `${appKey}-runtime`];
+  for (const candidate of candidates) {
+    const value = manifestImages[candidate];
+    if (value) return value;
+  }
+  return null;
+}
+
+function resolvePlaneDesiredConfig(
+  desiredConfig: Record<string, unknown> | undefined,
+  manifestImages: Record<string, string> | undefined,
+): Record<string, unknown> | undefined {
+  const next = { ...(desiredConfig ?? {}) };
+  const imageKeys: Array<[string, string[]]> = [
+    ["frontendImageUri", ["plane-frontend", "plane-web"]],
+    ["backendImageUri", ["plane-backend", "plane-api"]],
+    ["spaceImageUri", ["plane-space"]],
+    ["adminImageUri", ["plane-admin"]],
+    ["liveImageUri", ["plane-live"]],
+    ["mcpImageUri", ["plane-mcp-server", "plane-mcp"]],
+  ];
+  for (const [configKey, candidates] of imageKeys) {
+    if (typeof next[configKey] === "string" && next[configKey]) continue;
+    const image = firstManifestImage(candidates, manifestImages);
+    if (image) next[configKey] = image;
+  }
+  return Object.keys(next).length > 0 ? next : desiredConfig;
+}
+
+function firstManifestImage(
+  candidates: string[],
+  manifestImages: Record<string, string> | undefined,
+): string | null {
+  if (!manifestImages) return null;
   for (const candidate of candidates) {
     const value = manifestImages[candidate];
     if (value) return value;

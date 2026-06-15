@@ -414,6 +414,12 @@ resource "terraform_data" "plane_configuration_guardrails" {
   input = {
     plane_runtime_enabled                   = local.plane_runtime_enabled
     plane_image_uri                         = var.plane_image_uri
+    plane_frontend_image_uri                = var.plane_frontend_image_uri
+    plane_backend_image_uri                 = var.plane_backend_image_uri
+    plane_space_image_uri                   = var.plane_space_image_uri
+    plane_admin_image_uri                   = var.plane_admin_image_uri
+    plane_live_image_uri                    = var.plane_live_image_uri
+    plane_mcp_image_uri                     = var.plane_mcp_image_uri
     plane_db_url_secret_arn                 = var.plane_db_url_secret_arn
     plane_secret_key_secret_arn             = var.plane_secret_key_secret_arn
     plane_live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
@@ -430,8 +436,18 @@ resource "terraform_data" "plane_configuration_guardrails" {
 
   lifecycle {
     precondition {
-      condition     = var.plane_image_uri != ""
-      error_message = "plane_provisioned requires plane_image_uri pinned to an immutable digest."
+      condition = (
+        var.plane_image_uri != "" ||
+        (
+          var.plane_frontend_image_uri != "" &&
+          var.plane_backend_image_uri != "" &&
+          var.plane_space_image_uri != "" &&
+          var.plane_admin_image_uri != "" &&
+          var.plane_live_image_uri != "" &&
+          var.plane_mcp_image_uri != ""
+        )
+      )
+      error_message = "plane_provisioned requires either legacy plane_image_uri or all per-service Plane image URIs pinned to immutable digests."
     }
 
     precondition {
@@ -457,16 +473,6 @@ resource "terraform_data" "plane_configuration_guardrails" {
     precondition {
       condition     = var.plane_amqp_url_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
       error_message = "plane_provisioned requires plane_amqp_url_secret_arn or deployment_control_plane_create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = var.plane_s3_access_key_id_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
-      error_message = "plane_provisioned requires plane_s3_access_key_id_secret_arn or deployment_control_plane_create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = var.plane_s3_secret_access_key_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
-      error_message = "plane_provisioned requires plane_s3_secret_access_key_secret_arn or deployment_control_plane_create_secret_placeholders = true."
     }
 
     precondition {
@@ -1265,6 +1271,12 @@ module "plane" {
   public_url           = local.plane_public_url
   certificate_arn      = local.plane_certificate_arn
   image_uri            = var.plane_image_uri
+  frontend_image_uri   = var.plane_frontend_image_uri
+  backend_image_uri    = var.plane_backend_image_uri
+  space_image_uri      = var.plane_space_image_uri
+  admin_image_uri      = var.plane_admin_image_uri
+  live_image_uri       = var.plane_live_image_uri
+  mcp_image_uri        = var.plane_mcp_image_uri
 
   runtime_enabled           = local.plane_runtime_enabled
   web_desired_count         = var.plane_web_desired_count

@@ -32,11 +32,13 @@ const statusOutputs = [
   "plane_worker_service_name",
   "plane_beat_worker_service_name",
   "plane_live_service_name",
+  "plane_mcp_service_name",
   "plane_web_log_group_name",
   "plane_api_log_group_name",
   "plane_worker_log_group_name",
   "plane_beat_worker_log_group_name",
   "plane_live_log_group_name",
+  "plane_mcp_log_group_name",
   "plane_cache_endpoint",
   "plane_rabbitmq_broker_arn",
   "plane_storage_bucket_name",
@@ -44,9 +46,34 @@ const statusOutputs = [
 
 const provisionRequiredInputs: RequiredManagedAppInput[] = [
   {
-    key: "imageUri",
-    description: "Plane runtime container image URI pinned with @sha256.",
-    terraformVariable: "plane_image_uri",
+    key: "frontendImageUri",
+    description: "Plane frontend image URI pinned with @sha256.",
+    terraformVariable: "plane_frontend_image_uri",
+  },
+  {
+    key: "backendImageUri",
+    description: "Plane backend image URI pinned with @sha256.",
+    terraformVariable: "plane_backend_image_uri",
+  },
+  {
+    key: "spaceImageUri",
+    description: "Plane Space image URI pinned with @sha256.",
+    terraformVariable: "plane_space_image_uri",
+  },
+  {
+    key: "adminImageUri",
+    description: "Plane admin image URI pinned with @sha256.",
+    terraformVariable: "plane_admin_image_uri",
+  },
+  {
+    key: "liveImageUri",
+    description: "Plane live image URI pinned with @sha256.",
+    terraformVariable: "plane_live_image_uri",
+  },
+  {
+    key: "mcpImageUri",
+    description: "Plane MCP server image URI pinned with @sha256.",
+    terraformVariable: "plane_mcp_image_uri",
   },
   {
     key: "dbUrlSecretArn",
@@ -81,14 +108,14 @@ const provisionRequiredInputs: RequiredManagedAppInput[] = [
   {
     key: "s3AccessKeyIdSecretArn",
     description:
-      "Secrets Manager ARN containing an access key id for Plane S3 uploads.",
+      "Optional Secrets Manager ARN containing an access key id for Plane S3 uploads. ECS task-role access is used when omitted.",
     terraformVariable: "plane_s3_access_key_id_secret_arn",
     secret: true,
   },
   {
     key: "s3SecretAccessKeySecretArn",
     description:
-      "Secrets Manager ARN containing a secret access key for Plane S3 uploads.",
+      "Optional Secrets Manager ARN containing a secret access key for Plane S3 uploads. ECS task-role access is used when omitted.",
     terraformVariable: "plane_s3_secret_access_key_secret_arn",
     secret: true,
   },
@@ -131,10 +158,35 @@ export const planeAdapter: ManagedAppAdapter = {
     return compactObject({
       plane_provisioned: true,
       plane_runtime_enabled: runtimeEnabled,
-      plane_image_uri: requireDigestImage(
+      plane_frontend_image_uri: requireDigestImage(
         desiredConfig,
-        "imageUri",
-        "Plane imageUri",
+        "frontendImageUri",
+        "Plane frontendImageUri",
+      ),
+      plane_backend_image_uri: requireDigestImage(
+        desiredConfig,
+        "backendImageUri",
+        "Plane backendImageUri",
+      ),
+      plane_space_image_uri: requireDigestImage(
+        desiredConfig,
+        "spaceImageUri",
+        "Plane spaceImageUri",
+      ),
+      plane_admin_image_uri: requireDigestImage(
+        desiredConfig,
+        "adminImageUri",
+        "Plane adminImageUri",
+      ),
+      plane_live_image_uri: requireDigestImage(
+        desiredConfig,
+        "liveImageUri",
+        "Plane liveImageUri",
+      ),
+      plane_mcp_image_uri: requireDigestImage(
+        desiredConfig,
+        "mcpImageUri",
+        "Plane mcpImageUri",
       ),
       plane_db_url_secret_arn: requireStringInput(
         desiredConfig,
@@ -161,15 +213,13 @@ export const planeAdapter: ManagedAppAdapter = {
         "amqpUrlSecretArn",
         "Plane amqpUrlSecretArn",
       ),
-      plane_s3_access_key_id_secret_arn: requireStringInput(
+      plane_s3_access_key_id_secret_arn: optionalString(
         desiredConfig,
         "s3AccessKeyIdSecretArn",
-        "Plane s3AccessKeyIdSecretArn",
       ),
-      plane_s3_secret_access_key_secret_arn: requireStringInput(
+      plane_s3_secret_access_key_secret_arn: optionalString(
         desiredConfig,
         "s3SecretAccessKeySecretArn",
-        "Plane s3SecretAccessKeySecretArn",
       ),
       plane_s3_bucket_name: requireStringInput(
         desiredConfig,
@@ -309,6 +359,10 @@ export const planeAdapter: ManagedAppAdapter = {
           terraformOutputs,
           "plane_live_service_name",
         ),
+        mcpServiceName: stringOutput(
+          terraformOutputs,
+          "plane_mcp_service_name",
+        ),
         webLogGroupName: stringOutput(
           terraformOutputs,
           "plane_web_log_group_name",
@@ -328,6 +382,10 @@ export const planeAdapter: ManagedAppAdapter = {
         liveLogGroupName: stringOutput(
           terraformOutputs,
           "plane_live_log_group_name",
+        ),
+        mcpLogGroupName: stringOutput(
+          terraformOutputs,
+          "plane_mcp_log_group_name",
         ),
         cacheEndpoint: stringOutput(terraformOutputs, "plane_cache_endpoint"),
         rabbitmqBrokerArn: stringOutput(

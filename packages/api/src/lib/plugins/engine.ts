@@ -256,19 +256,36 @@ async function ensurePremiumInstallAllowed(
 // ---------------------------------------------------------------------------
 
 /**
- * Provision order: skills → mcp-server → ui-surface → infrastructure.
- * Teardown runs the same order (skills before MCP rows, infra destroy
- * jobs last).
+ * Provision order: skills → infrastructure → mcp-server → ui-surface.
+ *
+ * Managed-app-backed MCP components resolve their endpoint from the
+ * managed_applications row, so infrastructure must run before MCP.
  */
-const COMPONENT_RUN_ORDER: Record<string, number> = {
+const COMPONENT_PROVISION_ORDER: Record<string, number> = {
+  skills: 0,
+  infrastructure: 1,
+  "mcp-server": 2,
+  "ui-surface": 3,
+};
+
+/**
+ * Teardown order: skills → mcp-server → ui-surface → infrastructure.
+ * Infra destroy jobs stay last so plugin-managed MCP rows disappear before
+ * their backing application begins teardown.
+ */
+const COMPONENT_TEARDOWN_ORDER: Record<string, number> = {
   skills: 0,
   "mcp-server": 1,
   "ui-surface": 2,
   infrastructure: 3,
 };
 
-function runOrder(componentType: string): number {
-  return COMPONENT_RUN_ORDER[componentType] ?? 99;
+function provisionOrder(componentType: string): number {
+  return COMPONENT_PROVISION_ORDER[componentType] ?? 99;
+}
+
+function teardownOrder(componentType: string): number {
+  return COMPONENT_TEARDOWN_ORDER[componentType] ?? 99;
 }
 
 /** Stable content hash of one manifest component (upgrade diff input). */
@@ -546,12 +563,21 @@ export async function reconcileInstallStatus(
     deps,
   );
   const computed = computeInstallState(reconciled, gates);
-  if (computed === install.state) return install;
-  const updated = await deps.store.updateInstall(install.id, {
-    state: computed,
-    touchTransition: true,
-  });
-  return updated ?? install;
+  const current =
+    computed === install.state
+      ? install
+      : ((await deps.store.updateInstall(install.id, {
+          state: computed,
+          touchTransition: true,
+        })) ?? install);
+  return (
+    (await continuePendingAfterInfrastructureReady(
+      current,
+      reconciled,
+      gates,
+      deps,
+    )) ?? current
+  );
 }
 
 const SYSTEM_ACTOR: PluginEngineActor = {
@@ -762,12 +788,14 @@ async function removeComponentRow(
 }
 
 /**
- * Run handlers over every non-provisioned component row, in order
- * (skills → mcp-server → ui-surface → infrastructure). Aborts on the
- * first failure (later components stay `pending`); the failure is
- * recorded on the component row, never thrown. Infrastructure handlers
- * return with the row still `pending` (job in flight) — that is not a
- * failure and does not abort.
+ * Run handlers over every non-provisioned component row, in provision
+ * order. Aborts on the first failure (later components stay `pending`);
+ * the failure is recorded on the component row, never thrown.
+ *
+ * Infrastructure handlers can return with the row still `pending` because
+ * the deployment job is in flight. That is not a failure, but later
+ * endpoint-dependent components must wait for reconciliation to observe a
+ * successful apply before they run.
  */
 async function runComponentSequence(
   install: PluginInstallRow,
@@ -777,7 +805,7 @@ async function runComponentSequence(
 ): Promise<void> {
   const rows = await deps.store.listComponents(install.id);
   const ordered = [...rows].sort(
-    (a, b) => runOrder(a.component_type) - runOrder(b.component_type),
+    (a, b) => provisionOrder(a.component_type) - provisionOrder(b.component_type),
   );
   for (const row of ordered) {
     if (row.state === "provisioned") continue;
@@ -810,6 +838,7 @@ async function runComponentSequence(
         handlerRef: outcome.handlerRef,
         lastError: null,
       });
+      if (!outcome.provisioned) break;
     } catch (error) {
       await deps.store.updateComponent(row.id, {
         state: "failed",
@@ -818,6 +847,36 @@ async function runComponentSequence(
       break;
     }
   }
+}
+
+async function continuePendingAfterInfrastructureReady(
+  install: PluginInstallRow,
+  components: PluginComponentRow[],
+  gates: Map<string, InfraGate>,
+  deps: PluginEngineDeps,
+): Promise<PluginInstallRow | null> {
+  if (gates.size > 0) return null;
+  if (components.some((component) => component.state === "failed")) {
+    return null;
+  }
+  if (!components.some((component) => component.state === "pending")) {
+    return null;
+  }
+  const infraStillPending = components.some(
+    (component) =>
+      component.component_type === "infrastructure" &&
+      component.state !== "provisioned",
+  );
+  if (infraStillPending) return null;
+
+  const pinned = await resolvePinnedVersion(install, deps);
+  await runComponentSequence(
+    install,
+    pinned.versionEntry.payload,
+    SYSTEM_ACTOR,
+    deps,
+  );
+  return finalizeInstallState(install, SYSTEM_ACTOR, deps);
 }
 
 async function ensureComponentRows(
@@ -1106,12 +1165,6 @@ export async function retryPluginComponent(
   if (!install) {
     throw pluginEngineError("NOT_FOUND", "Plugin install not found");
   }
-  if (install.state === "uninstalling") {
-    throw pluginEngineError(
-      "FAILED_PRECONDITION",
-      "Cannot retry components while the plugin is uninstalling",
-    );
-  }
   const components = await deps.store.listComponents(install.id);
   const row = components.find(
     (component) => component.component_key === args.componentKey,
@@ -1127,6 +1180,9 @@ export async function retryPluginComponent(
       "FAILED_PRECONDITION",
       `Component ${args.componentKey} is ${row.state}; only failed components can be retried`,
     );
+  }
+  if (install.state === "uninstalling") {
+    return retryTeardownComponent(install, row, args.actor, deps);
   }
 
   const pinned = await resolvePinnedVersion(install, deps);
@@ -1155,6 +1211,71 @@ export async function retryPluginComponent(
     deps,
   );
   return finalizeInstallState(reDriving, args.actor, deps);
+}
+
+async function retryTeardownComponent(
+  install: PluginInstallRow,
+  row: PluginComponentRow,
+  actor: PluginEngineActor,
+  deps: PluginEngineDeps,
+): Promise<PluginInstallRow> {
+  let pinnedPayload: PluginVersion | null = null;
+  try {
+    const pinned = await deps.resolveVersion(
+      install.plugin_key,
+      install.pinned_version,
+    );
+    pinnedPayload = pinned?.versionEntry.payload ?? null;
+  } catch {
+    pinnedPayload = null;
+  }
+  const manifestComponent = pinnedPayload
+    ? findManifestComponent(pinnedPayload, row.component_key)
+    : null;
+  const retryRow =
+    (await deps.store.updateComponent(row.id, {
+      state: "pending",
+      lastError: null,
+    })) ?? ({ ...row, state: "pending", last_error: null } as PluginComponentRow);
+
+  try {
+    const outcome = await removeComponentRow(
+      install,
+      retryRow,
+      manifestComponent,
+      actor,
+      deps,
+    );
+    if (outcome === "in_flight") {
+      return (
+        (await deps.store.updateInstall(install.id, { lastError: null })) ??
+        install
+      );
+    }
+    const remaining = await deps.store.listComponents(install.id);
+    if (remaining.length === 0) {
+      await deps.store.deleteInstall(
+        install.id,
+        uninstalledAudit(install, actor),
+      );
+      return { ...install, state: "uninstalling" };
+    }
+    return (
+      (await deps.store.updateInstall(install.id, { lastError: null })) ??
+      install
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await deps.store.updateComponent(row.id, {
+      state: "failed",
+      lastError: `Teardown failed: ${message}`,
+    });
+    return (
+      (await deps.store.updateInstall(install.id, {
+        lastError: `Uninstall incomplete: ${row.component_key}: ${message}`,
+      })) ?? install
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1362,7 +1483,7 @@ export async function uninstallPlugin(
   // the install) once the job succeeds. Re-running uninstall re-drives.
   const rows = await deps.store.listComponents(install.id);
   const ordered = [...rows].sort(
-    (a, b) => runOrder(a.component_type) - runOrder(b.component_type),
+    (a, b) => teardownOrder(a.component_type) - teardownOrder(b.component_type),
   );
   const failures: string[] = [];
   let infraInFlight = false;

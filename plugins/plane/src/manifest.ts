@@ -101,7 +101,7 @@ export const planeManifest = {
           endpointFrom: {
             managedApp: "plane",
             configKey: "publicUrl",
-            path: "/mcp",
+            path: "/http/api-key/mcp",
           },
           auth: {
             mode: "user-provided-headers",
@@ -128,9 +128,28 @@ export const planeManifest = {
           key: "runtime",
           managedAppKey: "plane",
           terraformInputs: {
-            imageUri: {
-              description:
-                "Plane runtime container image URI pinned with @sha256.",
+            frontendImageUri: {
+              description: "Plane frontend image URI pinned with @sha256.",
+              type: "string",
+            },
+            backendImageUri: {
+              description: "Plane backend image URI pinned with @sha256.",
+              type: "string",
+            },
+            spaceImageUri: {
+              description: "Plane Space image URI pinned with @sha256.",
+              type: "string",
+            },
+            adminImageUri: {
+              description: "Plane admin image URI pinned with @sha256.",
+              type: "string",
+            },
+            liveImageUri: {
+              description: "Plane live image URI pinned with @sha256.",
+              type: "string",
+            },
+            mcpImageUri: {
+              description: "Plane MCP server image URI pinned with @sha256.",
               type: "string",
             },
             dbUrlSecretArn: {
@@ -157,12 +176,12 @@ export const planeManifest = {
             },
             s3AccessKeyIdSecretArn: {
               description:
-                "Secrets Manager ARN containing an access key id for Plane S3 uploads.",
+                "Optional Secrets Manager ARN containing an access key id for Plane S3 uploads.",
               type: "string",
             },
             s3SecretAccessKeySecretArn: {
               description:
-                "Secrets Manager ARN containing a secret access key for Plane S3 uploads.",
+                "Optional Secrets Manager ARN containing a secret access key for Plane S3 uploads.",
               type: "string",
             },
             s3BucketName: {

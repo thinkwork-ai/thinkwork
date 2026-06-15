@@ -593,6 +593,212 @@ def safe_get_bool(runner_secrets, payload, name, default=False):
     return default
 
 
+def current_terraform_outputs(stage):
+    bucket = os.environ.get("THINKWORK_TERRAFORM_STATE_BUCKET")
+    if not bucket:
+        return {}
+    keys = [
+        f"env:/{stage}/thinkwork/{stage}/terraform.tfstate",
+        f"thinkwork/{stage}/terraform.tfstate",
+    ]
+    for key in keys:
+        try:
+            body = output(["aws", "s3", "cp", f"s3://{bucket}/{key}", "-"])
+            state = json.loads(body)
+            outputs = state.get("outputs")
+            if isinstance(outputs, dict):
+                return outputs
+        except Exception:
+            continue
+    return {}
+
+
+def state_output(outputs, name, default=None):
+    value = outputs.get(name)
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return default
+
+
+def config_value(desired_config, manifest_images, key, env_name, image_names=None, default=""):
+    value = desired_config.get(key)
+    if isinstance(value, str) and value:
+        return value
+    for image_name in image_names or []:
+        image = manifest_images.get(image_name)
+        if isinstance(image, str) and image:
+            return image
+    return os.environ.get(env_name, default)
+
+
+def managed_app_terraform_overrides(payload, stage, account_id, current_outputs):
+    app_key = payload.get("appKey")
+    operation = str(payload.get("operation") or "").upper()
+    desired_config = payload.get("desiredConfig")
+    if not isinstance(desired_config, dict):
+        desired_config = {}
+    manifest_images = payload.get("manifestImages")
+    if not isinstance(manifest_images, dict):
+        manifest_images = {}
+
+    overrides = {
+        "enable_cognee": bool(state_output(current_outputs, "cognee_enabled", False)),
+        "twenty_provisioned": bool(state_output(current_outputs, "twenty_provisioned", False)),
+        "twenty_runtime_enabled": bool(
+            state_output(current_outputs, "twenty_runtime_enabled", False)
+        ),
+        "enable_deployment_control_plane": bool(
+            state_output(current_outputs, "deployment_control_plane_enabled", True)
+        ),
+        "deployment_control_plane_create_secret_placeholders": False,
+        "plane_provisioned": bool(state_output(current_outputs, "plane_provisioned", False)),
+        "plane_runtime_enabled": bool(
+            state_output(current_outputs, "plane_runtime_enabled", False)
+        ),
+        "plane_frontend_image_uri": "",
+        "plane_backend_image_uri": "",
+        "plane_space_image_uri": "",
+        "plane_admin_image_uri": "",
+        "plane_live_image_uri": "",
+        "plane_mcp_image_uri": "",
+        "plane_db_url_secret_arn": "",
+        "plane_secret_key_secret_arn": "",
+        "plane_live_server_secret_key_secret_arn": "",
+        "plane_aes_secret_key_secret_arn": "",
+        "plane_amqp_url_secret_arn": "",
+        "plane_s3_access_key_id_secret_arn": "",
+        "plane_s3_secret_access_key_secret_arn": "",
+        "plane_s3_bucket_name": "",
+        "plane_domain": "",
+        "plane_public_url": "",
+        "plane_certificate_arn": "",
+    }
+
+    if app_key != "plane":
+        return overrides
+
+    provisioned = operation != "DESTROY"
+    runtime_enabled = provisioned and operation != "PARK"
+    default_bucket = f"thinkwork-{stage}-{account_id}-plane"
+    overrides.update(
+        {
+            "plane_provisioned": provisioned,
+            "plane_runtime_enabled": runtime_enabled,
+            "plane_frontend_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "frontendImageUri",
+                "THINKWORK_PLANE_FRONTEND_IMAGE_URI",
+                ["plane-frontend", "plane-web"],
+            ),
+            "plane_backend_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "backendImageUri",
+                "THINKWORK_PLANE_BACKEND_IMAGE_URI",
+                ["plane-backend", "plane-api"],
+            ),
+            "plane_space_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "spaceImageUri",
+                "THINKWORK_PLANE_SPACE_IMAGE_URI",
+                ["plane-space"],
+            ),
+            "plane_admin_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "adminImageUri",
+                "THINKWORK_PLANE_ADMIN_IMAGE_URI",
+                ["plane-admin"],
+            ),
+            "plane_live_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "liveImageUri",
+                "THINKWORK_PLANE_LIVE_IMAGE_URI",
+                ["plane-live"],
+            ),
+            "plane_mcp_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "mcpImageUri",
+                "THINKWORK_PLANE_MCP_IMAGE_URI",
+                ["plane-mcp-server", "plane-mcp"],
+            ),
+            "plane_db_url_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "dbUrlSecretArn",
+                "THINKWORK_PLANE_DB_URL_SECRET_ARN",
+            ),
+            "plane_secret_key_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "secretKeySecretArn",
+                "THINKWORK_PLANE_SECRET_KEY_SECRET_ARN",
+            ),
+            "plane_live_server_secret_key_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "liveServerSecretKeySecretArn",
+                "THINKWORK_PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN",
+            ),
+            "plane_aes_secret_key_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "aesSecretKeySecretArn",
+                "THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN",
+            ),
+            "plane_amqp_url_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "amqpUrlSecretArn",
+                "THINKWORK_PLANE_AMQP_URL_SECRET_ARN",
+            ),
+            "plane_s3_access_key_id_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "s3AccessKeyIdSecretArn",
+                "THINKWORK_PLANE_S3_ACCESS_KEY_ID_SECRET_ARN",
+            ),
+            "plane_s3_secret_access_key_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "s3SecretAccessKeySecretArn",
+                "THINKWORK_PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN",
+            ),
+            "plane_s3_bucket_name": config_value(
+                desired_config,
+                manifest_images,
+                "s3BucketName",
+                "THINKWORK_PLANE_S3_BUCKET_NAME",
+                default=default_bucket,
+            ),
+            "plane_domain": config_value(
+                desired_config,
+                manifest_images,
+                "domain",
+                "THINKWORK_PLANE_DOMAIN",
+            ),
+            "plane_public_url": config_value(
+                desired_config,
+                manifest_images,
+                "publicUrl",
+                "THINKWORK_PLANE_PUBLIC_URL",
+            ),
+            "plane_certificate_arn": config_value(
+                desired_config,
+                manifest_images,
+                "certificateArn",
+                "THINKWORK_PLANE_CERTIFICATE_ARN",
+            ),
+            "deployment_control_plane_create_secret_placeholders": True,
+        }
+    )
+    return overrides
+
+
 def existing_stage_secret_string(stage, suffix):
     """Read a plain-string platform secret (e.g. thinkwork/<stage>/api-auth).
 
@@ -665,6 +871,16 @@ def release_git_sha():
     return ""
 
 
+def ensure_release_manifest_available(manifest_url, manifest_sha256):
+    if MANIFEST.exists() or not manifest_url:
+        return
+    download(manifest_url, MANIFEST)
+    actual = sha256_file(MANIFEST)
+    expected = (manifest_sha256 or "").lower()
+    if expected and actual != expected:
+        raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
+
+
 def source_repo_and_ref(module_source, release_version):
     source = module_source.removeprefix("git::")
     source_path, _, query = source.partition("?")
@@ -698,6 +914,8 @@ def terraform_module_source_and_version(module_source, module_version, release_v
             f"//terraform/modules/thinkwork?ref={quoted_ref}",
             "",
         )
+    if module_source.startswith("git::") or ".git//" in source_path:
+        return module_source, ""
     return module_source, module_version
 
 
@@ -1481,6 +1699,7 @@ def write_runner_files(payload, runner_secrets):
         account_id = output(
             ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"]
         )
+    current_outputs = current_terraform_outputs(stage)
 
     selected_release = release_selection(payload)
     release_version = selected_release.get("version") or "unresolved"
@@ -1496,6 +1715,7 @@ def write_runner_files(payload, runner_secrets):
             f"{release_manifest_trust_policy_value!r}; expected one of "
             f"{sorted(RELEASE_MANIFEST_TRUST_POLICIES)}"
         )
+    ensure_release_manifest_available(release_manifest_url, release_manifest_sha256)
     release_manifest_trusted_keys_json = json.dumps(
         trusted_release_keys(),
         separators=(",", ":"),
@@ -1665,6 +1885,9 @@ def write_runner_files(payload, runner_secrets):
             default=release_runtime_image("agentcore-pi-amd64"),
         ),
     }
+    vars_json.update(
+        managed_app_terraform_overrides(payload, stage, account_id, current_outputs)
+    )
 
     TF.mkdir(parents=True, exist_ok=True)
     (TF / "backend.hcl").write_text(
@@ -1839,6 +2062,102 @@ variable "deployment_terraform_module_version" {{
   type = string
 }}
 
+variable "deployment_control_plane_create_secret_placeholders" {{
+  type = bool
+}}
+
+variable "enable_cognee" {{
+  type = bool
+}}
+
+variable "enable_deployment_control_plane" {{
+  type = bool
+}}
+
+variable "twenty_provisioned" {{
+  type = bool
+}}
+
+variable "twenty_runtime_enabled" {{
+  type = bool
+}}
+
+variable "plane_provisioned" {{
+  type = bool
+}}
+
+variable "plane_runtime_enabled" {{
+  type = bool
+}}
+
+variable "plane_frontend_image_uri" {{
+  type = string
+}}
+
+variable "plane_backend_image_uri" {{
+  type = string
+}}
+
+variable "plane_space_image_uri" {{
+  type = string
+}}
+
+variable "plane_admin_image_uri" {{
+  type = string
+}}
+
+variable "plane_live_image_uri" {{
+  type = string
+}}
+
+variable "plane_mcp_image_uri" {{
+  type = string
+}}
+
+variable "plane_db_url_secret_arn" {{
+  type = string
+}}
+
+variable "plane_secret_key_secret_arn" {{
+  type = string
+}}
+
+variable "plane_live_server_secret_key_secret_arn" {{
+  type = string
+}}
+
+variable "plane_aes_secret_key_secret_arn" {{
+  type = string
+}}
+
+variable "plane_amqp_url_secret_arn" {{
+  type = string
+}}
+
+variable "plane_s3_access_key_id_secret_arn" {{
+  type = string
+}}
+
+variable "plane_s3_secret_access_key_secret_arn" {{
+  type = string
+}}
+
+variable "plane_s3_bucket_name" {{
+  type = string
+}}
+
+variable "plane_domain" {{
+  type = string
+}}
+
+variable "plane_public_url" {{
+  type = string
+}}
+
+variable "plane_certificate_arn" {{
+  type = string
+}}
+
 module "thinkwork" {{
   source  = {hcl_string(terraform_module_source)}
 {module_version_line}
@@ -1877,13 +2196,36 @@ module "thinkwork" {{
   enable_hindsight               = var.enable_hindsight
   enable_workspace_orchestration = true
 
-  enable_cognee          = false
-  twenty_provisioned     = false
-  twenty_runtime_enabled = false
+  enable_cognee          = var.enable_cognee
+  twenty_provisioned     = var.twenty_provisioned
+  twenty_runtime_enabled = var.twenty_runtime_enabled
+  plane_provisioned      = var.plane_provisioned
+  plane_runtime_enabled  = var.plane_runtime_enabled
+
+  plane_frontend_image_uri = var.plane_frontend_image_uri
+  plane_backend_image_uri  = var.plane_backend_image_uri
+  plane_space_image_uri    = var.plane_space_image_uri
+  plane_admin_image_uri    = var.plane_admin_image_uri
+  plane_live_image_uri     = var.plane_live_image_uri
+  plane_mcp_image_uri      = var.plane_mcp_image_uri
+
+  plane_db_url_secret_arn                 = var.plane_db_url_secret_arn
+  plane_secret_key_secret_arn             = var.plane_secret_key_secret_arn
+  plane_live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
+  plane_aes_secret_key_secret_arn         = var.plane_aes_secret_key_secret_arn
+  plane_amqp_url_secret_arn               = var.plane_amqp_url_secret_arn
+  plane_s3_access_key_id_secret_arn       = var.plane_s3_access_key_id_secret_arn
+  plane_s3_secret_access_key_secret_arn   = var.plane_s3_secret_access_key_secret_arn
+  plane_s3_bucket_name                    = var.plane_s3_bucket_name
+  plane_domain                            = var.plane_domain
+  plane_public_url                        = var.plane_public_url
+  plane_certificate_arn                   = var.plane_certificate_arn
+
   enable_stripe_billing      = false
   enable_slack_workspace_app = false
 
-  enable_deployment_control_plane    = false
+  enable_deployment_control_plane    = var.enable_deployment_control_plane
+  deployment_control_plane_create_secret_placeholders = var.deployment_control_plane_create_secret_placeholders
   deployment_state_machine_arn        = var.deployment_state_machine_arn
   deployment_evidence_bucket          = var.deployment_evidence_bucket
   deployment_release_version         = var.deployment_release_version
@@ -1917,9 +2259,40 @@ output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
   output "docs_bucket_name" {{ value = module.thinkwork.docs_bucket_name }}
   output "docs_distribution_id" {{ value = module.thinkwork.docs_distribution_id }}
   output "docs_distribution_domain" {{ value = module.thinkwork.docs_distribution_domain }}
-  output "cognee_enabled" {{ value = module.thinkwork.cognee_enabled }}
+output "cognee_enabled" {{ value = module.thinkwork.cognee_enabled }}
 output "twenty_provisioned" {{ value = module.thinkwork.twenty_provisioned }}
 output "twenty_runtime_enabled" {{ value = module.thinkwork.twenty_runtime_enabled }}
+output "deployment_control_plane_enabled" {{ value = module.thinkwork.deployment_control_plane_enabled }}
+output "deployment_state_machine_arn" {{ value = module.thinkwork.deployment_state_machine_arn }}
+output "deployment_state_machine_name" {{ value = module.thinkwork.deployment_state_machine_name }}
+output "deployment_runner_project_name" {{ value = module.thinkwork.deployment_runner_project_name }}
+output "deployment_runner_project_arn" {{ value = module.thinkwork.deployment_runner_project_arn }}
+output "deployment_evidence_bucket_name" {{ value = module.thinkwork.deployment_evidence_bucket_name }}
+output "deployment_ssm_prefix" {{ value = module.thinkwork.deployment_ssm_prefix }}
+output "deployment_appconfig_application_id" {{ value = module.thinkwork.deployment_appconfig_application_id }}
+output "deployment_appconfig_environment_id" {{ value = module.thinkwork.deployment_appconfig_environment_id }}
+output "deployment_appconfig_configuration_profile_id" {{ value = module.thinkwork.deployment_appconfig_configuration_profile_id }}
+output "plane_provisioned" {{ value = module.thinkwork.plane_provisioned }}
+output "plane_runtime_enabled" {{ value = module.thinkwork.plane_runtime_enabled }}
+output "plane_url" {{ value = module.thinkwork.plane_url }}
+output "plane_alb_arn" {{ value = module.thinkwork.plane_alb_arn }}
+output "plane_target_group_arn" {{ value = module.thinkwork.plane_target_group_arn }}
+output "plane_cluster_arn" {{ value = module.thinkwork.plane_cluster_arn }}
+output "plane_web_service_name" {{ value = module.thinkwork.plane_web_service_name }}
+output "plane_api_service_name" {{ value = module.thinkwork.plane_api_service_name }}
+output "plane_worker_service_name" {{ value = module.thinkwork.plane_worker_service_name }}
+output "plane_beat_worker_service_name" {{ value = module.thinkwork.plane_beat_worker_service_name }}
+output "plane_live_service_name" {{ value = module.thinkwork.plane_live_service_name }}
+output "plane_mcp_service_name" {{ value = module.thinkwork.plane_mcp_service_name }}
+output "plane_web_log_group_name" {{ value = module.thinkwork.plane_web_log_group_name }}
+output "plane_api_log_group_name" {{ value = module.thinkwork.plane_api_log_group_name }}
+output "plane_worker_log_group_name" {{ value = module.thinkwork.plane_worker_log_group_name }}
+output "plane_beat_worker_log_group_name" {{ value = module.thinkwork.plane_beat_worker_log_group_name }}
+output "plane_live_log_group_name" {{ value = module.thinkwork.plane_live_log_group_name }}
+output "plane_mcp_log_group_name" {{ value = module.thinkwork.plane_mcp_log_group_name }}
+output "plane_cache_endpoint" {{ value = module.thinkwork.plane_cache_endpoint }}
+output "plane_rabbitmq_broker_arn" {{ value = module.thinkwork.plane_rabbitmq_broker_arn }}
+output "plane_storage_bucket_name" {{ value = module.thinkwork.plane_storage_bucket_name }}
 """,
         encoding="utf-8",
     )

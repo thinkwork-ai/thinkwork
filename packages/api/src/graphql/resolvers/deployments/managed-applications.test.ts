@@ -117,14 +117,12 @@ beforeEach(async () => {
 });
 
 describe("managed application plan jobs", () => {
-  it("keeps contract-only managed app adapters out of the operator catalog", () => {
+  it("keeps plugin-owned adapters out of the operator catalog while allowing internal deployment", () => {
     expect(sharedMod.MANAGED_APP_CATALOG.map((app) => app.key)).toEqual([
       "cognee",
       "twenty",
     ]);
-    expect(() => sharedMod.normalizeManagedAppKey("plane")).toThrow(
-      /Unknown managed application key/,
-    );
+    expect(sharedMod.normalizeManagedAppKey("plane")).toBe("plane");
   });
 
   it("creates a Cognee plan job, records release metadata, and starts Step Functions", async () => {

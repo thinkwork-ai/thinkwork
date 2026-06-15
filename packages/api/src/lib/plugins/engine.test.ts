@@ -412,19 +412,19 @@ describe("installPlugin", () => {
     });
   });
 
-  it("runs infrastructure LAST and parks the install at awaiting_approval with the job linked", async () => {
+  it("runs infrastructure before MCP and parks the install while the job is in flight", async () => {
     const h = harness([withInfraVersion()]);
     const install = await installPlugin(installArgs(), h.deps);
 
     expect(install.state).toBe("awaiting_approval");
     expect(h.calls).toEqual([
       "provision:skills:skills",
-      "provision:mcp:crm",
-      "provision:mcp:tasks",
       "provision:infra:infra",
     ]);
     const components = await h.deps.store.listComponents(install.id);
     const infra = components.find((c) => c.component_key === "infra")!;
+    const crm = components.find((c) => c.component_key === "crm")!;
+    const tasks = components.find((c) => c.component_key === "tasks")!;
     expect(infra.state).toBe("pending");
     expect(infra.handler_ref).toMatchObject({
       managedAppKey: "twenty",
@@ -432,6 +432,8 @@ describe("installPlugin", () => {
       operation: "ENABLE",
       attempt: 1,
     });
+    expect(crm.state).toBe("pending");
+    expect(tasks.state).toBe("pending");
     // Not installed yet — no plugin.installed audit.
     expect(h.store.audits).toHaveLength(0);
   });
@@ -1386,6 +1388,52 @@ describe("infrastructure components (U11)", () => {
     expect(
       h.store.audits.filter((a) => a.eventType === "plugin.uninstalled"),
     ).toHaveLength(1);
+  });
+
+  it("retrying a failed component while uninstalling re-drives teardown", async () => {
+    const h = harness([withInfraVersion()]);
+    const install = await installWithInfra(h);
+    setJobStatus(h, "job-1", "succeeded");
+    await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+    await uninstallPlugin(
+      {
+        tenantId: TENANT,
+        installId: install.id,
+        destructiveConfirmation: "lastmile",
+        actor: ACTOR,
+      },
+      h.deps,
+    );
+
+    setJobStatus(h, "job-2", "failed", { errorMessage: "destroy exploded" });
+    await reconcileInstallStatus(
+      (await h.deps.store.getInstallById(TENANT, install.id))!,
+      h.deps,
+    );
+
+    const retried = await retryPluginComponent(
+      {
+        tenantId: TENANT,
+        installId: install.id,
+        componentKey: "infra",
+        actor: ACTOR,
+      },
+      h.deps,
+    );
+
+    expect(retried.state).toBe("uninstalling");
+    const redriven = (await h.deps.store.listComponents(install.id)).find(
+      (c) => c.component_key === "infra",
+    )!;
+    expect(redriven.state).toBe("pending");
+    expect(redriven.last_error).toBeNull();
+    expect(redriven.handler_ref).toMatchObject({
+      operation: "DESTROY",
+      deploymentJobId: "job-3",
+    });
   });
 });
 
