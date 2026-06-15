@@ -11,6 +11,9 @@ does not ingest or migrate Wiki/Brain content during Terraform apply.
 When the parent module enables Cognee, this module provisions:
 
 - ECS Fargate cluster, task definition, and service for the Cognee API on port 8000.
+  Legacy stage-wide deployments use the Brain-named cluster
+  `thinkwork-{stage}-brain-cluster`; Cognee remains the service, task family,
+  container, database, log, and implementation key.
 - Internal Application Load Balancer. There is no internet-facing endpoint mode
   in phase 1.
 - Security groups for ALB to Cognee, Cognee to Aurora, and Cognee to EFS.
@@ -28,7 +31,8 @@ Tenant-scoped instances derive all AWS resource names from
 `brain_instance_key` (or `brain_tenant_id` when the key is empty). This prevents
 two tenant Brain instances in the same stage from targeting the same ECS, ALB,
 EFS, secret, or log group names. Leaving both values empty preserves the legacy
-stage-wide Cognee resource names for existing deployments.
+stage-wide Cognee resource names for existing deployments except the
+operator-facing ECS cluster name, which is Brain-named.
 
 ## Enablement checklist
 
@@ -116,9 +120,9 @@ hardening. Do not reuse this module shape for an internet-reachable endpoint.
 
 ## Backend modes
 
-| Brain tier   | Backend mode | Graph/vector stores                         | Scale contract |
-| ------------ | ------------ | ------------------------------------------- | -------------- |
-| `default`    | `dogfood`    | local Kuzu/LanceDB-style stores on task EFS | `desired_count = 1`; not HA |
+| Brain tier   | Backend mode | Graph/vector stores                         | Scale contract                         |
+| ------------ | ------------ | ------------------------------------------- | -------------------------------------- |
+| `default`    | `dogfood`    | local Kuzu/LanceDB-style stores on task EFS | `desired_count = 1`; not HA            |
 | `production` | `remote`     | Neptune Analytics providers                 | Requires Neptune graph id and endpoint |
 
 Dogfood mode is deliberately single-task because Cognee's local Kuzu/LanceDB
@@ -211,6 +215,9 @@ After enabling Cognee in a stage, operators should verify:
 
 - `cognee_enabled` is `true`, `cognee_backend_mode` matches the intended mode,
   and `cognee_endpoint` is an internal ALB URL.
+- `cognee_cluster_arn`, GraphQL `deploymentStatus.cogneeClusterArn`, the Cognee
+  managed application `clusterArn`, and the health-check target all normalize to
+  the Brain cluster name for legacy stage-wide deployments.
 - `cognee_brain_storage_tier`, graph/vector providers, S3 roots, EFS id, and
   Neptune graph evidence match the intended tenant Brain instance.
 - The internal ALB health check is healthy and the health endpoint is reachable
@@ -222,6 +229,10 @@ After enabling Cognee in a stage, operators should verify:
 - Cognee reports the configured LLM, embedding, graph, and vector providers.
 - Cognee can call the selected LLM/embedding provider.
 - Cognee can reach the configured relational, vector, and graph stores.
+
+Committed verification evidence must redact account IDs, raw secret ARNs, full
+resource IDs, and environment values. Keep raw AWS/GraphQL evidence in the
+restricted CI, S3, or operator record, and commit only the sanitized summary.
 
 If startup fails, start with the ECS service events and the Cognee CloudWatch log
 group. Provider failures usually indicate missing Bedrock ARNs, missing

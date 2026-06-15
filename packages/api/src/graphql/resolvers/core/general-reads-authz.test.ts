@@ -276,9 +276,31 @@ describe("deploymentStatus authz", () => {
       cogneeBackendMode: "dogfood",
       cogneeLogGroupName: "/thinkwork/dev/cognee",
       cogneeClusterArn:
-        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-cognee-cluster",
+        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-brain-cluster",
       cogneeServiceName: "thinkwork-dev-cognee",
     });
+  });
+
+  it("keeps COGNEE_CLUSTER_ARN as an optional compatibility override", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
+    vi.stubEnv("COGNEE", "dogfood|http://cognee.internal");
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
+    vi.stubEnv(
+      "COGNEE_CLUSTER_ARN",
+      "arn:aws:ecs:us-west-2:210987654321:cluster/custom-cognee-cluster",
+    );
+
+    const result = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
+
+    expect(result.cogneeClusterArn).toBe(
+      "arn:aws:ecs:us-west-2:210987654321:cluster/custom-cognee-cluster",
+    );
   });
 
   it("serves Twenty managed app fields from DB state (plan 2026-06-12-001 U10)", async () => {

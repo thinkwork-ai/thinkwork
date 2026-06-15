@@ -5,6 +5,7 @@ import {
   managedApplications as managedApplicationsTable,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../../utils.js";
+import { resolveCogneeClusterIdentity } from "./cogneeClusterIdentity.js";
 
 export type ManagedApplicationKey = "cognee" | "twenty";
 
@@ -260,11 +261,12 @@ function cogneeManagedApplication(): ManagedApplicationStatus {
   const serviceName =
     process.env.COGNEE_SERVICE_NAME ||
     (cognee.enabled ? `thinkwork-${stage}-cognee` : null);
-  const clusterArn =
-    process.env.COGNEE_CLUSTER_ARN ||
-    (cognee.enabled && accountId
-      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-cognee-cluster`
-      : null);
+  const cluster = resolveCogneeClusterIdentity({
+    enabled: cognee.enabled,
+    stage,
+    region,
+    accountId,
+  });
   const logGroupName =
     process.env.COGNEE_LOG_GROUP_NAME ||
     (cognee.enabled ? `/thinkwork/${stage}/cognee` : null);
@@ -282,7 +284,7 @@ function cogneeManagedApplication(): ManagedApplicationStatus {
     backendMode: cognee.backendMode,
     logGroupName,
     logGroupNames: logGroupName ? [logGroupName] : [],
-    clusterArn,
+    clusterArn: cluster.clusterArn,
     serviceName,
     serviceNames: serviceName ? [serviceName] : [],
     albArn: null,

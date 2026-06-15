@@ -244,7 +244,9 @@ describe("U1 - Cognee Terraform app module", () => {
     expect(source).toMatch(/var\.desired_count == 1/);
     expect(source).toMatch(/production Brain tier must use remote mode/);
     expect(source).toMatch(/var\.vector_db_provider == "neptune_analytics"/);
-    expect(source).toMatch(/var\.graph_database_provider == "neptune_analytics"/);
+    expect(source).toMatch(
+      /var\.graph_database_provider == "neptune_analytics"/,
+    );
     expect(source).toMatch(/var\.neptune_endpoint != ""/);
     expect(source).toMatch(/length\(var\.bedrock_model_resource_arns\) > 0/);
   });
@@ -258,13 +260,45 @@ describe("U1 - Cognee Terraform app module", () => {
     expect(vars).toMatch(/variable "brain_storage_tier"/);
     expect(source).toMatch(/normalized_brain_instance_key/);
     expect(source).toMatch(/tenant_scoped_brain_instance/);
-    expect(source).toMatch(/thinkwork-\$\{var\.stage\}-cb-\$\{local\.brain_instance_hash\}/);
+    expect(source).toMatch(
+      /thinkwork-\$\{var\.stage\}-cb-\$\{local\.brain_instance_hash\}/,
+    );
     expect(source).toMatch(
       /\/thinkwork\/\$\{var\.stage\}\/brain\/\$\{local\.normalized_brain_instance_key\}\/cognee/,
     );
     expect(source).toMatch(/var\.vector_db_provider == "neptune_analytics"/);
-    expect(source).toMatch(/var\.graph_database_provider == "neptune_analytics"/);
+    expect(source).toMatch(
+      /var\.graph_database_provider == "neptune_analytics"/,
+    );
     expect(source).toMatch(/var\.neptune_endpoint/);
+  });
+
+  it("isolates the legacy stage-wide ECS cluster name from Cognee implementation names", () => {
+    const source = read(COGNEE_MAIN);
+    const outputs = read(COGNEE_OUTPUTS);
+
+    expect(source).toMatch(
+      /legacy_name\s*=\s*"thinkwork-\$\{var\.stage\}-cognee"/,
+    );
+    expect(source).toMatch(
+      /legacy_cluster_name\s*=\s*"thinkwork-\$\{var\.stage\}-brain-cluster"/,
+    );
+    expect(source).toMatch(
+      /cluster_name\s*=\s*local\.tenant_scoped_brain_instance \? "\$\{local\.name\}-cluster" : local\.legacy_cluster_name/,
+    );
+    expect(
+      firstNestedBlock(source, 'resource "aws_ecs_cluster" "main"'),
+    ).toMatch(/name\s*=\s*local\.cluster_name/);
+    expect(source).toMatch(
+      /resource_short_name\s*=\s*local\.tenant_scoped_brain_instance \? "tw-\$\{substr\(var\.stage, 0, 8\)\}-cb-\$\{substr\(local\.brain_instance_hash, 0, 10\)\}" : "tw-\$\{var\.stage\}-cognee"/,
+    );
+    expect(source).toMatch(/name\s*=\s*local\.name/);
+    expect(source).toMatch(/family\s*=\s*local\.name/);
+    expect(source).toMatch(/container_name\s*=\s*"cognee"/);
+    expect(source).toMatch(/"awslogs-stream-prefix"\s*=\s*"cognee"/);
+    expect(outputs).toMatch(
+      /Company Brain ECS cluster ARN hosting the Cognee service/,
+    );
   });
 
   it("scopes optional Brain S3 and Neptune IAM to tenant resources", () => {
@@ -277,7 +311,9 @@ describe("U1 - Cognee Terraform app module", () => {
     expect(source).toMatch(/resource "aws_iam_role_policy" "brain_artifacts"/);
     expect(source).toMatch(/"s3:prefix"/);
     expect(source).toMatch(/local\.brain_artifact_object_arns/);
-    expect(source).toMatch(/resource "aws_iam_role_policy" "neptune_graph_access"/);
+    expect(source).toMatch(
+      /resource "aws_iam_role_policy" "neptune_graph_access"/,
+    );
     expect(source).toMatch(/neptune-graph:ReadDataViaQuery/);
     expect(source).toMatch(/Resource = var\.neptune_graph_arn/);
   });
@@ -427,6 +463,9 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
     expect(outputs).toMatch(/output "cognee_s3_artifact_root"/);
     expect(outputs).toMatch(/output "cognee_neptune_graph_id"/);
     expect(outputs).toMatch(/local\.cognee_enabled \? module\.cognee\[0\]/);
+    expect(outputs).toMatch(
+      /Company Brain ECS cluster ARN hosting the Cognee service/,
+    );
     expect(outputs).toMatch(/: null/);
   });
 });

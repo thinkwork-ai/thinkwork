@@ -165,6 +165,9 @@ describe("Twenty status served from DB state (plan 2026-06-12-001 U10)", () => {
 describe("Cognee status stays on the env-var path (unchanged by U10)", () => {
   it("reads the compact COGNEE env projection", async () => {
     vi.stubEnv("COGNEE", "graphiti|https://cognee.internal.example.com");
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
     mod = await import("./managedApplications.js");
 
     const cognee = mod.readCogneeStatus();
@@ -181,7 +184,23 @@ describe("Cognee status stays on the env-var path (unchanged by U10)", () => {
       enabled: true,
       endpoint: "https://cognee.internal.example.com",
       backendMode: "graphiti",
+      clusterArn:
+        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-brain-cluster",
     });
+  });
+
+  it("uses COGNEE_CLUSTER_ARN exactly when present", async () => {
+    vi.stubEnv("COGNEE", "dogfood|https://cognee.internal.example.com");
+    vi.stubEnv(
+      "COGNEE_CLUSTER_ARN",
+      "arn:aws:ecs:us-west-2:210987654321:cluster/compat-cluster",
+    );
+    mod = await import("./managedApplications.js");
+
+    const app = await mod.readManagedApplication("cognee", "tenant-1");
+    expect(app.clusterArn).toBe(
+      "arn:aws:ecs:us-west-2:210987654321:cluster/compat-cluster",
+    );
   });
 
   it("reports Cognee disabled when no env projection exists", async () => {

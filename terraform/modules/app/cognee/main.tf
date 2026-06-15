@@ -7,13 +7,15 @@
 ################################################################################
 
 locals {
-  legacy_name = "thinkwork-${var.stage}-cognee"
+  legacy_name         = "thinkwork-${var.stage}-cognee"
+  legacy_cluster_name = "thinkwork-${var.stage}-brain-cluster"
 
   raw_brain_instance_key        = var.brain_instance_key != "" ? var.brain_instance_key : var.brain_tenant_id
   normalized_brain_instance_key = trim(replace(replace(lower(local.raw_brain_instance_key), "/[^a-z0-9-]/", "-"), "/-+/", "-"), "-")
   tenant_scoped_brain_instance  = local.normalized_brain_instance_key != ""
   brain_instance_hash           = substr(sha1(local.raw_brain_instance_key), 0, 12)
   name                          = local.tenant_scoped_brain_instance ? "thinkwork-${var.stage}-cb-${local.brain_instance_hash}" : local.legacy_name
+  cluster_name                  = local.tenant_scoped_brain_instance ? "${local.name}-cluster" : local.legacy_cluster_name
   resource_short_name           = local.tenant_scoped_brain_instance ? "tw-${substr(var.stage, 0, 8)}-cb-${substr(local.brain_instance_hash, 0, 10)}" : "tw-${var.stage}-cognee"
 
   data_root_directory   = "/app/cognee-storage/data"
@@ -320,14 +322,14 @@ resource "terraform_data" "configuration_guardrails" {
 ################################################################################
 
 resource "aws_ecs_cluster" "main" {
-  name = "${local.name}-cluster"
+  name = local.cluster_name
 
   setting {
     name  = "containerInsights"
     value = "enabled"
   }
 
-  tags = { Name = "${local.name}-cluster" }
+  tags = { Name = local.cluster_name }
 }
 
 ################################################################################

@@ -248,7 +248,7 @@ output "cognee_embedding_dimensions" {
 }
 
 output "cognee_cluster_arn" {
-  description = "ECS cluster ARN for the Cognee service (null when enable_cognee = false)"
+  description = "Company Brain ECS cluster ARN hosting the Cognee service (null when enable_cognee = false)"
   value       = local.cognee_enabled ? module.cognee[0].cognee_cluster_arn : null
 }
 

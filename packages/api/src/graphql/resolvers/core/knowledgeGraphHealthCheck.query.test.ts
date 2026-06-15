@@ -141,7 +141,7 @@ describe("knowledgeGraphHealthCheck", () => {
     const result = await mod.knowledgeGraphHealthCheck(null, {}, cognito);
 
     expect(DescribeServicesCommandMock).toHaveBeenCalledWith({
-      cluster: "thinkwork-dev-cognee-cluster",
+      cluster: "thinkwork-dev-brain-cluster",
       services: ["thinkwork-dev-cognee"],
     });
     expect(DescribeTargetGroupsCommandMock).toHaveBeenCalledWith({
@@ -158,6 +158,41 @@ describe("knowledgeGraphHealthCheck", () => {
     });
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     expect(Date.parse(result.checkedAt)).not.toBeNaN();
+  });
+
+  it("uses an explicit COGNEE_CLUSTER_ARN override for the ECS probe", async () => {
+    vi.stubEnv("COGNEE", "dogfood|http://cognee.internal");
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv(
+      "COGNEE_CLUSTER_ARN",
+      "arn:aws:ecs:us-west-2:210987654321:cluster/compat-cluster",
+    );
+    ecsSendMock.mockResolvedValueOnce({
+      services: [
+        {
+          status: "ACTIVE",
+          desiredCount: 1,
+          runningCount: 1,
+          pendingCount: 0,
+          deployments: [{ status: "PRIMARY", rolloutState: "COMPLETED" }],
+        },
+      ],
+    });
+    elbv2SendMock
+      .mockResolvedValueOnce({
+        TargetGroups: [{ TargetGroupArn: "target-group-arn" }],
+      })
+      .mockResolvedValueOnce({
+        TargetHealthDescriptions: [{ TargetHealth: { State: "healthy" } }],
+      });
+
+    await mod.knowledgeGraphHealthCheck(null, {}, cognito);
+
+    expect(DescribeServicesCommandMock).toHaveBeenCalledWith({
+      cluster: "arn:aws:ecs:us-west-2:210987654321:cluster/compat-cluster",
+      services: ["thinkwork-dev-cognee"],
+    });
   });
 
   it("returns an unhealthy result when the ECS service is not steady", async () => {
