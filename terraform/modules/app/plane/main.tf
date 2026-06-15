@@ -654,7 +654,7 @@ resource "aws_lb" "plane" {
 resource "aws_lb_target_group" "service" {
   for_each = local.public_services
 
-  name        = "tw-${var.stage}-plane-${replace(each.value.display_name, "_", "-")}"
+  name_prefix = each.key == "app" ? "twpa-" : "twpm-"
   port        = each.value.port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
@@ -672,6 +672,10 @@ resource "aws_lb_target_group" "service" {
   }
 
   tags = { Name = "${local.name}-${each.value.display_name}-tg" }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_lb_listener" "https" {
