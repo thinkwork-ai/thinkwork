@@ -27,10 +27,12 @@ import {
 } from "../core/resolve-auth-user.js";
 
 export const MANAGED_APP_CATALOG = [
-  ...managedAppRegistry.map((adapter) => ({
-    key: adapter.appKey,
-    displayName: adapter.displayName,
-  })),
+  ...managedAppRegistry
+    .filter((adapter) => adapter.catalogVisible)
+    .map((adapter) => ({
+      key: adapter.appKey,
+      displayName: adapter.displayName,
+    })),
 ] as const;
 
 export type DeploymentOperation = ManagedAppOperation;

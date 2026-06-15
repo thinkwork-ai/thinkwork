@@ -98,6 +98,7 @@ vi.mock("../core/resolve-auth-user.js", () => ({
 }));
 
 let startMod: typeof import("./startManagedApplicationPlan.mutation.js");
+let sharedMod: typeof import("./shared.js");
 
 beforeEach(async () => {
   vi.resetModules();
@@ -112,9 +113,20 @@ beforeEach(async () => {
   mockResolveCallerUserId.mockReset().mockResolvedValue("user-1");
   mockRandomUUID.mockReset().mockReturnValue("job-1");
   startMod = await import("./startManagedApplicationPlan.mutation.js");
+  sharedMod = await import("./shared.js");
 });
 
 describe("managed application plan jobs", () => {
+  it("keeps contract-only managed app adapters out of the operator catalog", () => {
+    expect(sharedMod.MANAGED_APP_CATALOG.map((app) => app.key)).toEqual([
+      "cognee",
+      "twenty",
+    ]);
+    expect(() => sharedMod.normalizeManagedAppKey("plane")).toThrow(
+      /Unknown managed application key/,
+    );
+  });
+
   it("creates a Cognee plan job, records release metadata, and starts Step Functions", async () => {
     vi.stubEnv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:deployments");
     vi.stubEnv("THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET", "evidence-bucket");

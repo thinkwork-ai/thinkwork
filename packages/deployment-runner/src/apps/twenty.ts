@@ -69,6 +69,7 @@ export const twentyAdapter: ManagedAppAdapter = {
   appKey: "twenty",
   displayName: "Twenty CRM",
   description: "Customer-owned CRM runtime with dedicated data and storage.",
+  catalogVisible: true,
   terraformModulePath: "terraform/modules/app/twenty",
   requiredInputs(operation) {
     return operation === "DESTROY" ? [] : provisionRequiredInputs;
