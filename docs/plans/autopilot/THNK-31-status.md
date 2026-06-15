@@ -44,6 +44,8 @@ project_context: TEI ThinkWork
 
 - #2522 `feat(plugins): add first-party plugin package contract` merged into
   `main` as `e6fbbfa4d08050d83b326f85f71ecc6454de1b82`.
+- #2524 `refactor(plugins): move Plane smoke scripts into plugin package`
+  merged into `main` as `defd784dc2d49ef9412638a865fe25778a428c37`.
 
 ## Current Plane Package Slice
 
@@ -64,6 +66,27 @@ project_context: TEI ThinkWork
 - `pnpm --filter @thinkwork/release-manifest test`
 - `pnpm --filter @thinkwork/plugin-plane test`
 - `pnpm --filter @thinkwork/plugin-plane typecheck`
+
+## Current Twenty / Company Brain Package Slice
+
+- Started from fresh `origin/main` at `defd784dc` in branch
+  `codex/thnk-31-twenty-brain-packages`.
+- Moving Twenty and Company Brain catalog manifests into
+  `plugins/twenty/` and `plugins/company-brain/`.
+- Keeping validated compatibility wrappers under
+  `packages/plugin-catalog/src/plugins/{twenty,company-brain}/manifest.ts`.
+- Shrinking the catalog legacy migration list to LastMile only.
+- PR #2526 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2526`
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm --filter @thinkwork/plugin-twenty test && pnpm --filter @thinkwork/plugin-twenty typecheck`
+- `pnpm --filter @thinkwork/plugin-company-brain test && pnpm --filter @thinkwork/plugin-company-brain typecheck`
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/twenty-manifest-parity.test.ts src/lib/plugins/plane-manifest-parity.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
 
 ## Verification Notes
 

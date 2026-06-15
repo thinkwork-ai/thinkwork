@@ -18,7 +18,9 @@
     "build:catalog": "tsx scripts/build-catalog.ts"
   },
   "dependencies": {
-    "@thinkwork/plugin-plane": "workspace:*"
+    "@thinkwork/plugin-company-brain": "workspace:*",
+    "@thinkwork/plugin-plane": "workspace:*",
+    "@thinkwork/plugin-twenty": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

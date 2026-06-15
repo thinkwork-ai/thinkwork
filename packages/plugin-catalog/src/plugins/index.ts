@@ -1,9 +1,9 @@
 import type { PluginManifest } from "../contracts";
 import { defineFirstPartyPluginPackage } from "../plugin-package";
+import { companyBrainPluginPackage as rawCompanyBrainPluginPackage } from "@thinkwork/plugin-company-brain";
 import { planePluginPackage as rawPlanePluginPackage } from "@thinkwork/plugin-plane";
-import { companyBrainManifest } from "./company-brain/manifest";
+import { twentyPluginPackage as rawTwentyPluginPackage } from "@thinkwork/plugin-twenty";
 import { lastmileManifest } from "./lastmile/manifest";
-import { twentyManifest } from "./twenty/manifest";
 
 /**
  * Root `plugins/*` packages that have moved to the package contract.
@@ -13,10 +13,22 @@ import { twentyManifest } from "./twenty/manifest";
 export const planePluginPackage = defineFirstPartyPluginPackage(
   rawPlanePluginPackage,
 );
+export const companyBrainPluginPackage = defineFirstPartyPluginPackage(
+  rawCompanyBrainPluginPackage,
+);
+export const twentyPluginPackage = defineFirstPartyPluginPackage(
+  rawTwentyPluginPackage,
+);
 
 export const planeManifest = planePluginPackage.manifest;
+export const companyBrainManifest = companyBrainPluginPackage.manifest;
+export const twentyManifest = twentyPluginPackage.manifest;
 
-export const firstPartyPluginPackages = [planePluginPackage] as const;
+export const firstPartyPluginPackages = [
+  companyBrainPluginPackage,
+  planePluginPackage,
+  twentyPluginPackage,
+] as const;
 
 /**
  * Temporary migration bridge for manifests that still live in the legacy
@@ -24,9 +36,7 @@ export const firstPartyPluginPackages = [planePluginPackage] as const;
  * list as their owning `plugins/<plugin-key>/` package takes over.
  */
 export const legacyPluginManifestsDuringMigration: readonly PluginManifest[] = [
-  companyBrainManifest,
   lastmileManifest,
-  twentyManifest,
 ];
 
 /**
@@ -37,4 +47,4 @@ export const allPluginManifests: readonly PluginManifest[] = [
   ...legacyPluginManifestsDuringMigration,
 ].sort((a, b) => a.pluginKey.localeCompare(b.pluginKey));
 
-export { companyBrainManifest, lastmileManifest, twentyManifest };
+export { lastmileManifest };
