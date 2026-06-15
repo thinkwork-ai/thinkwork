@@ -50,6 +50,8 @@ project_context: TEI ThinkWork
   into `main` as `ab297af54197daa85d94ea96ff37b6d7f8521297`.
 - #2527 `refactor(plugins): move LastMile manifest package` merged into `main`
   as `56b6947157e8be462701fade77f58e7f7b252ed2`.
+- #2528 `docs(plugins): update plugin builder package workflow` merged into
+  `main` as `44a7e75aa27bb95a2676d583cd2b18b00f2f11d6`.
 
 ## Current Plane Package Slice
 
@@ -128,6 +130,26 @@ project_context: TEI ThinkWork
 
 - `node --test .agents/skills/thinkwork-plugin-builder/tests/plugin-builder-skill.test.mjs`
 - `node .agents/skills/thinkwork-plugin-builder/scripts/scan-plugin-builder-output.mjs <fixture>`
+
+## Current Repository Enforcement Slice
+
+- Started from fresh `origin/main` at `44a7e75aa` in branch
+  `codex/thnk-31-plugin-source-enforcement`.
+- Adding a repository guard that fails when first-party plugin-key source paths
+  appear outside the owning `plugins/<plugin-key>/` folder unless documented in
+  `scripts/plugin-source-boundary-allowlist.mjs`.
+- Wiring the guard into root lint and adding focused node tests for allowed
+  plugin packages, misplaced source, shared false positives, documented
+  migration paths, and stale allowlist entries.
+- PR #2529 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2529`
+
+### Verification
+
+- `node scripts/verify-plugin-source-boundary.mjs`
+- `node --test scripts/__tests__/verify-plugin-source-boundary.test.mjs`
+- `pnpm lint:plugin-source`
+- `pnpm test:plugin-source-boundary`
 
 ## Verification Notes
 

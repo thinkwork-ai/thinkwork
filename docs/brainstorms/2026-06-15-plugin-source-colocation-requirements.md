@@ -178,7 +178,8 @@ shared packages retain generic platform infrastructure.
 - `docs/plans/2026-06-12-001-feat-application-plugins-plan.md`.
 - `docs/brainstorms/2026-06-14-plane-application-plugin-requirements.md`.
 - `docs/brainstorms/2026-06-14-plugin-builder-skill-requirements.md`.
-- Existing catalog source under `packages/plugin-catalog/src/plugins/`.
+- Historical catalog source under `packages/plugin-catalog/src/plugins/`; root
+  `plugins/<plugin-key>/` packages are now the intended source boundary.
 - Existing managed application adapters under `packages/deployment-runner/src/apps/`.
 
 ---
