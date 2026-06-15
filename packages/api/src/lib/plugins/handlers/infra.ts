@@ -105,6 +105,7 @@ export interface InfraHandlerRef extends Record<string, unknown> {
 export interface InfraManagedApplicationSnapshot {
   id: string | null;
   desiredConfig: Record<string, unknown>;
+  currentStatus?: string | null;
   /** Operator-selected release the managed app is pinned to, if any. */
   selectedReleaseVersion: string | null;
   selectedManifestDigest: string | null;
@@ -160,6 +161,7 @@ export function createDefaultInfraHandlerDeps(
             return {
               id: null,
               desiredConfig: {},
+              currentStatus: "enabled",
               selectedReleaseVersion: null,
               selectedManifestDigest: null,
             };
@@ -170,6 +172,7 @@ export function createDefaultInfraHandlerDeps(
       return {
         id: row.id,
         desiredConfig: (row.desired_config ?? {}) as Record<string, unknown>,
+        currentStatus: row.current_status ?? null,
         selectedReleaseVersion: row.selected_release_version ?? null,
         selectedManifestDigest: row.selected_manifest_digest ?? null,
       };
@@ -357,6 +360,12 @@ function hasResolvedRelease(app: InfraManagedApplicationSnapshot): boolean {
   );
 }
 
+function isRunningManagedApplication(
+  app: InfraManagedApplicationSnapshot,
+): boolean {
+  return app.currentStatus === undefined || app.currentStatus === "enabled";
+}
+
 /**
  * Provision (ensure) the infrastructure component: managed_applications row
  * + deployment PLAN job. Returns the updated handler_ref; the component is
@@ -455,6 +464,7 @@ export async function provisionPluginInfraComponent(args: {
   // can produce useful no-change evidence.
   if (
     existing &&
+    isRunningManagedApplication(existing) &&
     !contentChanged &&
     !prior.deploymentJobId &&
     !planBackedAdoption
@@ -479,11 +489,15 @@ export async function provisionPluginInfraComponent(args: {
   // ENABLE for net-new provisioning (no existing row); UPGRADE when the
   // component content changed (plugin upgrade) against an existing row;
   // retries of a failed job keep their original operation.
-  const operation: ManagedAppOperation = contentChanged
-    ? "UPGRADE"
-    : prior.operation === "ENABLE" || prior.operation === "UPGRADE"
-      ? prior.operation
-      : existing
+  const enableExisting =
+    existing !== null && !isRunningManagedApplication(existing);
+  const operation: ManagedAppOperation = enableExisting
+    ? "ENABLE"
+    : contentChanged
+      ? "UPGRADE"
+      : prior.operation === "ENABLE" || prior.operation === "UPGRADE"
+        ? prior.operation
+        : existing
         ? "UPGRADE"
         : "ENABLE";
 
