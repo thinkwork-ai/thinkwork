@@ -18,7 +18,7 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
 
 ## Implementation Progress
 
-- U1/U2 backend slice in progress:
+- U1/U2 backend slice merged:
   - Added `addManualUser` GraphQL contract with required per-submit
     `idempotencyKey`.
   - Added manual-user resolver that gates tenant admin first, rejects duplicate
@@ -29,12 +29,27 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
   - Added contract and resolver tests for no-invite creation, duplicate
     handling, role authorization, Cognito repair, and no DB insert on password
     finalization failure.
+  - PR #2511 merged into `main` as
+    `8cfac030a2c1361a3558245cb00e4f5db8f86496`.
 - U3 discovery:
   - `origin/main` already includes a dedicated `resendMemberInvite` contract,
     resolver, generated client types, and regression tests from
     `4dcfccf4f fix: add dedicated member invite resend flow`.
-  - Remaining U3 work is to run/verify the targeted tests and patch only if a
-    gap appears.
+  - U3 targeted tests passed during PR #2511 verification.
+- U4 Settings Users UI slice in progress:
+  - Branch: `codex/thnk-29-settings-users-ui` from fresh `origin/main` at
+    `8cfac030a2c1361a3558245cb00e4f5db8f86496`.
+  - Split the Users action area into distinct Add user and Send invite buttons.
+  - Added separate no-email manual-add and email-delivery invite dialog copy.
+  - Wired Add user to `SettingsAddManualUserMutation` and Send invite to
+    `SettingsInviteMemberMutation`, with fresh per-submit operation attempt IDs.
+  - Added focused Settings Users component tests for action split, search,
+    manual add semantics, invite semantics, duplicate errors, and owner role
+    filtering.
+  - Browser verification started the real web app at `127.0.0.1:5180`; direct
+    navigation to `/settings/users` redirected to sign-in, so authenticated
+    Users-surface screenshot verification remains blocked until a local browser
+    session has valid Cognito tokens.
 
 ## Verification Notes
 
