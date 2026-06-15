@@ -99,20 +99,20 @@ application plugin. Operators install it from Settings -> Plugins, then the
 plugin infrastructure component uses the managed-app deployment runner to
 provision the retained Plane substrate.
 
-Deploying Plane provisions the public Plane endpoint, ECS/Fargate web/API,
-worker, beat-worker, and live services, dedicated Plane database credentials,
-Redis-compatible cache, RabbitMQ, S3-backed file storage, CloudWatch logs, and
-the Plane MCP endpoint. Parking Plane stops runtime capacity while retaining
-Plane data, files, secrets, queue/cache/storage resources, endpoint wiring, and
-the re-enable path. Destroying Plane is destructive and removes Plane runtime
+Deploying Plane provisions the public Plane endpoint, one ECS/Fargate service
+and task with Plane app, MCP, Redis, and RabbitMQ containers, dedicated Plane
+database credentials, S3-backed file storage, CloudWatch logs, and the Plane MCP
+endpoint. Parking Plane stops runtime capacity while retaining Plane data,
+files, secrets, queue/cache/storage resources, endpoint wiring, and the
+re-enable path. Destroying Plane is destructive and removes Plane runtime
 infrastructure plus app-owned database state, storage, queue/cache resources,
 secrets, and managed MCP rows.
 
 Plane user access is intentionally per-user. Each user activates the plugin
 with their own Plane personal access token and workspace slug; ThinkWork stores
 those values as user-scoped activation secrets and emits them as
-`x-api-key`/`x-workspace-slug` headers only for that requester. Do not create a
-tenant-wide Plane API key as a shortcut.
+`Authorization: Bearer <PAT>` plus the `x-workspace-slug` header only for that
+requester. Do not create a tenant-wide Plane API key as a shortcut.
 
 Run the managed-app smoke after deploy, park, redeploy, or destroy:
 
@@ -133,7 +133,7 @@ health endpoint.
 
 After Plane is deployed and a user has activated the plugin, run the MCP
 seed/write smoke. Direct mode proves the Plane MCP server; proxy mode proves
-ThinkWork activation and runtime header injection:
+ThinkWork activation and runtime bearer plus header injection:
 
 ```bash
 SMOKE_ENABLE_PLANE_MCP=1 \

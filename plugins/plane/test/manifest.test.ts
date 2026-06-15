@@ -12,8 +12,18 @@ import { planeManifest } from "../src/manifest";
 
 const validatedPlaneManifest = validatePluginManifest(planeManifest);
 
-function infrastructureComponent(): InfrastructureComponent {
-  const component = validatedPlaneManifest.versions[0].components.find(
+function versionEntry(version = validatedPlaneManifest.versions[0].version) {
+  const entry = validatedPlaneManifest.versions.find(
+    (candidate) => candidate.version === version,
+  );
+  if (!entry) {
+    throw new Error(`plane manifest is missing version ${version}`);
+  }
+  return entry;
+}
+
+function infrastructureComponent(version?: string): InfrastructureComponent {
+  const component = versionEntry(version).components.find(
     (candidate) => candidate.type === "infrastructure",
   );
   if (component?.type !== "infrastructure") {
@@ -22,8 +32,8 @@ function infrastructureComponent(): InfrastructureComponent {
   return component;
 }
 
-function skillsComponent(): SkillsComponent {
-  const component = validatedPlaneManifest.versions[0].components.find(
+function skillsComponent(version?: string): SkillsComponent {
+  const component = versionEntry(version).components.find(
     (candidate) => candidate.type === "skills",
   );
   if (component?.type !== "skills") {
@@ -32,8 +42,8 @@ function skillsComponent(): SkillsComponent {
   return component;
 }
 
-function mcpComponent(): McpServerComponent {
-  const component = validatedPlaneManifest.versions[0].components.find(
+function mcpComponent(version?: string): McpServerComponent {
+  const component = versionEntry(version).components.find(
     (candidate) => candidate.type === "mcp-server",
   );
   if (component?.type !== "mcp-server") {
@@ -59,13 +69,17 @@ describe("Plane plugin manifest", () => {
   it("validates as a published Plane plugin", () => {
     const validated = validatePluginManifest(planeManifest);
     expect(validated.pluginKey).toBe("plane");
-    expect(validated.versions[0].version).toBe("0.1.0");
+    expect(validated.versions.map((version) => version.version)).toEqual([
+      "0.1.2",
+      "0.1.1",
+      "0.1.0",
+    ]);
     expect(
       validated.versions[0].components.map((component) => component.type),
     ).toEqual(["mcp-server", "infrastructure", "skills"]);
   });
 
-  it("declares a user-scoped Plane MCP endpoint with PAT headers", () => {
+  it("declares a user-scoped Plane MCP endpoint with PAT bearer auth", () => {
     const mcp = mcpComponent();
     expect(mcp).toMatchObject({
       type: "mcp-server",
@@ -74,7 +88,32 @@ describe("Plane plugin manifest", () => {
       endpointFrom: {
         managedApp: "plane",
         configKey: "publicUrl",
-        path: "/mcp",
+        path: "/http/api-key/mcp",
+      },
+      auth: {
+        mode: "user-provided-headers",
+        bearer: {
+          credentialKey: "apiKey",
+          displayName: "Plane personal access token",
+          secret: true,
+        },
+        headers: [
+          {
+            name: "x-workspace-slug",
+            credentialKey: "workspaceSlug",
+            displayName: "Plane workspace slug",
+          },
+        ],
+      },
+    });
+  });
+
+  it("preserves the pre-bearer MCP contract for already pinned Plane installs", () => {
+    expect(mcpComponent("0.1.1")).toMatchObject({
+      endpointFrom: {
+        managedApp: "plane",
+        configKey: "publicUrl",
+        path: "/http/api-key/mcp",
       },
       auth: {
         mode: "user-provided-headers",
@@ -104,11 +143,11 @@ describe("Plane plugin manifest", () => {
     });
     expect(Object.keys(infra.terraformInputs).sort()).toEqual([
       "aesSecretKeySecretArn",
-      "amqpUrlSecretArn",
       "certificateArn",
       "dbUrlSecretArn",
       "imageUri",
       "liveServerSecretKeySecretArn",
+      "mcpImageUri",
       "publicUrl",
       "s3AccessKeyIdSecretArn",
       "s3BucketName",

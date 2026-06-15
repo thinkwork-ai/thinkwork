@@ -2,6 +2,7 @@ import base64
 import importlib.util
 import io
 import json
+import os
 import re
 import subprocess
 import tarfile
@@ -731,8 +732,20 @@ def test_write_runner_files_persists_selected_release_to_controller_module(
     runner = load_runner()
     tf_dir = tmp_path / "terraform"
     old_manifest_url = "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.145/thinkwork-release.json"
-    new_manifest_url = "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.146/thinkwork-release.json"
-    new_manifest_sha = "c3189ff697f9e407ffea197b5298cbe87679ff207aa29b15f8d74f74569b8440"
+    new_manifest_path = tmp_path / "new-thinkwork-release.json"
+    new_manifest_git_sha = "c706fd93b917ee71a01add97ee7dc7c977cc2bb8"
+    new_manifest_sha = write_manifest(
+        new_manifest_path,
+        {
+            "schemaVersion": 1,
+            "release": {
+                "version": "v0.1.0-canary.146",
+                "gitSha": new_manifest_git_sha,
+                "createdAt": "2026-06-09T00:00:00.000Z",
+            },
+        },
+    )
+    new_manifest_url = file_url(new_manifest_path)
 
     monkeypatch.setattr(runner, "TF", tf_dir)
     monkeypatch.setattr(runner, "MANIFEST", tmp_path / "missing-manifest.json")
@@ -781,7 +794,7 @@ def test_write_runner_files_persists_selected_release_to_controller_module(
     assert tfvars["deployment_release_version"] == "v0.1.0-canary.146"
     assert tfvars["deployment_release_manifest_url"] == new_manifest_url
     assert old_manifest_url not in main_tf
-    assert 'ref=v0.1.0-canary.146' in main_tf
+    assert f"ref={new_manifest_git_sha}" in main_tf
     assert "deployment_release_manifest_signature_url" in main_tf
     assert "deployment_release_manifest_trusted_keys_json" in main_tf
     assert "deployment_terraform_module_source" in main_tf
@@ -791,7 +804,21 @@ def _cognito_email_runner_env(
     runner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
     tf_dir = tmp_path / "terraform"
-    manifest_url = "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.150/thinkwork-release.json"
+    manifest_path = tmp_path / "thinkwork-release.json"
+    manifest_sha = write_manifest(
+        manifest_path,
+        {
+            "schemaVersion": 1,
+            "release": {
+                "version": "v0.1.0-canary.150",
+                "gitSha": "abc123",
+                "createdAt": "2026-06-09T00:00:00.000Z",
+            },
+            "artifactBundles": [],
+            "artifacts": [],
+            "runtimeImages": [],
+        },
+    )
     monkeypatch.setattr(runner, "TF", tf_dir)
     monkeypatch.setattr(runner, "MANIFEST", tmp_path / "missing-manifest.json")
     monkeypatch.setenv("THINKWORK_STAGE", "tei-e2e")
@@ -802,11 +829,8 @@ def _cognito_email_runner_env(
     monkeypatch.setenv("THINKWORK_TERRAFORM_LOCK_TABLE", "thinkwork-locks")
     monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
     monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.150")
-    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", manifest_url)
-    monkeypatch.setenv(
-        "THINKWORK_RELEASE_MANIFEST_SHA256",
-        "f0a149db34d59e290fc4a43bc098a57539dcae508445e0fb626b8ce45f9eaf1c",
-    )
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", file_url(manifest_path))
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", manifest_sha)
     return tf_dir
 
 
@@ -981,9 +1005,254 @@ def test_write_runner_files_without_domain_keeps_defaults_and_provider_alias(
     assert 'alias  = "us_east_1"' in main_tf
     assert "aws.us_east_1 = aws.us_east_1" in main_tf
 
-    # KTD7: the inert cloudflare provider is gone from generated roots —
-    # customer accounts never hold Cloudflare credentials.
-    assert "cloudflare" not in main_tf
+    # Existing greenfield state can contain Cloudflare DNS records. Managed-app
+    # targeted plans do not change those records, but Terraform still needs the
+    # provider schema to refresh state.
+    assert 'source  = "cloudflare/cloudflare"' in main_tf
+    assert 'provider "cloudflare" {}' in main_tf
+
+
+def test_plane_managed_app_runner_writes_dns_record_and_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {
+                "deployment_control_plane_enabled": {"value": True},
+                "plane_provisioned": {"value": False},
+                "plane_runtime_enabled": {"value": False},
+            },
+            "resources": [
+                {
+                    "type": "cloudflare_record",
+                    "name": "app",
+                    "instances": [{"attributes": {"zone_id": "zone_123"}}],
+                }
+            ],
+        },
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "appKey": "plane",
+            "operation": "UPGRADE",
+            "desiredConfig": {
+                "domain": "plane.thinkwork.ai",
+                "publicUrl": "https://plane.thinkwork.ai",
+                "certificateArn": "arn:aws:acm:us-east-1:637423202447:certificate/test",
+                "s3BucketName": "thinkwork-dev-637423202447-plane",
+            },
+            "manifestImages": {
+                "plane-aio": (
+                    "artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:"
+                    "7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db"
+                ),
+                "plane-mcp": (
+                    "ghcr.io/thinkwork-ai/plane-mcp:0.1.0@sha256:"
+                    "1111111111111111111111111111111111111111111111111111111111111111"
+                ),
+            },
+        },
+        {},
+    )
+
+    tfvars = json.loads((tf_dir / "terraform.auto.tfvars.json").read_text(encoding="utf-8"))
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+
+    assert vars_json["cloudflare_zone_id"] == "zone_123"
+    assert vars_json["plane_dns_name"] == "plane.thinkwork.ai"
+    assert vars_json["plane_dns_enabled"] is True
+    assert tfvars["cloudflare_zone_id"] == "zone_123"
+    assert tfvars["plane_dns_enabled"] is True
+    assert "plane_amqp_url_secret_arn" not in tfvars
+    assert 'resource "cloudflare_record" "plane"' in main_tf
+    assert "content = module.thinkwork.plane_alb_dns_name" in main_tf
+    assert 'variable "plane_amqp_url_secret_arn"' not in main_tf
+    assert "plane_amqp_url_secret_arn" not in main_tf
+    assert "-target=cloudflare_record.plane" in runner.managed_app_terraform_target_args(
+        {"appKey": "plane"}
+    )
+
+
+def test_validate_managed_app_plan_scope_allows_plane_dns_record() -> None:
+    runner = load_runner()
+
+    runner.validate_managed_app_plan_scope(
+        {"appKey": "plane"},
+        {
+            "resource_changes": [
+                {
+                    "address": "cloudflare_record.plane[0]",
+                    "change": {"actions": ["create"]},
+                }
+            ]
+        },
+    )
+
+
+def test_validate_managed_app_plan_scope_rejects_other_dns_records() -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="cloudflare_record.app"):
+        runner.validate_managed_app_plan_scope(
+            {"appKey": "plane"},
+            {
+                "resource_changes": [
+                    {
+                        "address": "cloudflare_record.app[0]",
+                        "change": {"actions": ["create"]},
+                    }
+                ]
+            },
+        )
+
+
+def test_configure_cloudflare_provider_auth_reads_stage_ssm_without_tfvars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    calls: list[list[str]] = []
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+
+    def fake_output(args: list[str], **_kwargs) -> str:
+        calls.append(args)
+        return "cf-token"
+
+    monkeypatch.setattr(runner, "output", fake_output)
+
+    runner.configure_cloudflare_provider_auth("dev")
+
+    assert os.environ["CLOUDFLARE_API_TOKEN"] == "cf-token"
+    assert calls == [
+        [
+            "aws",
+            "ssm",
+            "get-parameter",
+            "--name",
+            "/thinkwork/dev/cloudflare-namespace-token",
+            "--with-decryption",
+            "--query",
+            "Parameter.Value",
+            "--output",
+            "text",
+        ]
+    ]
+
+
+def test_cloudflare_zone_id_for_hostname_matches_longest_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(runner, "cloudflare_api_token", lambda _stage: "cf-token")
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "result": [
+                        {"name": "thinkwork.ai", "id": "zone-thinkwork"},
+                        {"name": "agents.thinkwork.ai", "id": "zone-agents"},
+                    ]
+                }
+            ).encode()
+
+    def fake_urlopen(request, timeout: int):
+        assert timeout == 30
+        assert request.headers["Authorization"] == "Bearer cf-token"
+        return FakeResponse()
+
+    monkeypatch.setattr(runner.urllib.request, "urlopen", fake_urlopen)
+
+    assert (
+        runner.cloudflare_zone_id_for_hostname("dev", "plane.agents.thinkwork.ai")
+        == "zone-agents"
+    )
+
+
+def test_plane_overrides_derive_cloudflare_zone_when_state_lacks_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(
+        runner,
+        "cloudflare_zone_id_for_hostname",
+        lambda _stage, hostname: "zone-derived"
+        if hostname == "plane.thinkwork.ai"
+        else "",
+    )
+
+    overrides = runner.managed_app_terraform_overrides(
+        {
+            "appKey": "plane",
+            "operation": "UPGRADE",
+            "desiredConfig": {
+                "domain": "plane.thinkwork.ai",
+                "publicUrl": "https://plane.thinkwork.ai",
+            },
+        },
+        "dev",
+        "487219502366",
+        {"deployment_control_plane_enabled": {"value": True}},
+        {"resources": []},
+    )
+
+    assert overrides["cloudflare_zone_id"] == "zone-derived"
+    assert overrides["plane_dns_name"] == "plane.thinkwork.ai"
+    assert overrides["plane_dns_enabled"] is True
+
+
+def test_configure_terraform_provider_mirror_seeds_cloudflare_for_codebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    provider_zip = b"cloudflare-provider"
+    provider_digest = digest(provider_zip)
+
+    monkeypatch.setattr(runner, "WORK", tmp_path)
+    monkeypatch.setattr(runner.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(runner.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(runner, "CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256", provider_digest)
+    monkeypatch.delenv("TF_CLI_CONFIG_FILE", raising=False)
+
+    def fake_download(url: str, destination: Path) -> None:
+        assert "terraform-provider-cloudflare_4.52.7_linux_amd64.zip" in url
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(provider_zip)
+
+    monkeypatch.setattr(runner, "download", fake_download)
+
+    runner.configure_terraform_provider_mirror()
+
+    package = (
+        tmp_path
+        / "provider-mirror"
+        / "registry.terraform.io"
+        / "cloudflare"
+        / "cloudflare"
+        / "terraform-provider-cloudflare_4.52.7_linux_amd64.zip"
+    )
+    assert package.read_bytes() == provider_zip
+
+    terraformrc = tmp_path / "terraformrc"
+    contents = terraformrc.read_text(encoding="utf-8")
+    assert 'include = ["registry.terraform.io/cloudflare/cloudflare"]' in contents
+    assert 'exclude = ["registry.terraform.io/cloudflare/cloudflare"]' in contents
+    assert os.environ["TF_CLI_CONFIG_FILE"] == str(terraformrc)
 
 
 def test_write_runner_files_customer_domain_prefers_secrets_and_coerces_booleans(
@@ -1140,6 +1409,21 @@ def test_github_module_source_checks_out_https_repo() -> None:
         "github.com/thinkwork-ai/thinkwork//terraform/modules/thinkwork?ref=abc123",
         "main",
     ) == ("https://github.com/thinkwork-ai/thinkwork.git", "abc123")
+
+
+def test_git_module_source_ignores_registry_version() -> None:
+    runner = load_runner()
+
+    assert runner.terraform_module_source_and_version(
+        "git::https://github.com/thinkwork-ai/thinkwork.git"
+        "//terraform/modules/thinkwork?ref=codex/thnk-27-plane-deploy-fix",
+        "0.1.0-canary.189",
+        "v0.1.0-canary.189",
+    ) == (
+        "git::https://github.com/thinkwork-ai/thinkwork.git"
+        "//terraform/modules/thinkwork?ref=codex/thnk-27-plane-deploy-fix",
+        "",
+    )
 
 
 def test_safe_extract_rejects_archive_path_traversal(tmp_path: Path) -> None:

@@ -1116,6 +1116,11 @@ module "www_dns" {
   # this module owns only the public CNAME to the ALB.
   include_crm      = var.twenty_provisioned
   crm_alb_dns_name = module.thinkwork.twenty_alb_dns_name != null ? module.thinkwork.twenty_alb_dns_name : ""
+
+  # Plane custom domain (plane.<apex>). Plane uses its own ACM certificate;
+  # this module owns only the public CNAME to the ALB.
+  include_plane      = var.plane_provisioned
+  plane_alb_dns_name = module.thinkwork.plane_alb_dns_name != null ? module.thinkwork.plane_alb_dns_name : ""
 }
 
 ################################################################################

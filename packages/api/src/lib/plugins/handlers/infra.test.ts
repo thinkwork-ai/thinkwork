@@ -36,6 +36,7 @@ function component(
 interface ManagedAppFake {
   id: string | null;
   desiredConfig: Record<string, unknown>;
+  currentStatus?: string | null;
   selectedReleaseVersion: string | null;
   selectedManifestDigest: string | null;
 }
@@ -247,6 +248,7 @@ describe("provisionPluginInfraComponent", () => {
     deps.managedApps.set(`${TENANT}:twenty`, {
       id: "app-existing",
       desiredConfig: { appPassword: "keep-me" },
+      currentStatus: "enabled",
       selectedReleaseVersion: "v1.2.3",
       selectedManifestDigest: "sha-123",
     });
@@ -271,6 +273,7 @@ describe("provisionPluginInfraComponent", () => {
     deps.managedApps.set(`${TENANT}:twenty`, {
       id: "app-existing",
       desiredConfig: {},
+      currentStatus: "enabled",
       selectedReleaseVersion: "v1.2.3",
       selectedManifestDigest: "sha-123",
     });
@@ -290,6 +293,7 @@ describe("provisionPluginInfraComponent", () => {
     deps.managedApps.set(`${TENANT}:twenty`, {
       id: "app-existing",
       desiredConfig: { appPassword: "keep-me" },
+      currentStatus: "enabled",
       selectedReleaseVersion: "v1.2.3",
       selectedManifestDigest: "sha-123",
     });
@@ -373,6 +377,53 @@ describe("provisionPluginInfraComponent", () => {
     });
     expect(ref.adoptedRunningInfra).toBeUndefined();
     expect(ref.componentHash).toBe(infraComponentHash(brainSubstrate));
+  });
+
+  it("Plane creates an ENABLE plan when a previous managed app row is disabled", async () => {
+    const deps = fakeDeps();
+    deps.managedApps.set(`${TENANT}:plane`, {
+      id: "app-plane",
+      desiredConfig: { publicUrl: "https://plane.example.test" },
+      currentStatus: "disabled",
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+
+    const planeRuntime = component({
+      key: "runtime",
+      managedAppKey: "plane",
+      terraformInputs: {
+        publicUrl: { description: "URL", type: "string" },
+      },
+    });
+
+    const ref = await provisionPluginInfraComponent(
+      provisionArgs(
+        deps,
+        {},
+        {
+          pluginKey: "plane",
+          component: planeRuntime,
+        },
+      ),
+    );
+
+    expect(deps.startCalls).toHaveLength(1);
+    expect(deps.startCalls[0]).toMatchObject({
+      appKey: "plane",
+      operation: "ENABLE",
+      releaseVersion: "v1.2.3",
+      manifestDigest: "sha-123",
+      desiredConfig: { publicUrl: "https://plane.example.test" },
+    });
+    expect(ref).toMatchObject({
+      managedAppKey: "plane",
+      managedApplicationId: "app-plane",
+      deploymentJobId: "job-1",
+      operation: "ENABLE",
+      adoptedExisting: true,
+    });
+    expect(ref.adoptedRunningInfra).toBeUndefined();
   });
 
   it("Company Brain adopts existing Cognee directly when release metadata is unresolved", async () => {

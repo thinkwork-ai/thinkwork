@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Badge, Button, ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
-import { ArrowDownToLine, RefreshCw } from "lucide-react";
+import { ArrowDownToLine, ExternalLink, RefreshCw } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsInstallPluginMutation,
@@ -193,6 +193,7 @@ export function PluginsPage() {
                 entry.pluginKey,
                 activations,
               );
+              const launchUrl = deployedLaunchUrl(entry);
               return (
                 <div
                   key={entry.pluginKey}
@@ -209,9 +210,32 @@ export function PluginsPage() {
                   className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3.5 outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">
-                      {entry.displayName}
-                    </p>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {entry.displayName}
+                      </p>
+                      {launchUrl ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={`Open ${entry.displayName} application`}
+                          title={`Open ${entry.displayName} application`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            window.open(
+                              launchUrl,
+                              "_blank",
+                              "noopener,noreferrer",
+                            );
+                          }}
+                          onKeyDown={(event) => event.stopPropagation()}
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </Button>
+                      ) : null}
+                    </div>
                     <p className="mt-0.5 text-sm text-muted-foreground">
                       {catalogListDescription(entry)}
                     </p>
@@ -321,6 +345,14 @@ function pluginEntryIsAuthCapable(entry: {
   return entry.versions.some(
     (version) => (version.requiredOauthScopes?.length ?? 0) > 0,
   );
+}
+
+function deployedLaunchUrl(entry: {
+  install?: { state: string } | null;
+  launchUrl?: string | null;
+}): string | null {
+  if (!entry.install || entry.install.state === "uninstalling") return null;
+  return entry.launchUrl || null;
 }
 
 function activationStatusFor(

@@ -327,10 +327,12 @@ export function resolveUserHeaderComponentBindings(args: {
   }>;
 }): Array<{
   resource: string;
+  bearerCredentialKey?: string;
   headers: Array<{ name: string; credentialKey: string }>;
 }> {
   const bindings: Array<{
     resource: string;
+    bearerCredentialKey?: string;
     headers: Array<{ name: string; credentialKey: string }>;
   }> = [];
   for (const component of args.components) {
@@ -347,6 +349,7 @@ export function resolveUserHeaderComponentBindings(args: {
     }
     bindings.push({
       resource: normalizeResource(resolved),
+      bearerCredentialKey: component.auth.bearer?.credentialKey,
       headers: component.auth.headers.map((header) => ({
         name: header.name,
         credentialKey: header.credentialKey,
@@ -937,24 +940,36 @@ export async function activatePluginWithCredentials(
 
   const requiredCredentialKeys = [
     ...new Set(
-      bindings.flatMap((binding) =>
-        binding.headers.map((header) => header.credentialKey),
-      ),
+      bindings.flatMap((binding) => [
+        ...(binding.bearerCredentialKey ? [binding.bearerCredentialKey] : []),
+        ...binding.headers.map((header) => header.credentialKey),
+      ]),
     ),
   ];
-  const resolvedBindingsByResource = new Map<string, Record<string, string>>();
+  const resolvedBindingsByResource = new Map<
+    string,
+    { accessToken?: string; headers: Record<string, string> }
+  >();
   for (const binding of bindings) {
-    const headers = resolvedBindingsByResource.get(binding.resource) ?? {};
+    const resolved = resolvedBindingsByResource.get(binding.resource) ?? {
+      headers: {},
+    };
+    if (binding.bearerCredentialKey) {
+      resolved.accessToken = credentialValue(
+        args.credentials,
+        binding.bearerCredentialKey,
+      );
+    }
     for (const header of binding.headers) {
-      headers[header.name] = credentialValue(
+      resolved.headers[header.name] = credentialValue(
         args.credentials,
         header.credentialKey,
       );
     }
-    resolvedBindingsByResource.set(binding.resource, headers);
+    resolvedBindingsByResource.set(binding.resource, resolved);
   }
   const resolvedBindings = [...resolvedBindingsByResource.entries()].map(
-    ([resource, headers]) => ({ resource, headers }),
+    ([resource, resolved]) => ({ resource, ...resolved }),
   );
   const audit: EmitAuditEventInput = {
     tenantId: args.tenantId,
@@ -996,6 +1011,8 @@ export async function activatePluginWithCredentials(
       secretName,
       JSON.stringify({
         auth_type: "user-provided-headers",
+        ...(binding.accessToken ? { access_token: binding.accessToken } : {}),
+        token_type: binding.accessToken ? "Bearer" : undefined,
         headers: binding.headers,
         resource: binding.resource,
         obtained_at: deps.now().toISOString(),
@@ -1010,7 +1027,7 @@ export async function activatePluginWithCredentials(
   }
 
   console.log(
-    `[plugin-credentials] activation granted: user ${args.userId}, plugin ${install.plugin_key}, ${bindings.length} header auth record(s)`,
+    `[plugin-credentials] activation granted: user ${args.userId}, plugin ${install.plugin_key}, ${bindings.length} credential auth record(s)`,
   );
   return activation;
 }

@@ -803,19 +803,85 @@ variable "plane_provisioned" {
 }
 
 variable "plane_runtime_enabled" {
-  description = "Run Plane ECS services when the retained substrate is provisioned. Set false to park runtime while retaining data resources."
+  description = "Run the compact Plane ECS service when the retained substrate is provisioned. Set false to park runtime while retaining data resources."
   type        = bool
   default     = false
 }
 
 variable "plane_image_uri" {
-  description = "Plane container image URI pinned to an immutable sha256 digest. Required when plane_provisioned = true."
+  description = "Plane all-in-one image URI pinned to an immutable sha256 digest."
   type        = string
   default     = ""
 
   validation {
     condition     = var.plane_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_image_uri))
     error_message = "plane_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_frontend_image_uri" {
+  description = "Deprecated per-service Plane frontend image URI. The compact AIO runtime uses plane_image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_frontend_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_frontend_image_uri))
+    error_message = "plane_frontend_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_backend_image_uri" {
+  description = "Deprecated per-service Plane backend image URI. The compact AIO runtime uses plane_image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_backend_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_backend_image_uri))
+    error_message = "plane_backend_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_space_image_uri" {
+  description = "Deprecated per-service Plane Space image URI. The compact AIO runtime uses plane_image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_space_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_space_image_uri))
+    error_message = "plane_space_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_admin_image_uri" {
+  description = "Deprecated per-service Plane admin image URI. The compact AIO runtime uses plane_image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_admin_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_admin_image_uri))
+    error_message = "plane_admin_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_live_image_uri" {
+  description = "Deprecated per-service Plane live image URI. The compact AIO runtime uses plane_image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_live_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_live_image_uri))
+    error_message = "plane_live_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "plane_mcp_image_uri" {
+  description = "Plane MCP server runtime image URI pinned to an immutable sha256 digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.plane_mcp_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.plane_mcp_image_uri))
+    error_message = "plane_mcp_image_uri must be empty or pinned to an immutable sha256 image digest."
   }
 }
 
@@ -844,7 +910,7 @@ variable "plane_aes_secret_key_secret_arn" {
 }
 
 variable "plane_amqp_url_secret_arn" {
-  description = "Secrets Manager ARN containing Plane AMQP_URL."
+  description = "Deprecated no-op. Plane AIO AMQP_URL is generated from the in-task RabbitMQ sidecar."
   type        = string
   default     = ""
 }
@@ -891,6 +957,12 @@ variable "plane_web_desired_count" {
   default     = 1
 }
 
+variable "plane_web_container_port" {
+  description = "Plane AIO HTTP listener/container port exposed through the public ALB."
+  type        = number
+  default     = 8080
+}
+
 variable "plane_api_desired_count" {
   description = "Desired Plane API task count when plane_runtime_enabled is true."
   type        = number
@@ -916,36 +988,31 @@ variable "plane_live_desired_count" {
 }
 
 variable "plane_cache_engine" {
-  description = "ElastiCache engine for Plane. Prefer valkey; redis is available as a compatibility fallback."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "valkey"
-
-  validation {
-    condition     = contains(["valkey", "redis"], var.plane_cache_engine)
-    error_message = "plane_cache_engine must be valkey or redis."
-  }
 }
 
 variable "plane_cache_engine_version" {
-  description = "ElastiCache engine version for Plane."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "8.0"
 }
 
 variable "plane_cache_parameter_group_family" {
-  description = "ElastiCache parameter group family matching plane_cache_engine/plane_cache_engine_version."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "valkey8"
 }
 
 variable "plane_cache_node_type" {
-  description = "ElastiCache node type for Plane."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "cache.t4g.micro"
 }
 
 variable "plane_cache_num_cache_clusters" {
-  description = "Number of cache nodes in the Plane replication group. Use 1 for the smallest v1 deployment."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = number
   default     = 1
 }

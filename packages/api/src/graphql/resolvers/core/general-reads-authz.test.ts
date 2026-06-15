@@ -313,12 +313,11 @@ describe("deploymentStatus authz", () => {
       { desired_config: { publicUrl: "https://crm.example.com" } },
     ];
     const succeededJob = [{ operation: "ENABLE" }];
-    // readTwentyStatus (top-level twenty* fields) reads the row + latest
-    // succeeded job; twentyManagedApplication reads them again; the managed
-    // MCP enrichment select falls through to the default [] mock.
+    // This authz/status test only covers the legacy top-level twenty*
+    // projection. Managed-app list entries are covered by
+    // managedApplications.test.ts so this test does not need to know which app
+    // plugins are present.
     mockSelect
-      .mockReturnValueOnce(queryRows(appRow))
-      .mockReturnValueOnce(queryRows(succeededJob))
       .mockReturnValueOnce(queryRows(appRow))
       .mockReturnValueOnce(queryRows(succeededJob));
 
@@ -343,29 +342,6 @@ describe("deploymentStatus authz", () => {
       twentyAlbArn: null,
       twentyTargetGroupArn: null,
     });
-    expect(result.managedApplications).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "twenty",
-          displayName: "Twenty CRM",
-          status: "running",
-          enabled: true,
-          provisioned: true,
-          runtimeEnabled: true,
-          url: "https://crm.example.com",
-          logGroupNames: [
-            "/thinkwork/dev/twenty/server",
-            "/thinkwork/dev/twenty/worker",
-          ],
-          serviceNames: [
-            "thinkwork-dev-twenty-server",
-            "thinkwork-dev-twenty-worker",
-          ],
-          managedMcpStatus: "missing",
-          managedMcpInstallAvailable: true,
-        }),
-      ]),
-    );
   });
 
   it("ignores the retired TWENTY env projection: no DB state means disabled", async () => {

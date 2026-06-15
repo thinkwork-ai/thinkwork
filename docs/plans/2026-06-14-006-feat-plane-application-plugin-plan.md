@@ -47,15 +47,30 @@ Tests:
 ### U4. Plane Terraform Runtime Module
 
 Add `terraform/modules/app/plane` and wire `terraform/modules/thinkwork` plus
-greenfield examples. Use ECS/Fargate, dedicated Postgres contract, Redis/Valkey,
-Amazon MQ RabbitMQ, S3, public HTTPS ALB, CloudWatch evidence, and retained
-park/destroy semantics.
+greenfield examples. Use a compact ECS/Fargate runtime: one Plane all-in-one
+application container plus the separate Plane MCP sidecar in one ECS service
+and task definition. Plane AIO is not dependency-free: satisfy its required
+`REDIS_URL` and `AMQP_URL` with private in-task loopback sidecars, not managed
+AWS services. Use the dedicated Postgres contract, S3, public HTTPS ALB,
+CloudWatch evidence, and retained park/destroy semantics.
+
+Stop-the-line rule: do not add or approve a Plane plan that provisions
+per-service Plane ECS services, ElastiCache/Redis/Valkey, Amazon MQ/RabbitMQ,
+Elasticsearch/OpenSearch, or more than one Plane ECS service speculatively. If
+live deployment evidence proves the compact sidecar topology cannot work, a
+managed dependency is allowed as an explicit exception after recording the
+evidence, rationale, and resource impact in Linear. If these resources appear
+in Terraform plan output without that evidence trail, abort the apply and fix
+the module first. Do not remove the Plane AIO `REDIS_URL` or `AMQP_URL`; they
+must stay pointed at task-local sidecars unless the evidence-backed exception
+changes the dependency shape.
 
 ### U5. Per-User Plane MCP Activation
 
-Extend plugin MCP activation/runtime dispatch to support Plane HTTP PAT header
-auth (`x-api-key`, `x-workspace-slug`) or prove an OAuth bridge. Do not use a
-tenant-wide fallback.
+Extend plugin MCP activation/runtime dispatch to support Plane HTTP PAT bearer
+auth plus auxiliary workspace headers (`Authorization: Bearer <PAT>`,
+`x-workspace-slug`) or prove an OAuth bridge. Do not use a tenant-wide
+fallback.
 
 ### U6. Plane Issue-Loop Skill
 
@@ -68,6 +83,14 @@ Add smoke scripts that seed workspace/project/work-item data, verify MCP
 `get_me`, read seeded data, write back to an existing item, and create a new
 work item.
 
+Verification must exercise the ThinkWork application-plugin flow against a
+deployed AWS environment: install Plane through ThinkWork, inspect deployment
+evidence before approving/applying, open the deployed self-hosted Plane app,
+activate per-user MCP credentials, prove a ThinkWork agent can call Plane MCP,
+then teardown through ThinkWork and verify cleanup/parking. Do not use Plane
+Cloud, local Docker Compose, a local Plane runtime, or a Terraform-only shortcut
+as the end-to-end proof.
+
 ### U8. Release Packaging and Controller Wiring
 
 Include Plane image provenance/digest requirements and release-manifest wiring.
@@ -78,11 +101,12 @@ Document install, park, destroy, activation, smoke, and known limitations.
 
 ## Key Risks
 
-- Plane MCP HTTP PAT requires custom headers that the current ThinkWork MCP
-  dispatch contract does not yet model.
-- Plane self-hosting topology includes multiple services plus Postgres, Redis,
-  RabbitMQ, and S3; Terraform must not collapse durable customer data into
-  ephemeral container storage.
+- Plane MCP HTTP PAT requires bearer auth plus custom workspace headers that the
+  current ThinkWork MCP dispatch contract does not yet model together.
+- Plane self-hosting for ThinkWork is deliberately tighter than Plane's
+  multi-service reference topology: one ECS task with Plane AIO, MCP, and
+  task-local Redis/RabbitMQ sidecars. Terraform must not create separate
+  Redis/RabbitMQ managed services for Plane.
 - The catalog must not expose Plane as installable until the runtime module and
   auth path are executable.
 

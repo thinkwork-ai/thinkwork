@@ -4275,6 +4275,8 @@ export type PluginCatalogEntry = {
   /** The caller tenant's install of this plugin, if any. */
   install?: Maybe<PluginInstall>;
   latestVersion: Scalars['String']['output'];
+  /** Public application URL when this installed plugin owns a deployed app. */
+  launchUrl?: Maybe<Scalars['String']['output']>;
   pluginKey: Scalars['String']['output'];
   /** Premium metadata when the catalog entry is key-gated; null for included plugins. */
   premium?: Maybe<PluginCatalogPremium>;

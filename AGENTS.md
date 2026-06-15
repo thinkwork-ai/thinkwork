@@ -85,6 +85,50 @@ thinkwork login --stage <stage>    # OAuth to the deployed Cognito pool
 thinkwork me                       # identity + tenant sanity check
 ```
 
+### Verification / review workflow
+
+When a Linear issue is in scope, keep the Linear issue updated at every material
+gate: requirements read, PR state, plan inspected, apply started, blocker found,
+fix pushed, verification passed, teardown started, teardown verified, and final
+evidence. If work is blocked or a required PR/artifact is unmerged, leave the
+issue in Verification/Review and comment with the exact state.
+
+For application-plugin verification, prove the user-facing ThinkWork install
+path. Do not substitute a local Docker Compose run, a vendor cloud login, or a
+manual Terraform-only shortcut for the plugin install flow. Use the deployed
+ThinkWork app/runner to install, inspect the generated deployment evidence, then
+verify the deployed application and its MCP integration through a ThinkWork
+agent. Teardown must also go through the ThinkWork managed-application flow, and
+verification is not complete until teardown is observed.
+
+### Plane application plugin
+
+Plane is self-hosted by ThinkWork. Do not use Plane Cloud, and do not run Plane
+locally for THNK-27 verification. The accepted install target is the deployed
+ThinkWork environment provisioning Plane into AWS through the application-plugin
+runner.
+
+Plane's v1 topology is intentionally compact, but Plane AIO is not
+dependency-free. The only accepted runtime shape is one ECS service and one ECS
+task definition containing these containers:
+
+- `plane-app` for the Plane all-in-one runtime
+- `plane-mcp` for the separate ThinkWork MCP server
+- `plane-redis` as a task-local loopback Redis sidecar
+- `plane-rabbitmq` as a task-local loopback RabbitMQ sidecar
+
+Do not add per-service Plane ECS services. Do not add Amazon MQ/RabbitMQ,
+ElastiCache/Redis/Valkey, Elasticsearch/OpenSearch, or any other separately
+managed Plane runtime dependency speculatively. `REDIS_URL` and `AMQP_URL` must
+stay on the Plane AIO container and point to the task-local sidecars by default.
+If runtime evidence proves the compact task-local shape cannot work, a managed
+dependency is allowed as an explicit exception: first comment on the Linear
+issue with the evidence, rationale, resource impact, and revised plan, then
+inspect the Terraform plan before applying. If a Plane plan includes
+`aws_mq_broker`, `aws_elasticache_*`, `aws_opensearch*`, separately managed
+Redis/RabbitMQ/Valkey resources, or more than one Plane ECS service without that
+evidence trail, stop before apply and fix the module first.
+
 ### Web dev server
 
 ```bash
@@ -147,5 +191,6 @@ If Expo reports that `@thinkwork/react-native-sdk/dist/index.js` is missing, thi
 ## Scope guardrails
 
 - This is an **AWS-only** platform. Feature work that assumes Kubernetes, Docker Compose, GCP, or Azure is explicitly out of scope (`CONTRIBUTING.md`).
+- Plane-specific deployment rules live above in **Plane application plugin**. Treat them as stop-the-line verification gates, not preferences.
 - Size for enterprise scale — planning docs should assume on the order of **4 enterprises × 100+ agents × ~5 templates** (400+ agents); "n=4 simplification" reasoning is obsolete.
 - Prefer AWS-native services (AgentCore, Cognito, Bedrock) when comparable to SaaS alternatives; frame external SaaS as contingency, not default.

@@ -8,6 +8,28 @@ import { buildPlanSummary } from "../src/plan";
 
 const digest = "a".repeat(64);
 const imageDigest = "1".repeat(64);
+const planeImageConfig = {
+  imageUri: `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${imageDigest}`,
+  mcpImageUri: `ghcr.io/astral-sh/uv@sha256:${imageDigest}`,
+};
+
+function planeDesiredConfig(extra: Record<string, unknown> = {}) {
+  return {
+    ...planeImageConfig,
+    dbUrlSecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-db",
+    secretKeySecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-secret",
+    liveServerSecretKeySecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
+    aesSecretKeySecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
+    s3BucketName: "thinkwork-dev-plane",
+    publicUrl: "https://plane.example.com",
+    certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/example",
+    ...extra,
+  };
+}
 
 describe("managed app deployment adapters", () => {
   it("maps Cognee deploy config into Terraform variables and smoke evidence", () => {
@@ -156,27 +178,11 @@ describe("managed app deployment adapters", () => {
         releaseVersion: "1.2.3",
         manifestDigest: digest,
         desiredConfigVersion: "v1",
-        desiredConfig: {
-          imageUri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
-          dbUrlSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-db",
-          secretKeySecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-secret",
-          liveServerSecretKeySecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
-          aesSecretKeySecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
-          amqpUrlSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-amqp",
-          s3AccessKeyIdSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-access",
-          s3SecretAccessKeySecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-secret",
+        desiredConfig: planeDesiredConfig({
           s3BucketName: "thinkwork-plane-files",
-          publicUrl: "https://plane.example.com",
           certificateArn:
             "arn:aws:acm:us-east-1:123456789012:certificate/plane",
-        },
+        }),
       },
     });
 
@@ -185,7 +191,8 @@ describe("managed app deployment adapters", () => {
       expect.objectContaining({
         plane_provisioned: true,
         plane_runtime_enabled: true,
-        plane_image_uri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+        plane_image_uri: planeImageConfig.imageUri,
+        plane_mcp_image_uri: planeImageConfig.mcpImageUri,
         plane_public_url: "https://plane.example.com",
         plane_s3_bucket_name: "thinkwork-plane-files",
       }),
@@ -196,7 +203,8 @@ describe("managed app deployment adapters", () => {
       }),
     );
     expect(summary.statusOutputs).toContain("plane_url");
-    expect(summary.statusOutputs).toContain("plane_rabbitmq_broker_arn");
+    expect(summary.statusOutputs).not.toContain("plane_rabbitmq_broker_arn");
+    expect(summary.statusOutputs).not.toContain("plane_cache_endpoint");
   });
 
   it("hydrates managed app images from the verified release manifest contract", () => {
@@ -450,27 +458,7 @@ describe("managed app deployment adapters", () => {
   });
 
   it("maps Plane deploy and park plans to retained runtime states", () => {
-    const desiredConfig = {
-      imageUri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
-      dbUrlSecretArn:
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-db",
-      secretKeySecretArn:
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-secret",
-      liveServerSecretKeySecretArn:
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
-      aesSecretKeySecretArn:
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
-      amqpUrlSecretArn:
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-amqp",
-      s3AccessKeyIdSecretArn:
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-key",
-      s3SecretAccessKeySecretArn:
-        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-secret",
-      s3BucketName: "thinkwork-dev-plane",
-      publicUrl: "https://plane.example.com",
-      certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/example",
-      workerDesiredCount: 2,
-    };
+    const desiredConfig = planeDesiredConfig({ appDesiredCount: 2 });
 
     expect(
       buildManagedAppPlan({
@@ -482,9 +470,9 @@ describe("managed app deployment adapters", () => {
       expect.objectContaining({
         plane_provisioned: true,
         plane_runtime_enabled: true,
-        plane_image_uri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+        plane_image_uri: planeImageConfig.imageUri,
         plane_public_url: "https://plane.example.com",
-        plane_worker_desired_count: 2,
+        plane_web_desired_count: 2,
       }),
     );
     expect(
@@ -517,7 +505,9 @@ describe("managed app deployment adapters", () => {
     });
 
     expect(summary.dataImpact.destructive).toBe(true);
-    expect(summary.dataImpact.resources.join("\n")).toMatch(/RabbitMQ/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/compact ECS/);
+    expect(summary.dataImpact.resources.join("\n")).not.toMatch(/RabbitMQ/);
+    expect(summary.dataImpact.resources.join("\n")).not.toMatch(/Redis/);
     expect(summary.dataImpact.resources.join("\n")).toMatch(/S3/);
     expect(summary.preDestroySteps).toEqual(
       expect.arrayContaining([
@@ -545,28 +535,13 @@ describe("managed app deployment adapters", () => {
         releaseVersion: "1.2.3",
         manifestDigest: digest,
         desiredConfigVersion: "v1",
-        desiredConfig: {
-          dbUrlSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-db",
-          secretKeySecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-secret",
-          liveServerSecretKeySecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
-          aesSecretKeySecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
-          amqpUrlSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-amqp",
-          s3AccessKeyIdSecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-key",
-          s3SecretAccessKeySecretArn:
-            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-secret",
-          s3BucketName: "thinkwork-dev-plane",
-          publicUrl: "https://plane.example.com",
-          certificateArn:
-            "arn:aws:acm:us-east-1:123456789012:certificate/example",
-        },
+        desiredConfig: planeDesiredConfig({
+          imageUri: undefined,
+          mcpImageUri: undefined,
+        }),
         manifestImages: {
-          "managed-app-plane": `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+          "plane-aio": `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${"2".repeat(64)}`,
+          "plane-mcp-server": `ghcr.io/astral-sh/uv@sha256:${"7".repeat(64)}`,
         },
         planDigest: "b".repeat(64),
       },
@@ -574,7 +549,8 @@ describe("managed app deployment adapters", () => {
 
     expect(summary.terraformVariables).toEqual(
       expect.objectContaining({
-        plane_image_uri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+        plane_image_uri: `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${"2".repeat(64)}`,
+        plane_mcp_image_uri: `ghcr.io/astral-sh/uv@sha256:${"7".repeat(64)}`,
       }),
     );
   });
@@ -585,9 +561,6 @@ describe("managed app deployment adapters", () => {
         plane_provisioned: { value: true },
         plane_runtime_enabled: { value: true },
         plane_url: { value: "https://plane.example.com" },
-        plane_rabbitmq_broker_arn: {
-          value: "arn:aws:amazonmq:us-east-1:123456789012:broker:plane",
-        },
         plane_storage_bucket_name: { value: "thinkwork-dev-plane" },
       }),
     ).toEqual(
@@ -597,8 +570,6 @@ describe("managed app deployment adapters", () => {
         endpoint: "https://plane.example.com",
         status: "running",
         evidence: expect.objectContaining({
-          rabbitmqBrokerArn:
-            "arn:aws:amazonmq:us-east-1:123456789012:broker:plane",
           storageBucketName: "thinkwork-dev-plane",
         }),
       }),

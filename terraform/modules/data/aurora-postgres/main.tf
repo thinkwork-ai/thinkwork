@@ -73,7 +73,11 @@ resource "aws_security_group" "db" {
   }
 
   lifecycle {
-    ignore_changes = [name]
+    # App modules grant their own task security groups database access through
+    # standalone aws_security_group_rule resources. Keep this shared group from
+    # trying to reconcile those externally managed ingress rules during targeted
+    # managed-app deploys.
+    ignore_changes = [name, ingress]
   }
 }
 

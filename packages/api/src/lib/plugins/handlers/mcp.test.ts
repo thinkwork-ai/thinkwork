@@ -319,17 +319,16 @@ describe("user-provided header auth (THNK-27 U5)", () => {
       endpointFrom: {
         managedApp: "plane",
         configKey: "publicUrl",
-        path: "/mcp",
+        path: "/http/api-key/mcp",
       },
       auth: {
         mode: "user-provided-headers",
+        bearer: {
+          credentialKey: "apiKey",
+          displayName: "Plane personal access token",
+          secret: true,
+        },
         headers: [
-          {
-            name: "x-api-key",
-            credentialKey: "apiKey",
-            displayName: "Plane personal access token",
-            secret: true,
-          },
           {
             name: "x-workspace-slug",
             credentialKey: "workspaceSlug",
@@ -360,15 +359,15 @@ describe("user-provided header auth (THNK-27 U5)", () => {
 
     expect(ref).toEqual({
       tenantMcpServerId: "server-plane",
-      resolvedEndpointUrl: "https://plane.tenant.example.com/mcp",
+      resolvedEndpointUrl: "https://plane.tenant.example.com/http/api-key/mcp",
     });
     expect(insertCalls[0]).toMatchObject({
       slug: "plane--issues",
-      url: "https://plane.tenant.example.com/mcp",
+      url: "https://plane.tenant.example.com/http/api-key/mcp",
       auth_type: "user_headers",
       auth_config: {
+        bearerCredentialKey: "apiKey",
         headers: [
-          { name: "x-api-key", credentialKey: "apiKey" },
           { name: "x-workspace-slug", credentialKey: "workspaceSlug" },
         ],
       },

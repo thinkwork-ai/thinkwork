@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import os
+import platform
 import secrets
 import subprocess
 import tarfile
@@ -16,6 +17,19 @@ RELEASE = WORK / "release"
 SOURCE = WORK / "source"
 TF = WORK / "terraform"
 MANIFEST = RELEASE / "thinkwork-release.json"
+DEFAULT_PLANE_AIO_IMAGE_URI = (
+    "artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:"
+    "7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db"
+)
+CLOUDFLARE_PROVIDER_VERSION = "4.52.7"
+CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256 = (
+    "904acc31ebb9d6ef68c792074b30532ee61bf515f19e0a3c75b46f126cca1f13"
+)
+CLOUDFLARE_PROVIDER_LINUX_AMD64_URL = (
+    "https://github.com/cloudflare/terraform-provider-cloudflare/releases/download/"
+    f"v{CLOUDFLARE_PROVIDER_VERSION}/"
+    f"terraform-provider-cloudflare_{CLOUDFLARE_PROVIDER_VERSION}_linux_amd64.zip"
+)
 STARTED_AT = datetime.now(UTC).isoformat()
 RELEASE_EVIDENCE = {}
 CONTROLLER_EVIDENCE = {}
@@ -64,6 +78,48 @@ def download(url, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=120) as response:
         destination.write_bytes(response.read())
+
+
+def configure_terraform_provider_mirror():
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system != "linux" or machine not in {"x86_64", "amd64"}:
+        return
+
+    mirror = WORK / "provider-mirror"
+    package = (
+        mirror
+        / "registry.terraform.io"
+        / "cloudflare"
+        / "cloudflare"
+        / f"terraform-provider-cloudflare_{CLOUDFLARE_PROVIDER_VERSION}_linux_amd64.zip"
+    )
+    if not package.exists() or sha256_file(package) != CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256:
+        download(CLOUDFLARE_PROVIDER_LINUX_AMD64_URL, package)
+
+    digest = sha256_file(package)
+    if digest != CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256:
+        raise RuntimeError(
+            "Cloudflare provider mirror digest mismatch: "
+            f"expected {CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256}, got {digest}"
+        )
+
+    terraformrc = WORK / "terraformrc"
+    terraformrc.write_text(
+        f"""
+provider_installation {{
+  filesystem_mirror {{
+    path    = "{mirror}"
+    include = ["registry.terraform.io/cloudflare/cloudflare"]
+  }}
+  direct {{
+    exclude = ["registry.terraform.io/cloudflare/cloudflare"]
+  }}
+}}
+""".lstrip(),
+        encoding="utf-8",
+    )
+    os.environ["TF_CLI_CONFIG_FILE"] = str(terraformrc)
 
 
 def stable_json_bytes(value):
@@ -533,11 +589,71 @@ def terraform_plan_summary(plan_json):
     }
 
 
-def write_terraform_plan_evidence():
+def managed_app_terraform_target_args(payload):
+    if payload.get("appKey") != "plane":
+        return []
+    return [
+        "-target=module.thinkwork.terraform_data.plane_configuration_guardrails",
+        "-target=module.thinkwork.module.plane",
+        "-target=cloudflare_record.plane",
+    ]
+
+
+def is_managed_app_operation(payload):
+    contract = payload.get("operationContract")
+    if isinstance(contract, dict) and contract.get("kind") == "managed_app":
+        return True
+    return bool(payload.get("appKey"))
+
+
+def configure_managed_app_evidence_prefix(payload):
+    if not is_managed_app_operation(payload):
+        return
+    os.environ["THINKWORK_MANAGED_APP_OPERATION"] = "true"
+    evidence = payload.get("evidence")
+    if isinstance(evidence, dict):
+        prefix = evidence.get("prefix")
+        if isinstance(prefix, str) and prefix:
+            os.environ["THINKWORK_EVIDENCE_PREFIX"] = prefix
+
+
+def validate_managed_app_plan_scope(payload, plan_json):
+    if payload.get("appKey") != "plane":
+        return
+    unsafe_changes = []
+    for change in plan_json.get("resource_changes", []):
+        actions = change.get("change", {}).get("actions", [])
+        if not actions or actions == ["no-op"] or actions == ["read"]:
+            continue
+        address = change.get("address", "")
+        if address.startswith("module.thinkwork.module.plane"):
+            continue
+        if address.startswith("module.thinkwork.terraform_data.plane_configuration_guardrails"):
+            continue
+        if address.startswith("cloudflare_record.plane"):
+            continue
+        unsafe_changes.append(
+            {
+                "address": address,
+                "actions": actions,
+            }
+        )
+    if unsafe_changes:
+        preview = ", ".join(
+            f"{item['address']}:{'/'.join(item['actions'])}" for item in unsafe_changes[:10]
+        )
+        raise RuntimeError(
+            "Managed app plan for Plane contains non-Plane changes; refusing to continue. "
+            f"Examples: {preview}"
+        )
+
+
+def write_terraform_plan_evidence(payload=None):
     plan_path = Path("terraform-plan.json")
     with plan_path.open("w", encoding="utf-8") as handle:
         run(["terraform", "show", "-json", "tfplan"], cwd=TF, stdout=handle)
     plan_json = json.loads(plan_path.read_text(encoding="utf-8"))
+    validate_managed_app_plan_scope(payload or {}, plan_json)
     artifact = {
         "fileName": plan_path.name,
         "sha256": sha256_file(plan_path),
@@ -591,6 +707,434 @@ def safe_get_bool(runner_secrets, payload, name, default=False):
         if isinstance(value, str) and value:
             return value.strip().lower() in {"1", "true", "yes", "on"}
     return default
+
+
+def current_terraform_state(stage):
+    bucket = os.environ.get("THINKWORK_TERRAFORM_STATE_BUCKET")
+    if not bucket:
+        return {}
+    keys = [
+        f"env:/{stage}/thinkwork/{stage}/terraform.tfstate",
+        f"thinkwork/{stage}/terraform.tfstate",
+    ]
+    for key in keys:
+        try:
+            body = output(["aws", "s3", "cp", f"s3://{bucket}/{key}", "-"])
+            state = json.loads(body)
+            if isinstance(state, dict):
+                return state
+        except Exception:
+            continue
+    return {}
+
+
+def current_terraform_outputs(stage):
+    outputs = current_terraform_state(stage).get("outputs")
+    return outputs if isinstance(outputs, dict) else {}
+
+
+def cloudflare_api_token(stage):
+    existing = os.environ.get("CLOUDFLARE_API_TOKEN")
+    if existing:
+        return existing
+    parameter_name = f"/thinkwork/{stage}/cloudflare-namespace-token"
+    try:
+        token = output(
+            [
+                "aws",
+                "ssm",
+                "get-parameter",
+                "--name",
+                parameter_name,
+                "--with-decryption",
+                "--query",
+                "Parameter.Value",
+                "--output",
+                "text",
+            ]
+        )
+    except Exception:
+        return ""
+    if token:
+        os.environ["CLOUDFLARE_API_TOKEN"] = token
+    return token
+
+
+def configure_cloudflare_provider_auth(stage):
+    cloudflare_api_token(stage)
+
+
+def cloudflare_zone_id_for_hostname(stage, hostname):
+    configured = os.environ.get("THINKWORK_CLOUDFLARE_ZONE_ID", "")
+    if configured:
+        return configured
+    hostname = (hostname or "").strip().lower().rstrip(".")
+    if not hostname:
+        return ""
+    token = cloudflare_api_token(stage)
+    if not token:
+        return ""
+    request = urllib.request.Request(
+        "https://api.cloudflare.com/client/v4/zones?per_page=50",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return ""
+    zones = body.get("result")
+    if not isinstance(zones, list):
+        return ""
+    matches = []
+    for zone in zones:
+        if not isinstance(zone, dict):
+            continue
+        name = str(zone.get("name") or "").strip().lower().rstrip(".")
+        zone_id = str(zone.get("id") or "").strip()
+        if not name or not zone_id:
+            continue
+        if hostname == name or hostname.endswith(f".{name}"):
+            matches.append((len(name), zone_id))
+    if not matches:
+        return ""
+    return sorted(matches, reverse=True)[0][1]
+
+
+def state_output(outputs, name, default=None):
+    value = outputs.get(name)
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return default
+
+
+def state_terraform_data_input(state, name):
+    for resource in state.get("resources", []) or []:
+        if resource.get("type") != "terraform_data" or resource.get("name") != name:
+            continue
+        for instance in resource.get("instances", []) or []:
+            attributes = instance.get("attributes") or {}
+            terraform_input = attributes.get("input")
+            if isinstance(terraform_input, dict):
+                value = terraform_input.get("value")
+                if isinstance(value, dict):
+                    return value
+                return terraform_input
+    return {}
+
+
+def state_cloudflare_zone_id(state):
+    for resource in state.get("resources", []) or []:
+        if resource.get("type") != "cloudflare_record":
+            continue
+        for instance in resource.get("instances", []) or []:
+            attributes = instance.get("attributes") or {}
+            zone_id = attributes.get("zone_id")
+            if isinstance(zone_id, str) and zone_id:
+                return zone_id
+    return os.environ.get("THINKWORK_CLOUDFLARE_ZONE_ID", "")
+
+
+def url_hostname(url):
+    try:
+        return urllib.parse.urlparse(url).hostname or ""
+    except Exception:
+        return ""
+
+
+def config_value(desired_config, manifest_images, key, env_name, image_names=None, default=""):
+    value = desired_config.get(key)
+    if isinstance(value, str) and value:
+        return value
+    for image_name in image_names or []:
+        image = manifest_images.get(image_name)
+        if isinstance(image, str) and image:
+            return image
+    return os.environ.get(env_name, default)
+
+
+def managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state):
+    app_key = payload.get("appKey")
+    operation = str(payload.get("operation") or "").upper()
+    desired_config = payload.get("desiredConfig")
+    if not isinstance(desired_config, dict):
+        desired_config = {}
+    manifest_images = payload.get("manifestImages")
+    if not isinstance(manifest_images, dict):
+        manifest_images = {}
+    cognee_guardrails = state_terraform_data_input(
+        current_state,
+        "cognee_configuration_guardrails",
+    )
+    twenty_guardrails = state_terraform_data_input(
+        current_state,
+        "twenty_configuration_guardrails",
+    )
+
+    overrides = {
+        "enable_cognee": bool(state_output(current_outputs, "cognee_enabled", False)),
+        "cognee_image_uri": cognee_guardrails.get("cognee_image_uri", ""),
+        "cognee_db_username": cognee_guardrails.get("cognee_db_username", "thinkwork_cognee"),
+        "cognee_db_name": cognee_guardrails.get("cognee_db_name", "thinkwork_cognee"),
+        "cognee_db_password_secret_arn": cognee_guardrails.get(
+            "cognee_db_password_secret_arn",
+            "",
+        ),
+        "cognee_backend_mode": cognee_guardrails.get("cognee_backend_mode", "dogfood"),
+        "cognee_desired_count": cognee_guardrails.get("cognee_desired_count", 1),
+        "cognee_brain_tenant_id": state_output(current_outputs, "cognee_brain_tenant_id", ""),
+        "cognee_brain_instance_key": state_output(
+            current_outputs,
+            "cognee_brain_instance_key",
+            "",
+        ),
+        "cognee_brain_storage_tier": cognee_guardrails.get(
+            "cognee_brain_storage_tier",
+            state_output(current_outputs, "cognee_brain_storage_tier", "default"),
+        ),
+        "cognee_brain_s3_artifact_root": state_output(
+            current_outputs,
+            "cognee_s3_artifact_root",
+            "",
+        ),
+        "cognee_brain_s3_manifest_root": state_output(
+            current_outputs,
+            "cognee_s3_manifest_root",
+            "",
+        ),
+        "cognee_brain_s3_vault_projection_root": state_output(
+            current_outputs,
+            "cognee_s3_vault_projection_root",
+            "",
+        ),
+        "cognee_private_substrate_mode": bool(
+            state_output(current_outputs, "cognee_private_substrate_mode", True)
+        ),
+        "cognee_llm_provider": cognee_guardrails.get("cognee_llm_provider", "bedrock"),
+        "cognee_llm_model": "bedrock/moonshotai.kimi-k2.5",
+        "cognee_embedding_provider": cognee_guardrails.get(
+            "cognee_embedding_provider",
+            "bedrock",
+        ),
+        "cognee_embedding_model": state_output(
+            current_outputs,
+            "cognee_embedding_model",
+            "amazon.titan-embed-text-v2:0",
+        ),
+        "cognee_embedding_dimensions": state_output(
+            current_outputs,
+            "cognee_embedding_dimensions",
+            1024,
+        ),
+        "cognee_vector_db_provider": state_output(
+            current_outputs,
+            "cognee_vector_db_provider",
+            "lancedb",
+        ),
+        "cognee_graph_database_provider": state_output(
+            current_outputs,
+            "cognee_graph_database_provider",
+            "kuzu",
+        ),
+        "cognee_neptune_graph_id": state_output(current_outputs, "cognee_neptune_graph_id", ""),
+        "cognee_neptune_endpoint": state_output(current_outputs, "cognee_neptune_endpoint", ""),
+        "cognee_production_posture": state_output(
+            current_outputs,
+            "cognee_production_posture",
+            "",
+        ),
+        "cognee_bedrock_model_resource_arns": cognee_guardrails.get(
+            "cognee_bedrock_model_resources",
+            [],
+        ),
+        "twenty_provisioned": bool(state_output(current_outputs, "twenty_provisioned", False)),
+        "twenty_runtime_enabled": bool(
+            state_output(current_outputs, "twenty_runtime_enabled", False)
+        ),
+        "twenty_image_uri": twenty_guardrails.get("twenty_image_uri", ""),
+        "twenty_db_username": twenty_guardrails.get("twenty_db_username", "thinkwork_twenty"),
+        "twenty_db_name": twenty_guardrails.get("twenty_db_name", "thinkwork_twenty"),
+        "twenty_db_url_secret_arn": twenty_guardrails.get("twenty_db_url_secret_arn", ""),
+        "twenty_encryption_key_secret_arn": twenty_guardrails.get(
+            "twenty_encryption_key_secret_arn",
+            "",
+        ),
+        "twenty_email_from_address": "",
+        "twenty_email_from_name": "ThinkWork CRM",
+        "twenty_public_url": twenty_guardrails.get(
+            "twenty_public_url",
+            state_output(current_outputs, "twenty_url", ""),
+        ),
+        "twenty_certificate_arn": twenty_guardrails.get("twenty_certificate_arn", ""),
+        "enable_deployment_control_plane": bool(
+            state_output(current_outputs, "deployment_control_plane_enabled", True)
+        ),
+        "deployment_control_plane_create_secret_placeholders": False,
+        "cloudflare_zone_id": state_cloudflare_zone_id(current_state),
+        "plane_dns_enabled": False,
+        "plane_dns_name": "",
+        "plane_provisioned": bool(state_output(current_outputs, "plane_provisioned", False)),
+        "plane_runtime_enabled": bool(
+            state_output(current_outputs, "plane_runtime_enabled", False)
+        ),
+        "plane_image_uri": "",
+        "plane_frontend_image_uri": "",
+        "plane_backend_image_uri": "",
+        "plane_space_image_uri": "",
+        "plane_admin_image_uri": "",
+        "plane_live_image_uri": "",
+        "plane_mcp_image_uri": "",
+        "plane_db_url_secret_arn": "",
+        "plane_secret_key_secret_arn": "",
+        "plane_live_server_secret_key_secret_arn": "",
+        "plane_aes_secret_key_secret_arn": "",
+        "plane_s3_access_key_id_secret_arn": "",
+        "plane_s3_secret_access_key_secret_arn": "",
+        "plane_s3_bucket_name": "",
+        "plane_domain": "",
+        "plane_public_url": "",
+        "plane_certificate_arn": "",
+        "plane_web_container_port": 8080,
+    }
+
+    if app_key != "plane":
+        return overrides
+
+    provisioned = operation != "DESTROY"
+    runtime_enabled = provisioned and operation != "PARK"
+    default_bucket = f"thinkwork-{stage}-{account_id}-plane"
+    overrides.update(
+        {
+            "plane_provisioned": provisioned,
+            "plane_runtime_enabled": runtime_enabled,
+            "plane_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "imageUri",
+                "THINKWORK_PLANE_IMAGE_URI",
+                ["plane-aio", "plane"],
+                default=DEFAULT_PLANE_AIO_IMAGE_URI,
+            ),
+            "plane_frontend_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "frontendImageUri",
+                "THINKWORK_PLANE_FRONTEND_IMAGE_URI",
+                ["plane-frontend", "plane-web"],
+            ),
+            "plane_backend_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "backendImageUri",
+                "THINKWORK_PLANE_BACKEND_IMAGE_URI",
+                ["plane-backend", "plane-api"],
+            ),
+            "plane_space_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "spaceImageUri",
+                "THINKWORK_PLANE_SPACE_IMAGE_URI",
+                ["plane-space"],
+            ),
+            "plane_admin_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "adminImageUri",
+                "THINKWORK_PLANE_ADMIN_IMAGE_URI",
+                ["plane-admin"],
+            ),
+            "plane_live_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "liveImageUri",
+                "THINKWORK_PLANE_LIVE_IMAGE_URI",
+                ["plane-live"],
+            ),
+            "plane_mcp_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "mcpImageUri",
+                "THINKWORK_PLANE_MCP_IMAGE_URI",
+                ["plane-mcp-server", "plane-mcp"],
+            ),
+            "plane_db_url_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "dbUrlSecretArn",
+                "THINKWORK_PLANE_DB_URL_SECRET_ARN",
+            ),
+            "plane_secret_key_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "secretKeySecretArn",
+                "THINKWORK_PLANE_SECRET_KEY_SECRET_ARN",
+            ),
+            "plane_live_server_secret_key_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "liveServerSecretKeySecretArn",
+                "THINKWORK_PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN",
+            ),
+            "plane_aes_secret_key_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "aesSecretKeySecretArn",
+                "THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN",
+            ),
+            "plane_s3_access_key_id_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "s3AccessKeyIdSecretArn",
+                "THINKWORK_PLANE_S3_ACCESS_KEY_ID_SECRET_ARN",
+            ),
+            "plane_s3_secret_access_key_secret_arn": config_value(
+                desired_config,
+                manifest_images,
+                "s3SecretAccessKeySecretArn",
+                "THINKWORK_PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN",
+            ),
+            "plane_s3_bucket_name": config_value(
+                desired_config,
+                manifest_images,
+                "s3BucketName",
+                "THINKWORK_PLANE_S3_BUCKET_NAME",
+                default=default_bucket,
+            ),
+            "plane_domain": config_value(
+                desired_config,
+                manifest_images,
+                "domain",
+                "THINKWORK_PLANE_DOMAIN",
+            ),
+            "plane_public_url": config_value(
+                desired_config,
+                manifest_images,
+                "publicUrl",
+                "THINKWORK_PLANE_PUBLIC_URL",
+            ),
+            "plane_certificate_arn": config_value(
+                desired_config,
+                manifest_images,
+                "certificateArn",
+                "THINKWORK_PLANE_CERTIFICATE_ARN",
+            ),
+            "plane_web_container_port": int(
+                desired_config.get("webContainerPort")
+                or desired_config.get("listenHttpPort")
+                or os.environ.get("THINKWORK_PLANE_WEB_CONTAINER_PORT", "8080")
+            ),
+            "deployment_control_plane_create_secret_placeholders": True,
+        }
+    )
+    plane_dns_name = overrides["plane_domain"] or url_hostname(overrides["plane_public_url"])
+    overrides["cloudflare_zone_id"] = overrides[
+        "cloudflare_zone_id"
+    ] or cloudflare_zone_id_for_hostname(stage, plane_dns_name)
+    overrides["plane_dns_name"] = plane_dns_name
+    overrides["plane_dns_enabled"] = (
+        provisioned and bool(overrides["cloudflare_zone_id"]) and bool(plane_dns_name)
+    )
+    return overrides
 
 
 def existing_stage_secret_string(stage, suffix):
@@ -665,6 +1209,16 @@ def release_git_sha():
     return ""
 
 
+def ensure_release_manifest_available(manifest_url, manifest_sha256):
+    if MANIFEST.exists() or not manifest_url:
+        return
+    download(manifest_url, MANIFEST)
+    actual = sha256_file(MANIFEST)
+    expected = (manifest_sha256 or "").lower()
+    if expected and actual != expected:
+        raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
+
+
 def source_repo_and_ref(module_source, release_version):
     source = module_source.removeprefix("git::")
     source_path, _, query = source.partition("?")
@@ -698,6 +1252,8 @@ def terraform_module_source_and_version(module_source, module_version, release_v
             f"//terraform/modules/thinkwork?ref={quoted_ref}",
             "",
         )
+    if module_source.startswith("git::") or ".git//" in source_path:
+        return module_source, ""
     return module_source, module_version
 
 
@@ -1481,6 +2037,10 @@ def write_runner_files(payload, runner_secrets):
         account_id = output(
             ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"]
         )
+    current_state = current_terraform_state(stage)
+    current_outputs = current_state.get("outputs")
+    if not isinstance(current_outputs, dict):
+        current_outputs = {}
 
     selected_release = release_selection(payload)
     release_version = selected_release.get("version") or "unresolved"
@@ -1496,6 +2056,7 @@ def write_runner_files(payload, runner_secrets):
             f"{release_manifest_trust_policy_value!r}; expected one of "
             f"{sorted(RELEASE_MANIFEST_TRUST_POLICIES)}"
         )
+    ensure_release_manifest_available(release_manifest_url, release_manifest_sha256)
     release_manifest_trusted_keys_json = json.dumps(
         trusted_release_keys(),
         separators=(",", ":"),
@@ -1665,6 +2226,9 @@ def write_runner_files(payload, runner_secrets):
             default=release_runtime_image("agentcore-pi-amd64"),
         ),
     }
+    vars_json.update(
+        managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state)
+    )
 
     TF.mkdir(parents=True, exist_ok=True)
     (TF / "backend.hcl").write_text(
@@ -1696,6 +2260,10 @@ terraform {{
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }}
+    cloudflare = {{
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }}
   }}
 }}
 
@@ -1711,6 +2279,11 @@ provider "aws" {{
   alias  = "us_east_1"
   region = "us-east-1"
 }}
+
+# Existing greenfield stacks keep Cloudflare DNS resources in the same state
+# file. Managed-app targeted plans still need the provider schema available
+# even though they do not change those records.
+provider "cloudflare" {{}}
 
 variable "stage" {{
   type = string
@@ -1839,6 +2412,250 @@ variable "deployment_terraform_module_version" {{
   type = string
 }}
 
+variable "deployment_control_plane_create_secret_placeholders" {{
+  type = bool
+}}
+
+variable "enable_cognee" {{
+  type = bool
+}}
+
+variable "cognee_image_uri" {{
+  type = string
+}}
+
+variable "cognee_db_username" {{
+  type = string
+}}
+
+variable "cognee_db_name" {{
+  type = string
+}}
+
+variable "cognee_db_password_secret_arn" {{
+  type = string
+}}
+
+variable "cognee_backend_mode" {{
+  type = string
+}}
+
+variable "cognee_desired_count" {{
+  type = number
+}}
+
+variable "cognee_brain_tenant_id" {{
+  type = string
+}}
+
+variable "cognee_brain_instance_key" {{
+  type = string
+}}
+
+variable "cognee_brain_storage_tier" {{
+  type = string
+}}
+
+variable "cognee_brain_s3_artifact_root" {{
+  type = string
+}}
+
+variable "cognee_brain_s3_manifest_root" {{
+  type = string
+}}
+
+variable "cognee_brain_s3_vault_projection_root" {{
+  type = string
+}}
+
+variable "cognee_private_substrate_mode" {{
+  type = bool
+}}
+
+variable "cognee_llm_provider" {{
+  type = string
+}}
+
+variable "cognee_llm_model" {{
+  type = string
+}}
+
+variable "cognee_embedding_provider" {{
+  type = string
+}}
+
+variable "cognee_embedding_model" {{
+  type = string
+}}
+
+variable "cognee_embedding_dimensions" {{
+  type = number
+}}
+
+variable "cognee_vector_db_provider" {{
+  type = string
+}}
+
+variable "cognee_graph_database_provider" {{
+  type = string
+}}
+
+variable "cognee_neptune_graph_id" {{
+  type = string
+}}
+
+variable "cognee_neptune_endpoint" {{
+  type = string
+}}
+
+variable "cognee_production_posture" {{
+  type = string
+}}
+
+variable "cognee_bedrock_model_resource_arns" {{
+  type = list(string)
+}}
+
+variable "enable_deployment_control_plane" {{
+  type = bool
+}}
+
+variable "twenty_provisioned" {{
+  type = bool
+}}
+
+variable "twenty_runtime_enabled" {{
+  type = bool
+}}
+
+variable "twenty_image_uri" {{
+  type = string
+}}
+
+variable "twenty_db_username" {{
+  type = string
+}}
+
+variable "twenty_db_name" {{
+  type = string
+}}
+
+variable "twenty_db_url_secret_arn" {{
+  type = string
+}}
+
+variable "twenty_encryption_key_secret_arn" {{
+  type = string
+}}
+
+variable "twenty_email_from_address" {{
+  type = string
+}}
+
+variable "twenty_email_from_name" {{
+  type = string
+}}
+
+variable "twenty_public_url" {{
+  type = string
+}}
+
+variable "twenty_certificate_arn" {{
+  type = string
+}}
+
+variable "plane_provisioned" {{
+  type = bool
+}}
+
+variable "plane_runtime_enabled" {{
+  type = bool
+}}
+
+variable "plane_image_uri" {{
+  type = string
+}}
+
+variable "plane_frontend_image_uri" {{
+  type = string
+}}
+
+variable "plane_backend_image_uri" {{
+  type = string
+}}
+
+variable "plane_space_image_uri" {{
+  type = string
+}}
+
+variable "plane_admin_image_uri" {{
+  type = string
+}}
+
+variable "plane_live_image_uri" {{
+  type = string
+}}
+
+variable "plane_mcp_image_uri" {{
+  type = string
+}}
+
+variable "plane_db_url_secret_arn" {{
+  type = string
+}}
+
+variable "plane_secret_key_secret_arn" {{
+  type = string
+}}
+
+variable "plane_live_server_secret_key_secret_arn" {{
+  type = string
+}}
+
+variable "plane_aes_secret_key_secret_arn" {{
+  type = string
+}}
+
+variable "plane_s3_access_key_id_secret_arn" {{
+  type = string
+}}
+
+variable "plane_s3_secret_access_key_secret_arn" {{
+  type = string
+}}
+
+variable "plane_s3_bucket_name" {{
+  type = string
+}}
+
+variable "plane_domain" {{
+  type = string
+}}
+
+variable "plane_public_url" {{
+  type = string
+}}
+
+variable "plane_certificate_arn" {{
+  type = string
+}}
+
+variable "plane_web_container_port" {{
+  type = number
+}}
+
+variable "cloudflare_zone_id" {{
+  type = string
+}}
+
+variable "plane_dns_enabled" {{
+  type = bool
+}}
+
+variable "plane_dns_name" {{
+  type = string
+}}
+
 module "thinkwork" {{
   source  = {hcl_string(terraform_module_source)}
 {module_version_line}
@@ -1877,13 +2694,70 @@ module "thinkwork" {{
   enable_hindsight               = var.enable_hindsight
   enable_workspace_orchestration = true
 
-  enable_cognee          = false
-  twenty_provisioned     = false
-  twenty_runtime_enabled = false
+  enable_cognee          = var.enable_cognee
+  cognee_image_uri       = var.cognee_image_uri
+  cognee_db_username     = var.cognee_db_username
+  cognee_db_name         = var.cognee_db_name
+  cognee_db_password_secret_arn = var.cognee_db_password_secret_arn
+  cognee_backend_mode    = var.cognee_backend_mode
+  cognee_desired_count   = var.cognee_desired_count
+  cognee_brain_tenant_id                = var.cognee_brain_tenant_id
+  cognee_brain_instance_key             = var.cognee_brain_instance_key
+  cognee_brain_storage_tier             = var.cognee_brain_storage_tier
+  cognee_brain_s3_artifact_root         = var.cognee_brain_s3_artifact_root
+  cognee_brain_s3_manifest_root         = var.cognee_brain_s3_manifest_root
+  cognee_brain_s3_vault_projection_root = var.cognee_brain_s3_vault_projection_root
+  cognee_private_substrate_mode         = var.cognee_private_substrate_mode
+  cognee_llm_provider                   = var.cognee_llm_provider
+  cognee_llm_model                      = var.cognee_llm_model
+  cognee_embedding_provider             = var.cognee_embedding_provider
+  cognee_embedding_model                = var.cognee_embedding_model
+  cognee_embedding_dimensions           = var.cognee_embedding_dimensions
+  cognee_vector_db_provider             = var.cognee_vector_db_provider
+  cognee_graph_database_provider        = var.cognee_graph_database_provider
+  cognee_neptune_graph_id               = var.cognee_neptune_graph_id
+  cognee_neptune_endpoint               = var.cognee_neptune_endpoint
+  cognee_production_posture             = var.cognee_production_posture
+  cognee_bedrock_model_resource_arns    = var.cognee_bedrock_model_resource_arns
+  twenty_provisioned     = var.twenty_provisioned
+  twenty_runtime_enabled = var.twenty_runtime_enabled
+  twenty_image_uri       = var.twenty_image_uri
+  twenty_db_username     = var.twenty_db_username
+  twenty_db_name         = var.twenty_db_name
+  twenty_db_url_secret_arn         = var.twenty_db_url_secret_arn
+  twenty_encryption_key_secret_arn = var.twenty_encryption_key_secret_arn
+  twenty_email_from_address        = var.twenty_email_from_address
+  twenty_email_from_name           = var.twenty_email_from_name
+  twenty_public_url                = var.twenty_public_url
+  twenty_certificate_arn           = var.twenty_certificate_arn
+  plane_provisioned      = var.plane_provisioned
+  plane_runtime_enabled  = var.plane_runtime_enabled
+  plane_image_uri        = var.plane_image_uri
+
+  plane_frontend_image_uri = var.plane_frontend_image_uri
+  plane_backend_image_uri  = var.plane_backend_image_uri
+  plane_space_image_uri    = var.plane_space_image_uri
+  plane_admin_image_uri    = var.plane_admin_image_uri
+  plane_live_image_uri     = var.plane_live_image_uri
+  plane_mcp_image_uri      = var.plane_mcp_image_uri
+
+  plane_db_url_secret_arn                 = var.plane_db_url_secret_arn
+  plane_secret_key_secret_arn             = var.plane_secret_key_secret_arn
+  plane_live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
+  plane_aes_secret_key_secret_arn         = var.plane_aes_secret_key_secret_arn
+  plane_s3_access_key_id_secret_arn       = var.plane_s3_access_key_id_secret_arn
+  plane_s3_secret_access_key_secret_arn   = var.plane_s3_secret_access_key_secret_arn
+  plane_s3_bucket_name                    = var.plane_s3_bucket_name
+  plane_domain                            = var.plane_domain
+  plane_public_url                        = var.plane_public_url
+  plane_certificate_arn                   = var.plane_certificate_arn
+  plane_web_container_port                = var.plane_web_container_port
+
   enable_stripe_billing      = false
   enable_slack_workspace_app = false
 
-  enable_deployment_control_plane    = false
+  enable_deployment_control_plane    = var.enable_deployment_control_plane
+  deployment_control_plane_create_secret_placeholders = var.deployment_control_plane_create_secret_placeholders
   deployment_state_machine_arn        = var.deployment_state_machine_arn
   deployment_evidence_bucket          = var.deployment_evidence_bucket
   deployment_release_version         = var.deployment_release_version
@@ -1894,6 +2768,18 @@ module "thinkwork" {{
   deployment_release_manifest_trusted_keys_json = var.deployment_release_manifest_trusted_keys_json
   deployment_terraform_module_source            = var.deployment_terraform_module_source
   deployment_terraform_module_version           = var.deployment_terraform_module_version
+}}
+
+resource "cloudflare_record" "plane" {{
+  count = var.plane_dns_enabled ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = var.plane_dns_name
+  content = module.thinkwork.plane_alb_dns_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${{var.stage}} plane → Plane public ALB"
 }}
 
 output "app_url" {{ value = module.thinkwork.app_url }}
@@ -1917,9 +2803,40 @@ output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
   output "docs_bucket_name" {{ value = module.thinkwork.docs_bucket_name }}
   output "docs_distribution_id" {{ value = module.thinkwork.docs_distribution_id }}
   output "docs_distribution_domain" {{ value = module.thinkwork.docs_distribution_domain }}
-  output "cognee_enabled" {{ value = module.thinkwork.cognee_enabled }}
+output "cognee_enabled" {{ value = module.thinkwork.cognee_enabled }}
 output "twenty_provisioned" {{ value = module.thinkwork.twenty_provisioned }}
 output "twenty_runtime_enabled" {{ value = module.thinkwork.twenty_runtime_enabled }}
+output "deployment_control_plane_enabled" {{ value = module.thinkwork.deployment_control_plane_enabled }}
+output "deployment_state_machine_arn" {{ value = module.thinkwork.deployment_state_machine_arn }}
+output "deployment_state_machine_name" {{ value = module.thinkwork.deployment_state_machine_name }}
+output "deployment_runner_project_name" {{ value = module.thinkwork.deployment_runner_project_name }}
+output "deployment_runner_project_arn" {{ value = module.thinkwork.deployment_runner_project_arn }}
+output "deployment_evidence_bucket_name" {{ value = module.thinkwork.deployment_evidence_bucket_name }}
+output "deployment_ssm_prefix" {{ value = module.thinkwork.deployment_ssm_prefix }}
+output "deployment_appconfig_application_id" {{ value = module.thinkwork.deployment_appconfig_application_id }}
+output "deployment_appconfig_environment_id" {{ value = module.thinkwork.deployment_appconfig_environment_id }}
+output "deployment_appconfig_configuration_profile_id" {{ value = module.thinkwork.deployment_appconfig_configuration_profile_id }}
+output "plane_provisioned" {{ value = module.thinkwork.plane_provisioned }}
+output "plane_runtime_enabled" {{ value = module.thinkwork.plane_runtime_enabled }}
+output "plane_url" {{ value = module.thinkwork.plane_url }}
+output "plane_alb_arn" {{ value = module.thinkwork.plane_alb_arn }}
+output "plane_target_group_arn" {{ value = module.thinkwork.plane_target_group_arn }}
+output "plane_cluster_arn" {{ value = module.thinkwork.plane_cluster_arn }}
+output "plane_web_service_name" {{ value = module.thinkwork.plane_web_service_name }}
+output "plane_api_service_name" {{ value = module.thinkwork.plane_api_service_name }}
+output "plane_worker_service_name" {{ value = module.thinkwork.plane_worker_service_name }}
+output "plane_beat_worker_service_name" {{ value = module.thinkwork.plane_beat_worker_service_name }}
+output "plane_live_service_name" {{ value = module.thinkwork.plane_live_service_name }}
+output "plane_mcp_service_name" {{ value = module.thinkwork.plane_mcp_service_name }}
+output "plane_web_log_group_name" {{ value = module.thinkwork.plane_web_log_group_name }}
+output "plane_api_log_group_name" {{ value = module.thinkwork.plane_api_log_group_name }}
+output "plane_worker_log_group_name" {{ value = module.thinkwork.plane_worker_log_group_name }}
+output "plane_beat_worker_log_group_name" {{ value = module.thinkwork.plane_beat_worker_log_group_name }}
+output "plane_live_log_group_name" {{ value = module.thinkwork.plane_live_log_group_name }}
+output "plane_mcp_log_group_name" {{ value = module.thinkwork.plane_mcp_log_group_name }}
+output "plane_cache_endpoint" {{ value = module.thinkwork.plane_cache_endpoint }}
+output "plane_rabbitmq_broker_arn" {{ value = module.thinkwork.plane_rabbitmq_broker_arn }}
+output "plane_storage_bucket_name" {{ value = module.thinkwork.plane_storage_bucket_name }}
 """,
         encoding="utf-8",
     )
@@ -2314,6 +3231,8 @@ def write_deployment_status_pointer(status, vars_json=None, terraform_exit_code=
     write must never change the deploy result."""
     bucket = os.environ.get("THINKWORK_EVIDENCE_BUCKET")
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION")
+    if os.environ.get("THINKWORK_MANAGED_APP_OPERATION") == "true":
+        return
     if not bucket or action not in {"deploy", "update"}:
         return
     vars_json = vars_json or {}
@@ -2455,6 +3374,7 @@ def main():
     if action not in {"deploy", "update", "destroy", "plan", "status"}:
         raise RuntimeError(f"Unsupported deployment action: {action}")
     os.environ["THINKWORK_DEPLOYMENT_ACTION"] = action
+    configure_managed_app_evidence_prefix(payload)
 
     if action == "status":
         CONTROLLER_EVIDENCE = {
@@ -2472,7 +3392,11 @@ def main():
         return 0
 
     runner_secrets = secret_payload(payload)
-    static_files = sync_release_artifacts() if action in {"deploy", "update"} else {}
+    static_files = (
+        sync_release_artifacts()
+        if action in {"deploy", "update"} and not is_managed_app_operation(payload)
+        else {}
+    )
     vars_json = write_runner_files(payload, runner_secrets)
     controller_summary = controller_input_summary(payload)
     CONTROLLER_EVIDENCE = {
@@ -2490,6 +3414,8 @@ def main():
     }
     write_evidence("running", vars_json)
 
+    configure_cloudflare_provider_auth(vars_json["stage"])
+    configure_terraform_provider_mirror()
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
     workspace = vars_json["stage"]
     selected = subprocess.run(
@@ -2499,14 +3425,15 @@ def main():
     )
     if selected.returncode != 0:
         run(["terraform", "workspace", "new", workspace, "-no-color"], cwd=TF)
+    target_args = managed_app_terraform_target_args(payload)
     if action == "destroy":
         plan = subprocess.run(
-            ["terraform", "plan", "-destroy", "-out=tfplan", "-no-color"],
+            ["terraform", "plan", "-destroy", *target_args, "-out=tfplan", "-no-color"],
             cwd=TF,
             text=True,
         )
         if plan.returncode == 0:
-            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence()
+            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence(payload)
             result = subprocess.run(
                 ["terraform", "apply", "-auto-approve", "-no-color", "tfplan"],
                 cwd=TF,
@@ -2516,12 +3443,12 @@ def main():
             result = plan
     else:
         plan = subprocess.run(
-            ["terraform", "plan", "-out=tfplan", "-no-color"],
+            ["terraform", "plan", *target_args, "-out=tfplan", "-no-color"],
             cwd=TF,
             text=True,
         )
         if plan.returncode == 0:
-            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence()
+            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence(payload)
         if action == "plan" or plan.returncode != 0:
             result = plan
         else:
@@ -2532,7 +3459,11 @@ def main():
             )
 
     outputs_path = TF / "outputs.json"
-    if result.returncode == 0 and action in {"deploy", "update"}:
+    if (
+        result.returncode == 0
+        and action in {"deploy", "update"}
+        and not is_managed_app_operation(payload)
+    ):
         outputs_path.write_text(output(["terraform", "output", "-json"], cwd=TF), encoding="utf-8")
         TERRAFORM_EVIDENCE["outputs"] = {
             "fileName": "terraform-outputs.json",

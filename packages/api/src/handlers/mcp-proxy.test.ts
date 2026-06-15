@@ -187,6 +187,42 @@ describe("mcp-proxy handler", () => {
     );
   });
 
+  it("tools/call forwards auxiliary headers for bearer-auth servers", async () => {
+    mockBuildMcpConfigs.mockResolvedValue([
+      {
+        ...SERVER_A,
+        auth: {
+          type: "bearer",
+          token: "plane_pat_user_123",
+          headers: { "x-workspace-slug": "eng" },
+        },
+      },
+    ]);
+    mockCallTool.mockResolvedValue({
+      content: OK_CONTENT,
+      isError: false,
+      raw: {},
+    });
+
+    const res = await handler(
+      event(CALL_PATH, {
+        agentId: "ag1",
+        name: "crm__create_lead",
+        arguments: {},
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockCallTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "plane_pat_user_123",
+        headers: { "x-workspace-slug": "eng" },
+      }),
+      "create_lead",
+      {},
+    );
+  });
+
   it("tools/call accepts bounded {server, tool, arguments}", async () => {
     mockCallTool.mockResolvedValue({
       content: OK_CONTENT,

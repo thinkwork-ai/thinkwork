@@ -275,9 +275,17 @@ resource "aws_iam_role_policy" "codebuild" {
       {
         Effect = "Allow"
         Action = [
+          "appconfig:GetApplication",
+          "appconfig:GetConfigurationProfile",
           "appconfig:GetConfiguration",
+          "appconfig:GetEnvironment",
           "appconfig:StartConfigurationSession",
           "appconfig:GetLatestConfiguration",
+          "appconfig:ListTagsForResource",
+          "elasticache:Describe*",
+          "elasticache:ListTagsForResource",
+          "mq:Describe*",
+          "mq:ListTags",
         ]
         Resource = "*"
       },
@@ -293,18 +301,21 @@ resource "aws_iam_role_policy" "codebuild" {
         Effect = "Allow"
         Action = [
           "acm:*",
+          "appconfig:*",
           "apigateway:*",
           "appsync:*",
           "bedrock:*",
           "bedrock-agentcore:*",
           "cloudfront:*",
           "cloudwatch:*",
+          "codebuild:*",
           "cognito-identity:*",
           "cognito-idp:*",
           "dynamodb:*",
           "ec2:*",
           "ecr:*",
           "ecs:*",
+          "elasticache:*",
           "elasticfilesystem:*",
           "elasticloadbalancing:*",
           "events:*",
@@ -312,6 +323,7 @@ resource "aws_iam_role_policy" "codebuild" {
           "kms:*",
           "lambda:*",
           "logs:*",
+          "mq:*",
           "rds:*",
           "route53:*",
           "scheduler:*",

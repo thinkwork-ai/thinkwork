@@ -51,7 +51,8 @@ export interface McpServerConfig {
   transport: "streamable-http" | "sse";
   auth?:
     | { type: "bearer"; token: string }
-    | { type: "headers"; headers: Record<string, string> };
+    | { type: "headers"; headers: Record<string, string> }
+    | { type: "bearer"; token: string; headers: Record<string, string> };
   tools?: string[];
   availableTools?: string[];
 }
@@ -201,24 +202,42 @@ export async function buildMcpConfigs(
         const headerNames = userHeaderNamesFromAuthConfig(
           mcp.auth_config as Record<string, unknown> | null,
         );
-        if (headerNames.length === 0) {
+        const usesBearer = userHeaderAuthUsesBearer(
+          mcp.auth_config as Record<string, unknown> | null,
+        );
+        if (headerNames.length === 0 && !usesBearer) {
           console.warn(
-            `${logPrefix} Skipping plugin MCP ${mcp.slug}: user_headers auth_config has no header bindings`,
+            `${logPrefix} Skipping plugin MCP ${mcp.slug}: user_headers auth_config has no header or bearer bindings`,
           );
           continue;
         }
-        const resolved = await (
-          await getPluginAuth()
-        ).resolveHeaders({
-          requesterUserId,
-          pluginInstallId,
-          resource: mcp.url,
-          slug: mcp.slug ?? mcp.name,
-          headerNames,
-          logPrefix,
-        });
-        if (!resolved) continue;
-        pluginHeaders = resolved;
+        if (headerNames.length > 0) {
+          const resolved = await (
+            await getPluginAuth()
+          ).resolveHeaders({
+            requesterUserId,
+            pluginInstallId,
+            resource: mcp.url,
+            slug: mcp.slug ?? mcp.name,
+            headerNames,
+            logPrefix,
+          });
+          if (!resolved) continue;
+          pluginHeaders = resolved;
+        }
+        if (usesBearer) {
+          const resolved = await (
+            await getPluginAuth()
+          ).resolveToken({
+            requesterUserId,
+            pluginInstallId,
+            resource: mcp.url,
+            slug: mcp.slug ?? mcp.name,
+            logPrefix,
+          });
+          if (!resolved) continue;
+          pluginToken = resolved;
+        }
       } else {
         // Non-OAuth plugin servers still gate on the requester's active
         // activation (R14: install alone exposes nothing to end users).
@@ -485,13 +504,21 @@ function toMcpServerConfig(
     transport:
       (mcp.transport as "streamable-http" | "sse") || "streamable-http",
     auth: token
-      ? { type: "bearer", token }
+      ? headers
+        ? { type: "bearer", token, headers }
+        : { type: "bearer", token }
       : headers
         ? { type: "headers", headers }
         : undefined,
     tools: toolAllowlist,
     availableTools: availableTools.length > 0 ? availableTools : undefined,
   };
+}
+
+function userHeaderAuthUsesBearer(
+  authConfig: Record<string, unknown> | null,
+): boolean {
+  return typeof authConfig?.bearerCredentialKey === "string";
 }
 
 function userHeaderNamesFromAuthConfig(

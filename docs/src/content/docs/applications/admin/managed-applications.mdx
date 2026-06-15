@@ -139,12 +139,12 @@ The plugin detail page is the operator entry point for install/uninstall and
 infrastructure lifecycle. The backing managed-app adapter is not meant to be
 manually duplicated from the generic Managed Applications list.
 
-Plane MCP uses user-provided HTTP headers instead of OAuth. Each user connects
-their own Plane account by activating the plugin with:
+Plane MCP uses a user-provided Plane PAT and workspace header instead of OAuth.
+Each user connects their own Plane account by activating the plugin with:
 
 | Credential                  | Sent to Plane as   | Notes                                     |
 | --------------------------- | ------------------ | ----------------------------------------- |
-| Plane personal access token | `x-api-key`        | Stored as a user-scoped activation secret |
+| Plane personal access token | Bearer token       | Stored as a user-scoped activation secret |
 | Plane workspace slug        | `x-workspace-slug` | Stored with the same activation           |
 
 The activation belongs to the signed-in user. Operators should not paste a
@@ -221,8 +221,8 @@ SMOKE_ENABLE_PLANE_MCP=1 \
 ```
 
 Use `SMOKE_PLANE_THINKWORK_PROXY=1` with an activated Cognito user token to
-verify the ThinkWork `/api/mcp` proxy path and per-user header injection. Keep
-`SMOKE_PLANE_MCP_WRITE` unset for read-only checks.
+verify the ThinkWork `/api/mcp` proxy path and per-user bearer plus header
+injection. Keep `SMOKE_PLANE_MCP_WRITE` unset for read-only checks.
 
 ## Related Pages
 

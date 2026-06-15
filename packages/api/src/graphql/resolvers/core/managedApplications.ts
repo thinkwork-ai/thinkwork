@@ -7,7 +7,7 @@ import {
 import { db as defaultDb } from "../../utils.js";
 import { resolveCogneeClusterIdentity } from "./cogneeClusterIdentity.js";
 
-export type ManagedApplicationKey = "cognee" | "twenty";
+export type ManagedApplicationKey = "cognee" | "plane" | "twenty";
 
 export type CogneeStatus = {
   enabled: boolean;
@@ -26,6 +26,22 @@ export type TwentyStatus = {
   workerLogGroupName: string | null;
   albArn: string | null;
   targetGroupArn: string | null;
+};
+
+export type PlaneStatus = {
+  provisioned: boolean;
+  runtimeEnabled: boolean;
+  url: string | null;
+  clusterArn: string | null;
+  serviceName: string | null;
+  appLogGroupName: string | null;
+  mcpLogGroupName: string | null;
+  redisLogGroupName: string | null;
+  rabbitmqLogGroupName: string | null;
+  albArn: string | null;
+  appTargetGroupArn: string | null;
+  mcpTargetGroupArn: string | null;
+  storageBucketName: string | null;
 };
 
 export type ManagedApplicationStatus = {
@@ -70,6 +86,9 @@ export function normalizeManagedApplicationKey(
   }
   if (key === "twenty" || key === "crm" || key === "twenty-crm") {
     return "twenty";
+  }
+  if (key === "plane" || key === "tasks" || key === "project-management") {
+    return "plane";
   }
   return null;
 }
@@ -136,9 +155,13 @@ export function readCogneeStatus(): CogneeStatus {
 export interface TwentyStatusReaderDeps {
   getManagedApplicationRow(
     tenantId: string,
+    key?: "twenty" | "plane",
   ): Promise<{ desiredConfig: Record<string, unknown> } | null>;
-  /** Latest SUCCEEDED deployment job for (tenant, 'twenty'), if any. */
-  getLatestSucceededJobOperation(tenantId: string): Promise<string | null>;
+  /** Latest SUCCEEDED deployment job for the managed app, if any. */
+  getLatestSucceededJobOperation(
+    tenantId: string,
+    key?: "twenty" | "plane",
+  ): Promise<string | null>;
 }
 
 export function createDrizzleTwentyStatusReaderDeps(
@@ -179,6 +202,55 @@ export function createDrizzleTwentyStatusReaderDeps(
   };
 }
 
+export interface ManagedAppStatusReaderDeps {
+  getManagedApplicationRow(
+    tenantId: string,
+    key?: "twenty" | "plane",
+  ): Promise<{ desiredConfig: Record<string, unknown> } | null>;
+  getLatestSucceededJobOperation(
+    tenantId: string,
+    key?: "twenty" | "plane",
+  ): Promise<string | null>;
+}
+
+export function createDrizzleManagedAppStatusReaderDeps(
+  db: typeof defaultDb = defaultDb,
+): ManagedAppStatusReaderDeps {
+  return {
+    async getManagedApplicationRow(tenantId, key = "twenty") {
+      const [row] = await db
+        .select({ desired_config: managedApplicationsTable.desired_config })
+        .from(managedApplicationsTable)
+        .where(
+          and(
+            eq(managedApplicationsTable.tenant_id, tenantId),
+            eq(managedApplicationsTable.key, key),
+          ),
+        )
+        .limit(1);
+      if (!row) return null;
+      return {
+        desiredConfig: (row.desired_config ?? {}) as Record<string, unknown>,
+      };
+    },
+    async getLatestSucceededJobOperation(tenantId, key = "twenty") {
+      const [job] = await db
+        .select({ operation: managedApplicationDeploymentJobs.operation })
+        .from(managedApplicationDeploymentJobs)
+        .where(
+          and(
+            eq(managedApplicationDeploymentJobs.tenant_id, tenantId),
+            eq(managedApplicationDeploymentJobs.app_key, key),
+            eq(managedApplicationDeploymentJobs.status, "succeeded"),
+          ),
+        )
+        .orderBy(desc(managedApplicationDeploymentJobs.updated_at))
+        .limit(1);
+      return job?.operation ?? null;
+    },
+  };
+}
+
 const DISABLED_TWENTY_STATUS: TwentyStatus = {
   provisioned: false,
   runtimeEnabled: false,
@@ -190,6 +262,22 @@ const DISABLED_TWENTY_STATUS: TwentyStatus = {
   workerLogGroupName: null,
   albArn: null,
   targetGroupArn: null,
+};
+
+const DISABLED_PLANE_STATUS: PlaneStatus = {
+  provisioned: false,
+  runtimeEnabled: false,
+  url: null,
+  clusterArn: null,
+  serviceName: null,
+  appLogGroupName: null,
+  mcpLogGroupName: null,
+  redisLogGroupName: null,
+  rabbitmqLogGroupName: null,
+  albArn: null,
+  appTargetGroupArn: null,
+  mcpTargetGroupArn: null,
+  storageBucketName: null,
 };
 
 /**
@@ -211,9 +299,12 @@ export async function readTwentyStatus(
   deps: TwentyStatusReaderDeps = createDrizzleTwentyStatusReaderDeps(),
 ): Promise<TwentyStatus> {
   if (!tenantId) return DISABLED_TWENTY_STATUS;
-  const row = await deps.getManagedApplicationRow(tenantId);
+  const row = await deps.getManagedApplicationRow(tenantId, "twenty");
   if (!row) return DISABLED_TWENTY_STATUS;
-  const operation = await deps.getLatestSucceededJobOperation(tenantId);
+  const operation = await deps.getLatestSucceededJobOperation(
+    tenantId,
+    "twenty",
+  );
   if (!operation || operation === "DESTROY") return DISABLED_TWENTY_STATUS;
 
   const provisioned = true;
@@ -234,12 +325,48 @@ export async function readTwentyStatus(
   };
 }
 
+export async function readPlaneStatus(
+  tenantId: string | null,
+  deps: ManagedAppStatusReaderDeps = createDrizzleManagedAppStatusReaderDeps(),
+): Promise<PlaneStatus> {
+  if (!tenantId) return DISABLED_PLANE_STATUS;
+  const row = await deps.getManagedApplicationRow(tenantId, "plane");
+  if (!row) return DISABLED_PLANE_STATUS;
+  const operation = await deps.getLatestSucceededJobOperation(tenantId, "plane");
+  if (!operation || operation === "DESTROY") return DISABLED_PLANE_STATUS;
+
+  const provisioned = true;
+  const runtimeEnabled = operation !== "PARK";
+  const publicUrl = row.desiredConfig.publicUrl;
+  const storageBucketName = row.desiredConfig.s3BucketName;
+  const defaults = derivePlaneDefaults(provisioned);
+  return {
+    provisioned,
+    runtimeEnabled,
+    url: typeof publicUrl === "string" && publicUrl.trim() ? publicUrl : null,
+    clusterArn: defaults.clusterArn,
+    serviceName: defaults.serviceName,
+    appLogGroupName: defaults.appLogGroupName,
+    mcpLogGroupName: defaults.mcpLogGroupName,
+    redisLogGroupName: defaults.redisLogGroupName,
+    rabbitmqLogGroupName: defaults.rabbitmqLogGroupName,
+    albArn: null,
+    appTargetGroupArn: null,
+    mcpTargetGroupArn: null,
+    storageBucketName:
+      typeof storageBucketName === "string" && storageBucketName.trim()
+        ? storageBucketName
+        : defaults.storageBucketName,
+  };
+}
+
 export async function readManagedApplications(
   tenantId: string | null,
-  deps?: TwentyStatusReaderDeps,
+  deps?: ManagedAppStatusReaderDeps,
 ): Promise<ManagedApplicationStatus[]> {
   return [
     cogneeManagedApplication(),
+    await planeManagedApplication(tenantId, deps),
     await twentyManagedApplication(tenantId, deps),
   ];
 }
@@ -247,9 +374,10 @@ export async function readManagedApplications(
 export async function readManagedApplication(
   key: ManagedApplicationKey,
   tenantId: string | null,
-  deps?: TwentyStatusReaderDeps,
+  deps?: ManagedAppStatusReaderDeps,
 ): Promise<ManagedApplicationStatus> {
   if (key === "cognee") return cogneeManagedApplication();
+  if (key === "plane") return planeManagedApplication(tenantId, deps);
   return twentyManagedApplication(tenantId, deps);
 }
 
@@ -354,6 +482,74 @@ async function twentyManagedApplication(
   };
 }
 
+async function planeManagedApplication(
+  tenantId: string | null,
+  deps?: ManagedAppStatusReaderDeps,
+): Promise<ManagedApplicationStatus> {
+  const plane = await readPlaneStatus(tenantId, deps);
+  const status = plane.runtimeEnabled
+    ? "running"
+    : plane.provisioned
+      ? "parked"
+      : "disabled";
+  const logGroupNames = [
+    plane.appLogGroupName,
+    plane.mcpLogGroupName,
+    plane.redisLogGroupName,
+    plane.rabbitmqLogGroupName,
+  ].filter((value): value is string => Boolean(value));
+  const serviceNames = [plane.serviceName].filter((value): value is string =>
+    Boolean(value),
+  );
+
+  return {
+    key: "plane",
+    displayName: "Plane",
+    description: "Self-hosted project and task management runtime.",
+    status,
+    enabled: plane.runtimeEnabled,
+    provisioned: plane.provisioned,
+    runtimeEnabled: plane.runtimeEnabled,
+    url: plane.url,
+    endpoint: plane.url,
+    backendMode: "compact",
+    logGroupName: plane.appLogGroupName,
+    logGroupNames,
+    clusterArn: plane.clusterArn,
+    serviceName: plane.serviceName,
+    serviceNames,
+    albArn: plane.albArn,
+    targetGroupArn: plane.appTargetGroupArn,
+    storageBucketName: plane.storageBucketName,
+    databaseName: null,
+    message: planeStatusMessage(status),
+    managedMcpServerId: null,
+    managedMcpStatus: "missing",
+    managedMcpInstalled: false,
+    managedMcpInstallAvailable:
+      status === "running" && plane.provisioned && Boolean(plane.url),
+    managedMcpMessage:
+      status === "running" && plane.url
+        ? "Plane MCP server has not been registered yet."
+        : null,
+  };
+}
+
+function planeStatusMessage(
+  status: ManagedApplicationStatus["status"],
+): string | null {
+  if (status === "parked") {
+    return "Plane runtime is parked; Plane data and app secrets are retained.";
+  }
+  if (status === "disabled") {
+    return "Plane has not been provisioned for this stage.";
+  }
+  if (status === "unknown") {
+    return "Plane deployment status could not be parsed.";
+  }
+  return null;
+}
+
 function twentyStatusMessage(
   status: ManagedApplicationStatus["status"],
 ): string | null {
@@ -401,5 +597,48 @@ function deriveTwentyDefaults(
     workerServiceName: `thinkwork-${stage}-twenty-worker`,
     serverLogGroupName: `/thinkwork/${stage}/twenty/server`,
     workerLogGroupName: `/thinkwork/${stage}/twenty/worker`,
+  };
+}
+
+function derivePlaneDefaults(
+  provisioned: boolean,
+): Pick<
+  PlaneStatus,
+  | "clusterArn"
+  | "serviceName"
+  | "appLogGroupName"
+  | "mcpLogGroupName"
+  | "redisLogGroupName"
+  | "rabbitmqLogGroupName"
+  | "storageBucketName"
+> {
+  if (!provisioned) {
+    return {
+      clusterArn: null,
+      serviceName: null,
+      appLogGroupName: null,
+      mcpLogGroupName: null,
+      redisLogGroupName: null,
+      rabbitmqLogGroupName: null,
+      storageBucketName: null,
+    };
+  }
+
+  const stage = process.env.STAGE || "unknown";
+  const region = process.env.AWS_REGION || "us-east-1";
+  const accountId = process.env.AWS_ACCOUNT_ID || null;
+
+  return {
+    clusterArn: accountId
+      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-plane-cluster`
+      : null,
+    serviceName: `thinkwork-${stage}-plane`,
+    appLogGroupName: `/thinkwork/${stage}/plane/app`,
+    mcpLogGroupName: `/thinkwork/${stage}/plane/mcp`,
+    redisLogGroupName: `/thinkwork/${stage}/plane/redis`,
+    rabbitmqLogGroupName: `/thinkwork/${stage}/plane/rabbitmq`,
+    storageBucketName: accountId
+      ? `thinkwork-${stage}-${accountId}-plane`
+      : null,
   };
 }

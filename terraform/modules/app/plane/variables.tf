@@ -19,13 +19,13 @@ variable "subnet_ids" {
 }
 
 variable "cache_subnet_ids" {
-  description = "Private subnet IDs for the ElastiCache subnet group. Leave empty to reuse subnet_ids in isolated test fixtures only."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = list(string)
   default     = []
 }
 
 variable "queue_subnet_ids" {
-  description = "Private subnet IDs for the Amazon MQ RabbitMQ broker. Leave empty to reuse cache_subnet_ids/subnet_ids."
+  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   type        = list(string)
   default     = []
 }
@@ -62,23 +62,112 @@ variable "certificate_arn" {
 }
 
 variable "image_uri" {
-  description = "Plane container image URI pinned to a reviewed immutable digest."
+  description = "Plane all-in-one runtime image URI pinned to a reviewed immutable digest."
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(regex("@sha256:[0-9a-f]{64}$", var.image_uri))
-    error_message = "image_uri must be pinned to an immutable sha256 image digest."
+    condition     = var.image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.image_uri))
+    error_message = "image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "frontend_image_uri" {
+  description = "Deprecated per-service Plane frontend image URI. The compact AIO runtime uses image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.frontend_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.frontend_image_uri))
+    error_message = "frontend_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "backend_image_uri" {
+  description = "Deprecated per-service Plane backend image URI. The compact AIO runtime uses image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.backend_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.backend_image_uri))
+    error_message = "backend_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "space_image_uri" {
+  description = "Deprecated per-service Plane Space image URI. The compact AIO runtime uses image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.space_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.space_image_uri))
+    error_message = "space_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "admin_image_uri" {
+  description = "Deprecated per-service Plane admin image URI. The compact AIO runtime uses image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.admin_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.admin_image_uri))
+    error_message = "admin_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "live_image_uri" {
+  description = "Deprecated per-service Plane live image URI. The compact AIO runtime uses image_uri."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.live_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.live_image_uri))
+    error_message = "live_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "mcp_image_uri" {
+  description = "Plane MCP server runtime image URI pinned to a reviewed immutable digest."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.mcp_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.mcp_image_uri))
+    error_message = "mcp_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "redis_image_uri" {
+  description = "Redis sidecar image URI pinned to a reviewed immutable digest. Plane AIO requires REDIS_URL, but this remains an in-task loopback dependency, not ElastiCache."
+  type        = string
+  default     = "public.ecr.aws/docker/library/redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
+
+  validation {
+    condition     = var.redis_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.redis_image_uri))
+    error_message = "redis_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "rabbitmq_image_uri" {
+  description = "RabbitMQ sidecar image URI pinned to a reviewed immutable digest. Plane AIO requires AMQP_URL, but this remains an in-task loopback dependency, not Amazon MQ."
+  type        = string
+  default     = "public.ecr.aws/docker/library/rabbitmq:3.13-alpine@sha256:d7af1c87c5f1eda13fcfca06db452bf3aeab6619fc3358b68535c0c02c4e52bc"
+
+  validation {
+    condition     = var.rabbitmq_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.rabbitmq_image_uri))
+    error_message = "rabbitmq_image_uri must be empty or pinned to an immutable sha256 image digest."
   }
 }
 
 variable "runtime_enabled" {
-  description = "Whether Plane ECS services should run. Set false to park runtime while retaining data resources."
+  description = "Whether the compact Plane ECS service should run. Set false to park runtime while retaining data resources."
   type        = bool
   default     = true
 }
 
 variable "web_desired_count" {
-  description = "Desired Plane web task count when runtime_enabled is true"
+  description = "Desired compact Plane ECS service task count when runtime_enabled is true"
   type        = number
   default     = 1
 }
@@ -108,15 +197,15 @@ variable "live_desired_count" {
 }
 
 variable "cpu" {
-  description = "Fargate task CPU units for each Plane task"
+  description = "Fargate task CPU units for the compact Plane task"
   type        = number
-  default     = 1024
+  default     = 2048
 }
 
 variable "memory" {
-  description = "Fargate task memory in MB for each Plane task"
+  description = "Fargate task memory in MB for the compact Plane task"
   type        = number
-  default     = 2048
+  default     = 4096
 }
 
 variable "cpu_architecture" {
@@ -131,9 +220,9 @@ variable "cpu_architecture" {
 }
 
 variable "web_container_port" {
-  description = "Plane web container port exposed through the public ALB"
+  description = "Plane AIO container port exposed through the public ALB"
   type        = number
-  default     = 3000
+  default     = 8080
 }
 
 variable "api_container_port" {
@@ -151,7 +240,50 @@ variable "worker_container_port" {
 variable "live_container_port" {
   description = "Plane live container port"
   type        = number
-  default     = 3001
+  default     = 3000
+}
+
+variable "mcp_container_port" {
+  description = "Plane MCP server HTTP port"
+  type        = number
+  default     = 8211
+}
+
+variable "redis_container_port" {
+  description = "Redis sidecar port exposed only on the ECS task loopback network."
+  type        = number
+  default     = 6379
+}
+
+variable "rabbitmq_container_port" {
+  description = "RabbitMQ sidecar AMQP port exposed only on the ECS task loopback network."
+  type        = number
+  default     = 5672
+}
+
+variable "rabbitmq_username" {
+  description = "RabbitMQ sidecar username used only by the Plane AIO container over task loopback."
+  type        = string
+  default     = "plane"
+}
+
+variable "rabbitmq_password" {
+  description = "RabbitMQ sidecar password used only by the Plane AIO container over task loopback."
+  type        = string
+  default     = "plane"
+  sensitive   = true
+}
+
+variable "rabbitmq_vhost" {
+  description = "RabbitMQ sidecar vhost used only by the Plane AIO container over task loopback."
+  type        = string
+  default     = "plane"
+}
+
+variable "rabbitmq_erlang_cookie" {
+  description = "RabbitMQ single-node Erlang cookie used only inside the private Plane ECS task."
+  type        = string
+  default     = "thinkwork-plane-rabbitmq-cookie"
 }
 
 variable "web_command" {
@@ -163,25 +295,35 @@ variable "web_command" {
 variable "api_command" {
   description = "Container command for the Plane API service"
   type        = list(string)
-  default     = []
+  default = [
+    "/bin/bash",
+    "-lc",
+    "python manage.py wait_for_db && python manage.py migrate && /code/bin/docker-entrypoint-api.sh",
+  ]
 }
 
 variable "worker_command" {
   description = "Container command for the Plane worker service"
   type        = list(string)
-  default     = []
+  default     = ["/code/bin/docker-entrypoint-worker.sh"]
 }
 
 variable "beat_worker_command" {
   description = "Container command for the Plane beat worker service"
   type        = list(string)
-  default     = []
+  default     = ["/code/bin/docker-entrypoint-beat.sh"]
 }
 
 variable "live_command" {
   description = "Container command for the Plane live service"
   type        = list(string)
   default     = []
+}
+
+variable "mcp_command" {
+  description = "Container command for the Plane MCP HTTP server"
+  type        = list(string)
+  default     = ["uvx", "plane-mcp-server==0.2.8", "http"]
 }
 
 variable "health_check_path" {
@@ -233,7 +375,7 @@ variable "aes_secret_key_secret_arn" {
 }
 
 variable "amqp_url_secret_arn" {
-  description = "Secrets Manager ARN containing Plane AMQP_URL."
+  description = "Deprecated no-op. Plane AIO AMQP_URL is generated from the in-task RabbitMQ sidecar."
   type        = string
   default     = ""
 }
@@ -286,66 +428,61 @@ variable "enable_signup" {
 }
 
 variable "cache_engine" {
-  description = "ElastiCache engine. Prefer valkey; redis is available as a compatibility fallback."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "valkey"
-
-  validation {
-    condition     = contains(["valkey", "redis"], var.cache_engine)
-    error_message = "cache_engine must be valkey or redis."
-  }
 }
 
 variable "cache_engine_version" {
-  description = "ElastiCache engine version for the selected cache engine"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "8.0"
 }
 
 variable "cache_parameter_group_family" {
-  description = "ElastiCache parameter group family matching cache_engine/cache_engine_version"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "valkey8"
 }
 
 variable "cache_node_type" {
-  description = "ElastiCache node type for the Plane cache"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "cache.t4g.micro"
 }
 
 variable "cache_port" {
-  description = "ElastiCache Redis-compatible port"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = number
   default     = 6379
 }
 
 variable "cache_num_cache_clusters" {
-  description = "Number of cache nodes in the replication group. Use 1 for the smallest v1 deployment."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = number
   default     = 1
 }
 
 variable "cache_transit_encryption_enabled" {
-  description = "Enable in-transit encryption for the Plane cache"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = bool
   default     = true
 }
 
 variable "rabbitmq_engine_version" {
-  description = "Amazon MQ RabbitMQ engine version for Plane."
+  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   type        = string
   default     = "3.13"
 }
 
 variable "rabbitmq_instance_type" {
-  description = "Amazon MQ broker instance type for Plane RabbitMQ."
+  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   type        = string
-  default     = "mq.t3.micro"
+  default     = "mq.m7g.medium"
 }
 
 variable "rabbitmq_admin_username" {
-  description = "Admin username Terraform creates on the Plane RabbitMQ broker."
+  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   type        = string
   default     = "plane"
 }

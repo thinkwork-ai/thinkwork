@@ -20,6 +20,9 @@ const smokeContracts = [
   },
 ] as const;
 
+const DEFAULT_PLANE_AIO_IMAGE_URI =
+  "artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db";
+
 const statusOutputs = [
   "plane_provisioned",
   "plane_runtime_enabled",
@@ -32,21 +35,26 @@ const statusOutputs = [
   "plane_worker_service_name",
   "plane_beat_worker_service_name",
   "plane_live_service_name",
+  "plane_mcp_service_name",
   "plane_web_log_group_name",
   "plane_api_log_group_name",
   "plane_worker_log_group_name",
   "plane_beat_worker_log_group_name",
   "plane_live_log_group_name",
-  "plane_cache_endpoint",
-  "plane_rabbitmq_broker_arn",
+  "plane_mcp_log_group_name",
   "plane_storage_bucket_name",
 ] as const;
 
 const provisionRequiredInputs: RequiredManagedAppInput[] = [
   {
     key: "imageUri",
-    description: "Plane runtime container image URI pinned with @sha256.",
+    description: "Plane all-in-one image URI pinned with @sha256.",
     terraformVariable: "plane_image_uri",
+  },
+  {
+    key: "mcpImageUri",
+    description: "Plane MCP sidecar image URI pinned with @sha256.",
+    terraformVariable: "plane_mcp_image_uri",
   },
   {
     key: "dbUrlSecretArn",
@@ -73,22 +81,16 @@ const provisionRequiredInputs: RequiredManagedAppInput[] = [
     secret: true,
   },
   {
-    key: "amqpUrlSecretArn",
-    description: "Secrets Manager ARN containing Plane AMQP_URL.",
-    terraformVariable: "plane_amqp_url_secret_arn",
-    secret: true,
-  },
-  {
     key: "s3AccessKeyIdSecretArn",
     description:
-      "Secrets Manager ARN containing an access key id for Plane S3 uploads.",
+      "Optional Secrets Manager ARN containing an access key id for Plane S3 uploads. ECS task-role access is used when omitted.",
     terraformVariable: "plane_s3_access_key_id_secret_arn",
     secret: true,
   },
   {
     key: "s3SecretAccessKeySecretArn",
     description:
-      "Secrets Manager ARN containing a secret access key for Plane S3 uploads.",
+      "Optional Secrets Manager ARN containing a secret access key for Plane S3 uploads. ECS task-role access is used when omitted.",
     terraformVariable: "plane_s3_secret_access_key_secret_arn",
     secret: true,
   },
@@ -131,10 +133,14 @@ export const planeAdapter: ManagedAppAdapter = {
     return compactObject({
       plane_provisioned: true,
       plane_runtime_enabled: runtimeEnabled,
-      plane_image_uri: requireDigestImage(
+      plane_image_uri:
+        optionalString(desiredConfig, "imageUri") !== undefined
+          ? requireDigestImage(desiredConfig, "imageUri", "Plane imageUri")
+          : DEFAULT_PLANE_AIO_IMAGE_URI,
+      plane_mcp_image_uri: requireDigestImage(
         desiredConfig,
-        "imageUri",
-        "Plane imageUri",
+        "mcpImageUri",
+        "Plane mcpImageUri",
       ),
       plane_db_url_secret_arn: requireStringInput(
         desiredConfig,
@@ -156,20 +162,13 @@ export const planeAdapter: ManagedAppAdapter = {
         "aesSecretKeySecretArn",
         "Plane aesSecretKeySecretArn",
       ),
-      plane_amqp_url_secret_arn: requireStringInput(
-        desiredConfig,
-        "amqpUrlSecretArn",
-        "Plane amqpUrlSecretArn",
-      ),
-      plane_s3_access_key_id_secret_arn: requireStringInput(
+      plane_s3_access_key_id_secret_arn: optionalString(
         desiredConfig,
         "s3AccessKeyIdSecretArn",
-        "Plane s3AccessKeyIdSecretArn",
       ),
-      plane_s3_secret_access_key_secret_arn: requireStringInput(
+      plane_s3_secret_access_key_secret_arn: optionalString(
         desiredConfig,
         "s3SecretAccessKeySecretArn",
-        "Plane s3SecretAccessKeySecretArn",
       ),
       plane_s3_bucket_name: requireStringInput(
         desiredConfig,
@@ -186,35 +185,14 @@ export const planeAdapter: ManagedAppAdapter = {
         "certificateArn",
         "Plane certificateArn",
       ),
+      plane_web_container_port:
+        optionalNumber(desiredConfig, "webContainerPort") ??
+        optionalNumber(desiredConfig, "listenHttpPort") ??
+        8080,
       plane_domain: optionalString(desiredConfig, "domain"),
-      plane_web_desired_count: optionalNumber(desiredConfig, "webDesiredCount"),
-      plane_api_desired_count: optionalNumber(desiredConfig, "apiDesiredCount"),
-      plane_worker_desired_count: optionalNumber(
-        desiredConfig,
-        "workerDesiredCount",
-      ),
-      plane_beat_worker_desired_count: optionalNumber(
-        desiredConfig,
-        "beatWorkerDesiredCount",
-      ),
-      plane_live_desired_count: optionalNumber(
-        desiredConfig,
-        "liveDesiredCount",
-      ),
-      plane_cache_engine: optionalString(desiredConfig, "cacheEngine"),
-      plane_cache_engine_version: optionalString(
-        desiredConfig,
-        "cacheEngineVersion",
-      ),
-      plane_cache_parameter_group_family: optionalString(
-        desiredConfig,
-        "cacheParameterGroupFamily",
-      ),
-      plane_cache_node_type: optionalString(desiredConfig, "cacheNodeType"),
-      plane_cache_num_cache_clusters: optionalNumber(
-        desiredConfig,
-        "cacheNumCacheClusters",
-      ),
+      plane_web_desired_count:
+        optionalNumber(desiredConfig, "appDesiredCount") ??
+        optionalNumber(desiredConfig, "webDesiredCount"),
       plane_allowed_public_cidr_blocks: optionalStringArray(
         desiredConfig,
         "allowedPublicCidrBlocks",
@@ -235,10 +213,8 @@ export const planeAdapter: ManagedAppAdapter = {
       summary:
         "Plane destroy deletes the Plane runtime and customer-owned Plane project management data.",
       resources: [
-        "Plane ECS services, task definitions, task/execution IAM roles, and public ALB/listener/target-group resources",
+        "Plane compact ECS service, task definition, task/execution IAM roles, and public ALB/listener/target-group resources",
         "Dedicated Plane database, database role, database URL secret, application secrets, and encryption secrets",
-        "ElastiCache Valkey/Redis replication group, subnet group, parameter group, and cache endpoint",
-        "Amazon MQ RabbitMQ broker, virtual host/user secrets, and queue state",
         "S3 bucket objects or dedicated prefixes containing Plane file uploads and attachments",
         "CloudWatch log groups and deployment evidence artifacts for Plane jobs",
       ],
@@ -309,6 +285,10 @@ export const planeAdapter: ManagedAppAdapter = {
           terraformOutputs,
           "plane_live_service_name",
         ),
+        mcpServiceName: stringOutput(
+          terraformOutputs,
+          "plane_mcp_service_name",
+        ),
         webLogGroupName: stringOutput(
           terraformOutputs,
           "plane_web_log_group_name",
@@ -329,10 +309,9 @@ export const planeAdapter: ManagedAppAdapter = {
           terraformOutputs,
           "plane_live_log_group_name",
         ),
-        cacheEndpoint: stringOutput(terraformOutputs, "plane_cache_endpoint"),
-        rabbitmqBrokerArn: stringOutput(
+        mcpLogGroupName: stringOutput(
           terraformOutputs,
-          "plane_rabbitmq_broker_arn",
+          "plane_mcp_log_group_name",
         ),
         storageBucketName: stringOutput(
           terraformOutputs,

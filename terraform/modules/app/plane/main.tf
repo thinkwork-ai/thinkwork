@@ -1,11 +1,11 @@
 ################################################################################
 # Plane (Optional Managed App) - App Module
 #
-# Provisions Plane as an AWS-native runtime: public HTTPS ALB, ECS/Fargate
-# services, ElastiCache Valkey/Redis, Amazon MQ RabbitMQ, S3 object storage,
-# CloudWatch logs, and Secrets Manager references. The composite ThinkWork
-# module owns whether this module is instantiated; this module owns runtime
-# parking by setting ECS desired counts to zero.
+# Provisions Plane as a compact AWS-native runtime: one ECS/Fargate service.
+# Plane AIO bundles Plane's app services, but still requires Redis and RabbitMQ
+# URLs. Keep those as private loopback sidecars inside this task; do not add
+# separately managed Redis/Valkey, RabbitMQ/Amazon MQ, or per-service Plane ECS
+# services to this module.
 ################################################################################
 
 terraform {
@@ -24,11 +24,13 @@ terraform {
 locals {
   name = "thinkwork-${var.stage}-plane"
 
-  effective_cache_subnet_ids = length(var.cache_subnet_ids) > 0 ? var.cache_subnet_ids : var.subnet_ids
-  effective_queue_subnet_ids = length(var.queue_subnet_ids) > 0 ? var.queue_subnet_ids : local.effective_cache_subnet_ids
+  effective_app_image_uri = var.image_uri
 
-  redis_scheme = var.cache_transit_encryption_enabled ? "rediss" : "redis"
-  redis_url    = "${local.redis_scheme}://${aws_elasticache_replication_group.plane.primary_endpoint_address}:${var.cache_port}"
+  managed_s3_access_key_enabled = (
+    var.create_secret_placeholders &&
+    var.s3_access_key_id_secret_arn == "" &&
+    var.s3_secret_access_key_secret_arn == ""
+  )
 
   managed_secret_specs = {
     db_url = {
@@ -39,41 +41,33 @@ locals {
     }
     secret_key = {
       enabled       = var.create_secret_placeholders && var.secret_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/plane/secret-key"
+      name_prefix   = "thinkwork/${var.stage}/plane/secret-key-"
       description   = "Plane SECRET_KEY"
-      secret_string = jsonencode({ SECRET_KEY = "PLACEHOLDER_SET_VIA_CI" })
+      secret_string = jsonencode({ SECRET_KEY = random_password.secret_key.result })
     }
     live_server_secret_key = {
       enabled       = var.create_secret_placeholders && var.live_server_secret_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/plane/live-server-secret-key"
+      name_prefix   = "thinkwork/${var.stage}/plane/live-server-secret-key-"
       description   = "Plane LIVE_SERVER_SECRET_KEY"
-      secret_string = jsonencode({ LIVE_SERVER_SECRET_KEY = "PLACEHOLDER_SET_VIA_CI" })
+      secret_string = jsonencode({ LIVE_SERVER_SECRET_KEY = random_password.live_server_secret_key.result })
     }
     aes_secret_key = {
       enabled       = var.create_secret_placeholders && var.aes_secret_key_secret_arn == ""
-      name          = "thinkwork/${var.stage}/plane/aes-secret-key"
+      name_prefix   = "thinkwork/${var.stage}/plane/aes-secret-key-"
       description   = "Plane AES_SECRET_KEY"
-      secret_string = jsonencode({ AES_SECRET_KEY = "PLACEHOLDER_SET_VIA_CI" })
-    }
-    amqp_url = {
-      enabled     = var.create_secret_placeholders && var.amqp_url_secret_arn == ""
-      name        = "thinkwork/${var.stage}/plane/amqp-url"
-      description = "Plane AMQP_URL for the managed RabbitMQ broker"
-      secret_string = jsonencode({
-        AMQP_URL = "amqps://${var.rabbitmq_admin_username}:${random_password.rabbitmq.result}@${replace(aws_mq_broker.rabbitmq.instances[0].endpoints[0], "amqps://", "")}"
-      })
+      secret_string = jsonencode({ AES_SECRET_KEY = random_password.aes_secret_key.result })
     }
     s3_access_key_id = {
-      enabled       = var.create_secret_placeholders && var.s3_access_key_id_secret_arn == ""
+      enabled       = local.managed_s3_access_key_enabled
       name          = "thinkwork/${var.stage}/plane/s3-access-key-id"
-      description   = "Plane AWS_ACCESS_KEY_ID for S3 uploads"
-      secret_string = jsonencode({ AWS_ACCESS_KEY_ID = "PLACEHOLDER_SET_VIA_CI" })
+      description   = "Plane AWS_ACCESS_KEY_ID scoped to the Plane uploads bucket"
+      secret_string = jsonencode({ AWS_ACCESS_KEY_ID = try(aws_iam_access_key.plane_s3[0].id, "") })
     }
     s3_secret_access_key = {
-      enabled       = var.create_secret_placeholders && var.s3_secret_access_key_secret_arn == ""
+      enabled       = local.managed_s3_access_key_enabled
       name          = "thinkwork/${var.stage}/plane/s3-secret-access-key"
-      description   = "Plane AWS_SECRET_ACCESS_KEY for S3 uploads"
-      secret_string = jsonencode({ AWS_SECRET_ACCESS_KEY = "PLACEHOLDER_SET_VIA_CI" })
+      description   = "Plane AWS_SECRET_ACCESS_KEY scoped to the Plane uploads bucket"
+      secret_string = jsonencode({ AWS_SECRET_ACCESS_KEY = try(aws_iam_access_key.plane_s3[0].secret, "") })
     }
   }
 
@@ -101,11 +95,6 @@ locals {
     ? var.aes_secret_key_secret_arn
     : try(aws_secretsmanager_secret.plane["aes_secret_key"].arn, "")
   )
-  effective_amqp_url_secret_arn = (
-    var.amqp_url_secret_arn != ""
-    ? var.amqp_url_secret_arn
-    : try(aws_secretsmanager_secret.plane["amqp_url"].arn, "")
-  )
   effective_s3_access_key_id_secret_arn = (
     var.s3_access_key_id_secret_arn != ""
     ? var.s3_access_key_id_secret_arn
@@ -122,21 +111,33 @@ locals {
     local.effective_secret_key_secret_arn,
     local.effective_live_server_secret_key_secret_arn,
     local.effective_aes_secret_key_secret_arn,
-    local.effective_amqp_url_secret_arn,
     local.effective_s3_access_key_id_secret_arn,
     local.effective_s3_secret_access_key_secret_arn,
   ])
 
   base_environment = [
+    { name = "DOMAIN_NAME", value = trimprefix(var.public_url, "https://") },
+    { name = "SITE_ADDRESS", value = ":${var.web_container_port}" },
+    { name = "LISTEN_HTTP_PORT", value = tostring(var.web_container_port) },
+    { name = "APP_PROTOCOL", value = "http" },
     { name = "WEB_URL", value = var.public_url },
+    { name = "INTEGRATION_CALLBACK_BASE_URL", value = var.public_url },
     { name = "CORS_ALLOWED_ORIGINS", value = var.public_url },
-    { name = "REDIS_URL", value = local.redis_url },
     { name = "USE_MINIO", value = "0" },
     { name = "AWS_REGION", value = data.aws_region.current.name },
     { name = "AWS_S3_BUCKET_NAME", value = var.s3_bucket_name },
-    { name = "AWS_S3_ENDPOINT_URL", value = "" },
     { name = "FILE_SIZE_LIMIT", value = tostring(var.file_size_limit) },
     { name = "ENABLE_SIGNUP", value = tostring(var.enable_signup) },
+    { name = "REDIS_URL", value = "redis://127.0.0.1:${var.redis_container_port}" },
+    { name = "AMQP_URL", value = "amqp://${var.rabbitmq_username}:${var.rabbitmq_password}@127.0.0.1:${var.rabbitmq_container_port}/${var.rabbitmq_vhost}" },
+  ]
+
+  mcp_environment = [
+    { name = "PORT", value = tostring(var.mcp_container_port) },
+    { name = "PLANE_BASE_URL", value = var.public_url },
+    { name = "PLANE_INTERNAL_BASE_URL", value = var.public_url },
+    { name = "PLANE_OAUTH_PROVIDER_BASE_URL", value = var.public_url },
+    { name = "PLANE_OAUTH_PROVIDER_CLIENT_ID", value = "thinkwork-plane-mcp" },
   ]
 
   container_secrets = [
@@ -144,68 +145,166 @@ locals {
     { name = "SECRET_KEY", valueFrom = "${local.effective_secret_key_secret_arn}:SECRET_KEY::" },
     { name = "LIVE_SERVER_SECRET_KEY", valueFrom = "${local.effective_live_server_secret_key_secret_arn}:LIVE_SERVER_SECRET_KEY::" },
     { name = "AES_SECRET_KEY", valueFrom = "${local.effective_aes_secret_key_secret_arn}:AES_SECRET_KEY::" },
-    { name = "AMQP_URL", valueFrom = "${local.effective_amqp_url_secret_arn}:AMQP_URL::" },
-    { name = "AWS_ACCESS_KEY_ID", valueFrom = "${local.effective_s3_access_key_id_secret_arn}:AWS_ACCESS_KEY_ID::" },
-    { name = "AWS_SECRET_ACCESS_KEY", valueFrom = "${local.effective_s3_secret_access_key_secret_arn}:AWS_SECRET_ACCESS_KEY::" },
   ]
 
-  service_definitions = {
-    web = {
-      display_name   = "web"
+  optional_container_secrets = concat(
+    local.effective_s3_access_key_id_secret_arn != "" ? [
+      { name = "AWS_ACCESS_KEY_ID", valueFrom = "${local.effective_s3_access_key_id_secret_arn}:AWS_ACCESS_KEY_ID::" },
+    ] : [],
+    local.effective_s3_secret_access_key_secret_arn != "" ? [
+      { name = "AWS_SECRET_ACCESS_KEY", valueFrom = "${local.effective_s3_secret_access_key_secret_arn}:AWS_SECRET_ACCESS_KEY::" },
+    ] : [],
+  )
+
+  mcp_container_secrets = [
+    { name = "PLANE_OAUTH_PROVIDER_CLIENT_SECRET", valueFrom = "${local.effective_secret_key_secret_arn}:SECRET_KEY::" },
+  ]
+
+  container_specs = {
+    redis = {
+      display_name   = "redis"
+      image          = var.redis_image_uri
+      command        = []
+      port           = var.redis_container_port
+      public_service = false
+      health_path    = null
+      depends_on     = []
+      environment    = []
+      secrets        = []
+      health_check = {
+        command     = ["CMD-SHELL", "redis-cli ping | grep PONG"]
+        interval    = 10
+        timeout     = 5
+        retries     = 6
+        startPeriod = 10
+      }
+    }
+    rabbitmq = {
+      display_name   = "rabbitmq"
+      image          = var.rabbitmq_image_uri
+      command        = []
+      port           = var.rabbitmq_container_port
+      public_service = false
+      health_path    = null
+      depends_on     = []
+      environment = [
+        { name = "RABBITMQ_DEFAULT_USER", value = var.rabbitmq_username },
+        { name = "RABBITMQ_DEFAULT_PASS", value = var.rabbitmq_password },
+        { name = "RABBITMQ_DEFAULT_VHOST", value = var.rabbitmq_vhost },
+        { name = "RABBITMQ_ERLANG_COOKIE", value = var.rabbitmq_erlang_cookie },
+        { name = "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS", value = "-setcookie ${var.rabbitmq_erlang_cookie}" },
+      ]
+      secrets = []
+      health_check = {
+        command     = ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+        interval    = 15
+        timeout     = 10
+        retries     = 10
+        startPeriod = 30
+      }
+    }
+    app = {
+      display_name   = "app"
+      image          = local.effective_app_image_uri
       command        = var.web_command
       port           = var.web_container_port
-      desired_count  = var.web_desired_count
       public_service = true
+      health_path    = "/"
+      depends_on = [
+        { containerName = "plane-redis", condition = "HEALTHY" },
+        { containerName = "plane-rabbitmq", condition = "HEALTHY" },
+      ]
+      environment  = local.base_environment
+      secrets      = concat(local.container_secrets, local.optional_container_secrets)
+      health_check = null
     }
-    api = {
-      display_name   = "api"
-      command        = var.api_command
-      port           = var.api_container_port
-      desired_count  = var.api_desired_count
-      public_service = false
-    }
-    worker = {
-      display_name   = "worker"
-      command        = var.worker_command
-      port           = var.worker_container_port
-      desired_count  = var.worker_desired_count
-      public_service = false
-    }
-    beat_worker = {
-      display_name   = "beat-worker"
-      command        = var.beat_worker_command
-      port           = var.worker_container_port
-      desired_count  = var.beat_worker_desired_count
-      public_service = false
-    }
-    live = {
-      display_name   = "live"
-      command        = var.live_command
-      port           = var.live_container_port
-      desired_count  = var.live_desired_count
-      public_service = false
+    mcp = {
+      display_name   = "mcp"
+      image          = var.mcp_image_uri
+      command        = var.mcp_command
+      port           = var.mcp_container_port
+      public_service = true
+      health_path    = "/http/api-key/mcp"
+      depends_on     = []
+      environment    = local.mcp_environment
+      secrets        = local.mcp_container_secrets
+      health_check   = null
     }
   }
+
+  public_services = {
+    app = {
+      display_name = "app"
+      port         = var.web_container_port
+      health_path  = "/"
+    }
+    mcp = {
+      display_name = "mcp"
+      port         = var.mcp_container_port
+      health_path  = "/http/api-key/mcp"
+    }
+  }
+
+  listener_rules = {
+    mcp_oauth = {
+      priority    = 12
+      service_key = "mcp"
+      path_patterns = [
+        "/.well-known/*",
+        "/authorize",
+        "/http/*",
+        "/register",
+        "/token",
+      ]
+    }
+    mcp_stream = {
+      priority    = 11
+      service_key = "mcp"
+      path_patterns = [
+        "/header/mcp",
+        "/header/mcp/*",
+        "/mcp",
+        "/mcp/*",
+      ]
+    }
+  }
+
+  public_container_ports = toset([
+    for service in values(local.public_services) : tostring(service.port)
+  ])
 
   storage_bucket_arn = "arn:aws:s3:::${var.s3_bucket_name}"
 }
 
 data "aws_region" "current" {}
 
-resource "random_password" "rabbitmq" {
-  length           = 32
-  special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+resource "random_password" "secret_key" {
+  length  = 50
+  special = false
+}
+
+resource "random_password" "live_server_secret_key" {
+  length  = 50
+  special = false
+}
+
+resource "random_password" "aes_secret_key" {
+  length  = 32
+  special = false
 }
 
 resource "aws_secretsmanager_secret" "plane" {
   for_each = local.managed_secrets
 
-  name        = each.value.name
+  name        = try(each.value.name, null)
+  name_prefix = try(each.value.name_prefix, null)
   description = each.value.description
 
   tags = {
-    Name = each.value.name
+    Name = trimsuffix(
+      coalesce(try(each.value.name, null), try(each.value.name_prefix, null)),
+      "-",
+    )
     Role = "plane"
   }
 }
@@ -215,10 +314,6 @@ resource "aws_secretsmanager_secret_version" "plane" {
 
   secret_id     = aws_secretsmanager_secret.plane[each.key].id
   secret_string = each.value.secret_string
-
-  lifecycle {
-    ignore_changes = [secret_string]
-  }
 }
 
 ################################################################################
@@ -229,23 +324,20 @@ resource "terraform_data" "configuration_guardrails" {
   input = {
     runtime_enabled                   = var.runtime_enabled
     web_desired_count                 = var.web_desired_count
-    api_desired_count                 = var.api_desired_count
-    worker_desired_count              = var.worker_desired_count
-    beat_worker_desired_count         = var.beat_worker_desired_count
-    live_desired_count                = var.live_desired_count
     image_uri                         = var.image_uri
+    app_image_uri                     = local.effective_app_image_uri
+    mcp_image_uri                     = var.mcp_image_uri
+    redis_image_uri                   = var.redis_image_uri
+    rabbitmq_image_uri                = var.rabbitmq_image_uri
     public_url                        = var.public_url
     certificate_arn                   = var.certificate_arn
     db_url_secret_arn                 = local.effective_db_url_secret_arn
     secret_key_secret_arn             = local.effective_secret_key_secret_arn
     live_server_secret_key_secret_arn = local.effective_live_server_secret_key_secret_arn
     aes_secret_key_secret_arn         = local.effective_aes_secret_key_secret_arn
-    amqp_url_secret_arn               = local.effective_amqp_url_secret_arn
     s3_access_key_id_secret_arn       = local.effective_s3_access_key_id_secret_arn
     s3_secret_access_key_secret_arn   = local.effective_s3_secret_access_key_secret_arn
     s3_bucket_name                    = var.s3_bucket_name
-    cache_subnet_ids                  = local.effective_cache_subnet_ids
-    queue_subnet_ids                  = local.effective_queue_subnet_ids
   }
 
   lifecycle {
@@ -255,28 +347,19 @@ resource "terraform_data" "configuration_guardrails" {
     }
 
     precondition {
-      condition     = !var.runtime_enabled || var.api_desired_count > 0
-      error_message = "runtime_enabled requires api_desired_count > 0."
+      condition = (
+        local.effective_app_image_uri != "" &&
+        var.mcp_image_uri != ""
+      )
+      error_message = "Plane requires AIO app and MCP image URIs pinned to immutable digests."
     }
 
     precondition {
-      condition     = !var.runtime_enabled || var.worker_desired_count > 0
-      error_message = "runtime_enabled requires worker_desired_count > 0."
-    }
-
-    precondition {
-      condition     = !var.runtime_enabled || var.live_desired_count > 0
-      error_message = "runtime_enabled requires live_desired_count > 0."
-    }
-
-    precondition {
-      condition     = length(local.effective_cache_subnet_ids) > 0
-      error_message = "Plane requires at least one cache subnet."
-    }
-
-    precondition {
-      condition     = length(local.effective_queue_subnet_ids) > 0
-      error_message = "Plane requires at least one RabbitMQ subnet."
+      condition = (
+        var.redis_image_uri != "" &&
+        var.rabbitmq_image_uri != ""
+      )
+      error_message = "Plane AIO requires in-task Redis and RabbitMQ sidecar image URIs pinned to immutable digests."
     }
 
     precondition {
@@ -300,19 +383,10 @@ resource "terraform_data" "configuration_guardrails" {
     }
 
     precondition {
-      condition     = local.effective_amqp_url_secret_arn != ""
-      error_message = "Plane requires amqp_url_secret_arn or create_secret_placeholders = true."
+      condition     = (var.s3_access_key_id_secret_arn == "") == (var.s3_secret_access_key_secret_arn == "")
+      error_message = "Plane S3 access key secret ARNs must be provided together, or both omitted for Terraform-managed bucket-scoped credentials."
     }
 
-    precondition {
-      condition     = local.effective_s3_access_key_id_secret_arn != ""
-      error_message = "Plane requires s3_access_key_id_secret_arn or create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = local.effective_s3_secret_access_key_secret_arn != ""
-      error_message = "Plane requires s3_secret_access_key_secret_arn or create_secret_placeholders = true."
-    }
   }
 }
 
@@ -410,6 +484,48 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
   })
 }
 
+resource "aws_iam_user" "plane_s3" {
+  count = local.managed_s3_access_key_enabled ? 1 : 0
+
+  name = "${local.name}-s3"
+
+  tags = {
+    Name = "${local.name}-s3"
+    Role = "plane-storage"
+  }
+}
+
+resource "aws_iam_user_policy" "plane_s3" {
+  count = local.managed_s3_access_key_enabled ? 1 : 0
+
+  name = "plane-s3"
+  user = aws_iam_user.plane_s3[0].name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:AbortMultipartUpload",
+        "s3:DeleteObject",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:PutObject",
+      ]
+      Resource = [
+        local.storage_bucket_arn,
+        "${local.storage_bucket_arn}/*",
+      ]
+    }]
+  })
+}
+
+resource "aws_iam_access_key" "plane_s3" {
+  count = local.managed_s3_access_key_enabled ? 1 : 0
+
+  user = aws_iam_user.plane_s3[0].name
+}
+
 ################################################################################
 # Security Groups
 ################################################################################
@@ -419,12 +535,16 @@ resource "aws_security_group" "plane" {
   description = "Plane ECS tasks"
   vpc_id      = var.vpc_id
 
-  ingress {
-    description     = "Public ALB to Plane web"
-    from_port       = var.web_container_port
-    to_port         = var.web_container_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+  dynamic "ingress" {
+    for_each = local.public_container_ports
+
+    content {
+      description     = "Public ALB to Plane service port ${ingress.value}"
+      from_port       = tonumber(ingress.value)
+      to_port         = tonumber(ingress.value)
+      protocol        = "tcp"
+      security_groups = [aws_security_group.alb.id]
+    }
   }
 
   egress {
@@ -474,54 +594,6 @@ resource "aws_security_group" "alb" {
   lifecycle { create_before_destroy = true }
 }
 
-resource "aws_security_group" "cache" {
-  name_prefix = "${local.name}-cache-"
-  description = "Plane ElastiCache"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description     = "Plane tasks to Redis-compatible cache"
-    from_port       = var.cache_port
-    to_port         = var.cache_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.plane.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${local.name}-cache-sg" }
-  lifecycle { create_before_destroy = true }
-}
-
-resource "aws_security_group" "rabbitmq" {
-  name_prefix = "${local.name}-rabbitmq-"
-  description = "Plane RabbitMQ"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description     = "Plane tasks to RabbitMQ AMQPS"
-    from_port       = 5671
-    to_port         = 5671
-    protocol        = "tcp"
-    security_groups = [aws_security_group.plane.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${local.name}-rabbitmq-sg" }
-  lifecycle { create_before_destroy = true }
-}
-
 resource "aws_security_group_rule" "aurora_from_plane" {
   type                     = "ingress"
   from_port                = var.db_port
@@ -545,25 +617,31 @@ resource "aws_lb" "plane" {
   tags = { Name = "${local.name}-alb" }
 }
 
-resource "aws_lb_target_group" "web" {
-  name        = "tw-${var.stage}-plane-web"
-  port        = var.web_container_port
+resource "aws_lb_target_group" "service" {
+  for_each = local.public_services
+
+  name_prefix = each.key == "app" ? "twpa-" : "twpm-"
+  port        = each.value.port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "ip"
 
   health_check {
-    path                = var.health_check_path
-    port                = tostring(var.web_container_port)
+    path                = each.value.health_path
+    port                = tostring(each.value.port)
     protocol            = "HTTP"
     healthy_threshold   = 2
     unhealthy_threshold = 3
     timeout             = 10
     interval            = 30
-    matcher             = "200-399"
+    matcher             = "200-499"
   }
 
-  tags = { Name = "${local.name}-web-tg" }
+  tags = { Name = "${local.name}-${each.value.display_name}-tg" }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_lb_listener" "https" {
@@ -575,7 +653,25 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.web.arn
+    target_group_arn = aws_lb_target_group.service["app"].arn
+  }
+}
+
+resource "aws_lb_listener_rule" "service_path" {
+  for_each = local.listener_rules
+
+  listener_arn = aws_lb_listener.https.arn
+  priority     = each.value.priority
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.service[each.value.service_key].arn
+  }
+
+  condition {
+    path_pattern {
+      values = each.value.path_patterns
+    }
   }
 }
 
@@ -635,83 +731,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "plane" {
 }
 
 ################################################################################
-# ElastiCache Valkey/Redis
-################################################################################
-
-resource "aws_elasticache_subnet_group" "plane" {
-  name       = "tw-${var.stage}-plane"
-  subnet_ids = local.effective_cache_subnet_ids
-}
-
-resource "aws_elasticache_parameter_group" "plane" {
-  name   = "tw-${var.stage}-plane"
-  family = var.cache_parameter_group_family
-
-  parameter {
-    name  = "maxmemory-policy"
-    value = "noeviction"
-  }
-}
-
-resource "aws_elasticache_replication_group" "plane" {
-  replication_group_id = "tw-${var.stage}-plane"
-  description          = "Plane Redis-compatible cache"
-
-  engine         = var.cache_engine
-  engine_version = var.cache_engine_version
-  node_type      = var.cache_node_type
-  port           = var.cache_port
-
-  num_cache_clusters         = var.cache_num_cache_clusters
-  automatic_failover_enabled = var.cache_num_cache_clusters > 1
-  multi_az_enabled           = var.cache_num_cache_clusters > 1
-
-  at_rest_encryption_enabled = true
-  transit_encryption_enabled = var.cache_transit_encryption_enabled
-
-  subnet_group_name    = aws_elasticache_subnet_group.plane.name
-  security_group_ids   = [aws_security_group.cache.id]
-  parameter_group_name = aws_elasticache_parameter_group.plane.name
-
-  tags = { Name = "${local.name}-cache" }
-}
-
-################################################################################
-# Amazon MQ RabbitMQ
-################################################################################
-
-resource "aws_mq_broker" "rabbitmq" {
-  broker_name        = "tw-${var.stage}-plane"
-  engine_type        = "RabbitMQ"
-  engine_version     = var.rabbitmq_engine_version
-  host_instance_type = var.rabbitmq_instance_type
-  deployment_mode    = "SINGLE_INSTANCE"
-
-  publicly_accessible = false
-  security_groups     = [aws_security_group.rabbitmq.id]
-  subnet_ids          = [local.effective_queue_subnet_ids[0]]
-
-  auto_minor_version_upgrade = true
-  apply_immediately          = true
-
-  user {
-    username = var.rabbitmq_admin_username
-    password = random_password.rabbitmq.result
-  }
-
-  logs {
-    general = true
-  }
-
-  tags = { Name = "${local.name}-rabbitmq" }
-}
-
-################################################################################
 # CloudWatch Logs
 ################################################################################
 
 resource "aws_cloudwatch_log_group" "service" {
-  for_each = local.service_definitions
+  for_each = local.container_specs
 
   name              = "/thinkwork/${var.stage}/plane/${each.value.display_name}"
   retention_in_days = var.log_retention_days
@@ -723,10 +747,8 @@ resource "aws_cloudwatch_log_group" "service" {
 # ECS Task Definitions and Services
 ################################################################################
 
-resource "aws_ecs_task_definition" "service" {
-  for_each = local.service_definitions
-
-  family                   = "${local.name}-${each.value.display_name}"
+resource "aws_ecs_task_definition" "plane" {
+  family                   = local.name
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = tostring(var.cpu)
@@ -740,52 +762,49 @@ resource "aws_ecs_task_definition" "service" {
   }
 
   container_definitions = jsonencode([
-    {
-      name      = "plane-${each.value.display_name}"
-      image     = var.image_uri
-      essential = true
-      command   = each.value.command
+    for key, container in local.container_specs :
+    merge(
+      {
+        name      = "plane-${container.display_name}"
+        image     = container.image
+        essential = true
+        command   = container.command
 
-      portMappings = [
-        {
-          containerPort = each.value.port
-          hostPort      = each.value.port
-          protocol      = "tcp"
-        }
-      ]
-
-      environment = concat(
-        local.base_environment,
-        [
-          { name = "PORT", value = tostring(each.value.port) },
-          { name = "PLANE_SERVICE", value = each.value.display_name },
+        portMappings = [
+          {
+            containerPort = container.port
+            hostPort      = container.port
+            protocol      = "tcp"
+          }
         ]
-      )
-      secrets = local.container_secrets
 
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.service[each.key].name
-          awslogs-region        = data.aws_region.current.name
-          awslogs-stream-prefix = each.value.display_name
+        environment = container.environment
+        secrets     = container.secrets
+
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            awslogs-group         = aws_cloudwatch_log_group.service[key].name
+            awslogs-region        = data.aws_region.current.name
+            awslogs-stream-prefix = container.display_name
+          }
         }
-      }
-    }
+      },
+      length(container.depends_on) > 0 ? { dependsOn = container.depends_on } : {},
+      container.health_check != null ? { healthCheck = container.health_check } : {},
+    )
   ])
 }
 
-resource "aws_ecs_service" "service" {
-  for_each = local.service_definitions
-
-  name            = "${local.name}-${each.value.display_name}"
+resource "aws_ecs_service" "plane" {
+  name            = local.name
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.service[each.key].arn
-  desired_count   = var.runtime_enabled ? each.value.desired_count : 0
+  task_definition = aws_ecs_task_definition.plane.arn
+  desired_count   = var.runtime_enabled ? var.web_desired_count : 0
   launch_type     = "FARGATE"
 
   enable_execute_command            = true
-  health_check_grace_period_seconds = each.value.public_service ? var.health_check_grace_period_seconds : null
+  health_check_grace_period_seconds = var.health_check_grace_period_seconds
   wait_for_steady_state             = var.wait_for_steady_state
   force_new_deployment              = true
 
@@ -796,16 +815,16 @@ resource "aws_ecs_service" "service" {
   }
 
   dynamic "load_balancer" {
-    for_each = each.value.public_service ? [1] : []
+    for_each = local.public_services
 
     content {
-      target_group_arn = aws_lb_target_group.web.arn
-      container_name   = "plane-${each.value.display_name}"
-      container_port   = each.value.port
+      target_group_arn = aws_lb_target_group.service[load_balancer.key].arn
+      container_name   = "plane-${load_balancer.value.display_name}"
+      container_port   = load_balancer.value.port
     }
   }
 
   depends_on = [aws_lb_listener.https]
 
-  tags = { Name = "${local.name}-${each.value.display_name}" }
+  tags = { Name = local.name }
 }

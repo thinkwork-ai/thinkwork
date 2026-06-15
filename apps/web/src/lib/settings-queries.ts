@@ -1634,6 +1634,7 @@ export const SettingsPluginCatalogQuery = graphql(`
           lastError
         }
       }
+      launchUrl
     }
   }
 `);

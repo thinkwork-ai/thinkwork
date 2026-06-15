@@ -3,8 +3,8 @@
  *
  * These assertions keep the optional Plane substrate runnable in CI without
  * AWS credentials while guarding the important invariants: public HTTPS,
- * ECS/Fargate service split, retained S3/cache/RabbitMQ resources, parked
- * runtime semantics, and secret indirection.
+ * a compact ECS/Fargate AIO runtime, parked runtime semantics, and secret
+ * indirection.
  */
 
 import { readFileSync } from "node:fs";
@@ -39,6 +39,14 @@ const THINKWORK_VARS = resolve(
 const THINKWORK_OUTPUTS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/outputs.tf",
+);
+const WWW_DNS_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/main.tf",
+);
+const WWW_DNS_VARS = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/variables.tf",
 );
 const GREENFIELD_MAIN = resolve(
   REPO_ROOT,
@@ -79,53 +87,82 @@ function firstNestedBlock(source: string, blockHeader: string): string {
 }
 
 describe("Plane Terraform app module", () => {
-  it("creates a public HTTPS ALB for the Plane web service", () => {
+  it("creates a public HTTPS ALB for the compact Plane app service", () => {
     const source = read(PLANE_MAIN);
     const vars = read(PLANE_VARS);
 
     expect(source).toMatch(/resource "aws_lb" "plane"/);
     expect(source).toMatch(/internal\s*=\s*false/);
-    expect(source).toMatch(/resource "aws_lb_target_group" "web"/);
+    expect(source).toMatch(/resource "aws_lb_target_group" "service"/);
+    expect(source).toMatch(
+      /target_group_arn = aws_lb_target_group\.service\["app"\]\.arn/,
+    );
     expect(source).toMatch(/resource "aws_lb_listener" "https"/);
     expect(source).toMatch(/certificate_arn\s*=\s*var\.certificate_arn/);
     expect(source).toMatch(/resource "aws_lb_listener" "http_redirect"/);
     expect(source).toMatch(/status_code\s*=\s*"HTTP_301"/);
     expect(vars).toMatch(/variable "web_container_port"/);
+    expect(vars).toMatch(/default\s*=\s*8080/);
+    expect(source).toMatch(/name = "LISTEN_HTTP_PORT"/);
   });
 
-  it("models Plane web, API, worker, beat worker, and live ECS services", () => {
+  it("models Plane as one ECS service with AIO, MCP, and in-task dependency containers", () => {
     const source = read(PLANE_MAIN);
-    const serviceDefs = firstNestedBlock(source, "service_definitions = {");
+    const containerSpecs = firstNestedBlock(source, "container_specs = {");
+    const listenerRules = firstNestedBlock(source, "listener_rules = {");
     const ecsService = firstNestedBlock(
       source,
-      'resource "aws_ecs_service" "service"',
+      'resource "aws_ecs_service" "plane"',
     );
 
-    expect(serviceDefs).toMatch(/web\s*=\s*{/);
-    expect(serviceDefs).toMatch(/api\s*=\s*{/);
-    expect(serviceDefs).toMatch(/worker\s*=\s*{/);
-    expect(serviceDefs).toMatch(/beat_worker\s*=\s*{/);
-    expect(serviceDefs).toMatch(/live\s*=\s*{/);
-    expect(source).toMatch(/resource "aws_ecs_task_definition" "service"/);
+    expect(containerSpecs).toMatch(/app\s*=\s*{/);
+    expect(containerSpecs).toMatch(/mcp\s*=\s*{/);
+    expect(containerSpecs).toMatch(/redis\s*=\s*{/);
+    expect(containerSpecs).toMatch(/rabbitmq\s*=\s*{/);
+    expect(containerSpecs).not.toMatch(/worker\s*=\s*{/);
+    expect(source).toMatch(/resource "aws_ecs_task_definition" "plane"/);
     expect(ecsService).toMatch(
-      /desired_count\s*=\s*var\.runtime_enabled \? each\.value\.desired_count : 0/,
+      /desired_count\s*=\s*var\.runtime_enabled \? var\.web_desired_count : 0/,
     );
-    expect(ecsService).toMatch(/for_each\s*=\s*local\.service_definitions/);
+    expect(ecsService).toMatch(/for_each\s*=\s*local\.public_services/);
+    expect(listenerRules).toMatch(/mcp_oauth\s*=\s*{/);
+    expect(listenerRules).toMatch(/mcp_stream\s*=\s*{/);
+    expect(listenerRules).toMatch(/priority\s*=\s*12/);
+    expect(listenerRules).toMatch(/priority\s*=\s*11/);
+    expect(listenerRules).toMatch(/"\/\.well-known\/\*"/);
+    expect(listenerRules).toMatch(/"\/authorize"/);
+    expect(listenerRules).toMatch(/"\/token"/);
+    expect(listenerRules).toMatch(/"\/register"/);
+    expect(listenerRules).toMatch(/"\/mcp"/);
+    expect(listenerRules).toMatch(/"\/mcp\/\*"/);
+    expect(listenerRules).toMatch(/"\/header\/mcp"/);
+    expect(listenerRules).toMatch(/"\/header\/mcp\/\*"/);
   });
 
-  it("uses S3, ElastiCache, and Amazon MQ RabbitMQ as retained Plane data resources", () => {
+  it("keeps Plane compact without managed Redis or RabbitMQ dependencies", () => {
     const source = read(PLANE_MAIN);
     const readme = read(PLANE_README);
+    const ecsServiceResources = source.match(
+      /resource "aws_ecs_service" "plane"/g,
+    );
 
     expect(source).toMatch(/resource "aws_s3_bucket" "plane"/);
+    expect(ecsServiceResources).toHaveLength(1);
+    expect(source).not.toMatch(/resource "aws_elasticache_/);
+    expect(source).not.toMatch(/resource "aws_mq_broker"/);
+    expect(source).toMatch(/name = "REDIS_URL"/);
+    expect(source).toMatch(/redis:\/\/127\.0\.0\.1/);
+    expect(source).toMatch(/name = "AMQP_URL"/);
     expect(source).toMatch(
-      /resource "aws_elasticache_replication_group" "plane"/,
+      /amqp:\/\/\$\{var\.rabbitmq_username\}:\$\{var\.rabbitmq_password\}@127\.0\.0\.1/,
     );
-    expect(source).toMatch(/resource "aws_mq_broker" "rabbitmq"/);
-    expect(source).toMatch(/engine_type\s*=\s*"RabbitMQ"/);
+    expect(source).toMatch(/name = "RABBITMQ_ERLANG_COOKIE"/);
+    expect(source).toMatch(/name = "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS"/);
+    expect(source).toMatch(/-setcookie \$\{var\.rabbitmq_erlang_cookie\}/);
     expect(readme).toMatch(/runtime_enabled = false/);
-    expect(readme).toMatch(/parks all Plane ECS services/);
-    expect(readme).toMatch(/S3, cache, RabbitMQ, secrets, logs, ALB/);
+    expect(readme).toMatch(/parks the compact Plane ECS service/);
+    expect(readme).toMatch(/one ECS service/);
+    expect(readme).toMatch(/four containers/);
   });
 
   it("injects Plane secrets through ECS secret references", () => {
@@ -137,7 +174,6 @@ describe("Plane Terraform app module", () => {
       "secret_key_secret_arn",
       "live_server_secret_key_secret_arn",
       "aes_secret_key_secret_arn",
-      "amqp_url_secret_arn",
       "s3_access_key_id_secret_arn",
       "s3_secret_access_key_secret_arn",
     ]) {
@@ -147,7 +183,6 @@ describe("Plane Terraform app module", () => {
     expect(source).toMatch(/name = "SECRET_KEY"/);
     expect(source).toMatch(/name = "LIVE_SERVER_SECRET_KEY"/);
     expect(source).toMatch(/name = "AES_SECRET_KEY"/);
-    expect(source).toMatch(/name = "AMQP_URL"/);
     expect(source).toMatch(/name = "AWS_ACCESS_KEY_ID"/);
     expect(source).toMatch(/name = "AWS_SECRET_ACCESS_KEY"/);
   });
@@ -165,13 +200,13 @@ describe("Plane Terraform app module", () => {
       "plane_worker_service_name",
       "plane_beat_worker_service_name",
       "plane_live_service_name",
+      "plane_mcp_service_name",
       "plane_web_log_group_name",
       "plane_api_log_group_name",
       "plane_worker_log_group_name",
       "plane_beat_worker_log_group_name",
       "plane_live_log_group_name",
-      "plane_cache_endpoint",
-      "plane_rabbitmq_broker_arn",
+      "plane_mcp_log_group_name",
       "plane_storage_bucket_name",
       "plane_runtime_enabled",
     ]) {
@@ -193,6 +228,7 @@ describe("Plane Terraform app module", () => {
     expect(vars).toMatch(/variable "plane_runtime_enabled"/);
     expect(vars).toMatch(/variable "plane_image_uri"/);
     expect(vars).toMatch(/variable "plane_s3_bucket_name"/);
+    expect(vars).toMatch(/variable "plane_web_container_port"/);
     expect(source).toMatch(/plane_domain.*plane\.\$\{var\.www_domain\}/);
     expect(planeModule).toMatch(
       /count\s*=\s*local\.plane_provisioned \? 1 : 0/,
@@ -202,15 +238,19 @@ describe("Plane Terraform app module", () => {
       /runtime_enabled\s*=\s*local\.plane_runtime_enabled/,
     );
     expect(planeModule).toMatch(
+      /web_container_port\s*=\s*var\.plane_web_container_port/,
+    );
+    expect(planeModule).toMatch(
       /s3_bucket_name\s*=\s*var\.plane_s3_bucket_name/,
     );
-    expect(guardrails).toMatch(/plane_provisioned requires plane_image_uri/);
+    expect(guardrails).toMatch(
+      /plane_provisioned requires Plane AIO plane_image_uri and plane_mcp_image_uri/,
+    );
     expect(guardrails).toMatch(
       /plane_provisioned requires plane_s3_bucket_name/,
     );
     expect(outputs).toMatch(/output "plane_provisioned"/);
     expect(outputs).toMatch(/output "plane_url"/);
-    expect(outputs).toMatch(/output "plane_rabbitmq_broker_arn"/);
   });
 
   it("keeps greenfield Plane variables and defaults disabled", () => {
@@ -234,5 +274,29 @@ describe("Plane Terraform app module", () => {
     expect(tfvars).toMatch(/plane_provisioned\s*=\s*false/);
     expect(tfvars).toMatch(/plane_runtime_enabled\s*=\s*false/);
     expect(tfvars).toMatch(/empty derives https:\/\/plane\.<www_domain>/);
+  });
+
+  it("adds plane.<domain> DNS support without rotating the shared site certificate", () => {
+    const source = read(WWW_DNS_MAIN);
+    const vars = read(WWW_DNS_VARS);
+    const greenfield = read(GREENFIELD_MAIN);
+    const wwwDnsModule = firstNestedBlock(greenfield, 'module "www_dns"');
+    const planeRecord = firstNestedBlock(
+      source,
+      'resource "cloudflare_record" "plane"',
+    );
+
+    expect(vars).toMatch(/variable "include_plane"/);
+    expect(vars).toMatch(/variable "plane_alb_dns_name"/);
+    expect(source).toMatch(/plane\s*=\s*"plane\.\$\{var\.domain\}"/);
+    expect(source).toMatch(/create_plane_record\s*=\s*var\.include_plane/);
+    expect(planeRecord).toMatch(/name\s*=\s*local\.plane/);
+    expect(planeRecord).toMatch(/content\s*=\s*var\.plane_alb_dns_name/);
+    expect(planeRecord).toMatch(/proxied\s*=\s*false/);
+    expect(wwwDnsModule).toMatch(/include_plane\s*=\s*var\.plane_provisioned/);
+    expect(wwwDnsModule).toMatch(
+      /plane_alb_dns_name\s*=\s*module\.thinkwork\.plane_alb_dns_name/,
+    );
+    expect(source).not.toMatch(/var\.include_plane \? \[local\.plane\] : \[\]/);
   });
 });

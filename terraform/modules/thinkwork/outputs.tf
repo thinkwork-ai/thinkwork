@@ -452,6 +452,11 @@ output "plane_live_service_name" {
   value       = local.plane_provisioned ? module.plane[0].plane_live_service_name : null
 }
 
+output "plane_mcp_service_name" {
+  description = "ECS service name for Plane MCP server (null when plane_provisioned = false)"
+  value       = local.plane_provisioned ? module.plane[0].plane_mcp_service_name : null
+}
+
 output "plane_web_log_group_name" {
   description = "CloudWatch log group for Plane web (null when plane_provisioned = false)"
   value       = local.plane_provisioned ? module.plane[0].plane_web_log_group_name : null
@@ -477,13 +482,18 @@ output "plane_live_log_group_name" {
   value       = local.plane_provisioned ? module.plane[0].plane_live_log_group_name : null
 }
 
+output "plane_mcp_log_group_name" {
+  description = "CloudWatch log group for Plane MCP server (null when plane_provisioned = false)"
+  value       = local.plane_provisioned ? module.plane[0].plane_mcp_log_group_name : null
+}
+
 output "plane_cache_endpoint" {
-  description = "ElastiCache primary endpoint for Plane (null when plane_provisioned = false)"
+  description = "Deprecated compatibility output. Compact Plane AIO does not provision a separate cache."
   value       = local.plane_provisioned ? module.plane[0].plane_cache_endpoint : null
 }
 
 output "plane_rabbitmq_broker_arn" {
-  description = "Amazon MQ RabbitMQ broker ARN for Plane (null when plane_provisioned = false)"
+  description = "Deprecated compatibility output. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   value       = local.plane_provisioned ? module.plane[0].plane_rabbitmq_broker_arn : null
 }
 

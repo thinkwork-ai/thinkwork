@@ -62,9 +62,25 @@ export type McpServerAuth =
        * bearer path.
        */
       mode: "user-provided-headers";
+      /**
+       * Optional first-class bearer token credential to send as
+       * `Authorization: Bearer <value>`, alongside any declared headers.
+       * Use this when the MCP transport/framework expects Authorization as
+       * its auth token path but still needs extra per-user headers.
+       */
+      bearer?: McpUserProvidedBearer;
       headers: McpUserProvidedHeader[];
     }
   | { mode: "none" };
+
+export interface McpUserProvidedBearer {
+  /** Activation input key whose value supplies the bearer token. */
+  credentialKey: string;
+  /** Human label for activation UI/operator docs. */
+  displayName: string;
+  /** Marks secret fields for UI copy; values are always stored as secrets. */
+  secret?: boolean;
+}
 
 export interface McpUserProvidedHeader {
   /** HTTP header name to send to the MCP server, e.g. `x-api-key`. */
@@ -449,6 +465,30 @@ function validateUserProvidedHeadersAuth(
   }
   const seenHeaderNames = new Set<string>();
   const seenCredentialKeys = new Set<string>();
+  if (auth.bearer !== undefined) {
+    const label = `${prefix}.auth.bearer`;
+    if (
+      !auth.bearer ||
+      typeof auth.bearer !== "object" ||
+      Array.isArray(auth.bearer)
+    ) {
+      throw new PluginManifestError(`${label} must be an object`);
+    }
+    requireString(auth.bearer.credentialKey, `${label}.credentialKey`);
+    if (!CREDENTIAL_KEY_RE.test(auth.bearer.credentialKey)) {
+      throw new PluginManifestError(
+        `${label}.credentialKey "${auth.bearer.credentialKey}" must match ${CREDENTIAL_KEY_RE.source}`,
+      );
+    }
+    seenCredentialKeys.add(auth.bearer.credentialKey);
+    requireString(auth.bearer.displayName, `${label}.displayName`);
+    if (
+      auth.bearer.secret !== undefined &&
+      typeof auth.bearer.secret !== "boolean"
+    ) {
+      throw new PluginManifestError(`${label}.secret must be a boolean`);
+    }
+  }
   for (const [index, header] of auth.headers.entries()) {
     const label = `${prefix}.auth.headers[${index}]`;
     if (!header || typeof header !== "object" || Array.isArray(header)) {
