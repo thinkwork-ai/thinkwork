@@ -1,8 +1,9 @@
 /**
- * User + tenant-member reads. Mirrors the me/get_user/list_tenant_members
- * legacy thinkwork-admin skill read helpers.
+ * User + tenant-member reads and member invite resend operations. Mirrors the
+ * me/get_user/list_tenant_members legacy thinkwork-admin skill read helpers.
  */
 
+import { randomUUID } from "node:crypto";
 import type { AdminOpsClient } from "./client.js";
 import { USER_FIELDS, TENANT_MEMBER_FIELDS } from "./_fields.js";
 
@@ -23,7 +24,18 @@ export interface TenantMember {
   principalId: string;
   role: string;
   status: string;
+  cognitoStatus: string | null;
   createdAt: string;
+}
+
+export type ResendMemberInviteStatus =
+  | "RESENT"
+  | "NOT_PENDING"
+  | "DELIVERY_FAILED";
+
+export interface ResendMemberInviteResult {
+  status: ResendMemberInviteStatus;
+  message: string;
 }
 
 export async function me(client: AdminOpsClient): Promise<User | null> {
@@ -53,4 +65,29 @@ export async function listTenantMembers(
     { tenantId },
   );
   return data.tenantMembers ?? [];
+}
+
+export async function resendMemberInvite(
+  client: AdminOpsClient,
+  tenantId: string,
+  memberId: string,
+): Promise<ResendMemberInviteResult> {
+  const data = await client.graphql<{
+    resendMemberInvite: ResendMemberInviteResult;
+  }>(
+    `mutation($tenantId: ID!, $input: ResendMemberInviteInput!) {
+      resendMemberInvite(tenantId: $tenantId, input: $input) {
+        status
+        message
+      }
+    }`,
+    {
+      tenantId,
+      input: {
+        memberId,
+        idempotencyKey: `resend-member-invite:${memberId}:${randomUUID()}`,
+      },
+    },
+  );
+  return data.resendMemberInvite;
 }

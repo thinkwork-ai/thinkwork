@@ -2634,6 +2634,7 @@ export type Mutation = {
   reorderQuickActions: Array<UserQuickAction>;
   requestCompanyBrainProductionMigration: CompanyBrainMigrationStatus;
   requestRevision: InboxItem;
+  resendMemberInvite: ResendMemberInviteResult;
   /**
    * Admin-only replay: clear the compile cursor for (tenant, user). If
    * `force` is true, also archives every active page in the scope so the
@@ -3485,6 +3486,12 @@ export type MutationRequestCompanyBrainProductionMigrationArgs = {
 export type MutationRequestRevisionArgs = {
   id: Scalars['ID']['input'];
   input: RequestRevisionInput;
+};
+
+
+export type MutationResendMemberInviteArgs = {
+  input: ResendMemberInviteInput;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -5746,6 +5753,24 @@ export type RequestCompanyBrainProductionMigrationInput = {
 export type RequestRevisionInput = {
   reviewNotes: Scalars['String']['input'];
 };
+
+export type ResendMemberInviteInput = {
+  /** Required per-click idempotency key. Reuse the same value only when retrying the same click. */
+  idempotencyKey: Scalars['String']['input'];
+  memberId: Scalars['ID']['input'];
+};
+
+export type ResendMemberInviteResult = {
+  __typename?: 'ResendMemberInviteResult';
+  message: Scalars['String']['output'];
+  status: ResendMemberInviteStatus;
+};
+
+export enum ResendMemberInviteStatus {
+  DeliveryFailed = 'DELIVERY_FAILED',
+  NotPending = 'NOT_PENDING',
+  Resent = 'RESENT'
+}
 
 export type ResubmitInboxItemInput = {
   config?: InputMaybe<Scalars['AWSJSON']['input']>;

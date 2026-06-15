@@ -1,6 +1,5 @@
 import { getConfig } from "@thinkwork/runtime-config";
 import {
-  CognitoIdentityProviderClient,
   AdminCreateUserCommand,
   AdminGetUserCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
@@ -17,15 +16,16 @@ import { requireTenantAdmin } from "./authz.js";
 import { resolveCallerUserId } from "./resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
+import {
+  createCognitoInviteClient,
+  isResendableInviteStatus,
+  resendCognitoInvite,
+} from "./cognitoInvites.js";
 
-const cognito = new CognitoIdentityProviderClient({});
+const cognito = createCognitoInviteClient();
 function userPoolId(): string {
   return getConfig("COGNITO_USER_POOL_ID", "");
 }
-const RESENDABLE_INVITE_STATUSES = new Set([
-  "FORCE_CHANGE_PASSWORD",
-  "UNCONFIRMED",
-]);
 
 export const inviteMember = async (
   _parent: any,
@@ -107,18 +107,11 @@ async function inviteMemberCore(
         throw new Error("Could not resolve existing Cognito user sub");
       }
 
-      if (
-        existing.UserStatus &&
-        RESENDABLE_INVITE_STATUSES.has(existing.UserStatus)
-      ) {
-        const resent = await cognito.send(
-          new AdminCreateUserCommand({
-            UserPoolId: userPoolId(),
-            Username: email,
-            DesiredDeliveryMediums: ["EMAIL"],
-            MessageAction: "RESEND",
-          }),
-        );
+      if (isResendableInviteStatus(existing.UserStatus)) {
+        const resent = await resendCognitoInvite(cognito, {
+          userPoolId: userPoolId(),
+          email,
+        });
         cognitoSub =
           resent.User?.Attributes?.find((a) => a.Name === "sub")?.Value ||
           cognitoSub;

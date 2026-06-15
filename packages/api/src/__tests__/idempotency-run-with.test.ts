@@ -19,13 +19,13 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { insertReturningMock, updateMock, selectReturningMock } = vi.hoisted(
-  () => ({
+const { insertReturningMock, insertValues, updateMock, selectReturningMock } =
+  vi.hoisted(() => ({
     insertReturningMock: vi.fn(),
+    insertValues: [] as unknown[],
     updateMock: vi.fn(),
     selectReturningMock: vi.fn(),
-  }),
-);
+  }));
 
 vi.mock("../graphql/utils.js", async (importOriginal) => {
   const actual: any = await importOriginal();
@@ -33,12 +33,15 @@ vi.mock("../graphql/utils.js", async (importOriginal) => {
     ...actual,
     db: {
       insert: vi.fn(() => ({
-        values: () => ({
-          onConflictDoNothing: () => ({
-            returning: () =>
-              Promise.resolve(insertReturningMock() as unknown[]),
-          }),
-        }),
+        values: (values: unknown) => {
+          insertValues.push(values);
+          return {
+            onConflictDoNothing: () => ({
+              returning: () =>
+                Promise.resolve(insertReturningMock() as unknown[]),
+            }),
+          };
+        },
       })),
       update: vi.fn(() => ({
         set: (patch: unknown) => ({
@@ -73,6 +76,7 @@ const BASE = {
 describe("runWithIdempotency — skip path", () => {
   beforeEach(() => {
     insertReturningMock.mockReset();
+    insertValues.length = 0;
     updateMock.mockReset();
     selectReturningMock.mockReset();
   });
@@ -101,6 +105,7 @@ describe("runWithIdempotency — skip path", () => {
 describe("runWithIdempotency — first call (isNew=true)", () => {
   beforeEach(() => {
     insertReturningMock.mockReset();
+    insertValues.length = 0;
     updateMock.mockReset();
     selectReturningMock.mockReset();
   });
@@ -121,6 +126,28 @@ describe("runWithIdempotency — first call (isNew=true)", () => {
     };
     expect(patch.status).toBe("succeeded");
     expect(patch.result_json).toEqual({ agent: { id: "a-1" } });
+  });
+
+  it("stores mutationName as part of the idempotency namespace", async () => {
+    insertReturningMock.mockReturnValueOnce([{ id: "row-resend" }]);
+    const fn = vi.fn(async () => ({ status: "RESENT" }));
+
+    await runWithIdempotency({
+      ...BASE,
+      mutationName: "resendMemberInvite",
+      clientKey: "resend-member-invite:member-1:click-1",
+      inputs: { memberId: "member-1" },
+      fn,
+    });
+
+    expect(fn).toHaveBeenCalledOnce();
+    expect(insertValues[0]).toMatchObject({
+      tenant_id: "tenant-A",
+      invoker_user_id: "user-A",
+      mutation_name: "resendMemberInvite",
+      idempotency_key: "resend-member-invite:member-1:click-1",
+      status: "pending",
+    });
   });
 
   it("calls failIdempotentMutation on fn() throw, rethrows the original error", async () => {
@@ -147,6 +174,7 @@ describe("runWithIdempotency — first call (isNew=true)", () => {
 describe("runWithIdempotency — retry (isNew=false)", () => {
   beforeEach(() => {
     insertReturningMock.mockReset();
+    insertValues.length = 0;
     updateMock.mockReset();
     selectReturningMock.mockReset();
   });

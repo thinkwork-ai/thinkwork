@@ -262,6 +262,44 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
         );
       },
     },
+    {
+      name: "tenant_members_resend_invite",
+      description:
+        "Resend a pending Cognito invite email for a tenant member. Returns RESENT, NOT_PENDING, or DELIVERY_FAILED.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description:
+              "Tenant UUID (optional when the admin key already pins the tenant).",
+          },
+          memberId: { type: "string", description: "Tenant member UUID." },
+          principalId: {
+            type: "string",
+            description:
+              "Invoking user's UUID (optional; used for audit attribution).",
+          },
+        },
+        required: ["memberId"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        const tenantId =
+          auth.tenantId ??
+          (typeof args.tenantId === "string" ? args.tenantId : undefined);
+        if (!tenantId) {
+          throw new Error(
+            "tenantId is required when the admin key is not tenant-scoped",
+          );
+        }
+        return userOps.resendMemberInvite(
+          clientFor(args),
+          tenantId,
+          (args as { memberId: string }).memberId,
+        );
+      },
+    },
 
     // -------------------------------------------------------------------
     // Artifact reads

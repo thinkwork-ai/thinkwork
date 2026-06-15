@@ -12,6 +12,7 @@ const {
   inviteMemberMock,
   navigateMock,
   removeMemberMock,
+  resendMemberInviteMock,
   updateMemberMock,
   updateProfileMock,
   updateUserMock,
@@ -25,6 +26,7 @@ const {
   inviteMemberMock: vi.fn(),
   navigateMock: vi.fn(),
   removeMemberMock: vi.fn(),
+  resendMemberInviteMock: vi.fn(),
   updateMemberMock: vi.fn(),
   updateProfileMock: vi.fn(),
   updateUserMock: vi.fn(),
@@ -38,6 +40,7 @@ const {
     SettingsDeleteBudgetPolicyMutation: Symbol("deleteBudget"),
     SettingsInviteMemberMutation: Symbol("inviteMember"),
     SettingsRemoveTenantMemberMutation: Symbol("removeMember"),
+    SettingsResendMemberInviteMutation: Symbol("resendMemberInvite"),
     SettingsTenantMembersQuery: Symbol("members"),
     SettingsUserBudgetStatusQuery: Symbol("userBudgetStatus"),
     SettingsUpsertBudgetPolicyMutation: Symbol("upsertBudget"),
@@ -80,6 +83,8 @@ vi.mock("urql", () => ({
       return [{ fetching: false }, deleteBudgetMock];
     if (doc === queryDocs.SettingsInviteMemberMutation)
       return [{ fetching: false }, inviteMemberMock];
+    if (doc === queryDocs.SettingsResendMemberInviteMutation)
+      return [{ fetching: false }, resendMemberInviteMock];
     if (doc === queryDocs.SettingsRemoveTenantMemberMutation)
       return [{ fetching: false }, removeMemberMock];
     return [{ fetching: false }, vi.fn()];
@@ -134,6 +139,7 @@ beforeEach(() => {
   inviteMemberMock.mockReset();
   navigateMock.mockReset();
   removeMemberMock.mockReset();
+  resendMemberInviteMock.mockReset();
   updateMemberMock.mockReset();
   updateProfileMock.mockReset();
   updateUserMock.mockReset();
@@ -141,6 +147,15 @@ beforeEach(() => {
   deleteBudgetMock.mockResolvedValue({ error: null });
   inviteMemberMock.mockResolvedValue({ error: null });
   removeMemberMock.mockResolvedValue({ error: null });
+  resendMemberInviteMock.mockResolvedValue({
+    error: null,
+    data: {
+      resendMemberInvite: {
+        status: "RESENT",
+        message: "Invite resent.",
+      },
+    },
+  });
   updateMemberMock.mockResolvedValue({ error: null });
   updateProfileMock.mockResolvedValue({ error: null });
   updateUserMock.mockResolvedValue({ error: null });
@@ -149,7 +164,10 @@ beforeEach(() => {
   tenant.userId = "caller-1";
   tenant.role = "owner";
 });
-afterEach(cleanup);
+afterEach(() => {
+  vi.restoreAllMocks();
+  cleanup();
+});
 
 describe("SettingsUserDetail role merge", () => {
   it("renders the status badge beside the title and no Membership section", () => {
@@ -261,7 +279,15 @@ describe("SettingsUserDetail role merge", () => {
     expect(upsertBudgetMock).not.toHaveBeenCalled();
   });
 
-  it("resends the invite for the current user", async () => {
+  it("resends the invite for the current user with the dedicated mutation", async () => {
+    const randomUUID = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce(
+        "first-click" as `${string}-${string}-${string}-${string}-${string}`,
+      )
+      .mockReturnValueOnce(
+        "second-click" as `${string}-${string}-${string}-${string}-${string}`,
+      );
     seedMember({
       role: "admin",
       cognitoStatus: "FORCE_CHANGE_PASSWORD",
@@ -275,17 +301,149 @@ describe("SettingsUserDetail role merge", () => {
     render(<SettingsUserDetail />);
 
     fireEvent.click(screen.getByRole("button", { name: /resend invite/i }));
+    await waitFor(() => expect(screen.getByText("Invite resent")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /resend invite/i }));
 
-    await waitFor(() => expect(inviteMemberMock).toHaveBeenCalled());
-    expect(inviteMemberMock).toHaveBeenCalledWith({
+    await waitFor(() =>
+      expect(resendMemberInviteMock).toHaveBeenCalledTimes(2),
+    );
+    expect(resendMemberInviteMock).toHaveBeenNthCalledWith(1, {
       tenantId: "tenant-1",
       input: {
-        email: "dana@example.com",
-        name: "Dana Member",
-        role: "admin",
+        memberId: "member-1",
+        idempotencyKey: "resend-member-invite:member-1:first-click",
       },
     });
+    expect(resendMemberInviteMock).toHaveBeenNthCalledWith(2, {
+      tenantId: "tenant-1",
+      input: {
+        memberId: "member-1",
+        idempotencyKey: "resend-member-invite:member-1:second-click",
+      },
+    });
+    expect(randomUUID).toHaveBeenCalledTimes(2);
+    expect(inviteMemberMock).not.toHaveBeenCalled();
     expect(screen.getByText("Invite resent")).toBeTruthy();
+  });
+
+  it("ignores duplicate resend clicks while the first resend is in flight", async () => {
+    const randomUUID = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue(
+        "first-click" as `${string}-${string}-${string}-${string}-${string}`,
+      );
+    let resolveResend!: (value: unknown) => void;
+    resendMemberInviteMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveResend = resolve;
+      }),
+    );
+    seedMember({
+      cognitoStatus: "FORCE_CHANGE_PASSWORD",
+    });
+    render(<SettingsUserDetail />);
+
+    const button = screen.getByRole("button", { name: /resend invite/i });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(resendMemberInviteMock).toHaveBeenCalledTimes(1);
+    expect(resendMemberInviteMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      input: {
+        memberId: "member-1",
+        idempotencyKey: "resend-member-invite:member-1:first-click",
+      },
+    });
+    expect(randomUUID).toHaveBeenCalledOnce();
+
+    resolveResend({
+      error: null,
+      data: {
+        resendMemberInvite: {
+          status: "RESENT",
+          message: "Invite resent.",
+        },
+      },
+    });
+
+    await waitFor(() => expect(screen.getByText("Invite resent")).toBeTruthy());
+  });
+
+  it("shows Cognito delivery failures instead of success", async () => {
+    resendMemberInviteMock.mockResolvedValueOnce({
+      error: null,
+      data: {
+        resendMemberInvite: {
+          status: "DELIVERY_FAILED",
+          message:
+            "Invite delivery failed because the email provider rejected the send. Check SES recipient/domain verification.",
+        },
+      },
+    });
+    seedMember({
+      cognitoStatus: "FORCE_CHANGE_PASSWORD",
+    });
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /resend invite/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Invite delivery failed because the email provider rejected the send. Check SES recipient/domain verification.",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText("Invite resent")).toBeNull();
+  });
+
+  it("shows not-pending resend results instead of success", async () => {
+    resendMemberInviteMock.mockResolvedValueOnce({
+      error: null,
+      data: {
+        resendMemberInvite: {
+          status: "NOT_PENDING",
+          message:
+            "Invite not resent because Cognito user status is CONFIRMED.",
+        },
+      },
+    });
+    seedMember({
+      cognitoStatus: "FORCE_CHANGE_PASSWORD",
+    });
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /resend invite/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Invite not resent because Cognito user status is CONFIRMED.",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(
+      screen.getByRole("button", { name: /resend invite/i }),
+    ).toHaveProperty("disabled", true);
+    expect(screen.queryByText("Invite resent")).toBeNull();
+  });
+
+  it("shows GraphQL resend errors instead of success", async () => {
+    resendMemberInviteMock.mockResolvedValueOnce({
+      error: { message: "GraphQL resend failed." },
+    });
+    seedMember({
+      cognitoStatus: "FORCE_CHANGE_PASSWORD",
+    });
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /resend invite/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText("GraphQL resend failed.")).toBeTruthy(),
+    );
+    expect(screen.queryByText("Invite resent")).toBeNull();
   });
 
   it("hides resend invite after the Cognito user is confirmed", () => {

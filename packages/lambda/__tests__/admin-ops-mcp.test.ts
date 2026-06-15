@@ -218,6 +218,7 @@ describe("admin-ops-mcp Lambda", () => {
       "me",
       "users_get",
       "tenant_members_list",
+      "tenant_members_resend_invite",
       "artifacts_list",
       "artifacts_get",
       "create_routine",
@@ -266,6 +267,69 @@ describe("admin-ops-mcp Lambda", () => {
       string
     >;
     expect(headers["x-tenant-id"]).toBe("pinned-tenant-uuid");
+  });
+
+  it("tools/call tenant_members_resend_invite uses the dedicated GraphQL resend mutation", async () => {
+    dbLookupResult = [
+      {
+        id: "key-uuid",
+        tenant_id: "tenant-uuid",
+        created_by_user_id: "owner-uuid",
+      },
+    ];
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            resendMemberInvite: {
+              status: "RESENT",
+              message: "Invite resent.",
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    ) as unknown as typeof fetch;
+
+    await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 13,
+          method: "tools/call",
+          params: {
+            name: "tenant_members_resend_invite",
+            arguments: { memberId: "member-uuid" },
+          },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+
+    const fetchCall = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0]!;
+    expect(fetchCall[0]).toBe("https://api.test.example.com/graphql");
+    const request = fetchCall[1] as RequestInit;
+    const headers = request.headers as Record<string, string>;
+    expect(headers["x-tenant-id"]).toBe("tenant-uuid");
+    expect(headers["x-principal-id"]).toBe("owner-uuid");
+
+    const body = JSON.parse(String(request.body)) as {
+      query: string;
+      variables: {
+        tenantId: string;
+        input: { memberId: string; idempotencyKey: string };
+      };
+    };
+    expect(body.query).toContain("resendMemberInvite");
+    expect(body.variables.tenantId).toBe("tenant-uuid");
+    expect(body.variables.input.memberId).toBe("member-uuid");
+    expect(body.variables.input.idempotencyKey).toMatch(
+      /^resend-member-invite:member-uuid:/,
+    );
   });
 
   it("tools/call forwards createdByUserId from the key row as x-principal-id when caller didn't supply one", async () => {

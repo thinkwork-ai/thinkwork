@@ -3,11 +3,12 @@
  * members). The existing `thinkwork user invite` stays as a convenience
  * wrapper for the common flow.
  *
- * Implementations inline (4 subcommands).
+ * Implementations inline (5 subcommands).
  */
 
 import { Command } from "commander";
 import { confirm, input } from "@inquirer/prompts";
+import { randomUUID } from "node:crypto";
 import { graphql } from "../gql/index.js";
 import { loadStageSession } from "../cli-config.js";
 import { resolveStage } from "../lib/resolve-stage.js";
@@ -29,6 +30,7 @@ const TenantMembersDoc = graphql(`
       principalId
       role
       status
+      cognitoStatus
       createdAt
     }
   }
@@ -41,6 +43,18 @@ const InviteMemberDoc = graphql(`
       principalId
       role
       status
+    }
+  }
+`);
+
+const ResendMemberInviteDoc = graphql(`
+  mutation CliResendMemberInvite(
+    $tenantId: ID!
+    $input: ResendMemberInviteInput!
+  ) {
+    resendMemberInvite(tenantId: $tenantId, input: $input) {
+      status
+      message
     }
   }
 `);
@@ -86,6 +100,8 @@ interface InviteOptions extends MemberCliOptions {
   role?: string;
   name?: string;
 }
+
+type ResendOptions = MemberCliOptions;
 
 interface UpdateOptions extends MemberCliOptions {
   role?: string;
@@ -191,6 +207,7 @@ async function runMemberList(opts: ListOptions): Promise<void> {
         : m.principalId,
     role: m.role,
     status: m.status,
+    cognito: m.cognitoStatus ?? "—",
   }));
 
   printTable(rows, [
@@ -199,6 +216,7 @@ async function runMemberList(opts: ListOptions): Promise<void> {
     { key: "principal", header: "PRINCIPAL" },
     { key: "role", header: "ROLE" },
     { key: "status", header: "STATUS" },
+    { key: "cognito", header: "COGNITO" },
   ]);
 }
 
@@ -238,6 +256,34 @@ async function runMemberInvite(
   printSuccess(
     `Invited ${resolvedEmail} as ${member.role} (member id ${member.id}).`,
   );
+}
+
+async function runMemberResend(
+  memberId: string,
+  opts: ResendOptions,
+): Promise<void> {
+  const ctx = await resolveMemberContext(opts);
+  const data = await gqlMutate(ctx.client, ResendMemberInviteDoc, {
+    tenantId: ctx.tenantId,
+    input: {
+      memberId,
+      idempotencyKey: createResendInviteIdempotencyKey(memberId),
+    },
+  });
+  const result = data.resendMemberInvite;
+
+  if (isJsonMode()) {
+    printJson({ memberId, ...result });
+    return;
+  }
+
+  if (result.status === "RESENT") {
+    printSuccess(result.message);
+    return;
+  }
+
+  printError(result.message);
+  process.exit(1);
 }
 
 async function runMemberUpdate(
@@ -346,6 +392,21 @@ Examples:
     .action(runMemberInvite);
 
   mem
+    .command("resend <memberId>")
+    .description("Resend a pending Cognito invite email for a tenant member.")
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug")
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ thinkwork member resend 018f2d0c-...
+  $ thinkwork member resend 018f2d0c-... --tenant acme -s dev
+`,
+    )
+    .action(runMemberResend);
+
+  mem
     .command("update <memberId>")
     .description("Change a member's role or status.")
     .option("-s, --stage <name>", "Deployment stage")
@@ -363,4 +424,8 @@ Examples:
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("-y, --yes", "Skip confirmation")
     .action(runMemberRemove);
+}
+
+function createResendInviteIdempotencyKey(memberId: string): string {
+  return `resend-member-invite:${memberId}:${randomUUID()}`;
 }

@@ -23,7 +23,7 @@ export const TENANT_FIELDS =
 export const USER_FIELDS = "id tenantId email name image phone createdAt";
 
 export const TENANT_MEMBER_FIELDS =
-  "id tenantId principalType principalId role status createdAt";
+  "id tenantId principalType principalId role status cognitoStatus createdAt";
 
 export const TEAM_FIELDS =
   "id name slug description type status budgetMonthlyCents createdAt";

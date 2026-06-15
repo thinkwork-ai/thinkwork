@@ -14,6 +14,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 import { buildSchema, parse, print } from "graphql";
+import { coreMutations } from "../graphql/resolvers/core/index.js";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
 const SCHEMA_DIR = join(REPO_ROOT, "packages/database-pg/graphql");
@@ -481,6 +482,41 @@ describe("GraphQL Schema Contract", () => {
         expect(mutationFields).toContain(m);
       });
     }
+
+    it("exposes the dedicated member invite resend contract", () => {
+      const mutation = schema.getMutationType() as any;
+      const input = schema.getType("ResendMemberInviteInput") as any;
+      const result = schema.getType("ResendMemberInviteResult") as any;
+      const status = schema.getType("ResendMemberInviteStatus") as any;
+
+      expect(mutation.getFields().resendMemberInvite.type.toString()).toBe(
+        "ResendMemberInviteResult!",
+      );
+      expect(
+        mutation
+          .getFields()
+          .resendMemberInvite.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([
+        ["tenantId", "ID!"],
+        ["input", "ResendMemberInviteInput!"],
+      ]);
+      expect(input.getFields().memberId.type.toString()).toBe("ID!");
+      expect(input.getFields().idempotencyKey.type.toString()).toBe("String!");
+      expect(result.getFields().status.type.toString()).toBe(
+        "ResendMemberInviteStatus!",
+      );
+      expect(result.getFields().message.type.toString()).toBe("String!");
+      expect(result.getFields().member).toBeUndefined();
+      expect(status.getValues().map((value: any) => value.name)).toEqual([
+        "RESENT",
+        "NOT_PENDING",
+        "DELIVERY_FAILED",
+      ]);
+      expect(coreMutations.resendMemberInvite).toEqual(expect.any(Function));
+    });
   });
 
   describe("v1 Subscription surface", () => {

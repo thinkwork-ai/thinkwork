@@ -28,7 +28,12 @@ export type {
 } from "./agents.js";
 
 export * as users from "./users.js";
-export type { User, TenantMember } from "./users.js";
+export type {
+  User,
+  TenantMember,
+  ResendMemberInviteResult,
+  ResendMemberInviteStatus,
+} from "./users.js";
 
 export * as artifacts from "./artifacts.js";
 export type { Artifact, ListArtifactsInput } from "./artifacts.js";
