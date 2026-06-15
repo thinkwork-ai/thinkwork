@@ -3,8 +3,8 @@
  *
  * These assertions keep the optional Plane substrate runnable in CI without
  * AWS credentials while guarding the important invariants: public HTTPS,
- * ECS/Fargate service split, retained S3/cache/RabbitMQ resources, parked
- * runtime semantics, and secret indirection.
+ * a compact ECS/Fargate AIO runtime, parked runtime semantics, and secret
+ * indirection.
  */
 
 import { readFileSync } from "node:fs";
@@ -124,19 +124,23 @@ describe("Plane Terraform app module", () => {
     expect(ecsService).toMatch(/for_each\s*=\s*local\.public_services/);
   });
 
-  it("uses S3, ElastiCache, and Amazon MQ RabbitMQ as retained Plane data resources", () => {
+  it("keeps Plane compact without managed Redis or RabbitMQ dependencies", () => {
     const source = read(PLANE_MAIN);
     const readme = read(PLANE_README);
+    const ecsServiceResources = source.match(
+      /resource "aws_ecs_service" "plane"/g,
+    );
 
     expect(source).toMatch(/resource "aws_s3_bucket" "plane"/);
-    expect(source).toMatch(
-      /resource "aws_elasticache_replication_group" "plane"/,
-    );
-    expect(source).toMatch(/resource "aws_mq_broker" "rabbitmq"/);
-    expect(source).toMatch(/engine_type\s*=\s*"RabbitMQ"/);
+    expect(ecsServiceResources).toHaveLength(1);
+    expect(source).not.toMatch(/resource "aws_elasticache_/);
+    expect(source).not.toMatch(/resource "aws_mq_broker"/);
+    expect(source).not.toMatch(/name = "REDIS_URL"/);
+    expect(source).not.toMatch(/name = "AMQP_URL"/);
     expect(readme).toMatch(/runtime_enabled = false/);
     expect(readme).toMatch(/parks the compact Plane ECS service/);
-    expect(readme).toMatch(/S3, cache, RabbitMQ, secrets, logs, ALB/);
+    expect(readme).toMatch(/one ECS service/);
+    expect(readme).toMatch(/two containers/);
   });
 
   it("injects Plane secrets through ECS secret references", () => {
@@ -148,7 +152,6 @@ describe("Plane Terraform app module", () => {
       "secret_key_secret_arn",
       "live_server_secret_key_secret_arn",
       "aes_secret_key_secret_arn",
-      "amqp_url_secret_arn",
       "s3_access_key_id_secret_arn",
       "s3_secret_access_key_secret_arn",
     ]) {
@@ -158,7 +161,6 @@ describe("Plane Terraform app module", () => {
     expect(source).toMatch(/name = "SECRET_KEY"/);
     expect(source).toMatch(/name = "LIVE_SERVER_SECRET_KEY"/);
     expect(source).toMatch(/name = "AES_SECRET_KEY"/);
-    expect(source).toMatch(/name = "AMQP_URL"/);
     expect(source).toMatch(/name = "AWS_ACCESS_KEY_ID"/);
     expect(source).toMatch(/name = "AWS_SECRET_ACCESS_KEY"/);
   });
@@ -183,8 +185,6 @@ describe("Plane Terraform app module", () => {
       "plane_beat_worker_log_group_name",
       "plane_live_log_group_name",
       "plane_mcp_log_group_name",
-      "plane_cache_endpoint",
-      "plane_rabbitmq_broker_arn",
       "plane_storage_bucket_name",
       "plane_runtime_enabled",
     ]) {
@@ -229,7 +229,6 @@ describe("Plane Terraform app module", () => {
     );
     expect(outputs).toMatch(/output "plane_provisioned"/);
     expect(outputs).toMatch(/output "plane_url"/);
-    expect(outputs).toMatch(/output "plane_rabbitmq_broker_arn"/);
   });
 
   it("keeps greenfield Plane variables and defaults disabled", () => {

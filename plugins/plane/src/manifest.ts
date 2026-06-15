@@ -8,6 +8,10 @@
  *   - The `infrastructure` component maps onto the `plane` deployment-runner
  *     adapter introduced by U1. `terraformInputs` mirrors the adapter's
  *     required inputs for ENABLE/UPGRADE.
+ *   - The runtime topology is intentionally compact: one Plane all-in-one
+ *     application container plus the Plane MCP sidecar in a single ECS task.
+ *     Do not reintroduce per-service Plane containers, managed Redis/Valkey,
+ *     or Amazon MQ/RabbitMQ into this plugin contract.
  *   - The `skills` component seeds the first workflow skill so agents can
  *     work Plane issues with context-first read/write discipline.
  *   - The `mcp-server` component resolves the tenant Plane endpoint from the
@@ -166,10 +170,6 @@ const LEGACY_INFRA_COMPONENT: InfrastructureComponent = {
       description: "Secrets Manager ARN containing Plane AES_SECRET_KEY.",
       type: "string",
     },
-    amqpUrlSecretArn: {
-      description: "Secrets Manager ARN containing Plane AMQP_URL.",
-      type: "string",
-    },
     s3AccessKeyIdSecretArn: {
       description:
         "Optional Secrets Manager ARN containing an access key id for Plane S3 uploads.",
@@ -216,7 +216,6 @@ const COMPACT_INFRA_COMPONENT: InfrastructureComponent = {
       LEGACY_INFRA_COMPONENT.terraformInputs.liveServerSecretKeySecretArn,
     aesSecretKeySecretArn:
       LEGACY_INFRA_COMPONENT.terraformInputs.aesSecretKeySecretArn,
-    amqpUrlSecretArn: LEGACY_INFRA_COMPONENT.terraformInputs.amqpUrlSecretArn,
     s3AccessKeyIdSecretArn:
       LEGACY_INFRA_COMPONENT.terraformInputs.s3AccessKeyIdSecretArn,
     s3SecretAccessKeySecretArn:

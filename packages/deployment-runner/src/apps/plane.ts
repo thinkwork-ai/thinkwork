@@ -42,8 +42,6 @@ const statusOutputs = [
   "plane_beat_worker_log_group_name",
   "plane_live_log_group_name",
   "plane_mcp_log_group_name",
-  "plane_cache_endpoint",
-  "plane_rabbitmq_broker_arn",
   "plane_storage_bucket_name",
 ] as const;
 
@@ -80,12 +78,6 @@ const provisionRequiredInputs: RequiredManagedAppInput[] = [
     key: "aesSecretKeySecretArn",
     description: "Secrets Manager ARN containing Plane AES_SECRET_KEY.",
     terraformVariable: "plane_aes_secret_key_secret_arn",
-    secret: true,
-  },
-  {
-    key: "amqpUrlSecretArn",
-    description: "Secrets Manager ARN containing Plane AMQP_URL.",
-    terraformVariable: "plane_amqp_url_secret_arn",
     secret: true,
   },
   {
@@ -170,11 +162,6 @@ export const planeAdapter: ManagedAppAdapter = {
         "aesSecretKeySecretArn",
         "Plane aesSecretKeySecretArn",
       ),
-      plane_amqp_url_secret_arn: requireStringInput(
-        desiredConfig,
-        "amqpUrlSecretArn",
-        "Plane amqpUrlSecretArn",
-      ),
       plane_s3_access_key_id_secret_arn: optionalString(
         desiredConfig,
         "s3AccessKeyIdSecretArn",
@@ -206,20 +193,6 @@ export const planeAdapter: ManagedAppAdapter = {
       plane_web_desired_count:
         optionalNumber(desiredConfig, "appDesiredCount") ??
         optionalNumber(desiredConfig, "webDesiredCount"),
-      plane_cache_engine: optionalString(desiredConfig, "cacheEngine"),
-      plane_cache_engine_version: optionalString(
-        desiredConfig,
-        "cacheEngineVersion",
-      ),
-      plane_cache_parameter_group_family: optionalString(
-        desiredConfig,
-        "cacheParameterGroupFamily",
-      ),
-      plane_cache_node_type: optionalString(desiredConfig, "cacheNodeType"),
-      plane_cache_num_cache_clusters: optionalNumber(
-        desiredConfig,
-        "cacheNumCacheClusters",
-      ),
       plane_allowed_public_cidr_blocks: optionalStringArray(
         desiredConfig,
         "allowedPublicCidrBlocks",
@@ -240,10 +213,8 @@ export const planeAdapter: ManagedAppAdapter = {
       summary:
         "Plane destroy deletes the Plane runtime and customer-owned Plane project management data.",
       resources: [
-        "Plane ECS services, task definitions, task/execution IAM roles, and public ALB/listener/target-group resources",
+        "Plane compact ECS service, task definition, task/execution IAM roles, and public ALB/listener/target-group resources",
         "Dedicated Plane database, database role, database URL secret, application secrets, and encryption secrets",
-        "ElastiCache Valkey/Redis replication group, subnet group, parameter group, and cache endpoint",
-        "Amazon MQ RabbitMQ broker, virtual host/user secrets, and queue state",
         "S3 bucket objects or dedicated prefixes containing Plane file uploads and attachments",
         "CloudWatch log groups and deployment evidence artifacts for Plane jobs",
       ],
@@ -341,11 +312,6 @@ export const planeAdapter: ManagedAppAdapter = {
         mcpLogGroupName: stringOutput(
           terraformOutputs,
           "plane_mcp_log_group_name",
-        ),
-        cacheEndpoint: stringOutput(terraformOutputs, "plane_cache_endpoint"),
-        rabbitmqBrokerArn: stringOutput(
-          terraformOutputs,
-          "plane_rabbitmq_broker_arn",
         ),
         storageBucketName: stringOutput(
           terraformOutputs,

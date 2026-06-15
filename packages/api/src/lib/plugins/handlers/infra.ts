@@ -318,7 +318,6 @@ function planeDefaultDesiredConfig(): Record<string, unknown> {
       process.env.THINKWORK_PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN,
     aesSecretKeySecretArn:
       process.env.THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN,
-    amqpUrlSecretArn: process.env.THINKWORK_PLANE_AMQP_URL_SECRET_ARN,
     s3AccessKeyIdSecretArn:
       process.env.THINKWORK_PLANE_S3_ACCESS_KEY_ID_SECRET_ARN,
     s3SecretAccessKeySecretArn:

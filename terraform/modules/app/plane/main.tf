@@ -1,11 +1,10 @@
 ################################################################################
 # Plane (Optional Managed App) - App Module
 #
-# Provisions Plane as an AWS-native runtime: public HTTPS ALB, ECS/Fargate
-# services, ElastiCache Valkey/Redis, Amazon MQ RabbitMQ, S3 object storage,
-# CloudWatch logs, and Secrets Manager references. The composite ThinkWork
-# module owns whether this module is instantiated; this module owns runtime
-# parking by setting ECS desired counts to zero.
+# Provisions Plane as a compact AWS-native runtime: one ECS/Fargate service
+# with the Plane all-in-one app container and the Plane MCP sidecar. Do not add
+# separately managed Redis/Valkey, RabbitMQ/Amazon MQ, or per-service Plane ECS
+# services to this module.
 ################################################################################
 
 terraform {
@@ -24,13 +23,8 @@ terraform {
 locals {
   name = "thinkwork-${var.stage}-plane"
 
-  effective_cache_subnet_ids = length(var.cache_subnet_ids) > 0 ? var.cache_subnet_ids : var.subnet_ids
-  effective_queue_subnet_ids = length(var.queue_subnet_ids) > 0 ? var.queue_subnet_ids : local.effective_cache_subnet_ids
-
   effective_app_image_uri = var.image_uri
 
-  redis_scheme = var.cache_transit_encryption_enabled ? "rediss" : "redis"
-  redis_url    = "${local.redis_scheme}://${aws_elasticache_replication_group.plane.primary_endpoint_address}:${var.cache_port}"
   managed_s3_access_key_enabled = (
     var.create_secret_placeholders &&
     var.s3_access_key_id_secret_arn == "" &&
@@ -61,14 +55,6 @@ locals {
       name_prefix   = "thinkwork/${var.stage}/plane/aes-secret-key-"
       description   = "Plane AES_SECRET_KEY"
       secret_string = jsonencode({ AES_SECRET_KEY = random_password.aes_secret_key.result })
-    }
-    amqp_url = {
-      enabled     = var.create_secret_placeholders && var.amqp_url_secret_arn == ""
-      name_prefix = "thinkwork/${var.stage}/plane/amqp-url-"
-      description = "Plane AMQP_URL for the managed RabbitMQ broker"
-      secret_string = jsonencode({
-        AMQP_URL = "amqps://${var.rabbitmq_admin_username}:${random_password.rabbitmq.result}@${replace(aws_mq_broker.rabbitmq.instances[0].endpoints[0], "amqps://", "")}"
-      })
     }
     s3_access_key_id = {
       enabled       = local.managed_s3_access_key_enabled
@@ -108,11 +94,6 @@ locals {
     ? var.aes_secret_key_secret_arn
     : try(aws_secretsmanager_secret.plane["aes_secret_key"].arn, "")
   )
-  effective_amqp_url_secret_arn = (
-    var.amqp_url_secret_arn != ""
-    ? var.amqp_url_secret_arn
-    : try(aws_secretsmanager_secret.plane["amqp_url"].arn, "")
-  )
   effective_s3_access_key_id_secret_arn = (
     var.s3_access_key_id_secret_arn != ""
     ? var.s3_access_key_id_secret_arn
@@ -129,7 +110,6 @@ locals {
     local.effective_secret_key_secret_arn,
     local.effective_live_server_secret_key_secret_arn,
     local.effective_aes_secret_key_secret_arn,
-    local.effective_amqp_url_secret_arn,
     local.effective_s3_access_key_id_secret_arn,
     local.effective_s3_secret_access_key_secret_arn,
   ])
@@ -142,7 +122,6 @@ locals {
     { name = "WEB_URL", value = var.public_url },
     { name = "INTEGRATION_CALLBACK_BASE_URL", value = var.public_url },
     { name = "CORS_ALLOWED_ORIGINS", value = var.public_url },
-    { name = "REDIS_URL", value = local.redis_url },
     { name = "USE_MINIO", value = "0" },
     { name = "AWS_REGION", value = data.aws_region.current.name },
     { name = "AWS_S3_BUCKET_NAME", value = var.s3_bucket_name },
@@ -163,7 +142,6 @@ locals {
     { name = "SECRET_KEY", valueFrom = "${local.effective_secret_key_secret_arn}:SECRET_KEY::" },
     { name = "LIVE_SERVER_SECRET_KEY", valueFrom = "${local.effective_live_server_secret_key_secret_arn}:LIVE_SERVER_SECRET_KEY::" },
     { name = "AES_SECRET_KEY", valueFrom = "${local.effective_aes_secret_key_secret_arn}:AES_SECRET_KEY::" },
-    { name = "AMQP_URL", valueFrom = "${local.effective_amqp_url_secret_arn}:AMQP_URL::" },
   ]
 
   optional_container_secrets = concat(
@@ -232,11 +210,6 @@ locals {
 
 data "aws_region" "current" {}
 
-resource "random_password" "rabbitmq" {
-  length  = 32
-  special = false
-}
-
 resource "random_password" "secret_key" {
   length  = 50
   special = false
@@ -283,10 +256,6 @@ resource "terraform_data" "configuration_guardrails" {
   input = {
     runtime_enabled                   = var.runtime_enabled
     web_desired_count                 = var.web_desired_count
-    api_desired_count                 = var.api_desired_count
-    worker_desired_count              = var.worker_desired_count
-    beat_worker_desired_count         = var.beat_worker_desired_count
-    live_desired_count                = var.live_desired_count
     image_uri                         = var.image_uri
     app_image_uri                     = local.effective_app_image_uri
     mcp_image_uri                     = var.mcp_image_uri
@@ -296,12 +265,9 @@ resource "terraform_data" "configuration_guardrails" {
     secret_key_secret_arn             = local.effective_secret_key_secret_arn
     live_server_secret_key_secret_arn = local.effective_live_server_secret_key_secret_arn
     aes_secret_key_secret_arn         = local.effective_aes_secret_key_secret_arn
-    amqp_url_secret_arn               = local.effective_amqp_url_secret_arn
     s3_access_key_id_secret_arn       = local.effective_s3_access_key_id_secret_arn
     s3_secret_access_key_secret_arn   = local.effective_s3_secret_access_key_secret_arn
     s3_bucket_name                    = var.s3_bucket_name
-    cache_subnet_ids                  = local.effective_cache_subnet_ids
-    queue_subnet_ids                  = local.effective_queue_subnet_ids
   }
 
   lifecycle {
@@ -311,36 +277,11 @@ resource "terraform_data" "configuration_guardrails" {
     }
 
     precondition {
-      condition     = !var.runtime_enabled || var.api_desired_count > 0
-      error_message = "runtime_enabled requires api_desired_count > 0."
-    }
-
-    precondition {
-      condition     = !var.runtime_enabled || var.worker_desired_count > 0
-      error_message = "runtime_enabled requires worker_desired_count > 0."
-    }
-
-    precondition {
-      condition     = !var.runtime_enabled || var.live_desired_count > 0
-      error_message = "runtime_enabled requires live_desired_count > 0."
-    }
-
-    precondition {
       condition = (
         local.effective_app_image_uri != "" &&
         var.mcp_image_uri != ""
       )
       error_message = "Plane requires AIO app and MCP image URIs pinned to immutable digests."
-    }
-
-    precondition {
-      condition     = length(local.effective_cache_subnet_ids) > 0
-      error_message = "Plane requires at least one cache subnet."
-    }
-
-    precondition {
-      condition     = length(local.effective_queue_subnet_ids) > 0
-      error_message = "Plane requires at least one RabbitMQ subnet."
     }
 
     precondition {
@@ -361,11 +302,6 @@ resource "terraform_data" "configuration_guardrails" {
     precondition {
       condition     = local.effective_aes_secret_key_secret_arn != ""
       error_message = "Plane requires aes_secret_key_secret_arn or create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = local.effective_amqp_url_secret_arn != ""
-      error_message = "Plane requires amqp_url_secret_arn or create_secret_placeholders = true."
     }
 
     precondition {
@@ -580,54 +516,6 @@ resource "aws_security_group" "alb" {
   lifecycle { create_before_destroy = true }
 }
 
-resource "aws_security_group" "cache" {
-  name_prefix = "${local.name}-cache-"
-  description = "Plane ElastiCache"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description     = "Plane tasks to Redis-compatible cache"
-    from_port       = var.cache_port
-    to_port         = var.cache_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.plane.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${local.name}-cache-sg" }
-  lifecycle { create_before_destroy = true }
-}
-
-resource "aws_security_group" "rabbitmq" {
-  name_prefix = "${local.name}-rabbitmq-"
-  description = "Plane RabbitMQ"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description     = "Plane tasks to RabbitMQ AMQPS"
-    from_port       = 5671
-    to_port         = 5671
-    protocol        = "tcp"
-    security_groups = [aws_security_group.plane.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${local.name}-rabbitmq-sg" }
-  lifecycle { create_before_destroy = true }
-}
-
 resource "aws_security_group_rule" "aurora_from_plane" {
   type                     = "ingress"
   from_port                = var.db_port
@@ -762,78 +650,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "plane" {
       sse_algorithm = "AES256"
     }
   }
-}
-
-################################################################################
-# ElastiCache Valkey/Redis
-################################################################################
-
-resource "aws_elasticache_subnet_group" "plane" {
-  name       = "tw-${var.stage}-plane"
-  subnet_ids = local.effective_cache_subnet_ids
-}
-
-resource "aws_elasticache_parameter_group" "plane" {
-  name   = "tw-${var.stage}-plane"
-  family = var.cache_parameter_group_family
-
-  parameter {
-    name  = "maxmemory-policy"
-    value = "noeviction"
-  }
-}
-
-resource "aws_elasticache_replication_group" "plane" {
-  replication_group_id = "tw-${var.stage}-plane"
-  description          = "Plane Redis-compatible cache"
-
-  engine         = var.cache_engine
-  engine_version = var.cache_engine_version
-  node_type      = var.cache_node_type
-  port           = var.cache_port
-
-  num_cache_clusters         = var.cache_num_cache_clusters
-  automatic_failover_enabled = var.cache_num_cache_clusters > 1
-  multi_az_enabled           = var.cache_num_cache_clusters > 1
-
-  at_rest_encryption_enabled = true
-  transit_encryption_enabled = var.cache_transit_encryption_enabled
-
-  subnet_group_name    = aws_elasticache_subnet_group.plane.name
-  security_group_ids   = [aws_security_group.cache.id]
-  parameter_group_name = aws_elasticache_parameter_group.plane.name
-
-  tags = { Name = "${local.name}-cache" }
-}
-
-################################################################################
-# Amazon MQ RabbitMQ
-################################################################################
-
-resource "aws_mq_broker" "rabbitmq" {
-  broker_name        = "tw-${var.stage}-plane"
-  engine_type        = "RabbitMQ"
-  engine_version     = var.rabbitmq_engine_version
-  host_instance_type = var.rabbitmq_instance_type
-  deployment_mode    = "SINGLE_INSTANCE"
-
-  publicly_accessible = false
-  security_groups     = [aws_security_group.rabbitmq.id]
-  subnet_ids          = [local.effective_queue_subnet_ids[0]]
-
-  auto_minor_version_upgrade = true
-  apply_immediately          = true
-
-  user {
-    username = var.rabbitmq_admin_username
-    password = random_password.rabbitmq.result
-  }
-
-  logs {
-    general = true
-  }
-
-  tags = { Name = "${local.name}-rabbitmq" }
 }
 
 ################################################################################

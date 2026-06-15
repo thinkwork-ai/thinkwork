@@ -104,7 +104,6 @@ describe("Plane plugin manifest", () => {
     });
     expect(Object.keys(infra.terraformInputs).sort()).toEqual([
       "aesSecretKeySecretArn",
-      "amqpUrlSecretArn",
       "certificateArn",
       "dbUrlSecretArn",
       "imageUri",

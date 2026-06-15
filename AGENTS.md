@@ -147,5 +147,6 @@ If Expo reports that `@thinkwork/react-native-sdk/dist/index.js` is missing, thi
 ## Scope guardrails
 
 - This is an **AWS-only** platform. Feature work that assumes Kubernetes, Docker Compose, GCP, or Azure is explicitly out of scope (`CONTRIBUTING.md`).
+- **Plane plugin topology is intentionally compact.** Plane must deploy through ThinkWork as one ECS service/task containing the Plane all-in-one app container plus the separate Plane MCP sidecar only. Do not add or approve Plane plans that create per-service Plane ECS services, Amazon MQ/RabbitMQ, ElastiCache/Redis/Valkey, or other separately managed Plane runtime dependencies. If a Plane verification/deploy plan includes `aws_mq_broker`, `aws_elasticache_*`, Redis, RabbitMQ, or more than one Plane ECS service, stop, comment on the Linear issue, and fix the module before applying.
 - Size for enterprise scale — planning docs should assume on the order of **4 enterprises × 100+ agents × ~5 templates** (400+ agents); "n=4 simplification" reasoning is obsolete.
 - Prefer AWS-native services (AgentCore, Cognito, Bedrock) when comparable to SaaS alternatives; frame external SaaS as contingency, not default.

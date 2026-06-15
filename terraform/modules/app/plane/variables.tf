@@ -19,13 +19,13 @@ variable "subnet_ids" {
 }
 
 variable "cache_subnet_ids" {
-  description = "Private subnet IDs for the ElastiCache subnet group. Leave empty to reuse subnet_ids in isolated test fixtures only."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = list(string)
   default     = []
 }
 
 variable "queue_subnet_ids" {
-  description = "Private subnet IDs for the Amazon MQ RabbitMQ broker. Leave empty to reuse cache_subnet_ids/subnet_ids."
+  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   type        = list(string)
   default     = []
 }
@@ -316,7 +316,7 @@ variable "aes_secret_key_secret_arn" {
 }
 
 variable "amqp_url_secret_arn" {
-  description = "Secrets Manager ARN containing Plane AMQP_URL."
+  description = "Deprecated no-op. Compact Plane AIO does not inject AMQP_URL."
   type        = string
   default     = ""
 }
@@ -369,71 +369,61 @@ variable "enable_signup" {
 }
 
 variable "cache_engine" {
-  description = "ElastiCache engine. Prefer valkey; redis is available as a compatibility fallback."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "valkey"
-
-  validation {
-    condition     = contains(["valkey", "redis"], var.cache_engine)
-    error_message = "cache_engine must be valkey or redis."
-  }
 }
 
 variable "cache_engine_version" {
-  description = "ElastiCache engine version for the selected cache engine"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "8.0"
 }
 
 variable "cache_parameter_group_family" {
-  description = "ElastiCache parameter group family matching cache_engine/cache_engine_version"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "valkey8"
 }
 
 variable "cache_node_type" {
-  description = "ElastiCache node type for the Plane cache"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "cache.t4g.micro"
 }
 
 variable "cache_port" {
-  description = "ElastiCache Redis-compatible port"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = number
   default     = 6379
 }
 
 variable "cache_num_cache_clusters" {
-  description = "Number of cache nodes in the replication group. Use 1 for the smallest v1 deployment."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = number
   default     = 1
 }
 
 variable "cache_transit_encryption_enabled" {
-  description = "Enable in-transit encryption for the Plane cache"
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = bool
   default     = true
 }
 
 variable "rabbitmq_engine_version" {
-  description = "Amazon MQ RabbitMQ engine version for Plane."
+  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   type        = string
   default     = "3.13"
 }
 
 variable "rabbitmq_instance_type" {
-  description = "Amazon MQ broker instance type for Plane RabbitMQ."
+  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   type        = string
   default     = "mq.m7g.medium"
-
-  validation {
-    condition     = can(regex("^mq\\.(m5\\.(large|xlarge|2xlarge|4xlarge)|m7g\\.(medium|large|xlarge|2xlarge|4xlarge|8xlarge|12xlarge|16xlarge))$", var.rabbitmq_instance_type))
-    error_message = "rabbitmq_instance_type must be an Amazon MQ RabbitMQ-supported instance type such as mq.m7g.medium or mq.m5.large."
-  }
 }
 
 variable "rabbitmq_admin_username" {
-  description = "Admin username Terraform creates on the Plane RabbitMQ broker."
+  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
   type        = string
   default     = "plane"
 }

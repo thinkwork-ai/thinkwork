@@ -24,8 +24,6 @@ function planeDesiredConfig(extra: Record<string, unknown> = {}) {
       "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
     aesSecretKeySecretArn:
       "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
-    amqpUrlSecretArn:
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-amqp",
     s3BucketName: "thinkwork-dev-plane",
     publicUrl: "https://plane.example.com",
     certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/example",
@@ -205,7 +203,8 @@ describe("managed app deployment adapters", () => {
       }),
     );
     expect(summary.statusOutputs).toContain("plane_url");
-    expect(summary.statusOutputs).toContain("plane_rabbitmq_broker_arn");
+    expect(summary.statusOutputs).not.toContain("plane_rabbitmq_broker_arn");
+    expect(summary.statusOutputs).not.toContain("plane_cache_endpoint");
   });
 
   it("hydrates managed app images from the verified release manifest contract", () => {
@@ -506,7 +505,9 @@ describe("managed app deployment adapters", () => {
     });
 
     expect(summary.dataImpact.destructive).toBe(true);
-    expect(summary.dataImpact.resources.join("\n")).toMatch(/RabbitMQ/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/compact ECS/);
+    expect(summary.dataImpact.resources.join("\n")).not.toMatch(/RabbitMQ/);
+    expect(summary.dataImpact.resources.join("\n")).not.toMatch(/Redis/);
     expect(summary.dataImpact.resources.join("\n")).toMatch(/S3/);
     expect(summary.preDestroySteps).toEqual(
       expect.arrayContaining([
@@ -560,9 +561,6 @@ describe("managed app deployment adapters", () => {
         plane_provisioned: { value: true },
         plane_runtime_enabled: { value: true },
         plane_url: { value: "https://plane.example.com" },
-        plane_rabbitmq_broker_arn: {
-          value: "arn:aws:amazonmq:us-east-1:123456789012:broker:plane",
-        },
         plane_storage_bucket_name: { value: "thinkwork-dev-plane" },
       }),
     ).toEqual(
@@ -572,8 +570,6 @@ describe("managed app deployment adapters", () => {
         endpoint: "https://plane.example.com",
         status: "running",
         evidence: expect.objectContaining({
-          rabbitmqBrokerArn:
-            "arn:aws:amazonmq:us-east-1:123456789012:broker:plane",
           storageBucketName: "thinkwork-dev-plane",
         }),
       }),

@@ -424,7 +424,6 @@ resource "terraform_data" "plane_configuration_guardrails" {
     plane_secret_key_secret_arn             = var.plane_secret_key_secret_arn
     plane_live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
     plane_aes_secret_key_secret_arn         = var.plane_aes_secret_key_secret_arn
-    plane_amqp_url_secret_arn               = var.plane_amqp_url_secret_arn
     plane_s3_access_key_id_secret_arn       = var.plane_s3_access_key_id_secret_arn
     plane_s3_secret_access_key_secret_arn   = var.plane_s3_secret_access_key_secret_arn
     plane_s3_bucket_name                    = var.plane_s3_bucket_name
@@ -465,11 +464,6 @@ resource "terraform_data" "plane_configuration_guardrails" {
     }
 
     precondition {
-      condition     = var.plane_amqp_url_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
-      error_message = "plane_provisioned requires plane_amqp_url_secret_arn or deployment_control_plane_create_secret_placeholders = true."
-    }
-
-    precondition {
       condition     = var.plane_db_url_secret_arn == "" || var.plane_db_url_secret_arn != module.database.graphql_db_secret_arn
       error_message = "plane_provisioned requires a dedicated Plane database URL secret, not the shared Thinkwork admin database secret."
     }
@@ -492,11 +486,6 @@ resource "terraform_data" "plane_configuration_guardrails" {
     precondition {
       condition     = length(module.vpc.public_subnet_ids) > 0
       error_message = "plane_provisioned requires at least one public subnet for the public ALB and phase-1 task egress pattern."
-    }
-
-    precondition {
-      condition     = length(module.vpc.private_subnet_ids) > 0
-      error_message = "plane_provisioned requires at least one private subnet for ElastiCache and RabbitMQ."
     }
 
     precondition {
@@ -1259,8 +1248,6 @@ module "plane" {
   stage                = var.stage
   vpc_id               = module.vpc.vpc_id
   subnet_ids           = module.vpc.public_subnet_ids
-  cache_subnet_ids     = module.vpc.private_subnet_ids
-  queue_subnet_ids     = module.vpc.private_subnet_ids
   db_security_group_id = module.database.db_security_group_id
   public_url           = local.plane_public_url
   certificate_arn      = local.plane_certificate_arn
@@ -1284,20 +1271,14 @@ module "plane" {
   secret_key_secret_arn             = var.plane_secret_key_secret_arn
   live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
   aes_secret_key_secret_arn         = var.plane_aes_secret_key_secret_arn
-  amqp_url_secret_arn               = var.plane_amqp_url_secret_arn
   s3_access_key_id_secret_arn       = var.plane_s3_access_key_id_secret_arn
   s3_secret_access_key_secret_arn   = var.plane_s3_secret_access_key_secret_arn
   create_secret_placeholders        = var.deployment_control_plane_create_secret_placeholders
 
   s3_bucket_name = var.plane_s3_bucket_name
 
-  cache_engine                 = var.plane_cache_engine
-  cache_engine_version         = var.plane_cache_engine_version
-  cache_parameter_group_family = var.plane_cache_parameter_group_family
-  cache_node_type              = var.plane_cache_node_type
-  cache_num_cache_clusters     = var.plane_cache_num_cache_clusters
-  allowed_public_cidr_blocks   = var.plane_allowed_public_cidr_blocks
-  kms_key_arns                 = var.plane_kms_key_arns
+  allowed_public_cidr_blocks = var.plane_allowed_public_cidr_blocks
+  kms_key_arns               = var.plane_kms_key_arns
 
   depends_on = [terraform_data.plane_configuration_guardrails]
 }

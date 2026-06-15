@@ -910,7 +910,7 @@ variable "plane_aes_secret_key_secret_arn" {
 }
 
 variable "plane_amqp_url_secret_arn" {
-  description = "Secrets Manager ARN containing Plane AMQP_URL."
+  description = "Deprecated no-op. Compact Plane AIO does not inject AMQP_URL."
   type        = string
   default     = ""
 }
@@ -988,36 +988,31 @@ variable "plane_live_desired_count" {
 }
 
 variable "plane_cache_engine" {
-  description = "ElastiCache engine for Plane. Prefer valkey; redis is available as a compatibility fallback."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "valkey"
-
-  validation {
-    condition     = contains(["valkey", "redis"], var.plane_cache_engine)
-    error_message = "plane_cache_engine must be valkey or redis."
-  }
 }
 
 variable "plane_cache_engine_version" {
-  description = "ElastiCache engine version for Plane."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "8.0"
 }
 
 variable "plane_cache_parameter_group_family" {
-  description = "ElastiCache parameter group family matching plane_cache_engine/plane_cache_engine_version."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "valkey8"
 }
 
 variable "plane_cache_node_type" {
-  description = "ElastiCache node type for Plane."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = string
   default     = "cache.t4g.micro"
 }
 
 variable "plane_cache_num_cache_clusters" {
-  description = "Number of cache nodes in the Plane replication group. Use 1 for the smallest v1 deployment."
+  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
   type        = number
   default     = 1
 }
