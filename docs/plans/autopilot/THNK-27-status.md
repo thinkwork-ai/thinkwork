@@ -4,11 +4,12 @@ Issue: THNK-27 Add Plane Plugin
 
 ## Current State
 
-- Linear state: `In Progress`.
+- Linear state: `In Progress`; move to `Verification` after this status
+  closeout lands.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-docs-rollout`.
-- Active unit: U9 Docs, Rollout, and Operator Copy.
-- U8 merged via PR #2495.
+- Active branch: `codex/thnk-27-status-closeout`.
+- Active unit: Status closeout.
+- U9 merged via PR #2496.
 
 ## Context Discovered
 
@@ -34,7 +35,7 @@ Issue: THNK-27 Add Plane Plugin
 - [x] U6 Plane Issue-Loop Skill
 - [x] U7 Plane Seed and End-to-End Smoke
 - [x] U8 Release Packaging and Controller Wiring
-- [ ] U9 Docs, Rollout, and Operator Copy
+- [x] U9 Docs, Rollout, and Operator Copy
 
 ## PRs
 
@@ -63,7 +64,8 @@ Issue: THNK-27 Add Plane Plugin
   `https://github.com/thinkwork-ai/thinkwork/pull/2495` merged at
   `bae98296cce8d3dde2ca42204c7c1825987ae724`.
 - U9 Docs, Rollout, and Operator Copy:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2496` opened; CI pending.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2496` merged at
+  `dfad727a09b65a350e6594f97025271968e575f6`.
 
 ## Verification Log
 
@@ -177,6 +179,10 @@ scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed dry-run mode.
 - U9: `pnpm dlx prettier@3.6.2 --write ...` formatted the touched docs.
 - U9: `pnpm --filter @thinkwork/docs build` passed.
 - U9: `git diff --check` passed.
+- U9: PR #2496 CI passed (`cla`, `lint`, `verify`, `typecheck`, `test`) and
+  was squash-merged.
+- Closeout: all planned THNK-27 units U1-U9 are merged; this status-only
+  branch records the final merge state before moving THNK-27 to Verification.
 
 ## Decisions
 
