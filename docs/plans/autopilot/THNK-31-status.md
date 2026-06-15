@@ -58,6 +58,8 @@ project_context: TEI ThinkWork
   `main` as `7106af539b43f3a91d816878babc87a6958fabfa`.
 - #2531 `refactor(plugins): move plugin smoke scripts into packages` merged
   into `main` as `db405051a6555a675c214f5bb67340dcba871c2d`.
+- #2532 `test(plugins): move catalog parity tests into packages` merged into
+  `main` as `cd3725d5f888be73a575d934c191d06ab82a882e`.
 
 ## Current Plane Package Slice
 
@@ -213,6 +215,8 @@ project_context: TEI ThinkWork
   parity test entries.
 - PR #2532 opened for this slice:
   `https://github.com/thinkwork-ai/thinkwork/pull/2532`
+- PR #2532 merged into `main` as
+  `cd3725d5f888be73a575d934c191d06ab82a882e`.
 
 ### Verification
 
@@ -248,10 +252,15 @@ project_context: TEI ThinkWork
     package `test` script but no package-local test files yet. Updated the
     script to `vitest run --passWithNoTests`; package behavior is covered by the
     catalog tests in this slice.
+  - PR #2532 initially failed `Test` and `Typecheck` because package-local tests
+    imported the catalog contract through `@thinkwork/plugin-catalog/contracts`
+    without declaring the test-only workspace dependency. Added explicit
+    devDependencies for the four plugin packages plus the minimal lockfile
+    importer entries; rerun CI passed.
 
 ## Next Steps
 
-- Open and merge the plugin catalog test package PR after targeted checks and
-  CI pass.
-- Continue shrinking the remaining migration allowlist in fresh
-  `origin/main` worktrees, one implementation unit per PR.
+- Continue shrinking the remaining migration allowlist from fresh `origin/main`
+  worktrees, one implementation unit per PR.
+- Prioritize the next generic extension-point slice with the smallest blast
+  radius across API, deployment-runner, web, or Terraform-owned plugin source.
