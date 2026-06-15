@@ -52,6 +52,8 @@ project_context: TEI ThinkWork
 - Moving Plane-owned smoke scripts into `plugins/plane/smoke/`.
 - Updating deployment-runner and release manifest smoke contract paths to point
   at the plugin-owned smoke scripts.
+- PR #2524 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2524`
 
 ### Verification
 
