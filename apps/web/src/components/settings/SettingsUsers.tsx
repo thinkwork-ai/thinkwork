@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useMutation, useQuery } from "urql";
+import { SendIcon, UserPlusIcon } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -22,6 +23,7 @@ import {
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import {
+  SettingsAddManualUserMutation,
   SettingsInviteMemberMutation,
   SettingsTenantMembersQuery,
 } from "@/lib/settings-queries";
@@ -29,7 +31,6 @@ import {
   SettingsHeader,
   SettingsPane,
   SettingsTablePane,
-  settingsLinkActionClassName,
 } from "@/components/settings/SettingsContent";
 
 type UserRow = {
@@ -61,10 +62,12 @@ function relativeTime(value: unknown): string {
 }
 
 export function SettingsUsers() {
-  const { tenantId } = useTenant();
+  const { tenantId, role: callerRole } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const callerIsOwner = callerRole === "owner";
 
   const [result, refetch] = useQuery({
     query: SettingsTenantMembersQuery,
@@ -175,13 +178,28 @@ export function SettingsUsers() {
       description="Invite teammates and manage their roles and access."
       loading={result.fetching && !result.data}
       actions={
-        <button
-          type="button"
-          onClick={() => setInviteOpen(true)}
-          className={settingsLinkActionClassName}
-        >
-          + Invite member
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setAddOpen(true)}
+          >
+            <UserPlusIcon className="size-3.5" />
+            Add user
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setInviteOpen(true)}
+          >
+            <SendIcon className="size-3.5" />
+            Send invite
+          </Button>
+        </div>
       }
       toolbar={
         <Input
@@ -208,15 +226,28 @@ export function SettingsUsers() {
         }
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
-            No team members yet. Invite someone to collaborate.
+            No team members yet. Add a user or send an invite.
           </div>
         }
       />
-      <InviteMemberDialog
+      <SetupUserDialog
+        mode="add"
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        tenantId={tenantId ?? ""}
+        canCreateOwner={callerIsOwner}
+        onCompleted={() => {
+          refetch({ requestPolicy: "network-only" });
+          setAddOpen(false);
+        }}
+      />
+      <SetupUserDialog
+        mode="invite"
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         tenantId={tenantId ?? ""}
-        onInvited={() => {
+        canCreateOwner={callerIsOwner}
+        onCompleted={() => {
           refetch({ requestPolicy: "network-only" });
           setInviteOpen(false);
         }}
@@ -225,29 +256,48 @@ export function SettingsUsers() {
   );
 }
 
-function InviteMemberDialog({
+function SetupUserDialog({
+  mode,
   open,
   onOpenChange,
   tenantId,
-  onInvited,
+  canCreateOwner,
+  onCompleted,
 }: {
+  mode: "add" | "invite";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tenantId: string;
-  onInvited: () => void;
+  canCreateOwner: boolean;
+  onCompleted: () => void;
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("member");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [state, invite] = useMutation(SettingsInviteMemberMutation);
+  const [addState, addManualUser] = useMutation(SettingsAddManualUserMutation);
+  const [inviteState, invite] = useMutation(SettingsInviteMemberMutation);
+  const isAdd = mode === "add";
+  const fetching = isAdd ? addState.fetching : inviteState.fetching;
 
   async function onSubmit() {
     setErrorMsg(null);
-    const result = await invite({
-      tenantId,
-      input: { email: email.trim(), name: name.trim() || null, role },
-    });
+    const input = {
+      email: email.trim(),
+      name: name.trim() || null,
+      role,
+      idempotencyKey: createSetupAttemptId(mode, email),
+    };
+    const result = isAdd
+      ? await addManualUser({
+          tenantId,
+          input,
+        })
+      : await invite({
+          tenantId,
+          input,
+        });
+
     if (result.error) {
       setErrorMsg(result.error.message);
       return;
@@ -255,16 +305,25 @@ function InviteMemberDialog({
     setEmail("");
     setName("");
     setRole("member");
-    onInvited();
+    onCompleted();
   }
+
+  const title = isAdd ? "Add user" : "Send invite";
+  const submitLabel = isAdd ? "Add user" : "Send invite";
+  const submittingLabel = isAdd ? "Adding..." : "Sending...";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Invite member</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          <p className="text-sm text-muted-foreground">
+            {isAdd
+              ? "Create tenant access without sending an invitation email."
+              : "Send a ThinkWork invitation email for this tenant."}
+          </p>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Email</label>
             <Input
@@ -286,7 +345,9 @@ function InviteMemberDialog({
               <SelectContent>
                 <SelectItem value="member">Member</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="owner">Owner</SelectItem>
+                {canCreateOwner ? (
+                  <SelectItem value="owner">Owner</SelectItem>
+                ) : null}
               </SelectContent>
             </Select>
           </div>
@@ -298,11 +359,16 @@ function InviteMemberDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={onSubmit} disabled={state.fetching || !email.trim()}>
-            {state.fetching ? "Inviting…" : "Invite"}
+          <Button onClick={onSubmit} disabled={fetching || !email.trim()}>
+            {fetching ? submittingLabel : submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+function createSetupAttemptId(mode: "add" | "invite", email: string): string {
+  const normalizedEmail = email.trim().toLowerCase();
+  return `${mode}-user:${normalizedEmail}:${crypto.randomUUID()}`;
 }
