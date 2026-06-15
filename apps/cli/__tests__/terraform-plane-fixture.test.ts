@@ -85,7 +85,8 @@ describe("Plane Terraform app module", () => {
 
     expect(source).toMatch(/resource "aws_lb" "plane"/);
     expect(source).toMatch(/internal\s*=\s*false/);
-    expect(source).toMatch(/resource "aws_lb_target_group" "web"/);
+    expect(source).toMatch(/resource "aws_lb_target_group" "service"/);
+    expect(source).toMatch(/target_group_arn = aws_lb_target_group\.service\["web"\]\.arn/);
     expect(source).toMatch(/resource "aws_lb_listener" "https"/);
     expect(source).toMatch(/certificate_arn\s*=\s*var\.certificate_arn/);
     expect(source).toMatch(/resource "aws_lb_listener" "http_redirect"/);
@@ -204,7 +205,9 @@ describe("Plane Terraform app module", () => {
     expect(planeModule).toMatch(
       /s3_bucket_name\s*=\s*var\.plane_s3_bucket_name/,
     );
-    expect(guardrails).toMatch(/plane_provisioned requires plane_image_uri/);
+    expect(guardrails).toMatch(
+      /plane_provisioned requires either legacy plane_image_uri or all per-service Plane image URIs/,
+    );
     expect(guardrails).toMatch(
       /plane_provisioned requires plane_s3_bucket_name/,
     );
