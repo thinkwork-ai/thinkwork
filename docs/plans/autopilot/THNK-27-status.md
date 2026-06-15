@@ -62,6 +62,8 @@ Issue: THNK-27 Add Plane Plugin
 - U8 Release Packaging and Controller Wiring:
   `https://github.com/thinkwork-ai/thinkwork/pull/2495` merged at
   `bae98296cce8d3dde2ca42204c7c1825987ae724`.
+- U9 Docs, Rollout, and Operator Copy:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2496` opened; CI pending.
 
 ## Verification Log
 
