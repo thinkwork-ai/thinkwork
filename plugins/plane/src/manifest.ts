@@ -125,6 +125,38 @@ const PLANE_MCP_COMPONENT: McpServerComponent = {
   ],
 };
 
+const LEGACY_PLANE_MCP_COMPONENT: McpServerComponent = {
+  type: "mcp-server",
+  key: "issues",
+  displayName: "Plane work items",
+  description:
+    "Plane workspace, project, issue, cycle, module, page, and comment tools for the user's activated Plane workspace.",
+  endpointFrom: {
+    managedApp: "plane",
+    configKey: "publicUrl",
+    path: "/http/api-key/mcp",
+  },
+  auth: {
+    mode: "user-provided-headers",
+    headers: [
+      {
+        name: "x-api-key",
+        credentialKey: "apiKey",
+        displayName: "Plane personal access token",
+        secret: true,
+      },
+      {
+        name: "x-workspace-slug",
+        credentialKey: "workspaceSlug",
+        displayName: "Plane workspace slug",
+      },
+    ],
+  },
+  toolNotes: [
+    "Plane MCP HTTP PAT mode requires x-api-key and x-workspace-slug headers; readable issue ids such as ENG-42 must be resolved to UUIDs before UUID-only tool calls.",
+  ],
+};
+
 const LEGACY_INFRA_COMPONENT: InfrastructureComponent = {
   type: "infrastructure",
   key: "runtime",
@@ -245,7 +277,7 @@ export const planeManifest: PluginManifest = {
     "Self-hosted Plane project management runtime with durable work items, workflow skills, and user-scoped Plane MCP integration.",
   versions: [
     {
-      version: "0.1.1",
+      version: "0.1.2",
       requiredOauthScopes: [],
       components: [
         PLANE_MCP_COMPONENT,
@@ -254,10 +286,19 @@ export const planeManifest: PluginManifest = {
       ],
     },
     {
+      version: "0.1.1",
+      requiredOauthScopes: [],
+      components: [
+        LEGACY_PLANE_MCP_COMPONENT,
+        COMPACT_INFRA_COMPONENT,
+        PLANE_SKILLS_COMPONENT,
+      ],
+    },
+    {
       version: "0.1.0",
       requiredOauthScopes: [],
       components: [
-        PLANE_MCP_COMPONENT,
+        LEGACY_PLANE_MCP_COMPONENT,
         LEGACY_INFRA_COMPONENT,
         PLANE_SKILLS_COMPONENT,
       ],

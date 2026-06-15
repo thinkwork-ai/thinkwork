@@ -222,10 +222,13 @@ scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed dry-run mode.
   adapter stays hidden from the generic managed-app catalog because Plane is
   installed through the plugin catalog and uses the adapter only as its
   infrastructure backing.
-- Plane's MCP component now uses `auth.mode: user-provided-headers` with a
-  bearer PAT binding; user activations store PAT/workspace values per requester
-  in `user_plugin_activation_tokens` secrets, while
-  `tenant_mcp_servers.auth_config` stores only non-secret binding metadata.
+- Plane plugin `0.1.2` upgrades the MCP component to
+  `auth.mode: user-provided-headers` with a bearer PAT binding; user
+  activations store PAT/workspace values per requester in
+  `user_plugin_activation_tokens` secrets, while `tenant_mcp_servers.auth_config`
+  stores only non-secret binding metadata. Earlier Plane versions keep the
+  legacy header contract so existing install pins remain digest-stable and can
+  upgrade through the normal plugin version path.
 - U5 groups user-provided header credentials by normalized MCP resource before
   writing secrets so multiple components sharing one endpoint retain the full
   header set.
