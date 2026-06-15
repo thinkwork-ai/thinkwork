@@ -6,9 +6,9 @@ Issue: THNK-27 Add Plane Plugin
 
 - Linear state: `In Progress`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-manifest`.
-- Active unit: U2 Plugin Manifest and Catalog Entry.
-- U2 local verification complete; PR open for CI/review.
+- Active branch: `codex/thnk-27-plane-adapter-parity`.
+- Active unit: U3 Plane Managed-App Adapter.
+- U3 local verification complete; PR open for CI/review.
 
 ## Context Discovered
 
@@ -28,7 +28,7 @@ Issue: THNK-27 Add Plane Plugin
 
 - [x] U1 Plane Contract Proof
 - [x] U2 Plugin Manifest and Catalog Entry
-- [ ] U3 Plane Managed-App Adapter
+- [x] U3 Plane Managed-App Adapter
 - [ ] U4 Plane Terraform Runtime Module
 - [ ] U5 Per-User Plane MCP Activation
 - [ ] U6 Plane Issue-Loop Skill
@@ -42,8 +42,11 @@ Issue: THNK-27 Add Plane Plugin
   `https://github.com/thinkwork-ai/thinkwork/pull/2488` merged at
   `d4614c5f78f325c8bde77e4e4be3147d640cc7bd`.
 - U2 Plugin Manifest and Catalog Entry:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2489` opened from
-  `codex/thnk-27-plane-manifest`.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2489` merged at
+  `5d0ed19b39f40d15764c3a1463c9829d8989fd62`.
+- U3 Plane Managed-App Adapter:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2490` opened from
+  `codex/thnk-27-plane-adapter-parity`.
 
 ## Verification Log
 
@@ -59,6 +62,11 @@ Issue: THNK-27 Add Plane Plugin
   passed.
 - U2: `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
 - U2: `pnpm --filter @thinkwork/plugin-catalog test` passed.
+- U3: `pnpm --filter @thinkwork/api test -- plane-manifest-parity.test.ts`
+  passed.
+- U3: `pnpm --filter @thinkwork/api typecheck` passed.
+- U3: `pnpm --filter @thinkwork/plugin-catalog test -- plane-manifest.test.ts`
+  passed.
 
 ## Decisions
 
