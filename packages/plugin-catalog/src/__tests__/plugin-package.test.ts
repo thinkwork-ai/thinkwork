@@ -9,7 +9,9 @@ import { firstPartyPluginPackages, planePluginPackage } from "../plugins";
 describe("first-party plugin packages", () => {
   it("registers Plane from the root plugin package boundary", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
+      "company-brain",
       "plane",
+      "twenty",
     ]);
     expect(planePluginPackage.sourceRoot).toBe("plugins/plane");
     expect(planePluginPackage.manifest.pluginKey).toBe("plane");
