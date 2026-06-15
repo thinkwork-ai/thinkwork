@@ -280,6 +280,12 @@ variable "rabbitmq_vhost" {
   default     = "plane"
 }
 
+variable "rabbitmq_erlang_cookie" {
+  description = "RabbitMQ single-node Erlang cookie used only inside the private Plane ECS task."
+  type        = string
+  default     = "thinkwork-plane-rabbitmq-cookie"
+}
+
 variable "web_command" {
   description = "Container command for the Plane web service"
   type        = list(string)
