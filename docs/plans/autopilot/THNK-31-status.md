@@ -163,6 +163,8 @@ project_context: TEI ThinkWork
 - Updating the LastMile discovery drift test to import the fixture directly
   from `@thinkwork/plugin-lastmile`.
 - Shrinking the plugin source boundary allowlist by removing wrapper entries.
+- PR #2530 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2530`
 
 ### Verification
 
