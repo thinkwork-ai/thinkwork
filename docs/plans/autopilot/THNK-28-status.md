@@ -1,6 +1,6 @@
 # THNK-28 Autopilot Status
 
-Last updated: 2026-06-15T14:10:09Z
+Last updated: 2026-06-15T14:20:09Z
 
 ## Routing
 
@@ -21,7 +21,7 @@ Last updated: 2026-06-15T14:10:09Z
 
 - Status at discovery: Ready to Work.
 - Current Linear status: In Progress.
-- Implementation state: PR #2509 opened; CI/merge pending.
+- Implementation state: implementation PR #2509 merged to `main`; closeout status PR pending.
 - Production mutation/cloud-change guard: no production GraphQL resend calls, Cognito admin mutations, SES production-access requests, or manual cloud changes will be performed.
 
 ## Progress Log
@@ -47,3 +47,5 @@ Last updated: 2026-06-15T14:10:09Z
 - 2026-06-15T14:03Z - Root `pnpm format:check` could not run as-is in this worktree because the root package does not declare/install a `prettier` binary; targeted Prettier check passed without rewriting generated GraphQL files.
 - 2026-06-15T14:07Z - Browser smoke attempted with the in-app Browser on `http://127.0.0.1:5180/settings/users`; the Browser URL policy blocked the auth redirect chain, so no live resend/UI click was attempted. Safer local checks passed: `curl -I http://127.0.0.1:5180/settings/users` returned HTTP 200 from Vite, and `pnpm --filter @thinkwork/web build` completed successfully. Dev server was stopped afterward.
 - 2026-06-15T14:10Z - Pushed branch and opened implementation PR #2509: https://github.com/thinkwork-ai/thinkwork/pull/2509.
+- 2026-06-15T14:18Z - PR #2509 CI passed: CLA, lint, supply-chain verify, typecheck, and test.
+- 2026-06-15T14:19:25Z - Squash-merged PR #2509 to `main` at commit `4dcfccf4fc6be980ff8b398d5d2e87c438833068`; remote feature branch was already deleted by GitHub.
