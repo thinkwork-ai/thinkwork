@@ -140,6 +140,7 @@ fi
 echo "Building desktop app channel=${DESKTOP_CHANNEL} version=${DESKTOP_VERSION} ..."
 cd "$REPO_ROOT"
 
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
 export THINKWORK_STAGE="$STAGE"
 export VITE_THINKWORK_STAGE="$STAGE"
 export THINKWORK_DESKTOP_VERSION="$DESKTOP_VERSION"

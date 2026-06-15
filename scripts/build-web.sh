@@ -95,6 +95,8 @@ fi
 echo "▸ Building app ..."
 cd "$REPO_ROOT"
 
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
+
 # Write production env file.
 #
 # VITE_API_AUTH_SECRET is intentionally absent. The web SPA authenticates
