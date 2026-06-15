@@ -61,13 +61,13 @@ locals {
       enabled       = local.managed_s3_access_key_enabled
       name          = "thinkwork/${var.stage}/plane/s3-access-key-id"
       description   = "Plane AWS_ACCESS_KEY_ID scoped to the Plane uploads bucket"
-      secret_string = jsonencode({ AWS_ACCESS_KEY_ID = aws_iam_access_key.plane_s3[0].id })
+      secret_string = jsonencode({ AWS_ACCESS_KEY_ID = try(aws_iam_access_key.plane_s3[0].id, "") })
     }
     s3_secret_access_key = {
       enabled       = local.managed_s3_access_key_enabled
       name          = "thinkwork/${var.stage}/plane/s3-secret-access-key"
       description   = "Plane AWS_SECRET_ACCESS_KEY scoped to the Plane uploads bucket"
-      secret_string = jsonencode({ AWS_SECRET_ACCESS_KEY = aws_iam_access_key.plane_s3[0].secret })
+      secret_string = jsonencode({ AWS_SECRET_ACCESS_KEY = try(aws_iam_access_key.plane_s3[0].secret, "") })
     }
   }
 
