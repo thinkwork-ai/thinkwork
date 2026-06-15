@@ -508,13 +508,13 @@ jobs:
     # state from SSM/AgentCore data sources, not from build-container
     # outputs, so dropping the edge is safe.
     #
-    # Gating: only run when something terraform-relevant changed.
-    # Docs-only, admin-only, or mobile-only PRs skip terraform-apply;
-    # downstream publish jobs (build-web/docs) accept skipped
-    # as success. We deliberately do NOT add `build-container` here even
-    # to read `build-container.result` — that would reintroduce the
-    # 20-minute queue gap. Instead we gate on the same detect-changes
-    # signals that build-container itself uses.
+    # Gating: source deploys always run Terraform after Lambda zips build.
+    # Terraform's Lambda source_code_hash checks make unchanged handlers a
+    # no-op, while a later docs/status merge can recover a stale Lambda after
+    # an earlier deploy failed on transient infrastructure state such as lock
+    # contention. We deliberately do NOT add `build-container` here even to
+    # read `build-container.result` — that would reintroduce the 20-minute
+    # queue gap.
     needs: [detect-changes, build-lambdas]
     # Require build-lambdas to have succeeded. The pre-PR shape inherited
     # this implicitly via `needs`; the new `if:` overrides `always()` so
@@ -524,13 +524,6 @@ jobs:
       always() && !cancelled()
       && needs.build-lambdas.result == 'success'
       && !(github.event_name == 'workflow_dispatch' && inputs.use_controller == true)
-      && (
-        needs.detect-changes.outputs.terraform == 'true' ||
-        needs.detect-changes.outputs.lambdas == 'true' ||
-        needs.detect-changes.outputs.container == 'true' ||
-        needs.detect-changes.outputs.runtime_container_stale == 'true' ||
-        github.event_name == 'workflow_dispatch'
-      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -1205,7 +1198,7 @@ jobs:
           # nightly drift-check job in .github/workflows/verify.yml, which
           # runs `terraform plan -refresh=true` and surfaces any diff to
           # $GITHUB_STEP_SUMMARY without failing the workflow.
-          terraform apply -auto-approve -refresh=false \
+          terraform apply -auto-approve -refresh=false -lock-timeout=10m \
             -var "stage=${{ env.STAGE }}" \
             -var "region=${{ env.AWS_REGION }}" \
             -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}" \
@@ -1350,7 +1343,6 @@ jobs:
 
           delete_secret_if_present "${TWENTY_DB_URL_SECRET_ARN:-$TWENTY_DB_URL_SECRET_ID}" "database URL"
           delete_secret_if_present "${TWENTY_ENCRYPTION_KEY_SECRET_ARN:-$TWENTY_ENCRYPTION_KEY_SECRET_ID}" "encryption key"
-
 
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after
@@ -1802,6 +1794,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [ "${{ needs.terraform-apply.result }}" != "success" ]; then
+            echo "Skipping success status pointer because Terraform Apply result was ${{ needs.terraform-apply.result }}."
+            exit 0
+          fi
+
           source ../../../scripts/lib/terraform-output.sh
           evidence_bucket="$(tf_output_raw deployment_evidence_bucket_name 2>/dev/null || echo "")"
           if [ -z "$evidence_bucket" ] || [ "$evidence_bucket" = "null" ]; then

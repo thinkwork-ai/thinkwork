@@ -2,10 +2,37 @@
 issue: THNK-29
 title: Manual Setup
 updated: 2026-06-15
-dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
+dispatcher: dispatcher:THNK-29:InProgress:Codex
 ---
 
 # THNK-29 Autopilot Status
+
+## Verification Rebound Fix Pass
+
+- Started from fresh `origin/main` at
+  `edc12b6bb22a2a6652a12b6ce88efce7ca8b6ea7` in branch
+  `codex/thnk-29-deploy-lambda-recovery`.
+- Confirmed the sanctioned `dev` GraphQL Lambda is still stale:
+  `thinkwork-dev-api-graphql-http` reports `LastModified=2026-06-15T14:20:24Z`,
+  release `0.1.0-canary.189`, and manifest SHA
+  `5933a29e35f80de68a1c1447790f4d2231153f5442e7f695ce53b6294d465ea4`.
+- Confirmed the implementation deploy for `8cfac030a2c1361a3558245cb00e4f5db8f86496`
+  failed in Terraform Apply due to DynamoDB Terraform state-lock contention.
+- Confirmed later main Deploy runs for `10fc66cdb148`, `965f976a98b4`, and
+  `edc12b6bb22a` completed with Terraform Apply skipped because their changed
+  files were docs/status-only, so the Lambda never picked up the already-built
+  THNK-29 GraphQL artifacts.
+- Fix pass scope:
+  - Make source Deploy runs execute Terraform Apply after Lambda zips build, even
+    on docs/status-only pushes, so a later merge can recover a stale Lambda after
+    a transient lock-failed deploy.
+  - Add `-lock-timeout=10m` to Terraform Apply so lock contention waits instead
+    of failing immediately.
+  - Skip writing a successful deployment status pointer unless Terraform Apply
+    actually succeeded, avoiding false success evidence when apply is skipped or
+    failed.
+- No manual deployment commands, production mutation commands, or live
+  THNK-29 side-effect probes were run during this rebound fix pass.
 
 ## Current Pass
 
