@@ -109,6 +109,7 @@ describe("Plane Terraform app module", () => {
   it("models Plane as one ECS service with AIO, MCP, and in-task dependency containers", () => {
     const source = read(PLANE_MAIN);
     const containerSpecs = firstNestedBlock(source, "container_specs = {");
+    const listenerRules = firstNestedBlock(source, "listener_rules = {");
     const ecsService = firstNestedBlock(
       source,
       'resource "aws_ecs_service" "plane"',
@@ -124,6 +125,14 @@ describe("Plane Terraform app module", () => {
       /desired_count\s*=\s*var\.runtime_enabled \? var\.web_desired_count : 0/,
     );
     expect(ecsService).toMatch(/for_each\s*=\s*local\.public_services/);
+    expect(listenerRules).toMatch(/"\/\.well-known\/\*"/);
+    expect(listenerRules).toMatch(/"\/authorize"/);
+    expect(listenerRules).toMatch(/"\/token"/);
+    expect(listenerRules).toMatch(/"\/register"/);
+    expect(listenerRules).toMatch(/"\/mcp"/);
+    expect(listenerRules).toMatch(/"\/mcp\/\*"/);
+    expect(listenerRules).toMatch(/"\/header\/mcp"/);
+    expect(listenerRules).toMatch(/"\/header\/mcp\/\*"/);
   });
 
   it("keeps Plane compact without managed Redis or RabbitMQ dependencies", () => {

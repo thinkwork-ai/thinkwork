@@ -1046,8 +1046,8 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
             "appKey": "plane",
             "operation": "UPGRADE",
             "desiredConfig": {
-                "domain": "plane.agents.thinkwork.ai",
-                "publicUrl": "https://plane.agents.thinkwork.ai",
+                "domain": "plane.thinkwork.ai",
+                "publicUrl": "https://plane.thinkwork.ai",
                 "certificateArn": "arn:aws:acm:us-east-1:637423202447:certificate/test",
                 "s3BucketName": "thinkwork-dev-637423202447-plane",
             },
@@ -1069,7 +1069,7 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
     main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
 
     assert vars_json["cloudflare_zone_id"] == "zone_123"
-    assert vars_json["plane_dns_name"] == "plane.agents.thinkwork.ai"
+    assert vars_json["plane_dns_name"] == "plane.thinkwork.ai"
     assert vars_json["plane_dns_enabled"] is True
     assert tfvars["cloudflare_zone_id"] == "zone_123"
     assert tfvars["plane_dns_enabled"] is True
@@ -1192,7 +1192,7 @@ def test_plane_overrides_derive_cloudflare_zone_when_state_lacks_record(
         runner,
         "cloudflare_zone_id_for_hostname",
         lambda _stage, hostname: "zone-derived"
-        if hostname == "plane.agents.thinkwork.ai"
+        if hostname == "plane.thinkwork.ai"
         else "",
     )
 
@@ -1201,8 +1201,8 @@ def test_plane_overrides_derive_cloudflare_zone_when_state_lacks_record(
             "appKey": "plane",
             "operation": "UPGRADE",
             "desiredConfig": {
-                "domain": "plane.agents.thinkwork.ai",
-                "publicUrl": "https://plane.agents.thinkwork.ai",
+                "domain": "plane.thinkwork.ai",
+                "publicUrl": "https://plane.thinkwork.ai",
             },
         },
         "dev",
@@ -1212,7 +1212,7 @@ def test_plane_overrides_derive_cloudflare_zone_when_state_lacks_record(
     )
 
     assert overrides["cloudflare_zone_id"] == "zone-derived"
-    assert overrides["plane_dns_name"] == "plane.agents.thinkwork.ai"
+    assert overrides["plane_dns_name"] == "plane.thinkwork.ai"
     assert overrides["plane_dns_enabled"] is True
 
 

@@ -249,7 +249,17 @@ locals {
     mcp = {
       priority      = 10
       service_key   = "mcp"
-      path_patterns = ["/http/*", "/.well-known/*"]
+      path_patterns = [
+        "/.well-known/*",
+        "/authorize",
+        "/header/mcp",
+        "/header/mcp/*",
+        "/http/*",
+        "/mcp",
+        "/mcp/*",
+        "/register",
+        "/token",
+      ]
     }
   }
 
