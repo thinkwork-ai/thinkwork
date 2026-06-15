@@ -1112,6 +1112,74 @@ def test_configure_cloudflare_provider_auth_reads_stage_ssm_without_tfvars(
     ]
 
 
+def test_cloudflare_zone_id_for_hostname_matches_longest_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(runner, "cloudflare_api_token", lambda _stage: "cf-token")
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "result": [
+                        {"name": "thinkwork.ai", "id": "zone-thinkwork"},
+                        {"name": "agents.thinkwork.ai", "id": "zone-agents"},
+                    ]
+                }
+            ).encode()
+
+    def fake_urlopen(request, timeout: int):
+        assert timeout == 30
+        assert request.headers["Authorization"] == "Bearer cf-token"
+        return FakeResponse()
+
+    monkeypatch.setattr(runner.urllib.request, "urlopen", fake_urlopen)
+
+    assert (
+        runner.cloudflare_zone_id_for_hostname("dev", "plane.agents.thinkwork.ai")
+        == "zone-agents"
+    )
+
+
+def test_plane_overrides_derive_cloudflare_zone_when_state_lacks_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(
+        runner,
+        "cloudflare_zone_id_for_hostname",
+        lambda _stage, hostname: "zone-derived"
+        if hostname == "plane.agents.thinkwork.ai"
+        else "",
+    )
+
+    overrides = runner.managed_app_terraform_overrides(
+        {
+            "appKey": "plane",
+            "operation": "UPGRADE",
+            "desiredConfig": {
+                "domain": "plane.agents.thinkwork.ai",
+                "publicUrl": "https://plane.agents.thinkwork.ai",
+            },
+        },
+        "dev",
+        "487219502366",
+        {"deployment_control_plane_enabled": {"value": True}},
+        {"resources": []},
+    )
+
+    assert overrides["cloudflare_zone_id"] == "zone-derived"
+    assert overrides["plane_dns_name"] == "plane.agents.thinkwork.ai"
+    assert overrides["plane_dns_enabled"] is True
+
+
 def test_configure_terraform_provider_mirror_seeds_cloudflare_for_codebuild(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

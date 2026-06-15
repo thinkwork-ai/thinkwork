@@ -731,9 +731,10 @@ def current_terraform_outputs(stage):
     return outputs if isinstance(outputs, dict) else {}
 
 
-def configure_cloudflare_provider_auth(stage):
-    if os.environ.get("CLOUDFLARE_API_TOKEN"):
-        return
+def cloudflare_api_token(stage):
+    existing = os.environ.get("CLOUDFLARE_API_TOKEN")
+    if existing:
+        return existing
     parameter_name = f"/thinkwork/{stage}/cloudflare-namespace-token"
     try:
         token = output(
@@ -751,9 +752,51 @@ def configure_cloudflare_provider_auth(stage):
             ]
         )
     except Exception:
-        return
+        return ""
     if token:
         os.environ["CLOUDFLARE_API_TOKEN"] = token
+    return token
+
+
+def configure_cloudflare_provider_auth(stage):
+    cloudflare_api_token(stage)
+
+
+def cloudflare_zone_id_for_hostname(stage, hostname):
+    configured = os.environ.get("THINKWORK_CLOUDFLARE_ZONE_ID", "")
+    if configured:
+        return configured
+    hostname = (hostname or "").strip().lower().rstrip(".")
+    if not hostname:
+        return ""
+    token = cloudflare_api_token(stage)
+    if not token:
+        return ""
+    request = urllib.request.Request(
+        "https://api.cloudflare.com/client/v4/zones?per_page=50",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return ""
+    zones = body.get("result")
+    if not isinstance(zones, list):
+        return ""
+    matches = []
+    for zone in zones:
+        if not isinstance(zone, dict):
+            continue
+        name = str(zone.get("name") or "").strip().lower().rstrip(".")
+        zone_id = str(zone.get("id") or "").strip()
+        if not name or not zone_id:
+            continue
+        if hostname == name or hostname.endswith(f".{name}"):
+            matches.append((len(name), zone_id))
+    if not matches:
+        return ""
+    return sorted(matches, reverse=True)[0][1]
 
 
 def state_output(outputs, name, default=None):
@@ -1089,6 +1132,9 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         }
     )
     plane_dns_name = overrides["plane_domain"] or url_hostname(overrides["plane_public_url"])
+    overrides["cloudflare_zone_id"] = overrides[
+        "cloudflare_zone_id"
+    ] or cloudflare_zone_id_for_hostname(stage, plane_dns_name)
     overrides["plane_dns_name"] = plane_dns_name
     overrides["plane_dns_enabled"] = (
         provisioned and bool(overrides["cloudflare_zone_id"]) and bool(plane_dns_name)
@@ -3378,8 +3424,7 @@ def main():
     }
     write_evidence("running", vars_json)
 
-    if vars_json.get("plane_dns_enabled"):
-        configure_cloudflare_provider_auth(vars_json["stage"])
+    configure_cloudflare_provider_auth(vars_json["stage"])
     configure_terraform_provider_mirror()
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
     workspace = vars_json["stage"]
