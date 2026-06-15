@@ -67,7 +67,7 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
     instead of asking an operator to handle credentials.
   - PR #2514 merged into `main` as
     `efa454edaf239d99d4352ba8aa24ce5dcc69657e`.
-- U6 docs, rollout, and verification slice in progress:
+- U6 docs, rollout, and verification slice merged:
   - Branch: `codex/thnk-29-docs-verification` from fresh `origin/main` at
     `efa454edaf239d99d4352ba8aa24ce5dcc69657e`.
   - Updated Admin Humans documentation to describe Add user, Send invite,
@@ -81,12 +81,24 @@ dispatcher: dispatcher:THNK-29:ReadyToWork:Codex
     `packages/api/src/handlers/tenants.ts`; CLI invite/reset-password and
     legacy REST invite remain operator/CLI surfaces, while THNK-29 no-email
     manual setup is the web GraphQL Settings surface.
+  - PR #2516 merged into `main` as
+    `10fc66cdb14877492bd9cd453d94896ad2eba988`.
+- Final autopilot status artifact:
+  - Branch: `codex/thnk-29-final-status` from fresh `origin/main` at
+    `10fc66cdb14877492bd9cd453d94896ad2eba988`.
+  - All planned implementation units are merged. THNK-29 is ready for deployed
+    Verification using `docs/verification/manual-user-setup-e2e.md`.
 
 ## Verification Notes
 
 - No production mutation or manual deployment commands have been run.
 - Deployed AWS/Cognito validation remains required after implementation PRs
   merge and deploy.
+- Required implementation and automation artifact PRs merged:
+  - #2511 `feat(auth): add manual user setup API`
+  - #2513 `feat(web): split manual user setup actions`
+  - #2514 `feat(web): add login password reset flow`
+  - #2516 `docs: add manual user setup verification`
 - Local checks for the U1/U2 backend slice:
   - `pnpm --filter @thinkwork/web codegen`
   - `pnpm --filter thinkwork-cli codegen`
