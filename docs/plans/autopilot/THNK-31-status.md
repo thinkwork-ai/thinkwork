@@ -48,6 +48,8 @@ project_context: TEI ThinkWork
   merged into `main` as `defd784dc2d49ef9412638a865fe25778a428c37`.
 - #2526 `refactor(plugins): move Twenty and Company Brain manifests` merged
   into `main` as `ab297af54197daa85d94ea96ff37b6d7f8521297`.
+- #2527 `refactor(plugins): move LastMile manifest package` merged into `main`
+  as `56b6947157e8be462701fade77f58e7f7b252ed2`.
 
 ## Current Plane Package Slice
 
@@ -110,6 +112,20 @@ project_context: TEI ThinkWork
 - `pnpm --filter @thinkwork/plugin-lastmile test && pnpm --filter @thinkwork/plugin-lastmile typecheck`
 - `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/catalog-source.test.ts`
 - `pnpm --filter @thinkwork/api typecheck`
+
+## Current Plugin Builder Docs Slice
+
+- Started from fresh `origin/main` at `56b694715` in branch
+  `codex/thnk-31-plugin-builder-docs`.
+- Updating the ThinkWork plugin-builder workflow to produce root
+  `plugins/<plugin-key>/` packages instead of legacy catalog plugin folders.
+- Updating authoring templates, scanner enforcement, publication references,
+  and docs-site guidance for the TEI ThinkWork plugin package boundary.
+
+### Verification
+
+- `node --test .agents/skills/thinkwork-plugin-builder/tests/plugin-builder-skill.test.mjs`
+- `node .agents/skills/thinkwork-plugin-builder/scripts/scan-plugin-builder-output.mjs <fixture>`
 
 ## Verification Notes
 

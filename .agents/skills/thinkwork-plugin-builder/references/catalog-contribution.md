@@ -4,16 +4,20 @@ Use this reference when preparing files for the ThinkWork monorepo.
 
 ## Required Repo Targets
 
-- Add a plugin manifest folder under
-  `packages/plugin-catalog/src/plugins/<plugin-key>/`.
-- Export the manifest from that folder.
-- Register the manifest in `packages/plugin-catalog/src/plugins/index.ts`.
-- Add manifest-specific tests under `packages/plugin-catalog/src/__tests__/`.
+- Add a root plugin package under `plugins/<plugin-key>/`.
+- Include `package.json`, `tsconfig.json`, `README.md`, `src/index.ts`, and
+  `src/manifest.ts`.
+- Export `<camelPluginKey>PluginPackage` from `src/index.ts` with
+  `packageKey`, `sourceRoot: "plugins/<plugin-key>"`, and `manifest`.
+- Add the plugin package dependency and registration in
+  `packages/plugin-catalog/src/plugins/index.ts`.
+- Add manifest-specific tests under `packages/plugin-catalog/src/__tests__/`
+  or plugin-package-local tests when they do not need catalog aggregation.
 - Use `validatePluginManifest` in tests.
 - Run package tests and catalog build/sign verification when available.
 
 Do not add a general scaffold generator unless the task explicitly asks for
-one. V1 plugin manifests are hand-authored TypeScript with tests.
+one. V1 plugin packages are hand-authored TypeScript with tests.
 
 ## Manifest Rules
 
@@ -35,6 +39,8 @@ one. V1 plugin manifests are hand-authored TypeScript with tests.
 - `packages/plugin-catalog/src/__tests__/company-brain-manifest.test.ts`
 - `packages/plugin-catalog/src/__tests__/twenty-manifest.test.ts`
 - `packages/plugin-catalog/src/__tests__/build-catalog.test.ts`
+- `packages/plugin-catalog/src/__tests__/plugin-package.test.ts`
+- `plugins/plane/src/index.ts`
 
 Test customer-facing copy separately from internal implementation details when
 the plugin wraps an internal substrate.

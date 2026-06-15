@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allPluginManifests,
+  customerProductManifest,
   validatePluginManifest,
   type InfrastructureComponent,
-} from "../contracts";
-import { allPluginManifests, customerProductManifest } from "../plugins";
+} from "@thinkwork/plugin-catalog";
+import { customerProductPluginPackage } from "@thinkwork/plugin-customer-product";
 
 describe("Customer Product plugin manifest", () => {
+  it("declares the root plugin package boundary", () => {
+    expect(customerProductPluginPackage).toMatchObject({
+      packageKey: "customer-product",
+      sourceRoot: "plugins/customer-product",
+      manifest: customerProductManifest,
+    });
+  });
+
   it("is registered in the published catalog list", () => {
     expect(
       allPluginManifests.map((candidate) => candidate.pluginKey),

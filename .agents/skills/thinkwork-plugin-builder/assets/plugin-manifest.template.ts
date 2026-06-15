@@ -1,10 +1,10 @@
-import type { PluginManifest } from "../../contracts";
-
 /**
  * Replace placeholders with source-backed values from the contribution plan.
- * Validate with validatePluginManifest and add a manifest-specific test.
+ * Place this file at plugins/<plugin-key>/src/manifest.ts.
+ * Validate with validatePluginManifest at the catalog boundary and add a
+ * manifest-specific test.
  */
-export const examplePluginManifest: PluginManifest = {
+export const examplePluginManifest = {
   pluginKey: "customer-product",
   displayName: "Customer Product",
   description:

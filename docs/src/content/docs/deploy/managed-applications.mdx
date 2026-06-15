@@ -25,6 +25,15 @@ update proof can pass before Cognee, Twenty, or Plane are selected. The full
 managed-app gate is accepted only after an operator plans, approves, applies,
 and smokes the selected optional app through the customer controller.
 
+## Application Plugin Source
+
+First-party application plugin source lives under root
+`plugins/<plugin-key>/` packages. Each package owns its manifest, README, local
+tests or fixtures, and any plugin-specific smoke scripts that have migrated.
+Shared deployment, API, and web packages should keep generic plugin
+infrastructure only; plugin-specific additions belong in the owning plugin
+package unless a migration allowlist explicitly documents the legacy path.
+
 ## Lifecycle
 
 ```text

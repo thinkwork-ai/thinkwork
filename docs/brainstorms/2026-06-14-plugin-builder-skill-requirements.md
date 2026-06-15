@@ -228,8 +228,8 @@ are required.
 - Premium plugin precedent is captured in
   `docs/brainstorms/2026-06-13-company-brain-premium-plugin-requirements.md`.
 - Current plugin manifest types and validation live in
-  `packages/plugin-catalog/src/contracts.ts`; examples live under
-  `packages/plugin-catalog/src/plugins/`.
+  `packages/plugin-catalog/src/contracts.ts`; examples live under root
+  `plugins/<plugin-key>/` packages.
 - Existing CLI custom skill upload commands are retired; application plugins
   install from the signed catalog rather than a tenant zip-upload flow.
 - The McPherson Lakehouse Terraform project exists outside the issue context

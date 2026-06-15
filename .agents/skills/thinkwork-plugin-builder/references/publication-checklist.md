@@ -5,8 +5,14 @@ ThinkWork maintainer.
 
 ## Required Checks
 
+- Plugin source lives under `plugins/<plugin-key>/`.
+- `plugins/<plugin-key>/package.json` exposes
+  `@thinkwork/plugin-<plugin-key>`.
+- `plugins/<plugin-key>/src/index.ts` exports a package descriptor with
+  matching `packageKey` and `sourceRoot`.
 - Manifest validates with `validatePluginManifest`.
-- Manifest is registered in `packages/plugin-catalog/src/plugins/index.ts`.
+- Package descriptor is registered in
+  `packages/plugin-catalog/src/plugins/index.ts`.
 - Manifest-specific tests cover:
   - registration,
   - premium metadata when present,

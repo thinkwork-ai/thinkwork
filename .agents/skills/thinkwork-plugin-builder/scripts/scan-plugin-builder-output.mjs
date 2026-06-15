@@ -3,9 +3,16 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
 
-const SUPPORTED_MANAGED_APP_KEYS = new Set(["cognee", "twenty"]);
+const SUPPORTED_MANAGED_APP_KEYS = new Set(["cognee", "plane", "twenty"]);
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SKIP_DIRS = new Set([".git", "node_modules", ".terraform", "dist"]);
+const PLUGIN_PACKAGE_REQUIRED_FILES = [
+  "package.json",
+  "tsconfig.json",
+  "README.md",
+  "src/index.ts",
+  "src/manifest.ts",
+];
 
 async function main() {
   const target = process.argv[2];
@@ -34,6 +41,7 @@ async function main() {
     scanPath(file, findings);
     scanText(file, findings, hasAdapterGapReview);
   }
+  scanPluginPackageShape(contents, findings);
   scanRequiredHandoff(contents, findings);
 
   const blocking = findings.filter(
@@ -82,6 +90,16 @@ async function listFiles(root) {
 
 function scanPath(file, findings) {
   const name = basename(file.rel);
+  if (file.rel.startsWith("packages/plugin-catalog/src/plugins/")) {
+    findings.push({
+      severity: "blocking",
+      code: "legacy-catalog-plugin-path",
+      path: file.rel,
+      message:
+        "Generated plugin-specific source must live under plugins/<plugin-key>/, not packages/plugin-catalog/src/plugins/.",
+    });
+  }
+
   if (name === "terraform.tfvars" || name.endsWith(".tfvars")) {
     findings.push({
       severity: "blocking",
@@ -159,6 +177,167 @@ function scanText(file, findings, hasAdapterGapReview) {
       });
     }
   }
+}
+
+function scanPluginPackageShape(contents, findings) {
+  const byRel = new Map(contents.map((file) => [file.rel, file]));
+  const pluginKeys = new Set();
+  for (const file of contents) {
+    for (const match of file.text.matchAll(
+      /\bpluginKey\s*:\s*["']([^"']+)["']/g,
+    )) {
+      pluginKeys.add(match[1]);
+    }
+    for (const match of file.text.matchAll(
+      /\bpackageKey\s*:\s*["']([^"']+)["']/g,
+    )) {
+      pluginKeys.add(match[1]);
+    }
+  }
+
+  for (const pluginKey of pluginKeys) {
+    if (!SLUG_RE.test(pluginKey)) continue;
+    const packageRoot = `plugins/${pluginKey}`;
+    const pluginFiles = contents.filter((file) =>
+      file.rel.startsWith(`${packageRoot}/`),
+    );
+    if (pluginFiles.length === 0) {
+      findings.push({
+        severity: "blocking",
+        code: "missing-plugin-package-root",
+        path: ".",
+        message: `Plugin "${pluginKey}" must be emitted under ${packageRoot}/.`,
+      });
+      continue;
+    }
+
+    for (const requiredFile of PLUGIN_PACKAGE_REQUIRED_FILES) {
+      const rel = `${packageRoot}/${requiredFile}`;
+      if (!byRel.has(rel)) {
+        findings.push({
+          severity: "blocking",
+          code: "missing-plugin-package-file",
+          path: packageRoot,
+          message: `Plugin "${pluginKey}" is missing ${rel}.`,
+        });
+      }
+    }
+
+    scanPackageJson(
+      pluginKey,
+      byRel.get(`${packageRoot}/package.json`),
+      findings,
+    );
+    scanPackageIndex(
+      pluginKey,
+      byRel.get(`${packageRoot}/src/index.ts`),
+      findings,
+    );
+    scanManifestLocation(
+      pluginKey,
+      byRel.get(`${packageRoot}/src/manifest.ts`),
+      findings,
+    );
+  }
+}
+
+function scanPackageJson(pluginKey, file, findings) {
+  if (!file) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(file.text);
+  } catch (error) {
+    findings.push({
+      severity: "blocking",
+      code: "invalid-plugin-package-json",
+      path: file.rel,
+      message: `Plugin package.json must be valid JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    });
+    return;
+  }
+
+  const expectedName = `@thinkwork/plugin-${pluginKey}`;
+  if (parsed.name !== expectedName) {
+    findings.push({
+      severity: "blocking",
+      code: "plugin-package-name-mismatch",
+      path: file.rel,
+      message: `Plugin package name must be "${expectedName}".`,
+    });
+  }
+  if (parsed.main !== "./src/index.ts") {
+    findings.push({
+      severity: "blocking",
+      code: "plugin-package-main-mismatch",
+      path: file.rel,
+      message: 'Plugin package main must be "./src/index.ts".',
+    });
+  }
+  if (parsed.exports?.["."] !== "./src/index.ts") {
+    findings.push({
+      severity: "blocking",
+      code: "plugin-package-export-missing",
+      path: file.rel,
+      message: 'Plugin package exports must expose "." as "./src/index.ts".',
+    });
+  }
+  if (parsed.exports?.["./manifest"] !== "./src/manifest.ts") {
+    findings.push({
+      severity: "blocking",
+      code: "plugin-manifest-export-missing",
+      path: file.rel,
+      message:
+        'Plugin package exports must expose "./manifest" as "./src/manifest.ts".',
+    });
+  }
+}
+
+function scanPackageIndex(pluginKey, file, findings) {
+  if (!file) return;
+  const sourceRoot = `plugins/${pluginKey}`;
+  const expectedPackageExport = `${camelPluginKey(pluginKey)}PluginPackage`;
+  if (!file.text.includes(`packageKey: "${pluginKey}"`)) {
+    findings.push({
+      severity: "blocking",
+      code: "plugin-package-key-missing",
+      path: file.rel,
+      message: `src/index.ts must declare packageKey: "${pluginKey}".`,
+    });
+  }
+  if (!file.text.includes(`sourceRoot: "${sourceRoot}"`)) {
+    findings.push({
+      severity: "blocking",
+      code: "plugin-source-root-missing",
+      path: file.rel,
+      message: `src/index.ts must declare sourceRoot: "${sourceRoot}".`,
+    });
+  }
+  if (!file.text.includes(expectedPackageExport)) {
+    findings.push({
+      severity: "warning",
+      code: "plugin-package-export-name",
+      path: file.rel,
+      message: `Expected package descriptor export name to include ${expectedPackageExport}.`,
+    });
+  }
+}
+
+function scanManifestLocation(pluginKey, file, findings) {
+  if (!file) return;
+  if (!file.text.includes(`pluginKey: "${pluginKey}"`)) {
+    findings.push({
+      severity: "blocking",
+      code: "manifest-plugin-key-mismatch",
+      path: file.rel,
+      message: `src/manifest.ts must declare pluginKey: "${pluginKey}".`,
+    });
+  }
+}
+
+function camelPluginKey(pluginKey) {
+  return pluginKey.replace(/-([a-z0-9])/g, (_, char) => char.toUpperCase());
 }
 
 function scanRequiredHandoff(contents, findings) {
