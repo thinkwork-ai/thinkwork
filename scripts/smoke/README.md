@@ -386,15 +386,19 @@ SMOKE_ENABLE_MANAGED_APP_CONTROLLER_READINESS=1 \
 
 Live mode reads the selected release manifest URL/digest from the customer
 deployment SSM prefix, downloads the manifest, verifies its SHA-256, and checks
-the Cognee/Twenty managed-app descriptors. It verifies module source/version,
-smoke command paths, and required runtime images without starting a plan or
-approval job.
+the Cognee, Twenty, and Plane managed-app descriptors by default. It verifies
+module source/version, smoke command paths, and required runtime images without
+starting a plan or approval job. Use `SMOKE_MANAGED_APP_KEYS` to narrow the
+check when validating a release that intentionally omits one of the default
+optional apps.
 
 By default the smoke exits successfully with `deployReady:false` when
 descriptors are present but runtime images are missing; this makes it useful for
 diagnosing the next gap without breaking read-only demo validation. Set
 `SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1` for the final optional-app gate. In
-strict mode, missing managed-app images or smoke contracts fail closed.
+strict mode, missing managed-app images or smoke contracts fail closed. Plane's
+strict gate requires a `plane` runtime image in the release manifest and the
+`scripts/smoke/plane-managed-app-smoke.mjs` smoke contract.
 
 ## Knowledge Graph thread ingest smoke
 

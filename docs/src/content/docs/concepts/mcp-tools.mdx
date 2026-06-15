@@ -26,18 +26,19 @@ Operator or managed app registers MCP server
 
 MCP servers are registered at the tenant level, then assigned to agents,
 templates, or Spaces depending on the product surface. Most rows are manual
-operator registrations. Managed applications can also reconcile system-managed
-rows, such as the **Twenty CRM** MCP server that appears automatically when the
-Twenty managed application is running.
+operator registrations. Managed applications and application plugins can also
+reconcile system-managed rows, such as the **Twenty CRM** MCP server that
+appears automatically when the Twenty managed application is running or the
+**Plane** MCP server installed by the Plane plugin.
 
 Typical config includes:
 
-| Field     | Description                             |
-| --------- | --------------------------------------- |
-| Name      | Display name for the MCP server         |
-| URL       | HTTP endpoint for the server            |
-| Transport | Streamable HTTP or SSE                  |
-| Auth      | None, tenant API key, or per-user OAuth |
+| Field     | Description                                                              |
+| --------- | ------------------------------------------------------------------------ |
+| Name      | Display name for the MCP server                                          |
+| URL       | HTTP endpoint for the server                                             |
+| Transport | Streamable HTTP or SSE                                                   |
+| Auth      | None, tenant API key, per-user OAuth, or plugin-defined per-user headers |
 
 ### URL is read from the record on every call
 
@@ -56,23 +57,29 @@ application:
 | Destroyed         | Managed row and stored token material are removed during cleanup                                                         |
 
 If an already-running Twenty CRM stage is missing the managed row, operators
-repair it from Settings -> CRM with **Install MCP Server**. Do not register a
-duplicate manual Twenty row.
+repair it from Settings -> CRM with **Install MCP Server**. If Plane is missing
+its managed MCP row, repair or reinstall it from Settings -> Plugins -> Plane.
+Do not register duplicate manual Twenty or Plane rows.
 
 The MCP server detail page imports runtime tools from the assigned agent. For
 Twenty CRM, the UI expands the MCP server's `get_tool_catalog` response so the
 full CRM tool catalog can be searched and paged instead of only showing the
-small top-level MCP wrapper tools.
+small top-level MCP wrapper tools. For Plane, agents should resolve readable
+work-item ids such as `ENG-42` to Plane UUIDs before calling UUID-only tools.
 
 ## Authentication
 
-MCP tools commonly use one of three patterns:
+MCP tools commonly use these patterns:
 
 - **None** for private-network services or systems with external network controls.
 - **Tenant API key** for a shared secret resolved at invocation time.
 - **Per-user OAuth** when downstream tools need user-scoped access. Users
   connect from Spaces/Desktop Settings -> MCP Servers. Mobile retains the same
   self-service flow for mobile users.
+- **Per-user plugin headers** when a plugin needs user-scoped non-OAuth
+  credentials. Plane uses this mode: each user activates the Plane plugin with a
+  personal access token and workspace slug, and ThinkWork sends them as
+  `x-api-key` and `x-workspace-slug` only for that requester.
 
 <Aside type="note">
   If a per-user OAuth token is missing, ThinkWork can skip that MCP server for
@@ -87,6 +94,10 @@ For OAuth MCP servers, runtime assembly only includes the server when the
 current user has an active stored token. There is no tenant-wide fallback for a
 missing user credential. When the token exists, ThinkWork injects it into the
 outbound MCP call automatically; the agent does not see or manage the token.
+
+The same fail-closed rule applies to user-provided header servers. If the
+current user has not activated Plane, the runtime does not synthesize a
+tenant-wide Plane credential and does not reuse another user's PAT.
 
 MCP usage is tracked in the thread timeline, including:
 
