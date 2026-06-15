@@ -33,6 +33,20 @@ dispatcher: dispatcher:THNK-29:InProgress:Codex
     failed.
 - No manual deployment commands, production mutation commands, or live
   THNK-29 side-effect probes were run during this rebound fix pass.
+- PR #2518 merged into `main` as
+  `386367556815c0bf70ebaf88bb458c2f92999fd4`; checks passed.
+- Follow-up deploy run `27562084684` for `386367556815c0bf70ebaf88bb458c2f92999fd4`
+  confirmed the status-pointer guard worked: Deploy Summary logged
+  `Skipping success status pointer because Terraform Apply result was failure.`
+- That deploy acquired the Terraform lock and planned the API Lambda/IAM update,
+  but the full stack apply failed before refreshing
+  `thinkwork-dev-api-graphql-http` because unrelated Cloudflare DNS records and
+  security-group drift blocked the run.
+- Second rebound refinement branch `codex/thnk-29-target-lambda-apply` starts
+  from fresh `origin/main` at
+  `08dcda665e14394ad8bc39fac034ca5597fe4016` and narrows non-Terraform source
+  recovery runs to the API Lambda and API IAM Terraform targets. Full Terraform
+  Apply remains the path for actual Terraform changes and manual dispatch.
 
 ## Current Pass
 

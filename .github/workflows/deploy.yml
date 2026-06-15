@@ -509,12 +509,12 @@ jobs:
     # outputs, so dropping the edge is safe.
     #
     # Gating: source deploys always run Terraform after Lambda zips build.
-    # Terraform's Lambda source_code_hash checks make unchanged handlers a
-    # no-op, while a later docs/status merge can recover a stale Lambda after
-    # an earlier deploy failed on transient infrastructure state such as lock
-    # contention. We deliberately do NOT add `build-container` here even to
-    # read `build-container.result` — that would reintroduce the 20-minute
-    # queue gap.
+    # When no Terraform files changed, the apply step targets the API Lambda
+    # and IAM resources so a later docs/status merge can recover stale handler
+    # code after transient deploy failures without pulling unrelated stack drift
+    # into the recovery path. We deliberately do NOT add `build-container` here
+    # even to read `build-container.result` — that would reintroduce the
+    # 20-minute queue gap.
     needs: [detect-changes, build-lambdas]
     # Require build-lambdas to have succeeded. The pre-PR shape inherited
     # this implicitly via `needs`; the new `if:` overrides `always()` so
@@ -1185,6 +1185,7 @@ jobs:
           # still owns the shared ACM cert + docs/web/api CNAMEs.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'placeholder-not-configured' }}
         run: |
+          set -euo pipefail
           LAMBDA_DIR=""
           if [ -d "${{ github.workspace }}/dist/lambdas" ]; then
             LAMBDA_DIR="${{ github.workspace }}/dist/lambdas"
@@ -1193,12 +1194,23 @@ jobs:
           if [ -f "$LAMBDA_DIR/cognito-pre-signup.zip" ]; then
             PRE_SIGNUP_ZIP="$LAMBDA_DIR/cognito-pre-signup.zip"
           fi
+          TF_TARGET_ARGS=()
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ needs.detect-changes.outputs.terraform }}" != "true" ]; then
+            echo "No Terraform source changes detected; targeting API Lambda/IAM recovery resources."
+            TF_TARGET_ARGS+=(
+              -target=module.thinkwork.module.api.aws_iam_policy.api_data_plane
+              -target=module.thinkwork.module.api.aws_lambda_function.handler
+              -target=module.thinkwork.module.api.aws_lambda_function.compliance_anchor
+              -target=module.thinkwork.module.api.aws_lambda_function.compliance_anchor_watchdog
+              -target=module.thinkwork.module.api.aws_lambda_function.compliance_export_runner
+            )
+          fi
           # -refresh=false skips ~30s of "Refreshing state…" against ~700
           # resources on every push. Out-of-band drift is caught by the
           # nightly drift-check job in .github/workflows/verify.yml, which
           # runs `terraform plan -refresh=true` and surfaces any diff to
           # $GITHUB_STEP_SUMMARY without failing the workflow.
-          terraform apply -auto-approve -refresh=false -lock-timeout=10m \
+          terraform apply -auto-approve -refresh=false -lock-timeout=10m "${TF_TARGET_ARGS[@]}" \
             -var "stage=${{ env.STAGE }}" \
             -var "region=${{ env.AWS_REGION }}" \
             -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}" \
