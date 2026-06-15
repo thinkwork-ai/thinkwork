@@ -68,6 +68,14 @@ export type AddInboxItemLinkInput = {
   linkedType: Scalars['String']['input'];
 };
 
+export type AddManualUserInput = {
+  email: Scalars['String']['input'];
+  /** Required per-submit idempotency key. Reuse the same value only when retrying the same submit. */
+  idempotencyKey: Scalars['String']['input'];
+  name?: InputMaybe<Scalars['String']['input']>;
+  role?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type AddTenantMemberInput = {
   /** Optional idempotency key. See UpdateTenantInput.idempotencyKey. */
   idempotencyKey?: InputMaybe<Scalars['String']['input']>;
@@ -2449,6 +2457,7 @@ export type Mutation = {
   addEvalReplayToolOverride: EvalReplayAllowedTool;
   addInboxItemComment: InboxItemComment;
   addInboxItemLink: InboxItemLink;
+  addManualUser: TenantMember;
   addSpaceMember: SpaceMember;
   addTenantMember: TenantMember;
   addThreadDependency: ThreadDependency;
@@ -2790,6 +2799,12 @@ export type MutationAddInboxItemCommentArgs = {
 
 export type MutationAddInboxItemLinkArgs = {
   input: AddInboxItemLinkInput;
+};
+
+
+export type MutationAddManualUserArgs = {
+  input: AddManualUserInput;
+  tenantId: Scalars['ID']['input'];
 };
 
 

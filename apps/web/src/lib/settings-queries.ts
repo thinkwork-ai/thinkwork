@@ -1390,6 +1390,24 @@ export const SettingsInviteMemberMutation = graphql(`
   }
 `);
 
+export const SettingsAddManualUserMutation = graphql(`
+  mutation SettingsAddManualUser($tenantId: ID!, $input: AddManualUserInput!) {
+    addManualUser(tenantId: $tenantId, input: $input) {
+      id
+      principalType
+      principalId
+      role
+      status
+      createdAt
+      user {
+        id
+        name
+        email
+      }
+    }
+  }
+`);
+
 export const SettingsResendMemberInviteMutation = graphql(`
   mutation SettingsResendMemberInvite(
     $tenantId: ID!
