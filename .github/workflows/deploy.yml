@@ -1195,17 +1195,11 @@ jobs:
             PRE_SIGNUP_ZIP="$LAMBDA_DIR/cognito-pre-signup.zip"
           fi
           TF_TARGET_ARGS=()
-          CLOUDFLARE_ZONE_ID="${{ vars.CLOUDFLARE_ZONE_ID }}"
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ needs.detect-changes.outputs.terraform }}" != "true" ]; then
-            echo "No Terraform source changes detected; targeting API Lambda/IAM recovery resources."
-            echo "Disabling optional Cloudflare DNS modules for targeted Lambda recovery."
-            CLOUDFLARE_ZONE_ID=""
+            echo "No Terraform source changes detected; targeting graphql-http Lambda and API IAM recovery resources."
             TF_TARGET_ARGS+=(
               -target=module.thinkwork.module.api.aws_iam_policy.api_data_plane
-              -target=module.thinkwork.module.api.aws_lambda_function.handler
-              -target=module.thinkwork.module.api.aws_lambda_function.compliance_anchor
-              -target=module.thinkwork.module.api.aws_lambda_function.compliance_anchor_watchdog
-              -target=module.thinkwork.module.api.aws_lambda_function.compliance_export_runner
+              '-target=module.thinkwork.module.api.aws_lambda_function.handler["graphql-http"]'
             )
           fi
           # -refresh=false skips ~30s of "Refreshing state…" against ~700
@@ -1248,7 +1242,7 @@ jobs:
             -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP" \
             -var "platform_operator_emails=$THINKWORK_PLATFORM_OPERATOR_EMAILS" \
             -var "www_domain=${{ vars.WWW_DOMAIN }}" \
-            -var "cloudflare_zone_id=$CLOUDFLARE_ZONE_ID" \
+            -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
             -var "ses_inbound_domain=agents.thinkwork.ai" \
             -var "ses_parent_domain=thinkwork.ai" \
             -var 'tenant_slugs=["academic-bobcat-897","sleek-squirrel-230"]' \
