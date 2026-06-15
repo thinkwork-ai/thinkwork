@@ -1,10 +1,11 @@
 import { cogneeAdapter } from "./cognee.js";
+import { planeAdapter } from "./plane.js";
 import { twentyAdapter } from "./twenty.js";
 import type { ManagedAppOperation } from "../shared.js";
 
 export type { ManagedAppOperation } from "../shared.js";
 
-export type ManagedAppKey = "cognee" | "twenty";
+export type ManagedAppKey = "cognee" | "plane" | "twenty";
 
 export interface SmokeContract {
   id: string;
@@ -51,6 +52,7 @@ export interface ManagedAppAdapter {
   appKey: ManagedAppKey;
   displayName: string;
   description: string;
+  catalogVisible: boolean;
   terraformModulePath: string;
   requiredInputs(operation: ManagedAppOperation): RequiredManagedAppInput[];
   buildTerraformVariables(args: {
@@ -64,7 +66,11 @@ export interface ManagedAppAdapter {
   extractStatus(terraformOutputs: Record<string, unknown>): ManagedAppStatus;
 }
 
-export const managedAppRegistry = [cogneeAdapter, twentyAdapter] as const;
+export const managedAppRegistry = [
+  cogneeAdapter,
+  planeAdapter,
+  twentyAdapter,
+] as const;
 
 export function getManagedAppAdapter(appKey: ManagedAppKey): ManagedAppAdapter {
   const adapter = managedAppRegistry.find((candidate) => {
@@ -135,7 +141,9 @@ function manifestImageForApp(
   const candidates =
     appKey === "twenty"
       ? ["twenty", "twenty-crm", "managed-app-twenty"]
-      : [appKey, `managed-app-${appKey}`, `${appKey}-runtime`];
+      : appKey === "plane"
+        ? ["plane", "plane-app", "managed-app-plane"]
+        : [appKey, `managed-app-${appKey}`, `${appKey}-runtime`];
   for (const candidate of candidates) {
     const value = manifestImages[candidate];
     if (value) return value;

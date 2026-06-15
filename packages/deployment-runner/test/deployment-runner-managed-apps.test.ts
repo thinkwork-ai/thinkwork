@@ -393,4 +393,160 @@ describe("managed app deployment adapters", () => {
       }),
     );
   });
+
+  it("maps Plane deploy and park plans to retained runtime states", () => {
+    const desiredConfig = {
+      imageUri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+      dbUrlSecretArn:
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-db",
+      secretKeySecretArn:
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-secret",
+      liveServerSecretKeySecretArn:
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
+      aesSecretKeySecretArn:
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
+      amqpUrlSecretArn:
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-amqp",
+      s3AccessKeyIdSecretArn:
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-key",
+      s3SecretAccessKeySecretArn:
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-secret",
+      s3BucketName: "thinkwork-dev-plane",
+      publicUrl: "https://plane.example.com",
+      certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/example",
+      workerDesiredCount: 2,
+    };
+
+    expect(
+      buildManagedAppPlan({
+        appKey: "plane",
+        operation: "ENABLE",
+        desiredConfig,
+      }).terraformVariables,
+    ).toEqual(
+      expect.objectContaining({
+        plane_provisioned: true,
+        plane_runtime_enabled: true,
+        plane_image_uri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+        plane_public_url: "https://plane.example.com",
+        plane_worker_desired_count: 2,
+      }),
+    );
+    expect(
+      buildManagedAppPlan({
+        appKey: "plane",
+        operation: "PARK",
+        desiredConfig,
+      }).terraformVariables,
+    ).toEqual(
+      expect.objectContaining({
+        plane_provisioned: true,
+        plane_runtime_enabled: false,
+      }),
+    );
+  });
+
+  it("lists destructive Plane resource and data impact", () => {
+    const summary = buildPlanSummary({
+      evidenceBucket: "evidence-bucket",
+      input: {
+        phase: "plan",
+        tenantId: "tenant-1",
+        jobId: "job-plane-destroy",
+        appKey: "plane",
+        operation: "DESTROY",
+        releaseVersion: "1.2.3",
+        manifestDigest: digest,
+        desiredConfigVersion: "v1",
+      },
+    });
+
+    expect(summary.dataImpact.destructive).toBe(true);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/RabbitMQ/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/S3/);
+    expect(summary.preDestroySteps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "plane-db-drop" }),
+        expect.objectContaining({ id: "plane-object-storage-inventory" }),
+        expect.objectContaining({ id: "plane-secret-cleanup" }),
+      ]),
+    );
+    expect(summary.terraformVariables).toEqual({
+      plane_provisioned: false,
+      plane_runtime_enabled: false,
+    });
+  });
+
+  it("hydrates Plane images from the verified release manifest contract", () => {
+    const summary = buildApplySummary({
+      evidenceBucket: "evidence-bucket",
+      verifiedManifestDigest: digest,
+      input: {
+        phase: "apply",
+        tenantId: "tenant-1",
+        jobId: "job-plane-1",
+        appKey: "plane",
+        operation: "ENABLE",
+        releaseVersion: "1.2.3",
+        manifestDigest: digest,
+        desiredConfigVersion: "v1",
+        desiredConfig: {
+          dbUrlSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-db",
+          secretKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-secret",
+          liveServerSecretKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
+          aesSecretKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
+          amqpUrlSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-amqp",
+          s3AccessKeyIdSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-key",
+          s3SecretAccessKeySecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-s3-secret",
+          s3BucketName: "thinkwork-dev-plane",
+          publicUrl: "https://plane.example.com",
+          certificateArn:
+            "arn:aws:acm:us-east-1:123456789012:certificate/example",
+        },
+        manifestImages: {
+          "managed-app-plane": `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+        },
+        planDigest: "b".repeat(64),
+      },
+    });
+
+    expect(summary.terraformVariables).toEqual(
+      expect.objectContaining({
+        plane_image_uri: `public.ecr.aws/thinkwork/plane@sha256:${imageDigest}`,
+      }),
+    );
+  });
+
+  it("extracts Plane status from Terraform output shapes", () => {
+    expect(
+      getManagedAppAdapter("plane").extractStatus({
+        plane_provisioned: { value: true },
+        plane_runtime_enabled: { value: true },
+        plane_url: { value: "https://plane.example.com" },
+        plane_rabbitmq_broker_arn: {
+          value: "arn:aws:amazonmq:us-east-1:123456789012:broker:plane",
+        },
+        plane_storage_bucket_name: { value: "thinkwork-dev-plane" },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        provisioned: true,
+        runtimeEnabled: true,
+        endpoint: "https://plane.example.com",
+        status: "running",
+        evidence: expect.objectContaining({
+          rabbitmqBrokerArn:
+            "arn:aws:amazonmq:us-east-1:123456789012:broker:plane",
+          storageBucketName: "thinkwork-dev-plane",
+        }),
+      }),
+    );
+  });
 });

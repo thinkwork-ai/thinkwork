@@ -69,6 +69,7 @@ export const cogneeAdapter: ManagedAppAdapter = {
   appKey: "cognee",
   displayName: "Cognee",
   description: "Knowledge graph runtime with app-owned graph/vector storage.",
+  catalogVisible: true,
   terraformModulePath: "terraform/modules/app/cognee",
   requiredInputs(operation) {
     return operation === "ENABLE" || operation === "UPGRADE"
@@ -215,10 +216,7 @@ export const cogneeAdapter: ManagedAppAdapter = {
       ),
       cognee_bedrock_model_resource_arns: bedrockModelResourceArns,
       cognee_kms_key_arns: optionalStringArray(desiredConfig, "kmsKeyArns"),
-      cognee_neptune_graph_id: optionalString(
-        desiredConfig,
-        "neptuneGraphId",
-      ),
+      cognee_neptune_graph_id: optionalString(desiredConfig, "neptuneGraphId"),
       cognee_neptune_graph_arn: optionalString(
         desiredConfig,
         "neptuneGraphArn",
@@ -288,10 +286,7 @@ export const cogneeAdapter: ManagedAppAdapter = {
           terraformOutputs,
           "cognee_brain_instance_key",
         ),
-        brainTenantId: stringOutput(
-          terraformOutputs,
-          "cognee_brain_tenant_id",
-        ),
+        brainTenantId: stringOutput(terraformOutputs, "cognee_brain_tenant_id"),
         storageTier: stringOutput(
           terraformOutputs,
           "cognee_brain_storage_tier",
@@ -357,7 +352,9 @@ function normalizeBrainStorageTier(
     optionalString(desiredConfig, "brainStorageTier") ??
     optionalString(desiredConfig, "storageTier") ??
     "default";
-  if (!BRAIN_STORAGE_TIERS.includes(tier as (typeof BRAIN_STORAGE_TIERS)[number])) {
+  if (
+    !BRAIN_STORAGE_TIERS.includes(tier as (typeof BRAIN_STORAGE_TIERS)[number])
+  ) {
     throw new Error("Cognee brainStorageTier must be default or production");
   }
   return tier as (typeof BRAIN_STORAGE_TIERS)[number];
