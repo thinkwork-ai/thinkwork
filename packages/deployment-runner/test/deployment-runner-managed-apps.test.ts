@@ -192,7 +192,7 @@ describe("managed app deployment adapters", () => {
     );
     expect(summary.smokeContracts).toContainEqual(
       expect.objectContaining({
-        command: "scripts/smoke/plane-managed-app-smoke.mjs",
+        command: "plugins/plane/smoke/plane-managed-app-smoke.mjs",
       }),
     );
     expect(summary.statusOutputs).toContain("plane_url");

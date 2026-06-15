@@ -40,6 +40,31 @@ project_context: TEI ThinkWork
 - Initial implementation commit:
   `24cf19860 feat(plugins): add first-party plugin package contract`
 
+## Merged PRs
+
+- #2522 `feat(plugins): add first-party plugin package contract` merged into
+  `main` as `e6fbbfa4d08050d83b326f85f71ecc6454de1b82`.
+
+## Current Plane Package Slice
+
+- Started from fresh `origin/main` at `e6fbbfa4d` in branch
+  `codex/thnk-31-plane-package`.
+- Moving Plane-owned smoke scripts into `plugins/plane/smoke/`.
+- Updating deployment-runner and release manifest smoke contract paths to point
+  at the plugin-owned smoke scripts.
+- PR #2524 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2524`
+
+### Verification
+
+- `node --check plugins/plane/smoke/plane-managed-app-smoke.mjs && node --check plugins/plane/smoke/plane-mcp-smoke.mjs`
+- `COMPUTER_ENV_FILE=none node plugins/plane/smoke/plane-managed-app-smoke.mjs && COMPUTER_ENV_FILE=none node plugins/plane/smoke/plane-mcp-smoke.mjs`
+- `pnpm --filter @thinkwork/deployment-runner test`
+- `pnpm exec tsx --test scripts/release/__tests__/build-release-manifest.test.ts`
+- `pnpm --filter @thinkwork/release-manifest test`
+- `pnpm --filter @thinkwork/plugin-plane test`
+- `pnpm --filter @thinkwork/plugin-plane typecheck`
+
 ## Verification Notes
 
 - `pnpm install --lockfile-only` completed after adding `plugins/*` and

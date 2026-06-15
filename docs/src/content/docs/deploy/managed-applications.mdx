@@ -108,12 +108,12 @@ tenant-wide Plane API key as a shortcut.
 Run the managed-app smoke after deploy, park, redeploy, or destroy:
 
 ```bash
-node scripts/smoke/plane-managed-app-smoke.mjs
+node plugins/plane/smoke/plane-managed-app-smoke.mjs
 
 SMOKE_ENABLE_PLANE_MANAGED_APP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_EVIDENCE_FILE=deploy-artifacts/plane-smoke.json \
-  node scripts/smoke/plane-managed-app-smoke.mjs
+  node plugins/plane/smoke/plane-managed-app-smoke.mjs
 ```
 
 The smoke skips cleanly when Plane is unprovisioned or parked. When the runtime
@@ -132,14 +132,14 @@ SMOKE_ENABLE_PLANE_MCP=1 \
   SMOKE_PLANE_MCP_URL=https://plane.example.com/mcp \
   SMOKE_PLANE_API_KEY=<plane-pat> \
   SMOKE_PLANE_WORKSPACE_SLUG=<workspace-slug> \
-  node scripts/smoke/plane-mcp-smoke.mjs
+  node plugins/plane/smoke/plane-mcp-smoke.mjs
 
 SMOKE_ENABLE_PLANE_MCP=1 \
   SMOKE_PLANE_THINKWORK_PROXY=1 \
   SMOKE_API_BASE_URL=<api-url> \
   SMOKE_COGNITO_ID_TOKEN=<activated-user-token> \
   SMOKE_AGENT_ID=<agent-id> \
-  node scripts/smoke/plane-mcp-smoke.mjs
+  node plugins/plane/smoke/plane-mcp-smoke.mjs
 ```
 
 Write mode is opt-in with `SMOKE_PLANE_MCP_WRITE=1`. Without it, the smoke can
