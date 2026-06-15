@@ -61,6 +61,22 @@ dispatcher: dispatcher:THNK-29:InProgress:Codex
   runs. The apex domain input remains set so URL derivation stays stable; full
   Terraform Apply remains unchanged for Terraform source changes and manual
   dispatch.
+- PR #2523 merged into `main` as
+  `dacaa64b016c8cc060e1ec40562a70efef87956d`; checks passed.
+- Follow-up deploy run `27566782404` confirmed the status-pointer guard still
+  worked: Deploy Summary logged
+  `Skipping success status pointer because Terraform Apply result was failure.`
+- That deploy selected the targeted recovery path but disabling
+  `cloudflare_zone_id` changed `local.www_dns_enabled`, so Terraform still
+  planned web/docs custom-domain removals and failed deleting the in-use
+  `thinkwork-dev-computer-viewer-request` CloudFront Function before updating
+  `thinkwork-dev-api-graphql-http`.
+- Fourth rebound refinement branch `codex/thnk-29-graphql-only-recovery` starts
+  from fresh `origin/main` at
+  `defd784dc2d49ef9412638a865fe25778a428c37`, restores the normal Cloudflare
+  stage input, and narrows non-Terraform source recovery to only
+  `module.thinkwork.module.api.aws_iam_policy.api_data_plane` plus
+  `module.thinkwork.module.api.aws_lambda_function.handler["graphql-http"]`.
 
 ## Current Pass
 
