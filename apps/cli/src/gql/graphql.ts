@@ -35,6 +35,12 @@ export type ActivatePluginResult = {
   authorizeUrl: Scalars['String']['output'];
 };
 
+export type ActivatePluginWithCredentialsInput = {
+  /** Per-user credential values keyed by the plugin manifest's credentialKey fields. */
+  credentials: Array<PluginCredentialValueInput>;
+  installId: Scalars['ID']['input'];
+};
+
 export type ActivityLogEntry = {
   __typename?: 'ActivityLogEntry';
   action: Scalars['String']['output'];
@@ -2433,6 +2439,12 @@ export type Mutation = {
    * covering all the plugin's MCP servers. Returns the authorize URL.
    */
   activatePlugin: ActivatePluginResult;
+  /**
+   * Store per-user credentials for plugins whose MCP servers declare
+   * user-provided header auth (for example Plane PAT + workspace slug). Values
+   * are stored only as token secrets and are never exposed through GraphQL.
+   */
+  activatePluginWithCredentials: UserPluginActivation;
   addEvalDatasetCase: EvalTestCase;
   addEvalReplayToolOverride: EvalReplayAllowedTool;
   addInboxItemComment: InboxItemComment;
@@ -2747,6 +2759,11 @@ export type MutationAcceptAgentWorkspaceReviewArgs = {
 
 export type MutationActivatePluginArgs = {
   input: ActivatePluginInput;
+};
+
+
+export type MutationActivatePluginWithCredentialsArgs = {
+  input: ActivatePluginWithCredentialsInput;
 };
 
 
@@ -4298,6 +4315,11 @@ export type PluginComponent = {
   /** 'pending' | 'provisioned' | 'failed' (failed → pending on retry). */
   state: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type PluginCredentialValueInput = {
+  key: Scalars['String']['input'];
+  value: Scalars['String']['input'];
 };
 
 /**

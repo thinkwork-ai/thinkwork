@@ -52,6 +52,8 @@ export interface McpServerTarget {
   url: string;
   /** Optional bearer token (per-user OAuth or tenant API key). */
   token?: string;
+  /** Optional non-Authorization headers for user-provided header auth. */
+  headers?: Record<string, string>;
   /** Display name; used only in error messages. */
   name?: string;
 }
@@ -85,6 +87,10 @@ function baseHeaders(target: McpServerTarget): Record<string, string> {
     "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
   };
   if (target.token) headers.Authorization = `Bearer ${target.token}`;
+  for (const [key, value] of Object.entries(target.headers ?? {})) {
+    if (key.toLowerCase() === "authorization") continue;
+    headers[key] = value;
+  }
   return headers;
 }
 

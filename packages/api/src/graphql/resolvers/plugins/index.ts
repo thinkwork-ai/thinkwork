@@ -6,6 +6,7 @@ import {
 } from "./queries.js";
 import {
   activatePlugin,
+  activatePluginWithCredentials,
   cutoverTwentyPlugin,
   deactivatePlugin,
   installPlugin,
@@ -30,6 +31,7 @@ export const pluginMutations = {
   uninstallPlugin,
   retryPluginComponent,
   activatePlugin,
+  activatePluginWithCredentials,
   deactivatePlugin,
   issuePremiumPluginInstallKey,
   redeemPremiumPluginInstallKey,

@@ -38,18 +38,28 @@ describe("plane manifest ↔ adapter parity", () => {
     }
   });
 
-  it("remains exported but unpublished until runtime and MCP activation are executable", () => {
+  it("remains exported but unpublished until release/controller wiring lands", () => {
     expect(planeManifest.pluginKey).toBe("plane");
     expect(
       allPluginManifests.map((candidate) => candidate.pluginKey),
     ).not.toContain("plane");
   });
 
-  it("does not declare an MCP server before Plane PAT header auth is modeled", () => {
-    expect(
-      planeManifest.versions[0]!.components.some(
-        (component) => component.type === "mcp-server",
-      ),
-    ).toBe(false);
+  it("declares Plane MCP through per-user header auth", () => {
+    const component = planeManifest.versions[0]!.components.find(
+      (candidate) => candidate.type === "mcp-server",
+    );
+    expect(component).toMatchObject({
+      type: "mcp-server",
+      key: "issues",
+      endpointFrom: {
+        managedApp: "plane",
+        configKey: "publicUrl",
+        path: "/mcp",
+      },
+      auth: {
+        mode: "user-provided-headers",
+      },
+    });
   });
 });

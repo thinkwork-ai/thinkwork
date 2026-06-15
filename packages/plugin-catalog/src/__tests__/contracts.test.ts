@@ -179,6 +179,45 @@ describe("validatePluginManifest", () => {
     expect(() => validatePluginManifest(ok)).not.toThrow();
   });
 
+  it("accepts user-provided header auth without OAuth scopes", () => {
+    const ok = manifest();
+    version(ok).requiredOauthScopes = [];
+    const server = version(ok).components[0];
+    if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+    server.auth = {
+      mode: "user-provided-headers",
+      headers: [
+        {
+          name: "x-api-key",
+          credentialKey: "apiKey",
+          displayName: "API key",
+          secret: true,
+        },
+      ],
+    };
+    for (const component of version(ok).components.slice(1)) {
+      if (component.type === "mcp-server") component.auth = { mode: "none" };
+    }
+    expect(() => validatePluginManifest(ok)).not.toThrow();
+  });
+
+  it("rejects Authorization-shaped user-provided header auth", () => {
+    const bad = manifest();
+    const server = version(bad).components[0];
+    if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+    server.auth = {
+      mode: "user-provided-headers",
+      headers: [
+        {
+          name: "Authorization",
+          credentialKey: "apiKey",
+          displayName: "API key",
+        },
+      ],
+    };
+    expect(() => validatePluginManifest(bad)).toThrow(/not allowed/);
+  });
+
   it("rejects malformed semver", () => {
     for (const bad of ["1.0", "v1.0.0", "1.0.0.0", "01.2.3", "not-semver"]) {
       expect(() =>

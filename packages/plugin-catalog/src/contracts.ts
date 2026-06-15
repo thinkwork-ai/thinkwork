@@ -53,7 +53,29 @@ export type McpServerAuth =
        */
       mode: "oauth-per-instance";
     }
+  | {
+      /**
+       * User-provided HTTP headers (e.g. Plane PAT mode). Activation stores
+       * the caller's values as a per-user plugin secret, then dispatch emits
+       * only these declared headers to the MCP transport. Never use this for
+       * Authorization-bearing OAuth; OAuth must stay in the handle-shaped
+       * bearer path.
+       */
+      mode: "user-provided-headers";
+      headers: McpUserProvidedHeader[];
+    }
   | { mode: "none" };
+
+export interface McpUserProvidedHeader {
+  /** HTTP header name to send to the MCP server, e.g. `x-api-key`. */
+  name: string;
+  /** Activation input key whose value supplies this header. */
+  credentialKey: string;
+  /** Human label for activation UI/operator docs. */
+  displayName: string;
+  /** Marks secret fields for UI copy; values are always stored as secrets. */
+  secret?: boolean;
+}
 
 /**
  * The ONE allowed endpoint indirection (plan 2026-06-12-001 U10): a
@@ -231,9 +253,7 @@ function validatePremiumPluginMetadata(
     );
   }
   if (premium.installKeyRequired !== true) {
-    throw new PluginManifestError(
-      `${prefix}.installKeyRequired must be true`,
-    );
+    throw new PluginManifestError(`${prefix}.installKeyRequired must be true`);
   }
   requireString(premium.installKeyPrompt, `${prefix}.installKeyPrompt`);
 }
@@ -393,9 +413,13 @@ function validateMcpServerComponent(
     }
     return false;
   }
+  if (auth.mode === "user-provided-headers") {
+    validateUserProvidedHeadersAuth(auth, prefix);
+    return false;
+  }
   if (auth.mode !== "oauth") {
     throw new PluginManifestError(
-      `${prefix}.auth.mode must be "oauth", "oauth-per-instance", or "none"`,
+      `${prefix}.auth.mode must be "oauth", "oauth-per-instance", "user-provided-headers", or "none"`,
     );
   }
   const oauth = auth as Partial<Extract<McpServerAuth, { mode: "oauth" }>>;
@@ -403,6 +427,70 @@ function validateMcpServerComponent(
   requireHttpUrl(oauth.authDomain, `${prefix}.auth.authDomain`);
   requireString(oauth.resourceIndicator, `${prefix}.auth.resourceIndicator`);
   return true;
+}
+
+const HTTP_HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const CREDENTIAL_KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const FORBIDDEN_USER_HEADER_NAMES = new Set([
+  "authorization",
+  "proxy-authorization",
+  "cookie",
+  "set-cookie",
+]);
+
+function validateUserProvidedHeadersAuth(
+  auth: Partial<Extract<McpServerAuth, { mode: "user-provided-headers" }>>,
+  prefix: string,
+): void {
+  if (!Array.isArray(auth.headers) || auth.headers.length === 0) {
+    throw new PluginManifestError(
+      `${prefix}.auth.headers must be a non-empty array`,
+    );
+  }
+  const seenHeaderNames = new Set<string>();
+  const seenCredentialKeys = new Set<string>();
+  for (const [index, header] of auth.headers.entries()) {
+    const label = `${prefix}.auth.headers[${index}]`;
+    if (!header || typeof header !== "object" || Array.isArray(header)) {
+      throw new PluginManifestError(`${label} must be an object`);
+    }
+    requireString(header.name, `${label}.name`);
+    if (!HTTP_HEADER_NAME_RE.test(header.name)) {
+      throw new PluginManifestError(
+        `${label}.name "${header.name}" must be a valid HTTP header name`,
+      );
+    }
+    const normalizedName = header.name.toLowerCase();
+    if (FORBIDDEN_USER_HEADER_NAMES.has(normalizedName)) {
+      throw new PluginManifestError(
+        `${label}.name "${header.name}" is not allowed for user-provided header auth`,
+      );
+    }
+    if (seenHeaderNames.has(normalizedName)) {
+      throw new PluginManifestError(
+        `${prefix}.auth.headers declares duplicate header "${header.name}"`,
+      );
+    }
+    seenHeaderNames.add(normalizedName);
+
+    requireString(header.credentialKey, `${label}.credentialKey`);
+    if (!CREDENTIAL_KEY_RE.test(header.credentialKey)) {
+      throw new PluginManifestError(
+        `${label}.credentialKey "${header.credentialKey}" must match ${CREDENTIAL_KEY_RE.source}`,
+      );
+    }
+    if (seenCredentialKeys.has(header.credentialKey)) {
+      throw new PluginManifestError(
+        `${prefix}.auth.headers declares duplicate credentialKey "${header.credentialKey}"`,
+      );
+    }
+    seenCredentialKeys.add(header.credentialKey);
+
+    requireString(header.displayName, `${label}.displayName`);
+    if (header.secret !== undefined && typeof header.secret !== "boolean") {
+      throw new PluginManifestError(`${label}.secret must be a boolean`);
+    }
+  }
 }
 
 function validateEndpointFrom(

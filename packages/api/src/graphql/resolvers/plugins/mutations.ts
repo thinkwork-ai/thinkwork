@@ -20,6 +20,7 @@ import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { snakeToCamel } from "../../utils.js";
 import {
+  activatePluginWithCredentials as activateWithCredentials,
   createDefaultPluginActivationDeps,
   deactivateActivation,
   startActivation,
@@ -211,6 +212,48 @@ export async function activatePlugin(
     deps,
   );
   return { authorizeUrl };
+}
+
+export async function activatePluginWithCredentials(
+  _parent: unknown,
+  args: {
+    input: {
+      installId: string;
+      credentials: Array<{ key: string; value: string }>;
+    };
+  },
+  ctx: GraphQLContext,
+) {
+  const { tenantId, callerUserId } = await requireActivationCaller(ctx);
+  const credentialEntries = args.input.credentials ?? [];
+  const credentials: Record<string, string> = {};
+  for (const entry of credentialEntries) {
+    if (!entry.key || typeof entry.key !== "string") {
+      throw new GraphQLError("Credential keys must be non-empty", {
+        extensions: { code: "BAD_USER_INPUT" },
+      });
+    }
+    credentials[entry.key] = entry.value;
+  }
+  const deps = createDefaultPluginActivationDeps();
+  const activation = await activateWithCredentials(
+    {
+      userId: callerUserId,
+      tenantId,
+      pluginInstallId: args.input.installId,
+      credentials,
+    },
+    deps,
+  );
+  const install = await deps.store.getInstallById(
+    tenantId,
+    args.input.installId,
+  );
+  return {
+    ...snakeToCamel(activation as unknown as Record<string, unknown>),
+    pluginKey: install?.plugin_key ?? "",
+    grantedScopes: activation.granted_scopes ?? [],
+  };
 }
 
 export async function deactivatePlugin(

@@ -1944,6 +1944,70 @@ describe("buildInvocationResources — bearer never reaches the connect factory"
     expect(serialised).not.toContain("DoNotEcho");
     bundle.handleStore.clear();
   });
+
+  it("passes API-provided header auth through as extra headers", async () => {
+    const captured: Array<Record<string, string>> = [];
+    const connect: ConnectMcpServerFn = async (args) => {
+      captured.push(args.headers);
+      return [];
+    };
+
+    const bundle = await buildInvocationResources({
+      payload: {
+        mcp_configs: [
+          {
+            name: "plane--issues",
+            url: "https://plane.example.com/mcp",
+            auth: {
+              type: "headers",
+              headers: {
+                "x-api-key": "plane_pat_user_123",
+                "x-workspace-slug": "eng",
+              },
+            },
+          },
+        ],
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: connect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toEqual({
+      "x-api-key": "plane_pat_user_123",
+      "x-workspace-slug": "eng",
+    });
+    bundle.handleStore.clear();
+  });
 });
 
 // ---------------------------------------------------------------------------

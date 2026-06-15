@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   validatePluginManifest,
   type InfrastructureComponent,
+  type McpServerComponent,
   type SkillsComponent,
 } from "../contracts";
 import { allPluginManifests, planeManifest } from "../plugins";
@@ -27,8 +28,18 @@ function skillsComponent(): SkillsComponent {
   return component;
 }
 
+function mcpComponent(): McpServerComponent {
+  const component = planeManifest.versions[0].components.find(
+    (candidate) => candidate.type === "mcp-server",
+  );
+  if (component?.type !== "mcp-server") {
+    throw new Error("plane manifest is missing its mcp-server component");
+  }
+  return component;
+}
+
 describe("Plane plugin manifest", () => {
-  it("validates as an unpublished infrastructure-and-skills draft", () => {
+  it("validates as an unpublished Plane plugin draft", () => {
     const validated = validatePluginManifest(planeManifest);
     expect(validated.pluginKey).toBe("plane");
     expect(validated.versions[0].version).toBe("0.1.0");
@@ -37,7 +48,37 @@ describe("Plane plugin manifest", () => {
     ).not.toContain("plane");
     expect(
       validated.versions[0].components.map((component) => component.type),
-    ).toEqual(["infrastructure", "skills"]);
+    ).toEqual(["mcp-server", "infrastructure", "skills"]);
+  });
+
+  it("declares a user-scoped Plane MCP endpoint with PAT headers", () => {
+    const mcp = mcpComponent();
+    expect(mcp).toMatchObject({
+      type: "mcp-server",
+      key: "issues",
+      displayName: "Plane work items",
+      endpointFrom: {
+        managedApp: "plane",
+        configKey: "publicUrl",
+        path: "/mcp",
+      },
+      auth: {
+        mode: "user-provided-headers",
+        headers: [
+          {
+            name: "x-api-key",
+            credentialKey: "apiKey",
+            displayName: "Plane personal access token",
+            secret: true,
+          },
+          {
+            name: "x-workspace-slug",
+            credentialKey: "workspaceSlug",
+            displayName: "Plane workspace slug",
+          },
+        ],
+      },
+    });
   });
 
   it("declares the Plane runtime infrastructure contract", () => {
@@ -78,12 +119,8 @@ describe("Plane plugin manifest", () => {
     expect(skill.skillMd).toContain("re-read the record");
   });
 
-  it("does not declare Plane MCP until PAT header auth is modeled", () => {
-    expect(
-      planeManifest.versions[0].components.some(
-        (component) => component.type === "mcp-server",
-      ),
-    ).toBe(false);
+  it("uses header activation rather than OAuth scopes", () => {
+    expect(mcpComponent().auth.mode).toBe("user-provided-headers");
     expect(planeManifest.versions[0].requiredOauthScopes).toEqual([]);
   });
 });

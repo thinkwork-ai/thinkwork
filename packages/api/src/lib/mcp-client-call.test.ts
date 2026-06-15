@@ -35,7 +35,11 @@ function lifecycleFetch(
     opts.onRequest?.(body);
     if (body.method === "initialize") {
       return jsonResponse(
-        { jsonrpc: "2.0", id: body.id, result: { protocolVersion: MCP_PROTOCOL_VERSION } },
+        {
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { protocolVersion: MCP_PROTOCOL_VERSION },
+        },
         opts.sessionId ? { headers: { "mcp-session-id": opts.sessionId } } : {},
       );
     }
@@ -58,7 +62,11 @@ describe("mcp-client-call session lifecycle", () => {
           id: 1,
           result: {
             tools: [
-              { name: "create_lead", description: "make a lead", inputSchema: { type: "object" } },
+              {
+                name: "create_lead",
+                description: "make a lead",
+                inputSchema: { type: "object" },
+              },
             ],
           },
         }),
@@ -68,9 +76,17 @@ describe("mcp-client-call session lifecycle", () => {
 
     const tools = await mcpListTools(TARGET, { fetchImpl });
 
-    expect(requests).toEqual(["initialize", "notifications/initialized", "tools/list"]);
+    expect(requests).toEqual([
+      "initialize",
+      "notifications/initialized",
+      "tools/list",
+    ]);
     expect(tools).toEqual([
-      { name: "create_lead", description: "make a lead", inputSchema: { type: "object" } },
+      {
+        name: "create_lead",
+        description: "make a lead",
+        inputSchema: { type: "object" },
+      },
     ]);
   });
 
@@ -111,13 +127,39 @@ describe("mcp-client-call session lifecycle", () => {
       return jsonResponse({ jsonrpc: "2.0", id: 1, result: { tools: [] } });
     }) as unknown as typeof fetch;
 
-    await mcpListTools(
-      { ...TARGET, token: "tok-abc" },
-      { fetchImpl },
-    );
+    await mcpListTools({ ...TARGET, token: "tok-abc" }, { fetchImpl });
 
     expect(seen[0]["MCP-Protocol-Version"]).toBe(MCP_PROTOCOL_VERSION);
     expect(seen[0].Authorization).toBe("Bearer tok-abc");
+  });
+
+  it("sends user-provided header auth without allowing Authorization override", async () => {
+    const seen: Array<Record<string, string>> = [];
+    const fetchImpl = vi.fn(async (_url: any, init: any) => {
+      seen.push(init.headers as Record<string, string>);
+      const body = JSON.parse(init.body as string);
+      if (body.method === "initialize")
+        return jsonResponse({ jsonrpc: "2.0", id: body.id, result: {} });
+      if (body.method === "notifications/initialized")
+        return new Response("", { status: 202 });
+      return jsonResponse({ jsonrpc: "2.0", id: 1, result: { tools: [] } });
+    }) as unknown as typeof fetch;
+
+    await mcpListTools(
+      {
+        ...TARGET,
+        headers: {
+          "x-api-key": "plane_pat_user_123",
+          "x-workspace-slug": "eng",
+          Authorization: "Bearer should-not-override",
+        },
+      },
+      { fetchImpl },
+    );
+
+    expect(seen[0]["x-api-key"]).toBe("plane_pat_user_123");
+    expect(seen[0]["x-workspace-slug"]).toBe("eng");
+    expect(seen[0].Authorization).toBeUndefined();
   });
 
   it("parses an SSE-framed JSON-RPC response", async () => {
@@ -145,30 +187,41 @@ describe("mcp-client-call session lifecycle", () => {
         result: { content: [{ type: "text", text: "nope" }], isError: true },
       }),
     ]);
-    const result = await mcpCallTool(TARGET, "do_thing", { a: 1 }, { fetchImpl });
+    const result = await mcpCallTool(
+      TARGET,
+      "do_thing",
+      { a: 1 },
+      { fetchImpl },
+    );
     expect(result.isError).toBe(true);
     expect(textFromMcpContent(result.content)).toBe("nope");
   });
 
   it("throws McpTransportError on a JSON-RPC error", async () => {
     const fetchImpl = lifecycleFetch([
-      jsonResponse({ jsonrpc: "2.0", id: 1, error: { code: -32601, message: "no method" } }),
+      jsonResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        error: { code: -32601, message: "no method" },
+      }),
     ]);
-    await expect(mcpCallTool(TARGET, "x", {}, { fetchImpl })).rejects.toBeInstanceOf(
-      McpTransportError,
-    );
+    await expect(
+      mcpCallTool(TARGET, "x", {}, { fetchImpl }),
+    ).rejects.toBeInstanceOf(McpTransportError);
   });
 
   it("throws McpTransportError on a non-2xx call", async () => {
-    const fetchImpl = lifecycleFetch([new Response("upstream down", { status: 503 })]);
+    const fetchImpl = lifecycleFetch([
+      new Response("upstream down", { status: 503 }),
+    ]);
     await expect(mcpListTools(TARGET, { fetchImpl })).rejects.toBeInstanceOf(
       McpTransportError,
     );
   });
 
   it("throws McpTransportError when initialize itself fails", async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response("denied", { status: 401 }),
+    const fetchImpl = vi.fn(
+      async () => new Response("denied", { status: 401 }),
     ) as unknown as typeof fetch;
     await expect(mcpListTools(TARGET, { fetchImpl })).rejects.toBeInstanceOf(
       McpTransportError,
@@ -191,6 +244,8 @@ describe("textFromMcpContent", () => {
   });
 
   it("reads resource text/uri", () => {
-    expect(textFromMcpContent([{ resource: { uri: "s3://x" } }])).toBe("s3://x");
+    expect(textFromMcpContent([{ resource: { uri: "s3://x" } }])).toBe(
+      "s3://x",
+    );
   });
 });

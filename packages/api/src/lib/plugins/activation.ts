@@ -243,12 +243,29 @@ export function pluginTokenSecretName(args: {
   return `thinkwork/${args.stage}/plugin-tokens/${args.userId}/${args.pluginInstallId}/${resourceKeyFor(args.resourceIndicator)}`;
 }
 
+export function pluginHeaderSecretName(args: {
+  stage: string;
+  userId: string;
+  pluginInstallId: string;
+  resourceIndicator: string;
+}): string {
+  return `thinkwork/${args.stage}/plugin-header-auth/${args.userId}/${args.pluginInstallId}/${resourceKeyFor(args.resourceIndicator)}`;
+}
+
 function oauthMcpComponents(payload: PluginVersion): McpServerComponent[] {
   return payload.components.filter(
     (component): component is McpServerComponent =>
       component.type === "mcp-server" &&
       (component.auth.mode === "oauth" ||
         component.auth.mode === "oauth-per-instance"),
+  );
+}
+
+function userHeaderMcpComponents(payload: PluginVersion): McpServerComponent[] {
+  return payload.components.filter(
+    (component): component is McpServerComponent =>
+      component.type === "mcp-server" &&
+      component.auth.mode === "user-provided-headers",
   );
 }
 
@@ -296,6 +313,44 @@ export async function resolveOauthComponentBindings(args: {
     bindings.push({
       authDomain: await discoverResourceAuthDomain(resolved, args.fetchFn),
       resource: normalizeResource(resolved),
+    });
+  }
+  return bindings;
+}
+
+export function resolveUserHeaderComponentBindings(args: {
+  pluginKey: string;
+  components: McpServerComponent[];
+  componentRows: Array<{
+    component_key: string;
+    handler_ref: Record<string, unknown> | null;
+  }>;
+}): Array<{
+  resource: string;
+  headers: Array<{ name: string; credentialKey: string }>;
+}> {
+  const bindings: Array<{
+    resource: string;
+    headers: Array<{ name: string; credentialKey: string }>;
+  }> = [];
+  for (const component of args.components) {
+    if (component.auth.mode !== "user-provided-headers") continue;
+    const row = args.componentRows.find(
+      (candidate) => candidate.component_key === component.key,
+    );
+    const resolved = (row?.handler_ref ?? {}).resolvedEndpointUrl;
+    if (typeof resolved !== "string" || !resolved) {
+      throw pluginEngineError(
+        "PLUGIN_COMPONENT_NOT_PROVISIONED",
+        `Plugin ${args.pluginKey} MCP component "${component.key}" has no resolved endpoint yet; finish the install before activating`,
+      );
+    }
+    bindings.push({
+      resource: normalizeResource(resolved),
+      headers: component.auth.headers.map((header) => ({
+        name: header.name,
+        credentialKey: header.credentialKey,
+      })),
     });
   }
   return bindings;
@@ -816,6 +871,151 @@ export async function completeActivation(
 }
 
 // ---------------------------------------------------------------------------
+// activateWithCredentials
+// ---------------------------------------------------------------------------
+
+export interface ActivatePluginWithCredentialsArgs {
+  /** Canonical caller user id — resolved from the auth context, never input. */
+  userId: string;
+  tenantId: string;
+  pluginInstallId: string;
+  credentials: Record<string, string>;
+}
+
+function credentialValue(
+  credentials: Record<string, string>,
+  key: string,
+): string {
+  const value = credentials[key];
+  if (typeof value !== "string" || value.trim() === "") {
+    throw pluginEngineError(
+      "PLUGIN_CREDENTIAL_MISSING",
+      `Missing credential value for "${key}"`,
+    );
+  }
+  if (/[\r\n\0]/.test(value)) {
+    throw pluginEngineError(
+      "PLUGIN_CREDENTIAL_INVALID",
+      `Credential value for "${key}" contains invalid header characters`,
+    );
+  }
+  return value.trim();
+}
+
+export async function activatePluginWithCredentials(
+  args: ActivatePluginWithCredentialsArgs,
+  deps: PluginActivationDeps = createDefaultPluginActivationDeps(),
+): Promise<UserPluginActivationRow> {
+  const install = await deps.store.getInstallById(
+    args.tenantId,
+    args.pluginInstallId,
+  );
+  if (!install) {
+    throw pluginEngineError("NOT_FOUND", "Plugin install not found");
+  }
+  if (install.state === "uninstalling") {
+    throw pluginEngineError(
+      "FAILED_PRECONDITION",
+      "Plugin is uninstalling; activation is unavailable",
+    );
+  }
+
+  const payload = await resolvePinnedPayload(install, deps);
+  const headerComponents = userHeaderMcpComponents(payload);
+  if (headerComponents.length === 0) {
+    throw pluginEngineError(
+      "PLUGIN_NO_HEADER_AUTH_COMPONENTS",
+      `Plugin ${install.plugin_key} declares no user-provided header MCP servers; use the OAuth activation flow when applicable`,
+    );
+  }
+
+  const bindings = resolveUserHeaderComponentBindings({
+    pluginKey: install.plugin_key,
+    components: headerComponents,
+    componentRows: await deps.store.listComponents(install.id),
+  });
+
+  const requiredCredentialKeys = [
+    ...new Set(
+      bindings.flatMap((binding) =>
+        binding.headers.map((header) => header.credentialKey),
+      ),
+    ),
+  ];
+  const resolvedBindingsByResource = new Map<string, Record<string, string>>();
+  for (const binding of bindings) {
+    const headers = resolvedBindingsByResource.get(binding.resource) ?? {};
+    for (const header of binding.headers) {
+      headers[header.name] = credentialValue(
+        args.credentials,
+        header.credentialKey,
+      );
+    }
+    resolvedBindingsByResource.set(binding.resource, headers);
+  }
+  const resolvedBindings = [...resolvedBindingsByResource.entries()].map(
+    ([resource, headers]) => ({ resource, headers }),
+  );
+  const audit: EmitAuditEventInput = {
+    tenantId: args.tenantId,
+    actorId: args.userId,
+    actorType: "user",
+    eventType: "plugin.activation_granted",
+    source: "graphql",
+    payload: {
+      pluginInstallId: install.id,
+      pluginKey: install.plugin_key,
+      authMode: "user-provided-headers",
+      tokenCount: bindings.length,
+      credentialKeys: requiredCredentialKeys,
+    },
+    resourceType: "plugin_install",
+    resourceId: install.id,
+    action: "activate",
+    outcome: "success",
+  };
+
+  const activation = await deps.store.upsertActivation(
+    {
+      userId: args.userId,
+      pluginInstallId: install.id,
+      grantedScopes: [],
+    },
+    audit,
+  );
+
+  const stage = deps.stage();
+  for (const binding of resolvedBindings) {
+    const secretName = pluginHeaderSecretName({
+      stage,
+      userId: args.userId,
+      pluginInstallId: install.id,
+      resourceIndicator: binding.resource,
+    });
+    await deps.secrets.putSecret(
+      secretName,
+      JSON.stringify({
+        auth_type: "user-provided-headers",
+        headers: binding.headers,
+        resource: binding.resource,
+        obtained_at: deps.now().toISOString(),
+      }),
+    );
+    await deps.store.upsertActivationToken({
+      activationId: activation.id,
+      resourceIndicator: binding.resource,
+      secretRef: secretName,
+      expiresAt: null,
+    });
+  }
+
+  console.log(
+    `[plugin-credentials] activation granted: user ${args.userId}, plugin ${install.plugin_key}, ${bindings.length} header auth record(s)`,
+  );
+  return activation;
+}
+
+// ---------------------------------------------------------------------------
 // deactivateActivation
 // ---------------------------------------------------------------------------
 
@@ -910,6 +1110,19 @@ export interface PluginDispatchAuthResolver {
     slug: string;
     logPrefix: string;
   }): Promise<string | null>;
+  /**
+   * Resolve user-provided HTTP headers for one plugin server. Returns null
+   * and logs on any failure — never throws. Header values come from the
+   * requester's plugin activation secret, not tenant-wide auth_config.
+   */
+  resolveHeaders(args: {
+    requesterUserId: string;
+    pluginInstallId: string;
+    resource: string;
+    slug: string;
+    headerNames: string[];
+    logPrefix: string;
+  }): Promise<Record<string, string> | null>;
 }
 
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
@@ -1078,6 +1291,80 @@ export function createPluginDispatchAuthResolver(
       } catch (error) {
         console.warn(
           `${logPrefix} Plugin MCP token resolution error for ${slug}:`,
+          error,
+        );
+        return null;
+      }
+    },
+
+    async resolveHeaders({
+      requesterUserId,
+      pluginInstallId,
+      resource,
+      slug,
+      headerNames,
+      logPrefix,
+    }) {
+      try {
+        if (failedInstalls.has(pluginInstallId)) return null;
+        const activation = await getActivation(
+          requesterUserId,
+          pluginInstallId,
+        );
+        if (!activation || activation.status !== "active") {
+          console.warn(
+            `${logPrefix} Skipping plugin MCP ${slug}: no active activation for user ${requesterUserId}`,
+          );
+          return null;
+        }
+
+        const wanted = normalizeResource(resource);
+        const tokenRow = (await deps.store.listActivationTokens(activation.id))
+          .filter((row) => row.status === "active")
+          .find((row) => normalizeResource(row.resource_indicator) === wanted);
+        if (!tokenRow?.secret_ref) {
+          console.warn(
+            `${logPrefix} Skipping plugin MCP ${slug}: no active header credential record for resource ${wanted}`,
+          );
+          return null;
+        }
+
+        const secretString = await deps.secrets.getSecret(tokenRow.secret_ref);
+        if (!secretString) {
+          console.warn(
+            `${logPrefix} Skipping plugin MCP ${slug}: header credential secret missing`,
+          );
+          return null;
+        }
+        const parsed = JSON.parse(secretString) as { headers?: unknown };
+        const secretHeaders =
+          parsed.headers &&
+          typeof parsed.headers === "object" &&
+          !Array.isArray(parsed.headers)
+            ? (parsed.headers as Record<string, unknown>)
+            : null;
+        if (!secretHeaders) {
+          console.warn(
+            `${logPrefix} Skipping plugin MCP ${slug}: header credential secret has no headers object`,
+          );
+          return null;
+        }
+
+        const resolved: Record<string, string> = {};
+        for (const name of headerNames) {
+          const value = secretHeaders[name];
+          if (typeof value !== "string" || value.trim() === "") {
+            console.warn(
+              `${logPrefix} Skipping plugin MCP ${slug}: header credential secret is missing ${name}`,
+            );
+            return null;
+          }
+          resolved[name] = value;
+        }
+        return resolved;
+      } catch (error) {
+        console.warn(
+          `${logPrefix} Plugin MCP header credential resolution error for ${slug}:`,
           error,
         );
         return null;

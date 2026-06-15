@@ -14,6 +14,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PluginVersion } from "@thinkwork/plugin-catalog";
 import {
+  activatePluginWithCredentials,
   completeActivation,
   createPluginDispatchAuthResolver,
   deactivateActivation,
@@ -70,6 +71,37 @@ function lastmileVersion(
         type: "skills" as const,
         key: "skills",
         skills: [{ slug: "lastmile--crm-basics", skillMd: "# s" }],
+      },
+    ],
+  };
+}
+
+function planeVersion(): PluginVersion {
+  return {
+    version: "0.1.0",
+    requiredOauthScopes: [],
+    components: [
+      {
+        type: "mcp-server",
+        key: "issues",
+        displayName: "Plane work items",
+        endpointUrl: "https://plane.example.invalid/mcp",
+        auth: {
+          mode: "user-provided-headers",
+          headers: [
+            {
+              name: "x-api-key",
+              credentialKey: "apiKey",
+              displayName: "Plane personal access token",
+              secret: true,
+            },
+            {
+              name: "x-workspace-slug",
+              credentialKey: "workspaceSlug",
+              displayName: "Plane workspace slug",
+            },
+          ],
+        },
       },
     ],
   };
@@ -168,9 +200,10 @@ function buildHarness(payload: PluginVersion = lastmileVersion()): Harness {
     store,
     secrets,
     resolveVersion: async (pluginKey, version) =>
-      pluginKey === "lastmile" && (!version || version === "0.1.0")
+      (pluginKey === "lastmile" || pluginKey === "plane") &&
+      (!version || version === "0.1.0")
         ? {
-            plugin: { pluginKey: "lastmile" },
+            plugin: { pluginKey },
             versionEntry: {
               version: "0.1.0",
               payloadSha256: "sha-0.1.0",
@@ -499,6 +532,181 @@ describe("completeActivation", () => {
       new RegExp(`^thinkwork/test/plugin-tokens/${USER}/${h.installId}/`),
     );
     expect(h.secrets.values.has(expected)).toBe(true);
+  });
+});
+
+describe("activatePluginWithCredentials (THNK-27 U5)", () => {
+  it("stores Plane PAT headers as a user-scoped plugin activation secret", async () => {
+    const h = buildHarness(planeVersion());
+    const install = h.store.installs.get(h.installId)!;
+    install.plugin_key = "plane";
+    h.store.seedComponent({
+      plugin_install_id: h.installId,
+      component_key: "issues",
+      component_type: "mcp-server",
+      state: "provisioned",
+      handler_ref: {
+        tenantMcpServerId: "srv-plane",
+        resolvedEndpointUrl: "https://plane.example.invalid/mcp",
+      },
+    });
+
+    const activation = await activatePluginWithCredentials(
+      {
+        userId: USER,
+        tenantId: TENANT,
+        pluginInstallId: h.installId,
+        credentials: {
+          apiKey: "plane_pat_user_123",
+          workspaceSlug: "eng",
+        },
+      },
+      h.deps,
+    );
+
+    expect(activation).toMatchObject({
+      user_id: USER,
+      plugin_install_id: h.installId,
+      status: "active",
+      granted_scopes: [],
+    });
+    const tokens = await h.store.listActivationTokens(activation.id);
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]!.resource_indicator).toBe(
+      "https://plane.example.invalid/mcp",
+    );
+    const secret = JSON.parse(
+      h.secrets.values.get(tokens[0]!.secret_ref)!,
+    ) as Record<string, unknown>;
+    expect(secret).toMatchObject({
+      auth_type: "user-provided-headers",
+      resource: "https://plane.example.invalid/mcp",
+      headers: {
+        "x-api-key": "plane_pat_user_123",
+        "x-workspace-slug": "eng",
+      },
+    });
+    expect(h.store.audits.at(-1)?.payload).toMatchObject({
+      pluginKey: "plane",
+      authMode: "user-provided-headers",
+      credentialKeys: ["apiKey", "workspaceSlug"],
+    });
+  });
+
+  it("merges multiple header-auth components that share one MCP endpoint", async () => {
+    const h = buildHarness({
+      version: "0.1.0",
+      requiredOauthScopes: [],
+      components: [
+        {
+          type: "mcp-server",
+          key: "issues",
+          displayName: "Plane issues",
+          endpointUrl: "https://plane.example.invalid/mcp",
+          auth: {
+            mode: "user-provided-headers",
+            headers: [
+              {
+                name: "x-api-key",
+                credentialKey: "apiKey",
+                displayName: "Plane personal access token",
+                secret: true,
+              },
+            ],
+          },
+        },
+        {
+          type: "mcp-server",
+          key: "workspace",
+          displayName: "Plane workspace",
+          endpointUrl: "https://plane.example.invalid/mcp",
+          auth: {
+            mode: "user-provided-headers",
+            headers: [
+              {
+                name: "x-workspace-slug",
+                credentialKey: "workspaceSlug",
+                displayName: "Plane workspace slug",
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const install = h.store.installs.get(h.installId)!;
+    install.plugin_key = "plane";
+    for (const componentKey of ["issues", "workspace"]) {
+      h.store.seedComponent({
+        plugin_install_id: h.installId,
+        component_key: componentKey,
+        component_type: "mcp-server",
+        state: "provisioned",
+        handler_ref: {
+          tenantMcpServerId: `srv-plane-${componentKey}`,
+          resolvedEndpointUrl: "https://plane.example.invalid/mcp",
+        },
+      });
+    }
+
+    const activation = await activatePluginWithCredentials(
+      {
+        userId: USER,
+        tenantId: TENANT,
+        pluginInstallId: h.installId,
+        credentials: {
+          apiKey: "plane_pat_user_123",
+          workspaceSlug: "eng",
+        },
+      },
+      h.deps,
+    );
+
+    const tokens = await h.store.listActivationTokens(activation.id);
+    expect(tokens).toHaveLength(1);
+    const secret = JSON.parse(
+      h.secrets.values.get(tokens[0]!.secret_ref)!,
+    ) as Record<string, unknown>;
+    expect(secret).toMatchObject({
+      headers: {
+        "x-api-key": "plane_pat_user_123",
+        "x-workspace-slug": "eng",
+      },
+    });
+  });
+
+  it("rejects malformed header values before writing token secrets", async () => {
+    const h = buildHarness(planeVersion());
+    const install = h.store.installs.get(h.installId)!;
+    install.plugin_key = "plane";
+    h.store.seedComponent({
+      plugin_install_id: h.installId,
+      component_key: "issues",
+      component_type: "mcp-server",
+      state: "provisioned",
+      handler_ref: {
+        tenantMcpServerId: "srv-plane",
+        resolvedEndpointUrl: "https://plane.example.invalid/mcp",
+      },
+    });
+
+    await expect(
+      activatePluginWithCredentials(
+        {
+          userId: USER,
+          tenantId: TENANT,
+          pluginInstallId: h.installId,
+          credentials: {
+            apiKey: "plane_pat_user_123\nx-evil: yes",
+            workspaceSlug: "eng",
+          },
+        },
+        h.deps,
+      ),
+    ).rejects.toMatchObject({
+      extensions: { code: "PLUGIN_CREDENTIAL_INVALID" },
+    });
+    expect(h.secrets.values.size).toBe(0);
+    expect(h.store.activations.size).toBe(0);
   });
 });
 
