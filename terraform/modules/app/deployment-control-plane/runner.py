@@ -595,6 +595,7 @@ def managed_app_terraform_target_args(payload):
     return [
         "-target=module.thinkwork.terraform_data.plane_configuration_guardrails",
         "-target=module.thinkwork.module.plane",
+        "-target=cloudflare_record.plane",
     ]
 
 
@@ -752,6 +753,25 @@ def state_terraform_data_input(state, name):
     return {}
 
 
+def state_cloudflare_zone_id(state):
+    for resource in state.get("resources", []) or []:
+        if resource.get("type") != "cloudflare_record":
+            continue
+        for instance in resource.get("instances", []) or []:
+            attributes = instance.get("attributes") or {}
+            zone_id = attributes.get("zone_id")
+            if isinstance(zone_id, str) and zone_id:
+                return zone_id
+    return os.environ.get("THINKWORK_CLOUDFLARE_ZONE_ID", "")
+
+
+def url_hostname(url):
+    try:
+        return urllib.parse.urlparse(url).hostname or ""
+    except Exception:
+        return ""
+
+
 def config_value(desired_config, manifest_images, key, env_name, image_names=None, default=""):
     value = desired_config.get(key)
     if isinstance(value, str) and value:
@@ -880,6 +900,9 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             state_output(current_outputs, "deployment_control_plane_enabled", True)
         ),
         "deployment_control_plane_create_secret_placeholders": False,
+        "cloudflare_zone_id": state_cloudflare_zone_id(current_state),
+        "plane_dns_enabled": False,
+        "plane_dns_name": "",
         "plane_provisioned": bool(state_output(current_outputs, "plane_provisioned", False)),
         "plane_runtime_enabled": bool(
             state_output(current_outputs, "plane_runtime_enabled", False)
@@ -1039,6 +1062,11 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             ),
             "deployment_control_plane_create_secret_placeholders": True,
         }
+    )
+    plane_dns_name = overrides["plane_domain"] or url_hostname(overrides["plane_public_url"])
+    overrides["plane_dns_name"] = plane_dns_name
+    overrides["plane_dns_enabled"] = (
+        provisioned and bool(overrides["cloudflare_zone_id"]) and bool(plane_dns_name)
     )
     return overrides
 
@@ -2554,6 +2582,18 @@ variable "plane_web_container_port" {{
   type = number
 }}
 
+variable "cloudflare_zone_id" {{
+  type = string
+}}
+
+variable "plane_dns_enabled" {{
+  type = bool
+}}
+
+variable "plane_dns_name" {{
+  type = string
+}}
+
 module "thinkwork" {{
   source  = {hcl_string(terraform_module_source)}
 {module_version_line}
@@ -2667,6 +2707,18 @@ module "thinkwork" {{
   deployment_release_manifest_trusted_keys_json = var.deployment_release_manifest_trusted_keys_json
   deployment_terraform_module_source            = var.deployment_terraform_module_source
   deployment_terraform_module_version           = var.deployment_terraform_module_version
+}}
+
+resource "cloudflare_record" "plane" {{
+  count = var.plane_dns_enabled ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = var.plane_dns_name
+  content = module.thinkwork.plane_alb_dns_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${{var.stage}} plane → Plane public ALB"
 }}
 
 output "app_url" {{ value = module.thinkwork.app_url }}

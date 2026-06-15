@@ -40,6 +40,14 @@ const THINKWORK_OUTPUTS = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/outputs.tf",
 );
+const WWW_DNS_MAIN = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/main.tf",
+);
+const WWW_DNS_VARS = resolve(
+  REPO_ROOT,
+  "terraform/modules/app/www-dns/variables.tf",
+);
 const GREENFIELD_MAIN = resolve(
   REPO_ROOT,
   "terraform/examples/greenfield/main.tf",
@@ -245,5 +253,29 @@ describe("Plane Terraform app module", () => {
     expect(tfvars).toMatch(/plane_provisioned\s*=\s*false/);
     expect(tfvars).toMatch(/plane_runtime_enabled\s*=\s*false/);
     expect(tfvars).toMatch(/empty derives https:\/\/plane\.<www_domain>/);
+  });
+
+  it("adds plane.<domain> DNS support without rotating the shared site certificate", () => {
+    const source = read(WWW_DNS_MAIN);
+    const vars = read(WWW_DNS_VARS);
+    const greenfield = read(GREENFIELD_MAIN);
+    const wwwDnsModule = firstNestedBlock(greenfield, 'module "www_dns"');
+    const planeRecord = firstNestedBlock(
+      source,
+      'resource "cloudflare_record" "plane"',
+    );
+
+    expect(vars).toMatch(/variable "include_plane"/);
+    expect(vars).toMatch(/variable "plane_alb_dns_name"/);
+    expect(source).toMatch(/plane\s*=\s*"plane\.\$\{var\.domain\}"/);
+    expect(source).toMatch(/create_plane_record\s*=\s*var\.include_plane/);
+    expect(planeRecord).toMatch(/name\s*=\s*local\.plane/);
+    expect(planeRecord).toMatch(/content\s*=\s*var\.plane_alb_dns_name/);
+    expect(planeRecord).toMatch(/proxied\s*=\s*false/);
+    expect(wwwDnsModule).toMatch(/include_plane\s*=\s*var\.plane_provisioned/);
+    expect(wwwDnsModule).toMatch(
+      /plane_alb_dns_name\s*=\s*module\.thinkwork\.plane_alb_dns_name/,
+    );
+    expect(source).not.toMatch(/var\.include_plane \? \[local\.plane\] : \[\]/);
   });
 });

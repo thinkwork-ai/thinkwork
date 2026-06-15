@@ -1012,6 +1012,74 @@ def test_write_runner_files_without_domain_keeps_defaults_and_provider_alias(
     assert 'provider "cloudflare" {}' in main_tf
 
 
+def test_plane_managed_app_runner_writes_dns_record_and_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {
+                "deployment_control_plane_enabled": {"value": True},
+                "plane_provisioned": {"value": False},
+                "plane_runtime_enabled": {"value": False},
+            },
+            "resources": [
+                {
+                    "type": "cloudflare_record",
+                    "name": "app",
+                    "instances": [{"attributes": {"zone_id": "zone_123"}}],
+                }
+            ],
+        },
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "appKey": "plane",
+            "operation": "UPGRADE",
+            "desiredConfig": {
+                "domain": "plane.agents.thinkwork.ai",
+                "publicUrl": "https://plane.agents.thinkwork.ai",
+                "certificateArn": "arn:aws:acm:us-east-1:637423202447:certificate/test",
+                "s3BucketName": "thinkwork-dev-637423202447-plane",
+            },
+            "manifestImages": {
+                "plane-aio": (
+                    "artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:"
+                    "7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db"
+                ),
+                "plane-mcp": (
+                    "ghcr.io/thinkwork-ai/plane-mcp:0.1.0@sha256:"
+                    "1111111111111111111111111111111111111111111111111111111111111111"
+                ),
+            },
+        },
+        {},
+    )
+
+    tfvars = json.loads((tf_dir / "terraform.auto.tfvars.json").read_text(encoding="utf-8"))
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+
+    assert vars_json["cloudflare_zone_id"] == "zone_123"
+    assert vars_json["plane_dns_name"] == "plane.agents.thinkwork.ai"
+    assert vars_json["plane_dns_enabled"] is True
+    assert tfvars["cloudflare_zone_id"] == "zone_123"
+    assert tfvars["plane_dns_enabled"] is True
+    assert 'resource "cloudflare_record" "plane"' in main_tf
+    assert "content = module.thinkwork.plane_alb_dns_name" in main_tf
+    assert "-target=cloudflare_record.plane" in runner.managed_app_terraform_target_args(
+        {"appKey": "plane"}
+    )
+
+
 def test_configure_terraform_provider_mirror_seeds_cloudflare_for_codebuild(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
