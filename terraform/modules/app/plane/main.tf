@@ -247,8 +247,8 @@ locals {
 
   listener_rules = {
     mcp_oauth = {
-      priority      = 10
-      service_key   = "mcp"
+      priority    = 12
+      service_key = "mcp"
       path_patterns = [
         "/.well-known/*",
         "/authorize",

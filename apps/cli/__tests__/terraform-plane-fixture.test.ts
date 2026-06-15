@@ -127,7 +127,7 @@ describe("Plane Terraform app module", () => {
     expect(ecsService).toMatch(/for_each\s*=\s*local\.public_services/);
     expect(listenerRules).toMatch(/mcp_oauth\s*=\s*{/);
     expect(listenerRules).toMatch(/mcp_stream\s*=\s*{/);
-    expect(listenerRules).toMatch(/priority\s*=\s*10/);
+    expect(listenerRules).toMatch(/priority\s*=\s*12/);
     expect(listenerRules).toMatch(/priority\s*=\s*11/);
     expect(listenerRules).toMatch(/"\/\.well-known\/\*"/);
     expect(listenerRules).toMatch(/"\/authorize"/);
