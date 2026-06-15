@@ -9,7 +9,7 @@ Issue: THNK-27 Add Plane Plugin
 - Active branch: `codex/thnk-27-plane-mcp-activation`.
 - Active unit: U5 Per-User Plane MCP Activation.
 - U4 merged via PR #2491.
-- U5 implemented locally; PR pending after final self-review.
+- U5 PR #2492 opened; CI pending.
 
 ## Context Discovered
 
@@ -51,7 +51,8 @@ Issue: THNK-27 Add Plane Plugin
 - U4 Plane Terraform Runtime Module:
   `https://github.com/thinkwork-ai/thinkwork/pull/2491` merged at
   `88263e18d13746f2838001df15aa9ec9f998f189`.
-- Pending: U5 branch `codex/thnk-27-plane-mcp-activation`.
+- U5 Per-User Plane MCP Activation:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2492` opened; CI pending.
 
 ## Verification Log
 
