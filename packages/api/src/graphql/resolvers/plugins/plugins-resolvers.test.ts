@@ -127,7 +127,11 @@ import {
   revokePremiumPluginInstallKey,
   uninstallPlugin,
 } from "./mutations.js";
-import { myPluginActivations, pluginInstalls } from "./queries.js";
+import {
+  myPluginActivations,
+  pluginInstalls,
+  pluginLaunchUrlForInstall,
+} from "./queries.js";
 
 const CTX = { auth: { tenantId: null } } as never; // Google-federated shape
 
@@ -271,6 +275,67 @@ beforeEach(() => {
       status: "revoked",
       revoked_at: new Date("2026-06-13T12:00:00.000Z"),
     },
+  });
+});
+
+function launchUrlDb(row: {
+  current_status: string;
+  desired_config: Record<string, unknown>;
+}) {
+  return {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(async () => [row]),
+        })),
+      })),
+    })),
+  } as never;
+}
+
+describe("pluginLaunchUrlForInstall", () => {
+  it("returns the public URL for provisioned infrastructure on a deployed app", async () => {
+    await expect(
+      pluginLaunchUrlForInstall(
+        "tenant-1",
+        {
+          state: "installed",
+          components: [
+            {
+              componentType: "infrastructure",
+              state: "provisioned",
+              handlerRef: { managedApplicationId: "app-1" },
+            },
+          ],
+        },
+        launchUrlDb({
+          current_status: "enabled",
+          desired_config: { publicUrl: "https://plane.example.test/" },
+        }),
+      ),
+    ).resolves.toBe("https://plane.example.test");
+  });
+
+  it("does not return a launch URL for parked or invalid deployments", async () => {
+    await expect(
+      pluginLaunchUrlForInstall(
+        "tenant-1",
+        {
+          state: "installed",
+          components: [
+            {
+              componentType: "infrastructure",
+              state: "provisioned",
+              handlerRef: { managedAppKey: "plane" },
+            },
+          ],
+        },
+        launchUrlDb({
+          current_status: "parked",
+          desired_config: { publicUrl: "https://plane.example.test" },
+        }),
+      ),
+    ).resolves.toBeNull();
   });
 });
 

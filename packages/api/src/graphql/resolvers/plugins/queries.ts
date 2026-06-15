@@ -13,8 +13,11 @@
  */
 
 import { GraphQLError } from "graphql";
+import { and, eq } from "drizzle-orm";
 import type { PluginCatalogEntry as CatalogPluginEntry } from "@thinkwork/plugin-catalog";
+import { managedApplications } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
+import { db as defaultDb } from "../../utils.js";
 import { snakeToCamel } from "../../utils.js";
 import {
   compareSemverDesc,
@@ -32,6 +35,17 @@ import {
   toPluginInstallPayload,
 } from "./shared.js";
 
+type DbLike = typeof defaultDb;
+
+type PluginInstallPayload = Record<string, unknown> & {
+  state?: unknown;
+  components?: Array<{
+    componentType?: unknown;
+    state?: unknown;
+    handlerRef?: unknown;
+  }>;
+};
+
 async function installPayloadWithDetails(
   install: PluginInstallRow,
   deps = createDefaultPluginEngineDeps(),
@@ -42,6 +56,105 @@ async function installPayloadWithDetails(
     reconciled.id,
   );
   return toPluginInstallPayload(reconciled, components, activatedUserCount);
+}
+
+export async function pluginLaunchUrlForInstall(
+  tenantId: string,
+  install: PluginInstallPayload | null,
+  db: DbLike = defaultDb,
+): Promise<string | null> {
+  if (!install) return null;
+  const components = Array.isArray(install.components)
+    ? install.components
+    : [];
+  const infra = components.find(
+    (component) =>
+      component.componentType === "infrastructure" &&
+      component.state === "provisioned" &&
+      isRecord(component.handlerRef),
+  );
+  if (!infra || !isRecord(infra.handlerRef)) return null;
+
+  const managedApplicationId = stringValue(
+    infra.handlerRef.managedApplicationId,
+  );
+  const managedAppKey = stringValue(infra.handlerRef.managedAppKey);
+  const row = managedApplicationId
+    ? await findManagedApplicationById(tenantId, managedApplicationId, db)
+    : managedAppKey
+      ? await findManagedApplicationByKey(tenantId, managedAppKey, db)
+      : null;
+  if (!row || !applicationIsDeployed(row.current_status)) return null;
+  const desiredConfig = isRecord(row.desired_config) ? row.desired_config : {};
+  return publicHttpUrl(desiredConfig.publicUrl);
+}
+
+async function findManagedApplicationById(
+  tenantId: string,
+  id: string,
+  db: DbLike,
+) {
+  const [row] = await db
+    .select({
+      current_status: managedApplications.current_status,
+      desired_config: managedApplications.desired_config,
+    })
+    .from(managedApplications)
+    .where(
+      and(
+        eq(managedApplications.tenant_id, tenantId),
+        eq(managedApplications.id, id),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function findManagedApplicationByKey(
+  tenantId: string,
+  key: string,
+  db: DbLike,
+) {
+  const [row] = await db
+    .select({
+      current_status: managedApplications.current_status,
+      desired_config: managedApplications.desired_config,
+    })
+    .from(managedApplications)
+    .where(
+      and(
+        eq(managedApplications.tenant_id, tenantId),
+        eq(managedApplications.key, key),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+function applicationIsDeployed(status: string | null | undefined): boolean {
+  return status === "enabled" || status === "running";
+}
+
+function publicHttpUrl(value: unknown): string | null {
+  const url = stringValue(value);
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return null;
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function catalogVersionsPayload(plugin: CatalogPluginEntry) {
@@ -74,6 +187,12 @@ export async function pluginCatalog(
     const latestVersion = versions[0]?.version ?? "";
     const install =
       installs.find((row) => row.plugin_key === plugin.pluginKey) ?? null;
+    const installPayload = install
+      ? ((await installPayloadWithDetails(
+          install,
+          deps,
+        )) as PluginInstallPayload)
+      : null;
     entries.push({
       pluginKey: plugin.pluginKey,
       displayName: plugin.displayName,
@@ -82,11 +201,12 @@ export async function pluginCatalog(
       entitlement: null,
       versions,
       latestVersion,
-      install: install ? await installPayloadWithDetails(install, deps) : null,
+      install: installPayload,
+      launchUrl: await pluginLaunchUrlForInstall(tenantId, installPayload),
       updateAvailable: Boolean(
         install &&
-        latestVersion &&
-        compareSemverDesc(latestVersion, install.pinned_version) < 0,
+          latestVersion &&
+          compareSemverDesc(latestVersion, install.pinned_version) < 0,
       ),
     });
   }

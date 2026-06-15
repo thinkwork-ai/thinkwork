@@ -53,12 +53,14 @@ vi.mock("@thinkwork/ui", async (importOriginal) => ({
   Button: ({
     children,
     onClick,
+    onKeyDown,
     disabled,
     "aria-label": ariaLabel,
     title,
   }: {
     children: React.ReactNode;
     onClick?: React.MouseEventHandler<HTMLButtonElement>;
+    onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>;
     disabled?: boolean;
     "aria-label"?: string;
     title?: string;
@@ -66,6 +68,7 @@ vi.mock("@thinkwork/ui", async (importOriginal) => ({
     <button
       type="button"
       onClick={onClick}
+      onKeyDown={onKeyDown}
       disabled={disabled}
       aria-label={ariaLabel}
       title={title}
@@ -287,6 +290,30 @@ describe("PluginsPage", () => {
       params: { pluginKey: "company-brain" },
     });
   });
+
+  it("launches deployed applications without opening plugin details", () => {
+    const openMock = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<PluginsPage />);
+
+    const lastmileRow = screen.getByRole("link", { name: "Open LastMile" });
+    fireEvent.click(
+      within(lastmileRow).getByRole("button", {
+        name: "Open LastMile application",
+      }),
+    );
+
+    expect(openMock).toHaveBeenCalledWith(
+      "https://lastmile.example.com",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "Open Docs Sync application" }),
+    ).toBeNull();
+
+    openMock.mockRestore();
+  });
 });
 
 const installedPlugins = [
@@ -321,6 +348,7 @@ const catalogEntries = [
     displayName: "LastMile",
     description: "LastMile logistics tools and skills.",
     latestVersion: "1.1.0",
+    launchUrl: "https://lastmile.example.com",
     updateAvailable: true,
     versions: [
       {
@@ -344,6 +372,7 @@ const catalogEntries = [
     displayName: "Docs Sync",
     description: "Tenant-wide document sync with no per-user OAuth.",
     latestVersion: "1.0.0",
+    launchUrl: null,
     updateAvailable: false,
     versions: [
       {
@@ -361,6 +390,7 @@ const catalogEntries = [
     displayName: "Company Brain",
     description: "Premium knowledge graph substrate.",
     latestVersion: "0.1.0",
+    launchUrl: null,
     updateAvailable: false,
     premium: {
       entitlementProductKey: "company-brain",
@@ -385,6 +415,7 @@ const catalogEntries = [
     displayName: "Twenty CRM",
     description: "Customer relationship management.",
     latestVersion: "1.0.0",
+    launchUrl: null,
     updateAvailable: false,
     versions: [
       {

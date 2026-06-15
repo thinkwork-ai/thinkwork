@@ -140,6 +140,8 @@ type PluginCatalogEntry {
   latestVersion: String!
   "The caller tenant's install of this plugin, if any."
   install: PluginInstall
+  "Public application URL when this installed plugin owns a deployed app."
+  launchUrl: String
   "True when an install exists and a newer catalog version is available."
   updateAvailable: Boolean!
 }
