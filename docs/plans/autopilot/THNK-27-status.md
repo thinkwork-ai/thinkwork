@@ -56,7 +56,8 @@ Issue: THNK-27 Add Plane Plugin
 - U6 Plane Issue-Loop Skill:
   `https://github.com/thinkwork-ai/thinkwork/pull/2493` merged at
   `393f257c1a1546d5eabc843f08c4c19af8c2ee88`.
-- Pending: U7 branch `codex/thnk-27-plane-smoke`.
+- U7 Plane Seed and End-to-End Smoke:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2494` opened; CI pending.
 
 ## Verification Log
 
