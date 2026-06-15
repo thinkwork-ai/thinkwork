@@ -211,6 +211,8 @@ project_context: TEI ThinkWork
   catalog remains the aggregate authority.
 - Shrinking the plugin source boundary allowlist by removing the package-local
   parity test entries.
+- PR #2532 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2532`
 
 ### Verification
 
