@@ -275,9 +275,17 @@ resource "aws_iam_role_policy" "codebuild" {
       {
         Effect = "Allow"
         Action = [
+          "appconfig:GetApplication",
+          "appconfig:GetConfigurationProfile",
           "appconfig:GetConfiguration",
+          "appconfig:GetEnvironment",
           "appconfig:StartConfigurationSession",
           "appconfig:GetLatestConfiguration",
+          "appconfig:ListTagsForResource",
+          "elasticache:Describe*",
+          "elasticache:ListTagsForResource",
+          "mq:Describe*",
+          "mq:ListTags",
         ]
         Resource = "*"
       },

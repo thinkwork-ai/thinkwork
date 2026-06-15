@@ -533,11 +533,50 @@ def terraform_plan_summary(plan_json):
     }
 
 
-def write_terraform_plan_evidence():
+def managed_app_terraform_target_args(payload):
+    if payload.get("appKey") != "plane":
+        return []
+    return [
+        "-target=module.thinkwork.terraform_data.plane_configuration_guardrails",
+        "-target=module.thinkwork.module.plane",
+    ]
+
+
+def validate_managed_app_plan_scope(payload, plan_json):
+    if payload.get("appKey") != "plane":
+        return
+    unsafe_changes = []
+    for change in plan_json.get("resource_changes", []):
+        actions = change.get("change", {}).get("actions", [])
+        if not actions or actions == ["no-op"] or actions == ["read"]:
+            continue
+        address = change.get("address", "")
+        if address.startswith("module.thinkwork.module.plane"):
+            continue
+        if address.startswith("module.thinkwork.terraform_data.plane_configuration_guardrails"):
+            continue
+        unsafe_changes.append(
+            {
+                "address": address,
+                "actions": actions,
+            }
+        )
+    if unsafe_changes:
+        preview = ", ".join(
+            f"{item['address']}:{'/'.join(item['actions'])}" for item in unsafe_changes[:10]
+        )
+        raise RuntimeError(
+            "Managed app plan for Plane contains non-Plane changes; refusing to continue. "
+            f"Examples: {preview}"
+        )
+
+
+def write_terraform_plan_evidence(payload=None):
     plan_path = Path("terraform-plan.json")
     with plan_path.open("w", encoding="utf-8") as handle:
         run(["terraform", "show", "-json", "tfplan"], cwd=TF, stdout=handle)
     plan_json = json.loads(plan_path.read_text(encoding="utf-8"))
+    validate_managed_app_plan_scope(payload or {}, plan_json)
     artifact = {
         "fileName": plan_path.name,
         "sha256": sha256_file(plan_path),
@@ -593,7 +632,7 @@ def safe_get_bool(runner_secrets, payload, name, default=False):
     return default
 
 
-def current_terraform_outputs(stage):
+def current_terraform_state(stage):
     bucket = os.environ.get("THINKWORK_TERRAFORM_STATE_BUCKET")
     if not bucket:
         return {}
@@ -605,12 +644,16 @@ def current_terraform_outputs(stage):
         try:
             body = output(["aws", "s3", "cp", f"s3://{bucket}/{key}", "-"])
             state = json.loads(body)
-            outputs = state.get("outputs")
-            if isinstance(outputs, dict):
-                return outputs
+            if isinstance(state, dict):
+                return state
         except Exception:
             continue
     return {}
+
+
+def current_terraform_outputs(stage):
+    outputs = current_terraform_state(stage).get("outputs")
+    return outputs if isinstance(outputs, dict) else {}
 
 
 def state_output(outputs, name, default=None):
@@ -618,6 +661,21 @@ def state_output(outputs, name, default=None):
     if isinstance(value, dict) and "value" in value:
         return value["value"]
     return default
+
+
+def state_terraform_data_input(state, name):
+    for resource in state.get("resources", []) or []:
+        if resource.get("type") != "terraform_data" or resource.get("name") != name:
+            continue
+        for instance in resource.get("instances", []) or []:
+            attributes = instance.get("attributes") or {}
+            terraform_input = attributes.get("input")
+            if isinstance(terraform_input, dict):
+                value = terraform_input.get("value")
+                if isinstance(value, dict):
+                    return value
+                return terraform_input
+    return {}
 
 
 def config_value(desired_config, manifest_images, key, env_name, image_names=None, default=""):
@@ -631,7 +689,7 @@ def config_value(desired_config, manifest_images, key, env_name, image_names=Non
     return os.environ.get(env_name, default)
 
 
-def managed_app_terraform_overrides(payload, stage, account_id, current_outputs):
+def managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state):
     app_key = payload.get("appKey")
     operation = str(payload.get("operation") or "").upper()
     desired_config = payload.get("desiredConfig")
@@ -640,13 +698,110 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs)
     manifest_images = payload.get("manifestImages")
     if not isinstance(manifest_images, dict):
         manifest_images = {}
+    cognee_guardrails = state_terraform_data_input(
+        current_state,
+        "cognee_configuration_guardrails",
+    )
+    twenty_guardrails = state_terraform_data_input(
+        current_state,
+        "twenty_configuration_guardrails",
+    )
 
     overrides = {
         "enable_cognee": bool(state_output(current_outputs, "cognee_enabled", False)),
+        "cognee_image_uri": cognee_guardrails.get("cognee_image_uri", ""),
+        "cognee_db_username": cognee_guardrails.get("cognee_db_username", "thinkwork_cognee"),
+        "cognee_db_name": cognee_guardrails.get("cognee_db_name", "thinkwork_cognee"),
+        "cognee_db_password_secret_arn": cognee_guardrails.get(
+            "cognee_db_password_secret_arn",
+            "",
+        ),
+        "cognee_backend_mode": cognee_guardrails.get("cognee_backend_mode", "dogfood"),
+        "cognee_desired_count": cognee_guardrails.get("cognee_desired_count", 1),
+        "cognee_brain_tenant_id": state_output(current_outputs, "cognee_brain_tenant_id", ""),
+        "cognee_brain_instance_key": state_output(
+            current_outputs,
+            "cognee_brain_instance_key",
+            "",
+        ),
+        "cognee_brain_storage_tier": cognee_guardrails.get(
+            "cognee_brain_storage_tier",
+            state_output(current_outputs, "cognee_brain_storage_tier", "default"),
+        ),
+        "cognee_brain_s3_artifact_root": state_output(
+            current_outputs,
+            "cognee_s3_artifact_root",
+            "",
+        ),
+        "cognee_brain_s3_manifest_root": state_output(
+            current_outputs,
+            "cognee_s3_manifest_root",
+            "",
+        ),
+        "cognee_brain_s3_vault_projection_root": state_output(
+            current_outputs,
+            "cognee_s3_vault_projection_root",
+            "",
+        ),
+        "cognee_private_substrate_mode": bool(
+            state_output(current_outputs, "cognee_private_substrate_mode", True)
+        ),
+        "cognee_llm_provider": cognee_guardrails.get("cognee_llm_provider", "bedrock"),
+        "cognee_llm_model": "bedrock/moonshotai.kimi-k2.5",
+        "cognee_embedding_provider": cognee_guardrails.get(
+            "cognee_embedding_provider",
+            "bedrock",
+        ),
+        "cognee_embedding_model": state_output(
+            current_outputs,
+            "cognee_embedding_model",
+            "amazon.titan-embed-text-v2:0",
+        ),
+        "cognee_embedding_dimensions": state_output(
+            current_outputs,
+            "cognee_embedding_dimensions",
+            1024,
+        ),
+        "cognee_vector_db_provider": state_output(
+            current_outputs,
+            "cognee_vector_db_provider",
+            "lancedb",
+        ),
+        "cognee_graph_database_provider": state_output(
+            current_outputs,
+            "cognee_graph_database_provider",
+            "kuzu",
+        ),
+        "cognee_neptune_graph_id": state_output(current_outputs, "cognee_neptune_graph_id", ""),
+        "cognee_neptune_endpoint": state_output(current_outputs, "cognee_neptune_endpoint", ""),
+        "cognee_production_posture": state_output(
+            current_outputs,
+            "cognee_production_posture",
+            "",
+        ),
+        "cognee_bedrock_model_resource_arns": cognee_guardrails.get(
+            "cognee_bedrock_model_resources",
+            [],
+        ),
         "twenty_provisioned": bool(state_output(current_outputs, "twenty_provisioned", False)),
         "twenty_runtime_enabled": bool(
             state_output(current_outputs, "twenty_runtime_enabled", False)
         ),
+        "twenty_image_uri": twenty_guardrails.get("twenty_image_uri", ""),
+        "twenty_db_username": twenty_guardrails.get("twenty_db_username", "thinkwork_twenty"),
+        "twenty_db_name": twenty_guardrails.get("twenty_db_name", "thinkwork_twenty"),
+        "twenty_db_url_secret_arn": twenty_guardrails.get("twenty_db_url_secret_arn", ""),
+        "twenty_encryption_key_secret_arn": twenty_guardrails.get(
+            "twenty_encryption_key_secret_arn",
+            "",
+        ),
+        "twenty_email_from_address": "",
+        "twenty_email_from_name": "ThinkWork CRM",
+        "twenty_public_url": twenty_guardrails.get(
+            "twenty_public_url",
+            state_output(current_outputs, "twenty_url", ""),
+        ),
+        "twenty_certificate_arn": twenty_guardrails.get("twenty_certificate_arn", ""),
         "enable_deployment_control_plane": bool(
             state_output(current_outputs, "deployment_control_plane_enabled", True)
         ),
@@ -1699,7 +1854,10 @@ def write_runner_files(payload, runner_secrets):
         account_id = output(
             ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"]
         )
-    current_outputs = current_terraform_outputs(stage)
+    current_state = current_terraform_state(stage)
+    current_outputs = current_state.get("outputs")
+    if not isinstance(current_outputs, dict):
+        current_outputs = {}
 
     selected_release = release_selection(payload)
     release_version = selected_release.get("version") or "unresolved"
@@ -1886,7 +2044,7 @@ def write_runner_files(payload, runner_secrets):
         ),
     }
     vars_json.update(
-        managed_app_terraform_overrides(payload, stage, account_id, current_outputs)
+        managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state)
     )
 
     TF.mkdir(parents=True, exist_ok=True)
@@ -2070,6 +2228,102 @@ variable "enable_cognee" {{
   type = bool
 }}
 
+variable "cognee_image_uri" {{
+  type = string
+}}
+
+variable "cognee_db_username" {{
+  type = string
+}}
+
+variable "cognee_db_name" {{
+  type = string
+}}
+
+variable "cognee_db_password_secret_arn" {{
+  type = string
+}}
+
+variable "cognee_backend_mode" {{
+  type = string
+}}
+
+variable "cognee_desired_count" {{
+  type = number
+}}
+
+variable "cognee_brain_tenant_id" {{
+  type = string
+}}
+
+variable "cognee_brain_instance_key" {{
+  type = string
+}}
+
+variable "cognee_brain_storage_tier" {{
+  type = string
+}}
+
+variable "cognee_brain_s3_artifact_root" {{
+  type = string
+}}
+
+variable "cognee_brain_s3_manifest_root" {{
+  type = string
+}}
+
+variable "cognee_brain_s3_vault_projection_root" {{
+  type = string
+}}
+
+variable "cognee_private_substrate_mode" {{
+  type = bool
+}}
+
+variable "cognee_llm_provider" {{
+  type = string
+}}
+
+variable "cognee_llm_model" {{
+  type = string
+}}
+
+variable "cognee_embedding_provider" {{
+  type = string
+}}
+
+variable "cognee_embedding_model" {{
+  type = string
+}}
+
+variable "cognee_embedding_dimensions" {{
+  type = number
+}}
+
+variable "cognee_vector_db_provider" {{
+  type = string
+}}
+
+variable "cognee_graph_database_provider" {{
+  type = string
+}}
+
+variable "cognee_neptune_graph_id" {{
+  type = string
+}}
+
+variable "cognee_neptune_endpoint" {{
+  type = string
+}}
+
+variable "cognee_production_posture" {{
+  type = string
+}}
+
+variable "cognee_bedrock_model_resource_arns" {{
+  type = list(string)
+}}
+
 variable "enable_deployment_control_plane" {{
   type = bool
 }}
@@ -2080,6 +2334,42 @@ variable "twenty_provisioned" {{
 
 variable "twenty_runtime_enabled" {{
   type = bool
+}}
+
+variable "twenty_image_uri" {{
+  type = string
+}}
+
+variable "twenty_db_username" {{
+  type = string
+}}
+
+variable "twenty_db_name" {{
+  type = string
+}}
+
+variable "twenty_db_url_secret_arn" {{
+  type = string
+}}
+
+variable "twenty_encryption_key_secret_arn" {{
+  type = string
+}}
+
+variable "twenty_email_from_address" {{
+  type = string
+}}
+
+variable "twenty_email_from_name" {{
+  type = string
+}}
+
+variable "twenty_public_url" {{
+  type = string
+}}
+
+variable "twenty_certificate_arn" {{
+  type = string
 }}
 
 variable "plane_provisioned" {{
@@ -2197,8 +2487,41 @@ module "thinkwork" {{
   enable_workspace_orchestration = true
 
   enable_cognee          = var.enable_cognee
+  cognee_image_uri       = var.cognee_image_uri
+  cognee_db_username     = var.cognee_db_username
+  cognee_db_name         = var.cognee_db_name
+  cognee_db_password_secret_arn = var.cognee_db_password_secret_arn
+  cognee_backend_mode    = var.cognee_backend_mode
+  cognee_desired_count   = var.cognee_desired_count
+  cognee_brain_tenant_id                = var.cognee_brain_tenant_id
+  cognee_brain_instance_key             = var.cognee_brain_instance_key
+  cognee_brain_storage_tier             = var.cognee_brain_storage_tier
+  cognee_brain_s3_artifact_root         = var.cognee_brain_s3_artifact_root
+  cognee_brain_s3_manifest_root         = var.cognee_brain_s3_manifest_root
+  cognee_brain_s3_vault_projection_root = var.cognee_brain_s3_vault_projection_root
+  cognee_private_substrate_mode         = var.cognee_private_substrate_mode
+  cognee_llm_provider                   = var.cognee_llm_provider
+  cognee_llm_model                      = var.cognee_llm_model
+  cognee_embedding_provider             = var.cognee_embedding_provider
+  cognee_embedding_model                = var.cognee_embedding_model
+  cognee_embedding_dimensions           = var.cognee_embedding_dimensions
+  cognee_vector_db_provider             = var.cognee_vector_db_provider
+  cognee_graph_database_provider        = var.cognee_graph_database_provider
+  cognee_neptune_graph_id               = var.cognee_neptune_graph_id
+  cognee_neptune_endpoint               = var.cognee_neptune_endpoint
+  cognee_production_posture             = var.cognee_production_posture
+  cognee_bedrock_model_resource_arns    = var.cognee_bedrock_model_resource_arns
   twenty_provisioned     = var.twenty_provisioned
   twenty_runtime_enabled = var.twenty_runtime_enabled
+  twenty_image_uri       = var.twenty_image_uri
+  twenty_db_username     = var.twenty_db_username
+  twenty_db_name         = var.twenty_db_name
+  twenty_db_url_secret_arn         = var.twenty_db_url_secret_arn
+  twenty_encryption_key_secret_arn = var.twenty_encryption_key_secret_arn
+  twenty_email_from_address        = var.twenty_email_from_address
+  twenty_email_from_name           = var.twenty_email_from_name
+  twenty_public_url                = var.twenty_public_url
+  twenty_certificate_arn           = var.twenty_certificate_arn
   plane_provisioned      = var.plane_provisioned
   plane_runtime_enabled  = var.plane_runtime_enabled
 
@@ -2872,14 +3195,15 @@ def main():
     )
     if selected.returncode != 0:
         run(["terraform", "workspace", "new", workspace, "-no-color"], cwd=TF)
+    target_args = managed_app_terraform_target_args(payload)
     if action == "destroy":
         plan = subprocess.run(
-            ["terraform", "plan", "-destroy", "-out=tfplan", "-no-color"],
+            ["terraform", "plan", "-destroy", *target_args, "-out=tfplan", "-no-color"],
             cwd=TF,
             text=True,
         )
         if plan.returncode == 0:
-            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence()
+            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence(payload)
             result = subprocess.run(
                 ["terraform", "apply", "-auto-approve", "-no-color", "tfplan"],
                 cwd=TF,
@@ -2889,12 +3213,12 @@ def main():
             result = plan
     else:
         plan = subprocess.run(
-            ["terraform", "plan", "-out=tfplan", "-no-color"],
+            ["terraform", "plan", *target_args, "-out=tfplan", "-no-color"],
             cwd=TF,
             text=True,
         )
         if plan.returncode == 0:
-            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence()
+            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence(payload)
         if action == "plan" or plan.returncode != 0:
             result = plan
         else:
