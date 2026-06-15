@@ -437,17 +437,10 @@ resource "terraform_data" "plane_configuration_guardrails" {
   lifecycle {
     precondition {
       condition = (
-        var.plane_image_uri != "" ||
-        (
-          var.plane_frontend_image_uri != "" &&
-          var.plane_backend_image_uri != "" &&
-          var.plane_space_image_uri != "" &&
-          var.plane_admin_image_uri != "" &&
-          var.plane_live_image_uri != "" &&
-          var.plane_mcp_image_uri != ""
-        )
+        var.plane_image_uri != "" &&
+        var.plane_mcp_image_uri != ""
       )
-      error_message = "plane_provisioned requires either legacy plane_image_uri or all per-service Plane image URIs pinned to immutable digests."
+      error_message = "plane_provisioned requires Plane AIO plane_image_uri and plane_mcp_image_uri pinned to immutable digests."
     }
 
     precondition {

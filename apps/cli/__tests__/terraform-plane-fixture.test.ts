@@ -79,14 +79,14 @@ function firstNestedBlock(source: string, blockHeader: string): string {
 }
 
 describe("Plane Terraform app module", () => {
-  it("creates a public HTTPS ALB for the Plane web service", () => {
+  it("creates a public HTTPS ALB for the compact Plane app service", () => {
     const source = read(PLANE_MAIN);
     const vars = read(PLANE_VARS);
 
     expect(source).toMatch(/resource "aws_lb" "plane"/);
     expect(source).toMatch(/internal\s*=\s*false/);
     expect(source).toMatch(/resource "aws_lb_target_group" "service"/);
-    expect(source).toMatch(/target_group_arn = aws_lb_target_group\.service\["web"\]\.arn/);
+    expect(source).toMatch(/target_group_arn = aws_lb_target_group\.service\["app"\]\.arn/);
     expect(source).toMatch(/resource "aws_lb_listener" "https"/);
     expect(source).toMatch(/certificate_arn\s*=\s*var\.certificate_arn/);
     expect(source).toMatch(/resource "aws_lb_listener" "http_redirect"/);
@@ -94,24 +94,22 @@ describe("Plane Terraform app module", () => {
     expect(vars).toMatch(/variable "web_container_port"/);
   });
 
-  it("models Plane web, API, worker, beat worker, and live ECS services", () => {
+  it("models Plane as one ECS service with AIO and MCP containers", () => {
     const source = read(PLANE_MAIN);
-    const serviceDefs = firstNestedBlock(source, "service_definitions = {");
+    const containerSpecs = firstNestedBlock(source, "container_specs = {");
     const ecsService = firstNestedBlock(
       source,
-      'resource "aws_ecs_service" "service"',
+      'resource "aws_ecs_service" "plane"',
     );
 
-    expect(serviceDefs).toMatch(/web\s*=\s*{/);
-    expect(serviceDefs).toMatch(/api\s*=\s*{/);
-    expect(serviceDefs).toMatch(/worker\s*=\s*{/);
-    expect(serviceDefs).toMatch(/beat_worker\s*=\s*{/);
-    expect(serviceDefs).toMatch(/live\s*=\s*{/);
-    expect(source).toMatch(/resource "aws_ecs_task_definition" "service"/);
+    expect(containerSpecs).toMatch(/app\s*=\s*{/);
+    expect(containerSpecs).toMatch(/mcp\s*=\s*{/);
+    expect(containerSpecs).not.toMatch(/worker\s*=\s*{/);
+    expect(source).toMatch(/resource "aws_ecs_task_definition" "plane"/);
     expect(ecsService).toMatch(
-      /desired_count\s*=\s*var\.runtime_enabled \? each\.value\.desired_count : 0/,
+      /desired_count\s*=\s*var\.runtime_enabled \? var\.web_desired_count : 0/,
     );
-    expect(ecsService).toMatch(/for_each\s*=\s*local\.service_definitions/);
+    expect(ecsService).toMatch(/for_each\s*=\s*local\.public_services/);
   });
 
   it("uses S3, ElastiCache, and Amazon MQ RabbitMQ as retained Plane data resources", () => {
@@ -125,7 +123,7 @@ describe("Plane Terraform app module", () => {
     expect(source).toMatch(/resource "aws_mq_broker" "rabbitmq"/);
     expect(source).toMatch(/engine_type\s*=\s*"RabbitMQ"/);
     expect(readme).toMatch(/runtime_enabled = false/);
-    expect(readme).toMatch(/parks all Plane ECS services/);
+    expect(readme).toMatch(/parks the compact Plane ECS service/);
     expect(readme).toMatch(/S3, cache, RabbitMQ, secrets, logs, ALB/);
   });
 
@@ -166,11 +164,13 @@ describe("Plane Terraform app module", () => {
       "plane_worker_service_name",
       "plane_beat_worker_service_name",
       "plane_live_service_name",
+      "plane_mcp_service_name",
       "plane_web_log_group_name",
       "plane_api_log_group_name",
       "plane_worker_log_group_name",
       "plane_beat_worker_log_group_name",
       "plane_live_log_group_name",
+      "plane_mcp_log_group_name",
       "plane_cache_endpoint",
       "plane_rabbitmq_broker_arn",
       "plane_storage_bucket_name",
@@ -206,7 +206,7 @@ describe("Plane Terraform app module", () => {
       /s3_bucket_name\s*=\s*var\.plane_s3_bucket_name/,
     );
     expect(guardrails).toMatch(
-      /plane_provisioned requires either legacy plane_image_uri or all per-service Plane image URIs/,
+      /plane_provisioned requires Plane AIO plane_image_uri and plane_mcp_image_uri/,
     );
     expect(guardrails).toMatch(
       /plane_provisioned requires plane_s3_bucket_name/,

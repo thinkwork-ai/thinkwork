@@ -9,11 +9,7 @@ import { buildPlanSummary } from "../src/plan";
 const digest = "a".repeat(64);
 const imageDigest = "1".repeat(64);
 const planeImageConfig = {
-  frontendImageUri: `docker.io/makeplane/plane-frontend@sha256:${imageDigest}`,
-  backendImageUri: `docker.io/makeplane/plane-backend@sha256:${imageDigest}`,
-  spaceImageUri: `docker.io/makeplane/plane-space@sha256:${imageDigest}`,
-  adminImageUri: `docker.io/makeplane/plane-admin@sha256:${imageDigest}`,
-  liveImageUri: `docker.io/makeplane/plane-live@sha256:${imageDigest}`,
+  imageUri: `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${imageDigest}`,
   mcpImageUri: `ghcr.io/astral-sh/uv@sha256:${imageDigest}`,
 };
 
@@ -198,11 +194,7 @@ describe("managed app deployment adapters", () => {
       expect.objectContaining({
         plane_provisioned: true,
         plane_runtime_enabled: true,
-        plane_frontend_image_uri: planeImageConfig.frontendImageUri,
-        plane_backend_image_uri: planeImageConfig.backendImageUri,
-        plane_space_image_uri: planeImageConfig.spaceImageUri,
-        plane_admin_image_uri: planeImageConfig.adminImageUri,
-        plane_live_image_uri: planeImageConfig.liveImageUri,
+        plane_image_uri: planeImageConfig.imageUri,
         plane_mcp_image_uri: planeImageConfig.mcpImageUri,
         plane_public_url: "https://plane.example.com",
         plane_s3_bucket_name: "thinkwork-plane-files",
@@ -468,7 +460,7 @@ describe("managed app deployment adapters", () => {
   });
 
   it("maps Plane deploy and park plans to retained runtime states", () => {
-    const desiredConfig = planeDesiredConfig({ workerDesiredCount: 2 });
+    const desiredConfig = planeDesiredConfig({ appDesiredCount: 2 });
 
     expect(
       buildManagedAppPlan({
@@ -480,9 +472,9 @@ describe("managed app deployment adapters", () => {
       expect.objectContaining({
         plane_provisioned: true,
         plane_runtime_enabled: true,
-        plane_frontend_image_uri: planeImageConfig.frontendImageUri,
+        plane_image_uri: planeImageConfig.imageUri,
         plane_public_url: "https://plane.example.com",
-        plane_worker_desired_count: 2,
+        plane_web_desired_count: 2,
       }),
     );
     expect(
@@ -544,19 +536,11 @@ describe("managed app deployment adapters", () => {
         manifestDigest: digest,
         desiredConfigVersion: "v1",
         desiredConfig: planeDesiredConfig({
-          frontendImageUri: undefined,
-          backendImageUri: undefined,
-          spaceImageUri: undefined,
-          adminImageUri: undefined,
-          liveImageUri: undefined,
+          imageUri: undefined,
           mcpImageUri: undefined,
         }),
         manifestImages: {
-          "plane-frontend": `docker.io/makeplane/plane-frontend@sha256:${"2".repeat(64)}`,
-          "plane-backend": `docker.io/makeplane/plane-backend@sha256:${"3".repeat(64)}`,
-          "plane-space": `docker.io/makeplane/plane-space@sha256:${"4".repeat(64)}`,
-          "plane-admin": `docker.io/makeplane/plane-admin@sha256:${"5".repeat(64)}`,
-          "plane-live": `docker.io/makeplane/plane-live@sha256:${"6".repeat(64)}`,
+          "plane-aio": `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${"2".repeat(64)}`,
           "plane-mcp-server": `ghcr.io/astral-sh/uv@sha256:${"7".repeat(64)}`,
         },
         planDigest: "b".repeat(64),
@@ -565,7 +549,7 @@ describe("managed app deployment adapters", () => {
 
     expect(summary.terraformVariables).toEqual(
       expect.objectContaining({
-        plane_frontend_image_uri: `docker.io/makeplane/plane-frontend@sha256:${"2".repeat(64)}`,
+        plane_image_uri: `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${"2".repeat(64)}`,
         plane_mcp_image_uri: `ghcr.io/astral-sh/uv@sha256:${"7".repeat(64)}`,
       }),
     );

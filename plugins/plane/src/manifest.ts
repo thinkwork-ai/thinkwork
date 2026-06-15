@@ -128,28 +128,13 @@ export const planeManifest = {
           key: "runtime",
           managedAppKey: "plane",
           terraformInputs: {
-            frontendImageUri: {
-              description: "Plane frontend image URI pinned with @sha256.",
-              type: "string",
-            },
-            backendImageUri: {
-              description: "Plane backend image URI pinned with @sha256.",
-              type: "string",
-            },
-            spaceImageUri: {
-              description: "Plane Space image URI pinned with @sha256.",
-              type: "string",
-            },
-            adminImageUri: {
-              description: "Plane admin image URI pinned with @sha256.",
-              type: "string",
-            },
-            liveImageUri: {
-              description: "Plane live image URI pinned with @sha256.",
+            imageUri: {
+              description:
+                "Plane all-in-one image URI pinned with @sha256. Defaults to the reviewed Plane AIO image when omitted by the install handler.",
               type: "string",
             },
             mcpImageUri: {
-              description: "Plane MCP server image URI pinned with @sha256.",
+              description: "Plane MCP sidecar image URI pinned with @sha256.",
               type: "string",
             },
             dbUrlSecretArn: {

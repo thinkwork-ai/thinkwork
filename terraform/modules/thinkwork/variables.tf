@@ -803,13 +803,13 @@ variable "plane_provisioned" {
 }
 
 variable "plane_runtime_enabled" {
-  description = "Run Plane ECS services when the retained substrate is provisioned. Set false to park runtime while retaining data resources."
+  description = "Run the compact Plane ECS service when the retained substrate is provisioned. Set false to park runtime while retaining data resources."
   type        = bool
   default     = false
 }
 
 variable "plane_image_uri" {
-  description = "Legacy single Plane image URI pinned to an immutable sha256 digest. Prefer per-service image variables."
+  description = "Plane all-in-one image URI pinned to an immutable sha256 digest."
   type        = string
   default     = ""
 
@@ -820,7 +820,7 @@ variable "plane_image_uri" {
 }
 
 variable "plane_frontend_image_uri" {
-  description = "Plane frontend image URI pinned to an immutable sha256 digest."
+  description = "Deprecated per-service Plane frontend image URI. The compact AIO runtime uses plane_image_uri."
   type        = string
   default     = ""
 
@@ -831,7 +831,7 @@ variable "plane_frontend_image_uri" {
 }
 
 variable "plane_backend_image_uri" {
-  description = "Plane backend image URI pinned to an immutable sha256 digest."
+  description = "Deprecated per-service Plane backend image URI. The compact AIO runtime uses plane_image_uri."
   type        = string
   default     = ""
 
@@ -842,7 +842,7 @@ variable "plane_backend_image_uri" {
 }
 
 variable "plane_space_image_uri" {
-  description = "Plane Space image URI pinned to an immutable sha256 digest."
+  description = "Deprecated per-service Plane Space image URI. The compact AIO runtime uses plane_image_uri."
   type        = string
   default     = ""
 
@@ -853,7 +853,7 @@ variable "plane_space_image_uri" {
 }
 
 variable "plane_admin_image_uri" {
-  description = "Plane admin image URI pinned to an immutable sha256 digest."
+  description = "Deprecated per-service Plane admin image URI. The compact AIO runtime uses plane_image_uri."
   type        = string
   default     = ""
 
@@ -864,7 +864,7 @@ variable "plane_admin_image_uri" {
 }
 
 variable "plane_live_image_uri" {
-  description = "Plane live image URI pinned to an immutable sha256 digest."
+  description = "Deprecated per-service Plane live image URI. The compact AIO runtime uses plane_image_uri."
   type        = string
   default     = ""
 

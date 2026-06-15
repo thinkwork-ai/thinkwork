@@ -303,6 +303,7 @@ function compactRecord(value: Record<string, unknown>): Record<string, unknown> 
 
 function planeDefaultDesiredConfig(): Record<string, unknown> {
   return compactRecord({
+    imageUri: process.env.THINKWORK_PLANE_IMAGE_URI,
     frontendImageUri: process.env.THINKWORK_PLANE_FRONTEND_IMAGE_URI,
     backendImageUri: process.env.THINKWORK_PLANE_BACKEND_IMAGE_URI,
     spaceImageUri: process.env.THINKWORK_PLANE_SPACE_IMAGE_URI,

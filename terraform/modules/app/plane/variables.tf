@@ -62,7 +62,7 @@ variable "certificate_arn" {
 }
 
 variable "image_uri" {
-  description = "Legacy single Plane image URI pinned to a reviewed immutable digest. Prefer the per-service image variables."
+  description = "Plane all-in-one runtime image URI pinned to a reviewed immutable digest."
   type        = string
   default     = ""
 
@@ -73,7 +73,7 @@ variable "image_uri" {
 }
 
 variable "frontend_image_uri" {
-  description = "Plane frontend image URI pinned to a reviewed immutable digest."
+  description = "Deprecated per-service Plane frontend image URI. The compact AIO runtime uses image_uri."
   type        = string
   default     = ""
 
@@ -84,7 +84,7 @@ variable "frontend_image_uri" {
 }
 
 variable "backend_image_uri" {
-  description = "Plane backend image URI pinned to a reviewed immutable digest."
+  description = "Deprecated per-service Plane backend image URI. The compact AIO runtime uses image_uri."
   type        = string
   default     = ""
 
@@ -95,7 +95,7 @@ variable "backend_image_uri" {
 }
 
 variable "space_image_uri" {
-  description = "Plane Space image URI pinned to a reviewed immutable digest."
+  description = "Deprecated per-service Plane Space image URI. The compact AIO runtime uses image_uri."
   type        = string
   default     = ""
 
@@ -106,7 +106,7 @@ variable "space_image_uri" {
 }
 
 variable "admin_image_uri" {
-  description = "Plane admin image URI pinned to a reviewed immutable digest."
+  description = "Deprecated per-service Plane admin image URI. The compact AIO runtime uses image_uri."
   type        = string
   default     = ""
 
@@ -117,7 +117,7 @@ variable "admin_image_uri" {
 }
 
 variable "live_image_uri" {
-  description = "Plane live image URI pinned to a reviewed immutable digest."
+  description = "Deprecated per-service Plane live image URI. The compact AIO runtime uses image_uri."
   type        = string
   default     = ""
 
@@ -139,13 +139,13 @@ variable "mcp_image_uri" {
 }
 
 variable "runtime_enabled" {
-  description = "Whether Plane ECS services should run. Set false to park runtime while retaining data resources."
+  description = "Whether the compact Plane ECS service should run. Set false to park runtime while retaining data resources."
   type        = bool
   default     = true
 }
 
 variable "web_desired_count" {
-  description = "Desired Plane web task count when runtime_enabled is true"
+  description = "Desired compact Plane ECS service task count when runtime_enabled is true"
   type        = number
   default     = 1
 }
@@ -175,15 +175,15 @@ variable "live_desired_count" {
 }
 
 variable "cpu" {
-  description = "Fargate task CPU units for each Plane task"
+  description = "Fargate task CPU units for the compact Plane task"
   type        = number
-  default     = 1024
+  default     = 2048
 }
 
 variable "memory" {
-  description = "Fargate task memory in MB for each Plane task"
+  description = "Fargate task memory in MB for the compact Plane task"
   type        = number
-  default     = 2048
+  default     = 4096
 }
 
 variable "cpu_architecture" {
@@ -198,9 +198,9 @@ variable "cpu_architecture" {
 }
 
 variable "web_container_port" {
-  description = "Plane web container port exposed through the public ALB"
+  description = "Plane AIO container port exposed through the public ALB"
   type        = number
-  default     = 3000
+  default     = 80
 }
 
 variable "api_container_port" {
@@ -264,7 +264,7 @@ variable "live_command" {
 variable "mcp_command" {
   description = "Container command for the Plane MCP HTTP server"
   type        = list(string)
-  default     = ["uvx", "plane-mcp-server", "http"]
+  default     = ["uvx", "plane-mcp-server==0.2.8", "http"]
 }
 
 variable "health_check_path" {

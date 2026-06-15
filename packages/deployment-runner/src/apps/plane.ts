@@ -20,6 +20,9 @@ const smokeContracts = [
   },
 ] as const;
 
+const DEFAULT_PLANE_AIO_IMAGE_URI =
+  "artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db";
+
 const statusOutputs = [
   "plane_provisioned",
   "plane_runtime_enabled",
@@ -46,33 +49,13 @@ const statusOutputs = [
 
 const provisionRequiredInputs: RequiredManagedAppInput[] = [
   {
-    key: "frontendImageUri",
-    description: "Plane frontend image URI pinned with @sha256.",
-    terraformVariable: "plane_frontend_image_uri",
-  },
-  {
-    key: "backendImageUri",
-    description: "Plane backend image URI pinned with @sha256.",
-    terraformVariable: "plane_backend_image_uri",
-  },
-  {
-    key: "spaceImageUri",
-    description: "Plane Space image URI pinned with @sha256.",
-    terraformVariable: "plane_space_image_uri",
-  },
-  {
-    key: "adminImageUri",
-    description: "Plane admin image URI pinned with @sha256.",
-    terraformVariable: "plane_admin_image_uri",
-  },
-  {
-    key: "liveImageUri",
-    description: "Plane live image URI pinned with @sha256.",
-    terraformVariable: "plane_live_image_uri",
+    key: "imageUri",
+    description: "Plane all-in-one image URI pinned with @sha256.",
+    terraformVariable: "plane_image_uri",
   },
   {
     key: "mcpImageUri",
-    description: "Plane MCP server image URI pinned with @sha256.",
+    description: "Plane MCP sidecar image URI pinned with @sha256.",
     terraformVariable: "plane_mcp_image_uri",
   },
   {
@@ -158,31 +141,10 @@ export const planeAdapter: ManagedAppAdapter = {
     return compactObject({
       plane_provisioned: true,
       plane_runtime_enabled: runtimeEnabled,
-      plane_frontend_image_uri: requireDigestImage(
-        desiredConfig,
-        "frontendImageUri",
-        "Plane frontendImageUri",
-      ),
-      plane_backend_image_uri: requireDigestImage(
-        desiredConfig,
-        "backendImageUri",
-        "Plane backendImageUri",
-      ),
-      plane_space_image_uri: requireDigestImage(
-        desiredConfig,
-        "spaceImageUri",
-        "Plane spaceImageUri",
-      ),
-      plane_admin_image_uri: requireDigestImage(
-        desiredConfig,
-        "adminImageUri",
-        "Plane adminImageUri",
-      ),
-      plane_live_image_uri: requireDigestImage(
-        desiredConfig,
-        "liveImageUri",
-        "Plane liveImageUri",
-      ),
+      plane_image_uri:
+        optionalString(desiredConfig, "imageUri") !== undefined
+          ? requireDigestImage(desiredConfig, "imageUri", "Plane imageUri")
+          : DEFAULT_PLANE_AIO_IMAGE_URI,
       plane_mcp_image_uri: requireDigestImage(
         desiredConfig,
         "mcpImageUri",
@@ -237,20 +199,9 @@ export const planeAdapter: ManagedAppAdapter = {
         "Plane certificateArn",
       ),
       plane_domain: optionalString(desiredConfig, "domain"),
-      plane_web_desired_count: optionalNumber(desiredConfig, "webDesiredCount"),
-      plane_api_desired_count: optionalNumber(desiredConfig, "apiDesiredCount"),
-      plane_worker_desired_count: optionalNumber(
-        desiredConfig,
-        "workerDesiredCount",
-      ),
-      plane_beat_worker_desired_count: optionalNumber(
-        desiredConfig,
-        "beatWorkerDesiredCount",
-      ),
-      plane_live_desired_count: optionalNumber(
-        desiredConfig,
-        "liveDesiredCount",
-      ),
+      plane_web_desired_count:
+        optionalNumber(desiredConfig, "appDesiredCount") ??
+        optionalNumber(desiredConfig, "webDesiredCount"),
       plane_cache_engine: optionalString(desiredConfig, "cacheEngine"),
       plane_cache_engine_version: optionalString(
         desiredConfig,

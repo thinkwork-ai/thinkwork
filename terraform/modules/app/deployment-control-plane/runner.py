@@ -16,6 +16,10 @@ RELEASE = WORK / "release"
 SOURCE = WORK / "source"
 TF = WORK / "terraform"
 MANIFEST = RELEASE / "thinkwork-release.json"
+DEFAULT_PLANE_AIO_IMAGE_URI = (
+    "artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:"
+    "7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db"
+)
 STARTED_AT = datetime.now(UTC).isoformat()
 RELEASE_EVIDENCE = {}
 CONTROLLER_EVIDENCE = {}
@@ -828,6 +832,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "plane_runtime_enabled": bool(
             state_output(current_outputs, "plane_runtime_enabled", False)
         ),
+        "plane_image_uri": "",
         "plane_frontend_image_uri": "",
         "plane_backend_image_uri": "",
         "plane_space_image_uri": "",
@@ -857,6 +862,14 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         {
             "plane_provisioned": provisioned,
             "plane_runtime_enabled": runtime_enabled,
+            "plane_image_uri": config_value(
+                desired_config,
+                manifest_images,
+                "imageUri",
+                "THINKWORK_PLANE_IMAGE_URI",
+                ["plane-aio", "plane"],
+                default=DEFAULT_PLANE_AIO_IMAGE_URI,
+            ),
             "plane_frontend_image_uri": config_value(
                 desired_config,
                 manifest_images,
@@ -2398,6 +2411,10 @@ variable "plane_runtime_enabled" {{
   type = bool
 }}
 
+variable "plane_image_uri" {{
+  type = string
+}}
+
 variable "plane_frontend_image_uri" {{
   type = string
 }}
@@ -2542,6 +2559,7 @@ module "thinkwork" {{
   twenty_certificate_arn           = var.twenty_certificate_arn
   plane_provisioned      = var.plane_provisioned
   plane_runtime_enabled  = var.plane_runtime_enabled
+  plane_image_uri        = var.plane_image_uri
 
   plane_frontend_image_uri = var.plane_frontend_image_uri
   plane_backend_image_uri  = var.plane_backend_image_uri

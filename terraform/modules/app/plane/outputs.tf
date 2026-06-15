@@ -14,8 +14,8 @@ output "plane_alb_arn" {
 }
 
 output "plane_target_group_arn" {
-  description = "Target group ARN for the Plane web service"
-  value       = aws_lb_target_group.service["web"].arn
+  description = "Target group ARN for the compact Plane app service"
+  value       = aws_lb_target_group.service["app"].arn
 }
 
 output "plane_cluster_arn" {
@@ -24,62 +24,62 @@ output "plane_cluster_arn" {
 }
 
 output "plane_web_service_name" {
-  description = "ECS service name for the Plane web service"
-  value       = aws_ecs_service.service["web"].name
+  description = "ECS service name for the compact Plane service"
+  value       = aws_ecs_service.plane.name
 }
 
 output "plane_api_service_name" {
-  description = "ECS service name for the Plane API service"
-  value       = aws_ecs_service.service["api"].name
+  description = "Compatibility alias for the compact Plane service"
+  value       = aws_ecs_service.plane.name
 }
 
 output "plane_worker_service_name" {
-  description = "ECS service name for the Plane worker"
-  value       = aws_ecs_service.service["worker"].name
+  description = "Compatibility alias for the compact Plane service"
+  value       = aws_ecs_service.plane.name
 }
 
 output "plane_beat_worker_service_name" {
-  description = "ECS service name for the Plane beat worker"
-  value       = aws_ecs_service.service["beat_worker"].name
+  description = "Compatibility alias for the compact Plane service"
+  value       = aws_ecs_service.plane.name
 }
 
 output "plane_live_service_name" {
-  description = "ECS service name for the Plane live service"
-  value       = aws_ecs_service.service["live"].name
+  description = "Compatibility alias for the compact Plane service"
+  value       = aws_ecs_service.plane.name
 }
 
 output "plane_mcp_service_name" {
-  description = "ECS service name for the Plane MCP service"
-  value       = aws_ecs_service.service["mcp"].name
+  description = "Compatibility alias for the compact Plane service hosting the MCP sidecar"
+  value       = aws_ecs_service.plane.name
 }
 
 output "plane_web_log_group_name" {
-  description = "CloudWatch log group for the Plane web service"
-  value       = aws_cloudwatch_log_group.service["web"].name
+  description = "CloudWatch log group for the Plane AIO container"
+  value       = aws_cloudwatch_log_group.service["app"].name
 }
 
 output "plane_api_log_group_name" {
-  description = "CloudWatch log group for the Plane API service"
-  value       = aws_cloudwatch_log_group.service["api"].name
+  description = "Compatibility alias for the Plane AIO container log group"
+  value       = aws_cloudwatch_log_group.service["app"].name
 }
 
 output "plane_worker_log_group_name" {
-  description = "CloudWatch log group for the Plane worker"
-  value       = aws_cloudwatch_log_group.service["worker"].name
+  description = "Compatibility alias for the Plane AIO container log group"
+  value       = aws_cloudwatch_log_group.service["app"].name
 }
 
 output "plane_beat_worker_log_group_name" {
-  description = "CloudWatch log group for the Plane beat worker"
-  value       = aws_cloudwatch_log_group.service["beat_worker"].name
+  description = "Compatibility alias for the Plane AIO container log group"
+  value       = aws_cloudwatch_log_group.service["app"].name
 }
 
 output "plane_live_log_group_name" {
-  description = "CloudWatch log group for the Plane live service"
-  value       = aws_cloudwatch_log_group.service["live"].name
+  description = "Compatibility alias for the Plane AIO container log group"
+  value       = aws_cloudwatch_log_group.service["app"].name
 }
 
 output "plane_mcp_log_group_name" {
-  description = "CloudWatch log group for the Plane MCP service"
+  description = "CloudWatch log group for the Plane MCP sidecar"
   value       = aws_cloudwatch_log_group.service["mcp"].name
 }
 

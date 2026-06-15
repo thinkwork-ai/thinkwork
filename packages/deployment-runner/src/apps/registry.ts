@@ -160,11 +160,7 @@ function resolvePlaneDesiredConfig(
 ): Record<string, unknown> | undefined {
   const next = { ...(desiredConfig ?? {}) };
   const imageKeys: Array<[string, string[]]> = [
-    ["frontendImageUri", ["plane-frontend", "plane-web"]],
-    ["backendImageUri", ["plane-backend", "plane-api"]],
-    ["spaceImageUri", ["plane-space"]],
-    ["adminImageUri", ["plane-admin"]],
-    ["liveImageUri", ["plane-live"]],
+    ["imageUri", ["plane-aio", "plane", "plane-app", "managed-app-plane"]],
     ["mcpImageUri", ["plane-mcp-server", "plane-mcp"]],
   ];
   for (const [configKey, candidates] of imageKeys) {

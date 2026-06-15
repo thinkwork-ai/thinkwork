@@ -4,15 +4,16 @@ This module provisions the optional Plane managed application substrate for
 ThinkWork. It uses AWS-native retained resources:
 
 - public HTTPS ALB for the Plane web service
-- ECS/Fargate services for web, API, worker, beat worker, and live
+- one ECS/Fargate service running the Plane all-in-one container, plus the
+  Plane MCP sidecar needed for ThinkWork agent access
 - ElastiCache Valkey/Redis for cache and coordination
 - Amazon MQ RabbitMQ for async work
 - S3 for Plane file uploads and attachments
-- CloudWatch log groups for every Plane service
+- CloudWatch log groups for the Plane AIO and MCP containers
 - Secrets Manager references for database, app, queue, and S3 credentials
 
 The parent ThinkWork module owns whether this module is instantiated. Once it is
-instantiated, `runtime_enabled = false` parks all Plane ECS services at desired
+instantiated, `runtime_enabled = false` parks the compact Plane ECS service at desired
 count zero while retaining the database secret references, S3 bucket/objects,
 ElastiCache, RabbitMQ, log groups, ALB, and re-enable path.
 
@@ -24,7 +25,8 @@ ElastiCache, RabbitMQ, log groups, ALB, and re-enable path.
 - `db_security_group_id`
 - `public_url`
 - `certificate_arn`
-- `image_uri`
+- `image_uri` (Plane all-in-one image)
+- `mcp_image_uri`
 - `s3_bucket_name`
 - `db_url_secret_arn` or `create_secret_placeholders = true`
 - `secret_key_secret_arn` or `create_secret_placeholders = true`
@@ -56,10 +58,10 @@ workflow.
 
 ## Runtime Lifecycle
 
-| `runtime_enabled` | Web | API | Worker | Beat worker | Live | Retained resources |
-| ----------------- | --- | --- | ------ | ----------- | ---- | ------------------ |
-| `true`            | `web_desired_count` | `api_desired_count` | `worker_desired_count` | `beat_worker_desired_count` | `live_desired_count` | All resources |
-| `false`           | `0` | `0` | `0` | `0` | `0` | Database, S3, cache, RabbitMQ, secrets, logs, ALB |
+| `runtime_enabled` | Compact ECS service | Retained resources |
+| ----------------- | ------------------- | ------------------ |
+| `true`            | `web_desired_count` | All resources |
+| `false`           | `0` | Database, S3, cache, RabbitMQ, secrets, logs, ALB |
 
 Destroying retained Plane data is intentionally separate from parking. A
 destructive deployment job must inventory/drop the dedicated database, storage

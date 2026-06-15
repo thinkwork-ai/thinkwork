@@ -27,14 +27,15 @@ locals {
   effective_cache_subnet_ids = length(var.cache_subnet_ids) > 0 ? var.cache_subnet_ids : var.subnet_ids
   effective_queue_subnet_ids = length(var.queue_subnet_ids) > 0 ? var.queue_subnet_ids : local.effective_cache_subnet_ids
 
-  effective_frontend_image_uri = var.frontend_image_uri != "" ? var.frontend_image_uri : var.image_uri
-  effective_backend_image_uri  = var.backend_image_uri != "" ? var.backend_image_uri : var.image_uri
-  effective_space_image_uri    = var.space_image_uri != "" ? var.space_image_uri : var.image_uri
-  effective_admin_image_uri    = var.admin_image_uri != "" ? var.admin_image_uri : var.image_uri
-  effective_live_image_uri     = var.live_image_uri != "" ? var.live_image_uri : var.image_uri
+  effective_app_image_uri = var.image_uri
 
   redis_scheme = var.cache_transit_encryption_enabled ? "rediss" : "redis"
   redis_url    = "${local.redis_scheme}://${aws_elasticache_replication_group.plane.primary_endpoint_address}:${var.cache_port}"
+  managed_s3_access_key_enabled = (
+    var.create_secret_placeholders &&
+    var.s3_access_key_id_secret_arn == "" &&
+    var.s3_secret_access_key_secret_arn == ""
+  )
 
   managed_secret_specs = {
     db_url = {
@@ -68,6 +69,18 @@ locals {
       secret_string = jsonencode({
         AMQP_URL = "amqps://${var.rabbitmq_admin_username}:${random_password.rabbitmq.result}@${replace(aws_mq_broker.rabbitmq.instances[0].endpoints[0], "amqps://", "")}"
       })
+    }
+    s3_access_key_id = {
+      enabled       = local.managed_s3_access_key_enabled
+      name          = "thinkwork/${var.stage}/plane/s3-access-key-id"
+      description   = "Plane AWS_ACCESS_KEY_ID scoped to the Plane uploads bucket"
+      secret_string = jsonencode({ AWS_ACCESS_KEY_ID = aws_iam_access_key.plane_s3[0].id })
+    }
+    s3_secret_access_key = {
+      enabled       = local.managed_s3_access_key_enabled
+      name          = "thinkwork/${var.stage}/plane/s3-secret-access-key"
+      description   = "Plane AWS_SECRET_ACCESS_KEY scoped to the Plane uploads bucket"
+      secret_string = jsonencode({ AWS_SECRET_ACCESS_KEY = aws_iam_access_key.plane_s3[0].secret })
     }
   }
 
@@ -122,15 +135,26 @@ locals {
   ])
 
   base_environment = [
+    { name = "DOMAIN_NAME", value = trimprefix(var.public_url, "https://") },
+    { name = "SITE_ADDRESS", value = ":${var.web_container_port}" },
+    { name = "APP_PROTOCOL", value = "http" },
     { name = "WEB_URL", value = var.public_url },
+    { name = "INTEGRATION_CALLBACK_BASE_URL", value = var.public_url },
     { name = "CORS_ALLOWED_ORIGINS", value = var.public_url },
     { name = "REDIS_URL", value = local.redis_url },
     { name = "USE_MINIO", value = "0" },
     { name = "AWS_REGION", value = data.aws_region.current.name },
     { name = "AWS_S3_BUCKET_NAME", value = var.s3_bucket_name },
-    { name = "AWS_S3_ENDPOINT_URL", value = "" },
     { name = "FILE_SIZE_LIMIT", value = tostring(var.file_size_limit) },
     { name = "ENABLE_SIGNUP", value = tostring(var.enable_signup) },
+  ]
+
+  mcp_environment = [
+    { name = "PORT", value = tostring(var.mcp_container_port) },
+    { name = "PLANE_BASE_URL", value = var.public_url },
+    { name = "PLANE_INTERNAL_BASE_URL", value = var.public_url },
+    { name = "PLANE_OAUTH_PROVIDER_BASE_URL", value = var.public_url },
+    { name = "PLANE_OAUTH_PROVIDER_CLIENT_ID", value = "thinkwork-plane-mcp" },
   ]
 
   container_secrets = [
@@ -150,108 +174,49 @@ locals {
     ] : [],
   )
 
-  service_definitions = {
-    web = {
-      display_name   = "web"
-      image          = local.effective_frontend_image_uri
+  mcp_container_secrets = [
+    { name = "PLANE_OAUTH_PROVIDER_CLIENT_SECRET", valueFrom = "${local.effective_secret_key_secret_arn}:SECRET_KEY::" },
+  ]
+
+  container_specs = {
+    app = {
+      display_name   = "app"
+      image          = local.effective_app_image_uri
       command        = var.web_command
       port           = var.web_container_port
-      desired_count  = var.web_desired_count
       public_service = true
       health_path    = "/"
-    }
-    space = {
-      display_name   = "space"
-      image          = local.effective_space_image_uri
-      command        = []
-      port           = var.web_container_port
-      desired_count  = var.web_desired_count
-      public_service = true
-      health_path    = "/spaces/"
-    }
-    admin = {
-      display_name   = "admin"
-      image          = local.effective_admin_image_uri
-      command        = []
-      port           = var.web_container_port
-      desired_count  = var.web_desired_count
-      public_service = true
-      health_path    = "/god-mode/"
-    }
-    api = {
-      display_name   = "api"
-      image          = local.effective_backend_image_uri
-      command        = var.api_command
-      port           = var.api_container_port
-      desired_count  = var.api_desired_count
-      public_service = true
-      health_path    = "/api/"
-    }
-    worker = {
-      display_name   = "worker"
-      image          = local.effective_backend_image_uri
-      command        = var.worker_command
-      port           = var.worker_container_port
-      desired_count  = var.worker_desired_count
-      public_service = false
-      health_path    = "/"
-    }
-    beat_worker = {
-      display_name   = "beat-worker"
-      image          = local.effective_backend_image_uri
-      command        = var.beat_worker_command
-      port           = var.worker_container_port
-      desired_count  = var.beat_worker_desired_count
-      public_service = false
-      health_path    = "/"
-    }
-    live = {
-      display_name   = "live"
-      image          = local.effective_live_image_uri
-      command        = var.live_command
-      port           = var.live_container_port
-      desired_count  = var.live_desired_count
-      public_service = true
-      health_path    = "/live/"
+      environment    = local.base_environment
+      secrets        = concat(local.container_secrets, local.optional_container_secrets)
     }
     mcp = {
       display_name   = "mcp"
       image          = var.mcp_image_uri
       command        = var.mcp_command
       port           = var.mcp_container_port
-      desired_count  = 1
       public_service = true
       health_path    = "/http/api-key/mcp"
+      environment    = local.mcp_environment
+      secrets        = local.mcp_container_secrets
     }
   }
 
   public_services = {
-    for key, service in local.service_definitions : key => service if service.public_service
+    app = {
+      display_name = "app"
+      port         = var.web_container_port
+      health_path  = "/"
+    }
+    mcp = {
+      display_name = "mcp"
+      port         = var.mcp_container_port
+      health_path  = "/http/api-key/mcp"
+    }
   }
 
   listener_rules = {
-    api = {
-      priority      = 10
-      service_key   = "api"
-      path_patterns = ["/api/*", "/auth/*", "/static/*"]
-    }
-    live = {
-      priority      = 20
-      service_key   = "live"
-      path_patterns = ["/live/*"]
-    }
-    space = {
-      priority      = 30
-      service_key   = "space"
-      path_patterns = ["/spaces/*"]
-    }
-    admin = {
-      priority      = 40
-      service_key   = "admin"
-      path_patterns = ["/god-mode/*"]
-    }
     mcp = {
-      priority      = 50
+      priority      = 10
       service_key   = "mcp"
       path_patterns = ["/http/*", "/.well-known/*"]
     }
@@ -323,11 +288,7 @@ resource "terraform_data" "configuration_guardrails" {
     beat_worker_desired_count         = var.beat_worker_desired_count
     live_desired_count                = var.live_desired_count
     image_uri                         = var.image_uri
-    frontend_image_uri                = local.effective_frontend_image_uri
-    backend_image_uri                 = local.effective_backend_image_uri
-    space_image_uri                   = local.effective_space_image_uri
-    admin_image_uri                   = local.effective_admin_image_uri
-    live_image_uri                    = local.effective_live_image_uri
+    app_image_uri                     = local.effective_app_image_uri
     mcp_image_uri                     = var.mcp_image_uri
     public_url                        = var.public_url
     certificate_arn                   = var.certificate_arn
@@ -366,14 +327,10 @@ resource "terraform_data" "configuration_guardrails" {
 
     precondition {
       condition = (
-        local.effective_frontend_image_uri != "" &&
-        local.effective_backend_image_uri != "" &&
-        local.effective_space_image_uri != "" &&
-        local.effective_admin_image_uri != "" &&
-        local.effective_live_image_uri != "" &&
+        local.effective_app_image_uri != "" &&
         var.mcp_image_uri != ""
       )
-      error_message = "Plane requires frontend, backend, space, admin, live, and MCP image URIs pinned to immutable digests."
+      error_message = "Plane requires AIO app and MCP image URIs pinned to immutable digests."
     }
 
     precondition {
@@ -409,6 +366,11 @@ resource "terraform_data" "configuration_guardrails" {
     precondition {
       condition     = local.effective_amqp_url_secret_arn != ""
       error_message = "Plane requires amqp_url_secret_arn or create_secret_placeholders = true."
+    }
+
+    precondition {
+      condition     = (var.s3_access_key_id_secret_arn == "") == (var.s3_secret_access_key_secret_arn == "")
+      error_message = "Plane S3 access key secret ARNs must be provided together, or both omitted for Terraform-managed bucket-scoped credentials."
     }
 
   }
@@ -506,6 +468,48 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
       ]
     }]
   })
+}
+
+resource "aws_iam_user" "plane_s3" {
+  count = local.managed_s3_access_key_enabled ? 1 : 0
+
+  name = "${local.name}-s3"
+
+  tags = {
+    Name = "${local.name}-s3"
+    Role = "plane-storage"
+  }
+}
+
+resource "aws_iam_user_policy" "plane_s3" {
+  count = local.managed_s3_access_key_enabled ? 1 : 0
+
+  name = "plane-s3"
+  user = aws_iam_user.plane_s3[0].name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:AbortMultipartUpload",
+        "s3:DeleteObject",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:PutObject",
+      ]
+      Resource = [
+        local.storage_bucket_arn,
+        "${local.storage_bucket_arn}/*",
+      ]
+    }]
+  })
+}
+
+resource "aws_iam_access_key" "plane_s3" {
+  count = local.managed_s3_access_key_enabled ? 1 : 0
+
+  user = aws_iam_user.plane_s3[0].name
 }
 
 ################################################################################
@@ -679,7 +683,7 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.service["web"].arn
+    target_group_arn = aws_lb_target_group.service["app"].arn
   }
 }
 
@@ -833,7 +837,7 @@ resource "aws_mq_broker" "rabbitmq" {
 ################################################################################
 
 resource "aws_cloudwatch_log_group" "service" {
-  for_each = local.service_definitions
+  for_each = local.container_specs
 
   name              = "/thinkwork/${var.stage}/plane/${each.value.display_name}"
   retention_in_days = var.log_retention_days
@@ -845,10 +849,8 @@ resource "aws_cloudwatch_log_group" "service" {
 # ECS Task Definitions and Services
 ################################################################################
 
-resource "aws_ecs_task_definition" "service" {
-  for_each = local.service_definitions
-
-  family                   = "${local.name}-${each.value.display_name}"
+resource "aws_ecs_task_definition" "plane" {
+  family                   = local.name
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
   cpu                      = tostring(var.cpu)
@@ -862,55 +864,45 @@ resource "aws_ecs_task_definition" "service" {
   }
 
   container_definitions = jsonencode([
+    for key, container in local.container_specs :
     {
-      name      = "plane-${each.value.display_name}"
-      image     = each.value.image
+      name      = "plane-${container.display_name}"
+      image     = container.image
       essential = true
-      command   = each.value.command
+      command   = container.command
 
       portMappings = [
         {
-          containerPort = each.value.port
-          hostPort      = each.value.port
+          containerPort = container.port
+          hostPort      = container.port
           protocol      = "tcp"
         }
       ]
 
-      environment = concat(
-        local.base_environment,
-        [
-          { name = "PORT", value = tostring(each.value.port) },
-          { name = "PLANE_SERVICE", value = each.value.display_name },
-          { name = "API_BASE_URL", value = var.public_url },
-          { name = "PLANE_BASE_URL", value = var.public_url },
-          { name = "PLANE_INTERNAL_BASE_URL", value = var.public_url },
-        ]
-      )
-      secrets = concat(local.container_secrets, local.optional_container_secrets)
+      environment = container.environment
+      secrets     = container.secrets
 
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = aws_cloudwatch_log_group.service[each.key].name
+          awslogs-group         = aws_cloudwatch_log_group.service[key].name
           awslogs-region        = data.aws_region.current.name
-          awslogs-stream-prefix = each.value.display_name
+          awslogs-stream-prefix = container.display_name
         }
       }
     }
   ])
 }
 
-resource "aws_ecs_service" "service" {
-  for_each = local.service_definitions
-
-  name            = "${local.name}-${each.value.display_name}"
+resource "aws_ecs_service" "plane" {
+  name            = local.name
   cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.service[each.key].arn
-  desired_count   = var.runtime_enabled ? each.value.desired_count : 0
+  task_definition = aws_ecs_task_definition.plane.arn
+  desired_count   = var.runtime_enabled ? var.web_desired_count : 0
   launch_type     = "FARGATE"
 
   enable_execute_command            = true
-  health_check_grace_period_seconds = each.value.public_service ? var.health_check_grace_period_seconds : null
+  health_check_grace_period_seconds = var.health_check_grace_period_seconds
   wait_for_steady_state             = var.wait_for_steady_state
   force_new_deployment              = true
 
@@ -921,16 +913,16 @@ resource "aws_ecs_service" "service" {
   }
 
   dynamic "load_balancer" {
-    for_each = each.value.public_service ? [1] : []
+    for_each = local.public_services
 
     content {
-      target_group_arn = aws_lb_target_group.service[each.key].arn
-      container_name   = "plane-${each.value.display_name}"
-      container_port   = each.value.port
+      target_group_arn = aws_lb_target_group.service[load_balancer.key].arn
+      container_name   = "plane-${load_balancer.value.display_name}"
+      container_port   = load_balancer.value.port
     }
   }
 
   depends_on = [aws_lb_listener.https]
 
-  tags = { Name = "${local.name}-${each.value.display_name}" }
+  tags = { Name = local.name }
 }

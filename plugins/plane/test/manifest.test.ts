@@ -103,14 +103,11 @@ describe("Plane plugin manifest", () => {
       managedAppKey: "plane",
     });
     expect(Object.keys(infra.terraformInputs).sort()).toEqual([
-      "adminImageUri",
       "aesSecretKeySecretArn",
       "amqpUrlSecretArn",
-      "backendImageUri",
       "certificateArn",
       "dbUrlSecretArn",
-      "frontendImageUri",
-      "liveImageUri",
+      "imageUri",
       "liveServerSecretKeySecretArn",
       "mcpImageUri",
       "publicUrl",
@@ -118,7 +115,6 @@ describe("Plane plugin manifest", () => {
       "s3BucketName",
       "s3SecretAccessKeySecretArn",
       "secretKeySecretArn",
-      "spaceImageUri",
     ]);
     for (const spec of Object.values(infra.terraformInputs)) {
       expect(spec.description.length).toBeGreaterThan(0);
