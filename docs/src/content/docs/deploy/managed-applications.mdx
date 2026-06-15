@@ -1,13 +1,13 @@
 ---
 title: Managed Applications
-description: Deploy, park, destroy, and diagnose ThinkWork-managed applications such as Cognee and Twenty CRM without customer GitHub Actions.
+description: Deploy, park, destroy, and diagnose ThinkWork-managed applications such as Cognee, Twenty CRM, and Plane without customer GitHub Actions.
 ---
 
 import { Aside, Steps } from "@astrojs/starlight/components";
 
 Managed applications are optional applications operated inside the customer
-ThinkWork AWS deployment. V1 proves the lifecycle with Cognee Knowledge Graph
-and Twenty CRM.
+ThinkWork AWS deployment. V1 proves the lifecycle with Cognee Knowledge Graph,
+Twenty CRM, and Plane.
 
 Operators use Spaces Settings -> Managed Applications for the normal path:
 plan, review impact, approve, watch progress, and inspect evidence.
@@ -16,12 +16,12 @@ Managed-app jobs use the same deployment controller contract as full
 environment updates. A plan or apply request names the selected release
 manifest URL and SHA-256 digest, records a controller evidence prefix, and
 passes only release-verified image URIs or customer-owned secret ARNs into the
-runner. Base installs keep Cognee, Twenty, Slack, and Stripe disabled
+runner. Base installs keep Cognee, Twenty, Plane, Slack, and Stripe disabled
 until an operator explicitly plans and approves the optional app.
 
 The TEI proving environment keeps optional apps disabled in the base install.
 That is expected: foundation login, model catalog, runtime config, and release
-update proof can pass before Cognee or Twenty are selected. The full
+update proof can pass before Cognee, Twenty, or Plane are selected. The full
 managed-app gate is accepted only after an operator plans, approves, applies,
 and smokes the selected optional app through the customer controller.
 
@@ -83,6 +83,81 @@ The smoke skips cleanly when Twenty is unprovisioned or parked. When the runtime
 is enabled, it requires an HTTPS Twenty URL and a successful `/healthz`
 response.
 
+## Plane
+
+Plane is a self-hosted project-management runtime packaged as the `plane`
+application plugin. Operators install it from Settings -> Plugins, then the
+plugin infrastructure component uses the managed-app deployment runner to
+provision the retained Plane substrate.
+
+Deploying Plane provisions the public Plane endpoint, ECS/Fargate web/API,
+worker, beat-worker, and live services, dedicated Plane database credentials,
+Redis-compatible cache, RabbitMQ, S3-backed file storage, CloudWatch logs, and
+the Plane MCP endpoint. Parking Plane stops runtime capacity while retaining
+Plane data, files, secrets, queue/cache/storage resources, endpoint wiring, and
+the re-enable path. Destroying Plane is destructive and removes Plane runtime
+infrastructure plus app-owned database state, storage, queue/cache resources,
+secrets, and managed MCP rows.
+
+Plane user access is intentionally per-user. Each user activates the plugin
+with their own Plane personal access token and workspace slug; ThinkWork stores
+those values as user-scoped activation secrets and emits them as
+`x-api-key`/`x-workspace-slug` headers only for that requester. Do not create a
+tenant-wide Plane API key as a shortcut.
+
+Run the managed-app smoke after deploy, park, redeploy, or destroy:
+
+```bash
+node scripts/smoke/plane-managed-app-smoke.mjs
+
+SMOKE_ENABLE_PLANE_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/plane-smoke.json \
+  node scripts/smoke/plane-managed-app-smoke.mjs
+```
+
+The smoke skips cleanly when Plane is unprovisioned or parked. When the runtime
+is enabled, it requires an HTTPS Plane URL and a successful public health-path
+response. The default health path is `/`; override it with
+`SMOKE_PLANE_HEALTH_PATH` if the deployed Plane version exposes a narrower
+health endpoint.
+
+After Plane is deployed and a user has activated the plugin, run the MCP
+seed/write smoke. Direct mode proves the Plane MCP server; proxy mode proves
+ThinkWork activation and runtime header injection:
+
+```bash
+SMOKE_ENABLE_PLANE_MCP=1 \
+  SMOKE_PLANE_MCP_WRITE=1 \
+  SMOKE_PLANE_MCP_URL=https://plane.example.com/mcp \
+  SMOKE_PLANE_API_KEY=<plane-pat> \
+  SMOKE_PLANE_WORKSPACE_SLUG=<workspace-slug> \
+  node scripts/smoke/plane-mcp-smoke.mjs
+
+SMOKE_ENABLE_PLANE_MCP=1 \
+  SMOKE_PLANE_THINKWORK_PROXY=1 \
+  SMOKE_API_BASE_URL=<api-url> \
+  SMOKE_COGNITO_ID_TOKEN=<activated-user-token> \
+  SMOKE_AGENT_ID=<agent-id> \
+  node scripts/smoke/plane-mcp-smoke.mjs
+```
+
+Write mode is opt-in with `SMOKE_PLANE_MCP_WRITE=1`. Without it, the smoke can
+list tools and prove read paths without creating or commenting on work items.
+
+Known limits for Plane v1:
+
+- Plane is not a custom ThinkWork issue tracker. Users complete Plane's native
+  workspace/user setup in Plane.
+- ThinkWork does not provide tenant-wide Plane credentials. Every user who
+  wants agents to operate Plane work items must activate the Plane plugin with
+  their own PAT and workspace slug.
+- Agent write safety depends on the bundled `plane--issue-loop` skill:
+  context-first reads, narrow writes, comments for progress, and readable-id to
+  UUID resolution before UUID-only tool calls.
+- Live MCP write smoke intentionally requires `SMOKE_PLANE_MCP_WRITE=1` so
+  read-only verification cannot create or comment on work items by accident.
+
 ## Evidence Fields
 
 Managed-app evidence should include:
@@ -94,6 +169,7 @@ Managed-app evidence should include:
 - Terraform plan/apply/destroy artifact keys
 - app endpoint and runtime status
 - managed MCP state when the app owns a control connector
+- plugin activation/auth posture when the app exposes user-scoped MCP tools
 - destructive impact summary for destroy
 - smoke result
 - CloudWatch Logs URL when available

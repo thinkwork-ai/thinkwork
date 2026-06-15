@@ -6,9 +6,9 @@ Issue: THNK-27 Add Plane Plugin
 
 - Linear state: `In Progress`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-release-wiring`.
-- Active unit: U8 Release Packaging and Controller Wiring.
-- U7 merged via PR #2494.
+- Active branch: `codex/thnk-27-plane-docs-rollout`.
+- Active unit: U9 Docs, Rollout, and Operator Copy.
+- U8 merged via PR #2495.
 
 ## Context Discovered
 
@@ -33,7 +33,7 @@ Issue: THNK-27 Add Plane Plugin
 - [x] U5 Per-User Plane MCP Activation
 - [x] U6 Plane Issue-Loop Skill
 - [x] U7 Plane Seed and End-to-End Smoke
-- [ ] U8 Release Packaging and Controller Wiring
+- [x] U8 Release Packaging and Controller Wiring
 - [ ] U9 Docs, Rollout, and Operator Copy
 
 ## PRs
@@ -60,7 +60,8 @@ Issue: THNK-27 Add Plane Plugin
   `https://github.com/thinkwork-ai/thinkwork/pull/2494` merged at
   `5b03cb749effca1e78420ab8a2588776ad9e927b`.
 - U8 Release Packaging and Controller Wiring:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2495` opened; CI pending.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2495` merged at
+  `bae98296cce8d3dde2ca42204c7c1825987ae724`.
 
 ## Verification Log
 
@@ -166,6 +167,14 @@ scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed dry-run mode.
 - U8: `pnpm dlx prettier@3.6.2 --write ...` reported all touched files
   unchanged.
 - U8: `git diff --check` passed.
+- U8: PR #2495 CI passed (`cla`, `lint`, `verify`, `typecheck`, `test`) and
+  was squash-merged.
+- U9: implementation in progress on `codex/thnk-27-plane-docs-rollout`;
+  documenting Plane install, park, destroy, per-user activation, smoke gates,
+  release manifest requirements, and known limitations across operator docs.
+- U9: `pnpm dlx prettier@3.6.2 --write ...` formatted the touched docs.
+- U9: `pnpm --filter @thinkwork/docs build` passed.
+- U9: `git diff --check` passed.
 
 ## Decisions
 
