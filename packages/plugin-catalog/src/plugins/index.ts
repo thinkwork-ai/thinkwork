@@ -1,6 +1,7 @@
 import type { PluginManifest } from "../contracts";
 import { companyBrainManifest } from "./company-brain/manifest";
 import { lastmileManifest } from "./lastmile/manifest";
+import { planeManifest } from "./plane/manifest";
 import { twentyManifest } from "./twenty/manifest";
 
 /**
@@ -13,4 +14,9 @@ export const allPluginManifests: readonly PluginManifest[] = [
   twentyManifest,
 ];
 
-export { companyBrainManifest, lastmileManifest, twentyManifest };
+export {
+  companyBrainManifest,
+  lastmileManifest,
+  planeManifest,
+  twentyManifest,
+};
