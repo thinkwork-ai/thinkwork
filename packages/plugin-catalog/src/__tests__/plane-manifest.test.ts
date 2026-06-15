@@ -112,11 +112,17 @@ describe("Plane plugin manifest", () => {
     expect(skills.skills).toHaveLength(1);
     const skill = skills.skills[0];
     expect(skill.slug).toBe("plane--issue-loop");
-    expect(skill.skillMd).toContain("Resolve the workspace and project");
+    expect(skill.skillMd).toContain("Activation and scope");
+    expect(skill.skillMd).toContain("Resolve the workspace slug and project");
     expect(skill.skillMd).toContain("ENG-42");
     expect(skill.skillMd).toContain("Plane UUID");
+    expect(skill.skillMd).toContain("project key");
     expect(skill.skillMd).toContain("Never use a tenant-wide Plane API key");
-    expect(skill.skillMd).toContain("re-read the record");
+    expect(skill.skillMd).toContain("Prefer comments for progress");
+    expect(skill.skillMd).toContain("Write-back discipline");
+    expect(skill.skillMd).toContain("re-read the Plane record");
+    expect(skill.skillMd).toContain("Stop conditions");
+    expect(skill.skillMd).toContain("creating a duplicate");
   });
 
   it("uses header activation rather than OAuth scopes", () => {

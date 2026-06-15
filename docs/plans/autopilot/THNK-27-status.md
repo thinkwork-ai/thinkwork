@@ -6,10 +6,9 @@ Issue: THNK-27 Add Plane Plugin
 
 - Linear state: `In Progress`.
 - Labels: `Codex`, `Feature`.
-- Active branch: `codex/thnk-27-plane-mcp-activation`.
-- Active unit: U5 Per-User Plane MCP Activation.
-- U4 merged via PR #2491.
-- U5 PR #2492 opened; CI pending.
+- Active branch: `codex/thnk-27-plane-issue-loop-skill`.
+- Active unit: U6 Plane Issue-Loop Skill.
+- U5 merged via PR #2492.
 
 ## Context Discovered
 
@@ -32,7 +31,7 @@ Issue: THNK-27 Add Plane Plugin
 - [x] U3 Plane Managed-App Adapter
 - [x] U4 Plane Terraform Runtime Module
 - [x] U5 Per-User Plane MCP Activation
-- [ ] U6 Plane Issue-Loop Skill
+- [x] U6 Plane Issue-Loop Skill
 - [ ] U7 Plane Seed and End-to-End Smoke
 - [ ] U8 Release Packaging and Controller Wiring
 - [ ] U9 Docs, Rollout, and Operator Copy
@@ -52,7 +51,10 @@ Issue: THNK-27 Add Plane Plugin
   `https://github.com/thinkwork-ai/thinkwork/pull/2491` merged at
   `88263e18d13746f2838001df15aa9ec9f998f189`.
 - U5 Per-User Plane MCP Activation:
-  `https://github.com/thinkwork-ai/thinkwork/pull/2492` opened; CI pending.
+  `https://github.com/thinkwork-ai/thinkwork/pull/2492` merged at
+  `5920aa8b1fc9273a27ef978439783b096176884f`.
+- U6 Plane Issue-Loop Skill:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2493` opened; CI pending.
 
 ## Verification Log
 
@@ -109,6 +111,14 @@ server.test.ts` passed.
 - U5: `git diff --check` passed.
 - U5: Browser verification not applicable; this unit is backend/runtime
   activation plumbing with no new local UI surface.
+- U5: PR #2492 CI passed (`cla`, `lint`, `verify`, `typecheck`, `test`) and
+  was squash-merged.
+- U6: `pnpm --filter @thinkwork/plugin-catalog test --
+plane-manifest.test.ts` passed.
+- U6: `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+- U6: `git diff --check` passed.
+- U6: Browser verification not applicable; this unit only updates bundled
+  plugin skill prompt content.
 
 ## Decisions
 
@@ -129,3 +139,6 @@ server.test.ts` passed.
 - U5 groups user-provided header credentials by normalized MCP resource before
   writing secrets so multiple components sharing one endpoint retain the full
   header set.
+- U6 expands the bundled `plane--issue-loop` skill in the Plane manifest rather
+  than creating a second skill source path; plugin skills currently seed from
+  manifest `skillMd` strings.
