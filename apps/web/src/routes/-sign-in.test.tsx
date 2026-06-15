@@ -19,6 +19,8 @@ const authContextMocks = vi.hoisted(() => ({
 }));
 
 const authMocks = vi.hoisted(() => ({
+  confirmForgotPassword: vi.fn(),
+  forgotPassword: vi.fn(),
   getHostedSignInUrl: vi.fn(),
   getGoogleSignInUrl: vi.fn(),
   isPasswordSignInConfigured: vi.fn(),
@@ -59,6 +61,8 @@ vi.mock("@/context/AuthContext", () => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
+  confirmForgotPassword: authMocks.confirmForgotPassword,
+  forgotPassword: authMocks.forgotPassword,
   getHostedSignInUrl: authMocks.getHostedSignInUrl,
   getGoogleSignInUrl: authMocks.getGoogleSignInUrl,
   isPasswordSignInConfigured: authMocks.isPasswordSignInConfigured,
@@ -110,7 +114,9 @@ describe("SignInPage", () => {
 
     render(<SignInPage />);
 
-    expect(screen.getByRole("heading", { name: "Log in to ThinkWork" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Log in to ThinkWork" }),
+    ).toBeTruthy();
     expect(screen.queryByText("Spaces")).toBeNull();
     expect(screen.getByText("Acme ThinkWork · dev · us-east-1")).toBeTruthy();
     // Trust plumbing (e.g. "Unsigned build-time fallback") must not leak
@@ -118,9 +124,7 @@ describe("SignInPage", () => {
     expect(screen.queryByText("Unsigned build-time fallback")).toBeNull();
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: "Create one" })
-        .getAttribute("href"),
+      screen.getByRole("link", { name: "Create one" }).getAttribute("href"),
     ).toBe("/onboarding/welcome");
     expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
   });
@@ -242,9 +246,7 @@ describe("SignInPage", () => {
     expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
     expect(screen.queryByText("File")).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
-    expect(
-      screen.getByRole("link", { name: "Create one" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Create one" })).toBeTruthy();
   });
 
   it("imports desktop deployment profile JSON from a deep link", async () => {
@@ -449,6 +451,7 @@ describe("SignInPage", () => {
     expect(screen.getByLabelText("Email")).toBeTruthy();
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reset password" })).toBeTruthy();
     // OAuth demotes to a secondary action alongside the form.
     expect(
       screen.getByRole("button", { name: "Log in with Google" }),
@@ -473,9 +476,7 @@ describe("SignInPage", () => {
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Log in with Google" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Log in with Google" }));
 
     expect(navigations).toEqual([
       "https://auth.example/login?identity_provider=Google",
