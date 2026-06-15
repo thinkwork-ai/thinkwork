@@ -77,6 +77,14 @@ Add smoke scripts that seed workspace/project/work-item data, verify MCP
 `get_me`, read seeded data, write back to an existing item, and create a new
 work item.
 
+Verification must exercise the ThinkWork application-plugin flow against a
+deployed AWS environment: install Plane through ThinkWork, inspect deployment
+evidence before approving/applying, open the deployed self-hosted Plane app,
+activate per-user MCP credentials, prove a ThinkWork agent can call Plane MCP,
+then teardown through ThinkWork and verify cleanup/parking. Do not use Plane
+Cloud, local Docker Compose, a local Plane runtime, or a Terraform-only shortcut
+as the end-to-end proof.
+
 ### U8. Release Packaging and Controller Wiring
 
 Include Plane image provenance/digest requirements and release-manifest wiring.

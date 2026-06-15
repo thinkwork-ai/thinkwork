@@ -24,8 +24,12 @@ ThinkWork issue tracker.
   shape are supported by the ThinkWork MCP runtime.
 - Runtime deployment is Docker/container based on AWS-managed primitives;
   Kubernetes is out of scope.
-- Runtime data must use deliberate production-leaning services: dedicated
-  Postgres, Redis-compatible cache, RabbitMQ, and S3-compatible storage.
+- Runtime data must use dedicated Postgres and S3-compatible storage. Plane AIO
+  also requires Redis and RabbitMQ URLs, but THNK-27 must satisfy those with
+  private task-local loopback sidecars inside the same ECS task, not with
+  ElastiCache, Amazon MQ, or any separately managed Redis/RabbitMQ runtime.
+- The accepted v1 runtime shape is one ECS service and task definition with
+  `plane-app`, `plane-mcp`, `plane-redis`, and `plane-rabbitmq` containers.
 - Park preserves Plane data, files, credentials, and the re-enable path; destroy
   is separate and destructive.
 - Agent actions must be user scoped. No tenant-wide Plane API key may power
@@ -43,6 +47,9 @@ ThinkWork issue tracker.
   `docs/brainstorms/2026-06-12-application-plugins-requirements.md`.
 - Use Twenty as the closest infrastructure precedent.
 - Use AWS ECS/Fargate-style Docker deployment, not Kubernetes.
+- Install and teardown must be exercised through ThinkWork's application-plugin
+  flow against a deployed AWS environment. Do not verify THNK-27 with Plane
+  Cloud, local Docker Compose, or a local-only Plane runtime.
 - Use per-user Plane activation. The current ThinkWork MCP manifest/runtime
   supports OAuth and bearer-token dispatch, while Plane HTTP PAT mode requires
   `x-api-key` and `x-workspace-slug` headers; that activation/runtime contract
