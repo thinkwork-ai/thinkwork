@@ -246,19 +246,25 @@ locals {
   }
 
   listener_rules = {
-    mcp = {
+    mcp_oauth = {
       priority      = 10
       service_key   = "mcp"
       path_patterns = [
         "/.well-known/*",
         "/authorize",
-        "/header/mcp",
-        "/header/mcp/*",
         "/http/*",
-        "/mcp",
-        "/mcp/*",
         "/register",
         "/token",
+      ]
+    }
+    mcp_stream = {
+      priority    = 11
+      service_key = "mcp"
+      path_patterns = [
+        "/header/mcp",
+        "/header/mcp/*",
+        "/mcp",
+        "/mcp/*",
       ]
     }
   }
