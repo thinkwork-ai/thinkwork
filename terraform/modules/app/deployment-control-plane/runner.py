@@ -2108,6 +2108,10 @@ terraform {{
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }}
+    cloudflare = {{
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }}
   }}
 }}
 
@@ -2123,6 +2127,11 @@ provider "aws" {{
   alias  = "us_east_1"
   region = "us-east-1"
 }}
+
+# Existing greenfield stacks keep Cloudflare DNS resources in the same state
+# file. Managed-app targeted plans still need the provider schema available
+# even though they do not change those records.
+provider "cloudflare" {{}}
 
 variable "stage" {{
   type = string

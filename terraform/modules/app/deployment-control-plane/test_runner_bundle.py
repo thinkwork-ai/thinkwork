@@ -1004,9 +1004,11 @@ def test_write_runner_files_without_domain_keeps_defaults_and_provider_alias(
     assert 'alias  = "us_east_1"' in main_tf
     assert "aws.us_east_1 = aws.us_east_1" in main_tf
 
-    # KTD7: the inert cloudflare provider is gone from generated roots —
-    # customer accounts never hold Cloudflare credentials.
-    assert "cloudflare" not in main_tf
+    # Existing greenfield state can contain Cloudflare DNS records. Managed-app
+    # targeted plans do not change those records, but Terraform still needs the
+    # provider schema to refresh state.
+    assert 'source  = "cloudflare/cloudflare"' in main_tf
+    assert 'provider "cloudflare" {}' in main_tf
 
 
 def test_write_runner_files_customer_domain_prefers_secrets_and_coerces_booleans(
