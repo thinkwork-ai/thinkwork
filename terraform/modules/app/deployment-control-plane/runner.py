@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import os
+import platform
 import secrets
 import subprocess
 import tarfile
@@ -19,6 +20,15 @@ MANIFEST = RELEASE / "thinkwork-release.json"
 DEFAULT_PLANE_AIO_IMAGE_URI = (
     "artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:"
     "7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db"
+)
+CLOUDFLARE_PROVIDER_VERSION = "4.52.7"
+CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256 = (
+    "904acc31ebb9d6ef68c792074b30532ee61bf515f19e0a3c75b46f126cca1f13"
+)
+CLOUDFLARE_PROVIDER_LINUX_AMD64_URL = (
+    "https://github.com/cloudflare/terraform-provider-cloudflare/releases/download/"
+    f"v{CLOUDFLARE_PROVIDER_VERSION}/"
+    f"terraform-provider-cloudflare_{CLOUDFLARE_PROVIDER_VERSION}_linux_amd64.zip"
 )
 STARTED_AT = datetime.now(UTC).isoformat()
 RELEASE_EVIDENCE = {}
@@ -68,6 +78,48 @@ def download(url, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=120) as response:
         destination.write_bytes(response.read())
+
+
+def configure_terraform_provider_mirror():
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    if system != "linux" or machine not in {"x86_64", "amd64"}:
+        return
+
+    mirror = WORK / "provider-mirror"
+    package = (
+        mirror
+        / "registry.terraform.io"
+        / "cloudflare"
+        / "cloudflare"
+        / f"terraform-provider-cloudflare_{CLOUDFLARE_PROVIDER_VERSION}_linux_amd64.zip"
+    )
+    if not package.exists() or sha256_file(package) != CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256:
+        download(CLOUDFLARE_PROVIDER_LINUX_AMD64_URL, package)
+
+    digest = sha256_file(package)
+    if digest != CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256:
+        raise RuntimeError(
+            "Cloudflare provider mirror digest mismatch: "
+            f"expected {CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256}, got {digest}"
+        )
+
+    terraformrc = WORK / "terraformrc"
+    terraformrc.write_text(
+        f"""
+provider_installation {{
+  filesystem_mirror {{
+    path    = "{mirror}"
+    include = ["registry.terraform.io/cloudflare/cloudflare"]
+  }}
+  direct {{
+    exclude = ["registry.terraform.io/cloudflare/cloudflare"]
+  }}
+}}
+""".lstrip(),
+        encoding="utf-8",
+    )
+    os.environ["TF_CLI_CONFIG_FILE"] = str(terraformrc)
 
 
 def stable_json_bytes(value):
@@ -3249,6 +3301,7 @@ def main():
     }
     write_evidence("running", vars_json)
 
+    configure_terraform_provider_mirror()
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
     workspace = vars_json["stage"]
     selected = subprocess.run(

@@ -2,6 +2,7 @@ import base64
 import importlib.util
 import io
 import json
+import os
 import re
 import subprocess
 import tarfile
@@ -1009,6 +1010,45 @@ def test_write_runner_files_without_domain_keeps_defaults_and_provider_alias(
     # provider schema to refresh state.
     assert 'source  = "cloudflare/cloudflare"' in main_tf
     assert 'provider "cloudflare" {}' in main_tf
+
+
+def test_configure_terraform_provider_mirror_seeds_cloudflare_for_codebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    provider_zip = b"cloudflare-provider"
+    provider_digest = digest(provider_zip)
+
+    monkeypatch.setattr(runner, "WORK", tmp_path)
+    monkeypatch.setattr(runner.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(runner.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(runner, "CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256", provider_digest)
+    monkeypatch.delenv("TF_CLI_CONFIG_FILE", raising=False)
+
+    def fake_download(url: str, destination: Path) -> None:
+        assert "terraform-provider-cloudflare_4.52.7_linux_amd64.zip" in url
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(provider_zip)
+
+    monkeypatch.setattr(runner, "download", fake_download)
+
+    runner.configure_terraform_provider_mirror()
+
+    package = (
+        tmp_path
+        / "provider-mirror"
+        / "registry.terraform.io"
+        / "cloudflare"
+        / "cloudflare"
+        / "terraform-provider-cloudflare_4.52.7_linux_amd64.zip"
+    )
+    assert package.read_bytes() == provider_zip
+
+    terraformrc = tmp_path / "terraformrc"
+    contents = terraformrc.read_text(encoding="utf-8")
+    assert 'include = ["registry.terraform.io/cloudflare/cloudflare"]' in contents
+    assert 'exclude = ["registry.terraform.io/cloudflare/cloudflare"]' in contents
+    assert os.environ["TF_CLI_CONFIG_FILE"] == str(terraformrc)
 
 
 def test_write_runner_files_customer_domain_prefers_secrets_and_coerces_booleans(
