@@ -62,6 +62,8 @@ project_context: TEI ThinkWork
   package discovery remains the source of truth.
 - Wired `generate:plugins`, `check:plugins`, and catalog build freshness checks
   into `@thinkwork/plugin-catalog`.
+- PR #2557 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2557`
 
 ### Verification
 
