@@ -15,7 +15,9 @@
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:catalog": "tsx scripts/build-catalog.ts"
+    "generate:plugins": "tsx scripts/generate-plugin-registry.ts",
+    "check:plugins": "tsx scripts/generate-plugin-registry.ts --check",
+    "build:catalog": "tsx scripts/generate-plugin-registry.ts --check && tsx scripts/build-catalog.ts"
   },
   "dependencies": {
     "@thinkwork/plugin-company-brain": "workspace:*",

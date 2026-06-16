@@ -47,6 +47,31 @@ project_context: TEI ThinkWork
 - Formatting: `pnpm dlx prettier@3.8.2 --write ...` on touched files because
   the root `prettier` binary is not installed as a workspace dependency.
 
+## Current Generated Catalog Registry Slice
+
+- Started from fresh `origin/main` at
+  `67260f686a886e4f2e7d149d7a9b762656ea858e` in branch
+  `codex/thnk-31-generated-plugin-registry`.
+- Replaced the hand-maintained first-party registry body in
+  `packages/plugin-catalog/src/plugins/index.ts` with a generic re-export from
+  generated aggregate source.
+- Added `packages/plugin-catalog/scripts/generate-plugin-registry.ts` to
+  discover first-party plugin packages from root `plugins/*/package.json` and
+  render deterministic static imports for bundling/typechecking.
+- Added checked-in `generated-first-party.ts` and stale-registry coverage so
+  package discovery remains the source of truth.
+- Wired `generate:plugins`, `check:plugins`, and catalog build freshness checks
+  into `@thinkwork/plugin-catalog`.
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-catalog check:plugins`
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `node scripts/verify-plugin-source-boundary.mjs`
+- `git diff --check`
+- Formatting: `pnpm dlx prettier@3.8.2 --write ...` on touched files.
+
 ## Current Pass
 
 - Started from fresh `origin/main` at `e468998e7` in branch

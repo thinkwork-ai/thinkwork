@@ -1,6 +1,6 @@
 /**
- * Build the signed plugin catalog JSON from every manifest registered in
- * `src/plugins/`.
+ * Build the signed plugin catalog JSON from manifests discovered through the
+ * generated `plugins/*` package registry.
  *
  * Signing key input (ed25519 PKCS#8 PEM), in precedence order:
  *   1. `--key <path>` — file containing the private key PEM
