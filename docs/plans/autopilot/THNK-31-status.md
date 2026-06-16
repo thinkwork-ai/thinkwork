@@ -92,6 +92,8 @@ project_context: TEI ThinkWork
   migration allowlist. The guard now reports 33 migration paths, down from 36.
 - PR #2560 opened for this slice:
   `https://github.com/thinkwork-ai/thinkwork/pull/2560`
+- PR #2560 merged into `main` as
+  `d9296ad7248246c7d1fea2ea832e01cda60177aa`.
 
 ### Verification
 
