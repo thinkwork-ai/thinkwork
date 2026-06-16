@@ -5,7 +5,7 @@
  * Supports both Cognito JWT and API key authentication.
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, primeRuntimeConfig } from "@thinkwork/runtime-config";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 function userPoolId(): string {
@@ -83,15 +83,30 @@ export interface AuthResult {
 }
 
 let verifier: ReturnType<typeof CognitoJwtVerifier.create> | null = null;
+let verifierConfigKey: string | null = null;
 
-function getVerifier() {
-  if (!verifier) {
-    const ids = clientIds();
+async function getVerifier() {
+  let poolId = userPoolId();
+  let ids = clientIds();
+
+  if (!poolId || ids.length === 0) {
+    await primeRuntimeConfig({ force: true });
+    poolId = userPoolId();
+    ids = clientIds();
+  }
+
+  if (!poolId || ids.length === 0) {
+    throw new Error("Cognito verifier config missing");
+  }
+
+  const configKey = `${poolId}|${ids.join(",")}`;
+  if (!verifier || verifierConfigKey !== configKey) {
     verifier = CognitoJwtVerifier.create({
-      userPoolId: userPoolId(),
+      userPoolId: poolId,
       tokenUse: "id",
-      clientId: ids.length > 0 ? ids : null,
+      clientId: ids,
     });
+    verifierConfigKey = configKey;
   }
   return verifier;
 }
@@ -119,7 +134,7 @@ export async function authenticate(
   // 1. Cognito JWT in the Authorization header.
   if (authHeader) {
     try {
-      const payload = await getVerifier().verify(bearerToken);
+      const payload = await (await getVerifier()).verify(bearerToken);
       return {
         principalId: payload.sub,
         tenantId: (payload as any)["custom:tenant_id"] || null,
