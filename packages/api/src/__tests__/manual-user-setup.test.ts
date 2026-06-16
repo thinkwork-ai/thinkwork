@@ -5,6 +5,7 @@ const {
   insertCalls,
   mockRequireTenantAdmin,
   mockResolveCallerUserId,
+  mockEnsureDefaultThreadSpace,
   runWithIdempotencyMock,
   selectRowsQueue,
   updateCalls,
@@ -13,6 +14,7 @@ const {
   insertCalls: [] as Array<{ table: unknown; values: unknown }>,
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
+  mockEnsureDefaultThreadSpace: vi.fn(),
   runWithIdempotencyMock: vi.fn(),
   selectRowsQueue: [] as unknown[][],
   updateCalls: [] as Array<{ table: unknown; values: unknown }>,
@@ -52,6 +54,10 @@ vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
 
 vi.mock("../lib/idempotency.js", () => ({
   runWithIdempotency: runWithIdempotencyMock,
+}));
+
+vi.mock("../lib/spaces/default-space.js", () => ({
+  ensureDefaultThreadSpace: mockEnsureDefaultThreadSpace,
 }));
 
 vi.mock("../graphql/utils.js", () => {
@@ -160,12 +166,18 @@ describe("addManualUser", () => {
     insertCalls.length = 0;
     mockRequireTenantAdmin.mockReset();
     mockResolveCallerUserId.mockReset();
+    mockEnsureDefaultThreadSpace.mockReset();
     runWithIdempotencyMock.mockReset();
     selectRowsQueue.length = 0;
     updateCalls.length = 0;
 
     mockRequireTenantAdmin.mockResolvedValue("admin");
     mockResolveCallerUserId.mockResolvedValue("operator-user");
+    mockEnsureDefaultThreadSpace.mockResolvedValue({
+      id: "space-general",
+      tenant_id: "tenant-A",
+      status: "active",
+    });
     runWithIdempotencyMock.mockImplementation(
       async ({ fn }: { fn: () => Promise<unknown> }) => fn(),
     );
@@ -226,6 +238,10 @@ describe("addManualUser", () => {
       principal_id: "sub-1",
       role: "member",
       status: "active",
+    });
+    expect(mockEnsureDefaultThreadSpace).toHaveBeenCalledWith({
+      tenantId: "tenant-A",
+      userId: "sub-1",
     });
   });
 

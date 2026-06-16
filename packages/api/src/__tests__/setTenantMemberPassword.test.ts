@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   cognitoSendMock,
   getConfigMock,
+  mockEnsureDefaultThreadSpace,
   mockRequireTenantAdmin,
   selectRowsQueue,
   whereCalls,
 } = vi.hoisted(() => ({
   cognitoSendMock: vi.fn(),
   getConfigMock: vi.fn(),
+  mockEnsureDefaultThreadSpace: vi.fn(),
   mockRequireTenantAdmin: vi.fn(),
   selectRowsQueue: [] as unknown[][],
   whereCalls: [] as unknown[],
@@ -28,10 +30,17 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   AdminSetUserPasswordCommand: class {
     constructor(public input: unknown) {}
   },
+  AdminUpdateUserAttributesCommand: class {
+    constructor(public input: unknown) {}
+  },
 }));
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
+}));
+
+vi.mock("../lib/spaces/default-space.js", () => ({
+  ensureDefaultThreadSpace: mockEnsureDefaultThreadSpace,
 }));
 
 vi.mock("../graphql/utils.js", () => {
@@ -103,12 +112,18 @@ describe("setTenantMemberPassword", () => {
   beforeEach(() => {
     cognitoSendMock.mockReset();
     getConfigMock.mockReset();
+    mockEnsureDefaultThreadSpace.mockReset();
     mockRequireTenantAdmin.mockReset();
     selectRowsQueue.length = 0;
     whereCalls.length = 0;
 
     cognitoSendMock.mockResolvedValue({});
     getConfigMock.mockReturnValue("pool-1");
+    mockEnsureDefaultThreadSpace.mockResolvedValue({
+      id: "space-general",
+      tenant_id: "tenant-A",
+      status: "active",
+    });
     mockRequireTenantAdmin.mockResolvedValue("admin");
   });
 
@@ -132,8 +147,20 @@ describe("setTenantMemberPassword", () => {
       status: "PASSWORD_SET",
       message: "Password set.",
     });
-    expect(cognitoSendMock).toHaveBeenCalledOnce();
-    const command = cognitoSendMock.mock.calls[0]?.[0] as {
+    expect(cognitoSendMock).toHaveBeenCalledTimes(2);
+    const attributeCommand = cognitoSendMock.mock.calls[0]?.[0] as {
+      input?: Record<string, unknown>;
+    };
+    expect(attributeCommand.input).toMatchObject({
+      UserPoolId: "pool-1",
+      Username: "alex@example.com",
+      UserAttributes: [
+        { Name: "email", Value: "alex@example.com" },
+        { Name: "email_verified", Value: "true" },
+        { Name: "custom:tenant_id", Value: "tenant-A" },
+      ],
+    });
+    const command = cognitoSendMock.mock.calls[1]?.[0] as {
       input?: Record<string, unknown>;
     };
     expect(command.input).toMatchObject({
@@ -141,6 +168,10 @@ describe("setTenantMemberPassword", () => {
       Username: "alex@example.com",
       Password: "StrongPass123!",
       Permanent: true,
+    });
+    expect(mockEnsureDefaultThreadSpace).toHaveBeenCalledWith({
+      tenantId: "tenant-A",
+      userId: "user-1",
     });
   });
 
@@ -165,7 +196,7 @@ describe("setTenantMemberPassword", () => {
       message:
         "Temporary password set. The user must choose a new password at next sign-in.",
     });
-    const command = cognitoSendMock.mock.calls[0]?.[0] as {
+    const command = cognitoSendMock.mock.calls[1]?.[0] as {
       input?: Record<string, unknown>;
     };
     expect(command.input).toMatchObject({
