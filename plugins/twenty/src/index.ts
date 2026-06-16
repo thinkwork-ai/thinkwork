@@ -16,6 +16,11 @@ export const twentyPluginPackage = {
       description: "Twenty managed-app and MCP OAuth smoke validation scripts.",
     },
     {
+      kind: "deployment",
+      path: "plugins/twenty/src/deployment/managed-app.ts",
+      description: "Twenty managed-app deployment adapter.",
+    },
+    {
       kind: "tests",
       path: "plugins/twenty/test",
       description: "Twenty package-local manifest and contract tests.",
@@ -27,13 +32,6 @@ export const twentyPluginPackage = {
     },
   ],
   compatibilityLinks: [
-    {
-      path: "packages/deployment-runner/src/apps/twenty.ts",
-      reason:
-        "Twenty managed-app adapter has not moved to the plugin package yet.",
-      removal:
-        "THNK-31 U3 moves managed-app deployment adapters behind plugins.",
-    },
     {
       path: "terraform/modules/app/twenty",
       reason:
@@ -51,3 +49,4 @@ export const twentyPluginPackage = {
 } as const;
 
 export { twentyManifest };
+export { twentyAdapter } from "./deployment/managed-app";

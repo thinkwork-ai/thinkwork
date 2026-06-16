@@ -12,6 +12,8 @@ tests, and operations material.
   `FirstPartyPluginPackage` with owned source descriptors and compatibility
   links.
 - `src/manifest.ts` owns the Plane catalog manifest.
+- `src/deployment/managed-app.ts` owns the Plane managed-app deployment
+  adapter.
 - `smoke/plane-managed-app-smoke.mjs` checks deployed Plane runtime health.
 - `smoke/plane-mcp-smoke.mjs` checks the Plane MCP seed/read/write loop.
 - `test/manifest.test.ts` keeps Plane manifest, infrastructure input, MCP auth,
@@ -22,8 +24,6 @@ tests, and operations material.
 The package descriptor documents the legacy Plane paths that still contain
 plugin-specific source:
 
-- `packages/deployment-runner/src/apps/plane.ts` until THNK-31 U3 moves the
-  managed-app adapter into `plugins/plane/src/deployment/`.
 - `terraform/modules/app/plane` until THNK-31 U4 moves Terraform source into
   `plugins/plane/terraform/plane/`.
 

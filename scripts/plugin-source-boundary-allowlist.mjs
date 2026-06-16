@@ -91,20 +91,6 @@ export const pluginSourceBoundaryAllowlist = [
     reason: "historical database migration coverage",
   },
   {
-    path: "packages/deployment-runner/src/apps/cognee.ts",
-    reason:
-      "legacy Cognee deployment adapter until managed-app extensions move",
-  },
-  {
-    path: "packages/deployment-runner/src/apps/plane.ts",
-    reason: "legacy Plane deployment adapter until managed-app extensions move",
-  },
-  {
-    path: "packages/deployment-runner/src/apps/twenty.ts",
-    reason:
-      "legacy Twenty deployment adapter until managed-app extensions move",
-  },
-  {
     path: "terraform/modules/app/cognee/README.md",
     reason:
       "legacy Cognee Terraform module until Company Brain substrate moves",

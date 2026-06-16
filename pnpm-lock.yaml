@@ -1043,6 +1043,16 @@ importers:
         version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
 
   packages/deployment-runner:
+    dependencies:
+      '@thinkwork/plugin-company-brain':
+        specifier: workspace:*
+        version: link:../../plugins/company-brain
+      '@thinkwork/plugin-plane':
+        specifier: workspace:*
+        version: link:../../plugins/plane
+      '@thinkwork/plugin-twenty':
+        specifier: workspace:*
+        version: link:../../plugins/twenty
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
@@ -1595,6 +1605,9 @@ importers:
 
   plugins/company-brain:
     devDependencies:
+      '@thinkwork/deployment-runner':
+        specifier: workspace:*
+        version: link:../../packages/deployment-runner
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../../packages/plugin-catalog
@@ -13901,6 +13914,7 @@ packages:
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
     engines: {node: ^18 || >=20}
+    deprecated: unmaintained
     hasBin: true
     peerDependencies:
       typescript: ^5.0.0

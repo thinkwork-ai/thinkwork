@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./manifest": "./src/manifest.ts"
+    "./manifest": "./src/manifest.ts",
+    "./deployment/managed-app": "./src/deployment/managed-app.ts"
   },
   "scripts": {
     "build": "tsc --build",

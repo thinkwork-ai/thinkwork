@@ -76,6 +76,38 @@ project_context: TEI ThinkWork
 - `git diff --check`
 - Formatting: `pnpm dlx prettier@3.8.2 --write ...` on touched files.
 
+## Current Managed-App Adapter Ownership Slice
+
+- Started from fresh `origin/main` at
+  `2f900027bc1ac6842c47a223b9804e19c33e02c4` in branch
+  `codex/thnk-31-plugin-managed-app-adapters`.
+- Moved Plane, Twenty, and Company Brain internal substrate managed-app adapter
+  source from `packages/deployment-runner/src/apps/` into owning plugin
+  packages.
+- Updated the generic deployment-runner registry to import plugin-owned adapter
+  exports while keeping shared planning, apply, and utility code in
+  `@thinkwork/deployment-runner`.
+- Added explicit plugin package adapter exports and dependency metadata.
+- Removed the three deployment-runner adapter paths from the source-boundary
+  migration allowlist. The guard now reports 33 migration paths, down from 36.
+
+### Verification
+
+- `pnpm install --lockfile-only`
+- `pnpm install --ignore-scripts`
+- `pnpm --filter @thinkwork/deployment-runner test`
+- `pnpm --filter @thinkwork/deployment-runner typecheck`
+- `pnpm --filter @thinkwork/plugin-plane test`
+- `pnpm --filter @thinkwork/plugin-plane typecheck`
+- `pnpm --filter @thinkwork/plugin-twenty test`
+- `pnpm --filter @thinkwork/plugin-twenty typecheck`
+- `pnpm --filter @thinkwork/plugin-company-brain test`
+- `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `node scripts/verify-plugin-source-boundary.mjs`
+- `git diff --check`
+
 ## Current Pass
 
 - Started from fresh `origin/main` at `e468998e7` in branch

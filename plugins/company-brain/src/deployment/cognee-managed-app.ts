@@ -1,7 +1,7 @@
 import {
   type ManagedAppAdapter,
   type RequiredManagedAppInput,
-} from "./registry.js";
+} from "@thinkwork/deployment-runner/apps/registry";
 import {
   boolOutput,
   optionalNumber,
@@ -10,7 +10,7 @@ import {
   requireDigestImage,
   requireStringInput,
   stringOutput,
-} from "./utils.js";
+} from "@thinkwork/deployment-runner/apps/utils";
 
 const BRAIN_STORAGE_TIERS = ["default", "production"] as const;
 
