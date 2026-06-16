@@ -25,6 +25,15 @@ promotes it to a Goal when the work is accountable, uses Twenty MCP with the
 current user's authority, and writes lightweight status back to Twenty so the
 business record stays the human's home base.
 
+The strongest first branch is a Customer Onboarding Agent: a closed-won
+opportunity or new customer record starts structured onboarding work in
+ThinkWork. The companion branch is Executive Operating Review: managers should
+be able to see how CRM/customer state and ThinkWork execution state combine
+into account risk, open commitments, blocked onboarding work, and agent work in
+progress. The first release should prove the onboarding loop first, while
+preserving the operating-review data trail that would make the management view
+credible.
+
 ---
 
 ## Actors
@@ -40,6 +49,8 @@ business record stays the human's home base.
 - A5. Customer or external stakeholder: Appears in CRM context and may be
   affected by agent-assisted follow-up, onboarding, renewal, support, or sales
   work.
+- A6. Manager or executive reviewer: Needs a cross-account view of CRM state,
+  open commitments, customer risk, and governed agent work in progress.
 
 ---
 
@@ -92,6 +103,17 @@ business record stays the human's home base.
   - **Outcome:** The spike proves whether record-native agent work creates
     platform leverage before broader CRM-native UI is built.
   - **Covered by:** R13, R14, R15, R16
+
+- F5. Review operational state across accounts
+  - **Trigger:** A6 wants to understand customer/onboarding health, stale
+    commitments, blocked agent work, or accounts needing attention.
+  - **Actors:** A2, A6
+  - **Steps:** ThinkWork combines lightweight CRM state from Twenty with linked
+    Thread/Goal execution state. The reviewer sees enough provenance to move
+    from a summary back into the relevant CRM record and ThinkWork work trail.
+  - **Outcome:** The management view demonstrates why combining Twenty and
+    ThinkWork is more valuable than CRM automation or generic agent chat alone.
+  - **Covered by:** R17, R18, R19
 
 ---
 
@@ -181,6 +203,19 @@ between the two without duplicating the full workflow model inside Twenty.
   a user should understand the agent work in the context of the CRM record
   without needing to begin in the ThinkWork app.
 
+**Operating review**
+
+- R17. Executive Operating Review is a companion branch, not the first
+  operational workflow. The onboarding spike should capture enough linked
+  state to make a later management view credible without building a full
+  dashboard in v1.
+- R18. Any management view must combine Twenty CRM/customer state with
+  ThinkWork Thread/Goal execution state; a CRM-only pipeline report or a
+  ThinkWork-only agent activity report does not prove the product split.
+- R19. Operating-review summaries must remain drill-downable to both surfaces:
+  the CRM record for business context and the ThinkWork Thread/Goal for
+  execution evidence, decisions, and audit.
+
 ---
 
 ## Acceptance Examples
@@ -204,6 +239,10 @@ between the two without duplicating the full workflow model inside Twenty.
 - AE5. **Covers R13, R16.** Given the spike completes, when the team reviews the
   evidence, then they can see whether the CRM record became a better starting
   point for the work than generic ThinkWork chat plus a Twenty connector.
+- AE6. **Covers R17, R18, R19.** Given several onboarding Goals are linked to
+  Twenty records, when a manager reviews account risk or onboarding health,
+  then the summary can explain each issue using both CRM state and ThinkWork
+  execution state and can drill back to the record and work trail.
 
 ---
 
@@ -216,6 +255,9 @@ between the two without duplicating the full workflow model inside Twenty.
 - The first spike demonstrates cross-surface continuity: CRM record to
   ThinkWork work, ThinkWork work back to CRM status, and resumption from either
   side.
+- The onboarding workflow produces enough structured evidence that an Executive
+  Operating Review can later summarize open commitments, blocked work, and
+  account risk without inventing a second source of truth.
 - User-scoped authorization and review policy remain legible even though the
   workflow begins inside Twenty.
 - The team has enough evidence to decide whether to deepen Twenty-native UI or
@@ -237,8 +279,8 @@ between the two without duplicating the full workflow model inside Twenty.
   Attio, or other CRMs.
 - ThinkWork/Cognito SSO into the Twenty web app beyond the already planned
   managed-app and MCP/OAuth foundation.
-- CRM analytics or executive dashboards beyond evidence needed to judge the
-  spike.
+- A full Executive Operating Review dashboard in v1. The first slice should
+  preserve the evidence trail that makes that view possible.
 
 ### Outside this product's identity
 
@@ -263,6 +305,10 @@ between the two without duplicating the full workflow model inside Twenty.
   preferably closed-won onboarding or high-touch opportunity follow-up. It uses
   standard Twenty objects and matches ThinkWork's existing Goal examples for
   accountable customer work.
+- **Companion management view:** Treat Executive Operating Review as the likely
+  second branch. The first onboarding branch should make the data trail real,
+  then planning can decide whether the review view is a separate product slice
+  or the natural readout of onboarding execution.
 - **Task relationship:** Twenty tasks are lightweight CRM handles. ThinkWork
   Threads are the durable execution ledger, and ThinkWork Goals are the outcome
   contract for accountable work.
@@ -332,6 +378,9 @@ between the two without duplicating the full workflow model inside Twenty.
 - [Affects R4][Technical] What durable linking key should prevent duplicate
   Threads/Goals when the same user restarts the same workflow from the same CRM
   record?
+- [Affects R17, R18, R19][Product/Technical] Should Executive Operating Review
+  be planned as a separate slice after onboarding, or as the readout layer of
+  the onboarding workflow once enough linked execution data exists?
 
 ---
 
