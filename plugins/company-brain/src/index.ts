@@ -18,6 +18,11 @@ export const companyBrainPluginPackage = {
         "Company Brain entitlement, operations, context engine, and substrate smoke validation scripts.",
     },
     {
+      kind: "deployment",
+      path: "plugins/company-brain/src/deployment/cognee-managed-app.ts",
+      description: "Company Brain internal substrate managed-app adapter.",
+    },
+    {
       kind: "tests",
       path: "plugins/company-brain/test",
       description: "Company Brain package-local manifest and contract tests.",
@@ -30,13 +35,6 @@ export const companyBrainPluginPackage = {
     },
   ],
   compatibilityLinks: [
-    {
-      path: "packages/deployment-runner/src/apps/cognee.ts",
-      reason:
-        "Company Brain's internal substrate managed-app adapter has not moved to the plugin package yet.",
-      removal:
-        "THNK-31 U3 moves managed-app deployment adapters behind plugins.",
-    },
     {
       path: "terraform/modules/app/cognee",
       reason:
@@ -80,3 +78,4 @@ export const companyBrainPluginPackage = {
 } as const;
 
 export { companyBrainManifest };
+export { cogneeAdapter } from "./deployment/cognee-managed-app";

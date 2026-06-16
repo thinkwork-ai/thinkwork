@@ -1,6 +1,6 @@
-import { cogneeAdapter } from "./cognee.js";
-import { planeAdapter } from "./plane.js";
-import { twentyAdapter } from "./twenty.js";
+import { cogneeAdapter } from "@thinkwork/plugin-company-brain/deployment/cognee-managed-app";
+import { planeAdapter } from "@thinkwork/plugin-plane/deployment/managed-app";
+import { twentyAdapter } from "@thinkwork/plugin-twenty/deployment/managed-app";
 import type { ManagedAppOperation } from "../shared.js";
 
 export type { ManagedAppOperation } from "../shared.js";

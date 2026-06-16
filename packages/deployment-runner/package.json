@@ -9,14 +9,17 @@
     "./plan": "./src/plan.ts",
     "./apply": "./src/apply.ts",
     "./apps/registry": "./src/apps/registry.ts",
-    "./apps/cognee": "./src/apps/cognee.ts",
-    "./apps/plane": "./src/apps/plane.ts",
-    "./apps/twenty": "./src/apps/twenty.ts"
+    "./apps/utils": "./src/apps/utils.ts"
   },
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@thinkwork/plugin-company-brain": "workspace:*",
+    "@thinkwork/plugin-plane": "workspace:*",
+    "@thinkwork/plugin-twenty": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

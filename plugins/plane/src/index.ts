@@ -16,6 +16,11 @@ export const planePluginPackage = {
       description: "Plane managed-app and MCP smoke validation scripts.",
     },
     {
+      kind: "deployment",
+      path: "plugins/plane/src/deployment/managed-app.ts",
+      description: "Plane managed-app deployment adapter.",
+    },
+    {
       kind: "tests",
       path: "plugins/plane/test",
       description: "Plane package-local manifest and contract tests.",
@@ -28,13 +33,6 @@ export const planePluginPackage = {
   ],
   compatibilityLinks: [
     {
-      path: "packages/deployment-runner/src/apps/plane.ts",
-      reason:
-        "Plane managed-app adapter has not moved to the plugin package yet.",
-      removal:
-        "THNK-31 U3 moves managed-app deployment adapters behind plugins.",
-    },
-    {
       path: "terraform/modules/app/plane",
       reason:
         "Plane Terraform source still ships from the legacy app module path.",
@@ -44,3 +42,4 @@ export const planePluginPackage = {
 } as const;
 
 export { planeManifest };
+export { planeAdapter } from "./deployment/managed-app";
