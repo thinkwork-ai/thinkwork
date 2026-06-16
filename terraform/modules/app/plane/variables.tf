@@ -19,13 +19,13 @@ variable "subnet_ids" {
 }
 
 variable "cache_subnet_ids" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "Subnet IDs for the managed Plane Valkey/Redis cache. Defaults to subnet_ids when omitted."
   type        = list(string)
   default     = []
 }
 
 variable "queue_subnet_ids" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
+  description = "Subnet IDs for the managed Plane RabbitMQ broker. Defaults to subnet_ids when omitted."
   type        = list(string)
   default     = []
 }
@@ -139,25 +139,15 @@ variable "mcp_image_uri" {
 }
 
 variable "redis_image_uri" {
-  description = "Redis sidecar image URI pinned to a reviewed immutable digest. Plane AIO requires REDIS_URL, but this remains an in-task loopback dependency, not ElastiCache."
+  description = "Deprecated no-op. Plane uses managed ElastiCache Valkey/Redis for REDIS_URL."
   type        = string
-  default     = "public.ecr.aws/docker/library/redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
-
-  validation {
-    condition     = var.redis_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.redis_image_uri))
-    error_message = "redis_image_uri must be empty or pinned to an immutable sha256 image digest."
-  }
+  default     = ""
 }
 
 variable "rabbitmq_image_uri" {
-  description = "RabbitMQ sidecar image URI pinned to a reviewed immutable digest. Plane AIO requires AMQP_URL, but this remains an in-task loopback dependency, not Amazon MQ."
+  description = "Deprecated no-op. Plane uses Amazon MQ for RabbitMQ for AMQP_URL."
   type        = string
-  default     = "public.ecr.aws/docker/library/rabbitmq:3.13-alpine@sha256:d7af1c87c5f1eda13fcfca06db452bf3aeab6619fc3358b68535c0c02c4e52bc"
-
-  validation {
-    condition     = var.rabbitmq_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.rabbitmq_image_uri))
-    error_message = "rabbitmq_image_uri must be empty or pinned to an immutable sha256 image digest."
-  }
+  default     = ""
 }
 
 variable "runtime_enabled" {
@@ -250,38 +240,43 @@ variable "mcp_container_port" {
 }
 
 variable "redis_container_port" {
-  description = "Redis sidecar port exposed only on the ECS task loopback network."
+  description = "Deprecated compatibility value. Plane uses cache_port for managed Valkey/Redis."
   type        = number
   default     = 6379
 }
 
 variable "rabbitmq_container_port" {
-  description = "RabbitMQ sidecar AMQP port exposed only on the ECS task loopback network."
+  description = "Amazon MQ RabbitMQ secure AMQP listener port."
   type        = number
-  default     = 5672
+  default     = 5671
 }
 
 variable "rabbitmq_username" {
-  description = "RabbitMQ sidecar username used only by the Plane AIO container over task loopback."
+  description = "Amazon MQ RabbitMQ username used by Plane."
   type        = string
   default     = "plane"
 }
 
 variable "rabbitmq_password" {
-  description = "RabbitMQ sidecar password used only by the Plane AIO container over task loopback."
+  description = "Optional Amazon MQ RabbitMQ password. Leave empty to generate a Terraform-managed password."
   type        = string
-  default     = "plane"
+  default     = ""
   sensitive   = true
+
+  validation {
+    condition     = var.rabbitmq_password == "" || length(var.rabbitmq_password) >= 12
+    error_message = "rabbitmq_password must be empty or at least 12 characters."
+  }
 }
 
 variable "rabbitmq_vhost" {
-  description = "RabbitMQ sidecar vhost used only by the Plane AIO container over task loopback."
+  description = "RabbitMQ vhost path used in Plane's AMQP_URL. Amazon MQ creates the default / vhost."
   type        = string
-  default     = "plane"
+  default     = "/"
 }
 
 variable "rabbitmq_erlang_cookie" {
-  description = "RabbitMQ single-node Erlang cookie used only inside the private Plane ECS task."
+  description = "Deprecated no-op. Amazon MQ manages RabbitMQ internals."
   type        = string
   default     = "thinkwork-plane-rabbitmq-cookie"
 }
@@ -375,7 +370,7 @@ variable "aes_secret_key_secret_arn" {
 }
 
 variable "amqp_url_secret_arn" {
-  description = "Deprecated no-op. Plane AIO AMQP_URL is generated from the in-task RabbitMQ sidecar."
+  description = "Deprecated no-op. Plane creates an AMQP_URL secret from the managed Amazon MQ broker endpoint."
   type        = string
   default     = ""
 }
@@ -428,63 +423,85 @@ variable "enable_signup" {
 }
 
 variable "cache_engine" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache engine for Plane. Prefer valkey; redis is available as a compatibility fallback."
   type        = string
   default     = "valkey"
+
+  validation {
+    condition     = contains(["valkey", "redis"], var.cache_engine)
+    error_message = "cache_engine must be valkey or redis."
+  }
 }
 
 variable "cache_engine_version" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache engine version for the selected cache engine."
   type        = string
   default     = "8.0"
 }
 
 variable "cache_parameter_group_family" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache parameter group family matching cache_engine/cache_engine_version."
   type        = string
   default     = "valkey8"
 }
 
 variable "cache_node_type" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache node type for the Plane cache."
   type        = string
   default     = "cache.t4g.micro"
 }
 
 variable "cache_port" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache Redis-compatible port."
   type        = number
   default     = 6379
 }
 
 variable "cache_num_cache_clusters" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "Number of cache nodes in the replication group. Use 1 for the smallest v1 deployment."
   type        = number
   default     = 1
 }
 
 variable "cache_transit_encryption_enabled" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "Enable in-transit encryption for the Plane cache."
   type        = bool
   default     = true
 }
 
 variable "rabbitmq_engine_version" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
+  description = "Amazon MQ RabbitMQ engine version."
   type        = string
   default     = "3.13"
 }
 
 variable "rabbitmq_instance_type" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
+  description = "Amazon MQ RabbitMQ broker instance type. mq.m7g.medium is the smallest current RabbitMQ option in us-east-1."
   type        = string
   default     = "mq.m7g.medium"
 }
 
 variable "rabbitmq_admin_username" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
+  description = "Deprecated compatibility value. Use rabbitmq_username."
   type        = string
   default     = "plane"
+}
+
+variable "rabbitmq_deployment_mode" {
+  description = "Amazon MQ RabbitMQ deployment mode."
+  type        = string
+  default     = "SINGLE_INSTANCE"
+
+  validation {
+    condition     = contains(["SINGLE_INSTANCE", "CLUSTER_MULTI_AZ"], var.rabbitmq_deployment_mode)
+    error_message = "rabbitmq_deployment_mode must be SINGLE_INSTANCE or CLUSTER_MULTI_AZ."
+  }
+}
+
+variable "rabbitmq_auto_minor_version_upgrade" {
+  description = "Allow Amazon MQ to apply compatible RabbitMQ minor version upgrades during maintenance windows."
+  type        = bool
+  default     = true
 }
 
 variable "allowed_public_cidr_blocks" {

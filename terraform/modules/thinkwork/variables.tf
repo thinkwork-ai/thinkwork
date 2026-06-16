@@ -891,6 +891,28 @@ variable "plane_db_url_secret_arn" {
   default     = ""
 }
 
+variable "plane_db_username" {
+  description = "Dedicated PostgreSQL username for Plane. Do not use the shared Aurora admin/master user."
+  type        = string
+  default     = "thinkwork_plane"
+
+  validation {
+    condition     = !contains(["postgres", "thinkwork_admin", "rdsadmin"], lower(var.plane_db_username))
+    error_message = "plane_db_username must be a dedicated least-privilege Plane database user."
+  }
+}
+
+variable "plane_db_name" {
+  description = "Dedicated PostgreSQL database name for Plane. Do not use the shared Thinkwork application database."
+  type        = string
+  default     = "thinkwork_plane"
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.plane_db_name))
+    error_message = "plane_db_name must be a valid PostgreSQL identifier."
+  }
+}
+
 variable "plane_secret_key_secret_arn" {
   description = "Secrets Manager ARN containing Plane SECRET_KEY."
   type        = string
@@ -910,7 +932,7 @@ variable "plane_aes_secret_key_secret_arn" {
 }
 
 variable "plane_amqp_url_secret_arn" {
-  description = "Deprecated no-op. Plane AIO AMQP_URL is generated from the in-task RabbitMQ sidecar."
+  description = "Deprecated no-op. Plane creates an AMQP_URL secret from the managed Amazon MQ broker endpoint."
   type        = string
   default     = ""
 }
@@ -988,33 +1010,61 @@ variable "plane_live_desired_count" {
 }
 
 variable "plane_cache_engine" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache engine for Plane. Prefer valkey; redis is available as a compatibility fallback."
   type        = string
   default     = "valkey"
+
+  validation {
+    condition     = contains(["valkey", "redis"], var.plane_cache_engine)
+    error_message = "plane_cache_engine must be valkey or redis."
+  }
 }
 
 variable "plane_cache_engine_version" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache engine version for the selected Plane cache engine."
   type        = string
   default     = "8.0"
 }
 
 variable "plane_cache_parameter_group_family" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache parameter group family matching plane_cache_engine/plane_cache_engine_version."
   type        = string
   default     = "valkey8"
 }
 
 variable "plane_cache_node_type" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache node type for Plane."
   type        = string
   default     = "cache.t4g.micro"
 }
 
 variable "plane_cache_num_cache_clusters" {
-  description = "Deprecated no-op. Compact Plane AIO does not provision a separate cache."
+  description = "Number of Plane cache nodes in the replication group. Use 1 for the smallest v1 deployment."
   type        = number
   default     = 1
+}
+
+variable "plane_rabbitmq_engine_version" {
+  description = "Amazon MQ RabbitMQ engine version for Plane."
+  type        = string
+  default     = "3.13"
+}
+
+variable "plane_rabbitmq_instance_type" {
+  description = "Amazon MQ RabbitMQ broker instance type for Plane. mq.m7g.medium is the smallest current RabbitMQ option in us-east-1."
+  type        = string
+  default     = "mq.m7g.medium"
+}
+
+variable "plane_rabbitmq_deployment_mode" {
+  description = "Amazon MQ RabbitMQ deployment mode for Plane."
+  type        = string
+  default     = "SINGLE_INSTANCE"
+
+  validation {
+    condition     = contains(["SINGLE_INSTANCE", "CLUSTER_MULTI_AZ"], var.plane_rabbitmq_deployment_mode)
+    error_message = "plane_rabbitmq_deployment_mode must be SINGLE_INSTANCE or CLUSTER_MULTI_AZ."
+  }
 }
 
 variable "plane_allowed_public_cidr_blocks" {
