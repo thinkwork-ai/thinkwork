@@ -60,6 +60,8 @@ project_context: TEI ThinkWork
   into `main` as `db405051a6555a675c214f5bb67340dcba871c2d`.
 - #2532 `test(plugins): move catalog parity tests into packages` merged into
   `main` as `cd3725d5f888be73a575d934c191d06ab82a882e`.
+- #2534 `test(plugins): move API manifest parity into packages` merged into
+  `main` as `39ee24f01657e7b1be4a9ac0ef324da5cf74d8ab`.
 
 ## Current Plane Package Slice
 
@@ -245,6 +247,8 @@ project_context: TEI ThinkWork
   Twenty API manifest parity test entries.
 - PR #2534 opened for this slice:
   `https://github.com/thinkwork-ai/thinkwork/pull/2534`
+- PR #2534 merged into `main` as
+  `39ee24f01657e7b1be4a9ac0ef324da5cf74d8ab`.
 
 ### Verification
 
