@@ -1747,6 +1747,17 @@ function ThreadTurnActivity({
           detail={turnSummary(turn, usage)}
           ariaLabel="Turn activity"
         >
+          {projection ? (
+            <ProjectedWorkspacePanel
+              projection={projection}
+              threadId={threadId}
+              agentsMdMayDiffer={agentsMdContentMayDiffer(
+                turn.id,
+                projection,
+                latestProjection ?? null,
+              )}
+            />
+          ) : null}
           {rows.map((row, index) => (
             <ActionRow
               key={`${turn.id}-${index}-${row.title}`}
@@ -1759,17 +1770,6 @@ function ThreadTurnActivity({
           ))}
           {failureDetail ? (
             <ActionRow title="Run failed" detail={failureDetail} kind="tool" />
-          ) : null}
-          {projection ? (
-            <ProjectedWorkspacePanel
-              projection={projection}
-              threadId={threadId}
-              agentsMdMayDiffer={agentsMdContentMayDiffer(
-                turn.id,
-                projection,
-                latestProjection ?? null,
-              )}
-            />
           ) : null}
         </ThinkingRow>
       </div>
