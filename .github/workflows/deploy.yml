@@ -1256,12 +1256,15 @@ jobs:
         working-directory: terraform/examples/greenfield
         run: |
           set -euo pipefail
-          if [ "${TWENTY_PROVISIONED:-false}" != "true" ] || [ "${TWENTY_RUNTIME_ENABLED:-false}" != "true" ]; then
-            echo "Twenty CRM runtime is not enabled; skipping ECS restart."
+          source ../../../scripts/lib/terraform-output.sh
+
+          applied_twenty_provisioned=$(tf_output_raw twenty_provisioned 2>/dev/null || printf '%s' "${TWENTY_PROVISIONED:-false}")
+          applied_twenty_runtime_enabled=$(tf_output_raw twenty_runtime_enabled 2>/dev/null || printf '%s' "${TWENTY_RUNTIME_ENABLED:-false}")
+          if [ "$applied_twenty_provisioned" != "true" ] || [ "$applied_twenty_runtime_enabled" != "true" ]; then
+            echo "Twenty CRM runtime is not enabled in applied Terraform state; skipping ECS restart."
             exit 0
           fi
 
-          source ../../../scripts/lib/terraform-output.sh
           cluster_arn=$(tf_output_raw twenty_cluster_arn 2>/dev/null || echo "")
           server_service=$(tf_output_raw twenty_server_service_name 2>/dev/null || echo "")
           worker_service=$(tf_output_raw twenty_worker_service_name 2>/dev/null || echo "")
