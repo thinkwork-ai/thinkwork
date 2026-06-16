@@ -24,6 +24,7 @@ const authMocks = vi.hoisted(() => ({
 }));
 
 const bindingMocks = vi.hoisted(() => ({
+  bindingKey: "thinkwork.authDeploymentBinding.v2",
   storageKey: "thinkwork.authDeploymentProfileSha256.v1",
   ensureAuthStorageMatchesDeploymentProfile: vi.fn(() => true),
   markAuthStorageDeploymentProfile: vi.fn(),
@@ -50,6 +51,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@/lib/auth-deployment-binding", () => ({
+  AUTH_DEPLOYMENT_BINDING_STORAGE_KEY: bindingMocks.bindingKey,
   AUTH_DEPLOYMENT_PROFILE_SHA_STORAGE_KEY: bindingMocks.storageKey,
   ensureAuthStorageMatchesDeploymentProfile:
     bindingMocks.ensureAuthStorageMatchesDeploymentProfile,

@@ -72,6 +72,19 @@ vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
 
 const ORIGINAL_LOCATION = window.location;
 
+function setWindowLocation(url: string): void {
+  const parsed = new URL(url);
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: {
+      href: parsed.href,
+      hostname: parsed.hostname,
+      origin: parsed.origin,
+      pathname: parsed.pathname,
+    },
+  });
+}
+
 beforeEach(() => {
   vi.stubEnv("VITE_API_URL", "https://api.example.com");
   vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
@@ -123,10 +136,29 @@ describe("SignInPage", () => {
     // onto the end-user login page.
     expect(screen.queryByText("Unsigned build-time fallback")).toBeNull();
     expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Create one" })).toBeNull();
+    expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
+  });
+
+  it("shows environment creation only on the central app host", () => {
+    setWindowLocation("https://app.thinkwork.ai/sign-in");
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+
     expect(
       screen.getByRole("link", { name: "Create one" }).getAttribute("href"),
     ).toBe("/onboarding/welcome");
-    expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
+  });
+
+  it("hides environment creation on customer hosts", () => {
+    setWindowLocation("https://mcpherson.thinkwork.ai/sign-in");
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+
+    expect(screen.queryByText("Don't have an environment?")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Create one" })).toBeNull();
   });
 
   it("waits for auth restoration before enabling login", () => {
@@ -246,7 +278,7 @@ describe("SignInPage", () => {
     expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
     expect(screen.queryByText("File")).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Create one" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Create one" })).toBeNull();
   });
 
   it("imports desktop deployment profile JSON from a deep link", async () => {

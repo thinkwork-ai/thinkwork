@@ -11,6 +11,7 @@ import * as auth from "@/lib/auth";
 import { getDesktopBridge } from "@/lib/desktop-runtime";
 import type { TokenStorage } from "@/lib/token-storage";
 import {
+  AUTH_DEPLOYMENT_BINDING_STORAGE_KEY,
   AUTH_DEPLOYMENT_PROFILE_SHA_STORAGE_KEY,
   ensureAuthStorageMatchesDeploymentProfile,
   markAuthStorageDeploymentProfile,
@@ -184,6 +185,7 @@ export function AuthProvider({
     setTokenProvider(null);
     setAuthToken(null);
     setUser(null);
+    tokenStorage.removeItem(AUTH_DEPLOYMENT_BINDING_STORAGE_KEY);
     tokenStorage.removeItem(AUTH_DEPLOYMENT_PROFILE_SHA_STORAGE_KEY);
     if (desktopBridge) {
       void desktopBridge.signOut().catch((error) => {
