@@ -168,6 +168,7 @@ describe("provisionPluginInfraComponent", () => {
     deps.managedApps.set(`${TENANT}:twenty`, {
       id: "app-twenty",
       desiredConfig: {},
+      currentStatus: "enabled",
       selectedReleaseVersion: "v1.2.3",
       selectedManifestDigest: "sha-123",
     });
@@ -268,6 +269,33 @@ describe("provisionPluginInfraComponent", () => {
     expect(ref.componentHash).toBe(infraComponentHash(component()));
   });
 
+  it("does not adopt a managed app row whose runtime status is unknown", async () => {
+    const deps = fakeDeps();
+    deps.managedApps.set(`${TENANT}:twenty`, {
+      id: "app-existing",
+      desiredConfig: { appPassword: "keep-me" },
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+
+    const ref = await provisionPluginInfraComponent(provisionArgs(deps));
+
+    expect(deps.startCalls).toHaveLength(1);
+    expect(deps.startCalls[0]).toMatchObject({
+      appKey: "twenty",
+      operation: "ENABLE",
+      desiredConfig: { appPassword: "keep-me" },
+    });
+    expect(ref).toMatchObject({
+      managedAppKey: "twenty",
+      managedApplicationId: "app-existing",
+      deploymentJobId: "job-1",
+      operation: "ENABLE",
+      adoptedExisting: true,
+    });
+    expect(ref.adoptedRunningInfra).toBeUndefined();
+  });
+
   it("an idempotent re-run of an adopted-running ref stays a no-job ADOPT (Fix A)", async () => {
     const deps = fakeDeps();
     deps.managedApps.set(`${TENANT}:twenty`, {
@@ -338,6 +366,7 @@ describe("provisionPluginInfraComponent", () => {
         dbPasswordSecretArn: "arn:aws:secretsmanager:db",
         bedrockModelResourceArns: ["arn:aws:bedrock:model"],
       },
+      currentStatus: "enabled",
       selectedReleaseVersion: "v1.2.3",
       selectedManifestDigest: "sha-123",
     });
@@ -438,6 +467,7 @@ describe("provisionPluginInfraComponent", () => {
     deps.managedApps.set(`${TENANT}:cognee`, {
       id: "app-cognee",
       desiredConfig: { imageUri: "repo/cognee@sha256:abc" },
+      currentStatus: "enabled",
       selectedReleaseVersion: "unresolved",
       selectedManifestDigest: "unresolved",
     });
@@ -684,6 +714,7 @@ describe("teardownPluginInfraComponent", () => {
     deps.managedApps.set(`${TENANT}:twenty`, {
       id: "app-twenty",
       desiredConfig: {},
+      currentStatus: "enabled",
       selectedReleaseVersion: "v1.2.3",
       selectedManifestDigest: "sha-123",
     });
@@ -773,6 +804,7 @@ describe("teardownPluginInfraComponent", () => {
     deps.managedApps.set(`${TENANT}:twenty`, {
       id: "app-existing",
       desiredConfig: {},
+      currentStatus: "enabled",
       selectedReleaseVersion: "v1.2.3",
       selectedManifestDigest: "sha-123",
     });

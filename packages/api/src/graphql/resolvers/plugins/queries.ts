@@ -13,9 +13,12 @@
  */
 
 import { GraphQLError } from "graphql";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { PluginCatalogEntry as CatalogPluginEntry } from "@thinkwork/plugin-catalog";
-import { managedApplications } from "@thinkwork/database-pg/schema";
+import {
+  managedApplicationDeploymentJobs,
+  managedApplications,
+} from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db as defaultDb } from "../../utils.js";
 import { snakeToCamel } from "../../utils.js";
@@ -71,20 +74,25 @@ export async function pluginLaunchUrlForInstall(
     (component) =>
       component.componentType === "infrastructure" &&
       component.state === "provisioned" &&
-      isRecord(component.handlerRef),
+      isRecord(jsonRecordValue(component.handlerRef)),
   );
-  if (!infra || !isRecord(infra.handlerRef)) return null;
+  if (!infra) return null;
+  const handlerRef = jsonRecordValue(infra.handlerRef);
+  if (!handlerRef) return null;
 
-  const managedApplicationId = stringValue(
-    infra.handlerRef.managedApplicationId,
-  );
-  const managedAppKey = stringValue(infra.handlerRef.managedAppKey);
+  const managedApplicationId = stringValue(handlerRef.managedApplicationId);
+  const managedAppKey = stringValue(handlerRef.managedAppKey);
   const row = managedApplicationId
     ? await findManagedApplicationById(tenantId, managedApplicationId, db)
     : managedAppKey
       ? await findManagedApplicationByKey(tenantId, managedAppKey, db)
       : null;
-  if (!row || !applicationIsDeployed(row.current_status)) return null;
+  if (
+    !row ||
+    !(await applicationHasLaunchableRuntime(tenantId, row, handlerRef, db))
+  ) {
+    return null;
+  }
   const desiredConfig = isRecord(row.desired_config) ? row.desired_config : {};
   return publicHttpUrl(desiredConfig.publicUrl);
 }
@@ -96,6 +104,7 @@ async function findManagedApplicationById(
 ) {
   const [row] = await db
     .select({
+      key: managedApplications.key,
       current_status: managedApplications.current_status,
       desired_config: managedApplications.desired_config,
     })
@@ -117,6 +126,7 @@ async function findManagedApplicationByKey(
 ) {
   const [row] = await db
     .select({
+      key: managedApplications.key,
       current_status: managedApplications.current_status,
       desired_config: managedApplications.desired_config,
     })
@@ -133,6 +143,32 @@ async function findManagedApplicationByKey(
 
 function applicationIsDeployed(status: string | null | undefined): boolean {
   return status === "enabled" || status === "running";
+}
+
+async function applicationHasLaunchableRuntime(
+  tenantId: string,
+  row: {
+    key: string;
+    current_status: string | null;
+  },
+  handlerRef: Record<string, unknown>,
+  db: DbLike,
+): Promise<boolean> {
+  if (applicationIsDeployed(row.current_status)) return true;
+  if (handlerRef.adoptedRunningInfra === true) return true;
+  const [job] = await db
+    .select({ operation: managedApplicationDeploymentJobs.operation })
+    .from(managedApplicationDeploymentJobs)
+    .where(
+      and(
+        eq(managedApplicationDeploymentJobs.tenant_id, tenantId),
+        eq(managedApplicationDeploymentJobs.app_key, row.key),
+        eq(managedApplicationDeploymentJobs.status, "succeeded"),
+      ),
+    )
+    .orderBy(desc(managedApplicationDeploymentJobs.updated_at))
+    .limit(1);
+  return job?.operation === "ENABLE" || job?.operation === "UPGRADE";
 }
 
 function publicHttpUrl(value: unknown): string | null {
@@ -155,6 +191,17 @@ function stringValue(value: unknown): string | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function jsonRecordValue(value: unknown): Record<string, unknown> | null {
+  if (isRecord(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function catalogVersionsPayload(plugin: CatalogPluginEntry) {
@@ -205,8 +252,8 @@ export async function pluginCatalog(
       launchUrl: await pluginLaunchUrlForInstall(tenantId, installPayload),
       updateAvailable: Boolean(
         install &&
-          latestVersion &&
-          compareSemverDesc(latestVersion, install.pinned_version) < 0,
+        latestVersion &&
+        compareSemverDesc(latestVersion, install.pinned_version) < 0,
       ),
     });
   }

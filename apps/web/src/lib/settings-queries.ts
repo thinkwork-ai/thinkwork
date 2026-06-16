@@ -1731,6 +1731,21 @@ export const SettingsActivatePluginMutation = graphql(`
   }
 `);
 
+export const SettingsActivatePluginWithCredentialsMutation = graphql(`
+  mutation SettingsActivatePluginWithCredentials(
+    $input: ActivatePluginWithCredentialsInput!
+  ) {
+    activatePluginWithCredentials(input: $input) {
+      id
+      pluginInstallId
+      pluginKey
+      status
+      grantedAt
+      revokedAt
+    }
+  }
+`);
+
 export const SettingsDeactivatePluginMutation = graphql(`
   mutation SettingsDeactivatePlugin($input: DeactivatePluginInput!) {
     deactivatePlugin(input: $input) {

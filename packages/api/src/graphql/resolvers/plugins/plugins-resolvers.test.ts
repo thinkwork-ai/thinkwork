@@ -279,16 +279,31 @@ beforeEach(() => {
 });
 
 function launchUrlDb(row: {
+  key?: string;
   current_status: string;
   desired_config: Record<string, unknown>;
+  latestSucceededOperation?: string | null;
 }) {
+  let selectCount = 0;
+  const appRow = { key: row.key ?? "plane", ...row };
+  const jobRows = row.latestSucceededOperation
+    ? [{ operation: row.latestSucceededOperation }]
+    : [];
+  const resultForSelect = () => {
+    selectCount += 1;
+    return selectCount === 1 ? [appRow] : jobRows;
+  };
+  const chain = () => ({
+    where: vi.fn(() => ({
+      limit: vi.fn(async () => resultForSelect()),
+      orderBy: vi.fn(() => ({
+        limit: vi.fn(async () => resultForSelect()),
+      })),
+    })),
+  });
   return {
     select: vi.fn(() => ({
-      from: vi.fn(() => ({
-        where: vi.fn(() => ({
-          limit: vi.fn(async () => [row]),
-        })),
-      })),
+      from: vi.fn(chain),
     })),
   } as never;
 }
@@ -314,6 +329,78 @@ describe("pluginLaunchUrlForInstall", () => {
         }),
       ),
     ).resolves.toBe("https://plane.example.test");
+  });
+
+  it("returns the public URL when handlerRef is a GraphQL AWSJSON string", async () => {
+    await expect(
+      pluginLaunchUrlForInstall(
+        "tenant-1",
+        {
+          state: "installed",
+          components: [
+            {
+              componentType: "infrastructure",
+              state: "provisioned",
+              handlerRef: JSON.stringify({ managedApplicationId: "app-1" }),
+            },
+          ],
+        },
+        launchUrlDb({
+          current_status: "enabled",
+          desired_config: { publicUrl: "https://plane.example.test/" },
+        }),
+      ),
+    ).resolves.toBe("https://plane.example.test");
+  });
+
+  it("returns the public URL when the latest succeeded app operation is running-capable", async () => {
+    await expect(
+      pluginLaunchUrlForInstall(
+        "tenant-1",
+        {
+          state: "installed",
+          components: [
+            {
+              componentType: "infrastructure",
+              state: "provisioned",
+              handlerRef: { managedApplicationId: "app-1" },
+            },
+          ],
+        },
+        launchUrlDb({
+          key: "twenty",
+          current_status: "unknown",
+          desired_config: { publicUrl: "https://crm.example.test/" },
+          latestSucceededOperation: "UPGRADE",
+        }),
+      ),
+    ).resolves.toBe("https://crm.example.test");
+  });
+
+  it("returns the public URL for explicitly adopted running infrastructure", async () => {
+    await expect(
+      pluginLaunchUrlForInstall(
+        "tenant-1",
+        {
+          state: "installed",
+          components: [
+            {
+              componentType: "infrastructure",
+              state: "provisioned",
+              handlerRef: JSON.stringify({
+                managedApplicationId: "app-1",
+                adoptedRunningInfra: true,
+              }),
+            },
+          ],
+        },
+        launchUrlDb({
+          key: "twenty",
+          current_status: "unknown",
+          desired_config: { publicUrl: "https://crm.example.test/" },
+        }),
+      ),
+    ).resolves.toBe("https://crm.example.test");
   });
 
   it("does not return a launch URL for parked or invalid deployments", async () => {

@@ -7,14 +7,15 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { desktopState, mocks, queryDocs, tenantState, paramsState } =
-  vi.hoisted(() => ({
+const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
+  () => ({
     desktopState: {
       bridge: null as null | { getDesktopConfig: ReturnType<typeof vi.fn> },
     },
     paramsState: { pluginKey: "lastmile" },
     mocks: {
       activate: vi.fn(),
+      activateCredentials: vi.fn(),
       deactivate: vi.fn(),
       install: vi.fn(),
       navigate: vi.fn(),
@@ -26,6 +27,9 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } =
     },
     queryDocs: {
       SettingsActivatePluginMutation: Symbol("activatePlugin"),
+      SettingsActivatePluginWithCredentialsMutation: Symbol(
+        "activatePluginWithCredentials",
+      ),
       SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
       SettingsInstallPluginMutation: Symbol("installPlugin"),
       SettingsManagedApplicationDeploymentQuery: Symbol(
@@ -39,12 +43,16 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } =
       SettingsUpgradePluginMutation: Symbol("upgradePlugin"),
     },
     tenantState: { isOperator: true, roleResolved: true },
-  }));
+  }),
+);
 
 vi.mock("urql", () => ({
   useMutation: (doc: unknown) => {
     if (doc === queryDocs.SettingsActivatePluginMutation) {
       return [{ fetching: false }, mocks.activate];
+    }
+    if (doc === queryDocs.SettingsActivatePluginWithCredentialsMutation) {
+      return [{ fetching: false }, mocks.activateCredentials];
     }
     if (doc === queryDocs.SettingsDeactivatePluginMutation) {
       return [{ fetching: false }, mocks.deactivate];
@@ -188,6 +196,16 @@ beforeEach(() => {
   mocks.activate.mockResolvedValue({
     data: { activatePlugin: { authorizeUrl: "https://auth.example/start" } },
   });
+  mocks.activateCredentials.mockResolvedValue({
+    data: {
+      activatePluginWithCredentials: {
+        id: "act-plane",
+        pluginInstallId: "install-plane",
+        pluginKey: "plane",
+        status: "active",
+      },
+    },
+  });
   mocks.deactivate.mockResolvedValue({
     data: { deactivatePlugin: { id: "act-1", status: "revoked" } },
   });
@@ -321,6 +339,45 @@ describe("PluginDetail", () => {
         },
       });
     });
+  });
+
+  it("saves Plane credentials instead of starting OAuth", async () => {
+    paramsState.pluginKey = "plane";
+    mockQueries({
+      install: {
+        ...baseInstall,
+        id: "install-plane",
+        pluginKey: "plane",
+        state: "installed",
+      },
+      activations: [],
+      catalog: [planeEntry],
+    });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("Not connected")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^connect$/i })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Plane personal access token"), {
+      target: { value: "pat_test" },
+    });
+    fireEvent.change(screen.getByLabelText("Workspace slug"), {
+      target: { value: "engineering" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save credentials/i }));
+
+    await waitFor(() => {
+      expect(mocks.activateCredentials).toHaveBeenCalledWith({
+        input: {
+          installId: "install-plane",
+          credentials: [
+            { key: "apiKey", value: "pat_test" },
+            { key: "workspaceSlug", value: "engineering" },
+          ],
+        },
+      });
+    });
+    expect(mocks.activate).not.toHaveBeenCalled();
   });
 
   it("shows the success notice, refetches activations, and clears the OAuth return params", async () => {
@@ -609,6 +666,32 @@ const catalogEntry = {
           displayName: "LastMile MCP",
         },
         { key: "lastmile-skills", type: "skills", displayName: null },
+      ],
+    },
+  ],
+  install: null,
+};
+
+const planeEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "plane",
+  displayName: "Plane",
+  description: "Plane work item tools.",
+  latestVersion: "0.1.2",
+  updateAvailable: false,
+  premium: null,
+  entitlement: null,
+  versions: [
+    {
+      version: "0.1.2",
+      payloadSha256: "sha256:plane",
+      requiredOauthScopes: [],
+      components: [
+        {
+          key: "issues",
+          type: "mcp-server",
+          displayName: "Plane work items",
+        },
       ],
     },
   ],

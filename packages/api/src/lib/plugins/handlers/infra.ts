@@ -366,7 +366,10 @@ function hasResolvedRelease(app: InfraManagedApplicationSnapshot): boolean {
 function isRunningManagedApplication(
   app: InfraManagedApplicationSnapshot,
 ): boolean {
-  return app.currentStatus === undefined || app.currentStatus === "enabled";
+  return (
+    app.currentStatus === "enabled" ||
+    (app.id === null && app.currentStatus === undefined)
+  );
 }
 
 /**
