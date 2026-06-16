@@ -25,6 +25,8 @@ project_context: TEI ThinkWork
   descriptors and compatibility links.
 - Populated Plane, Twenty, Company Brain, and LastMile package descriptors and
   READMEs with current owned source and remaining migration debt.
+- PR #2555 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2555`
 
 ### Verification
 
