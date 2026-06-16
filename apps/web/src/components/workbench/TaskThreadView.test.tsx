@@ -2688,6 +2688,14 @@ describe("TaskThreadView", () => {
               invocationSource: "chat_message",
               startedAt: "2026-06-12T08:00:00Z",
               finishedAt: "2026-06-12T08:00:05Z",
+              usageJson: {
+                tools_called: ["crm_search"],
+                diagnostics: {
+                  workspace_diagnostics: {
+                    workspace_sync_ms: 12,
+                  },
+                },
+              },
               contextSnapshot: {
                 workspace_projection: {
                   renderedPrefix: "tenants/acme/threads/thread-1/",
@@ -2728,6 +2736,18 @@ describe("TaskThreadView", () => {
     expect(screen.getByText("tenants/acme/agents/main/")).toBeTruthy();
     expect(screen.getByText("not_authorized")).toBeTruthy();
     expect(screen.getByText("read_only_generated_file")).toBeTruthy();
+    expect(
+      screen
+        .getByText("Projected workspace")
+        .compareDocumentPosition(screen.getByText("Workspace sync")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("Projected workspace")
+        .compareDocumentPosition(screen.getByText("Finding sources")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders no projected workspace panel for pre-feature turns", () => {
