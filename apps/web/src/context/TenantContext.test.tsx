@@ -97,4 +97,66 @@ describe("TenantProvider", () => {
       expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/me"),
     );
   });
+
+  it("prefers the DB tenant from auth/me over a stale JWT tenant claim", async () => {
+    authState.value = {
+      user: { tenantId: "tenant-stale", sub: "cognito-sub" },
+      isAuthenticated: true,
+      isLoading: false,
+      getToken: vi.fn(async () => "id-token"),
+    };
+    apiFetchMock.mockImplementation(async (path: string) => {
+      if (path === "/api/auth/me") {
+        return {
+          tenantId: "tenant-db",
+          userId: "db-user-1",
+          role: "member",
+        };
+      }
+      if (path === "/api/tenants/tenant-db") {
+        return {
+          id: "tenant-db",
+          name: "Acme",
+          slug: "acme",
+        };
+      }
+      throw new Error(`unexpected path ${path}`);
+    });
+
+    const { TenantProvider, useTenant } = await import("./TenantContext");
+
+    function Probe() {
+      const { isLoading, tenantId, tenant, userId } = useTenant();
+      return (
+        <div>
+          <p>{isLoading ? "loading" : "ready"}</p>
+          <p data-testid="tenant-id">{tenantId}</p>
+          <p data-testid="tenant-name">{tenant?.name}</p>
+          <p data-testid="user-id">{userId}</p>
+        </div>
+      );
+    }
+
+    render(
+      <TenantProvider>
+        <Probe />
+      </TenantProvider>,
+    );
+
+    await screen.findByText("ready");
+    expect(screen.getByTestId("tenant-id").textContent).toBe("tenant-db");
+    expect(screen.getByTestId("tenant-name").textContent).toBe("Acme");
+    expect(screen.getByTestId("user-id").textContent).toBe("db-user-1");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/me");
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/tenants/tenant-db", {
+      extraHeaders: { "x-tenant-id": "tenant-db" },
+    });
+    expect(apiFetchMock).not.toHaveBeenCalledWith(
+      "/api/tenants/tenant-stale",
+      expect.anything(),
+    );
+    await waitFor(() =>
+      expect(setGraphqlTenantIdMock).toHaveBeenLastCalledWith("tenant-db"),
+    );
+  });
 });
