@@ -96,6 +96,9 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
         architecture: "amd64",
       },
       parseRuntimeImageSpec(
+        "name=plane-mcp-server,uri=ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:6666666666666666666666666666666666666666666666666666666666666666,architecture=amd64",
+      ),
+      parseRuntimeImageSpec(
         "name=twenty,uri=twentycrm/twenty@sha256:5555555555555555555555555555555555555555555555555555555555555555,architecture=amd64",
       ),
     ],
@@ -140,7 +143,14 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   assert.equal(manifest.artifacts[0]?.sha256.length, 64);
   assert.deepEqual(
     manifest.runtimeImages.map((image) => image.name),
-    ["agentcore-pi-amd64", "agentcore-pi-arm64", "cognee", "plane", "twenty"],
+    [
+      "agentcore-pi-amd64",
+      "agentcore-pi-arm64",
+      "cognee",
+      "plane",
+      "plane-mcp-server",
+      "twenty",
+    ],
   );
   assert.equal(
     manifest.runtimeImages.find((image) => image.name === "agentcore-pi-amd64")
@@ -161,7 +171,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     ),
     {
       cognee: ["cognee"],
-      plane: ["plane"],
+      plane: ["plane", "plane-mcp-server"],
       twenty: ["twenty"],
     },
   );
