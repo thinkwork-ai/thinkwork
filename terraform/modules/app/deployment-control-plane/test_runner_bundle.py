@@ -1286,6 +1286,149 @@ def test_write_runner_files_customer_domain_prefers_secrets_and_coerces_booleans
     assert vars_json["customer_domain_legacy_retired"] is False
 
 
+def test_write_runner_files_refuses_to_clear_existing_customer_domain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {
+                "customer_domain": {"value": "tei.thinkwork.ai"},
+                "customer_domain_delegated": {"value": True},
+            }
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="Refusing to clear customer_domain"):
+        runner.write_runner_files(
+            {
+                "stage": "tei-e2e",
+                "awsRegion": "us-east-1",
+                "awsAccountId": "637423202447",
+                "dbPassword": "db-secret",
+                "apiAuthSecret": "api-secret",
+            },
+            {},
+        )
+
+
+def test_write_runner_files_refuses_to_disable_existing_customer_domain_delegation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {
+                "customer_domain": {"value": "tei.thinkwork.ai"},
+                "customer_domain_delegated": {"value": True},
+            }
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="Refusing to turn off customer_domain_delegated"):
+        runner.write_runner_files(
+            {
+                "stage": "tei-e2e",
+                "awsRegion": "us-east-1",
+                "awsAccountId": "637423202447",
+                "dbPassword": "db-secret",
+                "apiAuthSecret": "api-secret",
+                "customerDomain": "tei.thinkwork.ai",
+                "customerDomainDelegated": False,
+            },
+            {},
+        )
+
+
+def test_write_runner_files_preserves_existing_customer_domain_from_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {
+                "customer_domain": {"value": "tei.thinkwork.ai"},
+                "customer_domain_delegated": {"value": True},
+            }
+        },
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {
+            "customerDomain": "tei.thinkwork.ai",
+            "customerDomainDelegated": "true",
+            "customerDomainLegacyRetired": "false",
+        },
+    )
+
+    assert vars_json["customer_domain"] == "tei.thinkwork.ai"
+    assert vars_json["customer_domain_delegated"] is True
+    assert vars_json["customer_domain_legacy_retired"] is False
+
+
+def test_write_runner_files_requires_explicit_override_to_change_customer_domain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {
+                "customer_domain": {"value": "tei.thinkwork.ai"},
+                "customer_domain_delegated": {"value": True},
+            }
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="Refusing to change customer_domain"):
+        runner.write_runner_files(
+            {
+                "stage": "tei-e2e",
+                "awsRegion": "us-east-1",
+                "awsAccountId": "637423202447",
+                "dbPassword": "db-secret",
+                "apiAuthSecret": "api-secret",
+                "customerDomain": "mcpherson.thinkwork.ai",
+                "customerDomainDelegated": True,
+            },
+            {},
+        )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "customerDomain": "mcpherson.thinkwork.ai",
+            "customerDomainDelegated": True,
+            "allowCustomerDomainRemoval": True,
+        },
+        {},
+    )
+
+    assert vars_json["customer_domain"] == "mcpherson.thinkwork.ai"
+
+
 def test_write_evidence_records_consumed_domain_fields(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

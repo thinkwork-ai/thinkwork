@@ -123,15 +123,39 @@ export interface PriorControllerInput {
   awsRegion: string;
   availabilityZones: unknown[];
   evidenceBucket: string;
+  runnerSecretArn?: string;
   releaseVersion?: string;
   agentcorePiSourceImageUri?: string;
+  customerDomain?: string;
+  customerDomainDelegated?: boolean;
+  customerDomainLegacyRetired?: boolean;
   features?: unknown;
   terraform?: unknown;
 }
 
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
+}
+
+function booleanValue(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string" && value) {
+    return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+  }
+  return undefined;
+}
+
 /** Validate and narrow a prior execution's parsed input JSON. */
 export function parsePriorControllerInput(raw: unknown): PriorControllerInput {
-  const input = raw as Record<string, unknown>;
+  const input = objectValue(raw) ?? {};
+  const preservedConfig = objectValue(input.preservedConfig) ?? {};
   const required = [
     "customerName",
     "environmentName",
@@ -156,12 +180,26 @@ export function parsePriorControllerInput(raw: unknown): PriorControllerInput {
       ? input.availabilityZones
       : [],
     evidenceBucket: input.evidenceBucket as string,
+    runnerSecretArn:
+      stringValue(input.runnerSecretArn) ??
+      stringValue(input.deploymentSecretsSecretArn),
     releaseVersion:
-      typeof input.releaseVersion === "string" ? input.releaseVersion : undefined,
+      typeof input.releaseVersion === "string"
+        ? input.releaseVersion
+        : undefined,
     agentcorePiSourceImageUri:
       typeof input.agentcorePiSourceImageUri === "string"
         ? input.agentcorePiSourceImageUri
         : undefined,
+    customerDomain:
+      stringValue(input.customerDomain) ??
+      stringValue(preservedConfig.customerDomain),
+    customerDomainDelegated:
+      booleanValue(input.customerDomainDelegated) ??
+      booleanValue(preservedConfig.customerDomainDelegated),
+    customerDomainLegacyRetired:
+      booleanValue(input.customerDomainLegacyRetired) ??
+      booleanValue(preservedConfig.customerDomainLegacyRetired),
     features: input.features,
     terraform: input.terraform,
   };
@@ -183,6 +221,16 @@ export function buildControllerUpdateInput(options: {
     manifestUrl: release.manifestUrl,
     manifestSha256: release.manifestSha256,
   };
+  const preservedConfig = {
+    ...(prior.customerDomain ? { customerDomain: prior.customerDomain } : {}),
+    ...(prior.customerDomainDelegated !== undefined
+      ? { customerDomainDelegated: prior.customerDomainDelegated }
+      : {}),
+    ...(prior.customerDomainLegacyRetired !== undefined
+      ? { customerDomainLegacyRetired: prior.customerDomainLegacyRetired }
+      : {}),
+  };
+  const hasPreservedConfig = Object.keys(preservedConfig).length > 0;
   return {
     schemaVersion: 1,
     contract: "thinkwork.deployment.controller.v1",
@@ -196,6 +244,15 @@ export function buildControllerUpdateInput(options: {
     availabilityZones: prior.availabilityZones,
     source: "manual-cli",
     evidenceBucket: prior.evidenceBucket,
+    runnerSecretArn:
+      prior.runnerSecretArn ??
+      `/thinkwork/${prior.environmentName}/deployment/runner-secrets`,
+    ...(hasPreservedConfig
+      ? {
+          preservedConfig,
+          ...preservedConfig,
+        }
+      : {}),
     evidence: {
       bucket: prior.evidenceBucket,
       prefix: `settings/releases/${release.version}/${sessionId}`,
@@ -223,7 +280,12 @@ export function buildControllerUpdateInput(options: {
       destroy: false,
     },
     features: prior.features ?? {
-      baseInstall: { cognee: false, slack: false, stripe: false, twenty: false },
+      baseInstall: {
+        cognee: false,
+        slack: false,
+        stripe: false,
+        twenty: false,
+      },
       optionalApps: [],
     },
     terraform: prior.terraform ?? {

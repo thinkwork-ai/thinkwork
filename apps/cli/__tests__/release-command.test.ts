@@ -145,8 +145,13 @@ describe("resolveReleaseManifest", () => {
       arrayBuffer: async () => new TextEncoder().encode(body).buffer,
     }) as unknown as typeof fetch;
 
-    const resolved = await resolveReleaseManifest("v0.1.0-canary.173", fetchImpl);
-    expect(resolved.manifestUrl).toContain("v0.1.0-canary.173/thinkwork-release.json");
+    const resolved = await resolveReleaseManifest(
+      "v0.1.0-canary.173",
+      fetchImpl,
+    );
+    expect(resolved.manifestUrl).toContain(
+      "v0.1.0-canary.173/thinkwork-release.json",
+    );
     expect(resolved.manifestSha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
@@ -182,9 +187,21 @@ const PRIOR = {
   availabilityZones: [],
   evidenceBucket: "thinkwork-tei-e2e-637423202447-deploy-evidence",
   releaseVersion: "v0.1.0-canary.172",
-  agentcorePiSourceImageUri: "ghcr.io/thinkwork-ai/thinkwork-agentcore:pinned@sha256:abc",
+  agentcorePiSourceImageUri:
+    "ghcr.io/thinkwork-ai/thinkwork-agentcore:pinned@sha256:abc",
   features: { baseInstall: { cognee: true }, optionalApps: [] },
   terraform: { stateRecovery: { mode: "state", recoverByTags: false } },
+};
+
+const PRIOR_WITH_DOMAIN = {
+  ...PRIOR,
+  runnerSecretArn:
+    "arn:aws:secretsmanager:us-east-1:637423202447:secret:runner",
+  preservedConfig: {
+    customerDomain: "tei.thinkwork.ai",
+    customerDomainDelegated: true,
+    customerDomainLegacyRetired: false,
+  },
 };
 
 describe("parsePriorControllerInput", () => {
@@ -192,6 +209,14 @@ describe("parsePriorControllerInput", () => {
     const prior = parsePriorControllerInput(PRIOR);
     expect(prior.customerName).toBe("ThinkWork");
     expect(prior.releaseVersion).toBe("v0.1.0-canary.172");
+  });
+
+  it("extracts runner secrets and preserved customer domain config", () => {
+    const prior = parsePriorControllerInput(PRIOR_WITH_DOMAIN);
+    expect(prior.runnerSecretArn).toBe(PRIOR_WITH_DOMAIN.runnerSecretArn);
+    expect(prior.customerDomain).toBe("tei.thinkwork.ai");
+    expect(prior.customerDomainDelegated).toBe(true);
+    expect(prior.customerDomainLegacyRetired).toBe(false);
   });
 
   it("throws a bootstrap hint when an environment fact is missing", () => {
@@ -227,18 +252,46 @@ describe("buildControllerUpdateInput", () => {
       awsAccountId: "637423202447",
       awsRegion: "us-east-1",
       evidenceBucket: PRIOR.evidenceBucket,
+      runnerSecretArn: "/thinkwork/tei-e2e/deployment/runner-secrets",
       releaseVersion: "v0.1.0-canary.173",
       releaseManifestSha256: "b".repeat(64),
       terraformModuleVersion: "0.1.0-canary.173",
       agentcorePiSourceImageUri: PRIOR.agentcorePiSourceImageUri,
       features: PRIOR.features,
-      operation: { kind: "foundation", action: "update", plan: true, apply: true, destroy: false },
+      operation: {
+        kind: "foundation",
+        action: "update",
+        plan: true,
+        apply: true,
+        destroy: false,
+      },
     });
     expect(input.evidence).toMatchObject({
       bucket: PRIOR.evidenceBucket,
       prefix: "settings/releases/v0.1.0-canary.173/session-1",
     });
     expect(input.release).toEqual(release);
+  });
+
+  it("preserves customer domain config on release update inputs", () => {
+    const prior = parsePriorControllerInput(PRIOR_WITH_DOMAIN);
+    const input = buildControllerUpdateInput({
+      prior,
+      release,
+      sessionId: "session-1",
+    });
+
+    expect(input).toMatchObject({
+      runnerSecretArn: PRIOR_WITH_DOMAIN.runnerSecretArn,
+      preservedConfig: {
+        customerDomain: "tei.thinkwork.ai",
+        customerDomainDelegated: true,
+        customerDomainLegacyRetired: false,
+      },
+      customerDomain: "tei.thinkwork.ai",
+      customerDomainDelegated: true,
+      customerDomainLegacyRetired: false,
+    });
   });
 
   it("generates a session id when none is supplied", () => {
@@ -263,7 +316,11 @@ describe("controllerExecutionName", () => {
   });
 
   it("stays within Step Functions' 80-char name limit", () => {
-    const name = controllerExecutionName("x".repeat(70), "v0.1.0-canary.173", now);
+    const name = controllerExecutionName(
+      "x".repeat(70),
+      "v0.1.0-canary.173",
+      now,
+    );
     expect(name.length).toBeLessThanOrEqual(80);
   });
 });
