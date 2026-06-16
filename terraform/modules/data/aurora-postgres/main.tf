@@ -125,6 +125,12 @@ resource "aws_rds_cluster" "main" {
   tags = {
     Name = "thinkwork-${var.stage}-db"
   }
+
+  lifecycle {
+    # Aurora can auto-advance patch versions; never attempt to roll an
+    # existing cluster back to the module's default minor version.
+    ignore_changes = [engine_version]
+  }
 }
 
 resource "aws_rds_cluster_instance" "main" {
@@ -141,6 +147,10 @@ resource "aws_rds_cluster_instance" "main" {
 
   tags = {
     Name = "thinkwork-${var.stage}-db-1"
+  }
+
+  lifecycle {
+    ignore_changes = [engine_version]
   }
 }
 
