@@ -163,34 +163,76 @@ function configPluginKey(config: RuntimeMcpConfig): string | null {
   return match?.[1] ?? null;
 }
 
-function mentionedPluginKeys(
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function aliasPattern(alias: string): string {
+  return escapeRegExp(alias.trim()).replace(/\s+/g, "\\s+");
+}
+
+function hasAliasMention(message: string, alias: string): boolean {
+  return new RegExp(`\\b${aliasPattern(alias)}\\b`).test(message);
+}
+
+function hasNegatedAliasMention(message: string, alias: string): boolean {
+  const pattern = aliasPattern(alias);
+  const optionalArticle = "(?:the\\s+)?";
+  return [
+    new RegExp(
+      `\\b(?:do\\s+not|don't|dont|never)\\s+(?:use|call|invoke|query|select|choose|route\\s+to)\\s+${optionalArticle}${pattern}\\b`,
+    ),
+    new RegExp(
+      `\\bnot\\s+(?:use|using|call|calling|invoke|invoking|querying)\\s+${optionalArticle}${pattern}\\b`,
+    ),
+    new RegExp(
+      `\\bwithout\\s+(?:using\\s+|calling\\s+|invoking\\s+|querying\\s+)?${optionalArticle}${pattern}\\b`,
+    ),
+    new RegExp(`\\bno\\s+${pattern}\\b`),
+  ].some((negated) => negated.test(message));
+}
+
+function mentionedPluginIntent(
   message: string,
   configs: RuntimeMcpConfig[],
-): Set<string> {
+): { requested: Set<string>; excluded: Set<string> } {
   const lower = message.toLowerCase();
   const configuredKeys = new Set(
     configs.map(configPluginKey).filter((key): key is string => Boolean(key)),
   );
-  const mentioned = new Set<string>();
+  const requested = new Set<string>();
+  const excluded = new Set<string>();
   for (const key of configuredKeys) {
     const aliases = EXPLICIT_PLUGIN_MCP_ALIASES[key] ?? [key];
-    if (aliases.some((alias) => lower.includes(alias))) {
-      mentioned.add(key);
+    const negated = aliases.some(
+      (alias) => hasAliasMention(lower, alias) && hasNegatedAliasMention(lower, alias),
+    );
+    if (negated) {
+      excluded.add(key);
+    }
+    const positive = aliases.some(
+      (alias) => hasAliasMention(lower, alias) && !hasNegatedAliasMention(lower, alias),
+    );
+    if (positive) {
+      requested.add(key);
     }
   }
-  return mentioned;
+  return { requested, excluded };
 }
 
 function filterMcpConfigsForExplicitPluginMention<T extends RuntimeMcpConfig>(
   configs: T[],
   message: string,
 ): T[] {
-  const mentioned = mentionedPluginKeys(message, configs);
-  if (mentioned.size === 0) return configs;
+  const { requested, excluded } = mentionedPluginIntent(message, configs);
+  if (requested.size === 0 && excluded.size === 0) return configs;
 
   const narrowed = configs.filter((config) => {
     const key = configPluginKey(config);
-    return !key || mentioned.has(key);
+    if (!key) return true;
+    if (excluded.has(key)) return false;
+    if (requested.size > 0) return requested.has(key);
+    return true;
   });
   return narrowed.length > 0 ? narrowed : configs;
 }
