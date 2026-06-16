@@ -392,6 +392,18 @@ type ResendMemberInviteResult {
   message: String!
 }
 
+input SetTenantMemberPasswordInput {
+  memberId: ID!
+  password: String!
+  "When true, the user keeps this password. When false, Cognito requires a password change on next sign-in."
+  permanent: Boolean = true
+}
+
+type SetTenantMemberPasswordResult {
+  status: String!
+  message: String!
+}
+
 type BootstrapResult {
   user: User!
   tenant: Tenant!
@@ -432,6 +444,10 @@ extend type Mutation {
     tenantId: ID!
     input: ResendMemberInviteInput!
   ): ResendMemberInviteResult!
+  setTenantMemberPassword(
+    tenantId: ID!
+    input: SetTenantMemberPasswordInput!
+  ): SetTenantMemberPasswordResult!
   updateUser(id: ID!, input: UpdateUserInput!): User!
   updateUserProfile(userId: ID!, input: UpdateUserProfileInput!): UserProfile!
   registerPushToken(input: RegisterPushTokenInput!): Boolean!

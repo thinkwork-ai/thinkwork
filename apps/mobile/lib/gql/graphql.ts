@@ -2677,6 +2677,7 @@ export type Mutation = {
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
   setSpaceTools: Space;
+  setTenantMemberPassword: SetTenantMemberPasswordResult;
   setUserModelApproval: Array<UserModelCatalogEntry>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startDeploymentReleaseUpdate: ReleaseUpdateJob;
@@ -3637,6 +3638,12 @@ export type MutationSetSpaceRuntimeOverridesArgs = {
 
 export type MutationSetSpaceToolsArgs = {
   input: SetSpaceToolsInput;
+};
+
+
+export type MutationSetTenantMemberPasswordArgs = {
+  input: SetTenantMemberPasswordInput;
+  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -6225,6 +6232,19 @@ export type SetSpaceToolsInput = {
   mcpServerIds: Array<Scalars['ID']['input']>;
   spaceId: Scalars['ID']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+export type SetTenantMemberPasswordInput = {
+  memberId: Scalars['ID']['input'];
+  password: Scalars['String']['input'];
+  /** When true, the user keeps this password. When false, Cognito requires a password change on next sign-in. */
+  permanent?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+export type SetTenantMemberPasswordResult = {
+  __typename?: 'SetTenantMemberPasswordResult';
+  message: Scalars['String']['output'];
+  status: Scalars['String']['output'];
 };
 
 export type SkillAttributionCandidate = {

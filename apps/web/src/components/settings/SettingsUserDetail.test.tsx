@@ -13,6 +13,7 @@ const {
   navigateMock,
   removeMemberMock,
   resendMemberInviteMock,
+  setPasswordMock,
   updateMemberMock,
   updateProfileMock,
   updateUserMock,
@@ -27,6 +28,7 @@ const {
   navigateMock: vi.fn(),
   removeMemberMock: vi.fn(),
   resendMemberInviteMock: vi.fn(),
+  setPasswordMock: vi.fn(),
   updateMemberMock: vi.fn(),
   updateProfileMock: vi.fn(),
   updateUserMock: vi.fn(),
@@ -41,6 +43,7 @@ const {
     SettingsInviteMemberMutation: Symbol("inviteMember"),
     SettingsRemoveTenantMemberMutation: Symbol("removeMember"),
     SettingsResendMemberInviteMutation: Symbol("resendMemberInvite"),
+    SettingsSetTenantMemberPasswordMutation: Symbol("setPassword"),
     SettingsTenantMembersQuery: Symbol("members"),
     SettingsUserBudgetStatusQuery: Symbol("userBudgetStatus"),
     SettingsUpsertBudgetPolicyMutation: Symbol("upsertBudget"),
@@ -85,6 +88,8 @@ vi.mock("urql", () => ({
       return [{ fetching: false }, inviteMemberMock];
     if (doc === queryDocs.SettingsResendMemberInviteMutation)
       return [{ fetching: false }, resendMemberInviteMock];
+    if (doc === queryDocs.SettingsSetTenantMemberPasswordMutation)
+      return [{ fetching: false }, setPasswordMock];
     if (doc === queryDocs.SettingsRemoveTenantMemberMutation)
       return [{ fetching: false }, removeMemberMock];
     return [{ fetching: false }, vi.fn()];
@@ -140,6 +145,7 @@ beforeEach(() => {
   navigateMock.mockReset();
   removeMemberMock.mockReset();
   resendMemberInviteMock.mockReset();
+  setPasswordMock.mockReset();
   updateMemberMock.mockReset();
   updateProfileMock.mockReset();
   updateUserMock.mockReset();
@@ -153,6 +159,15 @@ beforeEach(() => {
       resendMemberInvite: {
         status: "RESENT",
         message: "Invite resent.",
+      },
+    },
+  });
+  setPasswordMock.mockResolvedValue({
+    error: null,
+    data: {
+      setTenantMemberPassword: {
+        status: "PASSWORD_SET",
+        message: "Password set.",
       },
     },
   });
@@ -212,6 +227,105 @@ describe("SettingsUserDetail role merge", () => {
     seedMember();
     render(<SettingsUserDetail />);
     expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(false);
+  });
+
+  it("sets a permanent password for another member from the profile page", async () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^set password$/i }));
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "StrongPass123!" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "StrongPass123!" },
+    });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^set password$/i }).at(-1)!,
+    );
+
+    await waitFor(() => expect(setPasswordMock).toHaveBeenCalled());
+    expect(setPasswordMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      input: {
+        memberId: "member-1",
+        password: "StrongPass123!",
+        permanent: true,
+      },
+    });
+    expect(screen.getByText("Password set.")).toBeTruthy();
+  });
+
+  it("can require the user to change a temporary password on next sign-in", async () => {
+    setPasswordMock.mockResolvedValueOnce({
+      error: null,
+      data: {
+        setTenantMemberPassword: {
+          status: "TEMPORARY_PASSWORD_SET",
+          message:
+            "Temporary password set. The user must choose a new password at next sign-in.",
+        },
+      },
+    });
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^set password$/i }));
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "StrongPass123!" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "StrongPass123!" },
+    });
+    fireEvent.click(
+      screen.getByRole("switch", { name: /require change on next sign-in/i }),
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^set password$/i }).at(-1)!,
+    );
+
+    await waitFor(() => expect(setPasswordMock).toHaveBeenCalled());
+    expect(setPasswordMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      input: {
+        memberId: "member-1",
+        password: "StrongPass123!",
+        permanent: false,
+      },
+    });
+    expect(
+      screen.getByText(
+        "Temporary password set. The user must choose a new password at next sign-in.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("validates password confirmation before calling GraphQL", () => {
+    seedMember();
+    render(<SettingsUserDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^set password$/i }));
+    fireEvent.change(screen.getByLabelText("New password"), {
+      target: { value: "StrongPass123!" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm password"), {
+      target: { value: "DifferentPass123!" },
+    });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^set password$/i }).at(-1)!,
+    );
+
+    expect(screen.getByText("Passwords do not match.")).toBeTruthy();
+    expect(setPasswordMock).not.toHaveBeenCalled();
+  });
+
+  it("hides the set password action for the caller's own membership", () => {
+    seedMember({
+      user: { id: "caller-1", name: "Me", email: "me@x.com", profile: null },
+    });
+    render(<SettingsUserDetail />);
+
+    expect(screen.queryByRole("button", { name: /^set password$/i })).toBeNull();
   });
 
   it("requires a positive numeric budget before saving", () => {
