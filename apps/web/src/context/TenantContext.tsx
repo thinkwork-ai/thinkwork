@@ -126,7 +126,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [authRetryTick, setAuthRetryTick] = useState(0);
 
   const jwtTenantId = user?.tenantId ?? null;
-  const effectiveTenantId = jwtTenantId ?? discoveredTenantId;
+  const effectiveTenantId = discoveredTenantId ?? jwtTenantId;
 
   useEffect(() => {
     setGraphqlTenantId(effectiveTenantId || tenant?.id || null);
@@ -211,10 +211,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       return;
     }
     const found = await discoverCallerViaAuthMe();
+    setDiscoveredTenantId(found.tenantId);
     setDiscoveredUserId(found.userId);
     setRole(found.role);
     setRoleResolved(true);
-    await fetchTenant(targetTenantId);
+    await fetchTenant(found.tenantId ?? targetTenantId);
   }
 
   useEffect(() => {
@@ -265,7 +266,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         noTenantAssigned,
         refetch: () => {
           if (jwtTenantId) {
-            fetchTenant(jwtTenantId);
+            discoverCallerThenFetchTenant(jwtTenantId);
           } else {
             discoverTenantThenFetch();
           }
