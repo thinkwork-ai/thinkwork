@@ -420,6 +420,8 @@ resource "terraform_data" "plane_configuration_guardrails" {
     plane_admin_image_uri                   = var.plane_admin_image_uri
     plane_live_image_uri                    = var.plane_live_image_uri
     plane_mcp_image_uri                     = var.plane_mcp_image_uri
+    plane_db_name                           = var.plane_db_name
+    plane_db_username                       = var.plane_db_username
     plane_db_url_secret_arn                 = var.plane_db_url_secret_arn
     plane_secret_key_secret_arn             = var.plane_secret_key_secret_arn
     plane_live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
@@ -430,6 +432,8 @@ resource "terraform_data" "plane_configuration_guardrails" {
     plane_public_url                        = local.plane_public_url
     plane_certificate_arn                   = local.plane_certificate_arn
     plane_web_container_port                = var.plane_web_container_port
+    plane_cache_engine                      = var.plane_cache_engine
+    plane_rabbitmq_engine_version           = var.plane_rabbitmq_engine_version
     public_subnet_count                     = length(module.vpc.public_subnet_ids)
     private_subnet_count                    = length(module.vpc.private_subnet_ids)
   }
@@ -469,6 +473,11 @@ resource "terraform_data" "plane_configuration_guardrails" {
     }
 
     precondition {
+      condition     = var.plane_db_name != var.database_name
+      error_message = "plane_db_name must be distinct from the shared Thinkwork database name."
+    }
+
+    precondition {
       condition     = var.plane_s3_bucket_name != ""
       error_message = "plane_provisioned requires plane_s3_bucket_name."
     }
@@ -486,6 +495,11 @@ resource "terraform_data" "plane_configuration_guardrails" {
     precondition {
       condition     = length(module.vpc.public_subnet_ids) > 0
       error_message = "plane_provisioned requires at least one public subnet for the public ALB and phase-1 task egress pattern."
+    }
+
+    precondition {
+      condition     = length(module.vpc.private_subnet_ids) > 0
+      error_message = "plane_provisioned requires at least one private subnet for managed Valkey/Redis and RabbitMQ."
     }
 
     precondition {
@@ -1249,6 +1263,8 @@ module "plane" {
   stage                = var.stage
   vpc_id               = module.vpc.vpc_id
   subnet_ids           = module.vpc.public_subnet_ids
+  cache_subnet_ids     = module.vpc.private_subnet_ids
+  queue_subnet_ids     = module.vpc.private_subnet_ids
   db_security_group_id = module.database.db_security_group_id
   public_url           = local.plane_public_url
   certificate_arn      = local.plane_certificate_arn
@@ -1277,6 +1293,15 @@ module "plane" {
   create_secret_placeholders        = var.deployment_control_plane_create_secret_placeholders
 
   s3_bucket_name = var.plane_s3_bucket_name
+
+  cache_engine                 = var.plane_cache_engine
+  cache_engine_version         = var.plane_cache_engine_version
+  cache_parameter_group_family = var.plane_cache_parameter_group_family
+  cache_node_type              = var.plane_cache_node_type
+  cache_num_cache_clusters     = var.plane_cache_num_cache_clusters
+  rabbitmq_engine_version      = var.plane_rabbitmq_engine_version
+  rabbitmq_instance_type       = var.plane_rabbitmq_instance_type
+  rabbitmq_deployment_mode     = var.plane_rabbitmq_deployment_mode
 
   allowed_public_cidr_blocks = var.plane_allowed_public_cidr_blocks
   kms_key_arns               = var.plane_kms_key_arns

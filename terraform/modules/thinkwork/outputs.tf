@@ -488,12 +488,12 @@ output "plane_mcp_log_group_name" {
 }
 
 output "plane_cache_endpoint" {
-  description = "Deprecated compatibility output. Compact Plane AIO does not provision a separate cache."
+  description = "ElastiCache primary endpoint for Plane (null when plane_provisioned = false)"
   value       = local.plane_provisioned ? module.plane[0].plane_cache_endpoint : null
 }
 
 output "plane_rabbitmq_broker_arn" {
-  description = "Deprecated compatibility output. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
+  description = "Amazon MQ RabbitMQ broker ARN for Plane (null when plane_provisioned = false)"
   value       = local.plane_provisioned ? module.plane[0].plane_rabbitmq_broker_arn : null
 }
 

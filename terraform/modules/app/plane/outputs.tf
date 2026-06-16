@@ -89,18 +89,18 @@ output "plane_security_group_id" {
 }
 
 output "plane_cache_replication_group_id" {
-  description = "Deprecated compatibility output. Compact Plane AIO does not provision a separate cache."
-  value       = null
+  description = "ElastiCache replication group ID for Plane"
+  value       = aws_elasticache_replication_group.plane.id
 }
 
 output "plane_cache_endpoint" {
-  description = "Deprecated compatibility output. Compact Plane AIO does not provision a separate cache."
-  value       = null
+  description = "ElastiCache primary endpoint for Plane"
+  value       = aws_elasticache_replication_group.plane.primary_endpoint_address
 }
 
 output "plane_rabbitmq_broker_arn" {
-  description = "Deprecated compatibility output. Compact Plane AIO does not provision RabbitMQ/Amazon MQ."
-  value       = null
+  description = "Amazon MQ RabbitMQ broker ARN for Plane"
+  value       = aws_mq_broker.plane.arn
 }
 
 output "plane_storage_bucket_name" {
@@ -134,6 +134,6 @@ output "plane_aes_secret_key_secret_arn" {
 }
 
 output "plane_amqp_url_secret_arn" {
-  description = "Deprecated compatibility output. Plane AIO AMQP_URL is generated from the in-task RabbitMQ sidecar."
-  value       = null
+  description = "Secrets Manager ARN used for the Plane AMQP_URL"
+  value       = local.effective_amqp_url_secret_arn
 }

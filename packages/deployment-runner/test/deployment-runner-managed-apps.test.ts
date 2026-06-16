@@ -203,8 +203,8 @@ describe("managed app deployment adapters", () => {
       }),
     );
     expect(summary.statusOutputs).toContain("plane_url");
-    expect(summary.statusOutputs).not.toContain("plane_rabbitmq_broker_arn");
-    expect(summary.statusOutputs).not.toContain("plane_cache_endpoint");
+    expect(summary.statusOutputs).toContain("plane_rabbitmq_broker_arn");
+    expect(summary.statusOutputs).toContain("plane_cache_endpoint");
   });
 
   it("hydrates managed app images from the verified release manifest contract", () => {
@@ -505,9 +505,9 @@ describe("managed app deployment adapters", () => {
     });
 
     expect(summary.dataImpact.destructive).toBe(true);
-    expect(summary.dataImpact.resources.join("\n")).toMatch(/compact ECS/);
-    expect(summary.dataImpact.resources.join("\n")).not.toMatch(/RabbitMQ/);
-    expect(summary.dataImpact.resources.join("\n")).not.toMatch(/Redis/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/ECS service/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/RabbitMQ/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/Valkey|Redis/);
     expect(summary.dataImpact.resources.join("\n")).toMatch(/S3/);
     expect(summary.preDestroySteps).toEqual(
       expect.arrayContaining([

@@ -42,6 +42,8 @@ const statusOutputs = [
   "plane_beat_worker_log_group_name",
   "plane_live_log_group_name",
   "plane_mcp_log_group_name",
+  "plane_cache_endpoint",
+  "plane_rabbitmq_broker_arn",
   "plane_storage_bucket_name",
 ] as const;
 
@@ -53,7 +55,7 @@ const provisionRequiredInputs: RequiredManagedAppInput[] = [
   },
   {
     key: "mcpImageUri",
-    description: "Plane MCP sidecar image URI pinned with @sha256.",
+    description: "Plane MCP server image URI pinned with @sha256.",
     terraformVariable: "plane_mcp_image_uri",
   },
   {
@@ -147,6 +149,8 @@ export const planeAdapter: ManagedAppAdapter = {
         "dbUrlSecretArn",
         "Plane dbUrlSecretArn",
       ),
+      plane_db_name: optionalString(desiredConfig, "dbName"),
+      plane_db_username: optionalString(desiredConfig, "dbUsername"),
       plane_secret_key_secret_arn: requireStringInput(
         desiredConfig,
         "secretKeySecretArn",
@@ -193,6 +197,32 @@ export const planeAdapter: ManagedAppAdapter = {
       plane_web_desired_count:
         optionalNumber(desiredConfig, "appDesiredCount") ??
         optionalNumber(desiredConfig, "webDesiredCount"),
+      plane_cache_engine: optionalString(desiredConfig, "cacheEngine"),
+      plane_cache_engine_version: optionalString(
+        desiredConfig,
+        "cacheEngineVersion",
+      ),
+      plane_cache_parameter_group_family: optionalString(
+        desiredConfig,
+        "cacheParameterGroupFamily",
+      ),
+      plane_cache_node_type: optionalString(desiredConfig, "cacheNodeType"),
+      plane_cache_num_cache_clusters: optionalNumber(
+        desiredConfig,
+        "cacheNumCacheClusters",
+      ),
+      plane_rabbitmq_engine_version: optionalString(
+        desiredConfig,
+        "rabbitmqEngineVersion",
+      ),
+      plane_rabbitmq_instance_type: optionalString(
+        desiredConfig,
+        "rabbitmqInstanceType",
+      ),
+      plane_rabbitmq_deployment_mode: optionalString(
+        desiredConfig,
+        "rabbitmqDeploymentMode",
+      ),
       plane_allowed_public_cidr_blocks: optionalStringArray(
         desiredConfig,
         "allowedPublicCidrBlocks",
@@ -213,8 +243,10 @@ export const planeAdapter: ManagedAppAdapter = {
       summary:
         "Plane destroy deletes the Plane runtime and customer-owned Plane project management data.",
       resources: [
-        "Plane compact ECS service, task definition, task/execution IAM roles, and public ALB/listener/target-group resources",
+        "Plane ECS service, task definition, task/execution IAM roles, and public ALB/listener/target-group resources",
         "Dedicated Plane database, database role, database URL secret, application secrets, and encryption secrets",
+        "ElastiCache Valkey/Redis replication group, subnet group, parameter group, and cache endpoint",
+        "Amazon MQ RabbitMQ broker, security group, and AMQP URL secret",
         "S3 bucket objects or dedicated prefixes containing Plane file uploads and attachments",
         "CloudWatch log groups and deployment evidence artifacts for Plane jobs",
       ],
@@ -312,6 +344,11 @@ export const planeAdapter: ManagedAppAdapter = {
         mcpLogGroupName: stringOutput(
           terraformOutputs,
           "plane_mcp_log_group_name",
+        ),
+        cacheEndpoint: stringOutput(terraformOutputs, "plane_cache_endpoint"),
+        rabbitmqBrokerArn: stringOutput(
+          terraformOutputs,
+          "plane_rabbitmq_broker_arn",
         ),
         storageBucketName: stringOutput(
           terraformOutputs,

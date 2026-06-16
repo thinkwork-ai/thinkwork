@@ -429,6 +429,18 @@ variable "plane_db_url_secret_arn" {
   default     = ""
 }
 
+variable "plane_db_username" {
+  description = "Dedicated PostgreSQL username for Plane."
+  type        = string
+  default     = "thinkwork_plane"
+}
+
+variable "plane_db_name" {
+  description = "Dedicated PostgreSQL database name for Plane."
+  type        = string
+  default     = "thinkwork_plane"
+}
+
 variable "plane_secret_key_secret_arn" {
   description = "Secrets Manager ARN containing Plane SECRET_KEY."
   type        = string
@@ -448,7 +460,7 @@ variable "plane_aes_secret_key_secret_arn" {
 }
 
 variable "plane_amqp_url_secret_arn" {
-  description = "Secrets Manager ARN containing Plane AMQP_URL."
+  description = "Deprecated no-op. Plane creates AMQP_URL from the managed Amazon MQ broker endpoint."
   type        = string
   default     = ""
 }
@@ -469,6 +481,54 @@ variable "plane_s3_bucket_name" {
   description = "S3 bucket name used for Plane file uploads. Required when plane_provisioned = true."
   type        = string
   default     = ""
+}
+
+variable "plane_cache_engine" {
+  description = "ElastiCache engine for Plane. Prefer valkey; redis is available as a compatibility fallback."
+  type        = string
+  default     = "valkey"
+}
+
+variable "plane_cache_engine_version" {
+  description = "ElastiCache engine version for the selected Plane cache engine."
+  type        = string
+  default     = "8.0"
+}
+
+variable "plane_cache_parameter_group_family" {
+  description = "ElastiCache parameter group family matching plane_cache_engine/plane_cache_engine_version."
+  type        = string
+  default     = "valkey8"
+}
+
+variable "plane_cache_node_type" {
+  description = "ElastiCache node type for Plane."
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "plane_cache_num_cache_clusters" {
+  description = "Number of Plane cache nodes in the replication group."
+  type        = number
+  default     = 1
+}
+
+variable "plane_rabbitmq_engine_version" {
+  description = "Amazon MQ RabbitMQ engine version for Plane."
+  type        = string
+  default     = "3.13"
+}
+
+variable "plane_rabbitmq_instance_type" {
+  description = "Amazon MQ RabbitMQ broker instance type for Plane. mq.m7g.medium is the smallest current RabbitMQ option in us-east-1."
+  type        = string
+  default     = "mq.m7g.medium"
+}
+
+variable "plane_rabbitmq_deployment_mode" {
+  description = "Amazon MQ RabbitMQ deployment mode for Plane."
+  type        = string
+  default     = "SINGLE_INSTANCE"
 }
 
 variable "plane_public_url" {
@@ -980,6 +1040,8 @@ module "thinkwork" {
   plane_provisioned                          = var.plane_provisioned
   plane_runtime_enabled                      = var.plane_runtime_enabled
   plane_image_uri                            = var.plane_image_uri
+  plane_db_username                          = var.plane_db_username
+  plane_db_name                              = var.plane_db_name
   plane_db_url_secret_arn                    = var.plane_db_url_secret_arn
   plane_secret_key_secret_arn                = var.plane_secret_key_secret_arn
   plane_live_server_secret_key_secret_arn    = var.plane_live_server_secret_key_secret_arn
@@ -988,6 +1050,14 @@ module "thinkwork" {
   plane_s3_access_key_id_secret_arn          = var.plane_s3_access_key_id_secret_arn
   plane_s3_secret_access_key_secret_arn      = var.plane_s3_secret_access_key_secret_arn
   plane_s3_bucket_name                       = var.plane_s3_bucket_name
+  plane_cache_engine                         = var.plane_cache_engine
+  plane_cache_engine_version                 = var.plane_cache_engine_version
+  plane_cache_parameter_group_family         = var.plane_cache_parameter_group_family
+  plane_cache_node_type                      = var.plane_cache_node_type
+  plane_cache_num_cache_clusters             = var.plane_cache_num_cache_clusters
+  plane_rabbitmq_engine_version              = var.plane_rabbitmq_engine_version
+  plane_rabbitmq_instance_type               = var.plane_rabbitmq_instance_type
+  plane_rabbitmq_deployment_mode             = var.plane_rabbitmq_deployment_mode
   plane_public_url                           = local.plane_url
   plane_certificate_arn                      = var.plane_certificate_arn != "" ? var.plane_certificate_arn : (local.plane_managed_certificate_enabled ? aws_acm_certificate_validation.plane[0].certificate_arn : "")
   google_oauth_client_id                     = var.google_oauth_client_id
@@ -1376,6 +1446,11 @@ output "plane_api_service_name" {
 output "plane_cache_endpoint" {
   description = "ElastiCache primary endpoint for Plane (null when plane_provisioned = false)"
   value       = module.thinkwork.plane_cache_endpoint
+}
+
+output "plane_rabbitmq_broker_arn" {
+  description = "Amazon MQ RabbitMQ broker ARN for Plane (null when plane_provisioned = false)"
+  value       = module.thinkwork.plane_rabbitmq_broker_arn
 }
 
 output "agentcore_memory_id" {

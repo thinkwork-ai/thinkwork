@@ -3,8 +3,8 @@
  *
  * These assertions keep the optional Plane substrate runnable in CI without
  * AWS credentials while guarding the important invariants: public HTTPS,
- * a compact ECS/Fargate AIO runtime, parked runtime semantics, and secret
- * indirection.
+ * an ECS/Fargate AIO runtime with managed stateful services, parked runtime
+ * semantics, and secret indirection.
  */
 
 import { readFileSync } from "node:fs";
@@ -106,7 +106,7 @@ describe("Plane Terraform app module", () => {
     expect(source).toMatch(/name = "LISTEN_HTTP_PORT"/);
   });
 
-  it("models Plane as one ECS service with AIO, MCP, and in-task dependency containers", () => {
+  it("models Plane as one ECS service with AIO and MCP containers", () => {
     const source = read(PLANE_MAIN);
     const containerSpecs = firstNestedBlock(source, "container_specs = {");
     const listenerRules = firstNestedBlock(source, "listener_rules = {");
@@ -117,8 +117,8 @@ describe("Plane Terraform app module", () => {
 
     expect(containerSpecs).toMatch(/app\s*=\s*{/);
     expect(containerSpecs).toMatch(/mcp\s*=\s*{/);
-    expect(containerSpecs).toMatch(/redis\s*=\s*{/);
-    expect(containerSpecs).toMatch(/rabbitmq\s*=\s*{/);
+    expect(containerSpecs).not.toMatch(/redis\s*=\s*{/);
+    expect(containerSpecs).not.toMatch(/rabbitmq\s*=\s*{/);
     expect(containerSpecs).not.toMatch(/worker\s*=\s*{/);
     expect(source).toMatch(/resource "aws_ecs_task_definition" "plane"/);
     expect(ecsService).toMatch(
@@ -139,30 +139,57 @@ describe("Plane Terraform app module", () => {
     expect(listenerRules).toMatch(/"\/header\/mcp\/\*"/);
   });
 
-  it("keeps Plane compact without managed Redis or RabbitMQ dependencies", () => {
+  it("uses managed Valkey/Redis and RabbitMQ instead of sidecars", () => {
     const source = read(PLANE_MAIN);
+    const vars = read(PLANE_VARS);
     const readme = read(PLANE_README);
+    const cacheSecurityGroup = firstNestedBlock(
+      source,
+      'resource "aws_security_group" "cache"',
+    );
+    const queueSecurityGroup = firstNestedBlock(
+      source,
+      'resource "aws_security_group" "queue"',
+    );
     const ecsServiceResources = source.match(
       /resource "aws_ecs_service" "plane"/g,
     );
 
     expect(source).toMatch(/resource "aws_s3_bucket" "plane"/);
     expect(ecsServiceResources).toHaveLength(1);
-    expect(source).not.toMatch(/resource "aws_elasticache_/);
-    expect(source).not.toMatch(/resource "aws_mq_broker"/);
+    expect(source).toMatch(
+      /resource "aws_elasticache_replication_group" "plane"/,
+    );
+    expect(source).toMatch(/resource "aws_elasticache_subnet_group" "plane"/);
+    expect(source).toMatch(
+      /resource "aws_elasticache_parameter_group" "plane"/,
+    );
+    expect(source).toMatch(/resource "aws_mq_broker" "plane"/);
+    expect(source).toMatch(/engine_type\s*=\s*"RabbitMQ"/);
+    expect(source).toMatch(/publicly_accessible\s*=\s*false/);
+    expect(vars).toMatch(/default\s*=\s*"valkey"/);
+    expect(vars).toMatch(/cache_engine must be valkey or redis/);
+    expect(vars).toMatch(/default\s*=\s*"SINGLE_INSTANCE"/);
+    expect(cacheSecurityGroup).toMatch(
+      /security_groups\s*=\s*\[aws_security_group\.plane\.id\]/,
+    );
+    expect(queueSecurityGroup).toMatch(
+      /security_groups\s*=\s*\[aws_security_group\.plane\.id\]/,
+    );
     expect(source).toMatch(/name = "REDIS_URL"/);
-    expect(source).toMatch(/redis:\/\/127\.0\.0\.1/);
+    expect(source).toMatch(/aws_elasticache_replication_group\.plane/);
     expect(source).toMatch(/name = "AMQP_URL"/);
     expect(source).toMatch(
-      /amqp:\/\/\$\{var\.rabbitmq_username\}:\$\{var\.rabbitmq_password\}@127\.0\.0\.1/,
+      /resource "aws_secretsmanager_secret" "plane_amqp_url"/,
     );
-    expect(source).toMatch(/name = "RABBITMQ_ERLANG_COOKIE"/);
-    expect(source).toMatch(/name = "RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS"/);
-    expect(source).toMatch(/-setcookie \$\{var\.rabbitmq_erlang_cookie\}/);
+    expect(source).toMatch(/aws_mq_broker\.plane\.instances/);
+    expect(source).not.toMatch(/redis:\/\/127\.0\.0\.1/);
+    expect(source).not.toMatch(/image\s*=\s*var\.redis_image_uri/);
+    expect(source).not.toMatch(/image\s*=\s*var\.rabbitmq_image_uri/);
     expect(readme).toMatch(/runtime_enabled = false/);
     expect(readme).toMatch(/parks the compact Plane ECS service/);
     expect(readme).toMatch(/one ECS service/);
-    expect(readme).toMatch(/four containers/);
+    expect(readme).toMatch(/two\s+containers/);
   });
 
   it("injects Plane secrets through ECS secret references", () => {
@@ -207,6 +234,8 @@ describe("Plane Terraform app module", () => {
       "plane_beat_worker_log_group_name",
       "plane_live_log_group_name",
       "plane_mcp_log_group_name",
+      "plane_cache_endpoint",
+      "plane_rabbitmq_broker_arn",
       "plane_storage_bucket_name",
       "plane_runtime_enabled",
     ]) {
@@ -227,8 +256,15 @@ describe("Plane Terraform app module", () => {
     expect(vars).toMatch(/variable "plane_provisioned"/);
     expect(vars).toMatch(/variable "plane_runtime_enabled"/);
     expect(vars).toMatch(/variable "plane_image_uri"/);
+    expect(vars).toMatch(/variable "plane_db_username"/);
+    expect(vars).toMatch(/default\s*=\s*"thinkwork_plane"/);
+    expect(vars).toMatch(/variable "plane_db_name"/);
+    expect(vars).toMatch(/plane_db_name must be a valid PostgreSQL identifier/);
     expect(vars).toMatch(/variable "plane_s3_bucket_name"/);
     expect(vars).toMatch(/variable "plane_web_container_port"/);
+    expect(vars).toMatch(/variable "plane_cache_engine"/);
+    expect(vars).toMatch(/plane_cache_engine must be valkey or redis/);
+    expect(vars).toMatch(/variable "plane_rabbitmq_deployment_mode"/);
     expect(source).toMatch(/plane_domain.*plane\.\$\{var\.www_domain\}/);
     expect(planeModule).toMatch(
       /count\s*=\s*local\.plane_provisioned \? 1 : 0/,
@@ -241,13 +277,27 @@ describe("Plane Terraform app module", () => {
       /web_container_port\s*=\s*var\.plane_web_container_port/,
     );
     expect(planeModule).toMatch(
+      /cache_subnet_ids\s*=\s*module\.vpc\.private_subnet_ids/,
+    );
+    expect(planeModule).toMatch(
+      /queue_subnet_ids\s*=\s*module\.vpc\.private_subnet_ids/,
+    );
+    expect(planeModule).toMatch(
       /s3_bucket_name\s*=\s*var\.plane_s3_bucket_name/,
+    );
+    expect(planeModule).toMatch(/cache_engine\s*=\s*var\.plane_cache_engine/);
+    expect(planeModule).toMatch(
+      /rabbitmq_deployment_mode\s*=\s*var\.plane_rabbitmq_deployment_mode/,
     );
     expect(guardrails).toMatch(
       /plane_provisioned requires Plane AIO plane_image_uri and plane_mcp_image_uri/,
     );
+    expect(guardrails).toMatch(/plane_db_name must be distinct/);
     expect(guardrails).toMatch(
       /plane_provisioned requires plane_s3_bucket_name/,
+    );
+    expect(guardrails).toMatch(
+      /plane_provisioned requires at least one private subnet/,
     );
     expect(outputs).toMatch(/output "plane_provisioned"/);
     expect(outputs).toMatch(/output "plane_url"/);
