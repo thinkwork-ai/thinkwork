@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { Badge, Button } from "@thinkwork/ui";
+import { Badge, Button, Input, Label } from "@thinkwork/ui";
 import {
   ArrowDownToLine,
   Brain,
+  KeyRound,
   LogIn,
   LogOut,
   RotateCw,
@@ -18,6 +19,7 @@ import { useTenant } from "@/context/TenantContext";
 import { getDesktopBridge } from "@/lib/desktop-runtime";
 import {
   SettingsActivatePluginMutation,
+  SettingsActivatePluginWithCredentialsMutation,
   SettingsDeactivatePluginMutation,
   SettingsInstallPluginMutation,
   SettingsManagedApplicationDeploymentQuery,
@@ -64,6 +66,11 @@ export function PluginDetail() {
   const [installKeyError, setInstallKeyError] = useState<string | null>(null);
   const [installKeyOpen, setInstallKeyOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [credentialError, setCredentialError] = useState<string | null>(null);
+  const [credentialForm, setCredentialForm] = useState({
+    apiKey: "",
+    workspaceSlug: "",
+  });
 
   const [catalogResult, refreshCatalog] = useQuery({
     query: SettingsPluginCatalogQuery,
@@ -90,6 +97,8 @@ export function PluginDetail() {
   const [activateState, activatePlugin] = useMutation(
     SettingsActivatePluginMutation,
   );
+  const [activateWithCredentialsState, activatePluginWithCredentials] =
+    useMutation(SettingsActivatePluginWithCredentialsMutation);
   const [deactivateState, deactivatePlugin] = useMutation(
     SettingsDeactivatePluginMutation,
   );
@@ -116,8 +125,11 @@ export function PluginDetail() {
     activation && activation.status !== "revoked" ? activation.status : null;
 
   const displayName = entry?.displayName ?? install?.pluginKey ?? pluginKey;
+  const usesCredentialConnection = pluginUsesCredentialConnection(pluginKey);
   const authCapable =
-    (entry && pluginEntryIsAuthCapable(entry)) || Boolean(activation);
+    usesCredentialConnection ||
+    (entry && pluginEntryIsAuthCapable(entry)) ||
+    Boolean(activation);
   const premium = entry?.premium ?? null;
   const entitlement = entry?.entitlement ?? null;
   const hasActiveEntitlement = entitlement?.status === "active";
@@ -254,6 +266,43 @@ export function PluginDetail() {
       return;
     }
     window.location.assign(authorizeUrl);
+  }
+
+  async function saveCredentials(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!install) return;
+    setNotice(null);
+    setError(null);
+    setCredentialError(null);
+
+    const apiKey = credentialForm.apiKey.trim();
+    const workspaceSlug = credentialForm.workspaceSlug.trim();
+    if (!apiKey || !workspaceSlug) {
+      setCredentialError(
+        "Enter both a Plane personal access token and workspace slug.",
+      );
+      return;
+    }
+
+    const result = await activatePluginWithCredentials({
+      input: {
+        installId: install.id,
+        credentials: [
+          { key: "apiKey", value: apiKey },
+          { key: "workspaceSlug", value: workspaceSlug },
+        ],
+      },
+    });
+    if (result.error) {
+      setCredentialError(`Could not save credentials: ${result.error.message}`);
+      return;
+    }
+
+    setCredentialForm({ apiKey: "", workspaceSlug: "" });
+    setNotice("Credentials saved.");
+    toast.success("Credentials saved.");
+    refreshActivations({ requestPolicy: "network-only" });
+    refreshInstalls({ requestPolicy: "network-only" });
   }
 
   async function disconnect() {
@@ -529,53 +578,31 @@ export function PluginDetail() {
 
         {install && authCapable ? (
           <SettingsSection label="Connection">
-            <SettingsRow
-              label="Your access"
-              description="Connect your account to use this plugin's tools and skills. One connection covers all of the plugin's servers."
-            >
-              <Badge
-                variant={
-                  activationStatus === "active" ? "outline" : "secondary"
+            {usesCredentialConnection ? (
+              <PlaneCredentialConnectionRow
+                activationStatus={activationStatus}
+                credentialError={credentialError}
+                credentialForm={credentialForm}
+                disconnecting={deactivateState.fetching}
+                saving={activateWithCredentialsState.fetching}
+                onCredentialChange={(field, value) =>
+                  setCredentialForm((current) => ({
+                    ...current,
+                    [field]: value,
+                  }))
                 }
-                className={
-                  activationStatus === "active"
-                    ? "border-emerald-500/40 text-emerald-400"
-                    : activationStatus === "needs_reauth"
-                      ? "border-amber-500/40 text-amber-500"
-                      : undefined
-                }
-              >
-                {activationStatus === "active"
-                  ? "Connected"
-                  : activationStatus === "needs_reauth"
-                    ? "Reconnect"
-                    : "Not connected"}
-              </Badge>
-              <Button
-                size="sm"
-                disabled={activateState.fetching}
-                onClick={() => void connect()}
-                className="gap-2"
-              >
-                <LogIn className="size-4" />
-                {activationStatus === "active" ||
-                activationStatus === "needs_reauth"
-                  ? "Reconnect"
-                  : "Connect"}
-              </Button>
-              {activationStatus ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={deactivateState.fetching}
-                  onClick={() => void disconnect()}
-                  className="gap-2"
-                >
-                  <LogOut className="size-4" />
-                  Disconnect
-                </Button>
-              ) : null}
-            </SettingsRow>
+                onDisconnect={() => void disconnect()}
+                onSubmit={(event) => void saveCredentials(event)}
+              />
+            ) : (
+              <OAuthConnectionRow
+                activationStatus={activationStatus}
+                activating={activateState.fetching}
+                disconnecting={deactivateState.fetching}
+                onConnect={() => void connect()}
+                onDisconnect={() => void disconnect()}
+              />
+            )}
           </SettingsSection>
         ) : null}
 
@@ -621,6 +648,161 @@ export function PluginDetail() {
   );
 }
 
+function OAuthConnectionRow({
+  activationStatus,
+  activating,
+  disconnecting,
+  onConnect,
+  onDisconnect,
+}: {
+  activationStatus: string | null;
+  activating: boolean;
+  disconnecting: boolean;
+  onConnect: () => void;
+  onDisconnect: () => void;
+}) {
+  return (
+    <SettingsRow
+      label="Your access"
+      description="Connect your account to use this plugin's tools and skills. One connection covers all of the plugin's servers."
+    >
+      <PluginConnectionStatusBadge activationStatus={activationStatus} />
+      <Button
+        size="sm"
+        disabled={activating}
+        onClick={onConnect}
+        className="gap-2"
+      >
+        <LogIn className="size-4" />
+        {activationStatus === "active" || activationStatus === "needs_reauth"
+          ? "Reconnect"
+          : "Connect"}
+      </Button>
+      {activationStatus ? (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={disconnecting}
+          onClick={onDisconnect}
+          className="gap-2"
+        >
+          <LogOut className="size-4" />
+          Disconnect
+        </Button>
+      ) : null}
+    </SettingsRow>
+  );
+}
+
+function PlaneCredentialConnectionRow({
+  activationStatus,
+  credentialError,
+  credentialForm,
+  disconnecting,
+  saving,
+  onCredentialChange,
+  onDisconnect,
+  onSubmit,
+}: {
+  activationStatus: string | null;
+  credentialError: string | null;
+  credentialForm: { apiKey: string; workspaceSlug: string };
+  disconnecting: boolean;
+  saving: boolean;
+  onCredentialChange: (
+    field: "apiKey" | "workspaceSlug",
+    value: string,
+  ) => void;
+  onDisconnect: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <SettingsRow
+      label="Plane access"
+      description="Save the credentials the agent uses for Plane work-item tools."
+    >
+      <form
+        className="flex w-full min-w-[18rem] max-w-sm flex-col items-stretch gap-3 text-left"
+        onSubmit={onSubmit}
+      >
+        <div className="flex items-center justify-end gap-2">
+          <PluginConnectionStatusBadge activationStatus={activationStatus} />
+          {activationStatus ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={disconnecting}
+              onClick={onDisconnect}
+              className="gap-2"
+            >
+              <LogOut className="size-4" />
+              Disconnect
+            </Button>
+          ) : null}
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="plane-plugin-api-key">
+            Plane personal access token
+          </Label>
+          <Input
+            id="plane-plugin-api-key"
+            type="password"
+            autoComplete="off"
+            value={credentialForm.apiKey}
+            onChange={(event) =>
+              onCredentialChange("apiKey", event.currentTarget.value)
+            }
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="plane-plugin-workspace-slug">Workspace slug</Label>
+          <Input
+            id="plane-plugin-workspace-slug"
+            autoComplete="off"
+            value={credentialForm.workspaceSlug}
+            onChange={(event) =>
+              onCredentialChange("workspaceSlug", event.currentTarget.value)
+            }
+          />
+        </div>
+        {credentialError ? (
+          <p className="text-sm text-destructive">{credentialError}</p>
+        ) : null}
+        <Button type="submit" size="sm" disabled={saving} className="gap-2">
+          <KeyRound className="size-4" />
+          Save credentials
+        </Button>
+      </form>
+    </SettingsRow>
+  );
+}
+
+function PluginConnectionStatusBadge({
+  activationStatus,
+}: {
+  activationStatus: string | null;
+}) {
+  return (
+    <Badge
+      variant={activationStatus === "active" ? "outline" : "secondary"}
+      className={
+        activationStatus === "active"
+          ? "border-emerald-500/40 text-emerald-400"
+          : activationStatus === "needs_reauth"
+            ? "border-amber-500/40 text-amber-500"
+            : undefined
+      }
+    >
+      {activationStatus === "active"
+        ? "Connected"
+        : activationStatus === "needs_reauth"
+          ? "Reconnect"
+          : "Not connected"}
+    </Badge>
+  );
+}
+
 async function pluginOAuthReturnTo(pluginKey: string): Promise<string> {
   const path = `/settings/plugins/${pluginKey}`;
   const bridge = getDesktopBridge();
@@ -654,6 +836,10 @@ function pluginEntryIsAuthCapable(entry: {
   return entry.versions.some(
     (version) => (version.requiredOauthScopes?.length ?? 0) > 0,
   );
+}
+
+function pluginUsesCredentialConnection(pluginKey: string): boolean {
+  return pluginKey === "plane";
 }
 
 /**

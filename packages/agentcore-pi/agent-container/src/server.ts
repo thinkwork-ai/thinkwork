@@ -1505,20 +1505,21 @@ export async function buildInvocationResources(
       throw new DirectToolsValidationError(directToolsResult.missing);
     }
 
-    // Plan §006 U4 — register the inert proxy AgentTool. U5 swaps the
-    // execute body for the live list/search/call dispatcher. We only
-    // ship the proxy when MCP configs are present (validatedConfigs > 0):
-    // there's no reason for the model to see a `mcp` tool when there's
-    // nothing to gateway to, and gating here mitigates the inert-pattern
-    // model-context cost on agents without MCP wiring.
-    tools.push(
-      buildMcpProxyTool({
-        mode: "inert",
-        registry: args.mcpRegistry,
-        connectMcpServer: args.connectMcpServer,
-      }),
-    );
-    mcpProxyRegistered = true;
+    // Do not expose the inert proxy while the direct MCP tool surface is
+    // available. Its description tells the model to prefer `mcp`, but the
+    // inert body only throws; that blocks real plugin MCP use in threads.
+    // When the proxy dispatcher is made live, this can flip back to
+    // `mode: "live"` and replace the direct-tool surface intentionally.
+    if (mcpTools.length === 0) {
+      tools.push(
+        buildMcpProxyTool({
+          mode: "inert",
+          registry: args.mcpRegistry,
+          connectMcpServer: args.connectMcpServer,
+        }),
+      );
+      mcpProxyRegistered = true;
+    }
   }
 
   return {

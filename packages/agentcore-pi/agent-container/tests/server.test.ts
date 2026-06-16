@@ -3040,7 +3040,27 @@ describe("buildInvocationResources — mcp proxy registration (Plan §006 U4)", 
     };
   }
 
-  it("registers the inert mcp proxy when MCP configs are present", async () => {
+  function popOneDirectToolConnect(toolName: string): ConnectMcpServerFn {
+    return async (args) => {
+      args.registry?.register(args.serverName, {
+        tool: toolName,
+        description: `${toolName} description`,
+        inputSchema: { type: "object" },
+      });
+      return [
+        {
+          name: `mcp_${args.serverName}_${toolName}`,
+          label: `${args.serverName}: ${toolName}`,
+          description: `${toolName} description`,
+          parameters: { type: "object" } as never,
+          executionMode: "sequential",
+          execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+        } satisfies AgentTool<any>,
+      ];
+    };
+  }
+
+  it("registers the inert mcp proxy when MCP configs are present but no direct tools are available", async () => {
     const registry = new McpToolRegistry();
     const bundle = await buildInvocationResources({
       payload: {
@@ -3066,6 +3086,37 @@ describe("buildInvocationResources — mcp proxy registration (Plan §006 U4)", 
     const toolNames = bundle.tools.map((tool) => tool.name);
     expect(toolNames).toContain("mcp");
     expect(bundle.mcpProxyRegistered).toBe(true);
+    expect(registry.size).toBe(1);
+    bundle.handleStore.clear();
+  });
+
+  it("does not register the inert mcp proxy when live direct MCP tools are available", async () => {
+    const registry = new McpToolRegistry();
+    const bundle = await buildInvocationResources({
+      payload: {
+        mcp_configs: [
+          {
+            name: "plane--issues",
+            url: "https://plane.example.invalid/http/api-key/mcp",
+            auth: { token: "FakeBearerForTestFixtureOnly" },
+          },
+        ],
+      },
+      identity: baseIdentity,
+      env: baseEnv,
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: popOneDirectToolConnect("list_projects"),
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: registry,
+    });
+    const toolNames = bundle.tools.map((tool) => tool.name);
+    expect(toolNames).toContain("mcp_plane--issues_list_projects");
+    expect(toolNames).not.toContain("mcp");
+    expect(bundle.mcpProxyRegistered).toBe(false);
     expect(registry.size).toBe(1);
     bundle.handleStore.clear();
   });
