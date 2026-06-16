@@ -137,6 +137,7 @@ type Documents = {
   "\n  mutation SettingsInviteMember($tenantId: ID!, $input: InviteMemberInput!) {\n    inviteMember(tenantId: $tenantId, input: $input) {\n      id\n      principalType\n      principalId\n      role\n      status\n      createdAt\n      user {\n        id\n        name\n        email\n      }\n    }\n  }\n": typeof types.SettingsInviteMemberDocument;
   "\n  mutation SettingsAddManualUser($tenantId: ID!, $input: AddManualUserInput!) {\n    addManualUser(tenantId: $tenantId, input: $input) {\n      id\n      principalType\n      principalId\n      role\n      status\n      createdAt\n      user {\n        id\n        name\n        email\n      }\n    }\n  }\n": typeof types.SettingsAddManualUserDocument;
   "\n  mutation SettingsResendMemberInvite(\n    $tenantId: ID!\n    $input: ResendMemberInviteInput!\n  ) {\n    resendMemberInvite(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n": typeof types.SettingsResendMemberInviteDocument;
+  "\n  mutation SettingsSetTenantMemberPassword(\n    $tenantId: ID!\n    $input: SetTenantMemberPasswordInput!\n  ) {\n    setTenantMemberPassword(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n": typeof types.SettingsSetTenantMemberPasswordDocument;
   "\n  query SettingsCostSummary($tenantId: ID!) {\n    costSummary(tenantId: $tenantId) {\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      totalInputTokens\n      totalOutputTokens\n      eventCount\n    }\n  }\n": typeof types.SettingsCostSummaryDocument;
   "\n  query SettingsCostByUser($tenantId: ID!) {\n    costByUser(tenantId: $tenantId) {\n      userId\n      userName\n      userEmail\n      totalUsd\n      eventCount\n      isSystem\n    }\n  }\n": typeof types.SettingsCostByUserDocument;
   "\n  query SettingsBudgetStatus($tenantId: ID!) {\n    budgetStatus(tenantId: $tenantId) {\n      policy {\n        id\n        tenantId\n        userId\n        scope\n        period\n        limitUsd\n        actionOnExceed\n        enabled\n      }\n      spentUsd\n      remainingUsd\n      percentUsed\n      status\n    }\n  }\n": typeof types.SettingsBudgetStatusDocument;
@@ -410,6 +411,8 @@ const documents: Documents = {
     types.SettingsAddManualUserDocument,
   "\n  mutation SettingsResendMemberInvite(\n    $tenantId: ID!\n    $input: ResendMemberInviteInput!\n  ) {\n    resendMemberInvite(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n":
     types.SettingsResendMemberInviteDocument,
+  "\n  mutation SettingsSetTenantMemberPassword(\n    $tenantId: ID!\n    $input: SetTenantMemberPasswordInput!\n  ) {\n    setTenantMemberPassword(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n":
+    types.SettingsSetTenantMemberPasswordDocument,
   "\n  query SettingsCostSummary($tenantId: ID!) {\n    costSummary(tenantId: $tenantId) {\n      totalUsd\n      llmUsd\n      computeUsd\n      toolsUsd\n      totalInputTokens\n      totalOutputTokens\n      eventCount\n    }\n  }\n":
     types.SettingsCostSummaryDocument,
   "\n  query SettingsCostByUser($tenantId: ID!) {\n    costByUser(tenantId: $tenantId) {\n      userId\n      userName\n      userEmail\n      totalUsd\n      eventCount\n      isSystem\n    }\n  }\n":
@@ -1214,6 +1217,12 @@ export function graphql(
 export function graphql(
   source: "\n  mutation SettingsResendMemberInvite(\n    $tenantId: ID!\n    $input: ResendMemberInviteInput!\n  ) {\n    resendMemberInvite(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n",
 ): (typeof documents)["\n  mutation SettingsResendMemberInvite(\n    $tenantId: ID!\n    $input: ResendMemberInviteInput!\n  ) {\n    resendMemberInvite(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(
+  source: "\n  mutation SettingsSetTenantMemberPassword(\n    $tenantId: ID!\n    $input: SetTenantMemberPasswordInput!\n  ) {\n    setTenantMemberPassword(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n",
+): (typeof documents)["\n  mutation SettingsSetTenantMemberPassword(\n    $tenantId: ID!\n    $input: SetTenantMemberPasswordInput!\n  ) {\n    setTenantMemberPassword(tenantId: $tenantId, input: $input) {\n      status\n      message\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

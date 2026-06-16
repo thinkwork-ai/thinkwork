@@ -2690,6 +2690,7 @@ export type Mutation = {
   setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
   setSpaceTools: Space;
+  setTenantMemberPassword: SetTenantMemberPasswordResult;
   setUserModelApproval: Array<UserModelCatalogEntry>;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startDeploymentReleaseUpdate: ReleaseUpdateJob;
@@ -3503,6 +3504,11 @@ export type MutationSetSpaceRuntimeOverridesArgs = {
 
 export type MutationSetSpaceToolsArgs = {
   input: SetSpaceToolsInput;
+};
+
+export type MutationSetTenantMemberPasswordArgs = {
+  input: SetTenantMemberPasswordInput;
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type MutationSetUserModelApprovalArgs = {
@@ -5893,6 +5899,19 @@ export type SetSpaceToolsInput = {
   mcpServerIds: Array<Scalars["ID"]["input"]>;
   spaceId: Scalars["ID"]["input"];
   tenantId: Scalars["ID"]["input"];
+};
+
+export type SetTenantMemberPasswordInput = {
+  memberId: Scalars["ID"]["input"];
+  password: Scalars["String"]["input"];
+  /** When true, the user keeps this password. When false, Cognito requires a password change on next sign-in. */
+  permanent?: InputMaybe<Scalars["Boolean"]["input"]>;
+};
+
+export type SetTenantMemberPasswordResult = {
+  __typename?: "SetTenantMemberPasswordResult";
+  message: Scalars["String"]["output"];
+  status: Scalars["String"]["output"];
 };
 
 export type SkillAttributionCandidate = {
@@ -10770,6 +10789,20 @@ export type SettingsResendMemberInviteMutation = {
   resendMemberInvite: {
     __typename?: "ResendMemberInviteResult";
     status: ResendMemberInviteStatus;
+    message: string;
+  };
+};
+
+export type SettingsSetTenantMemberPasswordMutationVariables = Exact<{
+  tenantId: Scalars["ID"]["input"];
+  input: SetTenantMemberPasswordInput;
+}>;
+
+export type SettingsSetTenantMemberPasswordMutation = {
+  __typename?: "Mutation";
+  setTenantMemberPassword: {
+    __typename?: "SetTenantMemberPasswordResult";
+    status: string;
     message: string;
   };
 };
@@ -22444,6 +22477,80 @@ export const SettingsResendMemberInviteDocument = {
 } as unknown as DocumentNode<
   SettingsResendMemberInviteMutation,
   SettingsResendMemberInviteMutationVariables
+>;
+export const SettingsSetTenantMemberPasswordDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsSetTenantMemberPassword" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "tenantId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "SetTenantMemberPasswordInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "setTenantMemberPassword" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "tenantId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "tenantId" },
+                },
+              },
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsSetTenantMemberPasswordMutation,
+  SettingsSetTenantMemberPasswordMutationVariables
 >;
 export const SettingsCostSummaryDocument = {
   kind: "Document",

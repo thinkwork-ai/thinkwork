@@ -1420,6 +1420,18 @@ export const SettingsResendMemberInviteMutation = graphql(`
   }
 `);
 
+export const SettingsSetTenantMemberPasswordMutation = graphql(`
+  mutation SettingsSetTenantMemberPassword(
+    $tenantId: ID!
+    $input: SetTenantMemberPasswordInput!
+  ) {
+    setTenantMemberPassword(tenantId: $tenantId, input: $input) {
+      status
+      message
+    }
+  }
+`);
+
 // ─── Analytics (usage cost, operator-only) ───────────────────────────────
 
 export const SettingsCostSummaryQuery = graphql(`

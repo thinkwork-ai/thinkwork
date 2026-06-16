@@ -1,7 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
-import { CheckIcon, CopyIcon, MailIcon, Trash2Icon } from "lucide-react";
+import {
+  CheckIcon,
+  CopyIcon,
+  KeyRoundIcon,
+  MailIcon,
+  Trash2Icon,
+} from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +27,12 @@ import {
   AlertDialogTrigger,
   Badge,
   Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
   Select,
   SelectContent,
@@ -30,6 +49,7 @@ import {
   SettingsDeleteBudgetPolicyMutation,
   SettingsRemoveTenantMemberMutation,
   SettingsResendMemberInviteMutation,
+  SettingsSetTenantMemberPasswordMutation,
   SettingsUserBudgetStatusQuery,
   SettingsTenantMembersQuery,
   SettingsUpsertBudgetPolicyMutation,
@@ -117,12 +137,14 @@ export function SettingsUserDetail() {
         title={displayName}
         badge={<Badge variant="secondary">{titleCase(member.status)}</Badge>}
         actions={
-          canResendInvite ? (
-            <ResendInviteButton
-              tenantId={tenantId ?? ""}
-              memberId={member.id}
-            />
-          ) : null
+          <div className="flex flex-wrap items-start justify-end gap-2">
+            {canResendInvite ? (
+              <ResendInviteButton
+                tenantId={tenantId ?? ""}
+                memberId={member.id}
+              />
+            ) : null}
+          </div>
         }
       />
       <ProfileSection
@@ -134,6 +156,15 @@ export function SettingsUserDetail() {
         tenantId={tenantId ?? ""}
         isSelf={isSelf}
         callerIsOwner={callerIsOwner}
+        passwordAction={
+          !isSelf ? (
+            <SetPasswordButton
+              tenantId={tenantId ?? ""}
+              memberId={member.id}
+              email={user.email ?? displayName}
+            />
+          ) : null
+        }
         onSaved={() => refetch({ requestPolicy: "network-only" })}
       />
       <UserModelsSection userId={user.id} />
@@ -193,6 +224,164 @@ function formatBudgetLimit(limitUsd: number | null | undefined): string {
     minimumFractionDigits: 0,
     style: "currency",
   }).format(limitUsd)} / month`;
+}
+
+function SetPasswordButton({
+  tenantId,
+  memberId,
+  email,
+}: {
+  tenantId: string;
+  memberId: string;
+  email: string;
+}) {
+  const [{ fetching }, setTenantMemberPassword] = useMutation(
+    SettingsSetTenantMemberPasswordMutation,
+  );
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [requireChange, setRequireChange] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPassword("");
+      setConfirmPassword("");
+      setRequireChange(false);
+      setErrorMsg(null);
+    }
+  }, [open]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitting) return;
+    setMessage(null);
+    setErrorMsg(null);
+
+    if (password.length < 8) {
+      setErrorMsg("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMsg("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const result = await setTenantMemberPassword({
+        tenantId,
+        input: {
+          memberId,
+          password,
+          permanent: !requireChange,
+        },
+      });
+      if (result.error) {
+        setErrorMsg(result.error.message);
+        return;
+      }
+
+      setMessage(
+        result.data?.setTenantMemberPassword.message ?? "Password set.",
+      );
+      setOpen(false);
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error ? error.message : "Password update failed.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const disabled = fetching || isSubmitting || !tenantId || !memberId;
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        <KeyRoundIcon className="size-3.5" />
+        Set password
+      </Button>
+      {message ? (
+        <span className="text-xs text-muted-foreground">{message}</span>
+      ) : null}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={(event) => void onSubmit(event)}>
+            <DialogHeader>
+              <DialogTitle>Set password</DialogTitle>
+              <DialogDescription>
+                Manually set a password for {email}. No invite email is sent.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <label className="grid gap-2 text-sm font-medium">
+                New password
+                <Input
+                  autoComplete="new-password"
+                  minLength={8}
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                Confirm password
+                <Input
+                  autoComplete="new-password"
+                  minLength={8}
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+              </label>
+              <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">
+                    Require change on next sign-in
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Set a temporary password instead of a permanent one.
+                  </p>
+                </div>
+                <Switch
+                  checked={requireChange}
+                  aria-label="Require change on next sign-in"
+                  onCheckedChange={setRequireChange}
+                />
+              </div>
+              {errorMsg ? (
+                <p className="text-sm text-destructive">{errorMsg}</p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={disabled}>
+                {fetching || isSubmitting ? "Setting..." : "Set password"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
 
 function ResendInviteButton({
@@ -300,6 +489,7 @@ export function ProfileSection({
   tenantId,
   isSelf,
   callerIsOwner,
+  passwordAction,
   roleReadOnly = false,
   budgetReadOnly = false,
   onSaved,
@@ -312,6 +502,7 @@ export function ProfileSection({
   tenantId: string;
   isSelf: boolean;
   callerIsOwner: boolean;
+  passwordAction?: ReactNode;
   roleReadOnly?: boolean;
   budgetReadOnly?: boolean;
   onSaved: () => void;
@@ -474,6 +665,14 @@ export function ProfileSection({
           onChange={(e) => set("name")(e.target.value)}
         />
       </SettingsRow>
+      {passwordAction ? (
+        <SettingsRow
+          label="Manually Set Password"
+          description="Configure credentials without sending an invite email."
+        >
+          {passwordAction}
+        </SettingsRow>
+      ) : null}
       <SettingsRow
         label="Role"
         description="Permission level within this tenant."

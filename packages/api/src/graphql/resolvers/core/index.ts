@@ -19,6 +19,7 @@ import { updateUser } from "./updateUser.mutation.js";
 import { updateUserProfile } from "./updateUserProfile.mutation.js";
 import { inviteMember } from "./inviteMember.mutation.js";
 import { resendMemberInvite } from "./resendMemberInvite.mutation.js";
+import { setTenantMemberPassword } from "./setTenantMemberPassword.mutation.js";
 import { registerPushToken } from "./registerPushToken.mutation.js";
 import { unregisterPushToken } from "./unregisterPushToken.mutation.js";
 import { bootstrapUser } from "./bootstrapUser.mutation.js";
@@ -54,6 +55,7 @@ export const coreMutations = {
   removeTenantMember,
   inviteMember,
   resendMemberInvite,
+  setTenantMemberPassword,
   updateUser,
   updateUserProfile,
   registerPushToken,

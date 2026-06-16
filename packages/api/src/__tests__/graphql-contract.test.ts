@@ -441,6 +441,7 @@ describe("GraphQL Schema Contract", () => {
       "updateTenantModelCatalogEntry",
       // Core
       "renameTenantSlug",
+      "setTenantMemberPassword",
       // Threads
       "createThread",
       "updateThread",
@@ -541,6 +542,35 @@ describe("GraphQL Schema Contract", () => {
       expect(input.getFields().role.type.toString()).toBe("String");
       expect(input.getFields().idempotencyKey.type.toString()).toBe("String!");
       expect(coreMutations.addManualUser).toEqual(expect.any(Function));
+    });
+
+    it("exposes operator password setup separately from invite delivery", () => {
+      const mutation = schema.getMutationType() as any;
+      const input = schema.getType("SetTenantMemberPasswordInput") as any;
+      const result = schema.getType("SetTenantMemberPasswordResult") as any;
+
+      expect(
+        mutation.getFields().setTenantMemberPassword.type.toString(),
+      ).toBe("SetTenantMemberPasswordResult!");
+      expect(
+        mutation
+          .getFields()
+          .setTenantMemberPassword.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([
+        ["tenantId", "ID!"],
+        ["input", "SetTenantMemberPasswordInput!"],
+      ]);
+      expect(input.getFields().memberId.type.toString()).toBe("ID!");
+      expect(input.getFields().password.type.toString()).toBe("String!");
+      expect(input.getFields().permanent.type.toString()).toBe("Boolean");
+      expect(result.getFields().status.type.toString()).toBe("String!");
+      expect(result.getFields().message.type.toString()).toBe("String!");
+      expect(coreMutations.setTenantMemberPassword).toEqual(
+        expect.any(Function),
+      );
     });
   });
 
