@@ -967,7 +967,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         ),
         "twenty_certificate_arn": twenty_guardrails.get("twenty_certificate_arn", ""),
         "enable_deployment_control_plane": bool(
-            state_output(current_outputs, "deployment_control_plane_enabled", True)
+            state_output(current_outputs, "deployment_control_plane_enabled", False)
         ),
         "deployment_control_plane_create_secret_placeholders": False,
         "cloudflare_zone_id": state_cloudflare_zone_id(current_state),
