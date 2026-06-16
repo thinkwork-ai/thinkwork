@@ -17,6 +17,7 @@ import {
   users,
 } from "../../utils.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
+import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
 import { requireTenantAdmin, type TenantAdminRole } from "./authz.js";
 import { resolveCallerUserId } from "./resolve-auth-user.js";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
@@ -163,6 +164,7 @@ async function addManualUserCore(
       ),
     );
   if (existingMember) {
+    await ensureManualUserWorkspaceAccess(tenantId, userId);
     return snakeToCamel(existingMember);
   }
 
@@ -177,7 +179,16 @@ async function addManualUserCore(
     })
     .returning();
 
+  await ensureManualUserWorkspaceAccess(tenantId, userId);
+
   return snakeToCamel(row);
+}
+
+async function ensureManualUserWorkspaceAccess(
+  tenantId: string,
+  userId: string,
+) {
+  await ensureDefaultThreadSpace({ tenantId, userId });
 }
 
 async function ensureManualCognitoUser(

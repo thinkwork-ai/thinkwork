@@ -1,8 +1,12 @@
 import { getConfig } from "@thinkwork/runtime-config";
-import { AdminSetUserPasswordCommand } from "@aws-sdk/client-cognito-identity-provider";
+import {
+  AdminSetUserPasswordCommand,
+  AdminUpdateUserAttributesCommand,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { and, db, eq, tenantMembers, users } from "../../utils.js";
+import { ensureDefaultThreadSpace } from "../../../lib/spaces/default-space.js";
 import { requireTenantAdmin } from "./authz.js";
 import { createCognitoInviteClient } from "./cognitoInvites.js";
 
@@ -41,6 +45,17 @@ export const setTenantMemberPassword = async (
   }
 
   await cognito.send(
+    new AdminUpdateUserAttributesCommand({
+      UserPoolId: poolId,
+      Username: target.email,
+      UserAttributes: [
+        { Name: "email", Value: target.email },
+        { Name: "email_verified", Value: "true" },
+        { Name: "custom:tenant_id", Value: args.tenantId },
+      ],
+    }),
+  );
+  await cognito.send(
     new AdminSetUserPasswordCommand({
       UserPoolId: poolId,
       Username: target.email,
@@ -48,6 +63,10 @@ export const setTenantMemberPassword = async (
       Permanent: input.permanent,
     }),
   );
+  await ensureDefaultThreadSpace({
+    tenantId: args.tenantId,
+    userId: target.userId,
+  });
 
   return {
     status: input.permanent ? "PASSWORD_SET" : "TEMPORARY_PASSWORD_SET",
@@ -107,6 +126,7 @@ async function resolveTarget(tenantId: string, memberId: string) {
   }
 
   return {
+    userId: user.id,
     email: user.email,
   };
 }
