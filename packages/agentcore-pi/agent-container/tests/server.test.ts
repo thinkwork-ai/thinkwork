@@ -3054,7 +3054,10 @@ describe("buildInvocationResources — mcp proxy registration (Plan §006 U4)", 
           description: `${toolName} description`,
           parameters: { type: "object" } as never,
           executionMode: "sequential",
-          execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+          execute: async () => ({
+            content: [{ type: "text", text: "ok" }],
+            details: { ok: true },
+          }),
         } satisfies AgentTool<any>,
       ];
     };
