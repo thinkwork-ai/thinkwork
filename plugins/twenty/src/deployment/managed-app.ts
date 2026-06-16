@@ -70,7 +70,7 @@ export const twentyAdapter: ManagedAppAdapter = {
   displayName: "Twenty CRM",
   description: "Customer-owned CRM runtime with dedicated data and storage.",
   catalogVisible: true,
-  terraformModulePath: "terraform/modules/app/twenty",
+  terraformModulePath: "plugins/twenty/terraform/twenty",
   requiredInputs(operation) {
     return operation === "DESTROY" ? [] : provisionRequiredInputs;
   },

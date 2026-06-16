@@ -140,7 +140,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/cognee/Dockerfile
+          file: plugins/company-brain/runtime/cognee/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |

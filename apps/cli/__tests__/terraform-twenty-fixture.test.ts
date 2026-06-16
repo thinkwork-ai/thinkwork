@@ -14,18 +14,21 @@ import { describe, expect, it } from "vitest";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../../..");
 
-const TWENTY_MAIN = resolve(REPO_ROOT, "terraform/modules/app/twenty/main.tf");
+const TWENTY_MAIN = resolve(
+  REPO_ROOT,
+  "plugins/twenty/terraform/twenty/main.tf",
+);
 const TWENTY_VARS = resolve(
   REPO_ROOT,
-  "terraform/modules/app/twenty/variables.tf",
+  "plugins/twenty/terraform/twenty/variables.tf",
 );
 const TWENTY_OUTPUTS = resolve(
   REPO_ROOT,
-  "terraform/modules/app/twenty/outputs.tf",
+  "plugins/twenty/terraform/twenty/outputs.tf",
 );
 const TWENTY_README = resolve(
   REPO_ROOT,
-  "terraform/modules/app/twenty/README.md",
+  "plugins/twenty/terraform/twenty/README.md",
 );
 const THINKWORK_MAIN = resolve(
   REPO_ROOT,
@@ -378,7 +381,9 @@ describe("U1 - Twenty Terraform app module", () => {
     expect(twentyModule).toMatch(
       /count\s*=\s*local\.twenty_provisioned \? 1 : 0/,
     );
-    expect(twentyModule).toMatch(/source\s*=\s*"\.\.\/app\/twenty"/);
+    expect(twentyModule).toMatch(
+      /source\s*=\s*"\.\.\/\.\.\/\.\.\/plugins\/twenty\/terraform\/twenty"/,
+    );
     expect(twentyModule).toMatch(
       /subnet_ids\s*=\s*module\.vpc\.public_subnet_ids/,
     );

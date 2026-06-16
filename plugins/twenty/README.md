@@ -13,6 +13,7 @@ remaining infrastructure and activation source.
 - `src/manifest.ts` owns the Twenty catalog manifest.
 - `src/deployment/managed-app.ts` owns the Twenty managed-app deployment
   adapter.
+- `terraform/twenty/` owns the Twenty managed-app Terraform module.
 - `smoke/` owns Twenty managed-app and MCP OAuth smoke scripts.
 - `test/manifest.test.ts` keeps Twenty endpoint, OAuth, infrastructure, and
   managed-app input contracts aligned.
@@ -22,8 +23,6 @@ remaining infrastructure and activation source.
 The package descriptor documents the legacy Twenty paths that still contain
 plugin-specific source:
 
-- `terraform/modules/app/twenty` until THNK-31 U4 moves Terraform source into
-  `plugins/twenty/terraform/twenty/`.
 - `packages/api/src/lib/plugins/twenty-cutover.ts` until THNK-31 U6 moves
   plugin-specific API helpers behind package exports.
 

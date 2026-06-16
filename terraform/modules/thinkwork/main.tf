@@ -1156,7 +1156,7 @@ module "hindsight" {
 
 module "cognee" {
   count  = local.cognee_enabled ? 1 : 0
-  source = "../app/cognee"
+  source = "../../../plugins/company-brain/terraform/cognee"
 
   stage                  = var.stage
   vpc_id                 = module.vpc.vpc_id
@@ -1220,7 +1220,7 @@ module "cognee" {
 
 module "twenty" {
   count  = local.twenty_provisioned ? 1 : 0
-  source = "../app/twenty"
+  source = "../../../plugins/twenty/terraform/twenty"
 
   stage                = var.stage
   vpc_id               = module.vpc.vpc_id
@@ -1258,7 +1258,7 @@ module "twenty" {
 
 module "plane" {
   count  = local.plane_provisioned ? 1 : 0
-  source = "../app/plane"
+  source = "../../../plugins/plane/terraform/plane"
 
   stage                = var.stage
   vpc_id               = module.vpc.vpc_id

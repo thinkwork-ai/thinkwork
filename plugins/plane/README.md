@@ -14,20 +14,11 @@ tests, and operations material.
 - `src/manifest.ts` owns the Plane catalog manifest.
 - `src/deployment/managed-app.ts` owns the Plane managed-app deployment
   adapter.
+- `terraform/plane/` owns the Plane managed-app Terraform module.
 - `smoke/plane-managed-app-smoke.mjs` checks deployed Plane runtime health.
 - `smoke/plane-mcp-smoke.mjs` checks the Plane MCP seed/read/write loop.
 - `test/manifest.test.ts` keeps Plane manifest, infrastructure input, MCP auth,
   and bundled skill contracts aligned.
-
-## Temporary Compatibility Links
-
-The package descriptor documents the legacy Plane paths that still contain
-plugin-specific source:
-
-- `terraform/modules/app/plane` until THNK-31 U4 moves Terraform source into
-  `plugins/plane/terraform/plane/`.
-
-These links are migration debt, not shared platform ownership.
 
 ## Verification
 

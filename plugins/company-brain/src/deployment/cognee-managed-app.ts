@@ -70,7 +70,7 @@ export const cogneeAdapter: ManagedAppAdapter = {
   displayName: "Cognee",
   description: "Knowledge graph runtime with app-owned graph/vector storage.",
   catalogVisible: true,
-  terraformModulePath: "terraform/modules/app/cognee",
+  terraformModulePath: "plugins/company-brain/terraform/cognee",
   requiredInputs(operation) {
     return operation === "ENABLE" || operation === "UPGRADE"
       ? enableRequiredInputs
