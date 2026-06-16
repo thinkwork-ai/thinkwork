@@ -808,6 +808,59 @@ def state_output(outputs, name, default=None):
     return default
 
 
+def string_state_output(outputs, name):
+    value = state_output(outputs, name, "")
+    return value.strip() if isinstance(value, str) else ""
+
+
+def bool_state_output(outputs, name):
+    return bool(state_output(outputs, name, False))
+
+
+def enforce_customer_domain_preservation(current_outputs, vars_json, payload, runner_secrets):
+    previous_domain = string_state_output(current_outputs, "customer_domain")
+    if not previous_domain:
+        return
+
+    allow_removal = safe_get_bool(
+        runner_secrets,
+        payload,
+        "allowCustomerDomainRemoval",
+        default=False,
+    )
+    next_domain = str(vars_json.get("customer_domain") or "").strip()
+    if not next_domain:
+        if allow_removal:
+            return
+        raise RuntimeError(
+            "Refusing to clear customer_domain during a controller update. "
+            f"Current Terraform state has customer_domain={previous_domain!r}, "
+            "but this run generated an empty customer_domain. Preserve "
+            "customerDomain/customerDomainDelegated/customerDomainLegacyRetired "
+            "in the controller payload or runner secret. Set "
+            "allowCustomerDomainRemoval=true only for an intentional, reviewed "
+            "domain-retirement operation."
+        )
+
+    if next_domain != previous_domain and not allow_removal:
+        raise RuntimeError(
+            "Refusing to change customer_domain during a controller update. "
+            f"Current Terraform state has {previous_domain!r}, but this run "
+            f"generated {next_domain!r}. Domain changes require an explicit, "
+            "reviewed domain migration with allowCustomerDomainRemoval=true."
+        )
+
+    previous_delegated = bool_state_output(current_outputs, "customer_domain_delegated")
+    next_delegated = bool(vars_json.get("customer_domain_delegated", False))
+    if previous_delegated and not next_delegated and not allow_removal:
+        raise RuntimeError(
+            "Refusing to turn off customer_domain_delegated during a controller "
+            f"update for {previous_domain!r}. Disabling delegation would remove "
+            "customer-domain CloudFront aliases and Cognito callbacks. Use an "
+            "explicit reviewed domain-retirement operation if this is intended."
+        )
+
+
 def state_terraform_data_input(state, name):
     for resource in state.get("resources", []) or []:
         if resource.get("type") != "terraform_data" or resource.get("name") != name:
@@ -2224,6 +2277,12 @@ def write_runner_files(payload, runner_secrets):
             default=release_runtime_image("agentcore-pi-amd64"),
         ),
     }
+    enforce_customer_domain_preservation(
+        current_outputs,
+        vars_json,
+        payload,
+        runner_secrets,
+    )
     vars_json.update(
         managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state)
     )
