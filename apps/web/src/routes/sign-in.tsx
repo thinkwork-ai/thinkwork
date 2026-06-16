@@ -29,6 +29,7 @@ export function SignInPage() {
   const { next } = Route.useSearch();
   const navigate = useNavigate();
   const isDesktop = isDesktopBuild();
+  const canCreateEnvironment = isCentralOnboardingHost();
   const webDeploymentProfile = useMemo(
     () => getSpacesDeploymentProfileSnapshot(),
     [],
@@ -190,16 +191,18 @@ export function SignInPage() {
             <h1 className="text-2xl font-semibold tracking-tight">
               Log in to ThinkWork
             </h1>
-            <p className="text-xs text-muted-foreground">
-              Don&apos;t have an environment?{" "}
-              <Link
-                to="/onboarding/welcome"
-                className="rounded-sm font-medium text-foreground underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                Create one
-              </Link>
-              .
-            </p>
+            {canCreateEnvironment && (
+              <p className="text-xs text-muted-foreground">
+                Don&apos;t have an environment?{" "}
+                <Link
+                  to="/onboarding/welcome"
+                  className="rounded-sm font-medium text-foreground underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Create one
+                </Link>
+                .
+              </p>
+            )}
           </div>
         </div>
         {error && (
@@ -299,6 +302,11 @@ export function SignInPage() {
       {splash}
     </div>
   );
+}
+
+function isCentralOnboardingHost(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.hostname === "app.thinkwork.ai";
 }
 
 function GoogleIcon() {
