@@ -555,6 +555,12 @@ variable "deployment_state_machine_arn" {
   default     = ""
 }
 
+variable "deployment_control_plane_enabled" {
+  description = "Whether deployment control-plane routes and handlers should be provisioned. Kept separate from deployment_state_machine_arn because the ARN may be apply-time unknown."
+  type        = bool
+  default     = false
+}
+
 variable "deployment_evidence_bucket" {
   description = "S3 bucket name that stores deployment runner evidence. Passed to deployment-sessions and graphql-http so Settings can report release update evidence."
   type        = string

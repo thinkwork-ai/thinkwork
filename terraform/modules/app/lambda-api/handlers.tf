@@ -19,12 +19,12 @@ locals {
   # deployment jobs — plan 2026-06-12-001 U10); the TWENTY config key is
   # retired. Cognee's env-var status projection above is unchanged.
   optional_integration_handler_names = concat(
-    trimspace(var.deployment_state_machine_arn) == "" ? [
+    var.deployment_control_plane_enabled ? [] : [
       # Host-only onboarding/deployment API. Customer foundations disable the
       # deployment control plane, so release-based customer installs must not
       # require this Lambda artifact or expose these routes.
       "deployment-sessions",
-    ] : [],
+    ],
     var.enable_stripe_billing ? [] : [
       "stripe-checkout",
       "stripe-webhook",
