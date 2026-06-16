@@ -146,6 +146,55 @@ const STAGE = process.env.STAGE || process.env.STACK_NAME || "dev";
 const db = getDb();
 const lambdaClient = new LambdaClient({});
 
+type RuntimeMcpConfig = {
+  name?: string;
+  serverName?: string;
+  url?: string;
+};
+
+const EXPLICIT_PLUGIN_MCP_ALIASES: Record<string, string[]> = {
+  plane: ["plane", "plane pm", "plane project", "plane work"],
+  twenty: ["twenty", "twenty crm"],
+};
+
+function configPluginKey(config: RuntimeMcpConfig): string | null {
+  const name = String(config.name ?? config.serverName ?? "").toLowerCase();
+  const match = /^([a-z0-9-]+)--/.exec(name);
+  return match?.[1] ?? null;
+}
+
+function mentionedPluginKeys(
+  message: string,
+  configs: RuntimeMcpConfig[],
+): Set<string> {
+  const lower = message.toLowerCase();
+  const configuredKeys = new Set(
+    configs.map(configPluginKey).filter((key): key is string => Boolean(key)),
+  );
+  const mentioned = new Set<string>();
+  for (const key of configuredKeys) {
+    const aliases = EXPLICIT_PLUGIN_MCP_ALIASES[key] ?? [key];
+    if (aliases.some((alias) => lower.includes(alias))) {
+      mentioned.add(key);
+    }
+  }
+  return mentioned;
+}
+
+function filterMcpConfigsForExplicitPluginMention<T extends RuntimeMcpConfig>(
+  configs: T[],
+  message: string,
+): T[] {
+  const mentioned = mentionedPluginKeys(message, configs);
+  if (mentioned.size === 0) return configs;
+
+  const narrowed = configs.filter((config) => {
+    const key = configPluginKey(config);
+    return !key || mentioned.has(key);
+  });
+  return narrowed.length > 0 ? narrowed : configs;
+}
+
 // GENERIC_AGENT_ERROR_MESSAGE + extractResponseText now live in
 // packages/api/src/lib/chat-finalize/notify.ts. The import at the top of
 // this file pulls GENERIC_AGENT_ERROR_MESSAGE for the pre-dispatch error
@@ -1202,10 +1251,19 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // drift. Plugin activation gating already happened inside
     // buildMcpConfigs, keyed on the same currentUserId passed to the
     // workspace render above.
-    const effectiveMcpConfigs = applyWorkspaceMcpPolicyFilter(
+    const policyFilteredMcpConfigs = applyWorkspaceMcpPolicyFilter(
       mcpConfigs,
       effectiveMcpPolicy,
     );
+    const effectiveMcpConfigs = filterMcpConfigsForExplicitPluginMention(
+      policyFilteredMcpConfigs,
+      userMessage,
+    );
+    if (effectiveMcpConfigs.length !== policyFilteredMcpConfigs.length) {
+      console.log(
+        `[chat-agent-invoke] narrowed MCP configs for explicit plugin mention: ${policyFilteredMcpConfigs.length} -> ${effectiveMcpConfigs.length} (${effectiveMcpConfigs.map((config) => config.name ?? "unknown").join(", ")})`,
+      );
+    }
     const modelRoutingRoutes = effectiveToolPolicy.modelRouting ?? [];
     const modelRoutingPolicy =
       modelRoutingRoutes.length > 0
