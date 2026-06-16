@@ -311,6 +311,70 @@ describe("chat-agent-invoke runtime routing", () => {
     ]);
   });
 
+  it("does not treat a negated plugin mention as a requested MCP server", async () => {
+    mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      agentName: "ThinkWork",
+      agentSlug: "thinkwork",
+      agentSystemPrompt: null,
+      humanName: undefined,
+      humanPairId: null,
+      tenantSlug: "acme",
+      templateId: null,
+      templateModel: "moonshotai.kimi-k2.5",
+      runtimeType: "pi",
+      budgetMonthlyCents: null,
+      budgetPaused: false,
+      blockedTools: [],
+      sandboxTemplate: null,
+      browserAutomationEnabled: true,
+      contextEngineEnabled: false,
+      guardrailId: null,
+      guardrailConfig: undefined,
+      skillsConfig: [],
+      knowledgeBasesConfig: undefined,
+      mcpConfigs: [
+        {
+          name: "twenty--crm",
+          url: "https://crm.example.test/mcp",
+          transport: "streamable-http",
+          auth: { type: "bearer", token: "twenty-token" },
+        },
+        {
+          name: "plane--issues",
+          url: "https://plane.example.test/http/api-key/mcp",
+          transport: "streamable-http",
+          auth: {
+            type: "bearer",
+            token: "plane-token",
+            headers: { "x-workspace-slug": "thinkwork" },
+          },
+        },
+      ],
+      agentProfilesConfig: [],
+    });
+
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage:
+        "Use the Plane work items MCP tools to list Plane projects. Do not use Twenty CRM tools.",
+      messageId: "message-1",
+    });
+
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: { Payload: Uint8Array };
+    };
+    const body = decodeInvokeBody(command);
+    expect(body.mcp_configs).toEqual([
+      expect.objectContaining({ name: "plane--issues" }),
+    ]);
+  });
+
   it("blocks dispatch when the initiating user is already over budget", async () => {
     mocks.checkUserBudgetAndPauseWork.mockResolvedValueOnce({
       overBudget: true,

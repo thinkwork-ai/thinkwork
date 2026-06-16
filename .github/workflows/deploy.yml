@@ -1196,10 +1196,11 @@ jobs:
           fi
           TF_TARGET_ARGS=()
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ needs.detect-changes.outputs.terraform }}" != "true" ]; then
-            echo "No Terraform source changes detected; targeting graphql-http Lambda and API IAM recovery resources."
+            echo "No Terraform source changes detected; targeting API Lambda handlers and API IAM recovery resources."
             TF_TARGET_ARGS+=(
               -target=module.thinkwork.module.api.aws_iam_policy.api_data_plane
               '-target=module.thinkwork.module.api.aws_lambda_function.handler["graphql-http"]'
+              '-target=module.thinkwork.module.api.aws_lambda_function.handler["chat-agent-invoke"]'
             )
           fi
           # -refresh=false skips ~30s of "Refreshing state…" against ~700
