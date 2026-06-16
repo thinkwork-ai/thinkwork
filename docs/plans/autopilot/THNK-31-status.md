@@ -90,6 +90,8 @@ project_context: TEI ThinkWork
 - Added explicit plugin package adapter exports and dependency metadata.
 - Removed the three deployment-runner adapter paths from the source-boundary
   migration allowlist. The guard now reports 33 migration paths, down from 36.
+- PR #2560 opened for this slice:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2560`
 
 ### Verification
 
