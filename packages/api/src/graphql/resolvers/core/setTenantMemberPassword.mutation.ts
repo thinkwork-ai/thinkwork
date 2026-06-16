@@ -55,14 +55,18 @@ export const setTenantMemberPassword = async (
       ],
     }),
   );
-  await cognito.send(
-    new AdminSetUserPasswordCommand({
-      UserPoolId: poolId,
-      Username: target.email,
-      Password: input.password,
-      Permanent: input.permanent,
-    }),
-  );
+  try {
+    await cognito.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: poolId,
+        Username: target.email,
+        Password: input.password,
+        Permanent: input.permanent,
+      }),
+    );
+  } catch (error) {
+    throw passwordSetError(error);
+  }
   await ensureDefaultThreadSpace({
     tenantId: args.tenantId,
     userId: target.userId,
@@ -95,6 +99,32 @@ function normalizeInput(input: SetTenantMemberPasswordInput) {
     password,
     permanent: input.permanent ?? true,
   };
+}
+
+function passwordSetError(error: unknown): GraphQLError {
+  if (isNamedError(error, "InvalidPasswordException")) {
+    return new GraphQLError(
+      error.message || "Password does not conform to the Cognito policy.",
+      { extensions: { code: "BAD_USER_INPUT" } },
+    );
+  }
+
+  return error instanceof GraphQLError
+    ? error
+    : new GraphQLError("Unable to set member password.", {
+        extensions: { code: "INTERNAL_SERVER_ERROR" },
+      });
+}
+
+function isNamedError(
+  error: unknown,
+  name: string,
+): error is Error & { name: string } {
+  return (
+    error instanceof Error &&
+    typeof error.name === "string" &&
+    error.name === name
+  );
 }
 
 async function resolveTarget(tenantId: string, memberId: string) {

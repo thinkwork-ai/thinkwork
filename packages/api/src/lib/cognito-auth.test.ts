@@ -1,4 +1,28 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+const {
+  cognitoVerifierCreateMock,
+  getConfigMock,
+  primeRuntimeConfigMock,
+  verifyMock,
+} = vi.hoisted(() => ({
+  cognitoVerifierCreateMock: vi.fn(),
+  getConfigMock: vi.fn(),
+  primeRuntimeConfigMock: vi.fn(),
+  verifyMock: vi.fn(),
+}));
+
+vi.mock("@thinkwork/runtime-config", () => ({
+  getConfig: getConfigMock,
+  primeRuntimeConfig: primeRuntimeConfigMock,
+}));
+
+vi.mock("aws-jwt-verify", () => ({
+  CognitoJwtVerifier: {
+    create: cognitoVerifierCreateMock,
+  },
+}));
+
 import { authenticate } from "./cognito-auth.js";
 
 describe("authenticate — apikey path", () => {
@@ -6,6 +30,13 @@ describe("authenticate — apikey path", () => {
 
   beforeEach(() => {
     process.env.API_AUTH_SECRET = "tw-test-secret";
+    cognitoVerifierCreateMock.mockReset();
+    getConfigMock.mockReset();
+    primeRuntimeConfigMock.mockReset();
+    verifyMock.mockReset();
+    getConfigMock.mockImplementation((_: string, fallback?: string) => fallback);
+    primeRuntimeConfigMock.mockResolvedValue(undefined);
+    cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
   });
 
   afterEach(() => {
@@ -50,6 +81,13 @@ describe("authenticate — Bearer-as-apikey fallback (CLI/Strands back-compat)",
 
   beforeEach(() => {
     process.env.API_AUTH_SECRET = "tw-test-secret";
+    cognitoVerifierCreateMock.mockReset();
+    getConfigMock.mockReset();
+    primeRuntimeConfigMock.mockReset();
+    verifyMock.mockReset();
+    getConfigMock.mockImplementation((_: string, fallback?: string) => fallback);
+    primeRuntimeConfigMock.mockResolvedValue(undefined);
+    cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
   });
 
   afterEach(() => {
@@ -113,5 +151,66 @@ describe("authenticate — Bearer-as-apikey fallback (CLI/Strands back-compat)",
         authorization: "Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IngifQ.e30.invalid",
       }),
     ).toBeNull();
+  });
+});
+
+describe("authenticate — Cognito JWT path", () => {
+  const prev = process.env.API_AUTH_SECRET;
+
+  beforeEach(() => {
+    process.env.API_AUTH_SECRET = "";
+    cognitoVerifierCreateMock.mockReset();
+    getConfigMock.mockReset();
+    primeRuntimeConfigMock.mockReset();
+    verifyMock.mockReset();
+    primeRuntimeConfigMock.mockResolvedValue(undefined);
+    cognitoVerifierCreateMock.mockReturnValue({ verify: verifyMock });
+  });
+
+  afterEach(() => {
+    process.env.API_AUTH_SECRET = prev;
+  });
+
+  it("force-refreshes runtime config before creating a verifier when Cognito config is initially absent", async () => {
+    const config = new Map<string, string>();
+    getConfigMock.mockImplementation((key: string, fallback?: string) => {
+      return config.get(key) ?? fallback;
+    });
+    primeRuntimeConfigMock.mockImplementation(async () => {
+      config.set("COGNITO_USER_POOL_ID", "us-east-1_test");
+      config.set("COGNITO_APP_CLIENT_IDS", "client-web,client-mobile");
+    });
+    verifyMock.mockResolvedValue({
+      sub: "user-sub",
+      email: "operator@example.com",
+      email_verified: "true",
+      "custom:tenant_id": "tenant-A",
+    });
+
+    const auth = await authenticate({ authorization: "Bearer jwt-token" });
+
+    expect(primeRuntimeConfigMock).toHaveBeenCalledWith({ force: true });
+    expect(cognitoVerifierCreateMock).toHaveBeenCalledWith({
+      userPoolId: "us-east-1_test",
+      tokenUse: "id",
+      clientId: ["client-web", "client-mobile"],
+    });
+    expect(auth).toEqual({
+      principalId: "user-sub",
+      tenantId: "tenant-A",
+      email: "operator@example.com",
+      emailVerified: true,
+      authType: "cognito",
+      agentId: null,
+    });
+  });
+
+  it("does not cache a verifier when runtime config remains unavailable", async () => {
+    getConfigMock.mockImplementation((_: string, fallback?: string) => fallback);
+
+    expect(await authenticate({ authorization: "Bearer jwt-token" })).toBeNull();
+
+    expect(primeRuntimeConfigMock).toHaveBeenCalledWith({ force: true });
+    expect(cognitoVerifierCreateMock).not.toHaveBeenCalled();
   });
 });

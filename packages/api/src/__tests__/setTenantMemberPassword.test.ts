@@ -224,6 +224,41 @@ describe("setTenantMemberPassword", () => {
     expect(cognitoSendMock).not.toHaveBeenCalled();
   });
 
+  it("surfaces Cognito password policy failures as user input errors", async () => {
+    enqueueMemberAndUser();
+    cognitoSendMock
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(
+        Object.assign(
+          new Error(
+            "Password does not conform to policy: Password must have lowercase characters",
+          ),
+          { name: "InvalidPasswordException" },
+        ),
+      );
+
+    await expect(
+      setTenantMemberPassword(
+        null,
+        {
+          tenantId: "tenant-A",
+          input: {
+            memberId: "member-1",
+            password: "PASSWORD123!",
+          },
+        },
+        ctx,
+      ),
+    ).rejects.toMatchObject({
+      message:
+        "Password does not conform to policy: Password must have lowercase characters",
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+
+    expect(cognitoSendMock).toHaveBeenCalledTimes(2);
+    expect(mockEnsureDefaultThreadSpace).not.toHaveBeenCalled();
+  });
+
   it("denies non-admin callers before member lookup or Cognito calls", async () => {
     mockRequireTenantAdmin.mockRejectedValueOnce(
       Object.assign(new Error("Forbidden"), {
