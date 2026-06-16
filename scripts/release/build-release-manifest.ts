@@ -741,7 +741,7 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
         source: `${TERRAFORM_MODULE_SOURCE}//modules/app/plane`,
         version,
       },
-      requiredImages: ["plane"],
+      requiredImages: ["plane", "plane-mcp-server"],
       smokeContracts: [
         {
           id: "plane-runtime-health",
