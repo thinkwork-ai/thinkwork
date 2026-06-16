@@ -1,12 +1,47 @@
 ---
 issue: THNK-31
 title: "refactor: Co-locate application plugin source"
-updated: 2026-06-15
+updated: 2026-06-16
 dispatcher: dispatcher:THNK-31:InProgress:Codex
 project_context: TEI ThinkWork
 ---
 
 # THNK-31 Autopilot Status
+
+## Current Canonical Plugin Specification Slice
+
+- Started from fresh `origin/main` at
+  `ccc598c02d0a366f1448be5463e1d5d041d4f79d` in branch
+  `codex/thnk-31-plugin-source-colocation`.
+- Re-read Linear issue `THNK-31`, Linear document
+  `81845c7a-ccb7-40c6-bf38-472bf42ae502`, issue comments, labels, returned
+  relations, repo brainstorm, repo plan, and PR #2553 merge evidence before
+  implementation.
+- Moved Linear THNK-31 from `Ready to Work` to `In Progress` when this
+  implementation pass began, preserving Codex/Human routing metadata.
+- Added the canonical `plugins/README.md` package specification for TEI
+  ThinkWork plugin ownership.
+- Extended `FirstPartyPluginPackage` with machine-readable owned source
+  descriptors and compatibility links.
+- Populated Plane, Twenty, Company Brain, and LastMile package descriptors and
+  READMEs with current owned source and remaining migration debt.
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm --filter @thinkwork/plugin-plane test`
+- `pnpm --filter @thinkwork/plugin-plane typecheck`
+- `pnpm --filter @thinkwork/plugin-twenty test`
+- `pnpm --filter @thinkwork/plugin-twenty typecheck`
+- `pnpm --filter @thinkwork/plugin-company-brain test`
+- `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+- `pnpm --filter @thinkwork/plugin-lastmile test`
+- `pnpm --filter @thinkwork/plugin-lastmile typecheck`
+- `node scripts/verify-plugin-source-boundary.mjs`
+- `git diff --check`
+- Formatting: `pnpm dlx prettier@3.8.2 --write ...` on touched files because
+  the root `prettier` binary is not installed as a workspace dependency.
 
 ## Current Pass
 

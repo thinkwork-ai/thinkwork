@@ -1,18 +1,37 @@
 # Plane Plugin
 
-Plane is the first THNK-31 proof plugin for the root-level `plugins/<plugin-key>/`
-package contract.
+Plane is the first THNK-31 proof plugin for the root-level
+`plugins/<plugin-key>/` package contract. It is the full-shape review target for
+manifest, managed-app infrastructure, MCP activation, package-local smokes,
+tests, and operations material.
 
 ## Package Contract
 
 - `package.json` exposes `@thinkwork/plugin-plane`.
 - `src/index.ts` exports `planePluginPackage`, a validated
-  `FirstPartyPluginPackage`.
+  `FirstPartyPluginPackage` with owned source descriptors and compatibility
+  links.
 - `src/manifest.ts` owns the Plane catalog manifest.
 - `smoke/plane-managed-app-smoke.mjs` checks deployed Plane runtime health.
 - `smoke/plane-mcp-smoke.mjs` checks the Plane MCP seed/read/write loop.
+- `test/manifest.test.ts` keeps Plane manifest, infrastructure input, MCP auth,
+  and bundled skill contracts aligned.
 
-This package currently owns the catalog manifest and smoke scripts while
-existing Plane deployment adapter, Terraform, and parity test source remains in
-legacy shared locations until the next migration units move them behind the same
-plugin boundary.
+## Temporary Compatibility Links
+
+The package descriptor documents the legacy Plane paths that still contain
+plugin-specific source:
+
+- `packages/deployment-runner/src/apps/plane.ts` until THNK-31 U3 moves the
+  managed-app adapter into `plugins/plane/src/deployment/`.
+- `terraform/modules/app/plane` until THNK-31 U4 moves Terraform source into
+  `plugins/plane/terraform/plane/`.
+
+These links are migration debt, not shared platform ownership.
+
+## Verification
+
+```bash
+pnpm --filter @thinkwork/plugin-plane test
+pnpm --filter @thinkwork/plugin-plane typecheck
+```
