@@ -9,7 +9,8 @@
     "./catalog": "./src/catalog.ts",
     "./contracts": "./src/contracts.ts",
     "./plugin-package": "./src/plugin-package.ts",
-    "./plugins": "./src/plugins/index.ts"
+    "./plugins": "./src/registry/index.ts",
+    "./registry": "./src/registry/index.ts"
   },
   "scripts": {
     "build": "tsc --build",

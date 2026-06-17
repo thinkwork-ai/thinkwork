@@ -13,7 +13,7 @@ import {
   verifyPluginCatalog,
   type SignedPluginCatalogDocument,
 } from "../catalog";
-import { companyBrainManifest, lastmileManifest } from "../plugins";
+import { companyBrainManifest, lastmileManifest } from "../registry";
 
 function keyPair() {
   const pair = generateKeyPairSync("ed25519");

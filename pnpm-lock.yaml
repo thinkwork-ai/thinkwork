@@ -783,7 +783,7 @@ importers:
         version: link:../pi-runtime-core
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
-        version: link:../plugin-catalog
+        version: link:../../plugins/catalog
       '@thinkwork/plugin-company-brain':
         specifier: workspace:*
         version: link:../../plugins/company-brain
@@ -1341,34 +1341,6 @@ importers:
         specifier: ^3.2.1
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
 
-  packages/plugin-catalog:
-    dependencies:
-      '@thinkwork/plugin-company-brain':
-        specifier: workspace:*
-        version: link:../../plugins/company-brain
-      '@thinkwork/plugin-lastmile':
-        specifier: workspace:*
-        version: link:../../plugins/lastmile
-      '@thinkwork/plugin-plane':
-        specifier: workspace:*
-        version: link:../../plugins/plane
-      '@thinkwork/plugin-twenty':
-        specifier: workspace:*
-        version: link:../../plugins/twenty
-    devDependencies:
-      '@types/node':
-        specifier: ^25.6.0
-        version: 25.6.0
-      tsx:
-        specifier: ^4.21.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.5.0
-        version: 5.9.3
-      vitest:
-        specifier: ^2.0.0
-        version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
-
   packages/pricing-config:
     devDependencies:
       '@types/node':
@@ -1612,6 +1584,34 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
 
+  plugins/catalog:
+    dependencies:
+      '@thinkwork/plugin-company-brain':
+        specifier: workspace:*
+        version: link:../company-brain
+      '@thinkwork/plugin-lastmile':
+        specifier: workspace:*
+        version: link:../lastmile
+      '@thinkwork/plugin-plane':
+        specifier: workspace:*
+        version: link:../plane
+      '@thinkwork/plugin-twenty':
+        specifier: workspace:*
+        version: link:../twenty
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
+
   plugins/company-brain:
     dependencies:
       '@thinkwork/database-pg':
@@ -1629,7 +1629,7 @@ importers:
         version: link:../../packages/deployment-runner
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
-        version: link:../../packages/plugin-catalog
+        version: link:../catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
@@ -1641,7 +1641,7 @@ importers:
     devDependencies:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
-        version: link:../../packages/plugin-catalog
+        version: link:../catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
@@ -1656,7 +1656,7 @@ importers:
         version: link:../../packages/deployment-runner
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
-        version: link:../../packages/plugin-catalog
+        version: link:../catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
@@ -1675,7 +1675,7 @@ importers:
         version: link:../../packages/deployment-runner
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
-        version: link:../../packages/plugin-catalog
+        version: link:../catalog
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

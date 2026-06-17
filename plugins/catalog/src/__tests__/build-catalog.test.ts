@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildSignedCatalogJson } from "../../scripts/build-catalog";
 import { verifyPluginCatalog } from "../catalog";
-import { allPluginManifests } from "../plugins";
+import { allPluginManifests } from "../registry";
 
 function keyPair() {
   const pair = generateKeyPairSync("ed25519");

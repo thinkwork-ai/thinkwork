@@ -6,7 +6,7 @@ import {
   type PluginManifest,
   type PluginVersion,
 } from "../contracts";
-import { lastmileManifest } from "../plugins";
+import { lastmileManifest } from "../registry";
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
