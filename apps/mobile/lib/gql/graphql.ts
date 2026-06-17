@@ -2906,6 +2906,12 @@ export type Mutation = {
    */
   redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
   refreshGenUI?: Maybe<Message>;
+  /**
+   * Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
+   * bypassing the API freshness TTL while preserving signature/digest checks
+   * and stale-safe fallback.
+   */
+  refreshPluginCatalog: PluginCatalogMetadata;
   refreshThreadProgress: RefreshThreadProgressPayload;
   regenerateApplet: SaveAppletPayload;
   regenerateWebhookToken?: Maybe<Webhook>;

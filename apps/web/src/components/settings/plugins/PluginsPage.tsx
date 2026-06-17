@@ -9,6 +9,7 @@ import {
   SettingsInstallPluginMutation,
   SettingsMyPluginActivationsQuery,
   SettingsPluginCatalogQuery,
+  SettingsRefreshPluginCatalogMutation,
 } from "@/lib/settings-queries";
 import {
   SettingsHeader,
@@ -46,6 +47,9 @@ export function PluginsPage() {
   const [installState, installPlugin] = useMutation(
     SettingsInstallPluginMutation,
   );
+  const [refreshCatalogState, refreshRemoteCatalog] = useMutation(
+    SettingsRefreshPluginCatalogMutation,
+  );
 
   const catalog = catalogResult.data?.pluginCatalog ?? [];
   const catalogMetadata = catalogResult.data?.pluginCatalogMetadata ?? null;
@@ -70,6 +74,17 @@ export function PluginsPage() {
       : catalog;
 
   function refreshAll() {
+    refreshCatalog({ requestPolicy: "network-only" });
+    refreshActivations({ requestPolicy: "network-only" });
+  }
+
+  async function refreshTrustedCatalog() {
+    const result = await refreshRemoteCatalog({});
+    if (result.error) {
+      toast.error(`Could not refresh plugin catalog: ${result.error.message}`);
+      return;
+    }
+    toast.success("Plugin catalog refreshed.");
     refreshCatalog({ requestPolicy: "network-only" });
     refreshActivations({ requestPolicy: "network-only" });
   }
@@ -150,7 +165,12 @@ export function PluginsPage() {
         }
       >
         {catalogMetadata && !catalogUnavailable ? (
-          <CatalogMetadataStrip metadata={catalogMetadata} />
+          <CatalogMetadataStrip
+            metadata={catalogMetadata}
+            showRefresh={showOperatorActions}
+            refreshing={refreshCatalogState.fetching}
+            onRefresh={() => void refreshTrustedCatalog()}
+          />
         ) : null}
         {!roleResolved ? (
           <div className="p-4 text-sm text-muted-foreground">
@@ -337,6 +357,9 @@ export function PluginsPage() {
 
 function CatalogMetadataStrip({
   metadata,
+  showRefresh,
+  refreshing,
+  onRefresh,
 }: {
   metadata: {
     source: string;
@@ -354,6 +377,9 @@ function CatalogMetadataStrip({
     rateLimitRemaining?: string | null;
     rateLimitReset?: string | null;
   };
+  showRefresh: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
 }) {
   const commit = metadata.commitSha?.slice(0, 12) ?? null;
   const digest = metadata.catalogSha256.replace(/^sha256:/, "").slice(0, 12);
@@ -392,14 +418,30 @@ function CatalogMetadataStrip({
             <p className="mt-1 text-sm text-amber-500">{metadata.message}</p>
           ) : null}
         </div>
-        <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground md:justify-end">
-          <span>Generated {formatDateTime(metadata.generatedAt)}</span>
-          {metadata.fetchedAt ? (
-            <span>Fetched {formatDateTime(metadata.fetchedAt)}</span>
-          ) : null}
-          <span>Digest {digest}</span>
-          {metadata.rateLimitRemaining ? (
-            <span>GitHub remaining {metadata.rateLimitRemaining}</span>
+        <div className="flex shrink-0 flex-col items-start gap-2 md:items-end">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground md:justify-end">
+            <span>Generated {formatDateTime(metadata.generatedAt)}</span>
+            {metadata.fetchedAt ? (
+              <span>Fetched {formatDateTime(metadata.fetchedAt)}</span>
+            ) : null}
+            <span>Digest {digest}</span>
+            {metadata.rateLimitRemaining ? (
+              <span>GitHub remaining {metadata.rateLimitRemaining}</span>
+            ) : null}
+          </div>
+          {showRefresh ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={refreshing}
+              onClick={onRefresh}
+            >
+              <RefreshCw
+                className={`mr-2 size-4 ${refreshing ? "animate-spin" : ""}`}
+              />
+              Refresh catalog
+            </Button>
           ) : null}
         </div>
       </div>

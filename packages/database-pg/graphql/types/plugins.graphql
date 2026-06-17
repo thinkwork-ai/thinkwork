@@ -319,6 +319,12 @@ extend type Query {
 
 extend type Mutation {
   """
+  Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
+  bypassing the API freshness TTL while preserving signature/digest checks
+  and stale-safe fallback.
+  """
+  refreshPluginCatalog: PluginCatalogMetadata!
+  """
   Install a catalog plugin tenant-wide (tenant admin). Idempotent per
   (tenant, plugin): a concurrent call returns the in-flight install; a
   stuck-installing install past the staleness threshold re-drives the

@@ -2919,6 +2919,12 @@ export type Mutation = {
    */
   redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
   refreshGenUI?: Maybe<Message>;
+  /**
+   * Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
+   * bypassing the API freshness TTL while preserving signature/digest checks
+   * and stale-safe fallback.
+   */
+  refreshPluginCatalog: PluginCatalogMetadata;
   refreshThreadProgress: RefreshThreadProgressPayload;
   regenerateApplet: SaveAppletPayload;
   regenerateWebhookToken?: Maybe<Webhook>;
@@ -11566,6 +11572,31 @@ export type SettingsPluginCatalogQuery = {
       }>;
     } | null;
   }>;
+};
+
+export type SettingsRefreshPluginCatalogMutationVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type SettingsRefreshPluginCatalogMutation = {
+  __typename?: "Mutation";
+  refreshPluginCatalog: {
+    __typename?: "PluginCatalogMetadata";
+    source: string;
+    repository?: string | null;
+    ref?: string | null;
+    commitSha?: string | null;
+    releaseTag?: string | null;
+    assetName?: string | null;
+    catalogSha256: string;
+    generatedAt: any;
+    fetchedAt?: any | null;
+    stale: boolean;
+    lastRefreshStatus?: string | null;
+    message?: string | null;
+    rateLimitRemaining?: string | null;
+    rateLimitReset?: string | null;
+  };
 };
 
 export type SettingsPluginInstallsQueryVariables = Exact<{
@@ -24349,6 +24380,59 @@ export const SettingsPluginCatalogDocument = {
 } as unknown as DocumentNode<
   SettingsPluginCatalogQuery,
   SettingsPluginCatalogQueryVariables
+>;
+export const SettingsRefreshPluginCatalogDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsRefreshPluginCatalog" },
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "refreshPluginCatalog" },
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "source" } },
+                { kind: "Field", name: { kind: "Name", value: "repository" } },
+                { kind: "Field", name: { kind: "Name", value: "ref" } },
+                { kind: "Field", name: { kind: "Name", value: "commitSha" } },
+                { kind: "Field", name: { kind: "Name", value: "releaseTag" } },
+                { kind: "Field", name: { kind: "Name", value: "assetName" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "catalogSha256" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "generatedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "fetchedAt" } },
+                { kind: "Field", name: { kind: "Name", value: "stale" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastRefreshStatus" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "message" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "rateLimitRemaining" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "rateLimitReset" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRefreshPluginCatalogMutation,
+  SettingsRefreshPluginCatalogMutationVariables
 >;
 export const SettingsPluginInstallsDocument = {
   kind: "Document",

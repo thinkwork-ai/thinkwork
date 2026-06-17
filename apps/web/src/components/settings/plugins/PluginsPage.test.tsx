@@ -12,6 +12,7 @@ const {
   installMock,
   navigateMock,
   queryDocs,
+  refreshCatalogMutationMock,
   tenantState,
   toggleRef,
   useQueryMock,
@@ -22,7 +23,9 @@ const {
     SettingsInstallPluginMutation: Symbol("installPlugin"),
     SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
     SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
+    SettingsRefreshPluginCatalogMutation: Symbol("refreshPluginCatalog"),
   },
+  refreshCatalogMutationMock: vi.fn(),
   tenantState: { isOperator: true, roleResolved: true },
   toggleRef: { current: undefined as ((value: string) => void) | undefined },
   useQueryMock: vi.fn(),
@@ -32,6 +35,9 @@ vi.mock("urql", () => ({
   useMutation: (doc: unknown) => {
     if (doc === queryDocs.SettingsInstallPluginMutation) {
       return [{ fetching: false }, installMock];
+    }
+    if (doc === queryDocs.SettingsRefreshPluginCatalogMutation) {
+      return [{ fetching: false }, refreshCatalogMutationMock];
     }
     return [{ fetching: false }, vi.fn()];
   },
@@ -157,6 +163,7 @@ function mockQueries({
 beforeEach(() => {
   installMock.mockReset();
   navigateMock.mockReset();
+  refreshCatalogMutationMock.mockReset();
   refreshCatalog.mockReset();
   refreshActivations.mockReset();
   useQueryMock.mockReset();
@@ -169,6 +176,15 @@ beforeEach(() => {
         pluginKey: "twenty",
         pinnedVersion: "1.0.0",
         state: "installing",
+      },
+    },
+  });
+  refreshCatalogMutationMock.mockResolvedValue({
+    data: {
+      refreshPluginCatalog: {
+        ...catalogMetadata,
+        stale: false,
+        lastRefreshStatus: "not-modified",
       },
     },
   });
@@ -230,6 +246,22 @@ describe("PluginsPage", () => {
     ).toBeTruthy();
   });
 
+  it("lets operators force-refresh the trusted catalog through GraphQL", async () => {
+    render(<PluginsPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /refresh catalog/i }));
+
+    await waitFor(() => {
+      expect(refreshCatalogMutationMock).toHaveBeenCalledWith({});
+    });
+    expect(refreshCatalog).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(refreshActivations).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
   it("keeps key-gated catalog rows status-only", () => {
     render(<PluginsPage />);
 
@@ -272,6 +304,9 @@ describe("PluginsPage", () => {
     expect(screen.queryByRole("link", { name: "Open Twenty CRM" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open Docs Sync" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^install$/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /refresh catalog/i }),
+    ).toBeNull();
     expect(screen.queryByText("Not installed")).toBeNull();
     expect(screen.queryByText("Update available")).toBeNull();
   });

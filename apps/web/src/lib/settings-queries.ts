@@ -1745,6 +1745,27 @@ export const SettingsPluginCatalogQuery = graphql(`
   }
 `);
 
+export const SettingsRefreshPluginCatalogMutation = graphql(`
+  mutation SettingsRefreshPluginCatalog {
+    refreshPluginCatalog {
+      source
+      repository
+      ref
+      commitSha
+      releaseTag
+      assetName
+      catalogSha256
+      generatedAt
+      fetchedAt
+      stale
+      lastRefreshStatus
+      message
+      rateLimitRemaining
+      rateLimitReset
+    }
+  }
+`);
+
 export const SettingsPluginInstallsQuery = graphql(`
   query SettingsPluginInstalls {
     pluginInstalls {

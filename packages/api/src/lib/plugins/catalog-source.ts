@@ -79,6 +79,8 @@ export interface PluginCatalogSourceDeps {
   createGitHubCache?: (
     trustedPublicKeyPem: string,
   ) => GitHubPluginCatalogCache | undefined;
+  /** Bypass GitHub source TTL; used by operator refresh mutation. */
+  forceGitHubRefresh?: boolean;
 }
 
 const ssm = new SSMClient({});
@@ -171,6 +173,7 @@ export async function getPluginCatalogSnapshot(
           trustedPublicKeyPem,
           fetchImpl: deps.fetch,
           cache: createGitHubCache(trustedPublicKeyPem),
+          forceRefresh: deps.forceGitHubRefresh,
         });
         return {
           catalog: githubSnapshot.catalog,
