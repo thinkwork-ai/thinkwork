@@ -257,6 +257,15 @@ describe("inviteMember onboarding claim", () => {
     });
     expect(createCommand.input?.DesiredDeliveryMediums).toBeUndefined();
     expect(createCommand.input?.TemporaryPassword).toMatch(/Aa1!$/);
+    const invitePayload = emailChannelSendMock.mock.calls[0]?.[1] as {
+      html?: string;
+      text?: string;
+    };
+    expect(invitePayload.html).toContain('src="https://app.test/logo.png"');
+    expect(invitePayload.html).toContain('href="https://app.test/sign-in"');
+    expect(invitePayload.html).toContain("Workspace invitation");
+    expect(invitePayload.html).toContain("Temporary password");
+    expect(invitePayload.text).toContain("Sign in: https://app.test/sign-in");
     expect(emailChannelSendMock).toHaveBeenCalledWith(
       "resend",
       expect.objectContaining({
