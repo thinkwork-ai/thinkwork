@@ -7,7 +7,7 @@
  * the catalog in-process from the bundled manifests.
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import {
   allPluginManifests,
@@ -19,6 +19,7 @@ import {
 import {
   compareSemverDesc,
   getPluginCatalog,
+  getPluginCatalogSnapshot,
   getPluginVersion,
   PluginCatalogUnavailableError,
   resetPluginCatalogCacheForTests,
@@ -66,6 +67,111 @@ describe("getPluginCatalog", () => {
       loadSignedDocument: async () => document,
     });
     expect(catalog.plugins.map((p) => p.pluginKey)).toContain("lastmile");
+  });
+
+  it("signed mode with GitHub config: loads the verified release artifact", async () => {
+    const { privateKeyPem, publicKeyPem } = keyPair();
+    const document = signPluginCatalog({
+      catalog: buildPluginCatalog({
+        manifests: allPluginManifests,
+        generatedAt: "2026-06-17T00:00:00.000Z",
+        source: {
+          repository: "thinkwork-ai/thinkwork",
+          ref: "main",
+          commitSha: "0123456789abcdef0123456789abcdef01234567",
+        },
+      }),
+      privateKeyPem,
+      signedAt: "2026-06-17T00:00:00.000Z",
+    });
+    const fetchImpl = async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.includes("/releases/tags/plugin-catalog-main")) {
+        return new Response(
+          JSON.stringify({
+            assets: [
+              {
+                name: "thinkwork-plugin-catalog-main.json",
+                browser_download_url:
+                  "https://example.invalid/thinkwork-plugin-catalog-main.json",
+              },
+            ],
+          }),
+          { headers: { etag: '"catalog"' } },
+        );
+      }
+      return new Response(JSON.stringify(document));
+    };
+
+    const snapshot = await getPluginCatalogSnapshot({
+      readTrustedPublicKey: async () => publicKeyPem,
+      readGitHubConfig: () => ({
+        repository: "thinkwork-ai/thinkwork",
+        releaseTag: "plugin-catalog-main",
+        assetName: "thinkwork-plugin-catalog-main.json",
+        cacheTtlMs: 60_000,
+        userAgent: "thinkwork-api-test",
+      }),
+      fetch: fetchImpl as typeof fetch,
+      loadSignedDocument: async () => {
+        throw new Error("bundled signed document should not be used");
+      },
+    });
+
+    expect(snapshot.source).toBe("github-release");
+    expect(snapshot.github?.sourceCommitSha).toBe(
+      "0123456789abcdef0123456789abcdef01234567",
+    );
+    expect(snapshot.catalog.plugins.map((p) => p.pluginKey)).toContain(
+      "lastmile",
+    );
+  });
+
+  it("signed GitHub mode: falls back to bundled signed catalog when remote verification fails without cache", async () => {
+    const signer = keyPair();
+    const trusted = keyPair();
+    const badRemote = signedDocument(signer.privateKeyPem);
+    const bundled = signedDocument(trusted.privateKeyPem);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchImpl = async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.includes("/releases/tags/plugin-catalog-main")) {
+        return new Response(
+          JSON.stringify({
+            assets: [
+              {
+                name: "thinkwork-plugin-catalog-main.json",
+                browser_download_url:
+                  "https://example.invalid/thinkwork-plugin-catalog-main.json",
+              },
+            ],
+          }),
+        );
+      }
+      return new Response(JSON.stringify(badRemote));
+    };
+
+    const snapshot = await getPluginCatalogSnapshot({
+      readTrustedPublicKey: async () => trusted.publicKeyPem,
+      readGitHubConfig: () => ({
+        repository: "thinkwork-ai/thinkwork",
+        releaseTag: "plugin-catalog-main",
+        assetName: "thinkwork-plugin-catalog-main.json",
+        cacheTtlMs: 60_000,
+        userAgent: "thinkwork-api-test",
+      }),
+      fetch: fetchImpl as typeof fetch,
+      loadSignedDocument: async () => bundled,
+    });
+
+    expect(snapshot.source).toBe("bundled-signed");
+    expect(snapshot.catalog.plugins.map((p) => p.pluginKey)).toContain(
+      "lastmile",
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("GitHub catalog unavailable"),
+      expect.stringContaining("signature is invalid"),
+    );
   });
 
   it("signed mode: fails closed on a tampered payload", async () => {
