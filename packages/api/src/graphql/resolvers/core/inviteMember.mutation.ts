@@ -276,24 +276,48 @@ async function resolveInviteEmailChannel(
   const rows = await db
     .select()
     .from(emailProviderInstalls)
-    .where(
-      and(
-        eq(emailProviderInstalls.tenant_id, tenantId),
-        eq(emailProviderInstalls.active_for_production, true),
-      ),
-    );
-  const [provider] = Array.isArray(rows) ? rows : [];
-  if (
-    !provider ||
-    provider.status !== "ready" ||
-    !provider.credential_secret_ref ||
-    !provider.default_from_email
-  ) {
+    .where(eq(emailProviderInstalls.tenant_id, tenantId));
+  const providers = Array.isArray(rows) ? rows : [];
+  const activeResendProvider = providers.find(
+    (provider) =>
+      provider.provider === "resend" && provider.active_for_production,
+  );
+  const configuredResendProvider = providers.find(
+    (provider) =>
+      provider.provider === "resend" &&
+      provider.credential_secret_ref &&
+      provider.default_from_email,
+  );
+  const activeProvider = providers.find(
+    (provider) => provider.active_for_production,
+  );
+  const provider =
+    activeResendProvider ?? configuredResendProvider ?? activeProvider ?? null;
+
+  if (!provider) {
     return null;
   }
+
+  if (!provider.credential_secret_ref || !provider.default_from_email) {
+    throw new GraphQLError(
+      `Invite delivery is configured for the ${provider.provider} email channel, but the provider credential or sender address is missing.`,
+      {
+        extensions: { code: "DELIVERY_FAILED" },
+      },
+    );
+  }
+
   const secret = await getSecret(provider.credential_secret_ref);
   const credential = readStoredEmailProviderApiKey(secret);
-  if (!credential) return null;
+  if (!credential) {
+    throw new GraphQLError(
+      `Invite delivery is configured for the ${provider.provider} email channel, but the stored credential could not be read.`,
+      {
+        extensions: { code: "DELIVERY_FAILED" },
+      },
+    );
+  }
+
   return {
     providerInstallId: provider.id,
     provider: provider.provider as "resend" | "ses",
