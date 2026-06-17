@@ -27,8 +27,8 @@ export function EmailReadinessPanel({
     summary.providers[0] ??
     null;
   return (
-    <div className="grid gap-3">
-      <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+    <div className="grid w-full gap-3">
+      <div className="flex flex-col gap-3 rounded-md border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           {summary.productionReady ? (
             <ShieldCheck className="size-4 text-emerald-500" />
@@ -52,6 +52,7 @@ export function EmailReadinessPanel({
             type="button"
             size="sm"
             variant="outline"
+            className="w-full sm:w-auto"
             disabled={probing}
             onClick={() => onRunProbe(activeProvider.id)}
           >

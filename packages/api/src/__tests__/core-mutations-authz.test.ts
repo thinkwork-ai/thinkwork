@@ -25,6 +25,7 @@ const {
   mockInsertReturning,
   mockUpdateReturning,
   mockRequireTenantAdmin,
+  runWithIdempotencyMock,
   cognitoSendMock,
   insertCallRef,
 } = vi.hoisted(() => ({
@@ -32,6 +33,7 @@ const {
   mockInsertReturning: vi.fn(),
   mockUpdateReturning: vi.fn(),
   mockRequireTenantAdmin: vi.fn(),
+  runWithIdempotencyMock: vi.fn(),
   cognitoSendMock: vi.fn(),
   insertCallRef: { value: 0 },
 }));
@@ -75,6 +77,10 @@ vi.mock("../graphql/resolvers/core/authz.js", () => ({
   requireTenantAdmin: mockRequireTenantAdmin,
 }));
 
+vi.mock("../lib/idempotency.js", () => ({
+  runWithIdempotency: runWithIdempotencyMock,
+}));
+
 // Cognito client is constructed at module import time; mock the module so
 // AdminCreateUser / AdminGetUser route through our stub instead of AWS.
 vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
@@ -107,6 +113,17 @@ function cognitoCtx(principalId = "sub-1"): any {
   };
 }
 
+function apiKeyCtx(principalId = "api-key-1"): any {
+  return {
+    auth: {
+      authType: "apikey",
+      principalId,
+      tenantId: "tenant-A",
+      email: null,
+    },
+  };
+}
+
 const FORBIDDEN = Object.assign(new Error("Tenant admin role required"), {
   extensions: { code: "FORBIDDEN" },
 });
@@ -124,6 +141,10 @@ describe("core mutations — role gate + tenant pin", () => {
     mockInsertReturning.mockReset();
     mockUpdateReturning.mockReset();
     mockRequireTenantAdmin.mockReset();
+    runWithIdempotencyMock.mockReset();
+    runWithIdempotencyMock.mockImplementation(
+      async ({ fn }: { fn: () => Promise<unknown> }) => fn(),
+    );
     cognitoSendMock.mockReset();
     insertCallRef.value = 0;
   });
@@ -194,6 +215,24 @@ describe("core mutations — role gate + tenant pin", () => {
         expect.anything(),
         "tenant-A",
       );
+    });
+
+    it("surfaces Cognito invite delivery failures without masking the GraphQL error", async () => {
+      mockAdminAllowed();
+      const deliveryFailure = Object.assign(new Error("SES rejected"), {
+        name: "CodeDeliveryFailureException",
+      });
+      cognitoSendMock.mockRejectedValueOnce(deliveryFailure);
+
+      await expect(inviteMember(null, args, apiKeyCtx())).rejects.toMatchObject(
+        {
+          message:
+            "Invite delivery failed because Cognito's transactional email provider rejected the send. Check Cognito/SES invite email configuration.",
+          extensions: { code: "DELIVERY_FAILED" },
+        },
+      );
+
+      expect(insertCallRef.value).toBe(0);
     });
   });
 

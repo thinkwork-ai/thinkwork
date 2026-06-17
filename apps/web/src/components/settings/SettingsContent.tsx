@@ -213,14 +213,22 @@ export function SettingsSection({
 export function SettingsRow({
   label,
   description,
+  layout = "split",
   children,
 }: {
   label: ReactNode;
   description?: string;
+  layout?: "split" | "stacked";
   children?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-border px-4 py-3.5 last:border-b-0 md:grid md:grid-cols-[minmax(0,1fr)_minmax(10rem,max-content)] md:items-start md:gap-6">
+    <div
+      className={cn(
+        "flex flex-col gap-3 border-b border-border px-4 py-3.5 last:border-b-0",
+        layout === "split" &&
+          "md:grid md:grid-cols-[minmax(0,1fr)_minmax(10rem,max-content)] md:items-start md:gap-6",
+      )}
+    >
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground">{label}</p>
         {description ? (
@@ -228,7 +236,12 @@ export function SettingsRow({
         ) : null}
       </div>
       {children ? (
-        <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground md:flex-1 md:justify-end">
+        <div
+          className={cn(
+            "flex min-w-0 items-center gap-2 text-sm text-muted-foreground",
+            layout === "split" && "md:flex-1 md:justify-end",
+          )}
+        >
           {children}
         </div>
       ) : null}

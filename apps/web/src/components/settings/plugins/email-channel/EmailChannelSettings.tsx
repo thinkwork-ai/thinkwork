@@ -161,6 +161,7 @@ export function EmailChannelSettings() {
           <SettingsRow
             label="Production readiness"
             description="Production agent email remains closed until credentials, DNS, receiving, webhooks, provider events, and loop test are green."
+            layout="stacked"
           >
             <EmailReadinessPanel
               summary={summary}

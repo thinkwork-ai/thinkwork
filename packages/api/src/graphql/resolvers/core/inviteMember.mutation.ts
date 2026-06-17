@@ -3,6 +3,7 @@ import {
   AdminCreateUserCommand,
   AdminGetUserCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
+import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import {
   db,
@@ -17,7 +18,10 @@ import { resolveCallerUserId } from "./resolve-auth-user.js";
 import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { workspaceFolderName } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import {
+  COGNITO_INVITE_DELIVERY_FAILURE_MESSAGE,
   createCognitoInviteClient,
+  cognitoInviteErrorName,
+  isCognitoInviteDeliveryFailure,
   isResendableInviteStatus,
   resendCognitoInvite,
 } from "./cognitoInvites.js";
@@ -117,6 +121,16 @@ async function inviteMemberCore(
           cognitoSub;
       }
     } else {
+      if (isCognitoInviteDeliveryFailure(err)) {
+        console.warn("inviteMember: Cognito invite delivery failed", {
+          tenantId,
+          errorName: cognitoInviteErrorName(err),
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+        throw new GraphQLError(COGNITO_INVITE_DELIVERY_FAILURE_MESSAGE, {
+          extensions: { code: "DELIVERY_FAILED" },
+        });
+      }
       throw err;
     }
   }
