@@ -435,6 +435,12 @@ variable "plane_mcp_image_uri" {
   default     = ""
 }
 
+variable "plane_web_container_port" {
+  description = "Container port exposed by the Plane web/AIO runtime."
+  type        = number
+  default     = 8080
+}
+
 variable "plane_db_url_secret_arn" {
   description = "Secrets Manager ARN containing a JSON DATABASE_URL field for the dedicated Plane database."
   type        = string
@@ -545,6 +551,12 @@ variable "plane_rabbitmq_deployment_mode" {
 
 variable "plane_public_url" {
   description = "Public HTTPS URL for Plane. Leave empty to derive https://plane.<www_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "plane_domain" {
+  description = "Public DNS name for Plane. Leave empty to derive plane.<www_domain>."
   type        = string
   default     = ""
 }
@@ -832,7 +844,7 @@ locals {
   sandbox_domain  = var.www_domain != "" ? "sandbox.${var.www_domain}" : ""
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
   crm_domain      = var.www_domain != "" ? "crm.${var.www_domain}" : ""
-  plane_domain    = var.www_domain != "" ? "plane.${var.www_domain}" : ""
+  plane_domain    = var.plane_domain != "" ? var.plane_domain : (var.www_domain != "" ? "plane.${var.www_domain}" : "")
   twenty_url      = var.twenty_public_url != "" ? var.twenty_public_url : (local.crm_domain != "" ? "https://${local.crm_domain}" : "")
   plane_url       = var.plane_public_url != "" ? var.plane_public_url : (local.plane_domain != "" ? "https://${local.plane_domain}" : "")
 
@@ -1055,6 +1067,7 @@ module "thinkwork" {
   plane_runtime_enabled                      = var.plane_runtime_enabled
   plane_image_uri                            = var.plane_image_uri
   plane_mcp_image_uri                        = var.plane_mcp_image_uri
+  plane_web_container_port                   = var.plane_web_container_port
   plane_db_username                          = var.plane_db_username
   plane_db_name                              = var.plane_db_name
   plane_db_url_secret_arn                    = var.plane_db_url_secret_arn
@@ -1073,6 +1086,7 @@ module "thinkwork" {
   plane_rabbitmq_engine_version              = var.plane_rabbitmq_engine_version
   plane_rabbitmq_instance_type               = var.plane_rabbitmq_instance_type
   plane_rabbitmq_deployment_mode             = var.plane_rabbitmq_deployment_mode
+  plane_domain                               = local.plane_domain
   plane_public_url                           = local.plane_url
   plane_certificate_arn                      = var.plane_certificate_arn != "" ? var.plane_certificate_arn : (local.plane_managed_certificate_enabled ? aws_acm_certificate_validation.plane[0].certificate_arn : "")
   google_oauth_client_id                     = var.google_oauth_client_id

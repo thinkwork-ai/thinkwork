@@ -599,6 +599,22 @@ def managed_app_terraform_target_args(payload):
     ]
 
 
+def refresh_outputs_after_targeted_apply(payload):
+    if not is_managed_app_operation(payload):
+        return
+    print("[runner] refreshing Terraform outputs after targeted managed-app apply")
+    run(
+        [
+            "terraform",
+            "apply",
+            "-refresh-only",
+            "-auto-approve",
+            "-no-color",
+        ],
+        cwd=TF,
+    )
+
+
 def is_managed_app_operation(payload):
     contract = payload.get("operationContract")
     if isinstance(contract, dict) and contract.get("kind") == "managed_app":
@@ -3516,31 +3532,29 @@ def main():
             )
 
     outputs_path = TF / "outputs.json"
-    if (
-        result.returncode == 0
-        and action in {"deploy", "update"}
-        and not is_managed_app_operation(payload)
-    ):
+    if result.returncode == 0 and action in {"deploy", "update"}:
+        refresh_outputs_after_targeted_apply(payload)
         outputs_path.write_text(output(["terraform", "output", "-json"], cwd=TF), encoding="utf-8")
         TERRAFORM_EVIDENCE["outputs"] = {
             "fileName": "terraform-outputs.json",
             "sha256": sha256_file(outputs_path),
             "s3Uri": upload_evidence_artifact(outputs_path, "terraform-outputs.json"),
         }
-        push_database_schema(outputs_path, vars_json)
-        ensure_first_admin(outputs_path, vars_json, payload, runner_secrets)
-        write_outputs_to_ssm(outputs_path, vars_json)
-        selected_controller_release = write_controller_release_selection_to_ssm(vars_json)
-        if selected_controller_release:
-            CONTROLLER_EVIDENCE["releaseSelection"] = write_json_evidence_artifact(
-                "controller-release-selection.json",
-                selected_controller_release,
-            )
-        sync_static(outputs_path, static_files, vars_json)
-        try:
-            self_update_runner_script()
-        except Exception as self_update_error:
-            print(f"[runner] self-update failed (non-fatal): {self_update_error}")
+        if not is_managed_app_operation(payload):
+            push_database_schema(outputs_path, vars_json)
+            ensure_first_admin(outputs_path, vars_json, payload, runner_secrets)
+            write_outputs_to_ssm(outputs_path, vars_json)
+            selected_controller_release = write_controller_release_selection_to_ssm(vars_json)
+            if selected_controller_release:
+                CONTROLLER_EVIDENCE["releaseSelection"] = write_json_evidence_artifact(
+                    "controller-release-selection.json",
+                    selected_controller_release,
+                )
+            sync_static(outputs_path, static_files, vars_json)
+            try:
+                self_update_runner_script()
+            except Exception as self_update_error:
+                print(f"[runner] self-update failed (non-fatal): {self_update_error}")
     write_evidence(
         "succeeded" if result.returncode == 0 else "failed",
         vars_json,
