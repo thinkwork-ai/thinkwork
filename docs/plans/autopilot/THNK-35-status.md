@@ -11,8 +11,9 @@ status: active
 - Linear issue: THNK-35, moved from Ready to Work to In Progress after
   discovery on 2026-06-17.
 - Implementation base: `origin/main` at
-  `80e65ffaaed86995ccec30f8508298d0638919c3` (U7 merge).
-- Active branch: `codex/thnk-35-email-channel-u7-status`.
+  `c8df5e509b63bb9c21b57b3d145178fa2c309196` (Resend Channel
+  rename/setup simplification merge).
+- Active branch: `codex/thnk-35-resend-simplify-status`.
 
 ## Progress
 
@@ -26,6 +27,7 @@ status: active
 | U6 Inbound webhook normalization, authorization, rate limits, and wakeup | Merged  | PR #2600; merge commit `51726bac8796eb084f44307d744f681ea4941832` |
 | U7 Routine, runtime, and cross-surface email parity                      | Merged  | PR #2603; merge commit `80e65ffaaed86995ccec30f8508298d0638919c3` |
 | U8 SES migration, observability, documentation, and deployed validation  | Pending | Not started                                                       |
+| Follow-up Resend Channel rename and one-key setup simplification         | Merged  | PR #2605; merge commit `c8df5e509b63bb9c21b57b3d145178fa2c309196` |
 
 ## Notes
 
@@ -37,6 +39,33 @@ status: active
 
 ## Verification Log
 
+- Follow-up Resend Channel rename/setup simplification merge:
+  - PR #2605 merged on 2026-06-17 at merge commit
+    `c8df5e509b63bb9c21b57b3d145178fa2c309196`.
+  - CI passed: `cla`, `lint`, `verify`, `typecheck`, `test`, signed catalog
+    validation.
+  - User-facing plugin name changed from Email Channel to Resend Channel while
+    preserving internal `email-channel` keys and routes for compatibility.
+  - Resend key save now activates the provider and runs readiness checks
+    automatically after credential/webhook setup.
+  - Production readiness now gates only on setup checks: Resend key,
+    ThinkWork-owned domain, inbound receiving, and webhook signing secret.
+    Provider events and send/reply loop remain tracked as post-traffic evidence
+    without blocking the first production send.
+  - Settings UI now renders Resend provider setup before Resend channel
+    readiness.
+  - Local checks:
+    - `pnpm --filter @thinkwork/plugin-email-channel test`
+    - `pnpm --filter @thinkwork/plugin-email-channel typecheck`
+    - `pnpm --filter @thinkwork/plugin-catalog test`
+    - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginDetail.test.tsx`
+    - `pnpm --filter @thinkwork/api test -- src/lib/email-channel/__tests__/provider-contract.test.ts src/lib/email-channel/__tests__/first-send-approval.test.ts`
+    - `pnpm --filter @thinkwork/api typecheck`
+    - `pnpm --filter @thinkwork/web typecheck`
+    - `pnpm lint`
+    - `git diff --check`
+  - Local dev server restarted and verified at
+    `http://localhost:5174/settings/plugins/email-channel`.
 - U7 merge:
   - PR #2603 merged on 2026-06-17 at merge commit
     `80e65ffaaed86995ccec30f8508298d0638919c3`.
