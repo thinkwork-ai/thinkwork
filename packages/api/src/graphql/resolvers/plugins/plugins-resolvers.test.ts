@@ -79,10 +79,10 @@ vi.mock("../../../lib/plugins/activation.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../lib/plugins/twenty-cutover.js", async (importOriginal) => {
+vi.mock("@thinkwork/plugin-twenty/api/cutover", async (importOriginal) => {
   const actual =
     await importOriginal<
-      typeof import("../../../lib/plugins/twenty-cutover.js")
+      typeof import("@thinkwork/plugin-twenty/api/cutover")
     >();
   return {
     ...actual,
@@ -874,11 +874,17 @@ describe("cutoverTwentyPlugin (U10)", () => {
     const result = await cutoverTwentyPlugin(null, {}, CTX);
 
     expect(mockRequireTenantAdmin).toHaveBeenCalledWith(CTX, "tenant-1");
-    expect(mockCutoverTwenty).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      actorId: "user-1",
-      actorType: "user",
-    });
+    expect(mockCutoverTwenty).toHaveBeenCalledWith(
+      {
+        tenantId: "tenant-1",
+        actorId: "user-1",
+        actorType: "user",
+      },
+      expect.objectContaining({
+        getTwentyInstall: expect.any(Function),
+        adoptLegacyRow: expect.any(Function),
+      }),
+    );
     expect(result).toMatchObject({
       adopted: true,
       mcpServerId: "server-1",

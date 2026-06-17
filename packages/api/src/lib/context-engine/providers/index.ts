@@ -22,7 +22,7 @@ import { createWorkspaceFilesContextProvider } from "./workspace-files.js";
 import { createWikiContextProvider } from "./wiki.js";
 import { createWikiSourceAgentContextProvider } from "./wiki-source-agent.js";
 import { createTenantWebSearchContextProvider } from "./web-search.js";
-import { createCompanyBrainContextProvider } from "./company-brain.js";
+import { createCompanyBrainContextProvider } from "@thinkwork/plugin-company-brain/api/context-engine-provider";
 
 export function createCoreContextProviders(
   settings: TenantContextProviderSetting[] = [],
@@ -186,7 +186,7 @@ async function callTenantMcpTool(args: {
 
 export { createBedrockKnowledgeBaseContextProvider } from "./bedrock-knowledge-base.js";
 export { createCatalogContextProvider } from "./catalog.js";
-export { createCompanyBrainContextProvider } from "./company-brain.js";
+export { createCompanyBrainContextProvider } from "@thinkwork/plugin-company-brain/api/context-engine-provider";
 export { createCrmOpportunityContextProvider } from "./crm-opportunity.js";
 export { createErpCustomerContextProvider } from "./erp-customer.js";
 export { createMemoryContextProvider } from "./memory.js";

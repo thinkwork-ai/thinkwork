@@ -13,20 +13,11 @@ remaining infrastructure and activation source.
 - `src/manifest.ts` owns the Twenty catalog manifest.
 - `src/deployment/managed-app.ts` owns the Twenty managed-app deployment
   adapter.
+- `src/api/cutover.ts` owns the Twenty MCP cutover orchestration contract.
 - `terraform/twenty/` owns the Twenty managed-app Terraform module.
 - `smoke/` owns Twenty managed-app and MCP OAuth smoke scripts.
 - `test/manifest.test.ts` keeps Twenty endpoint, OAuth, infrastructure, and
   managed-app input contracts aligned.
-
-## Temporary Compatibility Links
-
-The package descriptor documents the legacy Twenty paths that still contain
-plugin-specific source:
-
-- `packages/api/src/lib/plugins/twenty-cutover.ts` until THNK-31 U6 moves
-  plugin-specific API helpers behind package exports.
-
-These links are migration debt, not shared platform ownership.
 
 ## Verification
 

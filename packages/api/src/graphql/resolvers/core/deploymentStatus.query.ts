@@ -6,7 +6,7 @@ import {
   readManagedApplications,
   readTwentyStatus,
 } from "./managedApplications.js";
-import { resolveCogneeClusterIdentity } from "./cogneeClusterIdentity.js";
+import { resolveCogneeClusterIdentity } from "@thinkwork/plugin-company-brain/api/cognee-cluster-identity";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 import { enrichManagedApplicationsWithMcpState } from "../../../lib/managed-mcp-applications.js";
 import {

@@ -1,17 +1,106 @@
 import { and, desc, eq, sql } from "drizzle-orm";
+import { getDb, type Database } from "@thinkwork/database-pg";
 import {
   brainArtifactManifests,
   brainSubstrateMigrations,
   brainSubstrateStates,
 } from "@thinkwork/database-pg/schema";
-import { db as defaultDb, type Database } from "../../db.js";
-import type {
-  ContextEngineProviderRequest,
-  ContextHit,
-  ContextProviderDescriptor,
-  ContextProviderResult,
-  ContextProviderStatus,
-} from "../types.js";
+
+export type ContextEngineMode = "results" | "answer";
+export type ContextEngineScope = "personal" | "team" | "auto";
+export type ContextEngineDepth = "quick" | "deep";
+export type ContextProviderFamily = "brain";
+export type ContextSourceFamily = "brain";
+
+export interface ContextEngineProviderRequest {
+  query: string;
+  mode: ContextEngineMode;
+  scope: ContextEngineScope;
+  depth: ContextEngineDepth;
+  limit: number;
+  providerOptions?: {
+    brain?: {
+      sourceKind?: string;
+      sourceType?: string;
+      datasetId?: string;
+      nodeSetIds?: string[];
+      topK?: number;
+      onlyContext?: boolean;
+    };
+  };
+  caller: {
+    tenantId: string;
+    userId?: string | null;
+    agentId?: string | null;
+    threadId?: string | null;
+    spaceId?: string | null;
+    templateId?: string | null;
+    traceId?: string | null;
+  };
+}
+
+export interface ContextHit {
+  id: string;
+  providerId: string;
+  family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
+  title: string;
+  snippet: string;
+  score?: number | null;
+  rank?: number | null;
+  scope: ContextEngineScope;
+  provenance: {
+    label?: string;
+    uri?: string;
+    sourceId?: string;
+    metadata?: Record<string, unknown>;
+  };
+  metadata?: Record<string, unknown>;
+  freshness?: {
+    asOf: string;
+    ttlSeconds: number;
+  };
+}
+
+export interface ContextProviderStatus {
+  providerId: string;
+  family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
+  displayName: string;
+  state: "ok" | "skipped" | "error" | "timeout" | "stale";
+  scope: ContextEngineScope;
+  durationMs?: number;
+  hitCount?: number;
+  error?: string;
+  reason?: string;
+  defaultEnabled?: boolean;
+  freshness?: {
+    asOf: string;
+    ttlSeconds: number;
+  };
+  metadata?: Record<string, unknown>;
+}
+
+export interface ContextProviderResult {
+  hits: ContextHit[];
+  status?: Partial<ContextProviderStatus>;
+}
+
+export interface ContextProviderDescriptor {
+  id: string;
+  family: ContextProviderFamily;
+  sourceFamily?: ContextSourceFamily;
+  displayName: string;
+  enabled?: boolean;
+  defaultEnabled: boolean;
+  config?: Record<string, unknown>;
+  supportedScopes?: ContextEngineScope[];
+  timeoutMs?: number;
+  query(request: ContextEngineProviderRequest): Promise<ContextProviderResult>;
+  status?(
+    request: ContextEngineProviderRequest,
+  ): Promise<Partial<ContextProviderStatus> | null>;
+}
 
 const DEFAULT_BRAIN_LIMIT = 10;
 const MAX_BRAIN_LIMIT = 20;
@@ -149,7 +238,7 @@ export interface CompanyBrainProviderOptions {
 export function createCompanyBrainContextProvider(
   options: CompanyBrainProviderOptions = {},
 ): ContextProviderDescriptor {
-  const db = options.db ?? defaultDb;
+  const db = options.db ?? getDb();
   const loadSubstrateState =
     options.loadSubstrateState ??
     ((tenantId: string) => loadSubstrateStateFromDb(db, tenantId));
@@ -722,9 +811,7 @@ function publicMigrationReadState(migration: BrainSubstrateMigrationSummary) {
     status: migration.status,
     fromStorageTier: migration.from_storage_tier,
     toStorageTier: migration.to_storage_tier,
-    validation: publicMigrationValidationSummary(
-      migration.validation_summary,
-    ),
+    validation: publicMigrationValidationSummary(migration.validation_summary),
     rollbackWindowClosesAt: isoDate(migration.rollback_window_closes_at),
   };
 }

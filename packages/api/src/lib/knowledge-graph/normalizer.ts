@@ -2,7 +2,7 @@ import type {
   CogneeGraphEdge,
   CogneeGraphNode,
   CogneeGraphPayload,
-} from "./cognee-client.js";
+} from "@thinkwork/plugin-company-brain/api/cognee-client";
 import {
   normalizeOntologySlug,
   type KnowledgeGraphOntologyExport,

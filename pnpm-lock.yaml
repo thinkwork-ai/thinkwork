@@ -784,9 +784,15 @@ importers:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../plugin-catalog
+      '@thinkwork/plugin-company-brain':
+        specifier: workspace:*
+        version: link:../../plugins/company-brain
       '@thinkwork/plugin-lastmile':
         specifier: workspace:*
         version: link:../../plugins/lastmile
+      '@thinkwork/plugin-twenty':
+        specifier: workspace:*
+        version: link:../../plugins/twenty
       '@thinkwork/release-manifest':
         specifier: workspace:*
         version: link:../release-manifest
@@ -1607,6 +1613,16 @@ importers:
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
 
   plugins/company-brain:
+    dependencies:
+      '@thinkwork/database-pg':
+        specifier: workspace:*
+        version: link:../../packages/database-pg
+      drizzle-orm:
+        specifier: ^0.39.0
+        version: 0.39.3(@aws-sdk/client-rds-data@3.1028.0)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.20.0)(postgres@3.4.9)(sql.js@1.14.1)
+      graphql:
+        specifier: ^16.10.0
+        version: 16.13.2
     devDependencies:
       '@thinkwork/deployment-runner':
         specifier: workspace:*
@@ -1649,6 +1665,10 @@ importers:
         version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
 
   plugins/twenty:
+    dependencies:
+      graphql:
+        specifier: ^16.10.0
+        version: 16.13.2
     devDependencies:
       '@thinkwork/deployment-runner':
         specifier: workspace:*

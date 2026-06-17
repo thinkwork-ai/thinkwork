@@ -5,7 +5,7 @@ import {
   managedApplications as managedApplicationsTable,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../../utils.js";
-import { resolveCogneeClusterIdentity } from "./cogneeClusterIdentity.js";
+import { resolveCogneeClusterIdentity } from "@thinkwork/plugin-company-brain/api/cognee-cluster-identity";
 
 export type ManagedApplicationKey = "cognee" | "plane" | "twenty";
 
@@ -332,7 +332,10 @@ export async function readPlaneStatus(
   if (!tenantId) return DISABLED_PLANE_STATUS;
   const row = await deps.getManagedApplicationRow(tenantId, "plane");
   if (!row) return DISABLED_PLANE_STATUS;
-  const operation = await deps.getLatestSucceededJobOperation(tenantId, "plane");
+  const operation = await deps.getLatestSucceededJobOperation(
+    tenantId,
+    "plane",
+  );
   if (!operation || operation === "DESTROY") return DISABLED_PLANE_STATUS;
 
   const provisioned = true;

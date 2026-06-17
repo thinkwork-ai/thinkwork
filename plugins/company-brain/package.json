@@ -7,12 +7,21 @@
   "exports": {
     ".": "./src/index.ts",
     "./manifest": "./src/manifest.ts",
+    "./api/cognee-client": "./src/api/cognee-client.ts",
+    "./api/cognee-cluster-identity": "./src/api/cognee-cluster-identity.ts",
+    "./api/context-engine-provider": "./src/api/context-engine-provider.ts",
+    "./api/migration": "./src/api/migration.ts",
     "./deployment/cognee-managed-app": "./src/deployment/cognee-managed-app.ts"
   },
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@thinkwork/database-pg": "workspace:*",
+    "drizzle-orm": "^0.39.0",
+    "graphql": "^16.10.0"
   },
   "devDependencies": {
     "@thinkwork/deployment-runner": "workspace:*",

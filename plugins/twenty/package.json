@@ -7,12 +7,16 @@
   "exports": {
     ".": "./src/index.ts",
     "./manifest": "./src/manifest.ts",
+    "./api/cutover": "./src/api/cutover.ts",
     "./deployment/managed-app": "./src/deployment/managed-app.ts"
   },
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "graphql": "^16.10.0"
   },
   "devDependencies": {
     "@thinkwork/deployment-runner": "workspace:*",

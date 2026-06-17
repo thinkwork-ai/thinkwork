@@ -439,6 +439,36 @@ above supplies that alias and passed.
 - `pnpm test:plugin-source-boundary`
 - `git diff --check`
 
+## Current API Runtime Helper Package Slice
+
+- Started from fresh `origin/main` at `36ab33924` in branch
+  `codex/thnk-31-generic-extension-points`.
+- Moving Company Brain migration helpers, context-engine provider, Cognee
+  substrate client, and cluster identity helper into `plugins/company-brain`.
+- Moving Twenty MCP cutover orchestration into `plugins/twenty`, with the API
+  retaining only a generic DB/Secrets Manager/audit dependency adapter under
+  `packages/api/src/lib/plugins/cutover/`.
+- Updating GraphQL resolvers, knowledge-graph ingest handlers, context provider
+  registration, and normalizer types to consume plugin package exports.
+- Removing the moved Company Brain/Cognee and Twenty API helper entries from
+  the source-boundary migration allowlist; the guard now reports 9 migration
+  paths and 2 shared paths.
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-company-brain test`
+- `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+- `pnpm --filter @thinkwork/plugin-twenty test`
+- `pnpm --filter @thinkwork/plugin-twenty typecheck`
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/brain/companyBrainMigration.mutation.test.ts src/graphql/resolvers/plugins/plugins-resolvers.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/handlers/knowledge-graph-observations-ingest.test.ts src/lib/knowledge-graph/normalizer.test.ts`
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm --filter @thinkwork/api exec vitest run test/integration/context-engine/company-brain-context.e2e.test.ts` (test file collected and skipped by its environment guard)
+- `pnpm lint:plugin-source`
+- `pnpm test:plugin-source-boundary`
+- `git diff --check`
+
 ## Verification Notes
 
 - `pnpm install --lockfile-only` completed after adding `plugins/*` and

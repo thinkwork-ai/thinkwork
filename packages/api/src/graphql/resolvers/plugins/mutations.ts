@@ -41,7 +41,8 @@ import {
   redeemPremiumInstallKey,
   revokePremiumInstallKey,
 } from "../../../lib/plugins/premium-entitlements.js";
-import { cutoverTwentyPluginForTenant } from "../../../lib/plugins/twenty-cutover.js";
+import { createDefaultTwentyCutoverDeps } from "../../../lib/plugins/cutover/deps.js";
+import { cutoverTwentyPluginForTenant } from "@thinkwork/plugin-twenty/api/cutover";
 import {
   pluginActorFor,
   pluginRequestMetadata,
@@ -169,11 +170,14 @@ export async function cutoverTwentyPlugin(
 ) {
   const { tenantId, callerUserId } = await requirePluginTenantAdmin(ctx);
   const actor = pluginActorFor(callerUserId);
-  return cutoverTwentyPluginForTenant({
-    tenantId,
-    actorId: actor.actorId,
-    actorType: actor.actorType,
-  });
+  return cutoverTwentyPluginForTenant(
+    {
+      tenantId,
+      actorId: actor.actorId,
+      actorType: actor.actorType,
+    },
+    createDefaultTwentyCutoverDeps(),
+  );
 }
 
 async function requireActivationCaller(
