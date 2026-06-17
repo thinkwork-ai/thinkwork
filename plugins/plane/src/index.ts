@@ -21,6 +21,11 @@ export const planePluginPackage = {
       description: "Plane managed-app deployment adapter.",
     },
     {
+      kind: "terraform",
+      path: "plugins/plane/terraform/plane",
+      description: "Plane managed-app Terraform module.",
+    },
+    {
       kind: "tests",
       path: "plugins/plane/test",
       description: "Plane package-local manifest and contract tests.",
@@ -31,14 +36,7 @@ export const planePluginPackage = {
       description: "Plane package ownership and migration notes.",
     },
   ],
-  compatibilityLinks: [
-    {
-      path: "terraform/modules/app/plane",
-      reason:
-        "Plane Terraform source still ships from the legacy app module path.",
-      removal: "THNK-31 U4 moves managed-app Terraform source under plugins.",
-    },
-  ],
+  compatibilityLinks: [],
 } as const;
 
 export { planeManifest };

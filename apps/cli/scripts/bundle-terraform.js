@@ -14,6 +14,8 @@ const repoRoot = resolve(cliRoot, "../..");
 
 const src = resolve(repoRoot, "terraform");
 const dst = resolve(cliRoot, "dist/terraform");
+const pluginsSrc = resolve(repoRoot, "plugins");
+const pluginsDst = resolve(cliRoot, "dist/plugins");
 
 if (!existsSync(src)) {
   console.warn("⚠ terraform/ not found at repo root — skipping bundle");
@@ -22,6 +24,7 @@ if (!existsSync(src)) {
 
 rmSync(dst, { recursive: true, force: true });
 mkdirSync(dst, { recursive: true });
+rmSync(pluginsDst, { recursive: true, force: true });
 
 const dirs = ["modules", "examples"];
 for (const dir of dirs) {
@@ -49,12 +52,34 @@ if (existsSync(schemaPath)) {
 
 console.log("✓ Terraform modules bundled into dist/terraform/");
 
-const enterpriseTemplatesSrc = resolve(cliRoot, "src/commands/enterprise/templates");
-const enterpriseTemplatesDst = resolve(cliRoot, "dist/commands/enterprise/templates");
+if (existsSync(pluginsSrc)) {
+  mkdirSync(pluginsDst, { recursive: true });
+  cpSync(pluginsSrc, pluginsDst, {
+    recursive: true,
+    filter: (path) => {
+      if (path.includes("node_modules")) return false;
+      if (path.includes("/dist/")) return false;
+      if (path.endsWith(".tsbuildinfo")) return false;
+      return true;
+    },
+  });
+  console.log("✓ Plugin source bundled into dist/plugins/");
+}
+
+const enterpriseTemplatesSrc = resolve(
+  cliRoot,
+  "src/commands/enterprise/templates",
+);
+const enterpriseTemplatesDst = resolve(
+  cliRoot,
+  "dist/commands/enterprise/templates",
+);
 
 if (existsSync(enterpriseTemplatesSrc)) {
   rmSync(enterpriseTemplatesDst, { recursive: true, force: true });
   mkdirSync(dirname(enterpriseTemplatesDst), { recursive: true });
   cpSync(enterpriseTemplatesSrc, enterpriseTemplatesDst, { recursive: true });
-  console.log("✓ Enterprise deployment templates bundled into dist/commands/enterprise/templates/");
+  console.log(
+    "✓ Enterprise deployment templates bundled into dist/commands/enterprise/templates/",
+  );
 }

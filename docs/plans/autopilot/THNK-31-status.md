@@ -112,6 +112,54 @@ project_context: TEI ThinkWork
 - `node scripts/verify-plugin-source-boundary.mjs`
 - `git diff --check`
 
+## Current Terraform and Runtime Source Ownership Slice
+
+- Started from fresh `origin/main` at
+  `43565f1ca065f8fa78173165499afc86c7769169` in branch
+  `codex/thnk-31-plugin-terraform-runtime`.
+- Moved Plane, Twenty, and Company Brain/Cognee Terraform modules from
+  `terraform/modules/app/` into owning plugin packages:
+  `plugins/plane/terraform/plane`,
+  `plugins/twenty/terraform/twenty`, and
+  `plugins/company-brain/terraform/cognee`.
+- Moved the Company Brain internal substrate runtime image source from
+  `packages/cognee/Dockerfile` to
+  `plugins/company-brain/runtime/cognee/Dockerfile`.
+- Updated managed-app adapters, `terraform/modules/thinkwork`, deploy/release
+  workflows, CLI Terraform fixtures, plugin package metadata, plugin READMEs,
+  and the CLI Terraform bundler/init scaffold to use plugin-owned source paths.
+- Removed the Terraform/runtime entries from the source-boundary migration
+  allowlist. The guard now reports 20 migration paths, down from 33.
+
+### Verification
+
+- `terraform fmt -recursive plugins/plane/terraform plugins/twenty/terraform plugins/company-brain/terraform terraform/modules/thinkwork`
+- `pnpm dlx prettier@3.8.2 --write ...` on touched JS/TS/Markdown/YAML files.
+- `node scripts/verify-plugin-source-boundary.mjs`
+- `pnpm --filter thinkwork-cli exec vitest run __tests__/terraform-cognee-fixture.test.ts __tests__/terraform-plane-fixture.test.ts __tests__/terraform-twenty-fixture.test.ts`
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `terraform -chdir=plugins/plane/terraform/plane init -backend=false && terraform -chdir=plugins/plane/terraform/plane validate`
+- `terraform -chdir=plugins/twenty/terraform/twenty init -backend=false && terraform -chdir=plugins/twenty/terraform/twenty validate`
+- `terraform -chdir=plugins/company-brain/terraform/cognee init -backend=false && terraform -chdir=plugins/company-brain/terraform/cognee validate`
+- `terraform -chdir=terraform/examples/greenfield init -backend=false && terraform -chdir=terraform/examples/greenfield validate`
+- `pnpm --filter @thinkwork/plugin-plane typecheck`
+- `pnpm --filter @thinkwork/plugin-twenty typecheck`
+- `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm --filter thinkwork-cli typecheck`
+- `pnpm --filter @thinkwork/plugin-plane test`
+- `pnpm --filter @thinkwork/plugin-twenty test`
+- `pnpm --filter @thinkwork/plugin-company-brain test`
+- `pnpm --filter @thinkwork/deployment-runner test`
+- `pnpm --filter @thinkwork/deployment-runner typecheck`
+- `pnpm --filter thinkwork-cli build`
+- `git diff --check`
+
+`terraform -chdir=terraform/modules/thinkwork init -backend=false` resolved the
+new plugin module sources, but direct child-module `validate` still requires the
+root module's `aws.us_east_1` provider alias. The greenfield root validation
+above supplies that alias and passed.
+
 ## Current Pass
 
 - Started from fresh `origin/main` at `e468998e7` in branch

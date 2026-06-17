@@ -21,6 +21,11 @@ export const twentyPluginPackage = {
       description: "Twenty managed-app deployment adapter.",
     },
     {
+      kind: "terraform",
+      path: "plugins/twenty/terraform/twenty",
+      description: "Twenty managed-app Terraform module.",
+    },
+    {
       kind: "tests",
       path: "plugins/twenty/test",
       description: "Twenty package-local manifest and contract tests.",
@@ -32,12 +37,6 @@ export const twentyPluginPackage = {
     },
   ],
   compatibilityLinks: [
-    {
-      path: "terraform/modules/app/twenty",
-      reason:
-        "Twenty Terraform source still ships from the legacy app module path.",
-      removal: "THNK-31 U4 moves managed-app Terraform source under plugins.",
-    },
     {
       path: "packages/api/src/lib/plugins/twenty-cutover.ts",
       reason:

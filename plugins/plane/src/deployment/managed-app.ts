@@ -119,7 +119,7 @@ export const planeAdapter: ManagedAppAdapter = {
   description:
     "Customer-owned Plane project management runtime with retained work-item data and user-scoped agent integration.",
   catalogVisible: false,
-  terraformModulePath: "terraform/modules/app/plane",
+  terraformModulePath: "plugins/plane/terraform/plane",
   requiredInputs(operation) {
     return operation === "DESTROY" ? [] : provisionRequiredInputs;
   },

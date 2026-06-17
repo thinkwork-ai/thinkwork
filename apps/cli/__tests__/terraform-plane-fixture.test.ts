@@ -15,18 +15,18 @@ import { describe, expect, it } from "vitest";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../../..");
 
-const PLANE_MAIN = resolve(REPO_ROOT, "terraform/modules/app/plane/main.tf");
+const PLANE_MAIN = resolve(REPO_ROOT, "plugins/plane/terraform/plane/main.tf");
 const PLANE_VARS = resolve(
   REPO_ROOT,
-  "terraform/modules/app/plane/variables.tf",
+  "plugins/plane/terraform/plane/variables.tf",
 );
 const PLANE_OUTPUTS = resolve(
   REPO_ROOT,
-  "terraform/modules/app/plane/outputs.tf",
+  "plugins/plane/terraform/plane/outputs.tf",
 );
 const PLANE_README = resolve(
   REPO_ROOT,
-  "terraform/modules/app/plane/README.md",
+  "plugins/plane/terraform/plane/README.md",
 );
 const THINKWORK_MAIN = resolve(
   REPO_ROOT,
@@ -269,7 +269,9 @@ describe("Plane Terraform app module", () => {
     expect(planeModule).toMatch(
       /count\s*=\s*local\.plane_provisioned \? 1 : 0/,
     );
-    expect(planeModule).toMatch(/source\s*=\s*"\.\.\/app\/plane"/);
+    expect(planeModule).toMatch(
+      /source\s*=\s*"\.\.\/\.\.\/\.\.\/plugins\/plane\/terraform\/plane"/,
+    );
     expect(planeModule).toMatch(
       /runtime_enabled\s*=\s*local\.plane_runtime_enabled/,
     );

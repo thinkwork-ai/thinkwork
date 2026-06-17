@@ -15,20 +15,26 @@ import { describe, expect, it } from "vitest";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../../..");
 
-const COGNEE_MAIN = resolve(REPO_ROOT, "terraform/modules/app/cognee/main.tf");
+const COGNEE_MAIN = resolve(
+  REPO_ROOT,
+  "plugins/company-brain/terraform/cognee/main.tf",
+);
 const COGNEE_VARS = resolve(
   REPO_ROOT,
-  "terraform/modules/app/cognee/variables.tf",
+  "plugins/company-brain/terraform/cognee/variables.tf",
 );
 const COGNEE_OUTPUTS = resolve(
   REPO_ROOT,
-  "terraform/modules/app/cognee/outputs.tf",
+  "plugins/company-brain/terraform/cognee/outputs.tf",
 );
 const COGNEE_README = resolve(
   REPO_ROOT,
-  "terraform/modules/app/cognee/README.md",
+  "plugins/company-brain/terraform/cognee/README.md",
 );
-const COGNEE_DOCKERFILE = resolve(REPO_ROOT, "packages/cognee/Dockerfile");
+const COGNEE_DOCKERFILE = resolve(
+  REPO_ROOT,
+  "plugins/company-brain/runtime/cognee/Dockerfile",
+);
 const BUSINESS_ONTOLOGY_OPS_DOC = resolve(
   REPO_ROOT,
   "docs/src/content/docs/guides/business-ontology-operations.mdx",
@@ -58,6 +64,10 @@ const GREENFIELD_MAIN = resolve(
   "terraform/examples/greenfield/main.tf",
 );
 const INIT_COMMAND = resolve(REPO_ROOT, "apps/cli/src/commands/init.ts");
+const BUNDLE_TERRAFORM_SCRIPT = resolve(
+  REPO_ROOT,
+  "apps/cli/scripts/bundle-terraform.js",
+);
 const ENTERPRISE_TEMPLATE_MAIN = resolve(
   REPO_ROOT,
   "apps/cli/src/commands/enterprise/templates/deploy-repo/terraform/main.tf",
@@ -396,7 +406,9 @@ describe("U2 - Cognee composite Thinkwork wiring", () => {
       /enable_cognee[\s\S]{0,120}resolved_memory_engine/,
     );
     expect(cogneeModule).toMatch(/count\s*=\s*local\.cognee_enabled \? 1 : 0/);
-    expect(cogneeModule).toMatch(/source\s*=\s*"\.\.\/app\/cognee"/);
+    expect(cogneeModule).toMatch(
+      /source\s*=\s*"\.\.\/\.\.\/\.\.\/plugins\/company-brain\/terraform\/cognee"/,
+    );
     expect(cogneeModule).toMatch(/vpc_id\s*=\s*module\.vpc\.vpc_id/);
     expect(cogneeModule).toMatch(
       /subnet_ids\s*=\s*module\.vpc\.public_subnet_ids/,
@@ -512,6 +524,27 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(source).toMatch(/output "cognee_endpoint"/);
   });
 
+  it("bundles plugin-owned Terraform and runtime source with init scaffolds", () => {
+    const initSource = read(INIT_COMMAND);
+    const bundleSource = read(BUNDLE_TERRAFORM_SCRIPT);
+
+    expect(bundleSource).toMatch(
+      /const pluginsSrc = resolve\(repoRoot, "plugins"\)/,
+    );
+    expect(bundleSource).toMatch(
+      /const pluginsDst = resolve\(cliRoot, "dist\/plugins"\)/,
+    );
+    expect(bundleSource).toMatch(/cpSync\(pluginsSrc, pluginsDst/);
+    expect(bundleSource).toMatch(/path\.includes\("node_modules"\)/);
+    expect(initSource).toMatch(
+      /const bundledPlugins = resolve\(bundledTf, "\.\.", "plugins"\)/,
+    );
+    expect(initSource).toMatch(
+      /const targetPlugins = join\(targetDir, "plugins"\)/,
+    );
+    expect(initSource).toMatch(/cpSync\(bundledPlugins, targetPlugins/);
+  });
+
   it("exposes safe Cognee defaults in the enterprise deploy template", () => {
     const source = read(ENTERPRISE_TEMPLATE_MAIN);
     const thinkworkModule = firstNestedBlock(source, 'module "thinkwork"');
@@ -568,9 +601,16 @@ describe("U4 - Cognee deployment template propagation", () => {
     expect(dockerfile).toMatch(/"boto3>=1\.34\.0"/);
     expect(dockerfile).not.toMatch(/cognee\/cognee:main/);
 
-    expect(deployWorkflow).toMatch(/'packages\/cognee\/\*\*'/);
+    expect(deployWorkflow).toMatch(
+      /'plugins\/company-brain\/runtime\/cognee\/\*\*'/,
+    );
+    expect(deployWorkflow).toMatch(
+      /'plugins\/company-brain\/terraform\/cognee\/\*\*'/,
+    );
     expect(deployWorkflow).toMatch(/Build and push Cognee Bedrock image/);
-    expect(deployWorkflow).toMatch(/file: packages\/cognee\/Dockerfile/);
+    expect(deployWorkflow).toMatch(
+      /file: plugins\/company-brain\/runtime\/cognee\/Dockerfile/,
+    );
     expect(deployWorkflow).toMatch(/github\.sha }}-cognee/);
     expect(deployWorkflow).toMatch(/COGNEE_BUILT_IMAGE_DIGEST/);
     expect(deployWorkflow).toMatch(/COGNEE_BUILT_IMAGE_REPOSITORY/);

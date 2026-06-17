@@ -331,6 +331,12 @@ export function registerInitCommand(program: Command): void {
           }
         }
 
+        const bundledPlugins = resolve(bundledTf, "..", "plugins");
+        const targetPlugins = join(targetDir, "plugins");
+        if (existsSync(bundledPlugins) && !existsSync(targetPlugins)) {
+          cpSync(bundledPlugins, targetPlugins, { recursive: true });
+        }
+
         // Copy schema.graphql
         const schemaPath = join(bundledTf, "schema.graphql");
         if (

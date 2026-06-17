@@ -91,7 +91,10 @@ jobs:
               - '.github/workflows/deploy.yml'
             terraform:
               - 'terraform/**'
-              - 'packages/cognee/**'
+              - 'plugins/company-brain/runtime/cognee/**'
+              - 'plugins/company-brain/terraform/cognee/**'
+              - 'plugins/plane/terraform/plane/**'
+              - 'plugins/twenty/terraform/twenty/**'
             workspace_defaults:
               - 'packages/workspace-defaults/files/**'
               # Customer Onboarding Space source files are seeded by the same
@@ -548,7 +551,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/cognee/Dockerfile
+          file: plugins/company-brain/runtime/cognee/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |

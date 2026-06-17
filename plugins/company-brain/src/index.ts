@@ -23,6 +23,16 @@ export const companyBrainPluginPackage = {
       description: "Company Brain internal substrate managed-app adapter.",
     },
     {
+      kind: "terraform",
+      path: "plugins/company-brain/terraform/cognee",
+      description: "Company Brain internal substrate Terraform module.",
+    },
+    {
+      kind: "runtime",
+      path: "plugins/company-brain/runtime/cognee/Dockerfile",
+      description: "Company Brain internal substrate runtime image source.",
+    },
+    {
       kind: "tests",
       path: "plugins/company-brain/test",
       description: "Company Brain package-local manifest and contract tests.",
@@ -35,18 +45,6 @@ export const companyBrainPluginPackage = {
     },
   ],
   compatibilityLinks: [
-    {
-      path: "terraform/modules/app/cognee",
-      reason:
-        "Company Brain's internal substrate Terraform source still ships from the legacy app module path.",
-      removal: "THNK-31 U4 moves managed-app Terraform source under plugins.",
-    },
-    {
-      path: "packages/cognee/Dockerfile",
-      reason:
-        "Company Brain's internal substrate runtime image still builds from the legacy package path.",
-      removal: "THNK-31 U4 moves runtime source under plugins/company-brain.",
-    },
     {
       path: "apps/web/src/components/settings/SettingsCogneeApplication.tsx",
       reason:

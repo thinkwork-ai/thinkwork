@@ -30,12 +30,12 @@ describe("first-party plugin packages", () => {
       path: "plugins/plane/src/deployment/managed-app.ts",
       description: "Plane managed-app deployment adapter.",
     });
-    expect(planePluginPackage.compatibilityLinks).toContainEqual({
-      path: "terraform/modules/app/plane",
-      reason:
-        "Plane Terraform source still ships from the legacy app module path.",
-      removal: "THNK-31 U4 moves managed-app Terraform source under plugins.",
+    expect(planePluginPackage.ownedSources).toContainEqual({
+      kind: "terraform",
+      path: "plugins/plane/terraform/plane",
+      description: "Plane managed-app Terraform module.",
     });
+    expect(planePluginPackage.compatibilityLinks).toEqual([]);
   });
 
   it("publishes every first-party plugin manifest through the catalog aggregate", () => {

@@ -14,6 +14,8 @@ implementation notes.
 - `src/manifest.ts` owns the Company Brain catalog manifest.
 - `src/deployment/cognee-managed-app.ts` owns the internal substrate
   managed-app deployment adapter.
+- `terraform/cognee/` owns the internal substrate Terraform module.
+- `runtime/cognee/Dockerfile` owns the internal substrate runtime image source.
 - `smoke/` owns Company Brain entitlement, operations, context engine, and
   internal substrate smoke scripts.
 - `test/manifest.test.ts` keeps Company Brain premium entitlement,
@@ -24,10 +26,6 @@ implementation notes.
 The package descriptor documents the legacy Company Brain paths that still
 contain plugin-specific source:
 
-- `terraform/modules/app/cognee` until THNK-31 U4 moves Terraform source into
-  `plugins/company-brain/terraform/cognee/`.
-- `packages/cognee/Dockerfile` until THNK-31 U4 moves runtime source into
-  `plugins/company-brain/runtime/cognee/`.
 - `apps/web/src/components/settings/SettingsCogneeApplication.tsx` until
   THNK-31 U5 renders Company Brain-owned UI from plugin detail.
 - `packages/api/src/lib/company-brain`,

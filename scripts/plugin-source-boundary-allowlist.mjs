@@ -79,68 +79,12 @@ export const pluginSourceBoundaryAllowlist = [
       "legacy Company Brain integration coverage until API extension points move",
   },
   {
-    path: "packages/cognee/Dockerfile",
-    reason: "legacy Cognee runtime package until Company Brain substrate moves",
-  },
-  {
     path: "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts",
     reason: "historical database migration coverage",
   },
   {
     path: "packages/database-pg/__tests__/migration-0167-company-brain-artifact-manifests.test.ts",
     reason: "historical database migration coverage",
-  },
-  {
-    path: "terraform/modules/app/cognee/README.md",
-    reason:
-      "legacy Cognee Terraform module until Company Brain substrate moves",
-  },
-  {
-    path: "terraform/modules/app/cognee/main.tf",
-    reason:
-      "legacy Cognee Terraform module until Company Brain substrate moves",
-  },
-  {
-    path: "terraform/modules/app/cognee/outputs.tf",
-    reason:
-      "legacy Cognee Terraform module until Company Brain substrate moves",
-  },
-  {
-    path: "terraform/modules/app/cognee/variables.tf",
-    reason:
-      "legacy Cognee Terraform module until Company Brain substrate moves",
-  },
-  {
-    path: "terraform/modules/app/plane/README.md",
-    reason: "legacy Plane Terraform module until managed-app extensions move",
-  },
-  {
-    path: "terraform/modules/app/plane/main.tf",
-    reason: "legacy Plane Terraform module until managed-app extensions move",
-  },
-  {
-    path: "terraform/modules/app/plane/outputs.tf",
-    reason: "legacy Plane Terraform module until managed-app extensions move",
-  },
-  {
-    path: "terraform/modules/app/plane/variables.tf",
-    reason: "legacy Plane Terraform module until managed-app extensions move",
-  },
-  {
-    path: "terraform/modules/app/twenty/README.md",
-    reason: "legacy Twenty Terraform module until managed-app extensions move",
-  },
-  {
-    path: "terraform/modules/app/twenty/main.tf",
-    reason: "legacy Twenty Terraform module until managed-app extensions move",
-  },
-  {
-    path: "terraform/modules/app/twenty/outputs.tf",
-    reason: "legacy Twenty Terraform module until managed-app extensions move",
-  },
-  {
-    path: "terraform/modules/app/twenty/variables.tf",
-    reason: "legacy Twenty Terraform module until managed-app extensions move",
   },
 ];
 
