@@ -4,6 +4,9 @@ const {
   cognitoSendMock,
   mockRequireTenantAdmin,
   mockResolveCallerUserId,
+  deliverInviteViaEmailChannelMock,
+  generateTemporaryPasswordMock,
+  resolveInviteEmailChannelMock,
   runWithIdempotencyMock,
   selectRowsQueue,
   whereCalls,
@@ -11,6 +14,9 @@ const {
   cognitoSendMock: vi.fn(),
   mockRequireTenantAdmin: vi.fn(),
   mockResolveCallerUserId: vi.fn(),
+  deliverInviteViaEmailChannelMock: vi.fn(),
+  generateTemporaryPasswordMock: vi.fn(),
+  resolveInviteEmailChannelMock: vi.fn(),
   runWithIdempotencyMock: vi.fn(),
   selectRowsQueue: [] as unknown[][],
   whereCalls: [] as unknown[],
@@ -26,6 +32,9 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   AdminGetUserCommand: class {
     constructor(public input: unknown) {}
   },
+  AdminSetUserPasswordCommand: class {
+    constructor(public input: unknown) {}
+  },
 }));
 
 vi.mock("../graphql/resolvers/core/authz.js", () => ({
@@ -34,6 +43,12 @@ vi.mock("../graphql/resolvers/core/authz.js", () => ({
 
 vi.mock("../graphql/resolvers/core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mockResolveCallerUserId,
+}));
+
+vi.mock("../graphql/resolvers/core/member-invite-delivery.js", () => ({
+  deliverInviteViaEmailChannel: deliverInviteViaEmailChannelMock,
+  generateTemporaryPassword: generateTemporaryPasswordMock,
+  resolveInviteEmailChannel: resolveInviteEmailChannelMock,
 }));
 
 vi.mock("../lib/idempotency.js", () => ({
@@ -111,12 +126,18 @@ describe("resendMemberInvite", () => {
     cognitoSendMock.mockReset();
     mockRequireTenantAdmin.mockReset();
     mockResolveCallerUserId.mockReset();
+    deliverInviteViaEmailChannelMock.mockReset();
+    generateTemporaryPasswordMock.mockReset();
+    resolveInviteEmailChannelMock.mockReset();
     runWithIdempotencyMock.mockReset();
     selectRowsQueue.length = 0;
     whereCalls.length = 0;
 
     mockRequireTenantAdmin.mockResolvedValue("admin");
     mockResolveCallerUserId.mockResolvedValue("operator-user");
+    deliverInviteViaEmailChannelMock.mockResolvedValue(undefined);
+    generateTemporaryPasswordMock.mockReturnValue("TempPass123!Aa1!");
+    resolveInviteEmailChannelMock.mockResolvedValue(null);
     runWithIdempotencyMock.mockImplementation(
       async ({ fn }: { fn: () => Promise<unknown> }) => fn(),
     );
@@ -173,6 +194,57 @@ describe("resendMemberInvite", () => {
       Username: "alex@example.com",
       DesiredDeliveryMediums: ["EMAIL"],
       MessageAction: "RESEND",
+    });
+  });
+
+  it("uses the configured Resend channel instead of Cognito delivery", async () => {
+    enqueueMemberAndUser();
+    resolveInviteEmailChannelMock.mockResolvedValueOnce({
+      providerInstallId: "provider-1",
+      provider: "resend",
+      from: "noreply@thinkwork.ai",
+      credential: "re_test",
+    });
+    cognitoSendMock.mockResolvedValueOnce({
+      UserStatus: "FORCE_CHANGE_PASSWORD",
+    });
+
+    const result = await resendMemberInvite(
+      null,
+      {
+        tenantId: "tenant-A",
+        input: {
+          memberId: "member-1",
+          idempotencyKey: "resend-member-invite:member-1:click-resend",
+        },
+      },
+      ctx,
+    );
+
+    expect(result).toMatchObject({ status: "RESENT" });
+    expect(cognitoSendMock).toHaveBeenCalledTimes(2);
+    const setPasswordCommand = cognitoSendMock.mock.calls[1]?.[0] as {
+      input?: Record<string, unknown>;
+    };
+    expect(setPasswordCommand.input).toMatchObject({
+      Username: "alex@example.com",
+      Password: "TempPass123!Aa1!",
+      Permanent: false,
+    });
+    expect(setPasswordCommand.input).not.toHaveProperty("MessageAction");
+    expect(deliverInviteViaEmailChannelMock).toHaveBeenCalledWith({
+      tenantId: "tenant-A",
+      email: "alex@example.com",
+      name: "Alex Example",
+      tempPassword: "TempPass123!Aa1!",
+      idempotencyKey:
+        "tenant-invite-resend:tenant-A:member-1:resend-member-invite:member-1:click-resend",
+      delivery: {
+        providerInstallId: "provider-1",
+        provider: "resend",
+        from: "noreply@thinkwork.ai",
+        credential: "re_test",
+      },
     });
   });
 

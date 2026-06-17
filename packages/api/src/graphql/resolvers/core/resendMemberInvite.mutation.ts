@@ -1,5 +1,8 @@
 import { getConfig } from "@thinkwork/runtime-config";
-import { AdminGetUserCommand } from "@aws-sdk/client-cognito-identity-provider";
+import {
+  AdminGetUserCommand,
+  AdminSetUserPasswordCommand,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 import { and, db, eq, tenantMembers, users } from "../../utils.js";
@@ -14,6 +17,11 @@ import {
   isResendableInviteStatus,
   resendCognitoInvite,
 } from "./cognitoInvites.js";
+import {
+  deliverInviteViaEmailChannel,
+  generateTemporaryPassword,
+  resolveInviteEmailChannel,
+} from "./member-invite-delivery.js";
 
 const cognito = createCognitoInviteClient();
 
@@ -65,7 +73,14 @@ export const resendMemberInvite = async (
     mutationName: "resendMemberInvite",
     inputs: { memberId: input.memberId },
     clientKey: input.idempotencyKey,
-    fn: () => resendPendingInvite(tenantId, input.memberId, target.email),
+    fn: () =>
+      resendPendingInvite(
+        tenantId,
+        input.memberId,
+        target.email,
+        target.name,
+        input.idempotencyKey,
+      ),
   });
 };
 
@@ -91,7 +106,11 @@ function notPendingResult(
 async function resolveResendTarget(
   tenantId: string,
   memberId: string,
-): Promise<{ email: string; cognitoStatus: string | null }> {
+): Promise<{
+  email: string;
+  name: string | null;
+  cognitoStatus: string | null;
+}> {
   const [member] = await db
     .select()
     .from(tenantMembers)
@@ -125,14 +144,32 @@ async function resolveResendTarget(
       Username: user.email,
     }),
   );
-  return { email: user.email, cognitoStatus: existing.UserStatus ?? null };
+  return {
+    email: user.email,
+    name: typeof user.name === "string" ? user.name : null,
+    cognitoStatus: existing.UserStatus ?? null,
+  };
 }
 
 async function resendPendingInvite(
   tenantId: string,
   memberId: string,
   email: string,
+  name: string | null,
+  idempotencyKey: string,
 ): Promise<ResendMemberInviteResult> {
+  const emailChannelDelivery = await resolveInviteEmailChannel(tenantId);
+  if (emailChannelDelivery) {
+    return resendPendingInviteViaEmailChannel({
+      tenantId,
+      memberId,
+      email,
+      name,
+      idempotencyKey,
+      delivery: emailChannelDelivery,
+    });
+  }
+
   try {
     await resendCognitoInvite(cognito, {
       userPoolId: userPoolId(),
@@ -152,6 +189,53 @@ async function resendPendingInvite(
       };
     }
     throw err;
+  }
+
+  return {
+    status: "RESENT",
+    message: "Invite resent.",
+  };
+}
+
+async function resendPendingInviteViaEmailChannel(input: {
+  tenantId: string;
+  memberId: string;
+  email: string;
+  name: string | null;
+  idempotencyKey: string;
+  delivery: Awaited<ReturnType<typeof resolveInviteEmailChannel>>;
+}): Promise<ResendMemberInviteResult> {
+  if (!input.delivery) {
+    throw new Error("email channel delivery is required");
+  }
+
+  const tempPassword = generateTemporaryPassword();
+  await cognito.send(
+    new AdminSetUserPasswordCommand({
+      UserPoolId: userPoolId(),
+      Username: input.email,
+      Password: tempPassword,
+      Permanent: false,
+    }),
+  );
+
+  try {
+    await deliverInviteViaEmailChannel({
+      tenantId: input.tenantId,
+      email: input.email,
+      name: input.name,
+      tempPassword,
+      delivery: input.delivery,
+      idempotencyKey: `tenant-invite-resend:${input.tenantId}:${input.memberId}:${input.idempotencyKey}`,
+    });
+  } catch (error) {
+    if (error instanceof GraphQLError) {
+      return {
+        status: "DELIVERY_FAILED",
+        message: error.message,
+      };
+    }
+    throw error;
   }
 
   return {
