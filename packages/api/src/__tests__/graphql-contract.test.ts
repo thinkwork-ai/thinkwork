@@ -127,6 +127,10 @@ describe("GraphQL Schema Contract", () => {
       // Artifacts
       "artifacts",
       "artifact",
+      // Email Channel Plugin
+      "emailChannelSummary",
+      "emailSpaceEmailPolicy",
+      "emailChannelLedger",
     ];
 
     for (const q of expectedQueries) {
@@ -275,6 +279,84 @@ describe("GraphQL Schema Contract", () => {
         ["spaceId", "ID!"],
         ["userId", "ID!"],
       ]);
+    });
+  });
+
+  describe("Email Channel Plugin contract", () => {
+    const schema = buildSchema(loadFullSchema());
+
+    it("exposes provider readiness and Space policy surfaces", () => {
+      const query = schema.getQueryType() as any;
+      const mutation = schema.getMutationType() as any;
+      const providerEnum = schema.getType("EmailChannelProvider") as any;
+      const readinessEnum = schema.getType("EmailReadinessCheckKey") as any;
+
+      expect(providerEnum.getValues().map((value: any) => value.name)).toEqual([
+        "RESEND",
+        "SES",
+      ]);
+      expect(readinessEnum.getValues().map((value: any) => value.name)).toEqual(
+        [
+          "CREDENTIALS",
+          "SENDING_DOMAIN",
+          "INBOUND_RECEIVING",
+          "WEBHOOK_SIGNATURE",
+          "PROVIDER_EVENTS",
+          "LOOP_TEST",
+        ],
+      );
+
+      expect(query.getFields().emailChannelSummary.type.toString()).toBe(
+        "EmailChannelSummary!",
+      );
+      expect(
+        query
+          .getFields()
+          .emailSpaceEmailPolicy.args.map((arg: any) => [
+            arg.name,
+            arg.type.toString(),
+          ]),
+      ).toEqual([["spaceId", "ID!"]]);
+      expect(query.getFields().emailChannelLedger.type.toString()).toBe(
+        "[EmailLedgerEvent!]!",
+      );
+
+      expect(mutation.getFields().configureEmailProvider.type.toString()).toBe(
+        "EmailProviderInstall!",
+      );
+      expect(
+        mutation.getFields().updateEmailReadinessCheck.type.toString(),
+      ).toBe("EmailReadinessCheck!");
+      expect(mutation.getFields().upsertEmailSpacePolicy.type.toString()).toBe(
+        "EmailSpacePolicy!",
+      );
+    });
+
+    it("does not expose provider secrets or raw retained email bodies", () => {
+      const provider = schema.getType("EmailProviderInstall") as any;
+      const providerFields = provider.getFields();
+      expect(providerFields.credentialConfigured.type.toString()).toBe(
+        "Boolean!",
+      );
+      expect(providerFields.webhookSecretConfigured.type.toString()).toBe(
+        "Boolean!",
+      );
+      expect(providerFields.credentialSecretRef).toBeUndefined();
+      expect(providerFields.webhookSecretRef).toBeUndefined();
+
+      const bodyRef = schema.getType("EmailBodyObjectRef") as any;
+      const bodyFields = bodyRef.getFields();
+      expect(bodyFields.contentHash.type.toString()).toBe("String!");
+      expect(bodyFields.retentionUntil.type.toString()).toBe("AWSDateTime!");
+      expect(bodyFields.redactedAt.type.toString()).toBe("AWSDateTime");
+      expect(bodyFields.objectRef).toBeUndefined();
+      expect(bodyFields.rawBody).toBeUndefined();
+      expect(bodyFields.body).toBeUndefined();
+
+      const ledger = schema.getType("EmailLedgerEvent") as any;
+      expect(ledger.getFields().bodyObject.type.toString()).toBe(
+        "EmailBodyObjectRef",
+      );
     });
   });
 
@@ -476,6 +558,12 @@ describe("GraphQL Schema Contract", () => {
       "deleteBudgetPolicy",
       "unpauseAgent",
       "unpauseUserBudget",
+      // Email Channel Plugin
+      "configureEmailProvider",
+      "updateEmailReadinessCheck",
+      "upsertEmailSpacePolicy",
+      "addEmailSpaceSenderAllowlist",
+      "removeEmailSpaceSenderAllowlist",
     ];
 
     for (const m of expectedMutations) {
@@ -549,9 +637,9 @@ describe("GraphQL Schema Contract", () => {
       const input = schema.getType("SetTenantMemberPasswordInput") as any;
       const result = schema.getType("SetTenantMemberPasswordResult") as any;
 
-      expect(
-        mutation.getFields().setTenantMemberPassword.type.toString(),
-      ).toBe("SetTenantMemberPasswordResult!");
+      expect(mutation.getFields().setTenantMemberPassword.type.toString()).toBe(
+        "SetTenantMemberPasswordResult!",
+      );
       expect(
         mutation
           .getFields()

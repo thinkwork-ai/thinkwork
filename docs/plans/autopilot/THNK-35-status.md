@@ -11,21 +11,21 @@ status: active
 - Linear issue: THNK-35, moved from Ready to Work to In Progress after
   discovery on 2026-06-17.
 - Implementation base: `origin/main` at
-  `a8c2d97d5bc0a56fb948ff801584bdf8bd15416f`.
-- Active branch: `codex/thnk-35-email-channel-u1`.
+  `c83013559163983d22b615e057d1e6b88d3bb2c7` (U1 merge).
+- Active branch: `codex/thnk-35-email-channel-u2`.
 
 ## Progress
 
-| Unit                                                                     | Status              | Evidence                                                       |
-| ------------------------------------------------------------------------ | ------------------- | -------------------------------------------------------------- |
-| U1 Email plugin package and catalog contract                             | Implemented locally | Branch `codex/thnk-35-email-channel-u1`; focused checks passed |
-| U2 Email channel data model, GraphQL, and ledger contract                | Pending             | Not started                                                    |
-| U3 Resend and SES provider adapter service                               | Pending             | Not started                                                    |
-| U4 Readiness state machine and plugin settings surface                   | Pending             | Not started                                                    |
-| U5 Outbound channel, first-send HITL, and ledger writes                  | Pending             | Not started                                                    |
-| U6 Inbound webhook normalization, authorization, rate limits, and wakeup | Pending             | Not started                                                    |
-| U7 Routine, runtime, and cross-surface email parity                      | Pending             | Not started                                                    |
-| U8 SES migration, observability, documentation, and deployed validation  | Pending             | Not started                                                    |
+| Unit                                                                     | Status              | Evidence                                                          |
+| ------------------------------------------------------------------------ | ------------------- | ----------------------------------------------------------------- |
+| U1 Email plugin package and catalog contract                             | Merged              | PR #2586; merge commit `c83013559163983d22b615e057d1e6b88d3bb2c7` |
+| U2 Email channel data model, GraphQL, and ledger contract                | Implemented locally | Branch `codex/thnk-35-email-channel-u2`; focused checks passed    |
+| U3 Resend and SES provider adapter service                               | Pending             | Not started                                                       |
+| U4 Readiness state machine and plugin settings surface                   | Pending             | Not started                                                       |
+| U5 Outbound channel, first-send HITL, and ledger writes                  | Pending             | Not started                                                       |
+| U6 Inbound webhook normalization, authorization, rate limits, and wakeup | Pending             | Not started                                                       |
+| U7 Routine, runtime, and cross-surface email parity                      | Pending             | Not started                                                       |
+| U8 SES migration, observability, documentation, and deployed validation  | Pending             | Not started                                                       |
 
 ## Notes
 
@@ -37,6 +37,22 @@ status: active
 
 ## Verification Log
 
+- U2 focused checks:
+  - `pnpm schema:build`
+  - `pnpm --filter @thinkwork/web codegen`
+  - `pnpm --filter @thinkwork/mobile codegen`
+  - `pnpm --dir apps/cli codegen`
+  - `pnpm --filter @thinkwork/database-pg test -- migration-0170-email-channel-plugin.test.ts`
+  - `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts`
+  - `pnpm --filter @thinkwork/database-pg typecheck`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `pnpm --dir apps/cli typecheck`
+  - `node scripts/verify-plugin-source-boundary.mjs`
+  - Applied `packages/database-pg/drizzle/0170_email_channel_plugin.sql` to the
+    dev database after CI drift precheck reported the scoped new manual
+    migration missing.
+  - `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0170_email_channel_plugin.sql`
 - U1 focused checks:
   - `pnpm --filter @thinkwork/plugin-email-channel test`
   - `pnpm --filter @thinkwork/plugin-email-channel typecheck`
@@ -48,6 +64,14 @@ status: active
 
 ## Environment Notes
 
+- `pnpm --dir apps/mobile exec tsc --noEmit` was run after mobile codegen and
+  failed on existing mobile app type debt unrelated to the email channel
+  contract, including missing `@react-navigation/native` declarations, stale
+  layout prop names, and pre-existing generated-query mismatches in fleet,
+  agents, inbox, settings, and extension tests.
+- Root `pnpm exec prettier --write ...` is not runnable in this checkout
+  because `prettier` is not declared in the workspace dependencies or lockfile;
+  touched files were formatted with `pnpm dlx prettier@3.6.2 --write ...`.
 - `pnpm install` completed and installed workspace binaries, but optional
   `canvas` native build output reported missing local `pkg-config`/pixman
   tooling on Node 25. The focused U1 checks above do not depend on `canvas`.

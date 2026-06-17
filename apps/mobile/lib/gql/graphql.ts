@@ -55,6 +55,13 @@ export type ActivityLogEntry = {
   tenantId: Scalars['ID']['output'];
 };
 
+export type AddEmailSpaceSenderAllowlistInput = {
+  reason?: InputMaybe<Scalars['String']['input']>;
+  spaceId: Scalars['ID']['input'];
+  value: Scalars['String']['input'];
+  valueType: EmailAllowlistType;
+};
+
 export type AddInboxItemCommentInput = {
   authorId?: InputMaybe<Scalars['ID']['input']>;
   authorType?: InputMaybe<Scalars['String']['input']>;
@@ -897,6 +904,29 @@ export type ConcurrencySnapshot = {
   totalActive: Scalars['Int']['output'];
 };
 
+export type ConfigureEmailDomainInput = {
+  dnsRecords?: InputMaybe<Scalars['AWSJSON']['input']>;
+  domain: Scalars['String']['input'];
+  inboundVerifiedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  ownershipType: EmailDomainOwnershipType;
+  providerMetadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  sendingVerifiedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  status?: InputMaybe<EmailDomainStatus>;
+};
+
+export type ConfigureEmailProviderInput = {
+  activeForProduction?: InputMaybe<Scalars['Boolean']['input']>;
+  credentialSecretRef?: InputMaybe<Scalars['String']['input']>;
+  defaultFromEmail?: InputMaybe<Scalars['String']['input']>;
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  domain?: InputMaybe<ConfigureEmailDomainInput>;
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  provider: EmailChannelProvider;
+  providerInstallId?: InputMaybe<Scalars['ID']['input']>;
+  status?: InputMaybe<EmailProviderInstallStatus>;
+  webhookSecretRef?: InputMaybe<Scalars['String']['input']>;
+};
+
 export type CostEvent = {
   __typename?: 'CostEvent';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -1268,6 +1298,259 @@ export type DisableSkillInput = {
 export type DisableWorkflowInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
+};
+
+export enum EmailAllowlistType {
+  Domain = 'DOMAIN',
+  Email = 'EMAIL'
+}
+
+export enum EmailBodyDirection {
+  Inbound = 'INBOUND',
+  Outbound = 'OUTBOUND'
+}
+
+export type EmailBodyObjectRef = {
+  __typename?: 'EmailBodyObjectRef';
+  contentHash: Scalars['String']['output'];
+  conversationId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  direction: EmailBodyDirection;
+  id: Scalars['ID']['output'];
+  metadata: Scalars['AWSJSON']['output'];
+  redactedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  redactedByUserId?: Maybe<Scalars['ID']['output']>;
+  redactionReason?: Maybe<Scalars['String']['output']>;
+  retentionUntil: Scalars['AWSDateTime']['output'];
+  tenantId: Scalars['ID']['output'];
+};
+
+/**
+ * Provider-neutral Email Channel Plugin contract (THNK-35 U2).
+ *
+ * Secrets and raw email bodies are intentionally absent from public GraphQL
+ * payloads. Provider credentials and webhook secrets are exposed only as
+ * configured booleans; retained body rows expose hashes, retention state, and
+ * redaction metadata without returning the object reference or body content.
+ */
+export enum EmailChannelProvider {
+  Resend = 'RESEND',
+  Ses = 'SES'
+}
+
+export type EmailChannelSummary = {
+  __typename?: 'EmailChannelSummary';
+  blockingReadinessChecks: Array<EmailReadinessCheck>;
+  domains: Array<EmailDomain>;
+  ledgerEventCount: Scalars['Int']['output'];
+  productionReady: Scalars['Boolean']['output'];
+  providers: Array<EmailProviderInstall>;
+  readinessChecks: Array<EmailReadinessCheck>;
+  spacePolicies: Array<EmailSpacePolicy>;
+};
+
+export type EmailConversation = {
+  __typename?: 'EmailConversation';
+  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  approvedByUserId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  lastMessageAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  metadata: Scalars['AWSJSON']['output'];
+  participantHash: Scalars['String']['output'];
+  providerInstallId?: Maybe<Scalars['ID']['output']>;
+  spaceId?: Maybe<Scalars['ID']['output']>;
+  status: EmailConversationStatus;
+  subject?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum EmailConversationStatus {
+  Approved = 'APPROVED',
+  Blocked = 'BLOCKED',
+  Closed = 'CLOSED',
+  PendingApproval = 'PENDING_APPROVAL'
+}
+
+export type EmailDomain = {
+  __typename?: 'EmailDomain';
+  createdAt: Scalars['AWSDateTime']['output'];
+  dnsRecords: Scalars['AWSJSON']['output'];
+  domain: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  inboundVerifiedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  ownershipType: EmailDomainOwnershipType;
+  providerInstallId: Scalars['ID']['output'];
+  providerMetadata: Scalars['AWSJSON']['output'];
+  sendingVerifiedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: EmailDomainStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum EmailDomainOwnershipType {
+  CustomerOwned = 'CUSTOMER_OWNED',
+  ThinkworkOwned = 'THINKWORK_OWNED'
+}
+
+export enum EmailDomainStatus {
+  Disabled = 'DISABLED',
+  Failed = 'FAILED',
+  Pending = 'PENDING',
+  Verified = 'VERIFIED'
+}
+
+export type EmailLedgerEvent = {
+  __typename?: 'EmailLedgerEvent';
+  actorUserId?: Maybe<Scalars['ID']['output']>;
+  bodyObject?: Maybe<EmailBodyObjectRef>;
+  conversationId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  eventType: EmailLedgerEventType;
+  fromEmail?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  inboxItemId?: Maybe<Scalars['ID']['output']>;
+  messageId?: Maybe<Scalars['ID']['output']>;
+  metadata: Scalars['AWSJSON']['output'];
+  providerEventId?: Maybe<Scalars['String']['output']>;
+  providerInstallId?: Maybe<Scalars['ID']['output']>;
+  providerMessageId?: Maybe<Scalars['String']['output']>;
+  reasonCode?: Maybe<Scalars['String']['output']>;
+  spaceId?: Maybe<Scalars['ID']['output']>;
+  subject?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  threadId?: Maybe<Scalars['ID']['output']>;
+  toEmails: Array<Scalars['String']['output']>;
+};
+
+export enum EmailLedgerEventType {
+  ApprovalApproved = 'APPROVAL_APPROVED',
+  ApprovalDenied = 'APPROVAL_DENIED',
+  ApprovalRequested = 'APPROVAL_REQUESTED',
+  BodyRedacted = 'BODY_REDACTED',
+  BodyRetained = 'BODY_RETAINED',
+  DraftCreated = 'DRAFT_CREATED',
+  InboundAuthorized = 'INBOUND_AUTHORIZED',
+  InboundReceived = 'INBOUND_RECEIVED',
+  InboundRejected = 'INBOUND_REJECTED',
+  ProviderEvent = 'PROVIDER_EVENT',
+  ReadinessCheck = 'READINESS_CHECK',
+  SendAttempted = 'SEND_ATTEMPTED',
+  SendBlocked = 'SEND_BLOCKED',
+  SendFailed = 'SEND_FAILED',
+  SendSucceeded = 'SEND_SUCCEEDED'
+}
+
+export type EmailProviderEvent = {
+  __typename?: 'EmailProviderEvent';
+  createdAt: Scalars['AWSDateTime']['output'];
+  eventType: EmailProviderEventType;
+  id: Scalars['ID']['output'];
+  ledgerEventId?: Maybe<Scalars['ID']['output']>;
+  occurredAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  payloadMetadata: Scalars['AWSJSON']['output'];
+  providerEventId: Scalars['String']['output'];
+  providerInstallId: Scalars['ID']['output'];
+  providerMessageId?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+};
+
+export enum EmailProviderEventType {
+  Bounced = 'BOUNCED',
+  Clicked = 'CLICKED',
+  Complained = 'COMPLAINED',
+  Delayed = 'DELAYED',
+  Delivered = 'DELIVERED',
+  Failed = 'FAILED',
+  Opened = 'OPENED',
+  Received = 'RECEIVED',
+  Sent = 'SENT'
+}
+
+export type EmailProviderInstall = {
+  __typename?: 'EmailProviderInstall';
+  activeForProduction: Scalars['Boolean']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  credentialConfigured: Scalars['Boolean']['output'];
+  defaultFromEmail?: Maybe<Scalars['String']['output']>;
+  displayName?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  metadata: Scalars['AWSJSON']['output'];
+  provider: EmailChannelProvider;
+  status: EmailProviderInstallStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  webhookSecretConfigured: Scalars['Boolean']['output'];
+};
+
+export enum EmailProviderInstallStatus {
+  Disabled = 'DISABLED',
+  Failed = 'FAILED',
+  Pending = 'PENDING',
+  Ready = 'READY'
+}
+
+export type EmailReadinessCheck = {
+  __typename?: 'EmailReadinessCheck';
+  checkKey: EmailReadinessCheckKey;
+  createdAt: Scalars['AWSDateTime']['output'];
+  domainId?: Maybe<Scalars['ID']['output']>;
+  failureCode?: Maybe<Scalars['String']['output']>;
+  failureMessage?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  lastCheckedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  metadata: Scalars['AWSJSON']['output'];
+  providerInstallId: Scalars['ID']['output'];
+  status: EmailReadinessStatus;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export enum EmailReadinessCheckKey {
+  Credentials = 'CREDENTIALS',
+  InboundReceiving = 'INBOUND_RECEIVING',
+  LoopTest = 'LOOP_TEST',
+  ProviderEvents = 'PROVIDER_EVENTS',
+  SendingDomain = 'SENDING_DOMAIN',
+  WebhookSignature = 'WEBHOOK_SIGNATURE'
+}
+
+export enum EmailReadinessStatus {
+  Blocked = 'BLOCKED',
+  Fail = 'FAIL',
+  Pass = 'PASS',
+  Pending = 'PENDING'
+}
+
+export type EmailSpacePolicy = {
+  __typename?: 'EmailSpacePolicy';
+  allowlists: Array<EmailSpaceSenderAllowlist>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  enabled: Scalars['Boolean']['output'];
+  firstSendReviewRequired: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  outsideSenderDefault: Scalars['String']['output'];
+  policy: Scalars['AWSJSON']['output'];
+  privateSpaceMembershipRequired: Scalars['Boolean']['output'];
+  providerInstallId?: Maybe<Scalars['ID']['output']>;
+  registeredUsersAllowed: Scalars['Boolean']['output'];
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type EmailSpaceSenderAllowlist = {
+  __typename?: 'EmailSpaceSenderAllowlist';
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdByUserId?: Maybe<Scalars['ID']['output']>;
+  id: Scalars['ID']['output'];
+  reason?: Maybe<Scalars['String']['output']>;
+  spaceId: Scalars['ID']['output'];
+  tenantId: Scalars['ID']['output'];
+  value: Scalars['String']['output'];
+  valueType: EmailAllowlistType;
 };
 
 export type EnableWorkflowInput = {
@@ -2453,6 +2736,7 @@ export type Mutation = {
    * are stored only as token secrets and are never exposed through GraphQL.
    */
   activatePluginWithCredentials: UserPluginActivation;
+  addEmailSpaceSenderAllowlist: EmailSpaceSenderAllowlist;
   addEvalDatasetCase: EvalTestCase;
   addEvalReplayToolOverride: EvalReplayAllowedTool;
   addInboxItemComment: InboxItemComment;
@@ -2502,6 +2786,7 @@ export type Mutation = {
    * materializer is deterministic/LLM-free) and is not forwarded.
    */
   compileWikiNow: WikiCompileJob;
+  configureEmailProvider: EmailProviderInstall;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   /**
@@ -2630,6 +2915,7 @@ export type Mutation = {
   rejectOntologyChangeSet: OntologyChangeSet;
   releaseThread: Thread;
   remediateReleaseRunner: ReleaseUpdateJob;
+  removeEmailSpaceSenderAllowlist: Scalars['Boolean']['output'];
   removeEvalDatasetCase: EvalDataset;
   removeEvalReplayToolOverride: Scalars['Boolean']['output'];
   removeInboxItemLink: Scalars['Boolean']['output'];
@@ -2719,6 +3005,7 @@ export type Mutation = {
   updateAgentProfile: AgentProfile;
   updateArtifact: Artifact;
   updateCompanyBrainMigration: CompanyBrainMigrationStatus;
+  updateEmailReadinessCheck: EmailReadinessCheck;
   updateEvalDataset: EvalDataset;
   updateEvalDatasetCase: EvalTestCase;
   updateEvalTestCase: EvalTestCase;
@@ -2759,6 +3046,7 @@ export type Mutation = {
    */
   upgradePlugin: PluginInstall;
   upsertBudgetPolicy: BudgetPolicy;
+  upsertEmailSpacePolicy: EmailSpacePolicy;
 };
 
 
@@ -2775,6 +3063,11 @@ export type MutationActivatePluginArgs = {
 
 export type MutationActivatePluginWithCredentialsArgs = {
   input: ActivatePluginWithCredentialsInput;
+};
+
+
+export type MutationAddEmailSpaceSenderAllowlistArgs = {
+  input: AddEmailSpaceSenderAllowlistInput;
 };
 
 
@@ -2933,6 +3226,11 @@ export type MutationCompileWikiNowArgs = {
   tenantId: Scalars['ID']['input'];
   tenantScope?: InputMaybe<Scalars['Boolean']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationConfigureEmailProviderArgs = {
+  input: ConfigureEmailProviderInput;
 };
 
 
@@ -3436,6 +3734,11 @@ export type MutationRemediateReleaseRunnerArgs = {
 };
 
 
+export type MutationRemoveEmailSpaceSenderAllowlistArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
 export type MutationRemoveEvalDatasetCaseArgs = {
   caseId: Scalars['String']['input'];
   datasetSlug: Scalars['String']['input'];
@@ -3786,6 +4089,11 @@ export type MutationUpdateCompanyBrainMigrationArgs = {
 };
 
 
+export type MutationUpdateEmailReadinessCheckArgs = {
+  input: UpdateEmailReadinessCheckInput;
+};
+
+
 export type MutationUpdateEvalDatasetArgs = {
   input: UpdateEvalDatasetInput;
   slug: Scalars['String']['input'];
@@ -3960,6 +4268,11 @@ export type MutationUpgradePluginArgs = {
 export type MutationUpsertBudgetPolicyArgs = {
   input: UpsertBudgetPolicyInput;
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type MutationUpsertEmailSpacePolicyArgs = {
+  input: UpsertEmailSpacePolicyInput;
 };
 
 export type NewMessageEvent = {
@@ -4545,6 +4858,9 @@ export type Query = {
   deploymentEvidence: DeploymentEvidence;
   deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
+  emailChannelLedger: Array<EmailLedgerEvent>;
+  emailChannelSummary: EmailChannelSummary;
+  emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
   evalDataset?: Maybe<EvalDataset>;
   evalDatasets: Array<EvalDataset>;
   evalReplayAvailableMcpTools: Array<EvalReplayMcpServer>;
@@ -4969,6 +5285,18 @@ export type QueryDeploymentEvidenceArgs = {
 
 export type QueryDeploymentReleasesArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryEmailChannelLedgerArgs = {
+  conversationId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  spaceId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryEmailSpaceEmailPolicyArgs = {
+  spaceId: Scalars['ID']['input'];
 };
 
 
@@ -7495,6 +7823,17 @@ export type UpdateCompanyBrainMigrationInput = {
   validationSummary?: InputMaybe<Scalars['AWSJSON']['input']>;
 };
 
+export type UpdateEmailReadinessCheckInput = {
+  checkKey: EmailReadinessCheckKey;
+  domainId?: InputMaybe<Scalars['ID']['input']>;
+  failureCode?: InputMaybe<Scalars['String']['input']>;
+  failureMessage?: InputMaybe<Scalars['String']['input']>;
+  lastCheckedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
+  providerInstallId: Scalars['ID']['input'];
+  status: EmailReadinessStatus;
+};
+
 export type UpdateEvalDatasetCaseInput = {
   agentcoreEvaluatorIds?: InputMaybe<Array<Scalars['String']['input']>>;
   assertions?: InputMaybe<Array<EvalAssertionInput>>;
@@ -7795,6 +8134,17 @@ export type UpsertBudgetPolicyInput = {
   period?: InputMaybe<Scalars['String']['input']>;
   scope: Scalars['String']['input'];
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+export type UpsertEmailSpacePolicyInput = {
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  firstSendReviewRequired?: InputMaybe<Scalars['Boolean']['input']>;
+  outsideSenderDefault?: InputMaybe<Scalars['String']['input']>;
+  policy?: InputMaybe<Scalars['AWSJSON']['input']>;
+  privateSpaceMembershipRequired?: InputMaybe<Scalars['Boolean']['input']>;
+  providerInstallId?: InputMaybe<Scalars['ID']['input']>;
+  registeredUsersAllowed?: InputMaybe<Scalars['Boolean']['input']>;
+  spaceId: Scalars['ID']['input'];
 };
 
 export type User = {

@@ -75,6 +75,10 @@ import {
 import { deploymentMutations, deploymentQueries } from "./deployments/index.js";
 import { pluginMutations, pluginQueries } from "./plugins/index.js";
 import {
+  emailChannelMutations,
+  emailChannelQueries,
+} from "./email-channel/index.js";
+import {
   quickActionQueries,
   quickActionMutations,
 } from "./quick-actions/index.js";
@@ -130,6 +134,7 @@ export const queryResolvers: Record<string, any> = {
   ...tenantCredentialQueries,
   ...deploymentQueries,
   ...pluginQueries,
+  ...emailChannelQueries,
   ...quickActionQueries,
   ...customizeQueries,
   ...complianceQueries,
@@ -172,6 +177,7 @@ export const mutationResolvers: Record<string, any> = {
   ...tenantCredentialMutations,
   ...deploymentMutations,
   ...pluginMutations,
+  ...emailChannelMutations,
   ...quickActionMutations,
   ...customizeMutations,
   ...complianceMutations,

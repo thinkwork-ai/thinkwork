@@ -179,6 +179,84 @@ export const SettingsCompanyBrainStatusQuery = graphql(`
   }
 `);
 
+export const SettingsEmailChannelQuery = graphql(`
+  query SettingsEmailChannel {
+    emailChannelSummary {
+      productionReady
+      ledgerEventCount
+      providers {
+        id
+        provider
+        displayName
+        status
+        activeForProduction
+        credentialConfigured
+        webhookSecretConfigured
+        defaultFromEmail
+        metadata
+        createdAt
+        updatedAt
+      }
+      domains {
+        id
+        providerInstallId
+        domain
+        ownershipType
+        status
+        sendingVerifiedAt
+        inboundVerifiedAt
+        dnsRecords
+        providerMetadata
+        createdAt
+        updatedAt
+      }
+      readinessChecks {
+        id
+        providerInstallId
+        domainId
+        checkKey
+        status
+        lastCheckedAt
+        failureCode
+        failureMessage
+        metadata
+        createdAt
+        updatedAt
+      }
+      blockingReadinessChecks {
+        id
+        providerInstallId
+        domainId
+        checkKey
+        status
+        failureCode
+        failureMessage
+      }
+      spacePolicies {
+        id
+        spaceId
+        providerInstallId
+        enabled
+        registeredUsersAllowed
+        privateSpaceMembershipRequired
+        outsideSenderDefault
+        firstSendReviewRequired
+        policy
+        allowlists {
+          id
+          valueType
+          value
+          reason
+          createdByUserId
+          createdAt
+        }
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`);
+
 export const SettingsRequestCompanyBrainProductionMigrationMutation = graphql(`
   mutation SettingsRequestCompanyBrainProductionMigration(
     $input: RequestCompanyBrainProductionMigrationInput!

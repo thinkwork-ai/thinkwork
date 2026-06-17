@@ -44,4 +44,18 @@ export const sharedPluginTermAllowlist = [
     reason:
       "shared platform schema for existing email reply tokens; THNK-35 U2 expands it generically for channel state.",
   },
+  {
+    pathPrefix: "packages/api/src/graphql/resolvers/email-channel/",
+    reason:
+      "shared platform GraphQL API for the Email Channel plugin control plane.",
+  },
+  {
+    path: "packages/database-pg/__tests__/migration-0170-email-channel-plugin.test.ts",
+    reason: "Email Channel plugin database contract coverage.",
+  },
+  {
+    path: "packages/database-pg/graphql/types/email-channel.graphql",
+    reason:
+      "shared platform GraphQL contract for the Email Channel plugin control plane.",
+  },
 ];
