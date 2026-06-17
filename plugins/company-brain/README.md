@@ -25,13 +25,9 @@ implementation notes.
 
 ## Temporary Compatibility Links
 
-The package descriptor documents the legacy Company Brain paths that still
-contain plugin-specific source:
-
-- `apps/web/src/components/settings/SettingsCogneeApplication.tsx` until
-  THNK-31 U5 renders Company Brain-owned UI from plugin detail.
-
-These links are migration debt, not shared platform ownership.
+No active plugin-specific compatibility source remains outside
+`plugins/company-brain/`. The legacy `/settings/applications/cognee` URL is a
+shared web redirect to the Company Brain plugin detail page.
 
 ## Verification
 

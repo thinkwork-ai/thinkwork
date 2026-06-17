@@ -50,14 +50,7 @@ export const companyBrainPluginPackage = {
         "Company Brain customer-facing ownership and substrate migration notes.",
     },
   ],
-  compatibilityLinks: [
-    {
-      path: "apps/web/src/components/settings/SettingsCogneeApplication.tsx",
-      reason:
-        "Company Brain operator UI is still owned by the shared web app during migration.",
-      removal: "THNK-31 U5 renders plugin-owned UI from plugin detail.",
-    },
-  ],
+  compatibilityLinks: [],
 } as const;
 
 export { companyBrainManifest };

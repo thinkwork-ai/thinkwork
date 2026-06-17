@@ -5,8 +5,20 @@ import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 
 import { findPluginSourceBoundaryViolations } from "../verify-plugin-source-boundary.mjs";
+import {
+  pluginSourceBoundaryAllowlist,
+  sharedPluginTermAllowlist,
+} from "../plugin-source-boundary-allowlist.mjs";
 
 describe("verify-plugin-source-boundary", () => {
+  it("keeps the default active migration allowlist closed", () => {
+    assert.deepEqual(pluginSourceBoundaryAllowlist, []);
+    assert.ok(
+      sharedPluginTermAllowlist.length > 0,
+      "historical/shared false-positive entries should remain separate from migration debt",
+    );
+  });
+
   it("accepts plugin-specific source inside the owning plugin package", async () => {
     await withFixture(async (dir) => {
       await writeFixtureFile(dir, "plugins/plane/src/manifest.ts");
@@ -85,6 +97,42 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.staleAllowlistEntries, []);
       assert.equal(result.allowlistMatchCount, 1);
       assert.equal(result.sharedAllowlistMatchCount, 1);
+    });
+  });
+
+  it("accepts historical and platform fixture entries through the shared allowlist", async () => {
+    await withFixture(async (dir) => {
+      await writeFixtureFile(
+        dir,
+        "apps/cli/__tests__/terraform-plane-fixture.test.ts",
+      );
+      await writeFixtureFile(
+        dir,
+        "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts",
+      );
+      await writeFixtureFile(
+        dir,
+        "apps/web/src/routes/_authed/settings.applications.cognee.tsx",
+      );
+      const fixtureSharedAllowlist = sharedPluginTermAllowlist.filter(
+        (entry) =>
+          entry.path === "apps/cli/__tests__/terraform-plane-fixture.test.ts" ||
+          entry.path ===
+            "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts" ||
+          entry.path ===
+            "apps/web/src/routes/_authed/settings.applications.cognee.tsx",
+      );
+
+      const result = await findPluginSourceBoundaryViolations({
+        repoRoot: dir,
+        allowlist: pluginSourceBoundaryAllowlist,
+        sharedAllowlist: fixtureSharedAllowlist,
+      });
+
+      assert.deepEqual(result.violations, []);
+      assert.deepEqual(result.staleAllowlistEntries, []);
+      assert.equal(result.allowlistMatchCount, 0);
+      assert.equal(result.sharedAllowlistMatchCount, 3);
     });
   });
 
