@@ -1,12 +1,47 @@
-import {
-  type LinkedTaskStatus,
-  type LinkedTaskSyncStatus,
-  normalizeExternalTaskStatus,
-} from "../linked-tasks/status.js";
-import {
-  type EvaluateExternalTaskWritebackInput,
-  evaluateExternalTaskWriteback,
-} from "../spaces/writeback-policy.js";
+export type LinkedTaskStatus =
+  | "unknown"
+  | "todo"
+  | "in_progress"
+  | "completed"
+  | "blocked"
+  | "cancelled"
+  | "not_applicable";
+
+export type LinkedTaskSyncStatus = "pending" | "synced" | "warning" | "error";
+
+export type SpaceWritebackPolicy =
+  | "disabled"
+  | "status_only"
+  | "status_and_comments";
+
+export type ExternalTaskWritebackAction =
+  | "status_summary"
+  | "human_comment"
+  | "agent_comment";
+
+export interface SpaceWritebackPolicyConfig {
+  allowAgentComments?: boolean;
+  agentCommentMode?: "disabled" | "requires_confirmation" | "allowed";
+}
+
+export interface EvaluateExternalTaskWritebackInput {
+  policy?: SpaceWritebackPolicy | string | null;
+  action: ExternalTaskWritebackAction;
+  humanConfirmed?: boolean;
+  config?: SpaceWritebackPolicyConfig | null;
+}
+
+export interface ExternalTaskWritebackDecision {
+  allowed: boolean;
+  policy: SpaceWritebackPolicy;
+  reason:
+    | "allowed"
+    | "writeback_disabled"
+    | "comments_disabled"
+    | "agent_comment_confirmation_required"
+    | "agent_comments_disabled";
+  requiresHumanConfirmation: boolean;
+}
 
 export interface LastMileMcpToolCall {
   serverName: string;
@@ -355,6 +390,151 @@ function toProviderError(
     ...(status !== undefined ? { status } : {}),
     detail: redactSecrets(value),
   };
+}
+
+function normalizeExternalTaskStatus(value: unknown): {
+  status: LinkedTaskStatus;
+  blocked: boolean;
+  syncStatus: LinkedTaskSyncStatus;
+} {
+  const normalized = normalizeStatusToken(value);
+  if (!normalized) {
+    return { status: "unknown", blocked: false, syncStatus: "warning" };
+  }
+
+  if (
+    normalized === "completed" ||
+    normalized === "complete" ||
+    normalized === "done" ||
+    normalized === "closed"
+  ) {
+    return { status: "completed", blocked: false, syncStatus: "synced" };
+  }
+
+  if (
+    normalized === "blocked" ||
+    normalized === "on_hold" ||
+    normalized === "waiting" ||
+    normalized === "stalled"
+  ) {
+    return { status: "blocked", blocked: true, syncStatus: "synced" };
+  }
+
+  if (
+    normalized === "in_progress" ||
+    normalized === "started" ||
+    normalized === "working" ||
+    normalized === "active"
+  ) {
+    return { status: "in_progress", blocked: false, syncStatus: "synced" };
+  }
+
+  if (
+    normalized === "todo" ||
+    normalized === "to_do" ||
+    normalized === "open" ||
+    normalized === "new" ||
+    normalized === "not_started"
+  ) {
+    return { status: "todo", blocked: false, syncStatus: "synced" };
+  }
+
+  if (
+    normalized === "cancelled" ||
+    normalized === "canceled" ||
+    normalized === "void"
+  ) {
+    return { status: "cancelled", blocked: false, syncStatus: "synced" };
+  }
+
+  if (
+    normalized === "not_applicable" ||
+    normalized === "not_applicable_not_needed" ||
+    normalized === "n_a" ||
+    normalized === "na"
+  ) {
+    return { status: "not_applicable", blocked: false, syncStatus: "synced" };
+  }
+
+  return { status: "unknown", blocked: false, syncStatus: "warning" };
+}
+
+function evaluateExternalTaskWriteback(
+  input: EvaluateExternalTaskWritebackInput,
+): ExternalTaskWritebackDecision {
+  const policy = normalizeSpaceWritebackPolicy(input.policy);
+  if (policy === "disabled") {
+    return deny(policy, "writeback_disabled", false);
+  }
+
+  if (input.action === "status_summary") {
+    return allow(policy);
+  }
+
+  if (policy === "status_only") {
+    return deny(policy, "comments_disabled", false);
+  }
+
+  if (input.action === "human_comment") {
+    return allow(policy);
+  }
+
+  const agentCommentMode =
+    input.config?.agentCommentMode ??
+    (input.config?.allowAgentComments ? "allowed" : "requires_confirmation");
+  if (agentCommentMode === "disabled") {
+    return deny(policy, "agent_comments_disabled", false);
+  }
+  if (agentCommentMode === "allowed" || input.humanConfirmed === true) {
+    return allow(policy);
+  }
+  return deny(policy, "agent_comment_confirmation_required", true);
+}
+
+function normalizeSpaceWritebackPolicy(
+  value: SpaceWritebackPolicy | string | null | undefined,
+): SpaceWritebackPolicy {
+  if (typeof value !== "string") return "disabled";
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "disabled" ||
+    normalized === "status_only" ||
+    normalized === "status_and_comments"
+  ) {
+    return normalized;
+  }
+  return "disabled";
+}
+
+function allow(policy: SpaceWritebackPolicy): ExternalTaskWritebackDecision {
+  return {
+    allowed: true,
+    policy,
+    reason: "allowed",
+    requiresHumanConfirmation: false,
+  };
+}
+
+function deny(
+  policy: SpaceWritebackPolicy,
+  reason: ExternalTaskWritebackDecision["reason"],
+  requiresHumanConfirmation: boolean,
+): ExternalTaskWritebackDecision {
+  return {
+    allowed: false,
+    policy,
+    reason,
+    requiresHumanConfirmation,
+  };
+}
+
+function normalizeStatusToken(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s/-]+/g, "_");
+  return normalized.length > 0 ? normalized : null;
 }
 
 function redactSecrets(value: unknown): unknown {

@@ -415,6 +415,30 @@ above supplies that alias and passed.
 - `pnpm lint:plugin-source`
 - `pnpm test:plugin-source-boundary`
 
+## Current LastMile API Package Slice
+
+- Started from fresh `origin/main` at `db0fcbd31` in branch
+  `codex/thnk-31-plugin-skill-mcp-content`.
+- Moving the LastMile task adapter and its package-local tests from
+  `packages/api/src/lib/lastmile/` into `plugins/lastmile/src/api/` and
+  `plugins/lastmile/test/api/`.
+- Exporting the adapter through `@thinkwork/plugin-lastmile/tasks-adapter` so
+  shared API onboarding and linked-task flows consume plugin-owned source.
+- Removing the LastMile adapter entries from the source-boundary migration
+  allowlist; the guard now reports 18 migration paths and 2 shared paths.
+
+### Verification
+
+- `pnpm --filter @thinkwork/plugin-lastmile test`
+- `pnpm --filter @thinkwork/plugin-lastmile typecheck`
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/linked-tasks/refresh-linked-tasks.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts`
+- `pnpm --filter @thinkwork/plugin-catalog test`
+- `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm lint:plugin-source`
+- `pnpm test:plugin-source-boundary`
+- `git diff --check`
+
 ## Verification Notes
 
 - `pnpm install --lockfile-only` completed after adding `plugins/*` and
