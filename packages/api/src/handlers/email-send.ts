@@ -23,6 +23,8 @@ import { deriveSpaceAddress } from "../lib/email/space-address.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { renderForEmail } from "../lib/channel-rendering/email-renderer.js";
 import { createEmailChannelService } from "../lib/email-channel/channel-service.js";
+import { requestFirstSendApproval } from "../lib/email-channel/first-send-approval.js";
+import { evaluateOutboundEmailPolicy } from "../lib/email-channel/outbound-policy.js";
 
 const db = getDb();
 const emailChannel = createEmailChannelService();
@@ -300,8 +302,49 @@ export async function handler(
     "",
   ].join("\r\n");
 
+  const policy = await evaluateOutboundEmailPolicy({
+    db,
+    tenantId: agent.tenant_id,
+    spaceId: null,
+  });
+  if (!policy.allowed) {
+    return {
+      statusCode: 503,
+      body: JSON.stringify({
+        status: "blocked",
+        reasonCode: policy.reasonCode,
+        error: policy.message,
+      }),
+    };
+  }
+  if (policy.firstSendReviewRequired) {
+    const approval = await requestFirstSendApproval({
+      db,
+      tenantId: agent.tenant_id,
+      providerInstallId: policy.providerInstallId,
+      provider: policy.provider,
+      agentId: agent.id,
+      spaceId: null,
+      threadId: req.threadId ?? null,
+      from: emailAddress,
+      to: recipients,
+      subject: req.subject,
+      body: req.body,
+    });
+    if (approval.status === "pending_review") {
+      return {
+        statusCode: 202,
+        body: JSON.stringify({
+          status: "pending_review",
+          conversationId: approval.conversationId,
+          inboxItemId: approval.inboxItemId,
+        }),
+      };
+    }
+  }
+
   try {
-    const result = await emailChannel.send("ses", {
+    const result = await emailChannel.send(policy.provider, {
       tenantId: agent.tenant_id,
       from: emailAddress,
       to: recipients,

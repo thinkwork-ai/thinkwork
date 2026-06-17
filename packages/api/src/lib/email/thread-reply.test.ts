@@ -1,21 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSesSend, insertedTokens, queueRows, resetMocks } = vi.hoisted(
-  () => {
-    process.env.EMAIL_HMAC_SECRET = "test-hmac";
-    const rows: unknown[][] = [];
-    const inserts: unknown[] = [];
-    return {
-      mockSesSend: vi.fn(),
-      insertedTokens: inserts,
-      queueRows: rows,
-      resetMocks: () => {
-        rows.length = 0;
-        inserts.length = 0;
-      },
-    };
-  },
-);
+const {
+  evaluateOutboundPolicyMock,
+  mockSesSend,
+  insertedTokens,
+  queueRows,
+  requestFirstSendApprovalMock,
+  resetMocks,
+} = vi.hoisted(() => {
+  process.env.EMAIL_HMAC_SECRET = "test-hmac";
+  const rows: unknown[][] = [];
+  const inserts: unknown[] = [];
+  return {
+    evaluateOutboundPolicyMock: vi.fn(),
+    mockSesSend: vi.fn(),
+    insertedTokens: inserts,
+    requestFirstSendApprovalMock: vi.fn(),
+    queueRows: rows,
+    resetMocks: () => {
+      rows.length = 0;
+      inserts.length = 0;
+    },
+  };
+});
 
 vi.mock("drizzle-orm", () => ({
   and: (...conditions: unknown[]) => ({ type: "and", conditions }),
@@ -82,6 +89,14 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   },
 }));
 
+vi.mock("../email-channel/outbound-policy.js", () => ({
+  evaluateOutboundEmailPolicy: evaluateOutboundPolicyMock,
+}));
+
+vi.mock("../email-channel/first-send-approval.js", () => ({
+  requestFirstSendApproval: requestFirstSendApprovalMock,
+}));
+
 import { sendThreadReplyEmail } from "./thread-reply.js";
 
 const TENANT_ID = "00000000-0000-4000-8000-000000000001";
@@ -92,6 +107,18 @@ describe("sendThreadReplyEmail", () => {
   beforeEach(() => {
     mockSesSend.mockReset();
     mockSesSend.mockResolvedValue({ MessageId: "ses-out-123" });
+    evaluateOutboundPolicyMock.mockReset();
+    evaluateOutboundPolicyMock.mockResolvedValue({
+      allowed: true,
+      providerInstallId: "provider-1",
+      provider: "ses",
+      firstSendReviewRequired: true,
+    });
+    requestFirstSendApprovalMock.mockReset();
+    requestFirstSendApprovalMock.mockResolvedValue({
+      status: "send",
+      conversationId: "conversation-approved",
+    });
     resetMocks();
   });
 
@@ -130,6 +157,25 @@ describe("sendThreadReplyEmail", () => {
     });
 
     expect(result).toEqual({ sent: true, sesMessageId: "ses-out-123" });
+    expect(evaluateOutboundPolicyMock).toHaveBeenCalledWith({
+      db: expect.anything(),
+      tenantId: TENANT_ID,
+      spaceId: "space-1",
+    });
+    expect(requestFirstSendApprovalMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        providerInstallId: "provider-1",
+        provider: "ses",
+        agentId: AGENT_ID,
+        spaceId: "space-1",
+        threadId: THREAD_ID,
+        from: "default@sleek-squirrel-230.thinkwork.ai",
+        to: ["eric@thinkwork.ai"],
+        subject: "Re: Hello",
+        body: "Here is **your** answer.",
+      }),
+    );
     expect(mockSesSend).toHaveBeenCalledOnce();
     const command = mockSesSend.mock.calls[0][0];
     expect(command.input.Source).toBe(
@@ -159,9 +205,7 @@ describe("sendThreadReplyEmail", () => {
     // both parts present
     expect(rawMessage).toContain("Content-Type: text/plain; charset=UTF-8");
     expect(rawMessage).toContain("Content-Type: text/html; charset=UTF-8");
-    expect(rawMessage).toContain(
-      "Content-Transfer-Encoding: quoted-printable",
-    );
+    expect(rawMessage).toContain("Content-Transfer-Encoding: quoted-printable");
     // raw markdown body shows up in the text part (verbatim per R5)
     expect(rawMessage).toContain("Here is **your** answer.");
     // rendered HTML body shows up in the html part. Quoted-printable passes
@@ -356,6 +400,85 @@ describe("sendThreadReplyEmail", () => {
     expect(rawMessage).toContain("Subject: Re: Hello");
     expect(rawMessage).not.toContain("Subject: Re: Re: Hello");
     expect(rawMessage).toContain("In-Reply-To: <orig-2@thinkwork.ai>");
+  });
+
+  it("fails closed when outbound readiness is incomplete", async () => {
+    evaluateOutboundPolicyMock.mockResolvedValueOnce({
+      allowed: false,
+      reasonCode: "email_readiness_incomplete",
+      message: "Email provider readiness is incomplete.",
+    });
+    queueRows.push(
+      [
+        {
+          id: THREAD_ID,
+          space_id: "space-1",
+          metadata: {
+            emailColdContact: { senderEmail: "eric@thinkwork.ai" },
+          },
+        },
+      ],
+      [
+        {
+          metadata: {
+            source: "email_reply",
+            senderEmail: "eric@thinkwork.ai",
+            subject: "Re: Hello",
+          },
+        },
+      ],
+      [{ spaceSlug: "default", tenantSlug: "sleek-squirrel-230" }],
+    );
+
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "Sure, more details here.",
+    });
+
+    expect(result).toEqual({ sent: false, reason: "readiness_blocked" });
+    expect(mockSesSend).not.toHaveBeenCalled();
+  });
+
+  it("requests review again when the email conversation is not approved", async () => {
+    requestFirstSendApprovalMock.mockResolvedValueOnce({
+      status: "pending_review",
+      conversationId: "conversation-1",
+      inboxItemId: "inbox-1",
+    });
+    queueRows.push(
+      [
+        {
+          id: THREAD_ID,
+          space_id: "space-1",
+          metadata: {
+            emailColdContact: { senderEmail: "eric@thinkwork.ai" },
+          },
+        },
+      ],
+      [
+        {
+          metadata: {
+            source: "email_reply",
+            senderEmail: "eric@thinkwork.ai",
+            subject: "Re: Hello",
+          },
+        },
+      ],
+      [{ spaceSlug: "default", tenantSlug: "sleek-squirrel-230" }],
+    );
+
+    const result = await sendThreadReplyEmail({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      agentId: AGENT_ID,
+      body: "Sure, more details here.",
+    });
+
+    expect(result).toEqual({ sent: false, reason: "pending_review" });
+    expect(mockSesSend).not.toHaveBeenCalled();
+    expect(insertedTokens).toHaveLength(0);
   });
 
   it("skips when the body is empty", async () => {

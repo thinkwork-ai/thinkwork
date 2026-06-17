@@ -1,22 +1,29 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { insertedReplyTokens, mockSesSend, resetDb, selectRows } = vi.hoisted(
-  () => {
-    process.env.THINKWORK_API_SECRET = "test-secret";
-    const rows: unknown[][] = [];
-    const inserts: unknown[] = [];
-    return {
-      insertedReplyTokens: inserts,
-      mockSesSend: vi.fn(),
-      resetDb: () => {
-        rows.length = 0;
-        inserts.length = 0;
-      },
-      selectRows: rows,
-    };
-  },
-);
+const {
+  evaluateOutboundPolicyMock,
+  insertedReplyTokens,
+  mockSesSend,
+  requestFirstSendApprovalMock,
+  resetDb,
+  selectRows,
+} = vi.hoisted(() => {
+  process.env.THINKWORK_API_SECRET = "test-secret";
+  const rows: unknown[][] = [];
+  const inserts: unknown[] = [];
+  return {
+    evaluateOutboundPolicyMock: vi.fn(),
+    insertedReplyTokens: inserts,
+    mockSesSend: vi.fn(),
+    requestFirstSendApprovalMock: vi.fn(),
+    resetDb: () => {
+      rows.length = 0;
+      inserts.length = 0;
+    },
+    selectRows: rows,
+  };
+});
 
 vi.mock("drizzle-orm", () => ({
   and: (...conditions: unknown[]) => ({ type: "and", conditions }),
@@ -63,6 +70,14 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     capability: "agentCapabilities.capability",
   },
   emailReplyTokens: {},
+}));
+
+vi.mock("../lib/email-channel/outbound-policy.js", () => ({
+  evaluateOutboundEmailPolicy: evaluateOutboundPolicyMock,
+}));
+
+vi.mock("../lib/email-channel/first-send-approval.js", () => ({
+  requestFirstSendApproval: requestFirstSendApprovalMock,
 }));
 
 import { handler } from "./email-send.js";
@@ -127,6 +142,18 @@ describe("email-send HTTP agent invocation", () => {
   beforeEach(() => {
     mockSesSend.mockReset();
     mockSesSend.mockResolvedValue({ MessageId: "ses-space-1" });
+    evaluateOutboundPolicyMock.mockReset();
+    evaluateOutboundPolicyMock.mockResolvedValue({
+      allowed: true,
+      providerInstallId: "provider-1",
+      provider: "ses",
+      firstSendReviewRequired: true,
+    });
+    requestFirstSendApprovalMock.mockReset();
+    requestFirstSendApprovalMock.mockResolvedValue({
+      status: "send",
+      conversationId: "conversation-approved",
+    });
     resetDb();
   });
 
@@ -165,6 +192,23 @@ describe("email-send HTTP agent invocation", () => {
     );
 
     expect(result).toMatchObject({ statusCode: 200 });
+    expect(evaluateOutboundPolicyMock).toHaveBeenCalledWith({
+      db: expect.anything(),
+      tenantId,
+      spaceId: null,
+    });
+    expect(requestFirstSendApprovalMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId,
+        providerInstallId: "provider-1",
+        provider: "ses",
+        agentId,
+        from: "finance@acme.thinkwork.ai",
+        to: ["recipient@example.com"],
+        subject: "Quarterly close",
+        body: "Here is the brief.",
+      }),
+    );
     expect(mockSesSend).toHaveBeenCalledOnce();
     const command = mockSesSend.mock.calls[0][0];
     expect(command.input.Source).toBe("finance@acme.thinkwork.ai");
@@ -267,6 +311,83 @@ describe("email-send HTTP agent invocation", () => {
       max_uses: 3,
       tenant_id: tenantId,
     });
+  });
+
+  it("fails closed before provider send when channel readiness is incomplete", async () => {
+    evaluateOutboundPolicyMock.mockResolvedValueOnce({
+      allowed: false,
+      reasonCode: "email_readiness_incomplete",
+      message: "Email provider readiness is incomplete.",
+    });
+    selectRows.push(
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
+      [{ enabled: true, config: {} }],
+    );
+
+    const result = await handler(
+      emailSendEvent({
+        agentId,
+        to: "recipient@example.com",
+        subject: "Quarterly close",
+        body: "Here is the brief.",
+        spaceTenantSlug: "acme",
+        spaceSlug: "finance",
+      }),
+    );
+
+    expect(result).toMatchObject({ statusCode: 503 });
+    expect(JSON.parse(result.body ?? "{}")).toMatchObject({
+      status: "blocked",
+      reasonCode: "email_readiness_incomplete",
+    });
+    expect(requestFirstSendApprovalMock).not.toHaveBeenCalled();
+    expect(mockSesSend).not.toHaveBeenCalled();
+  });
+
+  it("returns pending review for first-send approvals without provider send", async () => {
+    requestFirstSendApprovalMock.mockResolvedValueOnce({
+      status: "pending_review",
+      conversationId: "conversation-1",
+      inboxItemId: "inbox-1",
+    });
+    selectRows.push(
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
+      [{ enabled: true, config: {} }],
+    );
+
+    const result = await handler(
+      emailSendEvent({
+        agentId,
+        to: "recipient@example.com",
+        subject: "Quarterly close",
+        body: "Here is the brief.",
+        spaceTenantSlug: "acme",
+        spaceSlug: "finance",
+      }),
+    );
+
+    expect(result).toMatchObject({ statusCode: 202 });
+    expect(JSON.parse(result.body ?? "{}")).toEqual({
+      status: "pending_review",
+      conversationId: "conversation-1",
+      inboxItemId: "inbox-1",
+    });
+    expect(mockSesSend).not.toHaveBeenCalled();
+    expect(insertedReplyTokens).toHaveLength(0);
   });
 
   it("rejects sends when Space context is missing", async () => {
