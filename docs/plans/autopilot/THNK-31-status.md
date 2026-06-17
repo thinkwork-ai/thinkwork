@@ -1,7 +1,7 @@
 ---
 issue: THNK-31
 title: "refactor: Co-locate application plugin source"
-updated: 2026-06-16
+updated: 2026-06-17
 dispatcher: dispatcher:THNK-31:InProgress:Codex
 project_context: TEI ThinkWork
 ---
@@ -426,6 +426,8 @@ above supplies that alias and passed.
   shared API onboarding and linked-task flows consume plugin-owned source.
 - Removing the LastMile adapter entries from the source-boundary migration
   allowlist; the guard now reports 18 migration paths and 2 shared paths.
+- PR #2564 merged into `main` as
+  `36ab33924e89cbe1725da0d3eccf4b8394d898b2`.
 
 ### Verification
 
@@ -453,6 +455,8 @@ above supplies that alias and passed.
 - Removing the moved Company Brain/Cognee and Twenty API helper entries from
   the source-boundary migration allowlist; the guard now reports 9 migration
   paths and 2 shared paths.
+- PR #2566 merged into `main` as
+  `134c829673ef3a1958af65d037b1bbe2bdcddb7c`.
 
 ### Verification
 
@@ -468,6 +472,31 @@ above supplies that alias and passed.
 - `pnpm lint:plugin-source`
 - `pnpm test:plugin-source-boundary`
 - `git diff --check`
+
+## Current Plugin Authoring Workflow Slice
+
+- Started from fresh `origin/main` at
+  `134c829673ef3a1958af65d037b1bbe2bdcddb7c` in branch
+  `codex/thnk-31-plugin-authoring-docs`.
+- Updating the `thinkwork-plugin-builder` workflow, templates, references, and
+  scanner to treat `plugins/<plugin-key>/` as the generated source root.
+- Replacing stale instructions to hand-edit
+  `packages/plugin-catalog/src/plugins/index.ts` with generated registry
+  aggregation through
+  `packages/plugin-catalog/scripts/generate-plugin-registry.ts`.
+- Extending the builder scanner to block plugin-specific generated files under
+  shared API, web, deployment-runner, Terraform, and legacy smoke roots unless
+  that work is split into generic platform adapter changes.
+- Updating the smoke README table to point at plugin-owned smoke scripts for
+  Twenty, LastMile, and Company Brain.
+
+### Verification
+
+- `node --test .agents/skills/thinkwork-plugin-builder/tests/plugin-builder-skill.test.mjs`
+- `pnpm dlx prettier@3.8.2 --write ...` on touched skill docs/scripts/tests
+  and `scripts/smoke/README.md`.
+- `git diff --check`
+- `pnpm lint:plugin-source`
 
 ## Verification Notes
 

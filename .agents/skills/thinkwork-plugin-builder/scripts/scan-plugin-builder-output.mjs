@@ -6,6 +6,13 @@ import { basename, relative, resolve, sep } from "node:path";
 const SUPPORTED_MANAGED_APP_KEYS = new Set(["cognee", "plane", "twenty"]);
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SKIP_DIRS = new Set([".git", "node_modules", ".terraform", "dist"]);
+const SHARED_PLUGIN_SOURCE_ROOTS = [
+  "apps/web/",
+  "packages/api/",
+  "packages/deployment-runner/",
+  "scripts/smoke/",
+  "terraform/modules/app/",
+];
 const PLUGIN_PACKAGE_REQUIRED_FILES = [
   "package.json",
   "tsconfig.json",
@@ -97,6 +104,17 @@ function scanPath(file, findings) {
       path: file.rel,
       message:
         "Generated plugin-specific source must live under plugins/<plugin-key>/, not packages/plugin-catalog/src/plugins/.",
+    });
+  }
+
+  for (const root of SHARED_PLUGIN_SOURCE_ROOTS) {
+    if (!file.rel.startsWith(root)) continue;
+    findings.push({
+      severity: "blocking",
+      code: "shared-plugin-source-path",
+      path: file.rel,
+      message:
+        "Generated plugin-specific source must live under plugins/<plugin-key>/; shared API, web, deployment-runner, smoke, or Terraform roots require a generic platform adapter change.",
     });
   }
 

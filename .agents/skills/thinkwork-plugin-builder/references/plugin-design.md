@@ -12,7 +12,7 @@ marketplace, sideload path, or licensing mechanism.
 - Premium manifest example:
   `plugins/company-brain/src/manifest.ts`
 - Infrastructure plugin example:
-- `plugins/twenty/src/manifest.ts`
+  `plugins/twenty/src/manifest.ts`
 - Plugin package descriptor examples:
   `plugins/plane/src/index.ts`, `plugins/lastmile/src/index.ts`
 

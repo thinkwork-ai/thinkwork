@@ -9,10 +9,14 @@ Use this reference when preparing files for the ThinkWork monorepo.
   `src/manifest.ts`.
 - Export `<camelPluginKey>PluginPackage` from `src/index.ts` with
   `packageKey`, `sourceRoot: "plugins/<plugin-key>"`, and `manifest`.
-- Add the plugin package dependency and registration in
-  `packages/plugin-catalog/src/plugins/index.ts`.
-- Add manifest-specific tests under `packages/plugin-catalog/src/__tests__/`
-  or plugin-package-local tests when they do not need catalog aggregation.
+- Add the plugin package dependency to `packages/plugin-catalog/package.json`
+  when a new first-party package should be aggregated into the catalog.
+- Use `packages/plugin-catalog/scripts/generate-plugin-registry.ts` for
+  catalog aggregation; do not put plugin-specific source under
+  `packages/plugin-catalog/src/plugins/`.
+- Add manifest-specific tests under `plugins/<plugin-key>/test/`. Use
+  `packages/plugin-catalog/src/__tests__/` only for aggregate or generic
+  catalog-contract behavior.
 - Use `validatePluginManifest` in tests.
 - Run package tests and catalog build/sign verification when available.
 
@@ -36,11 +40,11 @@ one. V1 plugin packages are hand-authored TypeScript with tests.
 ## Tests to Imitate
 
 - `packages/plugin-catalog/src/__tests__/contracts.test.ts`
-- `packages/plugin-catalog/src/__tests__/company-brain-manifest.test.ts`
-- `packages/plugin-catalog/src/__tests__/twenty-manifest.test.ts`
 - `packages/plugin-catalog/src/__tests__/build-catalog.test.ts`
 - `packages/plugin-catalog/src/__tests__/plugin-package.test.ts`
+- `packages/plugin-catalog/src/__tests__/plugin-registry.test.ts`
 - `plugins/plane/src/index.ts`
+- `plugins/plane/test/manifest.test.ts`
 
 Test customer-facing copy separately from internal implementation details when
 the plugin wraps an internal substrate.
@@ -51,6 +55,7 @@ Prefer the commands already used by the repo or package:
 
 - `pnpm --filter @thinkwork/plugin-catalog test`
 - `pnpm --filter @thinkwork/plugin-catalog typecheck`
+- `pnpm --filter @thinkwork/plugin-catalog check:plugins`
 - `pnpm --filter @thinkwork/plugin-catalog build:catalog`
 
 If a customer repo does not have these commands, record validation as maintainer

@@ -32,12 +32,14 @@ customer secrets.
      maintainer decision points.
    - Do not create manifest files until the plan is reviewable.
 
-4. **Prepare catalog contribution artifacts.**
+4. **Prepare plugin package and catalog aggregation artifacts.**
    - Load `references/catalog-contribution.md`.
    - Use `assets/plugin-manifest.template.ts` and
      `assets/manifest-test.template.ts` as examples, not as independent schema.
    - Align with `packages/plugin-catalog/src/contracts.ts` and existing plugin
      tests.
+   - Treat `packages/plugin-catalog/scripts/generate-plugin-registry.ts` as the
+     catalog aggregation check.
 
 5. **Stop honestly on adapter gaps.**
    - Load `references/adapter-gap-review.md` for any infrastructure component.
@@ -55,7 +57,7 @@ customer secrets.
 End with one of these maintainer-facing outcomes:
 
 - **Ready for catalog implementation:** contribution plan, manifest/test draft,
-  catalog registration notes, and publication checklist are complete.
+  catalog aggregation notes, and publication checklist are complete.
 - **Blocked on adapter work:** adapter-gap review names the unsupported
   Terraform shape and follow-up platform paths.
 - **Narrow first slice recommended:** broad Terraform scope is split into a
@@ -70,4 +72,7 @@ End with one of these maintainer-facing outcomes:
 - Treat `packages/plugin-catalog/src/contracts.ts` as the manifest contract.
 - Treat `packages/deployment-runner/src/apps/registry.ts` as the managed-app
   adapter source of truth.
+- Keep plugin-specific source under `plugins/<plugin-key>/`; shared API, web,
+  deployment-runner, Terraform, or smoke changes should be generic platform
+  extension points or adapter-gap follow-ups.
 - Keep UI surfaces declared-only unless a separate ThinkWork issue changes that.
