@@ -12,6 +12,12 @@ export const lastmilePluginPackage = {
     },
     {
       kind: "api",
+      path: "plugins/lastmile/src/api/tasks-adapter.ts",
+      description:
+        "LastMile task adapter that normalizes MCP task provider calls.",
+    },
+    {
+      kind: "api",
       path: "plugins/lastmile/src/discovery.fixture.ts",
       description:
         "Recorded protected-resource discovery metadata used by package drift tests.",
@@ -32,16 +38,9 @@ export const lastmilePluginPackage = {
       description: "LastMile package ownership and verification notes.",
     },
   ],
-  compatibilityLinks: [
-    {
-      path: "packages/api/src/lib/lastmile/tasks-adapter.ts",
-      reason:
-        "LastMile task adapter is still owned by the shared API package during migration.",
-      removal:
-        "THNK-31 U6 moves plugin-specific API helpers behind package exports.",
-    },
-  ],
+  compatibilityLinks: [],
 } as const;
 
 export { lastmileManifest };
 export { lastmileDiscoveryFixture } from "./discovery.fixture";
+export * from "./api/tasks-adapter";

@@ -20,7 +20,7 @@ import {
   type LastMileAdapterResult,
   type LastMileTaskSnapshot,
   type LastMileProviderError,
-} from "../lastmile/tasks-adapter.js";
+} from "@thinkwork/plugin-lastmile/tasks-adapter";
 import type {
   LinkedTaskStatus,
   LinkedTaskSyncStatus,

@@ -58,14 +58,6 @@ export const pluginSourceBoundaryAllowlist = [
     reason: "legacy Cognee client until Company Brain substrate moves",
   },
   {
-    path: "packages/api/src/lib/lastmile/tasks-adapter.test.ts",
-    reason: "legacy LastMile adapter until API extension points move",
-  },
-  {
-    path: "packages/api/src/lib/lastmile/tasks-adapter.ts",
-    reason: "legacy LastMile adapter until API extension points move",
-  },
-  {
     path: "packages/api/src/lib/plugins/twenty-cutover.test.ts",
     reason: "legacy Twenty cutover helper until API extension points move",
   },

@@ -44,6 +44,7 @@
     "@thinkwork/namespace-registry": "workspace:*",
     "@thinkwork/pi-runtime-core": "workspace:*",
     "@thinkwork/plugin-catalog": "workspace:*",
+    "@thinkwork/plugin-lastmile": "workspace:*",
     "@thinkwork/release-manifest": "workspace:*",
     "@thinkwork/runtime-config": "workspace:*",
     "@thinkwork/ui": "workspace:*",

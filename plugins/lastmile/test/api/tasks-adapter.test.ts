@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createLastMileTasksAdapter,
   type LastMileMcpClient,
-} from "./tasks-adapter.js";
+} from "../../src/api/tasks-adapter.js";
 
 const baseCreateInput = {
   tenantId: "tenant-1",

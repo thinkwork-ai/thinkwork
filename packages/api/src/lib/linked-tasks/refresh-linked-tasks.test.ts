@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { LastMileTaskSnapshot } from "../lastmile/tasks-adapter.js";
+import type { LastMileTaskSnapshot } from "@thinkwork/plugin-lastmile/tasks-adapter";
 import type {
   LinkedTaskMirrorRow,
   LinkedTaskSyncRepository,

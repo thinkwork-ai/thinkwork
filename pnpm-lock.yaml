@@ -784,6 +784,9 @@ importers:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../plugin-catalog
+      '@thinkwork/plugin-lastmile':
+        specifier: workspace:*
+        version: link:../../plugins/lastmile
       '@thinkwork/release-manifest':
         specifier: workspace:*
         version: link:../release-manifest
