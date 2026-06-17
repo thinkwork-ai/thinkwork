@@ -68,7 +68,7 @@ async function callTool(name: string, args: Record<string, unknown> = {}) {
   return payload.result?.structuredContent;
 }
 
-describe.skipIf(!canRun)("Company Brain Context Engine live E2E", () => {
+describe.skipIf(!canRun)("Context Engine live E2E", () => {
   it("fans out across every selected source family and exposes provider diagnostics", async () => {
     const listed = await callTool("list_context_providers");
     const providers = listed.providers as Array<{

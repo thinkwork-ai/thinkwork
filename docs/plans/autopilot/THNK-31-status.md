@@ -468,7 +468,7 @@ above supplies that alias and passed.
 - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/brain/companyBrainMigration.mutation.test.ts src/graphql/resolvers/plugins/plugins-resolvers.test.ts src/handlers/knowledge-graph-thread-ingest.test.ts src/handlers/knowledge-graph-observations-ingest.test.ts src/lib/knowledge-graph/normalizer.test.ts`
 - `pnpm --filter @thinkwork/plugin-catalog test`
 - `pnpm --filter @thinkwork/plugin-catalog typecheck`
-- `pnpm --filter @thinkwork/api exec vitest run test/integration/context-engine/company-brain-context.e2e.test.ts` (test file collected and skipped by its environment guard)
+- `pnpm --filter @thinkwork/api exec vitest run test/integration/context-engine/context-engine-live.e2e.test.ts` (test file collected and skipped by its environment guard)
 - `pnpm lint:plugin-source`
 - `pnpm test:plugin-source-boundary`
 - `git diff --check`
@@ -497,6 +497,38 @@ above supplies that alias and passed.
   and `scripts/smoke/README.md`.
 - `git diff --check`
 - `pnpm lint:plugin-source`
+
+## Current Source-Boundary Enforcement Slice
+
+- Started from fresh `origin/main` at
+  `b4f78fb79cfd591896975265ba682f7cce649d21` in branch
+  `codex/thnk-31-source-boundary-enforcement`.
+- Removed the unused shared-web `SettingsCogneeApplication` component and test
+  after the legacy Cognee application route became a thin redirect to the
+  Company Brain plugin detail page.
+- Renamed the API live Context Engine E2E from
+  `company-brain-context.e2e.test.ts` to `context-engine-live.e2e.test.ts` so
+  shared Context Engine coverage no longer appears as plugin-owned API source.
+- Closed `pluginSourceBoundaryAllowlist` to zero active migration entries.
+- Preserved only shared/historical false-positive entries for CLI packaging
+  fixture tests, the legacy redirect route, deployment-control-plane, and
+  immutable database migration tests.
+- Source-boundary check now reports: `0 migration paths and 8 shared paths
+documented`.
+
+### Verification
+
+- `node scripts/verify-plugin-source-boundary.mjs`
+- `node --test scripts/__tests__/verify-plugin-source-boundary.test.mjs`
+- `pnpm --filter @thinkwork/api exec vitest run test/integration/context-engine/context-engine-live.e2e.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/plugin-company-brain test`
+- `pnpm --filter @thinkwork/plugin-company-brain typecheck`
+- `pnpm --filter @thinkwork/web exec vitest run src/routes/_authed/-settings-legacy-plugin-redirects.test.ts`
+- `pnpm --filter @thinkwork/web typecheck`
+- `pnpm lint:plugin-source`
+- `pnpm test:plugin-source-boundary`
+- `git diff --check`
 
 ## Verification Notes
 
