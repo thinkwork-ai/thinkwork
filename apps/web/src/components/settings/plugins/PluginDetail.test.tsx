@@ -526,7 +526,7 @@ describe("PluginDetail", () => {
     });
     render(<PluginDetail />);
 
-    expect(screen.getByText("Production email blocked")).toBeTruthy();
+    expect(screen.getByText("Resend setup blocked")).toBeTruthy();
     expect(screen.getAllByText("Resend API key").length).toBeGreaterThan(1);
     expect(
       screen.getByText(/dedicated ThinkWork production key/i),

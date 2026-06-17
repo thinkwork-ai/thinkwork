@@ -33,6 +33,7 @@ import {
 } from "../../../lib/email-channel/secrets.js";
 import { createResendWebhook } from "../../../lib/email-channel/providers/resend.js";
 import { providerSafeError } from "../../../lib/email-channel/provider-contract.js";
+import { runEmailReadinessProbe } from "../../../lib/email-channel/readiness-probes.js";
 import { runEmailReadinessProbeMutation } from "./readiness.mutations.js";
 
 type ConfigureEmailProviderInput = {
@@ -93,7 +94,7 @@ export async function saveEmailProviderCredential(
         provider: args.input.provider,
         displayName: args.input.displayName ?? "Email provider",
         status: "PENDING",
-        activeForProduction: false,
+        activeForProduction: true,
         credentialSecretRef: secretRef,
         webhookSecretRef: args.input.webhookSecretRef,
         defaultFromEmail:
@@ -113,15 +114,40 @@ export async function saveEmailProviderCredential(
       apiKey: args.input.apiKey,
       existingMetadata: metadata,
     });
-    const [updated] = await ctx.db
-      .select()
-      .from(emailProviderInstalls)
-      .where(eq(emailProviderInstalls.id, providerPayload.id))
-      .limit(1);
-    if (updated) return emailProviderInstallPayload(updated);
   }
 
+  await runEmailReadinessAfterCredentialSave({
+    ctx,
+    tenantId,
+    providerInstallId: providerPayload.id,
+  });
+  const [updated] = await ctx.db
+    .select()
+    .from(emailProviderInstalls)
+    .where(eq(emailProviderInstalls.id, providerPayload.id))
+    .limit(1);
+  if (updated) return emailProviderInstallPayload(updated);
+
   return providerPayload;
+}
+
+async function runEmailReadinessAfterCredentialSave(input: {
+  ctx: GraphQLContext;
+  tenantId: string;
+  providerInstallId: string;
+}) {
+  try {
+    await runEmailReadinessProbe({
+      db: input.ctx.db,
+      tenantId: input.tenantId,
+      providerInstallId: input.providerInstallId,
+    });
+  } catch (error) {
+    console.warn("Email readiness probe after credential save failed", {
+      providerInstallId: input.providerInstallId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function emailProviderDefaults(

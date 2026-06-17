@@ -83,7 +83,7 @@ export function EmailChannelSettings() {
     }
     setForm((current) => ({ ...current, apiKey: "" }));
     setEditingCredential(false);
-    toast.success("Resend credential stored.");
+    toast.success("Resend API key stored and checks updated.");
     refetch();
   }
 
@@ -148,32 +148,6 @@ export function EmailChannelSettings() {
 
   return (
     <>
-      <SettingsSection label="Resend channel">
-        {result.fetching && !summary ? (
-          <p className="p-4 text-sm text-muted-foreground">
-            Loading Resend channel...
-          </p>
-        ) : result.error ? (
-          <p className="p-4 text-sm text-destructive">
-            Resend channel settings could not be loaded.
-          </p>
-        ) : summary ? (
-          <SettingsRow
-            label="Production readiness"
-            description="Production agent email remains closed until credentials, DNS, receiving, webhooks, provider events, and loop test are green."
-            layout="stacked"
-          >
-            <EmailReadinessPanel
-              summary={summary}
-              probing={probeState.fetching}
-              onRunProbe={(providerInstallId) =>
-                void runChecks(providerInstallId)
-              }
-            />
-          </SettingsRow>
-        ) : null}
-      </SettingsSection>
-
       <SettingsSection label="Resend provider">
         <SettingsRow
           label="Credential"
@@ -293,6 +267,32 @@ export function EmailChannelSettings() {
             )}
           </form>
         </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection label="Resend channel">
+        {result.fetching && !summary ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            Loading Resend channel...
+          </p>
+        ) : result.error ? (
+          <p className="p-4 text-sm text-destructive">
+            Resend channel settings could not be loaded.
+          </p>
+        ) : summary ? (
+          <SettingsRow
+            label="Production readiness"
+            description="Production sending opens after the Resend key, ThinkWork domain, receiving, and webhook checks pass. Provider events and loop evidence update after live traffic."
+            layout="stacked"
+          >
+            <EmailReadinessPanel
+              summary={summary}
+              probing={probeState.fetching}
+              onRunProbe={(providerInstallId) =>
+                void runChecks(providerInstallId)
+              }
+            />
+          </SettingsRow>
+        ) : null}
       </SettingsSection>
 
       {summary ? (
