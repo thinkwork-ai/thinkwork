@@ -1,6 +1,7 @@
 ---
 module: apps/web thread conversation
 date: 2026-06-17
+last_updated: 2026-06-17
 problem_type: debug_findings
 component: projected_workspace_panel
 severity: medium
@@ -166,6 +167,50 @@ Recommended tests for the fix PR:
 - A broad "require sources" rule would hide valid projections from unusual
   renders that have an AGENTS.md key or generated prefix but no source rows.
   Gate on displayable evidence, not source count alone.
+
+## Compounded Learning
+
+Projection-shaped data is not automatically displayable data. A per-turn
+workspace projection panel should only render when the snapshot carries
+evidence a reader can inspect: a rendered prefix, AGENTS.md key/history key,
+generation timestamp, injected files, fetched sources, source rows, or
+meaningful reconcile rejection data. An empty object or clean reconcile-only
+shell creates false confidence: the UI says a projection exists, but the panel
+has nothing useful to show.
+
+The durable guard is two-sided:
+
+1. **Consumer guard:** `parseWorkspaceProjection` should return `null` for
+   empty projection shells and clean reconcile-only shells. This hides already
+   persisted shells and keeps the panel contract tied to inspectable evidence.
+2. **Producer guard:** `mergeWorkspaceProjectionReconcileSummary` should not
+   create `workspace_projection` from nothing for a zero-rejection reconcile.
+   It should preserve and augment an existing dispatch-time snapshot, while
+   avoiding future displayable-looking shells when no dispatch snapshot exists.
+
+Session history confirms the debug session deliberately stopped at diagnosis:
+PR #2546 changed only row ordering, PR #2594 landed this artifact only, and no
+product fix had shipped for THNK-39 after the canary `.199` deployment.
+(session history)
+
+This is a sibling of the THNK-10 snapshot immutability lesson, not the same
+failure mode. That earlier issue made historical projection content mutable or
+unverifiable. THNK-39 is different: the record exists syntactically but lacks
+substantive fields. Both cases share the same prevention rule: snapshot
+producers and consumers must verify useful evidence, not just object shape.
+
+## Related
+
+- [Per-turn snapshots need content-addressed, write-once storage](../architecture-patterns/per-turn-snapshot-needs-content-addressed-immutable-storage.md)
+  documents the sibling THNK-10 failure mode where projection snapshots pointed
+  at mutable AGENTS.md content and null fingerprints.
+- [Failed thread turns should not default open on loaded conversations](../ui-bugs/failed-thread-turn-default-open-layout-shift-2026-06-14.md)
+  is an adjacent thread-detail UI lesson: update stale tests and helper
+  contracts when old behavior has become the bug.
+- GitHub PR #2546 exposed the blank shell by pinning the existing projected
+  workspace row first; it did not cause the shell.
+- GitHub PR #2594 landed this diagnosis-only artifact and release
+  `v0.1.0-canary.199`.
 
 ## Status
 
