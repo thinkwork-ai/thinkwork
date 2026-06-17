@@ -24,7 +24,7 @@ status: active
 | U4 Readiness state machine and plugin settings surface                   | Merged  | PR #2595; merge commit `61599ac66fa03fbe4e855a0085688b81ee93458e` |
 | U5 Outbound channel, first-send HITL, and ledger writes                  | Merged  | PR #2597; merge commit `da283bb52d4b5dda04bbbdabe67c623505233a4e` |
 | U6 Inbound webhook normalization, authorization, rate limits, and wakeup | Merged  | PR #2600; merge commit `51726bac8796eb084f44307d744f681ea4941832` |
-| U7 Routine, runtime, and cross-surface email parity                      | PR open | PR #2603; commit `03a91636d82a9738f6d044a6e9b46a65fe90250d`       |
+| U7 Routine, runtime, and cross-surface email parity                      | PR open | PR #2603; head commit `6bd3f6a6ae3faf7dc02367c627d5c42967e7cab8`  |
 | U8 SES migration, observability, documentation, and deployed validation  | Pending | Not started                                                       |
 
 ## Notes
@@ -39,13 +39,20 @@ status: active
 
 - U7 focused checks:
   - PR #2603: https://github.com/thinkwork-ai/thinkwork/pull/2603
+  - Local web dev server verified at
+    `http://localhost:5174/settings/plugins/email-channel`.
+  - Browser screenshot verified Email Channel readiness layout no longer
+    overlaps its label/description column after stacking the readiness row.
   - `pnpm --filter @thinkwork/api test -- src/handlers/email-send.test.ts src/lib/routines/recipe-catalog.test.ts src/handlers/routine-asl-validator.test.ts src/__tests__/routines-publish-flow.test.ts`
+  - `pnpm --filter @thinkwork/api test -- src/__tests__/core-mutations-authz.test.ts src/__tests__/resendMemberInvite.test.ts`
   - `pnpm --filter @thinkwork/api typecheck`
   - `pnpm --filter @thinkwork/lambda test -- __tests__/job-trigger.skill-run.test.ts`
   - `pnpm --filter @thinkwork/lambda typecheck`
   - `pnpm --dir apps/cli test -- __tests__/inbox-registration.test.ts`
   - `pnpm --dir apps/cli typecheck`
   - `pnpm --dir apps/mobile test -- lib/mobile-inbox.test.ts`
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginDetail.test.tsx src/components/settings/SettingsUsers.test.tsx`
+  - `pnpm --filter @thinkwork/web typecheck`
   - `bash scripts/build-lambdas.sh email-send`
   - `bash scripts/build-lambdas.sh job-trigger`
   - `git diff --check`
