@@ -28,6 +28,8 @@ import { installStateChipClassName, installStateLabel } from "./plugin-state";
 
 type PluginFilter = "all" | "installed";
 
+const CATALOG_METADATA_TOOLTIP_DELAY_MS = 2_000;
+
 /**
  * Plugins settings surface (plan 2026-06-12-001 U8): one catalog list with an
  * install-state overlay and an All / Installed filter. The catalog already
@@ -331,7 +333,7 @@ function CatalogRefreshAction({
     ? `Plugin catalog metadata: ${metadataSummary(metadata)}`
     : "Refresh plugins";
   return (
-    <TooltipProvider delayDuration={1000}>
+    <TooltipProvider delayDuration={CATALOG_METADATA_TOOLTIP_DELAY_MS}>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
