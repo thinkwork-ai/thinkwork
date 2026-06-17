@@ -17,6 +17,8 @@ import {
   agents,
   agentCapabilities,
   emailReplyTokens,
+  spaces,
+  tenants,
 } from "@thinkwork/database-pg/schema";
 import { generateReplyToken } from "../lib/email-tokens.js";
 import { deriveSpaceAddress } from "../lib/email/space-address.js";
@@ -48,6 +50,9 @@ interface DirectSendEmailRequest {
   tenantId?: string;
   routineId?: string;
   executionId?: string;
+  agentId?: string;
+  spaceId?: string;
+  threadId?: string;
   to?: string[] | string;
   cc?: string[] | string;
   subject?: string;
@@ -427,6 +432,16 @@ async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
     };
   }
 
+  if (req.agentId && req.spaceId && req.tenantId) {
+    return sendRoutineChannelEmail({
+      req,
+      recipients,
+      cc,
+      subject,
+      body,
+    });
+  }
+
   const rendered = req.bodyFormat === "markdown" ? renderForEmail(body) : null;
   const result = await emailChannel.send("ses", {
     from: source,
@@ -442,6 +457,138 @@ async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
       ? rendered.html
       : req.bodyFormat === "html"
         ? body
+        : undefined,
+  });
+
+  return {
+    messageId: result.providerMessageId || null,
+    status: "sent",
+  };
+}
+
+async function sendRoutineChannelEmail(input: {
+  req: DirectSendEmailRequest;
+  recipients: string[];
+  cc: string[];
+  subject: string;
+  body: string;
+}) {
+  const tenantId = input.req.tenantId!;
+  const agentId = input.req.agentId!;
+  const spaceId = input.req.spaceId!;
+  const [agent] = await db
+    .select({
+      id: agents.id,
+      tenant_id: agents.tenant_id,
+      send_email: agents.send_email,
+    })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)));
+  if (!agent) {
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ error: "Agent not found" }),
+    };
+  }
+  const sendEmailResult = validateTemplateSendEmail(agent.send_email);
+  const sendEmailEnabled = sendEmailResult.ok
+    ? sendEmailResult.value?.enabled === true
+    : false;
+  if (!sendEmailEnabled) {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: "Send Email not enabled for this agent" }),
+    };
+  }
+
+  const [space] = await db
+    .select({
+      id: spaces.id,
+      tenant_id: spaces.tenant_id,
+      slug: spaces.slug,
+    })
+    .from(spaces)
+    .where(and(eq(spaces.id, spaceId), eq(spaces.tenant_id, tenantId)));
+  if (!space) {
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ error: "Space not found" }),
+    };
+  }
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId));
+  if (!tenant?.slug) {
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ error: "Tenant email domain not found" }),
+    };
+  }
+
+  const fromAddress = deriveSpaceAddress({
+    tenantSlug: tenant.slug,
+    spaceSlug: space.slug,
+  });
+  const policy = await evaluateOutboundEmailPolicy({
+    db,
+    tenantId,
+    spaceId,
+  });
+  if (!policy.allowed) {
+    return {
+      statusCode: 503,
+      body: JSON.stringify({
+        status: "blocked",
+        reasonCode: policy.reasonCode,
+        error: policy.message,
+      }),
+    };
+  }
+  if (policy.firstSendReviewRequired) {
+    const approval = await requestFirstSendApproval({
+      db,
+      tenantId,
+      providerInstallId: policy.providerInstallId,
+      provider: policy.provider,
+      agentId,
+      spaceId,
+      threadId: input.req.threadId ?? null,
+      from: fromAddress,
+      to: input.recipients,
+      subject: input.subject,
+      body: input.body,
+    });
+    if (approval.status === "pending_review") {
+      return {
+        statusCode: 202,
+        body: JSON.stringify({
+          status: "pending_review",
+          conversationId: approval.conversationId,
+          inboxItemId: approval.inboxItemId,
+        }),
+      };
+    }
+  }
+
+  const rendered =
+    input.req.bodyFormat === "markdown" ? renderForEmail(input.body) : null;
+  const result = await emailChannel.send(policy.provider, {
+    tenantId,
+    providerInstallId: policy.providerInstallId,
+    from: fromAddress,
+    to: input.recipients,
+    cc: input.cc,
+    subject: input.subject,
+    text: rendered
+      ? rendered.text
+      : input.req.bodyFormat === "html"
+        ? undefined
+        : input.body,
+    html: rendered
+      ? rendered.html
+      : input.req.bodyFormat === "html"
+        ? input.body
         : undefined,
   });
 

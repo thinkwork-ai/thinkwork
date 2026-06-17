@@ -6,6 +6,7 @@ import { resolveInboxContext, type InboxCliOptions } from "./helpers.js";
 
 interface ApproveOptions extends InboxCliOptions {
   notes?: string;
+  values?: string;
 }
 
 export async function runInboxApprove(
@@ -14,9 +15,18 @@ export async function runInboxApprove(
 ): Promise<void> {
   const ctx = await resolveInboxContext(opts);
 
+  const input =
+    opts.notes || opts.values
+      ? {
+          ...(opts.notes ? { reviewNotes: opts.notes } : {}),
+          ...(opts.values
+            ? { decisionValues: normalizeJsonFlag(opts.values) }
+            : {}),
+        }
+      : null;
   const data = await gqlMutate(ctx.client, ApproveInboxItemDoc, {
     id,
-    input: opts.notes ? { reviewNotes: opts.notes } : null,
+    input,
   });
   const item = data.approveInboxItem;
 
@@ -25,4 +35,15 @@ export async function runInboxApprove(
     return;
   }
   printSuccess(`Approved inbox item ${item.id} (status now ${item.status})`);
+}
+
+function normalizeJsonFlag(value: string): string {
+  try {
+    JSON.parse(value);
+    return value;
+  } catch (err) {
+    throw new Error(
+      `--values must be valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }

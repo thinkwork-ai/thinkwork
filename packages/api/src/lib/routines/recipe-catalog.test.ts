@@ -376,6 +376,8 @@ describe("recipe-catalog", () => {
       "tenantId.$": "$$.Execution.Input.tenantId",
       "routineId.$": "$$.Execution.Input.routineId",
       "executionId.$": "$$.Execution.Id",
+      "agentId.$": "$$.Execution.Input.agentId",
+      "spaceId.$": "$$.Execution.Input.spaceId",
     });
 
     const python = getRecipe("python")!.aslEmitter(

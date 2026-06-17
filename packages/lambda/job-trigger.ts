@@ -9,7 +9,7 @@
  * For one-time jobs: auto-deletes EventBridge schedule after firing
  *
  * Event payload (set by job-schedule-manager when creating the rule):
- *   { triggerId, triggerType, tenantId, agentId?, routineId?, prompt?, scheduleName?, oneTime? }
+ *   { triggerId, triggerType, tenantId, agentId?, spaceId?, routineId?, prompt?, scheduleName?, oneTime? }
  */
 
 import { getApiAuthSecret } from "@thinkwork/runtime-config";
@@ -279,8 +279,9 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -378,8 +379,9 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -440,6 +442,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       .select({
         enabled: scheduledJobs.enabled,
         name: scheduledJobs.name,
+        agent_id: scheduledJobs.agent_id,
         space_id: scheduledJobs.space_id,
         config: scheduledJobs.config,
         budget_paused: scheduledJobs.budget_paused,
@@ -471,6 +474,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     ) {
       return;
     }
+    const jobAgentId = job?.agent_id ?? agentId ?? null;
     const jobSpaceId = job?.space_id ?? event.spaceId ?? null;
 
     const isAgentJob = triggerType.startsWith("agent_");
@@ -687,8 +691,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } =
-          await import("@aws-sdk/client-lambda");
+        const { LambdaClient, InvokeCommand } = await import(
+          "@aws-sdk/client-lambda"
+        );
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -960,6 +965,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
                 triggerId,
                 triggerSource: "schedule",
                 scheduleName: scheduleName ?? null,
+                agentId: jobAgentId,
                 spaceId: jobSpaceId,
               },
               {
@@ -985,6 +991,7 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
                 input_json: {
                   triggerId,
                   scheduleName: scheduleName ?? null,
+                  agentId: jobAgentId,
                   spaceId: jobSpaceId,
                 },
                 status: "running",
@@ -1035,8 +1042,9 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } =
-          await import("@aws-sdk/client-scheduler");
+        const { SchedulerClient, DeleteScheduleCommand } = await import(
+          "@aws-sdk/client-scheduler"
+        );
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({
@@ -1072,6 +1080,8 @@ export function buildRoutineExecutionInput(
     ...userInput,
     tenantId: routine.tenantId,
     routineId: routine.routineId,
+    agentId: typeof userInput.agentId === "string" ? userInput.agentId : null,
+    spaceId: typeof userInput.spaceId === "string" ? userInput.spaceId : null,
     inboxApprovalFunctionName: runtimeFunctionName(
       "ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME",
       "routine-approval-callback",
