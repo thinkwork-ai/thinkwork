@@ -146,6 +146,42 @@ type PluginCatalogEntry {
   updateAvailable: Boolean!
 }
 
+"""
+Source and freshness metadata for the signed plugin catalog snapshot currently
+trusted by the GraphQL API. This is a sibling status surface for Settings UI;
+catalog rows remain the install/version overlay.
+"""
+type PluginCatalogMetadata {
+  "'bundled-unsigned' | 'bundled-signed' | 'github-release' | 'github-release-stale'."
+  source: String!
+  "GitHub repository when the catalog carries source provenance."
+  repository: String
+  "Git ref from the signed source provenance when present."
+  ref: String
+  "Source commit SHA from signed provenance."
+  commitSha: String
+  "GitHub release tag for release-backed catalogs."
+  releaseTag: String
+  "GitHub release asset name for release-backed catalogs."
+  assetName: String
+  "sha256 of the verified catalog snapshot."
+  catalogSha256: String!
+  "Timestamp embedded in the signed catalog payload."
+  generatedAt: AWSDateTime!
+  "Last time the API fetched or revalidated the GitHub release metadata."
+  fetchedAt: AWSDateTime
+  "True when the API is serving the last verified snapshot after a refresh failure."
+  stale: Boolean!
+  "'fresh' | 'not-modified' | 'stale-fallback' for GitHub-backed catalogs."
+  lastRefreshStatus: String
+  "Refresh failure detail when stale fallback is active."
+  message: String
+  "GitHub rate limit remaining header from the last release metadata response."
+  rateLimitRemaining: String
+  "GitHub rate limit reset header from the last release metadata response."
+  rateLimitReset: String
+}
+
 input InstallPluginInput {
   pluginKey: String!
   "Catalog version to pin; defaults to the latest published version."
@@ -271,6 +307,8 @@ extend type Query {
   state. Fails closed (GraphQL error) on catalog signature/digest failure.
   """
   pluginCatalog: [PluginCatalogEntry!]!
+  "Source, provenance, and freshness metadata for the trusted plugin catalog snapshot."
+  pluginCatalogMetadata: PluginCatalogMetadata!
   "The caller tenant's plugin installs (admin status surface)."
   pluginInstalls: [PluginInstall!]!
   "One install by id, with read-time component status reconciliation."

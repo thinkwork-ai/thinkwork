@@ -15,6 +15,7 @@
 import { GraphQLError } from "graphql";
 import { and, desc, eq } from "drizzle-orm";
 import type { PluginCatalogEntry as CatalogPluginEntry } from "@thinkwork/plugin-catalog";
+import { pluginCatalogSha256 } from "@thinkwork/plugin-catalog";
 import {
   managedApplicationDeploymentJobs,
   managedApplications,
@@ -25,6 +26,7 @@ import { snakeToCamel } from "../../utils.js";
 import {
   compareSemverDesc,
   getPluginCatalog,
+  getPluginCatalogSnapshot,
   sortVersionsNewestFirst,
 } from "../../../lib/plugins/catalog-source.js";
 import {
@@ -258,6 +260,35 @@ export async function pluginCatalog(
     });
   }
   return entries;
+}
+
+export async function pluginCatalogMetadata(
+  _parent: unknown,
+  _args: Record<string, never>,
+  ctx: GraphQLContext,
+) {
+  await requirePluginTenantMember(ctx);
+  const snapshot = await getPluginCatalogSnapshot();
+  const github = snapshot.github ?? null;
+  return {
+    source: snapshot.source,
+    repository:
+      github?.repository ?? snapshot.catalog.source?.repository ?? null,
+    ref: snapshot.catalog.source?.ref ?? null,
+    commitSha:
+      github?.sourceCommitSha ?? snapshot.catalog.source?.commitSha ?? null,
+    releaseTag: github?.releaseTag ?? null,
+    assetName: github?.assetName ?? null,
+    catalogSha256:
+      github?.catalogSha256 ?? pluginCatalogSha256(snapshot.catalog),
+    generatedAt: snapshot.catalog.generatedAt,
+    fetchedAt: github?.fetchedAt ?? null,
+    stale: github?.stale ?? false,
+    lastRefreshStatus: github?.lastRefreshStatus ?? null,
+    message: github?.message ?? null,
+    rateLimitRemaining: github?.rateLimitRemaining ?? null,
+    rateLimitReset: github?.rateLimitReset ?? null,
+  };
 }
 
 export async function pluginInstalls(
