@@ -2968,9 +2968,11 @@ export type Mutation = {
   revokePremiumPluginInstallKey: RevokePremiumPluginInstallKeyResult;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
+  runEmailReadinessProbe: Array<EmailReadinessCheck>;
   runScheduledJob: RunScheduledJobResult;
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
+  saveEmailProviderCredential: EmailProviderInstall;
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
@@ -3750,6 +3752,10 @@ export type MutationRotateTenantCredentialArgs = {
   input: RotateTenantCredentialInput;
 };
 
+export type MutationRunEmailReadinessProbeArgs = {
+  providerInstallId: Scalars["ID"]["input"];
+};
+
 export type MutationRunScheduledJobArgs = {
   id: Scalars["ID"]["input"];
 };
@@ -3760,6 +3766,10 @@ export type MutationSaveAppletArgs = {
 
 export type MutationSaveAppletStateArgs = {
   input: SaveAppletStateInput;
+};
+
+export type MutationSaveEmailProviderCredentialArgs = {
+  input: SaveEmailProviderCredentialInput;
 };
 
 export type MutationSeedEvalTestCasesArgs = {
@@ -6181,6 +6191,16 @@ export type SaveAppletStateInput = {
   instanceId: Scalars["ID"]["input"];
   key: Scalars["String"]["input"];
   value?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+};
+
+export type SaveEmailProviderCredentialInput = {
+  apiKey: Scalars["String"]["input"];
+  defaultFromEmail?: InputMaybe<Scalars["String"]["input"]>;
+  displayName?: InputMaybe<Scalars["String"]["input"]>;
+  domain?: InputMaybe<ConfigureEmailDomainInput>;
+  provider: EmailChannelProvider;
+  providerInstallId?: InputMaybe<Scalars["ID"]["input"]>;
+  webhookSecretRef?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type ScheduledJob = {
@@ -9846,6 +9866,100 @@ export type SettingsEmailChannelQuery = {
       }>;
     }>;
   };
+};
+
+export type SettingsSaveEmailProviderCredentialMutationVariables = Exact<{
+  input: SaveEmailProviderCredentialInput;
+}>;
+
+export type SettingsSaveEmailProviderCredentialMutation = {
+  __typename?: "Mutation";
+  saveEmailProviderCredential: {
+    __typename?: "EmailProviderInstall";
+    id: string;
+    provider: EmailChannelProvider;
+    status: EmailProviderInstallStatus;
+    activeForProduction: boolean;
+    credentialConfigured: boolean;
+    webhookSecretConfigured: boolean;
+    defaultFromEmail?: string | null;
+    metadata: any;
+    updatedAt: any;
+  };
+};
+
+export type SettingsRunEmailReadinessProbeMutationVariables = Exact<{
+  providerInstallId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsRunEmailReadinessProbeMutation = {
+  __typename?: "Mutation";
+  runEmailReadinessProbe: Array<{
+    __typename?: "EmailReadinessCheck";
+    id: string;
+    providerInstallId: string;
+    domainId?: string | null;
+    checkKey: EmailReadinessCheckKey;
+    status: EmailReadinessStatus;
+    failureCode?: string | null;
+    failureMessage?: string | null;
+    lastCheckedAt?: any | null;
+  }>;
+};
+
+export type SettingsUpsertEmailSpacePolicyMutationVariables = Exact<{
+  input: UpsertEmailSpacePolicyInput;
+}>;
+
+export type SettingsUpsertEmailSpacePolicyMutation = {
+  __typename?: "Mutation";
+  upsertEmailSpacePolicy: {
+    __typename?: "EmailSpacePolicy";
+    id: string;
+    spaceId: string;
+    providerInstallId?: string | null;
+    enabled: boolean;
+    registeredUsersAllowed: boolean;
+    privateSpaceMembershipRequired: boolean;
+    outsideSenderDefault: string;
+    firstSendReviewRequired: boolean;
+    policy: any;
+    updatedAt: any;
+    allowlists: Array<{
+      __typename?: "EmailSpaceSenderAllowlist";
+      id: string;
+      valueType: EmailAllowlistType;
+      value: string;
+      reason?: string | null;
+      createdAt: any;
+    }>;
+  };
+};
+
+export type SettingsAddEmailSpaceSenderAllowlistMutationVariables = Exact<{
+  input: AddEmailSpaceSenderAllowlistInput;
+}>;
+
+export type SettingsAddEmailSpaceSenderAllowlistMutation = {
+  __typename?: "Mutation";
+  addEmailSpaceSenderAllowlist: {
+    __typename?: "EmailSpaceSenderAllowlist";
+    id: string;
+    spaceId: string;
+    valueType: EmailAllowlistType;
+    value: string;
+    reason?: string | null;
+    createdAt: any;
+  };
+};
+
+export type SettingsRemoveEmailSpaceSenderAllowlistMutationVariables = Exact<{
+  id: Scalars["ID"]["input"];
+}>;
+
+export type SettingsRemoveEmailSpaceSenderAllowlistMutation = {
+  __typename?: "Mutation";
+  removeEmailSpaceSenderAllowlist: boolean;
 };
 
 export type SettingsRequestCompanyBrainProductionMigrationMutationVariables =
@@ -17998,6 +18112,355 @@ export const SettingsEmailChannelDocument = {
 } as unknown as DocumentNode<
   SettingsEmailChannelQuery,
   SettingsEmailChannelQueryVariables
+>;
+export const SettingsSaveEmailProviderCredentialDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsSaveEmailProviderCredential" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "SaveEmailProviderCredentialInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "saveEmailProviderCredential" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "provider" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "activeForProduction" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "credentialConfigured" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "webhookSecretConfigured" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "defaultFromEmail" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "metadata" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsSaveEmailProviderCredentialMutation,
+  SettingsSaveEmailProviderCredentialMutationVariables
+>;
+export const SettingsRunEmailReadinessProbeDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsRunEmailReadinessProbe" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "providerInstallId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "runEmailReadinessProbe" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "providerInstallId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "providerInstallId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "providerInstallId" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "domainId" } },
+                { kind: "Field", name: { kind: "Name", value: "checkKey" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                { kind: "Field", name: { kind: "Name", value: "failureCode" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "failureMessage" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastCheckedAt" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRunEmailReadinessProbeMutation,
+  SettingsRunEmailReadinessProbeMutationVariables
+>;
+export const SettingsUpsertEmailSpacePolicyDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUpsertEmailSpacePolicy" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "UpsertEmailSpacePolicyInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "upsertEmailSpacePolicy" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "providerInstallId" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "enabled" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "registeredUsersAllowed" },
+                },
+                {
+                  kind: "Field",
+                  name: {
+                    kind: "Name",
+                    value: "privateSpaceMembershipRequired",
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "outsideSenderDefault" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "firstSendReviewRequired" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "policy" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "allowlists" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "valueType" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "value" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "reason" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                    ],
+                  },
+                },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUpsertEmailSpacePolicyMutation,
+  SettingsUpsertEmailSpacePolicyMutationVariables
+>;
+export const SettingsAddEmailSpaceSenderAllowlistDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsAddEmailSpaceSenderAllowlist" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: {
+                kind: "Name",
+                value: "AddEmailSpaceSenderAllowlistInput",
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "addEmailSpaceSenderAllowlist" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
+                { kind: "Field", name: { kind: "Name", value: "valueType" } },
+                { kind: "Field", name: { kind: "Name", value: "value" } },
+                { kind: "Field", name: { kind: "Name", value: "reason" } },
+                { kind: "Field", name: { kind: "Name", value: "createdAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsAddEmailSpaceSenderAllowlistMutation,
+  SettingsAddEmailSpaceSenderAllowlistMutationVariables
+>;
+export const SettingsRemoveEmailSpaceSenderAllowlistDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsRemoveEmailSpaceSenderAllowlist" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: { kind: "Variable", name: { kind: "Name", value: "id" } },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "removeEmailSpaceSenderAllowlist" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "id" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "id" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsRemoveEmailSpaceSenderAllowlistMutation,
+  SettingsRemoveEmailSpaceSenderAllowlistMutationVariables
 >;
 export const SettingsRequestCompanyBrainProductionMigrationDocument = {
   kind: "Document",

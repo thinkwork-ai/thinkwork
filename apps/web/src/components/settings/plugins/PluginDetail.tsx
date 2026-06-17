@@ -35,6 +35,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { ManagedApplicationPlanDialog } from "@/components/settings/managed-applications/ManagedApplicationPlanDialog";
+import { EmailChannelSettings } from "./email-channel/EmailChannelSettings";
 import { InstallKeyDialog } from "./InstallKeyDialog";
 import { UninstallPluginDialog } from "./UninstallPluginDialog";
 import {
@@ -137,6 +138,7 @@ export function PluginDetail() {
     premium?.installKeyRequired && !hasActiveEntitlement,
   );
   const isCompanyBrain = pluginKey === "company-brain";
+  const isEmailChannel = pluginKey === "email-channel";
 
   // Mutations don't invalidate urql's document cache — refetch every affected
   // query explicitly after each one.
@@ -576,6 +578,10 @@ export function PluginDetail() {
           </SettingsSection>
         ) : null}
 
+        {isEmailChannel && install && showOperatorActions ? (
+          <EmailChannelSettings />
+        ) : null}
+
         {install && authCapable ? (
           <SettingsSection label="Connection">
             {usesCredentialConnection ? (
@@ -879,9 +885,9 @@ function handlerRefBoolean(value: unknown, key: string): boolean {
   }
   return Boolean(
     ref &&
-    typeof ref === "object" &&
-    !Array.isArray(ref) &&
-    (ref as Record<string, unknown>)[key] === true,
+      typeof ref === "object" &&
+      !Array.isArray(ref) &&
+      (ref as Record<string, unknown>)[key] === true,
   );
 }
 

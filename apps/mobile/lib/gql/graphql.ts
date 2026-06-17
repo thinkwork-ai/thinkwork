@@ -2955,9 +2955,11 @@ export type Mutation = {
   revokePremiumPluginInstallKey: RevokePremiumPluginInstallKeyResult;
   rollbackThreadIdleLearningRun: ThreadIdleLearningRun;
   rotateTenantCredential: TenantCredential;
+  runEmailReadinessProbe: Array<EmailReadinessCheck>;
   runScheduledJob: RunScheduledJobResult;
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
+  saveEmailProviderCredential: EmailProviderInstall;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
@@ -3874,6 +3876,11 @@ export type MutationRotateTenantCredentialArgs = {
 };
 
 
+export type MutationRunEmailReadinessProbeArgs = {
+  providerInstallId: Scalars['ID']['input'];
+};
+
+
 export type MutationRunScheduledJobArgs = {
   id: Scalars['ID']['input'];
 };
@@ -3886,6 +3893,11 @@ export type MutationSaveAppletArgs = {
 
 export type MutationSaveAppletStateArgs = {
   input: SaveAppletStateInput;
+};
+
+
+export type MutationSaveEmailProviderCredentialArgs = {
+  input: SaveEmailProviderCredentialInput;
 };
 
 
@@ -6521,6 +6533,16 @@ export type SaveAppletStateInput = {
   instanceId: Scalars['ID']['input'];
   key: Scalars['String']['input'];
   value?: InputMaybe<Scalars['AWSJSON']['input']>;
+};
+
+export type SaveEmailProviderCredentialInput = {
+  apiKey: Scalars['String']['input'];
+  defaultFromEmail?: InputMaybe<Scalars['String']['input']>;
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  domain?: InputMaybe<ConfigureEmailDomainInput>;
+  provider: EmailChannelProvider;
+  providerInstallId?: InputMaybe<Scalars['ID']['input']>;
+  webhookSecretRef?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type ScheduledJob = {

@@ -293,6 +293,16 @@ input AddEmailSpaceSenderAllowlistInput {
   reason: String
 }
 
+input SaveEmailProviderCredentialInput {
+  providerInstallId: ID
+  provider: EmailChannelProvider!
+  apiKey: String!
+  displayName: String
+  webhookSecretRef: String
+  defaultFromEmail: String
+  domain: ConfigureEmailDomainInput
+}
+
 extend type Query {
   emailChannelSummary: EmailChannelSummary!
   emailSpaceEmailPolicy(spaceId: ID!): EmailSpacePolicy
@@ -315,4 +325,8 @@ extend type Mutation {
     input: AddEmailSpaceSenderAllowlistInput!
   ): EmailSpaceSenderAllowlist!
   removeEmailSpaceSenderAllowlist(id: ID!): Boolean!
+  saveEmailProviderCredential(
+    input: SaveEmailProviderCredentialInput!
+  ): EmailProviderInstall!
+  runEmailReadinessProbe(providerInstallId: ID!): [EmailReadinessCheck!]!
 }
