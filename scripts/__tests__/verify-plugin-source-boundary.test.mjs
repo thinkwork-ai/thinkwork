@@ -26,6 +26,7 @@ describe("verify-plugin-source-boundary", () => {
         dir,
         "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
       );
+      await writeFixtureFile(dir, "plugins/email-channel/src/manifest.ts");
 
       const result = await scanFixture(dir);
 
@@ -37,15 +38,24 @@ describe("verify-plugin-source-boundary", () => {
   it("blocks another plugin's source inside the wrong plugin package", async () => {
     await withFixture(async (dir) => {
       await writeFixtureFile(dir, "plugins/lastmile/src/plane-notes.md");
+      await writeFixtureFile(
+        dir,
+        "plugins/lastmile/src/email-channel-notes.md",
+      );
 
       const result = await scanFixture(dir);
 
-      assert.equal(result.violations.length, 1);
+      assert.equal(result.violations.length, 2);
       assert.equal(
         result.violations[0].path,
+        "plugins/lastmile/src/email-channel-notes.md",
+      );
+      assert.deepEqual(result.violations[0].pluginKeys, ["email-channel"]);
+      assert.equal(
+        result.violations[1].path,
         "plugins/lastmile/src/plane-notes.md",
       );
-      assert.deepEqual(result.violations[0].pluginKeys, ["plane"]);
+      assert.deepEqual(result.violations[1].pluginKeys, ["plane"]);
     });
   });
 

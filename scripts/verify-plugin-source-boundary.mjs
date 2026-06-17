@@ -15,11 +15,19 @@ const DEFAULT_SCAN_ROOTS = [
   "scripts",
   "terraform",
 ];
-const PLUGIN_KEYS = ["company-brain", "cognee", "lastmile", "plane", "twenty"];
+const PLUGIN_KEYS = [
+  "company-brain",
+  "cognee",
+  "email-channel",
+  "lastmile",
+  "plane",
+  "twenty",
+];
 const PLUGIN_SOURCE_ROOTS = new Map([
   ["company-brain", ["plugins/company-brain/"]],
   // Cognee is the internal infrastructure substrate for Company Brain.
   ["cognee", ["plugins/company-brain/"]],
+  ["email-channel", ["plugins/email-channel/"]],
   ["lastmile", ["plugins/lastmile/"]],
   ["plane", ["plugins/plane/"]],
   ["twenty", ["plugins/twenty/"]],
