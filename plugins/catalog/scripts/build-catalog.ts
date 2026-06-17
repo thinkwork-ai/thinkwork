@@ -7,6 +7,10 @@
  *   2. `PLUGIN_CATALOG_SIGNING_KEY` env var — the PEM content itself
  *
  * Output defaults to `dist/catalog.json` (override with `--out <path>`).
+ * Source provenance can be passed explicitly or inherited from GitHub Actions:
+ *   --source-repository / PLUGIN_CATALOG_SOURCE_REPOSITORY / GITHUB_REPOSITORY
+ *   --source-ref        / PLUGIN_CATALOG_SOURCE_REF        / GITHUB_REF_NAME / GITHUB_REF
+ *   --source-commit     / PLUGIN_CATALOG_SOURCE_COMMIT_SHA / GITHUB_SHA
  *
  * Usage: pnpm --filter @thinkwork/plugin-catalog build:catalog -- --key signing-key.pem
  */
@@ -15,7 +19,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { buildPluginCatalog, signPluginCatalog } from "../src/catalog";
+import {
+  buildPluginCatalog,
+  signPluginCatalog,
+  type PluginCatalogSourceProvenance,
+} from "../src/catalog";
 import type { PluginManifest } from "../src/contracts";
 import { allPluginManifests } from "../src/registry";
 
@@ -23,10 +31,12 @@ export function buildSignedCatalogJson(options: {
   manifests: readonly PluginManifest[];
   privateKeyPem: string;
   generatedAt?: Date | string;
+  source?: PluginCatalogSourceProvenance;
 }): string {
   const catalog = buildPluginCatalog({
     manifests: options.manifests,
     generatedAt: options.generatedAt,
+    source: options.source,
   });
   const document = signPluginCatalog({
     catalog,
@@ -44,6 +54,34 @@ function readArg(argv: string[], flag: string): string | undefined {
     throw new Error(`${flag} requires a value`);
   }
   return value;
+}
+
+function readSourceProvenance(
+  argv: string[],
+): PluginCatalogSourceProvenance | undefined {
+  const repository =
+    readArg(argv, "--source-repository") ??
+    process.env.PLUGIN_CATALOG_SOURCE_REPOSITORY ??
+    process.env.GITHUB_REPOSITORY;
+  const ref =
+    readArg(argv, "--source-ref") ??
+    process.env.PLUGIN_CATALOG_SOURCE_REF ??
+    process.env.GITHUB_REF_NAME ??
+    process.env.GITHUB_REF;
+  const commitSha =
+    readArg(argv, "--source-commit") ??
+    process.env.PLUGIN_CATALOG_SOURCE_COMMIT_SHA ??
+    process.env.GITHUB_SHA;
+
+  const values = [repository, ref, commitSha].filter(Boolean);
+  if (values.length === 0) return undefined;
+  if (!repository || !ref || !commitSha) {
+    throw new Error(
+      "Catalog source provenance requires repository, ref, and commit SHA. " +
+        "Pass --source-repository, --source-ref, and --source-commit or set the matching env vars.",
+    );
+  }
+  return { repository, ref, commitSha };
 }
 
 function main(): void {
@@ -65,6 +103,7 @@ function main(): void {
   const json = buildSignedCatalogJson({
     manifests: allPluginManifests,
     privateKeyPem,
+    source: readSourceProvenance(argv),
   });
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, json, "utf8");
