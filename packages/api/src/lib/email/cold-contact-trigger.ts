@@ -14,7 +14,7 @@ const db = getDb();
 export interface CreateColdContactThreadInput {
   tenantId: string;
   spaceId: string;
-  senderUserId: string;
+  senderUserId: string | null;
   emailBody: string;
   emailSubject: string;
   senderEmail: string;
@@ -56,8 +56,8 @@ export async function createColdContactThread(
         ),
         status: "in_progress",
         channel: "email",
-        created_by_type: "user",
-        created_by_id: input.senderUserId,
+        created_by_type: input.senderUserId ? "user" : "email_sender",
+        created_by_id: input.senderUserId ?? input.senderEmail,
         metadata: {
           emailColdContact: {
             senderEmail: input.senderEmail,
@@ -92,30 +92,34 @@ export async function createColdContactThread(
       .returning({ id: messages.id });
     if (!message) throw new Error("Cold-contact message insert failed");
 
+    const participants: Array<typeof threadParticipants.$inferInsert> = [
+      {
+        tenant_id: input.tenantId,
+        thread_id: thread.id,
+        space_id: input.spaceId,
+        participant_type: "agent",
+        agent_id: agentId,
+        role: "agent",
+        source: "space_auto_subscribe",
+        notification_preference: "subscribed",
+      },
+    ];
+    if (input.senderUserId) {
+      participants.unshift({
+        tenant_id: input.tenantId,
+        thread_id: thread.id,
+        space_id: input.spaceId,
+        participant_type: "user",
+        user_id: input.senderUserId,
+        role: "requester",
+        source: "email_cold_contact",
+        last_read_at: createdAt,
+      });
+    }
+
     await tx
       .insert(threadParticipants)
-      .values([
-        {
-          tenant_id: input.tenantId,
-          thread_id: thread.id,
-          space_id: input.spaceId,
-          participant_type: "user",
-          user_id: input.senderUserId,
-          role: "requester",
-          source: "email_cold_contact",
-          last_read_at: createdAt,
-        },
-        {
-          tenant_id: input.tenantId,
-          thread_id: thread.id,
-          space_id: input.spaceId,
-          participant_type: "agent",
-          agent_id: agentId,
-          role: "agent",
-          source: "space_auto_subscribe",
-          notification_preference: "subscribed",
-        },
-      ])
+      .values(participants)
       .onConflictDoNothing();
 
     return { threadId: thread.id, messageId: message.id };

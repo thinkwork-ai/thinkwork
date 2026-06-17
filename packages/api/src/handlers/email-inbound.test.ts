@@ -31,25 +31,31 @@ const {
     };
   }
 
+  function queryBuilder() {
+    const builder = {
+      from: vi.fn(() => builder),
+      innerJoin: vi.fn(() => builder),
+      where: vi.fn(resultBuilder),
+      limit: vi.fn(async () => []),
+      then: Promise.resolve([]).then.bind(Promise.resolve([])),
+    };
+    return builder;
+  }
+
   return {
     createColdContactThread: coldContact,
     db: {
       insert: vi.fn((table: unknown) => ({
         values: vi.fn((value: unknown) => {
           inserts.push({ table, values: value });
-          return {
+          const chain = {
+            onConflictDoNothing: vi.fn(() => chain),
             returning: vi.fn(async () => [{ id: "message-email-1" }]),
           };
+          return chain;
         }),
       })),
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({
-          innerJoin: vi.fn(() => ({
-            where: vi.fn(resultBuilder),
-          })),
-          where: vi.fn(resultBuilder),
-        })),
-      })),
+      select: vi.fn(queryBuilder),
       update: vi.fn(() => ({
         set: vi.fn(() => ({
           where: vi.fn(async () => undefined),
@@ -110,11 +116,52 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     slug: "agents.slug",
     tenant_id: "agents.tenant_id",
   },
+  emailDomains: {
+    domain: "email_domains.domain",
+    id: "email_domains.id",
+    provider_install_id: "email_domains.provider_install_id",
+    status: "email_domains.status",
+    tenant_id: "email_domains.tenant_id",
+  },
+  emailLedgerEvents: {
+    created_at: "email_ledger_events.created_at",
+    event_type: "email_ledger_events.event_type",
+    from_email: "email_ledger_events.from_email",
+    space_id: "email_ledger_events.space_id",
+    tenant_id: "email_ledger_events.tenant_id",
+  },
+  emailProviderEvents: {
+    id: "email_provider_events.id",
+    ledger_event_id: "email_provider_events.ledger_event_id",
+    provider_event_id: "email_provider_events.provider_event_id",
+    provider_install_id: "email_provider_events.provider_install_id",
+  },
+  emailProviderInstalls: {
+    active_for_production: "email_provider_installs.active_for_production",
+    id: "email_provider_installs.id",
+    status: "email_provider_installs.status",
+  },
   emailReplyTokens: {
     id: "email_reply_tokens.id",
     ses_message_id: "email_reply_tokens.ses_message_id",
     token_hash: "email_reply_tokens.token_hash",
     use_count: "email_reply_tokens.use_count",
+  },
+  emailSpacePolicies: {
+    enabled: "email_space_policies.enabled",
+    outside_sender_default: "email_space_policies.outside_sender_default",
+    private_space_membership_required:
+      "email_space_policies.private_space_membership_required",
+    registered_users_allowed: "email_space_policies.registered_users_allowed",
+    space_id: "email_space_policies.space_id",
+    tenant_id: "email_space_policies.tenant_id",
+  },
+  emailSpaceSenderAllowlists: {
+    id: "email_space_sender_allowlists.id",
+    space_id: "email_space_sender_allowlists.space_id",
+    tenant_id: "email_space_sender_allowlists.tenant_id",
+    value: "email_space_sender_allowlists.value",
+    value_type: "email_space_sender_allowlists.value_type",
   },
   messages: { id: "messages.id" },
   spaceMembers: {
@@ -171,21 +218,44 @@ vi.mock("../lib/email/cold-contact-trigger.js", () => ({
 
 import { handler } from "./email-inbound.js";
 
+function routeRow(overrides: Record<string, unknown> = {}) {
+  return {
+    recipientEmail: "finance@acme.thinkwork.ai",
+    tenantId: "tenant-acme",
+    tenantSlug: "acme",
+    spaceId: "space-finance",
+    spaceSlug: "finance",
+    spaceStatus: "active",
+    spaceAccessMode: "public",
+    providerInstallId: "provider-resend",
+    domainId: "domain-acme",
+    ...overrides,
+  };
+}
+
+function enabledPolicy(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: true,
+    registeredUsersAllowed: true,
+    privateSpaceMembershipRequired: true,
+    outsideSenderDefault: "deny",
+    ...overrides,
+  };
+}
+
+function rateLimitPassRows() {
+  return [[{ count: 0 }], [{ count: 0 }], [{ count: 0 }]];
+}
+
 describe("email-inbound routing", () => {
   beforeEach(() => resetMocks());
 
   it("routes cold-contact email for an enabled public Space", async () => {
     selectRows.push(
-      [
-        {
-          tenantId: "tenant-acme",
-          spaceId: "space-finance",
-          accessMode: "public",
-          status: "active",
-          emailTriggerStatus: "enabled",
-        },
-      ],
+      [routeRow()],
+      [enabledPolicy()],
       [{ id: "user-eric" }],
+      ...rateLimitPassRows(),
     );
 
     await handler(emailEvent("finance@acme.thinkwork.ai"));
@@ -200,54 +270,58 @@ describe("email-inbound routing", () => {
       sesMessageId: "ses-inbound-1",
       originalMessageId: "<source@example.com>",
     });
-    expect(insertedRows).toHaveLength(0);
+    expect(insertedRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            event_type: "inbound_authorized",
+            reason_code: "registered_user_allowed",
+          }),
+        }),
+      ]),
+    );
   });
 
   it("rejects cold-contact email when the Space trigger is disabled", async () => {
-    selectRows.push([
-      {
-        tenantId: "tenant-acme",
-        spaceId: "space-finance",
-        accessMode: "public",
-        status: "active",
-        emailTriggerStatus: "disabled",
-      },
-    ]);
+    selectRows.push([routeRow()], [enabledPolicy({ enabled: false })]);
 
     await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
-    expect(insertedRows).toHaveLength(0);
+    expect(insertedRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            event_type: "inbound_rejected",
+            reason_code: "space_policy_disabled",
+          }),
+        }),
+      ]),
+    );
   });
 
-  it("rejects cold-contact email when the Space trigger is deleted", async () => {
-    selectRows.push([
-      {
-        tenantId: "tenant-acme",
-        spaceId: "space-finance",
-        accessMode: "public",
-        status: "active",
-        emailTriggerStatus: "none",
-      },
-    ]);
+  it("rejects cold-contact email when the Space policy is missing", async () => {
+    selectRows.push([routeRow()], []);
 
     await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
-    expect(insertedRows).toHaveLength(0);
+    expect(insertedRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            event_type: "inbound_rejected",
+            reason_code: "space_policy_missing",
+          }),
+        }),
+      ]),
+    );
   });
 
   it("rejects private Space cold-contact from non-members", async () => {
     selectRows.push(
-      [
-        {
-          tenantId: "tenant-acme",
-          spaceId: "space-finance",
-          accessMode: "private",
-          status: "active",
-          emailTriggerStatus: "enabled",
-        },
-      ],
+      [routeRow({ spaceAccessMode: "private" })],
+      [enabledPolicy()],
       [{ id: "user-eric" }],
       [],
     );
@@ -255,12 +329,22 @@ describe("email-inbound routing", () => {
     await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
-    expect(insertedRows).toHaveLength(0);
+    expect(insertedRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            event_type: "inbound_rejected",
+            reason_code: "private_space_membership_required",
+          }),
+        }),
+      ]),
+    );
   });
 
   it("routes token-bearing Space replies before cold-contact handling", async () => {
     parsedEmail.inReplyTo = "<ses-outbound-1>";
     selectRows.push(
+      [routeRow()],
       [
         {
           id: "token-1",
@@ -317,6 +401,7 @@ describe("email-inbound routing", () => {
   it("enqueues non-thread reply wakeups without a legacy email_channel capability row", async () => {
     parsedEmail.inReplyTo = "<ses-outbound-1>";
     selectRows.push(
+      [routeRow()],
       [
         {
           id: "token-1",
@@ -366,59 +451,51 @@ describe("email-inbound routing", () => {
 
   it("rejects token-bearing Space replies when the sender does not match", async () => {
     parsedEmail.inReplyTo = "<ses-outbound-1>";
-    selectRows.push([
-      {
-        id: "token-1",
-        agent_id: "agent-finance",
-        context_id: "thread-finance",
-        context_type: "thread",
-        recipient_email: "someone-else@acme.com",
-        use_count: 0,
-        max_uses: 3,
-        expires_at: new Date(Date.now() + 60_000),
-      },
-    ]);
+    selectRows.push(
+      [routeRow()],
+      [
+        {
+          id: "token-1",
+          agent_id: "agent-finance",
+          context_id: "thread-finance",
+          context_type: "thread",
+          recipient_email: "someone-else@acme.com",
+          use_count: 0,
+          max_uses: 3,
+          expires_at: new Date(Date.now() + 60_000),
+        },
+      ],
+    );
 
     await handler(emailEvent("finance@acme.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
-    expect(insertedRows).toHaveLength(0);
+    expect(insertedRows).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            content: "Hello from email",
+            thread_id: "thread-finance",
+          }),
+        }),
+      ]),
+    );
   });
 
-  it("sends a retirement notice for legacy tenant-dot-space addresses", async () => {
+  it("silently drops unroutable legacy tenant-dot-space addresses", async () => {
     await handler(emailEvent("acme.finance@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
-    expect(mockSesSend).toHaveBeenCalledOnce();
-    const command = mockSesSend.mock.calls[0][0];
-    expect(command.input.Message.Body.Text.Data).toContain(
-      "Your email to acme.finance@agents.thinkwork.ai was not delivered.",
-    );
-    expect(command.input.Message.Body.Text.Data).toContain(
-      "space-slug@tenant-slug.thinkwork.ai",
-    );
+    expect(mockSesSend).not.toHaveBeenCalled();
   });
 
-  it("sends a retirement notice for legacy per-agent addresses", async () => {
+  it("silently drops unroutable legacy per-agent addresses", async () => {
     await handler(emailEvent("marco@agents.thinkwork.ai"));
 
     expect(createColdContactThread).not.toHaveBeenCalled();
     expect(insertedRows).toHaveLength(0);
-    expect(mockSesSend).toHaveBeenCalledOnce();
-    const command = mockSesSend.mock.calls[0][0];
-    expect(command.input).toMatchObject({
-      Source: "noreply@agents.thinkwork.ai",
-      Destination: { ToAddresses: ["eric@acme.com"] },
-      Message: {
-        Subject: {
-          Data: "This Thinkwork agent email address has changed",
-        },
-      },
-    });
-    expect(command.input.Message.Body.Text.Data).toContain(
-      "space-slug@tenant-slug.thinkwork.ai",
-    );
+    expect(mockSesSend).not.toHaveBeenCalled();
   });
 });
 

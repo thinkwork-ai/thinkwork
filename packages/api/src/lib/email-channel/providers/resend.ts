@@ -27,6 +27,12 @@ export interface ResendProviderDeps {
   ) => Promise<Partial<NormalizedInboundEmail>>;
 }
 
+export interface ResendWebhookCreateResult {
+  id: string;
+  signingSecret: string;
+  metadata: Record<string, unknown>;
+}
+
 export function createResendProvider(
   deps: ResendProviderDeps = {},
 ): EmailProviderAdapter {
@@ -106,6 +112,57 @@ async function sendResendEmail(
     providerMessageId: safeString(body.id),
     status: "sent",
     metadata: { response: body },
+  };
+}
+
+export async function createResendWebhook(input: {
+  credential: string;
+  endpoint: string;
+  events: string[];
+  fetchImpl?: typeof fetch;
+}): Promise<ResendWebhookCreateResult> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const response = await fetchImpl(`${RESEND_API_BASE}/webhooks`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.credential}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      endpoint: input.endpoint,
+      events: input.events,
+    }),
+  });
+  const body = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  if (!response.ok) {
+    throw new EmailProviderError(
+      "resend",
+      "RESEND_WEBHOOK_CREATE_FAILED",
+      "Resend webhook creation failed; production email must fail closed until webhook readiness passes.",
+      {
+        retryable: response.status >= 500,
+        metadata: {
+          status: response.status,
+          error: safeString(body.message ?? body.error),
+        },
+      },
+    );
+  }
+  const signingSecret = safeString(body.signing_secret);
+  if (!signingSecret) {
+    throw new EmailProviderError(
+      "resend",
+      "RESEND_WEBHOOK_SECRET_MISSING",
+      "Resend did not return a webhook signing secret.",
+    );
+  }
+  return {
+    id: safeString(body.id),
+    signingSecret,
+    metadata: sanitizeResendPayload(body),
   };
 }
 

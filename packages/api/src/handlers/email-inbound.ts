@@ -20,18 +20,24 @@ import {
   agents,
   agentCapabilities,
   agentWakeupRequests,
+  emailLedgerEvents,
   emailReplyTokens,
   messages,
-  spaceMembers,
-  spaces,
-  tenants,
   threads,
   users,
 } from "@thinkwork/database-pg/schema";
 import { verifyReplyToken, hashToken } from "../lib/email-tokens.js";
 import { createColdContactThread } from "../lib/email/cold-contact-trigger.js";
-import { parseSpaceRecipient } from "../lib/email/space-address.js";
 import { normalizeSesInbound } from "../lib/email-channel/providers/ses.js";
+import type {
+  NormalizedInboundEmail,
+  NormalizedProviderEvent,
+} from "../lib/email-channel/provider-contract.js";
+import { resolveInboundSpaceRoute } from "../lib/email-channel/inbound-routing.js";
+import type { InboundSpaceRoute } from "../lib/email-channel/inbound-routing.js";
+import { authorizeInboundSpaceSender } from "../lib/email-channel/inbound-authz.js";
+import { checkInboundEmailRateLimits } from "../lib/email-channel/rate-limits.js";
+import { recordInboundProviderEvent } from "../lib/email-channel/idempotency.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 
 function workspaceBucket(): string {
@@ -62,19 +68,82 @@ async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
   const normalizedInbound = await normalizeSesInbound(record);
   const sesMessageId = normalizedInbound.providerMessageId;
 
-  const recipient = parseThinkworkRecipient(sesNotification.receipt.recipients);
-  if (!recipient) return;
+  const parsedEmail = await fetchEmailBody(mail, sesMessageId);
+  await processNormalizedInboundEmail({
+    inbound: {
+      ...normalizedInbound,
+      fromEmail:
+        normalizedInbound.fromEmail || extractEmailAddress(mail.source || ""),
+      subject: parsedEmail.subject || normalizedInbound.subject,
+      textBody: parsedEmail.textBody,
+      headers: {
+        ...normalizedInbound.headers,
+        "in-reply-to": parsedEmail.inReplyTo || getHeader(mail, "in-reply-to"),
+        "x-thinkwork-reply-token": getHeader(mail, "x-thinkwork-reply-token"),
+      },
+      metadata: {
+        ...normalizedInbound.metadata,
+        s3Key: parsedEmail.s3Key,
+        originalMessageId: parsedEmail.originalMessageId,
+      },
+    },
+    providerEvent: {
+      provider: "ses",
+      providerEventId: normalizedInbound.providerEventId,
+      providerMessageId: normalizedInbound.providerMessageId,
+      eventType: "received",
+      occurredAt: normalizedInbound.receivedAt,
+      inbound: normalizedInbound,
+      metadata: { receipt: sesNotification.receipt },
+    },
+  });
+}
 
-  const senderEmail = extractEmailAddress(mail.source || "");
+export async function processNormalizedInboundEmail(input: {
+  inbound: NormalizedInboundEmail;
+  providerEvent?: NormalizedProviderEvent;
+}): Promise<void> {
+  const senderEmail = extractEmailAddress(input.inbound.fromEmail);
   if (!senderEmail) {
     console.log("[email-inbound] No sender, dropping");
     return;
   }
 
-  const parsedEmail = await fetchEmailBody(mail, sesMessageId);
-  const replyTokenHeader = getHeader(mail, "x-thinkwork-reply-token");
-  const inReplyTo = parsedEmail.inReplyTo || getHeader(mail, "in-reply-to");
-  const spaceAddress = parseSpaceRecipient(recipient.recipientEmail);
+  const route = await resolveInboundSpaceRoute({
+    db,
+    toEmails: input.inbound.toEmails,
+  });
+  if (!route) {
+    console.log("[email-inbound] inbound_rejected:recipient_not_routable");
+    return;
+  }
+
+  if (input.providerEvent) {
+    const idempotency = await recordInboundProviderEvent({
+      db,
+      tenantId: route.tenantId,
+      providerInstallId: route.providerInstallId,
+      event: { ...input.providerEvent, inbound: input.inbound },
+    });
+    if (idempotency.duplicate) {
+      console.log(
+        `[email-inbound] Duplicate provider event ${input.providerEvent.providerEventId}, skipping`,
+      );
+      return;
+    }
+  }
+
+  await recordInboundLedger({
+    eventType: "inbound_received",
+    route,
+    inbound: input.inbound,
+    senderEmail,
+    reasonCode: "provider_verified",
+  });
+
+  const replyTokenHeader =
+    input.inbound.headers["x-thinkwork-reply-token"] || "";
+  const inReplyTo = input.inbound.headers["in-reply-to"] || "";
 
   let inReplyToRoute: Awaited<ReturnType<typeof consumeTokenByInReplyTo>>;
   try {
@@ -84,7 +153,7 @@ async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
     throw err;
   }
   let headerRoute: Awaited<ReturnType<typeof verifyAndConsumeToken>> = null;
-  if (spaceAddress && !inReplyToRoute && replyTokenHeader) {
+  if (!inReplyToRoute && replyTokenHeader) {
     headerRoute = await verifyAndConsumeToken(
       replyTokenHeader,
       undefined,
@@ -104,69 +173,117 @@ async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
       (await appendReplyToThread({
         threadId: replyRoute.contextId,
         senderEmail,
-        sesMessageId,
-        subject: parsedEmail.subject,
-        textBody: parsedEmail.textBody,
-        originalMessageId: parsedEmail.originalMessageId,
+        sesMessageId: input.inbound.providerMessageId,
+        subject: input.inbound.subject,
+        textBody: input.inbound.textBody,
+        originalMessageId: originalMessageId(input.inbound),
       }))
     ) {
+      await recordInboundLedger({
+        eventType: "inbound_authorized",
+        route,
+        inbound: input.inbound,
+        senderEmail,
+        reasonCode: "reply_token_thread",
+      });
       return;
     }
 
     await enqueueReplyWakeup({
       agentId: replyRoute.agentId,
       senderEmail,
-      sesMessageId,
-      subject: parsedEmail.subject,
-      textBody: parsedEmail.textBody,
-      s3Key: parsedEmail.s3Key,
-      originalMessageId: parsedEmail.originalMessageId,
+      sesMessageId: input.inbound.providerMessageId,
+      subject: input.inbound.subject,
+      textBody: input.inbound.textBody,
+      s3Key: s3Key(input.inbound),
+      originalMessageId: originalMessageId(input.inbound),
       replyTokenContextId: replyRoute.contextId,
       replyTokenContextType: replyRoute.contextType,
       isAllowlisted: false,
     });
-    return;
-  }
-
-  if (spaceAddress) {
-    await processColdContact({
-      ...spaceAddress,
+    await recordInboundLedger({
+      eventType: "inbound_authorized",
+      route,
+      inbound: input.inbound,
       senderEmail,
-      sesMessageId,
-      subject: parsedEmail.subject,
-      textBody: parsedEmail.textBody,
-      originalMessageId: parsedEmail.originalMessageId,
+      reasonCode: "reply_token_wakeup",
     });
     return;
   }
 
-  await sendLegacyAddressRetirementNotice({
-    recipientEmail: recipient.recipientEmail,
+  await processColdContact({
+    route,
     senderEmail,
-    subject: parsedEmail.subject,
+    inbound: input.inbound,
   });
+}
+
+async function processColdContact(input: {
+  route: InboundSpaceRoute;
+  senderEmail: string;
+  inbound: NormalizedInboundEmail;
+}) {
+  const authz = await authorizeInboundSpaceSender({
+    db,
+    route: input.route,
+    senderEmail: input.senderEmail,
+  });
+  if (!authz.authorized) {
+    await recordInboundLedger({
+      eventType: "inbound_rejected",
+      route: input.route,
+      inbound: input.inbound,
+      senderEmail: input.senderEmail,
+      reasonCode: authz.reasonCode,
+    });
+    return;
+  }
+
+  const rateLimit = await checkInboundEmailRateLimits({
+    db,
+    tenantId: input.route.tenantId,
+    spaceId: input.route.spaceId,
+    senderEmail: input.senderEmail,
+  });
+  if (!rateLimit.allowed) {
+    await recordInboundLedger({
+      eventType: "inbound_rejected",
+      route: input.route,
+      inbound: input.inbound,
+      senderEmail: input.senderEmail,
+      reasonCode: `rate_limit_${rateLimit.scope}`,
+      metadata: { count: rateLimit.count, limit: rateLimit.limit },
+    });
+    return;
+  }
+
+  await recordInboundLedger({
+    eventType: "inbound_authorized",
+    route: input.route,
+    inbound: input.inbound,
+    senderEmail: input.senderEmail,
+    reasonCode: authz.reasonCode,
+    metadata: { actor: authz.actor },
+  });
+
+  const thread = await createColdContactThread({
+    tenantId: input.route.tenantId,
+    spaceId: input.route.spaceId,
+    senderUserId: authz.senderUserId,
+    senderEmail: input.senderEmail,
+    emailSubject: input.inbound.subject,
+    emailBody: input.inbound.textBody,
+    sesMessageId: input.inbound.providerMessageId,
+    originalMessageId: originalMessageId(input.inbound),
+  });
+  console.log(
+    `[email-inbound] cold_contact_thread_created tenant=${input.route.tenantSlug} space=${input.route.spaceSlug} sender=${input.senderEmail} thread=${thread.threadId}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function parseThinkworkRecipient(recipients: string[] | undefined) {
-  if (!recipients || recipients.length === 0) {
-    console.log("[email-inbound] No recipients, dropping");
-    return null;
-  }
-
-  const recipientEmail = recipients[0].toLowerCase();
-  if (!/^[^@\s]+@[^@\s]+\.thinkwork\.ai$/.test(recipientEmail)) {
-    console.log(
-      `[email-inbound] Non-thinkwork.ai recipient: ${recipientEmail}, dropping`,
-    );
-    return null;
-  }
-
-  return { recipientEmail };
-}
 
 function getHeader(
   mail: SESEvent["Records"][0]["ses"]["mail"],
@@ -184,6 +301,56 @@ function extractEmailAddress(value: string): string {
   const trimmed = value.trim().toLowerCase();
   const angleMatch = trimmed.match(/<([^>]+)>/);
   return (angleMatch?.[1] || trimmed).trim().toLowerCase();
+}
+
+function originalMessageId(inbound: NormalizedInboundEmail): string {
+  return typeof inbound.metadata.originalMessageId === "string"
+    ? inbound.metadata.originalMessageId
+    : (inbound.headers["message-id"] ?? "");
+}
+
+function s3Key(inbound: NormalizedInboundEmail): string {
+  return typeof inbound.metadata.s3Key === "string"
+    ? inbound.metadata.s3Key
+    : "";
+}
+
+async function recordInboundLedger(input: {
+  eventType: "inbound_received" | "inbound_authorized" | "inbound_rejected";
+  route: InboundSpaceRoute;
+  inbound: NormalizedInboundEmail;
+  senderEmail: string;
+  reasonCode: string;
+  metadata?: Record<string, unknown>;
+}) {
+  await db.insert(emailLedgerEvents).values({
+    tenant_id: input.route.tenantId,
+    space_id: input.route.spaceId,
+    provider_install_id: input.route.providerInstallId,
+    event_type: input.eventType,
+    provider_message_id: input.inbound.providerMessageId,
+    provider_event_id: input.inbound.providerEventId,
+    subject: input.inbound.subject,
+    from_email: input.senderEmail,
+    to_emails: input.inbound.toEmails,
+    reason_code: input.reasonCode,
+    metadata: {
+      provider: input.inbound.provider,
+      recipient: input.route.recipientEmail,
+      route: {
+        tenantSlug: input.route.tenantSlug,
+        spaceSlug: input.route.spaceSlug,
+        domainId: input.route.domainId,
+      },
+      attachments: input.inbound.attachments.map((attachment) => ({
+        id: attachment.id ?? null,
+        filename: attachment.filename ?? null,
+        contentType: attachment.contentType ?? null,
+        contentLength: attachment.contentLength ?? null,
+      })),
+      ...input.metadata,
+    },
+  });
 }
 
 async function fetchEmailBody(
@@ -229,136 +396,6 @@ async function fetchEmailBody(
   }
 
   return { s3Key, subject, textBody, originalMessageId, inReplyTo };
-}
-
-async function sendLegacyAddressRetirementNotice(input: {
-  recipientEmail: string;
-  senderEmail: string;
-  subject: string;
-}) {
-  console.log(
-    `[email-inbound] legacy_agent_address_retired recipient=${input.recipientEmail} sender=${input.senderEmail}`,
-  );
-  try {
-    const { SESClient, SendEmailCommand } = await import("@aws-sdk/client-ses");
-    const ses = new SESClient({});
-    await ses.send(
-      new SendEmailCommand({
-        Source: "noreply@agents.thinkwork.ai",
-        Destination: { ToAddresses: [input.senderEmail] },
-        Message: {
-          Subject: {
-            Data: "This Thinkwork agent email address has changed",
-            Charset: "UTF-8",
-          },
-          Body: {
-            Text: {
-              Data: [
-                `Your email to ${input.recipientEmail} was not delivered.`,
-                "",
-                "Thinkwork agent email addresses now use Space addresses in the form:",
-                "space-slug@tenant-slug.thinkwork.ai",
-                "",
-                "Please contact the recipient for the current Space email address and resend your message there.",
-                "",
-                input.subject ? `Original subject: ${input.subject}` : "",
-              ]
-                .filter(Boolean)
-                .join("\n"),
-              Charset: "UTF-8",
-            },
-          },
-        },
-      }),
-    );
-  } catch (err) {
-    console.error(
-      "[email-inbound] Failed to send legacy-address retirement notice:",
-      err,
-    );
-  }
-}
-
-async function processColdContact(input: {
-  tenantSlug: string;
-  spaceSlug: string;
-  senderEmail: string;
-  sesMessageId: string;
-  subject: string;
-  textBody: string;
-  originalMessageId: string;
-}) {
-  const [space] = await db
-    .select({
-      tenantId: tenants.id,
-      spaceId: spaces.id,
-      accessMode: spaces.access_mode,
-      status: spaces.status,
-      emailTriggerStatus: spaces.email_trigger_status,
-    })
-    .from(tenants)
-    .innerJoin(
-      spaces,
-      and(eq(spaces.tenant_id, tenants.id), eq(spaces.slug, input.spaceSlug)),
-    )
-    .where(eq(tenants.slug, input.tenantSlug))
-    .limit(1);
-
-  if (!space || space.status === "archived") {
-    logColdContactReject("space_not_found", input);
-    return;
-  }
-  if (space.emailTriggerStatus !== "enabled") {
-    logColdContactReject("triggers_disabled", input);
-    return;
-  }
-
-  const [sender] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(
-      and(
-        eq(users.tenant_id, space.tenantId),
-        sql`lower(${users.email}) = ${input.senderEmail}`,
-      ),
-    )
-    .limit(1);
-  if (!sender) {
-    logColdContactReject("sender_not_registered", input);
-    return;
-  }
-
-  if (space.accessMode === "private") {
-    const [member] = await db
-      .select({ id: spaceMembers.id })
-      .from(spaceMembers)
-      .where(
-        and(
-          eq(spaceMembers.tenant_id, space.tenantId),
-          eq(spaceMembers.space_id, space.spaceId),
-          eq(spaceMembers.user_id, sender.id),
-        ),
-      )
-      .limit(1);
-    if (!member) {
-      logColdContactReject("not_space_member", input);
-      return;
-    }
-  }
-
-  const thread = await createColdContactThread({
-    tenantId: space.tenantId,
-    spaceId: space.spaceId,
-    senderUserId: sender.id,
-    senderEmail: input.senderEmail,
-    emailSubject: input.subject,
-    emailBody: input.textBody,
-    sesMessageId: input.sesMessageId,
-    originalMessageId: input.originalMessageId,
-  });
-  console.log(
-    `[email-inbound] cold_contact_thread_created tenant=${input.tenantSlug} space=${input.spaceSlug} sender=${input.senderEmail} thread=${thread.threadId}`,
-  );
 }
 
 async function appendReplyToThread(input: {
@@ -604,20 +641,6 @@ async function insertWakeupRequest(input: {
     }
     throw insertErr;
   }
-}
-
-function logColdContactReject(
-  reason: string,
-  input: {
-    tenantSlug: string;
-    spaceSlug: string;
-    senderEmail: string;
-    sesMessageId: string;
-  },
-) {
-  console.log(
-    `[email-inbound] cold_contact_rejected:${reason} tenant=${input.tenantSlug} space=${input.spaceSlug} sender=${input.senderEmail} ses=${input.sesMessageId}`,
-  );
 }
 
 /**
