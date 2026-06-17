@@ -321,11 +321,14 @@ describe("U10 — host CSP wired for computer_site", () => {
     expect(source).not.toMatch(/module\.admin_site\.distribution_domain/);
     // connect-src must allow API Gateway for GraphQL queries/mutations,
     // AppSync for the streaming wire, Cognito IdP for SDK calls, and
-    // Cognito Hosted UI for the OAuth callback token exchange.
+    // Cognito Hosted UI for the OAuth callback token exchange. It also
+    // allows regional S3 endpoints because thread attachments upload
+    // directly to presigned S3 PUT URLs from the browser.
     expect(source).toMatch(/execute-api/);
     expect(source).toMatch(/appsync-api/);
     expect(source).toMatch(/cognito-idp/);
     expect(source).toMatch(/auth\.\$\{var\.region\}\.amazoncognito\.com/);
+    expect(source).toMatch(/s3\.\$\{var\.region\}\.amazonaws\.com/);
     // The parent still allows map tiles so existing same-origin artifact
     // routes that are not generated-code iframes can render maps, but
     // LLM-authored generated apps themselves must run through the sandbox.
