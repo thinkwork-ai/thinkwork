@@ -40,16 +40,20 @@ export function SettingsHeader({
   title,
   description,
   actions,
+  actionKey,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
+  actionKey?: string;
 }) {
   usePageHeaderActions({
     title,
     breadcrumbs: [{ label: title }],
     action: actions ?? undefined,
-    actionKey: actions ? `settings-header:${title}` : undefined,
+    actionKey: actions
+      ? `settings-header:${title}:${actionKey ?? "action"}`
+      : undefined,
   });
   return <SettingsPageTitle title={title} description={description} />;
 }

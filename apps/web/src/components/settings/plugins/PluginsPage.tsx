@@ -2,11 +2,19 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { Badge, Button, ToggleGroup, ToggleGroupItem } from "@thinkwork/ui";
-import { ArrowDownToLine, ExternalLink, RefreshCw } from "lucide-react";
+import {
+  Badge,
+  Button,
+  ToggleGroup,
+  ToggleGroupItem,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@thinkwork/ui";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import {
-  SettingsInstallPluginMutation,
   SettingsMyPluginActivationsQuery,
   SettingsPluginCatalogQuery,
   SettingsRefreshPluginCatalogMutation,
@@ -44,9 +52,6 @@ export function PluginsPage() {
     query: SettingsMyPluginActivationsQuery,
     requestPolicy: "cache-and-network",
   });
-  const [installState, installPlugin] = useMutation(
-    SettingsInstallPluginMutation,
-  );
   const [refreshCatalogState, refreshRemoteCatalog] = useMutation(
     SettingsRefreshPluginCatalogMutation,
   );
@@ -64,7 +69,6 @@ export function PluginsPage() {
       .map((activation) => activation.pluginKey),
   );
 
-  const installedCount = catalog.filter((entry) => entry.install).length;
   const visible = selfServiceOnly
     ? catalog.filter(
         (entry) => Boolean(entry.install) && pluginEntryIsAuthCapable(entry),
@@ -89,27 +93,6 @@ export function PluginsPage() {
     refreshActivations({ requestPolicy: "network-only" });
   }
 
-  async function install(pluginKey: string) {
-    const idempotencyKey = [
-      "plugins",
-      pluginKey,
-      "install",
-      Date.now().toString(36),
-    ].join("-");
-    const result = await installPlugin({
-      input: { pluginKey, idempotencyKey },
-    });
-    if (result.error) {
-      toast.error(`Could not install ${pluginKey}: ${result.error.message}`);
-      return;
-    }
-    toast.success(`Installing ${pluginKey}.`);
-    // urql's document cache does not invalidate on its own — refetch every
-    // affected query explicitly.
-    refreshCatalog({ requestPolicy: "network-only" });
-    refreshActivations({ requestPolicy: "network-only" });
-  }
-
   function openPlugin(pluginKey: string) {
     void navigate({
       to: "/settings/plugins/$pluginKey",
@@ -126,17 +109,20 @@ export function PluginsPage() {
             ? "Connect installed plugins to your account."
             : "Install applications from the plugin catalog and connect them to your account."
         }
+        actionKey={`catalog-refresh:${catalogMetadata ? catalogMetadataActionKey(catalogMetadata) : "metadata-pending"}:${refreshCatalogState.fetching ? "refreshing" : "idle"}:${showOperatorActions ? "operator" : "member"}`}
         actions={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={refreshAll}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <RefreshCw className="size-4" />
-          </Button>
+          <CatalogRefreshAction
+            metadata={catalogMetadata}
+            refreshing={refreshCatalogState.fetching}
+            showTrustedRefresh={showOperatorActions}
+            onRefresh={() => {
+              if (showOperatorActions) {
+                void refreshTrustedCatalog();
+              } else {
+                refreshAll();
+              }
+            }}
+          />
         }
       />
 
@@ -158,20 +144,12 @@ export function PluginsPage() {
                 All
               </ToggleGroupItem>
               <ToggleGroupItem value="installed" className="px-3 text-xs">
-                Installed{installedCount ? ` (${installedCount})` : ""}
+                Installed
               </ToggleGroupItem>
             </ToggleGroup>
           )
         }
       >
-        {catalogMetadata && !catalogUnavailable ? (
-          <CatalogMetadataStrip
-            metadata={catalogMetadata}
-            showRefresh={showOperatorActions}
-            refreshing={refreshCatalogState.fetching}
-            onRefresh={() => void refreshTrustedCatalog()}
-          />
-        ) : null}
         {!roleResolved ? (
           <div className="p-4 text-sm text-muted-foreground">
             Loading plugins...
@@ -324,23 +302,6 @@ export function PluginsPage() {
                           {installStateLabel(entry.install.state)}
                         </Badge>
                       </>
-                    ) : showOperatorActions ? (
-                      entry.premium?.installKeyRequired ? (
-                        <Badge variant="outline">Not installed</Badge>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={installState.fetching}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void install(entry.pluginKey);
-                          }}
-                        >
-                          <ArrowDownToLine className="mr-2 size-4" />
-                          Install
-                        </Button>
-                      )
                     ) : (
                       <Badge variant="outline">Not installed</Badge>
                     )}
@@ -355,98 +316,152 @@ export function PluginsPage() {
   );
 }
 
-function CatalogMetadataStrip({
+function CatalogRefreshAction({
   metadata,
-  showRefresh,
   refreshing,
+  showTrustedRefresh,
   onRefresh,
 }: {
-  metadata: {
-    source: string;
-    repository?: string | null;
-    ref?: string | null;
-    commitSha?: string | null;
-    releaseTag?: string | null;
-    assetName?: string | null;
-    catalogSha256: string;
-    generatedAt: string;
-    fetchedAt?: string | null;
-    stale: boolean;
-    lastRefreshStatus?: string | null;
-    message?: string | null;
-    rateLimitRemaining?: string | null;
-    rateLimitReset?: string | null;
-  };
-  showRefresh: boolean;
+  metadata: CatalogMetadata | null;
   refreshing: boolean;
+  showTrustedRefresh: boolean;
   onRefresh: () => void;
 }) {
+  const title = metadata
+    ? `Plugin catalog metadata: ${metadataSummary(metadata)}`
+    : "Refresh plugins";
+  return (
+    <TooltipProvider delayDuration={1000}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onRefresh}
+            aria-label={
+              showTrustedRefresh ? "Refresh plugin catalog" : "Refresh plugins"
+            }
+            disabled={refreshing}
+          >
+            <RefreshCw
+              className={`size-4 ${refreshing ? "animate-spin" : ""}`}
+            />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="bottom"
+          align="end"
+          className="max-w-[18rem] border border-border bg-popover px-2.5 py-2 text-popover-foreground shadow-md"
+          hideArrow
+        >
+          {metadata ? <CatalogMetadataDetails metadata={metadata} /> : title}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+type CatalogMetadata = {
+  source: string;
+  repository?: string | null;
+  ref?: string | null;
+  commitSha?: string | null;
+  releaseTag?: string | null;
+  assetName?: string | null;
+  catalogSha256: string;
+  generatedAt: string;
+  fetchedAt?: string | null;
+  stale: boolean;
+  lastRefreshStatus?: string | null;
+  message?: string | null;
+  rateLimitRemaining?: string | null;
+  rateLimitReset?: string | null;
+};
+
+function CatalogMetadataDetails({ metadata }: { metadata: CatalogMetadata }) {
   const commit = metadata.commitSha?.slice(0, 12) ?? null;
   const digest = metadata.catalogSha256.replace(/^sha256:/, "").slice(0, 12);
-  const channel =
-    metadata.repository && metadata.releaseTag
-      ? `${metadata.repository} · ${metadata.releaseTag}`
-      : metadata.repository || sourceLabel(metadata.source);
-
   return (
-    <div className="border-b border-border px-4 py-3">
-      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-foreground">
-              Catalog source
-            </p>
-            <Badge
-              variant="outline"
-              className={
-                metadata.stale
-                  ? "border-amber-500/40 text-amber-500"
-                  : metadata.source.startsWith("github")
-                    ? "border-emerald-500/40 text-emerald-500"
-                    : undefined
-              }
-            >
-              {metadata.stale ? "Stale fallback" : sourceLabel(metadata.source)}
-            </Badge>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {channel}
-            {commit ? ` · ${commit}` : ""}
-            {metadata.ref ? ` · ${metadata.ref}` : ""}
-          </p>
-          {metadata.message ? (
-            <p className="mt-1 text-sm text-amber-500">{metadata.message}</p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 flex-col items-start gap-2 md:items-end">
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground md:justify-end">
-            <span>Generated {formatDateTime(metadata.generatedAt)}</span>
-            {metadata.fetchedAt ? (
-              <span>Fetched {formatDateTime(metadata.fetchedAt)}</span>
-            ) : null}
-            <span>Digest {digest}</span>
-            {metadata.rateLimitRemaining ? (
-              <span>GitHub remaining {metadata.rateLimitRemaining}</span>
-            ) : null}
-          </div>
-          {showRefresh ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={refreshing}
-              onClick={onRefresh}
-            >
-              <RefreshCw
-                className={`mr-2 size-4 ${refreshing ? "animate-spin" : ""}`}
-              />
-              Refresh catalog
-            </Button>
-          ) : null}
-        </div>
+    <div className="grid min-w-56 gap-1.5 text-xs leading-tight">
+      <div className="grid gap-0.5">
+        <p className="font-medium text-popover-foreground">Catalog metadata</p>
+        <p className="text-muted-foreground">
+          Generated {formatDateTime(metadata.generatedAt)}
+          {metadata.fetchedAt
+            ? ` · Fetched ${formatDateTime(metadata.fetchedAt)}`
+            : ""}
+        </p>
       </div>
+      {metadata.stale ? <p className="text-amber-500">Stale fallback</p> : null}
+      <MetadataLine label="Digest" value={digest} />
+      {metadata.repository ? (
+        <MetadataLine label="Repository" value={metadata.repository} />
+      ) : null}
+      {metadata.releaseTag ? (
+        <MetadataLine label="Release" value={metadata.releaseTag} />
+      ) : null}
+      {metadata.assetName ? (
+        <MetadataLine label="Asset" value={metadata.assetName} />
+      ) : null}
+      {metadata.ref ? <MetadataLine label="Ref" value={metadata.ref} /> : null}
+      {commit ? <MetadataLine label="Commit" value={commit} /> : null}
+      {metadata.lastRefreshStatus ? (
+        <MetadataLine label="Status" value={metadata.lastRefreshStatus} />
+      ) : null}
+      {metadata.rateLimitRemaining ? (
+        <MetadataLine
+          label="GitHub remaining"
+          value={metadata.rateLimitRemaining}
+        />
+      ) : null}
+      {metadata.rateLimitReset ? (
+        <MetadataLine
+          label="GitHub reset"
+          value={formatRateLimitReset(metadata.rateLimitReset)}
+        />
+      ) : null}
+      {metadata.message ? (
+        <p className="text-amber-500">{metadata.message}</p>
+      ) : null}
     </div>
   );
+}
+
+function MetadataLine({ label, value }: { label: string; value: string }) {
+  return (
+    <p className="truncate text-popover-foreground">
+      <span className="text-muted-foreground">{label}</span>{" "}
+      <span>{value}</span>
+    </p>
+  );
+}
+
+function metadataSummary(metadata: CatalogMetadata): string {
+  const digest = metadata.catalogSha256.replace(/^sha256:/, "").slice(0, 12);
+  const generated = formatDateTime(metadata.generatedAt);
+  return `${metadata.stale ? "stale fallback" : sourceLabel(metadata.source)}, generated ${generated}, digest ${digest}`;
+}
+
+function catalogMetadataActionKey(metadata: CatalogMetadata): string {
+  return [
+    metadata.source,
+    metadata.repository,
+    metadata.ref,
+    metadata.commitSha,
+    metadata.releaseTag,
+    metadata.assetName,
+    metadata.catalogSha256,
+    metadata.generatedAt,
+    metadata.fetchedAt,
+    metadata.stale ? "stale" : "fresh",
+    metadata.lastRefreshStatus,
+    metadata.message,
+    metadata.rateLimitRemaining,
+    metadata.rateLimitReset,
+  ]
+    .filter(Boolean)
+    .join("|");
 }
 
 function catalogListDescription(entry: {
@@ -483,6 +498,12 @@ function formatDateTime(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatRateLimitReset(value: string): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value;
+  return formatDateTime(new Date(numeric * 1000).toISOString());
 }
 
 function pluginEntryIsAuthCapable(entry: {

@@ -9,7 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  installMock,
+  headerConfigRef,
   navigateMock,
   queryDocs,
   refreshCatalogMutationMock,
@@ -17,10 +17,14 @@ const {
   toggleRef,
   useQueryMock,
 } = vi.hoisted(() => ({
-  installMock: vi.fn(),
+  headerConfigRef: {
+    current: null as {
+      action?: React.ReactNode;
+      actionKey?: string;
+    } | null,
+  },
   navigateMock: vi.fn(),
   queryDocs: {
-    SettingsInstallPluginMutation: Symbol("installPlugin"),
     SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
     SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
     SettingsRefreshPluginCatalogMutation: Symbol("refreshPluginCatalog"),
@@ -33,9 +37,6 @@ const {
 
 vi.mock("urql", () => ({
   useMutation: (doc: unknown) => {
-    if (doc === queryDocs.SettingsInstallPluginMutation) {
-      return [{ fetching: false }, installMock];
-    }
     if (doc === queryDocs.SettingsRefreshPluginCatalogMutation) {
       return [{ fetching: false }, refreshCatalogMutationMock];
     }
@@ -103,12 +104,27 @@ vi.mock("@thinkwork/ui", async (importOriginal) => ({
       {children}
     </button>
   ),
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  TooltipProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock("@/lib/settings-queries", () => queryDocs);
 
 vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: vi.fn(),
+  usePageHeaderActions: (config: {
+    action?: React.ReactNode;
+    actionKey?: string;
+  }) => {
+    headerConfigRef.current = config;
+  },
 }));
 
 vi.mock("@/context/TenantContext", () => ({
@@ -126,9 +142,11 @@ const refreshActivations = vi.fn();
 
 function mockQueries({
   catalogError = false,
+  catalogFetching = false,
   activations = [] as Array<{ pluginKey: string; status: string }>,
 }: {
   catalogError?: boolean;
+  catalogFetching?: boolean;
   activations?: Array<{ pluginKey: string; status: string }>;
 } = {}) {
   useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
@@ -145,7 +163,7 @@ function mockQueries({
                 pluginCatalog: catalogEntries,
                 pluginCatalogMetadata: catalogMetadata,
               },
-              fetching: false,
+              fetching: catalogFetching,
             },
         refreshCatalog,
       ];
@@ -161,7 +179,7 @@ function mockQueries({
 }
 
 beforeEach(() => {
-  installMock.mockReset();
+  headerConfigRef.current = null;
   navigateMock.mockReset();
   refreshCatalogMutationMock.mockReset();
   refreshCatalog.mockReset();
@@ -169,16 +187,6 @@ beforeEach(() => {
   useQueryMock.mockReset();
   tenantState.isOperator = true;
   tenantState.roleResolved = true;
-  installMock.mockResolvedValue({
-    data: {
-      installPlugin: {
-        id: "install-2",
-        pluginKey: "twenty",
-        pinnedVersion: "1.0.0",
-        state: "installing",
-      },
-    },
-  });
   refreshCatalogMutationMock.mockResolvedValue({
     data: {
       refreshPluginCatalog: {
@@ -192,6 +200,13 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+function renderHeaderAction() {
+  if (!headerConfigRef.current?.action) {
+    throw new Error("Expected PluginsPage to publish a header action");
+  }
+  return render(<>{headerConfigRef.current.action}</>);
+}
 
 describe("PluginsPage", () => {
   it("renders the degraded catalog state with a retry", () => {
@@ -232,13 +247,24 @@ describe("PluginsPage", () => {
     expect(screen.getAllByText("Update available").length).toBe(1);
   });
 
-  it("shows catalog source freshness and installed versus latest versions", () => {
+  it("keeps catalog source metadata on the header refresh action", () => {
     render(<PluginsPage />);
+    expect(screen.queryByText("Catalog source")).toBeNull();
 
-    expect(screen.getByText("Catalog source")).toBeTruthy();
+    renderHeaderAction();
+
+    const refresh = screen.getByRole("button", {
+      name: /refresh plugin catalog/i,
+    });
+    expect(refresh.getAttribute("title")).toBeNull();
+    expect(screen.getByText("Catalog metadata")).toBeTruthy();
     expect(screen.getByText("Stale fallback")).toBeTruthy();
-    expect(screen.getByText(/thinkwork-ai\/thinkwork/)).toBeTruthy();
-    expect(screen.getByText(/0123456789ab/)).toBeTruthy();
+    expect(screen.getByText("Digest")).toBeTruthy();
+    expect(screen.getByText("abcdef012345")).toBeTruthy();
+    expect(screen.getByText("Repository")).toBeTruthy();
+    expect(screen.getByText("thinkwork-ai/thinkwork")).toBeTruthy();
+    expect(screen.queryByText("Bundled unsigned")).toBeNull();
+    expect(headerConfigRef.current?.actionKey).toContain("abcdef0123456789");
 
     const lastmileRow = screen.getByRole("link", { name: "Open LastMile" });
     expect(
@@ -248,8 +274,11 @@ describe("PluginsPage", () => {
 
   it("lets operators force-refresh the trusted catalog through GraphQL", async () => {
     render(<PluginsPage />);
+    renderHeaderAction();
 
-    fireEvent.click(screen.getByRole("button", { name: /refresh catalog/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /refresh plugin catalog/i }),
+    );
 
     await waitFor(() => {
       expect(refreshCatalogMutationMock).toHaveBeenCalledWith({});
@@ -260,6 +289,19 @@ describe("PluginsPage", () => {
     expect(refreshActivations).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });
+  });
+
+  it("does not spin the refresh icon during background catalog fetching", () => {
+    mockQueries({ catalogFetching: true });
+    render(<PluginsPage />);
+    renderHeaderAction();
+
+    const refresh = screen.getByRole("button", {
+      name: /refresh plugin catalog/i,
+    });
+    expect(refresh.querySelector("svg")?.getAttribute("class")).not.toContain(
+      "animate-spin",
+    );
   });
 
   it("keeps key-gated catalog rows status-only", () => {
@@ -279,7 +321,6 @@ describe("PluginsPage", () => {
       within(brainRow).queryByRole("link", { name: /enter key/i }),
     ).toBeNull();
     expect(within(brainRow).getByText("Not installed")).toBeTruthy();
-    expect(installMock).not.toHaveBeenCalled();
   });
 
   it("filters to installed-only when the toggle is switched", () => {
@@ -288,7 +329,7 @@ describe("PluginsPage", () => {
     // Both plugins visible under "All".
     expect(screen.getByRole("link", { name: "Open Twenty CRM" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /installed \(2\)/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^installed$/i }));
 
     // Twenty (not installed) drops out; installed plugins remain.
     expect(screen.queryByRole("link", { name: "Open Twenty CRM" })).toBeNull();
@@ -305,34 +346,18 @@ describe("PluginsPage", () => {
     expect(screen.queryByRole("link", { name: "Open Docs Sync" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^install$/i })).toBeNull();
     expect(
-      screen.queryByRole("button", { name: /refresh catalog/i }),
+      screen.queryByRole("button", { name: /refresh plugin catalog/i }),
     ).toBeNull();
     expect(screen.queryByText("Not installed")).toBeNull();
     expect(screen.queryByText("Update available")).toBeNull();
   });
 
-  it("installs a catalog plugin and refetches catalog + activations", async () => {
+  it("shows not-installed status instead of installing from the catalog row", () => {
     render(<PluginsPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^install$/i }));
-
-    await waitFor(() => {
-      expect(installMock).toHaveBeenCalledWith({
-        input: expect.objectContaining({
-          pluginKey: "twenty",
-          idempotencyKey: expect.any(String),
-        }),
-      });
-    });
-    await waitFor(() => {
-      expect(refreshCatalog).toHaveBeenCalledWith({
-        requestPolicy: "network-only",
-      });
-      expect(refreshActivations).toHaveBeenCalledWith({
-        requestPolicy: "network-only",
-      });
-    });
-    expect(navigateMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /^install$/i })).toBeNull();
+    const twentyRow = screen.getByRole("link", { name: "Open Twenty CRM" });
+    expect(within(twentyRow).getByText("Not installed")).toBeTruthy();
   });
 
   it("opens plugin details from the full catalog row", () => {
