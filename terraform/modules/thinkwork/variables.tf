@@ -1125,6 +1125,12 @@ variable "bucket_name" {
   default     = ""
 }
 
+variable "plugin_catalog_github_token_secret_arn" {
+  description = "Optional Secrets Manager ARN/name containing a GitHub token for API plugin catalog release-asset fetches. Empty uses unauthenticated GitHub requests."
+  type        = string
+  default     = ""
+}
+
 variable "database_name" {
   description = "Aurora database name"
   type        = string

@@ -75,6 +75,12 @@ variable "account_id" {
   type        = string
 }
 
+variable "plugin_catalog_github_token_secret_arn" {
+  description = "Optional Secrets Manager ARN/name containing a GitHub token for API plugin catalog release-asset fetches. Empty uses unauthenticated GitHub requests."
+  type        = string
+  default     = ""
+}
+
 variable "db_password" {
   description = "Master password for the Aurora cluster"
   type        = string
@@ -981,6 +987,8 @@ module "thinkwork" {
   stage      = var.stage
   region     = var.region
   account_id = var.account_id
+
+  plugin_catalog_github_token_secret_arn = var.plugin_catalog_github_token_secret_arn
 
   db_password                                = var.db_password
   database_engine                            = var.database_engine

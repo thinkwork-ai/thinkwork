@@ -61,6 +61,12 @@ variable "bucket_arn" {
   type        = string
 }
 
+variable "plugin_catalog_github_token_secret_arn" {
+  description = "Optional Secrets Manager ARN/name containing a GitHub token for plugin catalog release-asset fetches. Empty uses unauthenticated GitHub requests."
+  type        = string
+  default     = ""
+}
+
 variable "brain_artifacts_kms_key_arn" {
   description = "Optional KMS key ARN used to encrypt canonical Company Brain artifacts. AES256 encryption is used when unset."
   type        = string
