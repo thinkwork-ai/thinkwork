@@ -1,6 +1,7 @@
 ---
 title: Plugin source boundaries should be package-owned and deploy-verified
 date: 2026-06-17
+last_updated: 2026-06-17
 category: architecture-patterns
 module: Application Plugins / Plugin Source Boundary
 problem_type: architecture_pattern
@@ -16,6 +17,9 @@ related_components:
   - deployment-runner
   - terraform
   - mcp-runtime
+  - webhooks
+  - linked-tasks
+  - database-pg
   - github-actions
   - plugin-builder
 tags:
@@ -58,6 +62,16 @@ active activation `c2d156a1-bdbf-49f5-9b9a-6aaf48ea2f85`, and exposed
 with `401 {"error":"User not found in LastMile directory."}`; that was an
 external directory/access caveat, not a ThinkWork install or MCP restoration
 regression.
+
+THNK-33 added a companion edge case: sometimes the correct first slice is a
+shared server contract for a plugin-related product proof, not plugin-owned
+source yet. The Twenty native producer and embedded app install path was
+blocked by the current component model, so the merged proof deliberately
+targeted only `server_contract_verified`: signed `task-event` ingress, linked
+task provider support, idempotent append/wake behavior, diagnostics, and a
+deployed smoke runbook. That contract belongs in shared API/database/smoke
+surfaces because it is the generic Thread Event Sources path, even though the
+first fixture uses `producer: "twenty"`.
 
 ## Guidance
 
@@ -141,7 +155,45 @@ Keep shared exceptions narrow and named. A fixture that validates plugin-owned
 Terraform packaging from the CLI bundle can be a shared exception; a new
 `packages/deployment-runner/src/apps/foo.ts` adapter for one plugin should not.
 
-### 5. Put smoke verification inside the owning package
+### 5. Keep shared platform contract filenames provider-neutral
+
+When a shared platform contract is first exercised by one provider, keep the
+source path named after the platform contract, not the first provider. THNK-33's
+first PR initially used Twenty-specific filenames for platform-level assets:
+
+```text
+packages/database-pg/drizzle/0171_twenty_linked_task_provider.sql
+scripts/smoke/fixtures/twenty-task-status-changed.json
+scripts/smoke/fixtures/twenty-task-comment-added.json
+```
+
+`scripts/verify-plugin-source-boundary.mjs` correctly failed the PR because
+those paths contained a first-party plugin key outside `plugins/twenty/`. The
+right fix was not to move a shared database constraint migration into the
+Twenty package, and not to add a broad allowlist entry. The right fix was to
+name the artifacts after the platform contract they verify:
+
+```text
+packages/database-pg/drizzle/0171_linked_task_external_providers.sql
+scripts/smoke/fixtures/task-event-status-changed.json
+scripts/smoke/fixtures/task-event-comment-added.json
+```
+
+The payload bodies can still contain provider values such as
+`"producer": "twenty"` when that is the behavior under test. The boundary
+concern is source ownership: a migration that broadens the shared
+`linked_tasks.provider` constraint and a smoke fixture that exercises generic
+`task-event` ingress are platform assets. Provider-specific producer code,
+embedded app packaging, logic functions, manifest pieces, and package-local
+smokes still belong under `plugins/<plugin-key>/`.
+
+Prefer an explicit `sharedPluginTermAllowlist` entry only when the path itself
+must include the plugin key for a durable shared reason, such as a CLI fixture
+that validates plugin-owned Terraform packaging from the platform bundle.
+Otherwise, provider-neutral naming keeps the guard meaningful and avoids
+normalizing plugin leakage in shared code.
+
+### 6. Put smoke verification inside the owning package
 
 Package-owned smokes make the review boundary real. LastMile's deployed smoke
 lives at `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs` and verifies the
@@ -166,7 +218,14 @@ SMOKE_LASTMILE_MCP_CALL=1 \
 This is the right shape for future plugins: each package owns the smoke that
 proves its user-facing contract, while shared harnesses stay generic.
 
-### 6. Separate authored source, signed catalog, verified cache, and install pins
+For provider-neutral shared contracts, put the reusable smoke helper and
+fixtures near the shared contract until there is plugin-owned producer source.
+THNK-33's `scripts/smoke/webhook-smoke.sh` and `task-event-*` fixtures prove
+the generic signed ingress contract only. They do not prove
+`native_producer_verified`, and they should not be used as evidence that a
+native Twenty app package can be installed.
+
+### 7. Separate authored source, signed catalog, verified cache, and install pins
 
 THNK-37 added GitHub-backed catalog freshness without changing the source
 boundary. The durable model is four layers:
@@ -200,7 +259,7 @@ Do not treat "the GitHub asset changed" as sufficient verification. The
 deployed ThinkWork API trust boundary and the tenant install pin are separate
 states that must both be observed.
 
-### 7. Deploy shared handler changes to every handler that consumes them
+### 8. Deploy shared handler changes to every handler that consumes them
 
 The final THNK-31 verification found a real deploy-target gap (session
 history): a shared `packages/api` change reached only `graphql-http` and
@@ -239,6 +298,9 @@ were proved through the live ThinkWork path.
 - Moving an existing plugin's Terraform, adapter, UI, API, smoke, or docs.
 - Reviewing a PR that adds plugin-specific code under `packages/`, `apps/`,
   `terraform/modules/app`, or `scripts/`.
+- Adding the first provider to a shared platform contract, such as task-event
+  ingress or linked-task provider support, where the provider value is real but
+  the source path should stay provider-neutral.
 - Updating plugin-builder templates or authoring guidance.
 - Verifying a plugin migration where source layout changed but user behavior
   must stay the same.
