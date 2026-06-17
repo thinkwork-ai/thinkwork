@@ -74,7 +74,7 @@ export const linkedTasks = pgTable(
     index("idx_linked_tasks_space").on(table.tenant_id, table.space_id),
     check(
       "linked_tasks_provider_allowed",
-      sql`${table.provider} IN ('lastmile','thinkwork')`,
+      sql`${table.provider} IN ('lastmile','thinkwork','twenty')`,
     ),
     check(
       "linked_tasks_status_allowed",
@@ -127,11 +127,11 @@ export const linkedTaskEvents = pgTable(
     index("idx_linked_task_events_thread").on(table.tenant_id, table.thread_id),
     check(
       "linked_task_events_provider_allowed",
-      sql`${table.provider} IN ('lastmile','thinkwork')`,
+      sql`${table.provider} IN ('lastmile','thinkwork','twenty')`,
     ),
     check(
       "linked_task_events_type_allowed",
-      sql`${table.event_type} IN ('created','status_changed','completed','blocked','reassigned','due_date_changed','sync_failed','writeback_posted')`,
+      sql`${table.event_type} IN ('created','status_changed','completed','blocked','reassigned','due_date_changed','comment_added','sync_failed','writeback_posted')`,
     ),
     check(
       "linked_task_events_previous_status_allowed",

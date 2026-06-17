@@ -1,9 +1,9 @@
 /**
  * Task-event webhook.
  *
- * LastMile Tasks remains the source of truth. This ingress updates the
+ * External task systems remain the source of truth. This ingress updates the
  * ThinkWork linked-task mirror and records concise Thread milestones for
- * important events only.
+ * important task status/comment events.
  */
 
 import type {
@@ -14,7 +14,11 @@ import { createWebhookHandler, type WebhookResolveResult } from "./_shared.js";
 import { syncLinkedTaskFromProviderEvent } from "../../lib/linked-tasks/sync-linked-task.js";
 
 interface TaskEventPayload {
+  schema?: string;
+  provider?: string;
   event?: string;
+  eventType?: string;
+  kind?: string;
   taskId?: string;
   externalTaskId?: string;
   id?: string;
@@ -30,6 +34,12 @@ interface TaskEventPayload {
   dueAt?: string;
   dueDate?: string;
   occurredAt?: string;
+  actor?: {
+    id?: string | null;
+    name?: string | null;
+    displayName?: string | null;
+    email?: string | null;
+  };
   assignee?: {
     id?: string | null;
     externalId?: string | null;
@@ -37,6 +47,14 @@ interface TaskEventPayload {
     name?: string | null;
     displayName?: string | null;
     email?: string | null;
+  };
+  comment?: {
+    id?: string | null;
+    body?: string | null;
+    text?: string | null;
+    content?: string | null;
+    authorId?: string | null;
+    authorName?: string | null;
   };
   task?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
@@ -50,7 +68,10 @@ const RELEVANT_EVENTS = new Set([
   "task.due_date_changed",
   "task.updated",
   "task.status_changed",
+  "task.comment_added",
 ]);
+
+const PROVIDERS = new Set(["lastmile", "twenty"]);
 
 export async function resolveTaskEvent(args: {
   tenantId: string;
@@ -63,11 +84,29 @@ export async function resolveTaskEvent(args: {
     return { ok: false, status: 400, message: "invalid JSON body" };
   }
 
-  if (!payload.event || !RELEVANT_EVENTS.has(payload.event)) {
+  const provider = normalizeProvider(payload.provider);
+  if (!provider) {
+    return {
+      ok: false,
+      status: 400,
+      message: "provider must be lastmile or twenty",
+      delivery: { providerName: stringValue(payload.provider) ?? undefined },
+    };
+  }
+
+  const eventName =
+    stringValue(payload.event) ??
+    stringValue(payload.eventType) ??
+    stringValue(payload.kind);
+  if (!eventName || !RELEVANT_EVENTS.has(eventName)) {
     return {
       ok: true,
       skip: true,
-      reason: `event ${payload.event ?? "<missing>"} is not a linked-task sync event`,
+      reason: `event ${eventName ?? "<missing>"} is not a linked-task sync event`,
+      delivery: {
+        providerName: provider,
+        normalizedKind: eventName ?? undefined,
+      },
     };
   }
 
@@ -84,17 +123,35 @@ export async function resolveTaskEvent(args: {
       ok: false,
       status: 400,
       message: "externalTaskId or taskId is required",
+      delivery: {
+        providerName: provider,
+        normalizedKind: eventName,
+      },
+    };
+  }
+  const externalEventId =
+    stringValue(payload.externalEventId) ??
+    stringValue(payload.eventId) ??
+    stringValue(payload.metadata?.eventId);
+  if (!externalEventId) {
+    return {
+      ok: false,
+      status: 400,
+      message: "eventId or externalEventId is required",
+      delivery: {
+        providerName: provider,
+        externalTaskId,
+        normalizedKind: eventName,
+      },
     };
   }
 
   const result = await syncLinkedTaskFromProviderEvent({
     tenantId: args.tenantId,
+    provider,
     externalTaskId,
-    externalEventId:
-      stringValue(payload.externalEventId) ??
-      stringValue(payload.eventId) ??
-      stringValue(payload.metadata?.eventId),
-    eventName: payload.event,
+    externalEventId,
+    eventName,
     status:
       payload.status ?? payload.state ?? payload.taskStatus ?? task.status,
     blocked: payload.blocked,
@@ -105,13 +162,13 @@ export async function resolveTaskEvent(args: {
       stringValue(task.externalTaskUrl) ??
       stringValue(task.url),
     assignee: normalizeAssignee(payload.assignee ?? task.assignee),
+    comment: normalizeComment(payload.comment, payload.actor),
     dueAt:
       stringValue(payload.dueAt) ??
       stringValue(payload.dueDate) ??
       stringValue(task.dueAt) ??
       stringValue(task.dueDate),
     occurredAt: stringValue(payload.occurredAt),
-    raw: payload,
   });
 
   if (result.skipped) {
@@ -119,6 +176,12 @@ export async function resolveTaskEvent(args: {
       ok: true,
       skip: true,
       reason: result.reason,
+      delivery: {
+        providerName: provider,
+        providerEventId: externalEventId,
+        externalTaskId,
+        normalizedKind: eventName,
+      },
     };
   }
 
@@ -134,15 +197,29 @@ export async function resolveTaskEvent(args: {
       milestonePosted: result.milestonePosted,
       allRequiredComplete: result.allRequiredComplete,
     },
+    delivery: {
+      providerName: provider,
+      providerEventId: externalEventId,
+      externalTaskId,
+      normalizedKind: eventName,
+      threadId: result.linkedTask.threadId,
+    },
   };
 }
 
 export const handler = createWebhookHandler({
   integration: "task-event",
+  requireTimestampFreshness: true,
+  recordDeliveries: true,
   resolve: async (args) => resolveTaskEvent(args),
 });
 
 export type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 };
+
+function normalizeProvider(value: unknown): "lastmile" | "twenty" | null {
+  const provider = stringValue(value)?.toLowerCase() ?? "lastmile";
+  return PROVIDERS.has(provider) ? (provider as "lastmile" | "twenty") : null;
+}
 
 function normalizeAssignee(value: unknown) {
   const record = objectRecord(value);
@@ -156,6 +233,24 @@ function normalizeAssignee(value: unknown) {
     stringValue(record.email);
   if (!externalId && !displayName) return undefined;
   return { externalId, displayName };
+}
+
+function normalizeComment(commentValue: unknown, actorValue: unknown) {
+  const comment = objectRecord(commentValue);
+  const actor = objectRecord(actorValue);
+  const body =
+    stringValue(comment.body) ??
+    stringValue(comment.text) ??
+    stringValue(comment.content);
+  const authorName =
+    stringValue(comment.authorName) ??
+    stringValue(actor.displayName) ??
+    stringValue(actor.name) ??
+    stringValue(actor.email);
+  const authorId = stringValue(comment.authorId) ?? stringValue(actor.id);
+  const id = stringValue(comment.id);
+  if (!body && !authorName && !authorId && !id) return undefined;
+  return { id, body, authorName, authorId };
 }
 
 function objectRecord(value: unknown): Record<string, unknown> {

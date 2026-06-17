@@ -1,5 +1,6 @@
 {
   "event": "task.completed",
+  "eventId": "task-smoke-completed-0001",
   "taskId": "smoke-task-0001",
   "metadata": {
     "triggeredByRunId": "REPLACE_WITH_ACTUAL_SKILL_RUN_UUID",

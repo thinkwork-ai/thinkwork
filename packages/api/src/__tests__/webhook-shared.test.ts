@@ -23,6 +23,7 @@ import { createHmac } from "node:crypto";
 const {
   mockSelect,
   mockInsert,
+  mockInsertValues,
   mockUpdate,
   mockInvokeSkillRun,
   mockHashResolvedInputs,
@@ -30,6 +31,7 @@ const {
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
   mockInsert: vi.fn(),
+  mockInsertValues: vi.fn(),
   mockUpdate: vi.fn(),
   mockInvokeSkillRun: vi.fn(),
   mockHashResolvedInputs: vi.fn(() => "hash-fixed"),
@@ -43,12 +45,15 @@ const selectChain = (rows: Rows) => ({
 });
 
 const insertChain = (rows: Rows) => ({
-  values: () => ({
-    onConflictDoNothing: () => ({
+  values: (value: unknown) => {
+    mockInsertValues(value);
+    return {
+      onConflictDoNothing: () => ({
+        returning: () => Promise.resolve(rows),
+      }),
       returning: () => Promise.resolve(rows),
-    }),
-    returning: () => Promise.resolve(rows),
-  }),
+    };
+  },
 });
 
 const updateChain = () => ({
@@ -79,6 +84,10 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     id: "tenant_system_users.id",
     tenant_id: "tenant_system_users.tenant_id",
   },
+  webhookDeliveries: {
+    id: "webhook_deliveries.id",
+    tenant_id: "webhook_deliveries.tenant_id",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -105,8 +114,12 @@ vi.mock("@aws-sdk/client-secrets-manager", () => ({
 // tests that exercise the happy path prepend this.
 const SYSTEM_USER = "system-user-1";
 
-const { createWebhookHandler, signingSecretName, __resetRateLimitForTests } =
-  await import("../handlers/webhooks/_shared.js");
+const {
+  createWebhookHandler,
+  computeTimestampedSignature,
+  signingSecretName,
+  __resetRateLimitForTests,
+} = await import("../handlers/webhooks/_shared.js");
 
 const TENANT_ID = "11111111-2222-3333-4444-555555555555";
 const SECRET = "super-secret";
@@ -116,6 +129,7 @@ function makeEvent(
   opts: {
     path?: string;
     signature?: string;
+    timestamp?: string;
     method?: string;
     isBase64Encoded?: boolean;
   } = {},
@@ -133,6 +147,7 @@ function makeEvent(
     headers: {
       "content-type": "application/json",
       "x-thinkwork-signature": sig,
+      ...(opts.timestamp ? { "x-thinkwork-timestamp": opts.timestamp } : {}),
     },
     requestContext: {
       http: {
@@ -287,6 +302,88 @@ describe("webhook auth", () => {
   });
 });
 
+describe("webhook timestamp freshness", () => {
+  it("accepts fresh timestamped signatures when configured", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-17T18:00:00Z"));
+    const timestamp = `${Math.floor(Date.now() / 1_000)}`;
+    const rawBody = JSON.stringify({ customerId: "cust-1" });
+    const handler = createWebhookHandler(
+      {
+        integration: "test-integration",
+        requireTimestampFreshness: true,
+        resolve: ALWAYS_OK_RESOLVER,
+      },
+      { fetchSigningSecret: mockFetchSigningSecret },
+    );
+    queueSystemUserBootstrap();
+    mockInsert.mockReturnValueOnce([{ id: "run-1", skill_version: 1 }]);
+
+    const res = await handler(
+      makeEvent(rawBody, {
+        timestamp,
+        signature: `sha256=${computeTimestampedSignature(
+          SECRET,
+          timestamp,
+          rawBody,
+        )}`,
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    vi.useRealTimers();
+  });
+
+  it("rejects stale timestamped signatures when configured", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-17T18:00:00Z"));
+    const timestamp = `${Math.floor(Date.now() / 1_000) - 301}`;
+    const rawBody = "{}";
+    const handler = createWebhookHandler(
+      {
+        integration: "test-integration",
+        requireTimestampFreshness: true,
+        resolve: ALWAYS_OK_RESOLVER,
+      },
+      { fetchSigningSecret: mockFetchSigningSecret },
+    );
+
+    const res = await handler(
+      makeEvent(rawBody, {
+        timestamp,
+        signature: `sha256=${computeTimestampedSignature(
+          SECRET,
+          timestamp,
+          rawBody,
+        )}`,
+      }),
+    );
+
+    expect(res.statusCode).toBe(401);
+    expect(mockFetchSigningSecret).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("rejects raw-body signatures when timestamp freshness is configured", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-17T18:00:00Z"));
+    const timestamp = `${Math.floor(Date.now() / 1_000)}`;
+    const handler = createWebhookHandler(
+      {
+        integration: "test-integration",
+        requireTimestampFreshness: true,
+        resolve: ALWAYS_OK_RESOLVER,
+      },
+      { fetchSigningSecret: mockFetchSigningSecret },
+    );
+
+    const res = await handler(makeEvent("{}", { timestamp }));
+
+    expect(res.statusCode).toBe(401);
+    vi.useRealTimers();
+  });
+});
+
 describe("webhook resolver outcomes", () => {
   it("returns 200 {skipped} without inserting a row when resolver says skip", async () => {
     const handler = makeHandler(async () => ({
@@ -339,6 +436,93 @@ describe("webhook resolver outcomes", () => {
     // Body message is generic — internal stack trace MUST NOT appear in
     // response. It logs server-side only.
     expect(res.body as string).not.toContain("db bomb");
+  });
+});
+
+describe("webhook delivery diagnostics", () => {
+  it("records bounded handled delivery metadata without raw body or signatures", async () => {
+    const handler = createWebhookHandler(
+      {
+        integration: "test-integration",
+        recordDeliveries: true,
+        resolve: async () => ({
+          ok: true as const,
+          handled: true as const,
+          body: { linkedTaskId: "linked-1" },
+          delivery: {
+            providerName: "twenty",
+            providerEventId: "evt-1",
+            externalTaskId: "task-1",
+            normalizedKind: "task.comment_added",
+            threadId: "11111111-2222-3333-4444-666666666666",
+          },
+        }),
+      },
+      { fetchSigningSecret: mockFetchSigningSecret },
+    );
+
+    const res = await handler(
+      makeEvent(
+        JSON.stringify({
+          provider: "twenty",
+          comment: { body: "do not persist this raw body" },
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const delivery = mockInsertValues.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(delivery).toMatchObject({
+      tenant_id: TENANT_ID,
+      target_type: "task",
+      provider_name: "twenty",
+      provider_event_id: "evt-1",
+      external_task_id: "task-1",
+      normalized_kind: "task.comment_added",
+      thread_id: "11111111-2222-3333-4444-666666666666",
+      signature_status: "verified",
+      resolution_status: "ok",
+      status_code: 200,
+    });
+    expect(delivery.body_sha256).toEqual(expect.any(String));
+    expect(delivery.body_size_bytes).toBeGreaterThan(0);
+    expect(delivery).not.toHaveProperty("body_preview");
+    expect(delivery).not.toHaveProperty("signature_prefix");
+    expect(JSON.stringify(delivery)).not.toContain("do not persist");
+    expect(JSON.stringify(delivery)).not.toContain(SECRET);
+  });
+
+  it("records missing signature failures without fetching tenant secrets", async () => {
+    const handler = createWebhookHandler(
+      {
+        integration: "test-integration",
+        recordDeliveries: true,
+        resolve: ALWAYS_OK_RESOLVER,
+      },
+      { fetchSigningSecret: mockFetchSigningSecret },
+    );
+    const event = makeEvent("{}");
+    delete event.headers["x-thinkwork-signature"];
+
+    const res = await handler(event);
+
+    expect(res.statusCode).toBe(401);
+    expect(mockFetchSigningSecret).not.toHaveBeenCalled();
+    const delivery = mockInsertValues.mock.calls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
+    expect(delivery).toMatchObject({
+      tenant_id: TENANT_ID,
+      signature_status: "missing",
+      resolution_status: "unverified",
+      status_code: 401,
+    });
+    expect(delivery).not.toHaveProperty("body_preview");
+    expect(delivery).not.toHaveProperty("signature_prefix");
   });
 });
 

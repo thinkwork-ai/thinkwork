@@ -27,6 +27,15 @@ const baseTask: LinkedTaskMirrorRow = {
   metadata: null,
 };
 
+const twentyTask: LinkedTaskMirrorRow = {
+  ...baseTask,
+  id: "linked-twenty-1",
+  provider: "twenty",
+  externalTaskId: "twenty-task-1",
+  externalTaskUrl: "https://twenty.example/tasks/twenty-task-1",
+  title: "Review security addendum",
+};
+
 describe("syncLinkedTaskFromProviderEvent", () => {
   it("updates a completed task and posts one Thread milestone", async () => {
     const repo = makeRepository([baseTask]);
@@ -133,6 +142,122 @@ describe("syncLinkedTaskFromProviderEvent", () => {
     expect(repo.tasks[0]).toMatchObject({ status: "in_progress" });
     expect(repo.events).toEqual([]);
     expect(repo.messages).toEqual([]);
+    expect(coordinator.wakeups).toEqual([]);
+  });
+
+  it("records Twenty status changes as bounded external Thread milestones", async () => {
+    const repo = makeRepository([twentyTask]);
+    const coordinator = makeCoordinator();
+
+    const result = await syncLinkedTaskFromProviderEvent(
+      {
+        tenantId: "tenant-1",
+        provider: "twenty",
+        externalTaskId: "twenty-task-1",
+        externalEventId: "twenty-status-1",
+        eventName: "task.status_changed",
+        status: "in_progress",
+      },
+      { repository: repo, coordinator },
+    );
+
+    expect(result).toMatchObject({
+      eventType: "status_changed",
+      milestonePosted: true,
+      allRequiredComplete: false,
+    });
+    expect(repo.events[0]).toMatchObject({
+      eventType: "status_changed",
+      message: "Review security addendum status changed to in progress.",
+    });
+    expect(repo.events[0].linkedTask.provider).toBe("twenty");
+    expect(repo.messages.map((message) => message.content)).toEqual([
+      "Review security addendum status changed to in progress.",
+    ]);
+    expect(coordinator.wakeups).toEqual([]);
+  });
+
+  it("records Twenty comments without changing task status or storing raw payloads", async () => {
+    const repo = makeRepository([twentyTask]);
+    const longComment = "x".repeat(1_200);
+
+    await syncLinkedTaskFromProviderEvent(
+      {
+        tenantId: "tenant-1",
+        provider: "twenty",
+        externalTaskId: "twenty-task-1",
+        externalEventId: "twenty-comment-1",
+        eventName: "task.comment_added",
+        comment: {
+          id: "comment-1",
+          body: longComment,
+          authorName: "Ada Lovelace",
+          authorId: "person-1",
+        },
+      },
+      { repository: repo, coordinator: makeCoordinator() },
+    );
+
+    expect(repo.tasks[0]).toMatchObject({
+      provider: "twenty",
+      status: "todo",
+      syncStatus: "synced",
+    });
+    expect(repo.events[0]).toMatchObject({
+      eventType: "comment_added",
+      externalEventId: "twenty-comment-1",
+    });
+    expect(repo.events[0].linkedTask.provider).toBe("twenty");
+    expect(repo.events[0].metadata).toMatchObject({
+      provider: "twenty",
+      comment: {
+        id: "comment-1",
+        authorName: "Ada Lovelace",
+        authorId: "person-1",
+      },
+    });
+    expect(String((repo.events[0].metadata.comment as any).body)).toHaveLength(
+      1_000,
+    );
+    expect(JSON.stringify(repo.events[0].metadata)).not.toContain(
+      "lastProviderRaw",
+    );
+    expect(repo.messages[0].content).toContain(
+      "Ada Lovelace added an external CRM comment",
+    );
+  });
+
+  it("coalesces duplicate Twenty comment events without duplicate Thread milestones", async () => {
+    const repo = makeRepository([twentyTask]);
+    const coordinator = makeCoordinator();
+    const event = {
+      tenantId: "tenant-1",
+      provider: "twenty" as const,
+      externalTaskId: "twenty-task-1",
+      externalEventId: "twenty-comment-dupe",
+      eventName: "task.comment_added",
+      comment: {
+        id: "comment-dupe",
+        body: "Same event replayed.",
+        authorName: "Ada Lovelace",
+      },
+    };
+
+    await syncLinkedTaskFromProviderEvent(event, {
+      repository: repo,
+      coordinator,
+    });
+    const replay = await syncLinkedTaskFromProviderEvent(event, {
+      repository: repo,
+      coordinator,
+    });
+
+    expect(replay).toMatchObject({
+      eventType: "comment_added",
+      milestonePosted: false,
+    });
+    expect(repo.events).toHaveLength(1);
+    expect(repo.messages).toHaveLength(1);
     expect(coordinator.wakeups).toEqual([]);
   });
 

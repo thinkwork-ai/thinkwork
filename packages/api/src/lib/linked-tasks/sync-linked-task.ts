@@ -19,15 +19,19 @@ import {
 } from "./status.js";
 
 export type LinkedTaskMilestoneEventType =
+  | "status_changed"
   | "completed"
   | "blocked"
   | "reassigned"
   | "due_date_changed"
+  | "comment_added"
   | "sync_failed";
+
+export type LinkedTaskProvider = "lastmile" | "thinkwork" | "twenty";
 
 export interface LinkedTaskSyncInput {
   tenantId: string;
-  provider?: "lastmile";
+  provider?: LinkedTaskProvider;
   externalTaskId: string;
   externalEventId?: string | null;
   eventName?: string | null;
@@ -40,13 +44,19 @@ export interface LinkedTaskSyncInput {
     displayName?: string | null;
   } | null;
   dueAt?: string | null;
+  comment?: {
+    id?: string | null;
+    body?: string | null;
+    authorName?: string | null;
+    authorId?: string | null;
+  } | null;
   occurredAt?: string | Date | null;
   raw?: unknown;
 }
 
 export interface LinkedTaskSyncFailureInput {
   tenantId: string;
-  provider?: "lastmile";
+  provider?: LinkedTaskProvider;
   externalTaskId: string;
   externalEventId?: string | null;
   message: string;
@@ -99,7 +109,7 @@ export interface LinkedTaskMilestoneInput {
 export interface LinkedTaskSyncRepository {
   findByExternalTaskId(input: {
     tenantId: string;
-    provider: "lastmile";
+    provider: LinkedTaskProvider;
     externalTaskId: string;
   }): Promise<LinkedTaskMirrorRow | null>;
   listThreadTasks(input: {
@@ -168,14 +178,19 @@ export async function syncLinkedTaskFromProviderEvent(
   const normalized = normalizeExternalTaskStatus(
     input.status ?? input.eventName,
   );
+  const hasStatusInput = input.status !== undefined && input.status !== null;
   const blocked =
-    typeof input.blocked === "boolean" ? input.blocked : normalized.blocked;
-  const syncStatus = normalized.syncStatus;
+    typeof input.blocked === "boolean"
+      ? input.blocked
+      : hasStatusInput
+        ? normalized.blocked
+        : task.blocked;
+  const syncStatus = hasStatusInput ? normalized.syncStatus : task.syncStatus;
   const update: LinkedTaskUpdate = {
     title: input.title?.trim() || undefined,
     externalTaskUrl:
       input.externalTaskUrl === undefined ? undefined : input.externalTaskUrl,
-    status: normalized.status,
+    status: hasStatusInput ? normalized.status : task.status,
     blocked,
     syncStatus,
     assigneeDisplay:
@@ -189,7 +204,8 @@ export async function syncLinkedTaskFromProviderEvent(
     metadata: mergeProviderMetadata(task.metadata, {
       dueAt: input.dueAt ?? undefined,
       lastProviderEvent: input.eventName ?? undefined,
-      raw: input.raw,
+      provider: input.provider,
+      comment: input.comment,
     }),
   };
   const updated = await repository.updateLinkedTask({ task, update });
@@ -208,10 +224,11 @@ export async function syncLinkedTaskFromProviderEvent(
       occurredAt: parseDate(input.occurredAt, deps.now),
       metadata: {
         eventName: input.eventName,
+        provider,
         blocked: updated.blocked,
         assignee: input.assignee,
         dueAt: input.dueAt,
-        raw: input.raw,
+        comment: boundedComment(input.comment),
       },
     });
   }
@@ -341,6 +358,9 @@ function classifyMilestoneEvent(
   updated: LinkedTaskMirrorRow,
 ): LinkedTaskMilestoneEventType | null {
   const eventName = normalizeEventName(input.eventName);
+  if (eventName.includes("comment")) {
+    return "comment_added";
+  }
   if (eventName.includes("due") && eventName.includes("chang")) {
     return "due_date_changed";
   }
@@ -353,6 +373,7 @@ function classifyMilestoneEvent(
   if (previous.status !== updated.status) {
     if (updated.status === "completed") return "completed";
     if (updated.status === "blocked") return "blocked";
+    if (eventName.includes("status")) return "status_changed";
   }
   if (!previous.blocked && updated.blocked) return "blocked";
   return null;
@@ -365,6 +386,21 @@ function buildMilestoneMessage(
 ): string {
   if (eventType === "completed") return `${updated.title} completed.`;
   if (eventType === "blocked") return `${updated.title} is blocked.`;
+  if (eventType === "status_changed") {
+    return `${updated.title} status changed to ${formatStatus(updated.status)}.`;
+  }
+  if (eventType === "comment_added") {
+    const comment = boundedComment(updated.metadata?.lastProviderComment);
+    const body = stringValue(comment?.body);
+    const author = stringValue(comment?.authorName);
+    if (body && author) {
+      return `${author} added an external CRM comment on ${updated.title}: "${body}"`;
+    }
+    if (body) {
+      return `External CRM comment added on ${updated.title}: "${body}"`;
+    }
+    return `External CRM comment added on ${updated.title}.`;
+  }
   if (eventType === "reassigned") {
     return `${updated.title} reassigned to ${updated.assigneeDisplay ?? updated.assigneeExternalId ?? "an external owner"}.`;
   }
@@ -382,7 +418,8 @@ function mergeProviderMetadata(
   next: {
     dueAt?: string;
     lastProviderEvent?: string;
-    raw?: unknown;
+    provider?: LinkedTaskProvider;
+    comment?: unknown;
     lastSyncFailure?: unknown;
   },
 ): Record<string, unknown> {
@@ -390,7 +427,8 @@ function mergeProviderMetadata(
     ...(current ?? {}),
     lastProviderDueAt: next.dueAt,
     lastProviderEvent: next.lastProviderEvent,
-    lastProviderRaw: next.raw,
+    lastProvider: next.provider,
+    lastProviderComment: boundedComment(next.comment),
     lastSyncFailure: next.lastSyncFailure,
   });
 }
@@ -426,12 +464,46 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function boundedComment(value: unknown):
+  | {
+      id?: string;
+      body?: string;
+      authorName?: string;
+      authorId?: string;
+    }
+  | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  return compactObject({
+    id: truncate(stringValue(record.id), 160),
+    body: truncate(stringValue(record.body), 1_000),
+    authorName: truncate(stringValue(record.authorName), 160),
+    authorId: truncate(stringValue(record.authorId), 160),
+  }) as {
+    id?: string;
+    body?: string;
+    authorName?: string;
+    authorId?: string;
+  };
+}
+
+function truncate(value: string | null, max: number): string | undefined {
+  if (!value) return undefined;
+  return value.length > max ? `${value.slice(0, max - 3)}...` : value;
+}
+
+function formatStatus(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
 class DrizzleLinkedTaskSyncRepository implements LinkedTaskSyncRepository {
   private readonly db = getDb();
 
   async findByExternalTaskId(input: {
     tenantId: string;
-    provider: "lastmile";
+    provider: LinkedTaskProvider;
     externalTaskId: string;
   }): Promise<LinkedTaskMirrorRow | null> {
     const [row] = await this.db
@@ -507,7 +579,7 @@ class DrizzleLinkedTaskSyncRepository implements LinkedTaskSyncRepository {
         linked_task_id: input.linkedTask.id,
         space_id: input.linkedTask.spaceId,
         thread_id: input.linkedTask.threadId,
-        provider: "lastmile",
+        provider: input.linkedTask.provider,
         event_type: input.eventType,
         external_event_id: input.externalEventId,
         previous_status: input.previousStatus,

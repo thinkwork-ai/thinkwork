@@ -2266,6 +2266,7 @@ export type LinkedTaskEvent = {
 
 export enum LinkedTaskEventType {
   Blocked = 'BLOCKED',
+  CommentAdded = 'COMMENT_ADDED',
   Completed = 'COMPLETED',
   Created = 'CREATED',
   DueDateChanged = 'DUE_DATE_CHANGED',
@@ -2277,7 +2278,8 @@ export enum LinkedTaskEventType {
 
 export enum LinkedTaskProvider {
   Lastmile = 'LASTMILE',
-  Thinkwork = 'THINKWORK'
+  Thinkwork = 'THINKWORK',
+  Twenty = 'TWENTY'
 }
 
 export enum LinkedTaskStatus {
