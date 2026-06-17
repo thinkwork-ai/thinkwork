@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import secrets
 import subprocess
 import tarfile
@@ -599,6 +600,49 @@ def managed_app_terraform_target_args(payload):
     ]
 
 
+def truthy(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def managed_app_state_isolation_enabled(payload):
+    features = payload.get("features")
+    if isinstance(features, dict) and truthy(features.get("managedAppStateIsolation")):
+        return True
+    contract = payload.get("operationContract")
+    if isinstance(contract, dict) and truthy(contract.get("managedAppStateIsolation")):
+        return True
+    return truthy(os.environ.get("THINKWORK_MANAGED_APP_STATE_ISOLATION"))
+
+
+def managed_app_backend_app_key(payload):
+    app_key = str(payload.get("appKey") or "").strip().lower()
+    if not app_key:
+        raise RuntimeError("Managed app state isolation requires appKey.")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", app_key):
+        raise RuntimeError(f"Invalid managed app key for Terraform state: {app_key!r}")
+    return app_key
+
+
+def terraform_backend_key(stage, payload):
+    if is_managed_app_operation(payload) and managed_app_state_isolation_enabled(payload):
+        app_key = managed_app_backend_app_key(payload)
+        return f"thinkwork/{stage}/managed-apps/{app_key}/terraform.tfstate"
+    return f"thinkwork/{stage}/terraform.tfstate"
+
+
+def terraform_workspace_name(stage, payload):
+    if is_managed_app_operation(payload) and managed_app_state_isolation_enabled(payload):
+        # Per-app backend keys already include the stage. Staying on the
+        # default workspace keeps the S3 object key exact and gives each app a
+        # separate lock row instead of env:/<stage>/... workspace indirection.
+        return "default"
+    return stage
+
+
 def refresh_outputs_after_targeted_apply(payload):
     if not is_managed_app_operation(payload):
         return
@@ -922,6 +966,48 @@ def config_value(desired_config, manifest_images, key, env_name, image_names=Non
     return os.environ.get(env_name, default)
 
 
+def validate_managed_app_desired_state(payload, desired_config, manifest_images):
+    app_key = payload.get("appKey")
+    if not app_key:
+        return
+    operation = str(payload.get("operation") or "").upper()
+    if operation not in {"ENABLE", "PARK", "DESTROY", "UPGRADE"}:
+        raise RuntimeError(
+            "Managed app operation requires operation to be one of "
+            "ENABLE, PARK, DESTROY, or UPGRADE."
+        )
+    if operation == "DESTROY" or app_key != "plane":
+        return
+
+    required = [
+        (
+            "mcpImageUri",
+            "THINKWORK_PLANE_MCP_IMAGE_URI",
+            ["plane-mcp-server", "plane-mcp"],
+        ),
+        ("dbUrlSecretArn", "THINKWORK_PLANE_DB_URL_SECRET_ARN", []),
+        ("secretKeySecretArn", "THINKWORK_PLANE_SECRET_KEY_SECRET_ARN", []),
+        (
+            "liveServerSecretKeySecretArn",
+            "THINKWORK_PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN",
+            [],
+        ),
+        ("aesSecretKeySecretArn", "THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN", []),
+        ("publicUrl", "THINKWORK_PLANE_PUBLIC_URL", []),
+        ("certificateArn", "THINKWORK_PLANE_CERTIFICATE_ARN", []),
+    ]
+    missing = [
+        key
+        for key, env_name, image_names in required
+        if not config_value(desired_config, manifest_images, key, env_name, image_names)
+    ]
+    if missing:
+        raise RuntimeError(
+            "Plane managed app operation is missing required desired-state fields: "
+            + ", ".join(missing)
+        )
+
+
 def managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state):
     app_key = payload.get("appKey")
     operation = str(payload.get("operation") or "").upper()
@@ -931,6 +1017,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
     manifest_images = payload.get("manifestImages")
     if not isinstance(manifest_images, dict):
         manifest_images = {}
+    validate_managed_app_desired_state(payload, desired_config, manifest_images)
     cognee_guardrails = state_terraform_data_input(
         current_state,
         "cognee_configuration_guardrails",
@@ -2308,7 +2395,7 @@ def write_runner_files(payload, runner_secrets):
         "\n".join(
             [
                 f"bucket = {hcl_string(os.environ['THINKWORK_TERRAFORM_STATE_BUCKET'])}",
-                f"key = {hcl_string(f'thinkwork/{stage}/terraform.tfstate')}",
+                f"key = {hcl_string(terraform_backend_key(stage, payload))}",
                 f"region = {hcl_string(region)}",
                 f"dynamodb_table = {hcl_string(os.environ['THINKWORK_TERRAFORM_LOCK_TABLE'])}",
                 "encrypt = true",
@@ -3490,14 +3577,15 @@ def main():
     configure_cloudflare_provider_auth(vars_json["stage"])
     configure_terraform_provider_mirror()
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
-    workspace = vars_json["stage"]
-    selected = subprocess.run(
-        ["terraform", "workspace", "select", workspace, "-no-color"],
-        cwd=TF,
-        text=True,
-    )
-    if selected.returncode != 0:
-        run(["terraform", "workspace", "new", workspace, "-no-color"], cwd=TF)
+    workspace = terraform_workspace_name(vars_json["stage"], payload)
+    if workspace != "default":
+        selected = subprocess.run(
+            ["terraform", "workspace", "select", workspace, "-no-color"],
+            cwd=TF,
+            text=True,
+        )
+        if selected.returncode != 0:
+            run(["terraform", "workspace", "new", workspace, "-no-color"], cwd=TF)
     target_args = managed_app_terraform_target_args(payload)
     if action == "destroy":
         plan = subprocess.run(

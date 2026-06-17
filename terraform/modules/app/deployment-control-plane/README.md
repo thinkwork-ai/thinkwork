@@ -19,7 +19,18 @@ Lambda artifacts into the customer-owned artifact bucket, runs Terraform
 against the ThinkWork composite module, publishes static site bundles, and
 writes deployment profile pointers under `/thinkwork/<stage>/deployment`.
 
-Managed applications are intentionally disabled in this runner path:
-`enable_cognee = false`, `twenty_provisioned = false`, and
-`twenty_runtime_enabled = false`. Cognee/Twenty lifecycle remains owned by the
-managed-application deployment flow.
+Platform deploys stay on the root Terraform state key:
+`thinkwork/<stage>/terraform.tfstate`.
+
+Targeted managed-application operations are controller-owned. Before the
+managed-app state migration, they continue to use the root backend so existing
+state remains authoritative. After a reviewed `terraform state mv`/import
+migration for an app, set `THINKWORK_MANAGED_APP_STATE_ISOLATION=true` or pass
+`features.managedAppStateIsolation=true` for that app operation. The runner
+then uses `thinkwork/<stage>/managed-apps/<appKey>/terraform.tfstate` and the
+default Terraform workspace, giving the app an independent S3 object and lock
+scope.
+
+Do not enable per-app state isolation for a live app until its resources have
+been moved out of root state and the per-app plan is verified no-op. Otherwise
+Terraform will see an empty app state and attempt to recreate resources.
