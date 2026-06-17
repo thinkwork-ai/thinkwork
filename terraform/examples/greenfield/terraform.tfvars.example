@@ -53,6 +53,7 @@ database_engine = "rds-postgres"
 # plane_runtime_enabled                     = false
 # plane_image_uri                           = "makeplane/plane@sha256:..."
 # plane_mcp_image_uri                       = "ghcr.io/astral-sh/uv@sha256:..."
+# plane_web_container_port                  = 8080
 # plane_db_username                         = "thinkwork_plane"
 # plane_db_name                             = "thinkwork_plane"
 # plane_db_url_secret_arn                   = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/db-url-..."
@@ -64,6 +65,7 @@ database_engine = "rds-postgres"
 # plane_s3_bucket_name                      = "thinkwork-dev-plane"
 # plane_cache_engine                        = "valkey"
 # plane_rabbitmq_deployment_mode            = "SINGLE_INSTANCE"
+# plane_domain                              = "" # empty derives plane.<www_domain>
 # plane_public_url                          = "" # empty derives https://plane.<www_domain>
 # plane_certificate_arn                     = "" # empty creates a dedicated plane.<www_domain> certificate
 

@@ -1083,6 +1083,25 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
     )
 
 
+def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = load_runner()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    runner.refresh_outputs_after_targeted_apply({"appKey": "plane"})
+    runner.refresh_outputs_after_targeted_apply({})
+
+    assert calls == [
+        [
+            "terraform",
+            "apply",
+            "-refresh-only",
+            "-auto-approve",
+            "-no-color",
+        ]
+    ]
+
+
 def test_validate_managed_app_plan_scope_allows_plane_dns_record() -> None:
     runner = load_runner()
 

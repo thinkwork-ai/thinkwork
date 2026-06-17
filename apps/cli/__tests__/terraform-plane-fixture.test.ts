@@ -313,6 +313,8 @@ describe("Plane Terraform app module", () => {
 
     expect(source).toMatch(/variable "plane_provisioned"/);
     expect(source).toMatch(/variable "plane_runtime_enabled"/);
+    expect(source).toMatch(/variable "plane_domain"/);
+    expect(source).toMatch(/variable "plane_web_container_port"/);
     expect(source).toMatch(/plane_managed_certificate_enabled/);
     expect(source).toMatch(/resource "aws_acm_certificate" "plane"/);
     expect(thinkworkModule).toMatch(
@@ -324,12 +326,18 @@ describe("Plane Terraform app module", () => {
     expect(thinkworkModule).toMatch(
       /plane_mcp_image_uri\s*=\s*var\.plane_mcp_image_uri/,
     );
+    expect(thinkworkModule).toMatch(
+      /plane_web_container_port\s*=\s*var\.plane_web_container_port/,
+    );
+    expect(thinkworkModule).toMatch(/plane_domain\s*=\s*local\.plane_domain/);
     expect(thinkworkModule).toMatch(/plane_public_url\s*=\s*local\.plane_url/);
     expect(source).toMatch(/output "plane_provisioned"/);
     expect(source).toMatch(/output "plane_url"/);
     expect(tfvars).toMatch(/plane_provisioned\s*=\s*false/);
     expect(tfvars).toMatch(/plane_runtime_enabled\s*=\s*false/);
     expect(tfvars).toMatch(/plane_mcp_image_uri\s*=\s*"ghcr\.io\/astral-sh\/uv@sha256:\.\.\."/);
+    expect(tfvars).toMatch(/plane_web_container_port\s*=\s*8080/);
+    expect(tfvars).toMatch(/plane_domain\s*=\s*""/);
     expect(tfvars).toMatch(/empty derives https:\/\/plane\.<www_domain>/);
   });
 
