@@ -7,8 +7,9 @@
 - [ ] `src/index.ts` exports a package descriptor with matching `packageKey`,
       `sourceRoot`, and manifest.
 - [ ] Manifest validates with `validatePluginManifest`.
-- [ ] Package descriptor is registered in
-      `packages/plugin-catalog/src/plugins/index.ts`.
+- [ ] Package descriptor is discoverable by
+      `packages/plugin-catalog/scripts/generate-plugin-registry.ts`; any needed
+      plugin-catalog workspace dependency change is called out separately.
 - [ ] Manifest-specific tests pass.
 - [ ] Catalog build/sign verification is run or documented for maintainer handoff.
 

@@ -11,15 +11,17 @@ ThinkWork maintainer.
 - `plugins/<plugin-key>/src/index.ts` exports a package descriptor with
   matching `packageKey` and `sourceRoot`.
 - Manifest validates with `validatePluginManifest`.
-- Package descriptor is registered in
-  `packages/plugin-catalog/src/plugins/index.ts`.
+- Package descriptor is discoverable by
+  `packages/plugin-catalog/scripts/generate-plugin-registry.ts`; any needed
+  `packages/plugin-catalog/package.json` dependency change is explicit.
 - Manifest-specific tests cover:
-  - registration,
+  - package descriptor shape,
   - premium metadata when present,
   - component shape,
   - customer-facing copy versus internal implementation names,
   - adapter key and required Terraform inputs for infrastructure components.
 - Catalog build/sign step is identified and run when available.
+- Catalog registry check is identified and run when available.
 - Premium entitlement review is complete:
   - `entitlementProductKey`,
   - `installKeyRequired: true`,

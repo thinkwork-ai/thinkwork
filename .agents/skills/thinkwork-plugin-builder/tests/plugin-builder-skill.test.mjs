@@ -54,9 +54,17 @@ describe("thinkwork-plugin-builder skill package", () => {
     const text = files.join("\n");
 
     assert.match(text, /packages\/plugin-catalog\/src\/contracts\.ts/);
+    assert.match(
+      text,
+      /packages\/plugin-catalog\/scripts\/generate-plugin-registry\.ts/,
+    );
     assert.match(text, /validatePluginManifest/);
     assert.match(text, /packages\/deployment-runner\/src\/apps\/registry\.ts/);
     assert.match(text, /installKeyRequired/);
+    assert.doesNotMatch(
+      text,
+      /packages\/plugin-catalog\/src\/plugins\/index\.ts/,
+    );
     assert.doesNotMatch(text, /\/Users\/ericodom/);
   });
 });
@@ -111,6 +119,53 @@ describe("scan-plugin-builder-output", () => {
         parsed.findings.some(
           (finding) => finding.code === "missing-plugin-package-root",
         ),
+      );
+    });
+  });
+
+  it("blocks generated plugin-specific source in shared platform roots", async () => {
+    await withTempDir(async (dir) => {
+      await writeFile(join(dir, "contribution-plan.md"), "# Plan\n");
+      await writeFile(join(dir, "publication-checklist.md"), "# Checklist\n");
+      await writePluginPackage(dir, {
+        pluginKey: "mcpherson-lakehouse",
+        managedAppKey: "twenty",
+      });
+
+      await writeSharedFile(
+        dir,
+        "apps/web/src/plugins/mcpherson-lakehouse.tsx",
+        "export const McphersonLakehouse = null;\n",
+      );
+      await writeSharedFile(
+        dir,
+        "packages/api/src/plugins/mcpherson-lakehouse.ts",
+        "export const pluginKey = 'mcpherson-lakehouse';\n",
+      );
+      await writeSharedFile(
+        dir,
+        "packages/deployment-runner/src/apps/mcpherson-lakehouse.ts",
+        "export const adapter = 'mcpherson-lakehouse';\n",
+      );
+      await writeSharedFile(
+        dir,
+        "terraform/modules/app/mcpherson-lakehouse/main.tf",
+        "# plugin-specific terraform\n",
+      );
+      await writeSharedFile(
+        dir,
+        "scripts/smoke/mcpherson-lakehouse-smoke.mjs",
+        "console.log('smoke');\n",
+      );
+
+      const result = runScanner(dir);
+      const parsed = JSON.parse(result.stdout);
+      assert.equal(result.status, 1);
+      assert.equal(
+        parsed.findings.filter(
+          (finding) => finding.code === "shared-plugin-source-path",
+        ).length,
+        5,
       );
     });
   });
@@ -218,6 +273,12 @@ async function writePluginPackage(dir, { pluginKey, managedAppKey }) {
     join(root, "src/manifest.ts"),
     `export const ${manifestName} = { pluginKey: "${pluginKey}", versions: [{ components: [{ type: "infrastructure", managedAppKey: "${managedAppKey}" }] }] };\n`,
   );
+}
+
+async function writeSharedFile(dir, rel, text) {
+  const abs = join(dir, rel);
+  await mkdir(dirname(abs), { recursive: true });
+  await writeFile(abs, text);
 }
 
 function camelPluginKey(pluginKey) {
