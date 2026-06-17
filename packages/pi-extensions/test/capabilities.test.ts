@@ -165,6 +165,53 @@ describe("U7 capability extensions", () => {
     });
   });
 
+  it("send_email reports pending human review without claiming delivery", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        status: "pending_review",
+        conversationId: "conversation-1",
+        inboxItemId: "inbox-1",
+      }),
+    );
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(
+      createSendEmailExtension({
+        sendEmailConfig: {
+          apiUrl: "https://api.example.com",
+          apiSecret: "secret",
+          agentId: "agent-1",
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+        },
+        payload: {
+          current_user_email: "eric@example.com",
+          tenant_slug: "acme",
+          turn_context: { spaceSlug: "finance" },
+        },
+        fetchImpl,
+      }),
+      {},
+    )(api);
+
+    const result = await getTool(tools, "send_email").execute(
+      "call-1",
+      { to: "me", subject: "Hello", body: "Body" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    expect((result.content?.[0] as { text: string }).text).toContain(
+      "pending human review",
+    );
+    expect(result.details).toMatchObject({
+      ok: false,
+      status: "pending_review",
+      conversationId: "conversation-1",
+      inboxItemId: "inbox-1",
+    });
+  });
+
   it("set_task_status registers when configured and posts the database mutation request", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({

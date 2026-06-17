@@ -19,6 +19,11 @@ import {
   bridgeInboxDecisionToRoutineApproval,
   isRoutineApprovalInboxItem,
 } from "./routine-approval-bridge.js";
+import {
+  bridgeEmailApprovalDecision,
+  isEmailSendApprovalInboxItem,
+} from "../../../lib/email-channel/first-send-approval.js";
+import { createEmailChannelService } from "../../../lib/email-channel/channel-service.js";
 
 export const approveInboxItem = async (
   _parent: any,
@@ -82,6 +87,27 @@ export const approveInboxItem = async (
       decision: "approved",
       actorId: callerUserId ?? null,
       decisionPayload: { reviewNotes, values: parsedValues },
+    });
+  }
+  if (isEmailSendApprovalInboxItem(current)) {
+    let parsedValues: Record<string, unknown> | undefined;
+    const rawValues = args.input?.decisionValues;
+    if (typeof rawValues === "string" && rawValues.length > 0) {
+      try {
+        parsedValues = JSON.parse(rawValues);
+      } catch (err) {
+        throw new Error(
+          `decisionValues is not valid JSON: ${(err as Error).message}`,
+        );
+      }
+    }
+    await bridgeEmailApprovalDecision({
+      db,
+      inboxItem: current,
+      decision: "approved",
+      actorId: callerUserId ?? null,
+      decisionPayload: { reviewNotes, values: parsedValues },
+      send: createEmailChannelService().send,
     });
   }
 
