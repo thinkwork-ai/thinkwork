@@ -85,6 +85,7 @@ type FakeSkillsDeps = SkillsHandlerDeps & {
   uninstall: ReturnType<typeof vi.fn>;
   reindex: ReturnType<typeof vi.fn>;
   regenerate: ReturnType<typeof vi.fn>;
+  bootstrapWorkspace: ReturnType<typeof vi.fn>;
   seedSkillEvalDataset: ReturnType<typeof vi.fn>;
   archiveSkillEvalDataset: ReturnType<typeof vi.fn>;
   launchSkillEvalRun: ReturnType<typeof vi.fn>;
@@ -111,7 +112,15 @@ function deps(
     })),
     reindex: vi.fn(async () => ({ slug: "x", action: "upserted" as const })),
     regenerate: vi.fn(async () => undefined),
-    resolvePlatformAgent: vi.fn(async () => ({ slug: "agent-1" }) as never),
+    resolvePlatformAgent: vi.fn(
+      async () => ({ id: "agent-id", slug: "agent-1" }) as never,
+    ),
+    bootstrapWorkspace: vi.fn(async () => ({
+      agentId: "agent-id",
+      written: 1,
+      skipped: 7,
+      total: 8,
+    })),
     // Default to no-op spies so tests never hit the real eval seeder/AWS.
     seedSkillEvalDataset: vi.fn(async () => ({
       action: "seeded" as const,
@@ -168,6 +177,12 @@ describe("provisionPluginSkillsComponent", () => {
         wiringChoice: PLUGIN_SKILL_WIRING_CHOICE,
       }),
     );
+    expect(d.bootstrapWorkspace).toHaveBeenCalledWith("agent-id", {
+      mode: "preserve-existing",
+    });
+    expect(d.bootstrapWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
+      d.install.mock.invocationCallOrder[0],
+    );
     expect(d.reindex).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant-1",
@@ -210,6 +225,37 @@ describe("provisionPluginSkillsComponent", () => {
     expect(ref.workspaceFolders).toEqual(["skills/lastmile--crm-basics/"]);
     // Seed still overwrote the catalog source.
     expect(s3.puts.length).toBeGreaterThan(0);
+  });
+
+  it("repairs legacy platform-agent workspace defaults before installing catalog skills", async () => {
+    const s3 = fakeS3();
+    let repaired = false;
+    const d = deps(s3, {
+      bootstrapWorkspace: vi.fn(async (_agentId, opts) => {
+        expect(opts).toEqual({ mode: "preserve-existing" });
+        repaired = true;
+        return { agentId: "agent-id", written: 1, skipped: 7, total: 8 };
+      }),
+      install: vi.fn(async () => {
+        expect(repaired).toBe(true);
+        return {
+          ok: true as const,
+          installed_paths: [],
+          context_md_changed_path: "CONTEXT.md" as const,
+          source_sha256: "a".repeat(64),
+          eval_cases: [],
+        };
+      }),
+    });
+
+    await provisionPluginSkillsComponent({
+      tenantId: "tenant-1",
+      component,
+      deps: d,
+    });
+
+    expect(d.bootstrapWorkspace).toHaveBeenCalledTimes(1);
+    expect(d.install).toHaveBeenCalledTimes(1);
   });
 
   it("propagates non-409 install failures (component lands failed + retryable)", async () => {

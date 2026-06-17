@@ -14,10 +14,13 @@
  *      minimal valid wiring for `installCatalogSkill`.
  *   3. Refresh the `skill_catalog` index row (best-effort — the S3 prefix
  *      is the source of truth; index failures log, never fail install).
- *   4. Drive the existing `installCatalogSkill` machinery into the tenant
+ *   4. Repair missing tenant platform-agent workspace defaults in
+ *      preserve-existing mode so legacy agents have root CONTEXT.md without
+ *      clobbering operator-authored files.
+ *   5. Drive the existing `installCatalogSkill` machinery into the tenant
  *      platform agent's workspace with `wiringChoice: 'default'`. A 409
  *      `already_installed` is treated as success (create-or-repair).
- *   5. Regenerate the workspace manifest so the runtime re-syncs.
+ *   6. Regenerate the workspace manifest so the runtime re-syncs.
  *
  * Teardown reverses: `uninstallCatalogSkill` from the workspace (removes
  * skills/<slug>/ + the CONTEXT.md snippet), then delete the seeded catalog
@@ -47,6 +50,7 @@ import { uninstallCatalogSkill } from "../../catalog-uninstall.js";
 import { reindexCatalogSkill } from "../../catalog-index.js";
 import { regenerateManifest } from "../../workspace-manifest.js";
 import { resolveTenantPlatformAgent } from "../../agents/tenant-platform-agent.js";
+import { bootstrapAgentWorkspace } from "../../workspace-bootstrap.js";
 import { renderWiringMd } from "../../wiring-md.js";
 import {
   archiveSkillDatasetIfExists,
@@ -78,6 +82,7 @@ export interface SkillsHandlerDeps {
   reindex?: typeof reindexCatalogSkill;
   regenerate?: typeof regenerateManifest;
   resolvePlatformAgent?: typeof resolveTenantPlatformAgent;
+  bootstrapWorkspace?: typeof bootstrapAgentWorkspace;
   /** Per-skill eval dataset sync (Skill Tests & Evals U2). Injectable so
    *  unit tests stay hermetic; defaults to the real seeder. */
   seedSkillEvalDataset?: typeof ensureSkillDatasetSeeded;
@@ -137,6 +142,7 @@ export async function provisionPluginSkillsComponent(args: {
   const reindex = deps.reindex ?? reindexCatalogSkill;
   const regenerate = deps.regenerate ?? regenerateManifest;
   const resolveAgent = deps.resolvePlatformAgent ?? resolveTenantPlatformAgent;
+  const bootstrapWorkspace = deps.bootstrapWorkspace ?? bootstrapAgentWorkspace;
   const seedSkillEvalDataset =
     deps.seedSkillEvalDataset ?? ensureSkillDatasetSeeded;
   const launchEvalRun = deps.launchSkillEvalRun ?? launchSkillEvalRun;
@@ -149,6 +155,8 @@ export async function provisionPluginSkillsComponent(args: {
     );
   }
   const targetPrefix = `tenants/${tenantSlug}/agents/${agent.slug}/`;
+
+  await bootstrapWorkspace(agent.id, { mode: "preserve-existing" });
 
   const seededCatalogPrefixes: string[] = [];
   const workspaceFolders: string[] = [];
