@@ -33,11 +33,23 @@ project_context: TEI ThinkWork
   - Plugin dispatch now prefers a fresh reusable plugin-level token over an
     expired exact legacy token row, while preserving refresh behavior when all
     records are expired.
+- PR #2570 merged into `main` as
+  `201cf4d77f70da9a05fe25772e3fa763dde395f0`.
+- The automatic main deploy for PR #2570 rebuilt Lambda zips, but the
+  package-only API deploy target list only updated the `graphql-http` and
+  `chat-agent-invoke` Lambda resources. The LastMile verification fix also
+  needs the `skills` plugin OAuth callback handler and `mcp-proxy` handler to
+  receive shared `packages/api` code.
+- Follow-up deploy automation change expands the package-only API target from
+  two named handlers to the full `aws_lambda_function.handler` collection so all
+  API handlers receive shared package changes without requiring manual Lambda
+  updates.
 
 ### Verification
 
 - `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/activation.test.ts src/lib/__tests__/mcp-configs-plugin-auth.test.ts src/lib/plugins/dispatch-parity.test.ts`
 - `pnpm --filter @thinkwork/api typecheck`
+- `git diff --check`
 
 ## Current Canonical Plugin Specification Slice
 
