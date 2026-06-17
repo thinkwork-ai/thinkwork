@@ -37,6 +37,11 @@ function signedDocument(privateKeyPem: string): SignedPluginCatalogDocument {
   const catalog = buildPluginCatalog({
     manifests: [lastmileManifest],
     generatedAt: "2026-06-12T00:00:00.000Z",
+    source: {
+      repository: "thinkwork-ai/thinkwork",
+      ref: "main",
+      commitSha: "0123456789abcdef0123456789abcdef01234567",
+    },
   });
   return signPluginCatalog({
     catalog,
@@ -55,6 +60,31 @@ describe("buildPluginCatalog", () => {
     expect(entry.versions[0].version).toBe("0.1.0");
     expect(entry.versions[0].payloadSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(entry.versions[0].payload).toEqual(lastmileManifest.versions[0]);
+  });
+
+  it("optionally signs GitHub source provenance", () => {
+    const catalog = buildPluginCatalog({
+      manifests: [lastmileManifest],
+      generatedAt: "2026-06-12T00:00:00.000Z",
+      source: {
+        repository: "thinkwork-ai/thinkwork",
+        ref: "refs/heads/main",
+        commitSha: "0123456789abcdef0123456789abcdef01234567",
+      },
+    });
+    expect(catalog.source).toEqual({
+      repository: "thinkwork-ai/thinkwork",
+      ref: "refs/heads/main",
+      commitSha: "0123456789abcdef0123456789abcdef01234567",
+    });
+  });
+
+  it("keeps source provenance optional for bundled fallback catalogs", () => {
+    const catalog = buildPluginCatalog({
+      manifests: [lastmileManifest],
+      generatedAt: "2026-06-12T00:00:00.000Z",
+    });
+    expect(catalog.source).toBeUndefined();
   });
 
   it("rejects duplicate plugin keys in a catalog", () => {
@@ -81,6 +111,29 @@ describe("buildPluginCatalog", () => {
       /not valid semver/,
     );
   });
+
+  it("rejects invalid source provenance shape", () => {
+    expect(() =>
+      buildPluginCatalog({
+        manifests: [lastmileManifest],
+        source: {
+          repository: "not-owner-name",
+          ref: "main",
+          commitSha: "0123456789abcdef0123456789abcdef01234567",
+        },
+      }),
+    ).toThrow(/owner\/name/);
+    expect(() =>
+      buildPluginCatalog({
+        manifests: [lastmileManifest],
+        source: {
+          repository: "thinkwork-ai/thinkwork",
+          ref: "main",
+          commitSha: "not-a-sha",
+        },
+      }),
+    ).toThrow(/40-character Git commit SHA/);
+  });
 });
 
 describe("sign → verify round-trip", () => {
@@ -92,6 +145,11 @@ describe("sign → verify round-trip", () => {
       trustedPublicKeyPem: keys.publicKeyPem,
     });
     expect(verified.plugins[0].pluginKey).toBe("lastmile");
+    expect(verified.source).toEqual({
+      repository: "thinkwork-ai/thinkwork",
+      ref: "main",
+      commitSha: "0123456789abcdef0123456789abcdef01234567",
+    });
     expect(document.signature.catalogSha256).toBe(
       pluginCatalogSha256(verified),
     );
@@ -134,6 +192,24 @@ describe("verification fails closed", () => {
     tampered.catalog.plugins[0].description = "tampered description";
     // Keep the catalog-level digest consistent so the signature check is
     // what must catch the tamper.
+    tampered.signature.catalogSha256 = pluginCatalogSha256(tampered.catalog);
+    expect(() =>
+      verifyPluginCatalog({
+        document: tampered,
+        trustedPublicKeyPem: keys.publicKeyPem,
+      }),
+    ).toThrow(PluginCatalogSignatureError);
+  });
+
+  it("rejects tampered source provenance covered by the signature", () => {
+    const keys = keyPair();
+    const document = signedDocument(keys.privateKeyPem);
+    const tampered = clone(document);
+    tampered.catalog.source = {
+      repository: "thinkwork-ai/thinkwork",
+      ref: "release",
+      commitSha: "fedcba9876543210fedcba9876543210fedcba98",
+    };
     tampered.signature.catalogSha256 = pluginCatalogSha256(tampered.catalog);
     expect(() =>
       verifyPluginCatalog({

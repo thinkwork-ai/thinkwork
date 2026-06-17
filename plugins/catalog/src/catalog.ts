@@ -46,9 +46,19 @@ export interface PluginCatalogEntry {
   versions: PluginCatalogVersionEntry[];
 }
 
+export interface PluginCatalogSourceProvenance {
+  /** GitHub repository that authored the catalog source, e.g. thinkwork-ai/thinkwork. */
+  repository: string;
+  /** Source ref or channel used by the publisher, e.g. main or refs/heads/main. */
+  ref: string;
+  /** Git commit SHA that the generated catalog was built from. */
+  commitSha: string;
+}
+
 export interface PluginCatalog {
   schemaVersion: typeof PLUGIN_CATALOG_SCHEMA_VERSION;
   generatedAt: string;
+  source?: PluginCatalogSourceProvenance;
   plugins: PluginCatalogEntry[];
 }
 
@@ -115,6 +125,7 @@ export function pluginCatalogSha256(catalog: PluginCatalog): string {
 export function buildPluginCatalog(options: {
   manifests: readonly PluginManifest[];
   generatedAt?: Date | string;
+  source?: PluginCatalogSourceProvenance;
 }): PluginCatalog {
   const seenKeys = new Set<string>();
   const plugins: PluginCatalogEntry[] = [];
@@ -141,6 +152,9 @@ export function buildPluginCatalog(options: {
   return {
     schemaVersion: PLUGIN_CATALOG_SCHEMA_VERSION,
     generatedAt: toIso(options.generatedAt ?? new Date()),
+    source: options.source
+      ? validateSourceProvenance(options.source)
+      : undefined,
     plugins,
   };
 }
@@ -235,6 +249,9 @@ export function validatePluginCatalog(value: unknown): PluginCatalog {
     );
   }
   requireIsoDate(catalog.generatedAt, "catalog.generatedAt");
+  if (catalog.source !== undefined) {
+    validateSourceProvenance(catalog.source);
+  }
   if (!Array.isArray(catalog.plugins)) {
     throw new PluginCatalogError("catalog.plugins must be an array");
   }
@@ -284,6 +301,23 @@ export function validatePluginCatalog(value: unknown): PluginCatalog {
   return catalog as PluginCatalog;
 }
 
+function validateSourceProvenance(
+  value: unknown,
+): PluginCatalogSourceProvenance {
+  const source = value as Partial<PluginCatalogSourceProvenance>;
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    throw new PluginCatalogError("catalog.source must be an object");
+  }
+  requireRepository(source.repository, "catalog.source.repository");
+  requireRef(source.ref, "catalog.source.ref");
+  requireCommitSha(source.commitSha, "catalog.source.commitSha");
+  return {
+    repository: source.repository,
+    ref: source.ref,
+    commitSha: source.commitSha,
+  };
+}
+
 function validateSignatureShape(value: unknown): PluginCatalogSignature {
   const signature = value as Partial<PluginCatalogSignature>;
   if (!signature || typeof signature !== "object" || Array.isArray(signature)) {
@@ -322,6 +356,44 @@ function requireIsoDate(value: unknown, path: string): asserts value is string {
     Number.isNaN(Date.parse(value))
   ) {
     throw new PluginCatalogError(`${path} must be an ISO timestamp`);
+  }
+}
+
+function requireRepository(
+  value: unknown,
+  path: string,
+): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)
+  ) {
+    throw new PluginCatalogError(
+      `${path} must be a GitHub repository in owner/name form`,
+    );
+  }
+}
+
+function requireRef(value: unknown, path: string): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 255 ||
+    /\s/.test(value)
+  ) {
+    throw new PluginCatalogError(
+      `${path} must be a non-empty Git ref without whitespace`,
+    );
+  }
+}
+
+function requireCommitSha(
+  value: unknown,
+  path: string,
+): asserts value is string {
+  if (typeof value !== "string" || !/^[a-f0-9]{40}$/.test(value)) {
+    throw new PluginCatalogError(
+      `${path} must be a lowercase 40-character Git commit SHA`,
+    );
   }
 }
 
