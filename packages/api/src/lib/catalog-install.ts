@@ -127,17 +127,16 @@ export async function installCatalogSkill(
 
   const contextKey = `${options.targetPrefix}CONTEXT.md`;
   let contextContent: string;
+  let contextExisted = true;
   try {
     contextContent = await readTextObject(options, contextKey);
   } catch (err) {
     if (isNoSuchKey(err)) {
-      throw new CatalogInstallError(
-        400,
-        "context_md_missing",
-        "CONTEXT.md is required before installing a catalog skill.",
-      );
+      contextContent = "";
+      contextExisted = false;
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   const sourceSha256 = sourceSha256ForFiles(files);
@@ -190,6 +189,7 @@ export async function installCatalogSkill(
       refKey,
       contextKey,
       contextContent,
+      contextExisted,
       contextWritten,
     });
     throw new CatalogInstallError(
@@ -309,6 +309,7 @@ async function rollbackInstall(
     refKey: string | null;
     contextKey: string;
     contextContent: string;
+    contextExisted: boolean;
     contextWritten: boolean;
   },
 ): Promise<void> {
@@ -326,22 +327,24 @@ async function rollbackInstall(
       });
   }
   if (args.contextWritten) {
-    await options.s3
-      .send(
-        new PutObjectCommand({
+    const rollbackContext = args.contextExisted
+      ? new PutObjectCommand({
           Bucket: options.bucket,
           Key: args.contextKey,
           Body: args.contextContent,
           ContentType: "text/markdown; charset=utf-8",
-        }),
-      )
-      .catch((err) => {
-        console.error(
-          `[catalog-install] rollback CONTEXT.md restore failed: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      });
+        })
+      : new DeleteObjectCommand({
+          Bucket: options.bucket,
+          Key: args.contextKey,
+        });
+    await options.s3.send(rollbackContext).catch((err) => {
+      console.error(
+        `[catalog-install] rollback CONTEXT.md restore failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
   }
 }
 
