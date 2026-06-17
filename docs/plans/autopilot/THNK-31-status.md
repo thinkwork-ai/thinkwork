@@ -44,12 +44,52 @@ project_context: TEI ThinkWork
   two named handlers to the full `aws_lambda_function.handler` collection so all
   API handlers receive shared package changes without requiring manual Lambda
   updates.
+- PR #2571 merged into `main` as
+  `8d3fa3d1797d2a24942d938f06bf99a6767c4ca9`.
+- The automatic main deploy for PR #2571 completed successfully:
+  `https://github.com/thinkwork-ai/thinkwork/actions/runs/27661340138`.
+  The deployed `skills` handler was last modified at
+  `2026-06-17T02:21:37.000+0000`; the deployed `mcp-proxy` handler was last
+  modified at `2026-06-17T02:22:03.000+0000`.
+- Final LastMile plugin verification on the deployed TEI ThinkWork path used
+  tenant `0015953e-aa13-4cab-8398-2e70f73dda63`
+  (`sleek-squirrel-230`) and Eric's user
+  `4dee701a-c17b-46fe-9f38-a333d4c3fad0` (`eric@thinkwork.ai`).
+- The post-activation smoke passed the ThinkWork installation and MCP
+  restoration checks:
+  - activation `c2d156a1-bdbf-49f5-9b9a-6aaf48ea2f85` is `active` with
+    `openid,email,profile,offline_access`;
+  - the non-activated control user has no active LastMile activation;
+  - authenticated `tools/list` through the deployed MCP proxy exposes
+    `lastmile--crm` with 9 tools, `lastmile--tasks` with 42 tools, and
+    `lastmile--routing` with 6 tools for the runtime ThinkWork agent
+    `c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c`.
+- The activation token table now has one active token row for the LastMile
+  activation, scoped to `https://dev-mcp.lastmile-tei.com/crm`; tasks and
+  routing are covered by the shared plugin-level token fallback restored in
+  PR #2570.
+- The optional live CRM read probe reached LastMile through
+  `lastmile--crm` but failed upstream with
+  `MCP server lastmile--crm returned 401: {"error":"User not found in LastMile directory."}`.
+  That leaves the remaining end-to-end CRM data read as an external LastMile
+  directory membership/access item for Eric, not a ThinkWork install or MCP
+  restoration regression.
 
 ### Verification
 
 - `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/activation.test.ts src/lib/__tests__/mcp-configs-plugin-auth.test.ts src/lib/plugins/dispatch-parity.test.ts`
 - `pnpm --filter @thinkwork/api typecheck`
 - `git diff --check`
+- `pnpm --filter thinkwork-cli dev -- me`
+- LastMile phase-2 deployed smoke without `SMOKE_LASTMILE_MCP_CALL=1`
+  (activation and `tools/list`) passed.
+- LastMile phase-2 deployed smoke with `SMOKE_LASTMILE_MCP_CALL=1` passed the
+  activation and `tools/list` checks, then failed at the vendor boundary with
+  the LastMile directory 401 described above.
+- DB activation-token check for install
+  `1d6ddb0f-0093-4dd5-b124-e06b43847834` returned activation
+  `c2d156a1-bdbf-49f5-9b9a-6aaf48ea2f85`, status `active`, `token_rows = 1`,
+  and resource indicator `https://dev-mcp.lastmile-tei.com/crm`.
 
 ## Current Canonical Plugin Specification Slice
 
