@@ -93,6 +93,9 @@ vi.mock("@aws-sdk/client-cognito-identity-provider", () => ({
   AdminGetUserCommand: class {
     constructor(public input: unknown) {}
   },
+  AdminSetUserPasswordCommand: class {
+    constructor(public input: unknown) {}
+  },
 }));
 
 // eslint-disable-next-line import/first
