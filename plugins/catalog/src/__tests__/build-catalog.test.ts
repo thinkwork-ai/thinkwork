@@ -34,6 +34,7 @@ describe("buildSignedCatalogJson", () => {
     });
     expect(verified.plugins.map((plugin) => plugin.pluginKey)).toEqual([
       "company-brain",
+      "email-channel",
       "lastmile",
       "plane",
       "twenty",

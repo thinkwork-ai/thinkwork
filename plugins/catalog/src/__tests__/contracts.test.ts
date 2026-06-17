@@ -321,6 +321,55 @@ describe("validatePluginManifest", () => {
     expect(() => validatePluginManifest(ok)).not.toThrow();
   });
 
+  it("validates an email-channel capability with Resend and SES providers", () => {
+    const ok = manifest((m) => {
+      m.versions[0].capabilities = [
+        {
+          type: "email-channel",
+          key: "agent-space-email",
+          displayName: "Agent and Space email",
+          providers: [
+            {
+              key: "resend",
+              displayName: "Resend",
+              recommended: true,
+            },
+            {
+              key: "ses",
+              displayName: "Amazon SES",
+              compatibility: true,
+            },
+          ],
+          settingsSurface: "settings.plugins.email-channel",
+        },
+      ];
+    });
+    expect(() => validatePluginManifest(ok)).not.toThrow();
+  });
+
+  it("rejects deferred email-channel providers", () => {
+    const bad = manifest((m) => {
+      m.versions[0].capabilities = [
+        {
+          type: "email-channel",
+          key: "agent-space-email",
+          displayName: "Agent and Space email",
+          providers: [
+            {
+              key: "smtp" as "resend",
+              displayName: "SMTP",
+              recommended: true,
+            },
+          ],
+          settingsSurface: "settings.plugins.email-channel",
+        },
+      ];
+    });
+    expect(() => validatePluginManifest(bad)).toThrow(
+      /not a supported email-channel provider/,
+    );
+  });
+
   it("rejects an infrastructure component with a malformed input spec", () => {
     const bad = manifest((m) => {
       m.versions[0].components.push({

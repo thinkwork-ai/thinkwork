@@ -4,12 +4,16 @@
 
 import { defineFirstPartyPluginPackage } from "../plugin-package";
 import { companyBrainPluginPackage as rawCompanyBrainPluginPackage } from "@thinkwork/plugin-company-brain";
+import { emailChannelPluginPackage as rawEmailChannelPluginPackage } from "@thinkwork/plugin-email-channel";
 import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/plugin-lastmile";
 import { planePluginPackage as rawPlanePluginPackage } from "@thinkwork/plugin-plane";
 import { twentyPluginPackage as rawTwentyPluginPackage } from "@thinkwork/plugin-twenty";
 
 export const companyBrainPluginPackage = defineFirstPartyPluginPackage(
   rawCompanyBrainPluginPackage,
+);
+export const emailChannelPluginPackage = defineFirstPartyPluginPackage(
+  rawEmailChannelPluginPackage,
 );
 export const lastmilePluginPackage = defineFirstPartyPluginPackage(
   rawLastmilePluginPackage,
@@ -22,12 +26,14 @@ export const twentyPluginPackage = defineFirstPartyPluginPackage(
 );
 
 export const companyBrainManifest = companyBrainPluginPackage.manifest;
+export const emailChannelManifest = emailChannelPluginPackage.manifest;
 export const lastmileManifest = lastmilePluginPackage.manifest;
 export const planeManifest = planePluginPackage.manifest;
 export const twentyManifest = twentyPluginPackage.manifest;
 
 export const firstPartyPluginPackages = [
   companyBrainPluginPackage,
+  emailChannelPluginPackage,
   lastmilePluginPackage,
   planePluginPackage,
   twentyPluginPackage,

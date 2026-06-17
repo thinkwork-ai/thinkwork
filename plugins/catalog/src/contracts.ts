@@ -9,6 +9,10 @@
  *   - `infrastructure` — a managed-app Terraform deployment
  *   - `ui-surface`     — declared-only in v1 (identity + intended mount)
  *
+ * Capability declarations are catalog metadata, not install lifecycle
+ * components. They let a plugin advertise channel contracts whose runtime is
+ * owned by shared platform handlers.
+ *
  * This module is pure: types + validation only. No DB, GraphQL, or AWS
  * imports — the SSM-backed catalog verification wrapper lives in
  * `packages/api`.
@@ -32,6 +36,11 @@ export const PLUGIN_COMPONENT_TYPES = [
 ] as const;
 
 export type PluginComponentType = (typeof PLUGIN_COMPONENT_TYPES)[number];
+
+export const EMAIL_CHANNEL_PROVIDER_KEYS = ["resend", "ses"] as const;
+
+export type EmailChannelProviderKey =
+  (typeof EMAIL_CHANNEL_PROVIDER_KEYS)[number];
 
 export type McpServerAuth =
   | {
@@ -178,11 +187,33 @@ export type PluginComponent =
   | InfrastructureComponent
   | UiSurfaceComponent;
 
+export interface EmailChannelProviderOption {
+  key: EmailChannelProviderKey;
+  displayName: string;
+  recommended?: boolean;
+  compatibility?: boolean;
+}
+
+export interface EmailChannelCapability {
+  type: "email-channel";
+  key: string;
+  displayName: string;
+  providers: EmailChannelProviderOption[];
+  settingsSurface: string;
+}
+
+export type PluginCapability = EmailChannelCapability;
+
 export interface PluginVersion {
   /** Semver string (SEMVER_RE). */
   version: string;
   /** OAuth scopes this version's MCP servers require at activation. */
   requiredOauthScopes: string[];
+  /**
+   * Declared catalog capabilities that are implemented by shared platform
+   * handlers or reserved UI surfaces, rather than plugin-engine components.
+   */
+  capabilities?: PluginCapability[];
   components: PluginComponent[];
 }
 
@@ -305,8 +336,18 @@ function validatePluginVersion(value: unknown, pluginKey: string): void {
   }
 
   const seenComponentKeys = new Set<string>();
+  const seenCapabilityKeys = new Set<string>();
   const seenSkillSlugs = new Set<string>();
   let hasOauthServer = false;
+
+  if (version.capabilities !== undefined) {
+    if (!Array.isArray(version.capabilities)) {
+      throw new PluginManifestError(`${label}: capabilities must be an array`);
+    }
+    for (const capability of version.capabilities as Partial<PluginCapability>[]) {
+      validatePluginCapability(capability, label, seenCapabilityKeys);
+    }
+  }
 
   for (const component of version.components as Partial<PluginComponent>[]) {
     if (
@@ -375,6 +416,103 @@ function validatePluginVersion(value: unknown, pluginKey: string): void {
   if (hasOauthServer && version.requiredOauthScopes!.length === 0) {
     throw new PluginManifestError(
       `${label}: OAuth mcp-server components require non-empty requiredOauthScopes`,
+    );
+  }
+}
+
+function validatePluginCapability(
+  capability: Partial<PluginCapability>,
+  label: string,
+  seenCapabilityKeys: Set<string>,
+): void {
+  if (
+    !capability ||
+    typeof capability !== "object" ||
+    Array.isArray(capability)
+  ) {
+    throw new PluginManifestError(
+      `${label}: each capability must be an object`,
+    );
+  }
+  if (capability.type !== "email-channel") {
+    throw new PluginManifestError(
+      `${label}: unknown capability type "${String(capability.type)}"`,
+    );
+  }
+  requireString(capability.key, `${label}: capability.key`);
+  if (!SLUG_RE.test(capability.key)) {
+    throw new PluginManifestError(
+      `${label}: capability key "${capability.key}" must match ${SLUG_RE.source}`,
+    );
+  }
+  if (seenCapabilityKeys.has(capability.key)) {
+    throw new PluginManifestError(
+      `${label}: duplicate capability key "${capability.key}"`,
+    );
+  }
+  seenCapabilityKeys.add(capability.key);
+  validateEmailChannelCapability(capability as EmailChannelCapability, label);
+}
+
+function validateEmailChannelCapability(
+  capability: Partial<EmailChannelCapability>,
+  label: string,
+): void {
+  const prefix = `${label}: email-channel "${capability.key}"`;
+  requireString(capability.displayName, `${prefix}.displayName`);
+  requireString(capability.settingsSurface, `${prefix}.settingsSurface`);
+  if (
+    !Array.isArray(capability.providers) ||
+    capability.providers.length === 0
+  ) {
+    throw new PluginManifestError(
+      `${prefix}.providers must be a non-empty array`,
+    );
+  }
+
+  const seenProviders = new Set<string>();
+  let recommendedCount = 0;
+  for (const [index, provider] of capability.providers.entries()) {
+    const providerPrefix = `${prefix}.providers[${index}]`;
+    if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
+      throw new PluginManifestError(`${providerPrefix} must be an object`);
+    }
+    requireString(provider.key, `${providerPrefix}.key`);
+    if (
+      !(EMAIL_CHANNEL_PROVIDER_KEYS as readonly string[]).includes(provider.key)
+    ) {
+      throw new PluginManifestError(
+        `${providerPrefix}.key "${provider.key}" is not a supported email-channel provider`,
+      );
+    }
+    if (seenProviders.has(provider.key)) {
+      throw new PluginManifestError(
+        `${prefix}.providers declares duplicate provider "${provider.key}"`,
+      );
+    }
+    seenProviders.add(provider.key);
+    requireString(provider.displayName, `${providerPrefix}.displayName`);
+    if (
+      provider.recommended !== undefined &&
+      typeof provider.recommended !== "boolean"
+    ) {
+      throw new PluginManifestError(
+        `${providerPrefix}.recommended must be a boolean`,
+      );
+    }
+    if (
+      provider.compatibility !== undefined &&
+      typeof provider.compatibility !== "boolean"
+    ) {
+      throw new PluginManifestError(
+        `${providerPrefix}.compatibility must be a boolean`,
+      );
+    }
+    if (provider.recommended === true) recommendedCount += 1;
+  }
+  if (recommendedCount !== 1) {
+    throw new PluginManifestError(
+      `${prefix}.providers must declare exactly one recommended provider`,
     );
   }
 }

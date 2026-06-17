@@ -39,4 +39,9 @@ export const sharedPluginTermAllowlist = [
     path: "packages/database-pg/__tests__/migration-0167-company-brain-artifact-manifests.test.ts",
     reason: "historical database migration coverage",
   },
+  {
+    path: "packages/database-pg/src/schema/email-channel.ts",
+    reason:
+      "shared platform schema for existing email reply tokens; THNK-35 U2 expands it generically for channel state.",
+  },
 ];
