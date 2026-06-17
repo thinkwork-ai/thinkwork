@@ -204,3 +204,31 @@ project_context: ThinkWork / Enterprise Agent OS
 - `pnpm --filter @thinkwork/api typecheck` passed.
 - `pnpm --filter @thinkwork/web typecheck` passed.
 - `pnpm --filter thinkwork-cli typecheck` passed.
+
+## Current U7 Documentation And Verification Slice
+
+- Started from fresh `origin/main` at
+  `9a1d5c4d5491bdd6aef487d0b2244fed1b28fc2d` in branch
+  `codex/thnk-37-u7-catalog-docs`.
+- Added Admin docs page for Settings -> Plugins covering signed catalog
+  freshness, API verified cache, operator refresh, stale fallback, install
+  pins, and deployed verification flow.
+- Updated root plugin package guidance with the authored-source -> signed
+  artifact -> API verified cache -> installed pin model and release checklist.
+- Updated the plugin source-boundary architecture pattern with the THNK-37
+  catalog freshness layer and the requirement to observe both API trust state
+  and tenant install pins.
+- Added THNK-37 follow-up context to the THNK-31 source-colocation plan so root
+  `plugins/*` remains the source boundary even though runtime freshness comes
+  from a GitHub-hosted signed artifact.
+- Updated LastMile package and smoke docs to keep LastMile as the practical
+  deployed gate after catalog refresh: `lastmile--crm`, `lastmile--tasks`, and
+  `lastmile--routing` must still appear through ThinkWork for the activated
+  user.
+
+### Verification
+
+- `pnpm dlx prettier --write ...` passed for touched docs and smoke header.
+- `pnpm --filter @thinkwork/docs build` passed.
+- `node scripts/verify-plugin-source-boundary.mjs` passed.
+- `git diff --check` passed.

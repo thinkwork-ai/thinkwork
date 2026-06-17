@@ -105,6 +105,56 @@ The signing key is used only by GitHub Actions. Deployed ThinkWork stages should
 trust the matching public key through runtime configuration and continue to read
 catalog data through ThinkWork GraphQL, not browser-side GitHub calls.
 
+## Runtime Freshness Model
+
+Plugin authors change source under `plugins/<plugin-key>/`. The release path
+turns that source into a signed catalog artifact; the deployed API fetches that
+artifact from GitHub, verifies the signature and payload digests, and caches
+only verified snapshots. The browser never fetches GitHub directly, and the API
+never compiles or evaluates plugin TypeScript from GitHub.
+
+ThinkWork has four distinct catalog states to keep straight during review:
+
+| Layer              | Owner                                    | What changes it                                                                          |
+| ------------------ | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Authored source    | `plugins/*` package maintainers          | Pull requests that edit manifests, package metadata, skills, adapters, or runtime source |
+| Signed artifact    | GitHub Actions `Plugin Catalog` workflow | Merge to `main` with catalog-affecting plugin source, or manual workflow dispatch        |
+| API verified cache | Deployed GraphQL API                     | TTL refresh, conditional GitHub revalidation, or operator `refreshPluginCatalog`         |
+| Installed pin      | Tenant plugin install state              | `installPlugin` or `upgradePlugin` mutations through ThinkWork                           |
+
+Settings -> Plugins reads `pluginCatalog` plus `pluginCatalogMetadata` through
+GraphQL. Operators see the installed pinned version next to the latest verified
+catalog version, the source repository/tag/commit, generated and fetched
+timestamps, stale fallback status, and a `Refresh catalog` action. That action
+calls `refreshPluginCatalog`; it bypasses the API freshness TTL but still uses
+the same signature/digest verification and stale-safe fallback path.
+
+If GitHub is unavailable, rate limited, returns a malformed artifact, or serves
+an artifact with a bad signature, the API must not trust it. A previously
+verified snapshot may be served as stale fallback; otherwise the catalog fails
+closed and installed plugin state remains in Aurora.
+
+## Release And Verification Checklist
+
+When a plugin version bump should become visible without a full app deploy:
+
+1. Land the plugin source change under `plugins/*` on `main`.
+2. Confirm the `Plugin Catalog` workflow published
+   `thinkwork-plugin-catalog-main.json` on release tag `plugin-catalog-main`.
+3. Verify the signed artifact with the deployed trusted public key, or at least
+   confirm the artifact metadata contains the expected repository, ref, source
+   commit SHA, generated timestamp, catalog digest, and version payload digest.
+4. In a GitHub-backed stage, refresh the API cache by waiting for TTL or using
+   the operator `Refresh catalog` action in Settings -> Plugins.
+5. Confirm Settings -> Plugins shows the expected latest version, source
+   metadata, stale/fallback state when applicable, and update availability for
+   tenants with an older installed pin.
+6. Install or upgrade through ThinkWork. Do not substitute a direct Terraform
+   apply, vendor cloud login, local Docker Compose run, or manual catalog edit.
+7. Run the package-owned smoke for the plugin after install/upgrade. For
+   LastMile, that means proving `lastmile--crm`, `lastmile--tasks`, and
+   `lastmile--routing` through ThinkWork's MCP proxy.
+
 Before closing a migration slice, run the source-boundary check:
 
 ```bash

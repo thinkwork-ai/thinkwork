@@ -166,7 +166,41 @@ SMOKE_LASTMILE_MCP_CALL=1 \
 This is the right shape for future plugins: each package owns the smoke that
 proves its user-facing contract, while shared harnesses stay generic.
 
-### 6. Deploy shared handler changes to every handler that consumes them
+### 6. Separate authored source, signed catalog, verified cache, and install pins
+
+THNK-37 added GitHub-backed catalog freshness without changing the source
+boundary. The durable model is four layers:
+
+```text
+plugins/* authored source
+  -> GitHub Actions signed catalog artifact
+  -> API verified cache / stale fallback
+  -> tenant install pinned version
+```
+
+The root `plugins/*` packages remain the authored source of truth. GitHub hosts
+only a signed, generated catalog artifact, not runtime TypeScript source. The
+GraphQL API fetches that artifact, verifies the ed25519 signature and payload
+digests, caches only verified snapshots, and exposes freshness/provenance
+through `pluginCatalogMetadata`. Browsers continue to read through GraphQL, and
+manual refresh uses the operator-only `refreshPluginCatalog` mutation.
+
+Verification should therefore prove both freshness and install behavior:
+
+- a plugin source/version change produced the stable signed GitHub Release
+  asset;
+- the API refreshed or revalidated the artifact and reported source commit,
+  digest, generated/fetched timestamps, and stale state correctly;
+- Settings -> Plugins showed latest verified version versus installed pinned
+  version;
+- install/upgrade still ran through ThinkWork and package-owned smokes proved
+  the plugin's MCP/application contract.
+
+Do not treat "the GitHub asset changed" as sufficient verification. The
+deployed ThinkWork API trust boundary and the tenant install pin are separate
+states that must both be observed.
+
+### 7. Deploy shared handler changes to every handler that consumes them
 
 The final THNK-31 verification found a real deploy-target gap (session
 history): a shared `packages/api` change reached only `graphql-http` and
@@ -250,6 +284,9 @@ Good verification gate:
 ```text
 source-boundary guard passes
 plugin package tests/typecheck pass
+signed catalog artifact is published and verified
+API reports source commit, digest, fetched time, and stale state
+Settings -> Plugins shows installed pin versus latest verified version
 main deploy updates all consuming API handlers
 ThinkWork install remains installed at pinned version
 per-user activation is active
@@ -272,6 +309,8 @@ issue is closed before the deployed ThinkWork install path is rechecked
 - [THNK-31 requirements](../../brainstorms/2026-06-15-plugin-source-colocation-requirements.md)
 - [THNK-31 implementation plan](../../plans/2026-06-15-003-refactor-plugin-source-colocation-plan.md)
 - [THNK-31 autopilot status](../../plans/autopilot/THNK-31-status.md)
+- [THNK-37: Move plugin catalog source to GitHub](https://linear.app/thinkworkai/issue/THNK-37/move-plugin-catalog-source-to-github)
+- [THNK-37 implementation plan](../../plans/2026-06-17-002-feat-github-backed-plugin-catalog-plan.md)
 - [Plugin package contract](../../../plugins/README.md)
 - [LastMile plugin package notes](../../../plugins/lastmile/README.md)
 - [PR #2570: restore LastMile MCP tokens after reauth](https://github.com/thinkwork-ai/thinkwork/pull/2570)

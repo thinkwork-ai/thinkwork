@@ -155,6 +155,12 @@ AE7 source-boundary enforcement.
   now. Renaming can be reconsidered later, but this plan measures success by
   removing first-party source ownership and manual plugin-specific registry
   code from that package.
+- Follow-up from THNK-37: root `plugins/*` packages remain the authored source
+  of truth, but runtime freshness now flows through a GitHub-hosted signed
+  catalog artifact. That artifact is generated from package source, verified by
+  the API, cached as a trusted snapshot, and compared against tenant install
+  pins in Settings -> Plugins. This does not move plugin ownership to GitHub or
+  allow API runtime evaluation of remote TypeScript.
 - Replace hand-owned first-party registries with package discovery or generated
   aggregate files whose source of truth is `plugins/*`. Generated aggregate
   files are acceptable only when static imports are required for bundling or
