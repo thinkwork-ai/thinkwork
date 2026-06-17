@@ -252,15 +252,19 @@ export function createSendEmailExtension(
             string,
             unknown
           >;
+          const status = asString(result.status);
+          const pendingReview = status === "pending_review";
           return {
             content: [
               {
                 type: "text",
-                text: `Email sent to ${recipients.join(", ")}.`,
+                text: pendingReview
+                  ? `Email draft for ${recipients.join(", ")} is pending human review.`
+                  : `Email sent to ${recipients.join(", ")}.`,
               },
             ],
             details: {
-              ok: true,
+              ok: !pendingReview,
               runtime: "pi",
               provider: "thinkwork-email",
               recipient_count: recipients.length,

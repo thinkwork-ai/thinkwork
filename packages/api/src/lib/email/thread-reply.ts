@@ -23,6 +23,8 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { renderForEmail } from "../channel-rendering/index.js";
 import { createEmailChannelService } from "../email-channel/channel-service.js";
+import { requestFirstSendApproval } from "../email-channel/first-send-approval.js";
+import { evaluateOutboundEmailPolicy } from "../email-channel/outbound-policy.js";
 import { generateReplyToken } from "../email-tokens.js";
 import { deriveSpaceAddress } from "./space-address.js";
 
@@ -53,6 +55,8 @@ type SkipReason =
   | "last_user_message_not_email"
   | "missing_sender_email"
   | "missing_space_routing"
+  | "pending_review"
+  | "readiness_blocked"
   | "empty_body";
 
 /**
@@ -130,6 +134,35 @@ export async function sendThreadReplyEmail(
     spaceSlug: routing.spaceSlug,
   });
   const subject = formatReplySubject(subjectFromMessage);
+  const policy = await evaluateOutboundEmailPolicy({
+    db,
+    tenantId: input.tenantId,
+    spaceId: thread.space_id,
+  });
+  if (!policy.allowed) {
+    console.warn(
+      `[thread-reply] Email reply blocked thread=${input.threadId} reason=${policy.reasonCode}`,
+    );
+    return { sent: false, reason: "readiness_blocked" };
+  }
+  if (policy.firstSendReviewRequired) {
+    const approval = await requestFirstSendApproval({
+      db,
+      tenantId: input.tenantId,
+      providerInstallId: policy.providerInstallId,
+      provider: policy.provider,
+      agentId: input.agentId,
+      spaceId: thread.space_id,
+      threadId: input.threadId,
+      from: fromAddress,
+      to: [senderEmail],
+      subject,
+      body,
+    });
+    if (approval.status === "pending_review") {
+      return { sent: false, reason: "pending_review" };
+    }
+  }
   const expiresAt = new Date(
     Date.now() + REPLY_TOKEN_AGE_DAYS * 24 * 60 * 60 * 1000,
   );
@@ -193,7 +226,7 @@ export async function sendThreadReplyEmail(
 
   const rawMessage = [...rawHeaders, "", ...partLines].join("\r\n");
 
-  const result = await emailChannel.send("ses", {
+  const result = await emailChannel.send(policy.provider, {
     tenantId: input.tenantId,
     from: fromAddress,
     to: [senderEmail],
