@@ -1,8 +1,8 @@
-# Email Channel Plugin
+# Resend Channel Plugin
 
-The Email Channel plugin is the package-owned source boundary for tenant-owned
-agent and Space email. V1 declares Resend as the recommended provider and SES as
-the AWS-native compatibility provider while shared platform code owns
+The Resend Channel plugin is the package-owned source boundary for
+tenant-owned agent and Space email. V1 is Resend-backed by default and keeps SES
+as the AWS-native compatibility provider while shared platform code owns
 installation, settings GraphQL, database state, provider execution, and runtime
 gates.
 

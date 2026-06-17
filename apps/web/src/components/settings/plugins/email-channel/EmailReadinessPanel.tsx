@@ -9,9 +9,18 @@ const CHECK_LABELS: Record<string, string> = {
   SENDING_DOMAIN: "Sending domain",
   INBOUND_RECEIVING: "Inbound receiving",
   WEBHOOK_SIGNATURE: "Webhook signature",
-  PROVIDER_EVENTS: "Provider events",
-  LOOP_TEST: "Send and reply loop",
+  PROVIDER_EVENTS: "Delivery events",
+  LOOP_TEST: "Send and reply evidence",
 };
+
+const SETUP_CHECK_KEYS = [
+  "CREDENTIALS",
+  "SENDING_DOMAIN",
+  "INBOUND_RECEIVING",
+  "WEBHOOK_SIGNATURE",
+];
+
+const EVIDENCE_CHECK_KEYS = ["PROVIDER_EVENTS", "LOOP_TEST"];
 
 export function EmailReadinessPanel({
   summary,
@@ -26,24 +35,29 @@ export function EmailReadinessPanel({
     summary.providers.find((provider) => provider.activeForProduction) ??
     summary.providers[0] ??
     null;
+  const setupReady = SETUP_CHECK_KEYS.every((key) =>
+    summary.readinessChecks.some(
+      (check) => check.checkKey === key && check.status === "PASS",
+    ),
+  );
   return (
     <div className="grid w-full gap-3">
       <div className="flex flex-col gap-3 rounded-md border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
-          {summary.productionReady ? (
+          {summary.productionReady || setupReady ? (
             <ShieldCheck className="size-4 text-emerald-500" />
           ) : (
             <ShieldAlert className="size-4 text-amber-500" />
           )}
           <div>
             <p className="text-sm font-medium">
-              {summary.productionReady
-                ? "Production email ready"
-                : "Production email blocked"}
+              {summary.productionReady || setupReady
+                ? "Resend setup ready"
+                : "Resend setup blocked"}
             </p>
             <p className="text-xs text-muted-foreground">
-              Agent sends, routine sends, and inbound wakeups stay closed until
-              every check passes.
+              Sending opens after the key, ThinkWork domain, receiving, and
+              webhook checks pass. Delivery evidence updates after live traffic.
             </p>
           </div>
         </div>
@@ -66,6 +80,12 @@ export function EmailReadinessPanel({
           const check = summary.readinessChecks.find(
             (candidate) => candidate.checkKey === key,
           );
+          const evidenceOnly = EVIDENCE_CHECK_KEYS.includes(key);
+          const statusLabel =
+            evidenceOnly && check?.status !== "PASS"
+              ? "waiting"
+              : (check?.status?.toLowerCase().replace(/_/g, " ") ??
+                "pending");
           return (
             <div
               key={key}
@@ -73,7 +93,11 @@ export function EmailReadinessPanel({
             >
               <div>
                 <p className="text-sm font-medium">{label}</p>
-                {check?.failureMessage ? (
+                {evidenceOnly && check?.status !== "PASS" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Captured after the first live email event.
+                  </p>
+                ) : check?.failureMessage ? (
                   <p className="text-xs text-destructive">
                     {check.failureMessage}
                   </p>
@@ -89,12 +113,14 @@ export function EmailReadinessPanel({
                 className={
                   check?.status === "PASS"
                     ? "border-emerald-500/40 text-emerald-400"
-                    : check?.status === "FAIL" || check?.status === "BLOCKED"
+                    : evidenceOnly
+                      ? "border-muted-foreground/30 text-muted-foreground"
+                      : check?.status === "FAIL" || check?.status === "BLOCKED"
                       ? "border-amber-500/40 text-amber-500"
                       : undefined
                 }
               >
-                {check?.status?.toLowerCase().replace(/_/g, " ") ?? "pending"}
+                {statusLabel}
               </Badge>
             </div>
           );

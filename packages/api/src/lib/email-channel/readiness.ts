@@ -3,13 +3,11 @@ import type {
   EmailReadinessCheckResult,
 } from "./provider-contract.js";
 
-const REQUIRED_READINESS_CHECKS: EmailReadinessCheckKey[] = [
+export const PRODUCTION_READINESS_CHECKS: EmailReadinessCheckKey[] = [
   "credentials",
   "sending_domain",
   "inbound_receiving",
   "webhook_signature",
-  "provider_events",
-  "loop_test",
 ];
 
 export function buildReadinessChecks(input: {
@@ -37,21 +35,15 @@ export function buildReadinessChecks(input: {
       failureCode: "missing_webhook_secret",
       failureMessage: "Webhook signing secret is not configured.",
     }),
-    readinessCheck("provider_events", input.providerEventsReachable, {
-      failureCode: "provider_events_unverified",
-      failureMessage: "Provider delivery/failure events are not reachable.",
-    }),
-    readinessCheck("loop_test", input.loopTestPassed, {
-      failureCode: "loop_test_incomplete",
-      failureMessage: "Send -> receive/reply loop test has not passed.",
-    }),
+    evidenceCheck("provider_events", input.providerEventsReachable),
+    evidenceCheck("loop_test", input.loopTestPassed),
   ];
 }
 
 export function productionReadinessPassed(
   checks: EmailReadinessCheckResult[],
 ): boolean {
-  return REQUIRED_READINESS_CHECKS.every((key) =>
+  return PRODUCTION_READINESS_CHECKS.every((key) =>
     checks.some((check) => check.checkKey === key && check.status === "pass"),
   );
 }
@@ -64,4 +56,17 @@ function readinessCheck(
   return passed
     ? { checkKey, status: "pass", metadata: {} }
     : { checkKey, status: "blocked", ...failure, metadata: {} };
+}
+
+function evidenceCheck(
+  checkKey: EmailReadinessCheckKey,
+  passed: boolean,
+): EmailReadinessCheckResult {
+  return passed
+    ? { checkKey, status: "pass", metadata: { requiredForProduction: false } }
+    : {
+        checkKey,
+        status: "pending",
+        metadata: { requiredForProduction: false },
+      };
 }

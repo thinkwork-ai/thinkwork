@@ -513,7 +513,7 @@ describe("PluginDetail", () => {
     ).toBeNull();
   });
 
-  it("renders Email channel readiness and Resend key guidance for operators", () => {
+  it("renders Resend channel readiness and Resend key guidance for operators", () => {
     paramsState.pluginKey = "email-channel";
     mockQueries({
       install: {
@@ -526,7 +526,7 @@ describe("PluginDetail", () => {
     });
     render(<PluginDetail />);
 
-    expect(screen.getByText("Production email blocked")).toBeTruthy();
+    expect(screen.getByText("Resend setup blocked")).toBeTruthy();
     expect(screen.getAllByText("Resend API key").length).toBeGreaterThan(1);
     expect(
       screen.getByText(/dedicated ThinkWork production key/i),
@@ -829,8 +829,8 @@ const planeEntry = {
 const emailChannelEntry = {
   __typename: "PluginCatalogEntry" as const,
   pluginKey: "email-channel",
-  displayName: "Email",
-  description: "Tenant agent and Space email channel.",
+  displayName: "Resend Channel",
+  description: "Resend-backed tenant agent and Space email channel.",
   latestVersion: "0.1.0",
   updateAvailable: false,
   premium: null,
@@ -844,7 +844,7 @@ const emailChannelEntry = {
         {
           key: "email-channel",
           type: "email-channel",
-          displayName: "Email channel",
+          displayName: "Resend channel",
         },
       ],
     },

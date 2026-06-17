@@ -1,6 +1,5 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
-  EMAIL_READINESS_CHECK_KEYS,
   emailBodyObjects,
   emailDomains,
   emailLedgerEvents,
@@ -11,6 +10,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { requirePluginTenantAdmin } from "../plugins/shared.js";
+import { PRODUCTION_READINESS_CHECKS } from "../../../lib/email-channel/readiness.js";
 import {
   emailDomainPayload,
   emailLedgerEventPayload,
@@ -75,11 +75,18 @@ export async function emailChannelSummary(
   const activeProvider = providers.find(
     (provider) => provider.active_for_production,
   );
-  const blockingReadinessChecks = readinessChecks.filter((check) =>
-    ["fail", "blocked"].includes(check.status),
-  );
+  const blockingReadinessChecks = activeProvider
+    ? readinessChecks.filter(
+        (check) =>
+          check.provider_install_id === activeProvider.id &&
+          PRODUCTION_READINESS_CHECKS.includes(
+            check.check_key as (typeof PRODUCTION_READINESS_CHECKS)[number],
+          ) &&
+          ["fail", "blocked"].includes(check.status),
+      )
+    : [];
   const requiredChecksPassed = activeProvider
-    ? EMAIL_READINESS_CHECK_KEYS.every((key) =>
+    ? PRODUCTION_READINESS_CHECKS.every((key) =>
         readinessChecks.some(
           (check) =>
             check.provider_install_id === activeProvider.id &&

@@ -55,7 +55,7 @@ describe("Email Channel provider contract", () => {
     });
   });
 
-  it("requires all readiness checks before production can pass", () => {
+  it("requires setup readiness before production can pass", () => {
     const blocked = buildReadinessChecks({
       credentialConfigured: true,
       webhookSecretConfigured: true,
@@ -74,10 +74,14 @@ describe("Email Channel provider contract", () => {
       webhookSecretConfigured: true,
       domainVerified: true,
       inboundVerified: true,
-      providerEventsReachable: true,
-      loopTestPassed: true,
+      providerEventsReachable: false,
+      loopTestPassed: false,
     });
     expect(productionReadinessPassed(ready)).toBe(true);
+    expect(ready.find((check) => check.checkKey === "provider_events"))
+      .toMatchObject({ status: "pending" });
+    expect(ready.find((check) => check.checkKey === "loop_test"))
+      .toMatchObject({ status: "pending" });
   });
 
   it("records provider events idempotently before writing ledger rows", async () => {

@@ -1,12 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import {
-  EMAIL_READINESS_CHECK_KEYS,
   emailProviderInstalls,
   emailReadinessChecks,
   emailSpacePolicies,
   type EmailChannelProvider,
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "@thinkwork/database-pg";
+import { PRODUCTION_READINESS_CHECKS } from "./readiness.js";
 
 type Db = Pick<Database, "select">;
 
@@ -62,7 +62,7 @@ export async function evaluateOutboundEmailPolicy(input: {
     );
   const ready =
     provider.status === "ready" &&
-    EMAIL_READINESS_CHECK_KEYS.every((key) =>
+    PRODUCTION_READINESS_CHECKS.every((key) =>
       readiness.some(
         (check: { check_key: string; status: string }) =>
           check.check_key === key && check.status === "pass",
@@ -73,7 +73,7 @@ export async function evaluateOutboundEmailPolicy(input: {
       allowed: false,
       reasonCode: "email_readiness_incomplete",
       message:
-        "Email provider readiness is incomplete. Production email fails closed until all readiness checks pass.",
+        "Email provider readiness is incomplete. Production email fails closed until the Resend key, ThinkWork domain, receiving, and webhook checks pass.",
     };
   }
 

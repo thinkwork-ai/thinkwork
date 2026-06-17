@@ -1,6 +1,5 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
-  EMAIL_READINESS_CHECK_KEYS,
   emailDomains,
   emailProviderInstalls,
   emailReadinessChecks,
@@ -9,6 +8,7 @@ import {
 import type { Database } from "@thinkwork/database-pg";
 import { createEmailChannelService } from "./channel-service.js";
 import type { EmailProviderKey } from "./provider-contract.js";
+import { productionReadinessPassed } from "./readiness.js";
 
 type Db = Database;
 type ReadinessCheckRow = typeof emailReadinessChecks.$inferSelect;
@@ -106,13 +106,11 @@ export async function runEmailReadinessProbe(input: {
     if (row) rows.push(row);
   }
 
-  const allPassed = EMAIL_READINESS_CHECK_KEYS.every((key) =>
-    rows.some((row) => row.check_key === key && row.status === "pass"),
-  );
+  const productionReady = productionReadinessPassed(checks);
   await input.db
     .update(emailProviderInstalls)
     .set({
-      status: allPassed ? "ready" : "pending",
+      status: productionReady ? "ready" : "pending",
       updated_at: sql`now()`,
     })
     .where(eq(emailProviderInstalls.id, provider.id));
@@ -120,7 +118,7 @@ export async function runEmailReadinessProbe(input: {
   return {
     providerInstallId: provider.id,
     checks: rows,
-    productionReady: allPassed,
+    productionReady,
   };
 }
 
