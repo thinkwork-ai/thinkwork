@@ -172,6 +172,10 @@ outside.
   types such as delivery/bounce/complaint, and can be replayed.
 - Resend MCP and agents docs: Resend exposes agent-oriented send/receive,
   domains, webhooks, API keys, and received-email tooling.
+- Resend API key docs: keys are created from the Resend API Keys dashboard,
+  have permission modes such as `sending_access` and `full_access`, can be
+  domain-scoped for sending access, and the key value is only viewable when it
+  is created.
 - AWS SES sandbox and quotas docs: sandboxed accounts can send only to verified
   recipients/domains, with 200 messages per 24 hours and 1 message per second.
 - AWS SES receiving/S3 docs: receipt rules, S3 storage, Lambda actions, region
@@ -600,6 +604,7 @@ surface.
 - Create: `packages/api/src/graphql/resolvers/email-channel/policy.mutations.ts`
 - Create: `apps/web/src/components/settings/plugins/email-channel/EmailChannelSettings.tsx`
 - Create: `apps/web/src/components/settings/plugins/email-channel/EmailReadinessPanel.tsx`
+- Create: `apps/web/src/components/settings/plugins/email-channel/ResendApiKeyInstructions.tsx`
 - Create: `apps/web/src/components/settings/plugins/email-channel/SpaceEmailPolicyPanel.tsx`
 - Create: `apps/web/src/components/settings/plugins/email-channel/EmailLedgerPanel.tsx`
 - Create: `apps/web/src/components/settings/plugins/email-channel/*.test.tsx`
@@ -616,6 +621,18 @@ surface.
 - Admins can choose Resend or SES compatibility, enter secret refs/credentials
   through existing secret-safe patterns, inspect DNS/domain instructions, and
   run explicit test sends/receives.
+- For Resend, the plugin detail/configuration panel must include concise setup
+  guidance before the credential field: where to open the Resend API Keys
+  dashboard, that the admin should create a dedicated ThinkWork production key,
+  which permission mode the selected setup requires, how to domain-scope the key
+  when `sending_access` is sufficient, and that Resend only shows the key value
+  at creation time. Prefer the least-privileged permission that supports the
+  selected automation path; require `full_access` only if ThinkWork is expected
+  to manage or verify provider resources that cannot be handled with a
+  send-scoped key.
+- Store the Resend key through the existing secret-safe credential flow. The UI
+  should never echo the submitted key after save; it should show only a masked
+  status, last verification time, and rotation action.
 - Readiness checks are individually visible and auditable. A green derived state
   requires credentials, sending domain, inbound receiving, webhook/event
   reachability, delivery/bounce/complaint reachability, and loop test.
@@ -640,6 +657,12 @@ surface.
   Space email available.
 - Covers AE2: missing inbound or webhook check keeps production sends and
   inbound wakeups blocked while operator test mode remains available.
+- Happy path: Resend setup panel explains how to create a dedicated API key in
+  Resend, recommends the least-privileged permission for the chosen setup, and
+  links to official API key docs without exposing a saved secret value.
+- Error path: a Resend key with insufficient permission surfaces a provider
+  readiness error that tells the admin which permission/domain scope is missing
+  without logging or rendering the key.
 - Happy path: admin adds a Space-level sender/domain allowlist and the policy
   query returns it without exposing secrets.
 - Error path: non-admin user cannot configure provider, domain, readiness, or
@@ -1051,6 +1074,11 @@ flowchart TB
 
 - Update admin docs for plugin install, Resend setup, SES compatibility, Space
   allowlists, first-send approval, and ledger inspection.
+- The Resend setup docs and plugin detail page should include an API-key
+  checklist: create a dedicated key in Resend, choose the least-privileged
+  permission/domain scope that supports the selected automation mode, paste the
+  key once into ThinkWork, run readiness verification, and rotate the key by
+  creating a replacement before deleting the old one.
 - Add an operator runbook for readiness failures, webhook secret rotation,
   provider event replay, raw body redaction, and SES fallback.
 - Verification requires a deployed stack. There is no local-only acceptance for
@@ -1071,6 +1099,10 @@ Linear issue:
 
 - **Install path:** a tenant admin installs the Email plugin through Settings ->
   Plugins, not by direct Terraform or provider dashboard setup.
+- **Resend credential guidance:** the plugin detail page gives the admin clear
+  API-key instructions, links to Resend's API key docs, stores the submitted key
+  through the secret-safe flow, masks it after save, and reports insufficient
+  permission/domain scope as readiness failures.
 - **Resend readiness:** credentials, DNS/domain verification, inbound receiving,
   webhook signature verification, delivery/bounce/complaint reachability, and
   send -> receive/reply loop all pass for a ThinkWork-owned tenant subdomain.
@@ -1121,6 +1153,9 @@ Linear issue:
 - **Resend Verify Webhook Requests:** https://resend.com/docs/webhooks/verify-webhooks-requests
 - **Resend Managing Webhooks:** https://resend.com/docs/webhooks/introduction
 - **Resend Email for agents:** https://resend.com/agents
+- **Resend API Keys:** https://resend.com/docs/dashboard/api-keys/introduction
+- **Resend Create an API Key:** https://resend.com/docs/create-an-api-key
+- **Resend Handle API Keys:** https://resend.com/docs/knowledge-base/how-to-handle-api-keys
 - **AWS SES sandbox production access:** https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html
 - **AWS SES quotas:** https://docs.aws.amazon.com/ses/latest/dg/quotas.html
 - **AWS SES S3 receiving action:** https://docs.aws.amazon.com/ses/latest/dg/receiving-email-action-s3.html
