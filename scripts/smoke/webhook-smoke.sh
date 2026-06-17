@@ -16,7 +16,8 @@
 #     --integration <crm-opportunity|task-event> \
 #     --payload <path-to-json-file> \
 #     [--api-url <https://...>] \
-#     [--secret <hex>]
+#     [--secret <hex>] \
+#     [--timestamp <unix-seconds-or-ms>]
 #
 # If --api-url is omitted, reads `api_endpoint` from
 #   terraform/examples/greenfield/terraform output.
@@ -43,6 +44,7 @@ INTEGRATION=""
 PAYLOAD_FILE=""
 API_URL=""
 SECRET=""
+TIMESTAMP=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -51,6 +53,7 @@ while [[ $# -gt 0 ]]; do
     --payload)      PAYLOAD_FILE="$2"; shift 2 ;;
     --api-url)      API_URL="$2"; shift 2 ;;
     --secret)       SECRET="$2"; shift 2 ;;
+    --timestamp)    TIMESTAMP="$2"; shift 2 ;;
     --help|-h)      usage; exit 0 ;;
     *) echo "unknown arg: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -92,23 +95,39 @@ if [[ -z "$SECRET" ]]; then
     }
 fi
 
-# Read raw body; compute HMAC-SHA256. Matches `computeSignature` in
-# packages/api/src/handlers/webhooks/_shared.ts.
+# Read raw body; compute HMAC-SHA256. `task-event` requires timestamp
+# freshness and signs "<timestamp>.<body>"; older integration smoke paths sign
+# just the raw body.
 BODY=$(cat "$PAYLOAD_FILE")
-SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $NF}')
+if [[ "$INTEGRATION" == "task-event" ]]; then
+  TIMESTAMP="${TIMESTAMP:-$(date +%s)}"
+  SIG=$(printf '%s.%s' "$TIMESTAMP" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $NF}')
+else
+  SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | awk '{print $NF}')
+fi
 
 URL="${API_URL%/}/webhooks/${INTEGRATION}/${TENANT_ID}"
 
 echo "POST $URL" >&2
 echo "  body-bytes: ${#BODY}" >&2
+if [[ -n "$TIMESTAMP" ]]; then
+  echo "  timestamp:  $TIMESTAMP" >&2
+fi
 echo "  signature:  sha256=${SIG:0:16}..." >&2
 echo "" >&2
 
 # -sS: silent but show errors. -D -: dump response headers to stdout
 # before the body so the operator sees status + x-request-id inline.
+HEADERS=(
+  -H "content-type: application/json"
+  -H "x-thinkwork-signature: sha256=${SIG}"
+)
+if [[ -n "$TIMESTAMP" ]]; then
+  HEADERS+=(-H "x-thinkwork-timestamp: ${TIMESTAMP}")
+fi
+
 curl -sS -X POST "$URL" \
-  -H "content-type: application/json" \
-  -H "x-thinkwork-signature: sha256=${SIG}" \
+  "${HEADERS[@]}" \
   -D - \
   --data-binary "$BODY"
 echo ""

@@ -1,0 +1,16 @@
+{
+  "schema": "thread-event-source.v1",
+  "provider": "twenty",
+  "eventType": "task.comment_added",
+  "eventId": "twenty-smoke-comment-0001",
+  "externalTaskId": "twenty-smoke-task-0001",
+  "actor": {
+    "id": "twenty-person-0001",
+    "displayName": "Ada Lovelace"
+  },
+  "comment": {
+    "id": "twenty-comment-0001",
+    "body": "Customer confirmed the launch date."
+  },
+  "occurredAt": "2026-06-17T18:05:00Z"
+}

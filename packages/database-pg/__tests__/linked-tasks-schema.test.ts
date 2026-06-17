@@ -16,6 +16,10 @@ const migration0135 = readFileSync(
   join(HERE, "..", "drizzle", "0135_native_checklist_linked_tasks.sql"),
   "utf-8",
 );
+const migration0171 = readFileSync(
+  join(HERE, "..", "drizzle", "0171_linked_task_external_providers.sql"),
+  "utf-8",
+);
 
 describe("Linked task mirror schema", () => {
   it("models the current external task mirror state for a Space Thread", () => {
@@ -101,6 +105,31 @@ describe("Linked task mirror schema", () => {
       "creates-constraint: public.linked_task_events.linked_task_events_new_status_allowed",
     ]) {
       expect(migration0135).toContain(`-- ${marker}`);
+    }
+  });
+
+  it("allows Twenty linked task mirrors and comment events", () => {
+    for (const source of [
+      migration0171,
+      readFileSync(
+        join(HERE, "..", "src", "schema", "linked-tasks.ts"),
+        "utf-8",
+      ),
+      readFileSync(
+        join(HERE, "..", "graphql", "types", "linked-tasks.graphql"),
+        "utf-8",
+      ),
+    ]) {
+      expect(source.toLowerCase()).toContain("twenty");
+      expect(source).toMatch(/comment_added|COMMENT_ADDED/);
+    }
+
+    for (const marker of [
+      "creates-constraint: public.linked_tasks.linked_tasks_provider_allowed",
+      "creates-constraint: public.linked_task_events.linked_task_events_provider_allowed",
+      "creates-constraint: public.linked_task_events.linked_task_events_type_allowed",
+    ]) {
+      expect(migration0171).toContain(`-- ${marker}`);
     }
   });
 });

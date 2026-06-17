@@ -57,6 +57,7 @@ describe("resolveTaskEvent", () => {
 
     expect(mockSyncLinkedTaskFromProviderEvent).toHaveBeenCalledWith({
       tenantId: TENANT,
+      provider: "lastmile",
       externalTaskId: "LM-1",
       externalEventId: "evt-1",
       eventName: "task.completed",
@@ -70,9 +71,8 @@ describe("resolveTaskEvent", () => {
       },
       dueAt: null,
       occurredAt: "2026-05-19T15:00:00Z",
-      raw: expect.any(Object),
     });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: true,
       handled: true,
       body: {
@@ -84,7 +84,85 @@ describe("resolveTaskEvent", () => {
         milestonePosted: true,
         allRequiredComplete: true,
       },
+      delivery: {
+        providerName: "lastmile",
+        providerEventId: "evt-1",
+        externalTaskId: "LM-1",
+        normalizedKind: "task.completed",
+        threadId: "thread-1",
+      },
     });
+  });
+
+  it("syncs normalized Twenty status events into linked task mirrors", async () => {
+    const result = await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({
+        schema: "thread-event-source.v1",
+        provider: "twenty",
+        eventType: "task.status_changed",
+        eventId: "twenty-evt-1",
+        externalTaskId: "twenty-task-1",
+        status: "in_progress",
+        title: "Review security addendum",
+        externalTaskUrl: "https://twenty.example/tasks/twenty-task-1",
+        occurredAt: "2026-06-17T18:00:00Z",
+      }),
+    });
+
+    expect(mockSyncLinkedTaskFromProviderEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT,
+        provider: "twenty",
+        externalTaskId: "twenty-task-1",
+        externalEventId: "twenty-evt-1",
+        eventName: "task.status_changed",
+        status: "in_progress",
+        title: "Review security addendum",
+        externalTaskUrl: "https://twenty.example/tasks/twenty-task-1",
+        occurredAt: "2026-06-17T18:00:00Z",
+      }),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      handled: true,
+    });
+  });
+
+  it("syncs normalized Twenty comments as external CRM content", async () => {
+    await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({
+        schema: "thread-event-source.v1",
+        provider: "twenty",
+        kind: "task.comment_added",
+        eventId: "twenty-comment-1",
+        externalTaskId: "twenty-task-1",
+        actor: {
+          id: "person-1",
+          displayName: "Ada Lovelace",
+        },
+        comment: {
+          id: "comment-1",
+          body: "Customer confirmed the launch date.",
+        },
+      }),
+    });
+
+    expect(mockSyncLinkedTaskFromProviderEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "twenty",
+        externalTaskId: "twenty-task-1",
+        externalEventId: "twenty-comment-1",
+        eventName: "task.comment_added",
+        comment: {
+          id: "comment-1",
+          body: "Customer confirmed the launch date.",
+          authorName: "Ada Lovelace",
+          authorId: "person-1",
+        },
+      }),
+    );
   });
 
   it("accepts nested task payloads from provider variants", async () => {
@@ -122,7 +200,8 @@ describe("resolveTaskEvent", () => {
     const result = await resolveTaskEvent({
       tenantId: TENANT,
       rawBody: JSON.stringify({
-        event: "task.comment_added",
+        event: "task.viewed",
+        eventId: "evt-viewed",
         taskId: "LM-1",
       }),
     });
@@ -141,13 +220,20 @@ describe("resolveTaskEvent", () => {
       tenantId: TENANT,
       rawBody: JSON.stringify({
         event: "task.completed",
+        eventId: "evt-missing-task",
         taskId: "foreign-task",
       }),
     });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: true,
       skip: true,
       reason: "linked task mirror not found",
+      delivery: {
+        providerName: "lastmile",
+        providerEventId: "evt-missing-task",
+        externalTaskId: "foreign-task",
+        normalizedKind: "task.completed",
+      },
     });
   });
 
@@ -162,12 +248,44 @@ describe("resolveTaskEvent", () => {
   it("returns 400 when a relevant event has no external task id", async () => {
     const result = await resolveTaskEvent({
       tenantId: TENANT,
-      rawBody: JSON.stringify({ event: "task.completed" }),
+      rawBody: JSON.stringify({ event: "task.completed", eventId: "evt-3" }),
     });
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
       status: 400,
       message: "externalTaskId or taskId is required",
+    });
+  });
+
+  it("returns 400 when a relevant event has no event id", async () => {
+    const result = await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({
+        event: "task.completed",
+        taskId: "LM-1",
+      }),
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      message: "eventId or externalEventId is required",
+    });
+  });
+
+  it("returns 400 for unsupported providers", async () => {
+    const result = await resolveTaskEvent({
+      tenantId: TENANT,
+      rawBody: JSON.stringify({
+        provider: "linear",
+        event: "task.completed",
+        eventId: "evt-linear",
+        taskId: "LIN-1",
+      }),
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      message: "provider must be lastmile or twenty",
     });
   });
 });

@@ -1,5 +1,6 @@
 {
   "event": "task.completed",
+  "eventId": "task-smoke-completed-no-trigger-0001",
   "taskId": "smoke-task-0002",
   "metadata": {}
 }

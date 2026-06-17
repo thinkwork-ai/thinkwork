@@ -1,0 +1,10 @@
+{
+  "schema": "thread-event-source.v1",
+  "provider": "twenty",
+  "eventType": "task.status_changed",
+  "eventId": "twenty-smoke-unknown-0001",
+  "externalTaskId": "twenty-smoke-missing-task",
+  "status": "completed",
+  "title": "Missing linked task",
+  "occurredAt": "2026-06-17T18:10:00Z"
+}
