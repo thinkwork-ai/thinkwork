@@ -270,6 +270,81 @@ describe("inviteMember onboarding claim", () => {
     );
   });
 
+  it("uses a configured Resend channel even when old readiness flags are stale", async () => {
+    cognitoSendMock.mockResolvedValueOnce({
+      User: {
+        Attributes: [{ Name: "sub", Value: "cognito-user-1" }],
+      },
+    });
+    selectRowsQueue.push(
+      [
+        {
+          id: "provider-1",
+          tenant_id: "tenant-A",
+          provider: "resend",
+          status: "pending",
+          active_for_production: false,
+          credential_secret_ref: "resend/api-key",
+          default_from_email: "noreply@thinkwork.ai",
+        },
+      ],
+      [],
+      [],
+    );
+    insertReturningQueue.push([
+      {
+        id: "member-1",
+        tenant_id: "tenant-A",
+        principal_type: "USER",
+        principal_id: "cognito-user-1",
+        role: "member",
+        status: "active",
+      },
+    ]);
+
+    await inviteMember(
+      null,
+      {
+        tenantId: "tenant-A",
+        input: {
+          email: "alex@acme.example",
+          name: "Alex Acme",
+          role: "member",
+        },
+      },
+      {
+        auth: {
+          authType: "cognito",
+          principalId: "operator-user",
+          tenantId: "tenant-A",
+          email: "operator@acme.example",
+        },
+      } as any,
+    );
+
+    const createCommand = cognitoSendMock.mock.calls[0]?.[0] as {
+      input?: {
+        MessageAction?: string;
+        DesiredDeliveryMediums?: string[];
+      };
+    };
+    expect(createCommand.input).toMatchObject({
+      MessageAction: "SUPPRESS",
+    });
+    expect(createCommand.input?.DesiredDeliveryMediums).toBeUndefined();
+    expect(emailChannelSendMock).toHaveBeenCalledWith(
+      "resend",
+      expect.objectContaining({
+        tenantId: "tenant-A",
+        providerInstallId: "provider-1",
+        from: "noreply@thinkwork.ai",
+        to: ["alex@acme.example"],
+        subject: "You're invited to ThinkWork",
+        credential: "re_test",
+      }),
+    );
+  });
+
   it("resends the Cognito invitation when the existing user is still pending", async () => {
     cognitoSendMock
       .mockRejectedValueOnce({ name: "UsernameExistsException" })
