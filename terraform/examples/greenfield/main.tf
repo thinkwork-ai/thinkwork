@@ -429,6 +429,12 @@ variable "plane_image_uri" {
   default     = ""
 }
 
+variable "plane_mcp_image_uri" {
+  description = "Plane MCP server runtime image URI pinned to an immutable sha256 digest."
+  type        = string
+  default     = ""
+}
+
 variable "plane_db_url_secret_arn" {
   description = "Secrets Manager ARN containing a JSON DATABASE_URL field for the dedicated Plane database."
   type        = string
@@ -1048,6 +1054,7 @@ module "thinkwork" {
   plane_provisioned                          = var.plane_provisioned
   plane_runtime_enabled                      = var.plane_runtime_enabled
   plane_image_uri                            = var.plane_image_uri
+  plane_mcp_image_uri                        = var.plane_mcp_image_uri
   plane_db_username                          = var.plane_db_username
   plane_db_name                              = var.plane_db_name
   plane_db_url_secret_arn                    = var.plane_db_url_secret_arn

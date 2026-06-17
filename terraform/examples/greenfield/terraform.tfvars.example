@@ -52,6 +52,7 @@ database_engine = "rds-postgres"
 # plane_provisioned                         = false
 # plane_runtime_enabled                     = false
 # plane_image_uri                           = "makeplane/plane@sha256:..."
+# plane_mcp_image_uri                       = "ghcr.io/astral-sh/uv@sha256:..."
 # plane_db_username                         = "thinkwork_plane"
 # plane_db_name                             = "thinkwork_plane"
 # plane_db_url_secret_arn                   = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/plane/db-url-..."
