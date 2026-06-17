@@ -22,8 +22,10 @@ import { generateReplyToken } from "../lib/email-tokens.js";
 import { deriveSpaceAddress } from "../lib/email/space-address.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 import { renderForEmail } from "../lib/channel-rendering/email-renderer.js";
+import { createEmailChannelService } from "../lib/email-channel/channel-service.js";
 
 const db = getDb();
+const emailChannel = createEmailChannelService();
 
 interface SendEmailRequest {
   agentId: string;
@@ -298,23 +300,15 @@ export async function handler(
     "",
   ].join("\r\n");
 
-  // Send via SES
   try {
-    const { SESClient, SendRawEmailCommand } =
-      await import("@aws-sdk/client-ses");
-    const ses = new SESClient({});
-
-    const result = await ses.send(
-      new SendRawEmailCommand({
-        Source: emailAddress,
-        Destinations: recipients,
-        RawMessage: {
-          Data: Buffer.from(rawMessage),
-        },
-      }),
-    );
-
-    const sesMessageId = result.MessageId || "";
+    const result = await emailChannel.send("ses", {
+      tenantId: agent.tenant_id,
+      from: emailAddress,
+      to: recipients,
+      subject: req.subject,
+      rawMessage,
+    });
+    const sesMessageId = result.providerMessageId;
 
     // Store reply token in DB
     await db.insert(emailReplyTokens).values({
@@ -341,7 +335,7 @@ export async function handler(
       }),
     };
   } catch (sendErr) {
-    console.error("[email-send] SES send failed:", sendErr);
+    console.error("[email-send] provider send failed:", sendErr);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: "Failed to send email" }),
@@ -390,35 +384,26 @@ async function sendDirectRoutineEmail(req: DirectSendEmailRequest) {
     };
   }
 
-  const { SESClient, SendEmailCommand } = await import("@aws-sdk/client-ses");
-  const ses = new SESClient({});
   const rendered = req.bodyFormat === "markdown" ? renderForEmail(body) : null;
-  const messageBody =
-    req.bodyFormat === "html"
-      ? { Html: { Data: body, Charset: "UTF-8" } }
-      : rendered
-        ? {
-            Text: { Data: rendered.text, Charset: "UTF-8" },
-            Html: { Data: rendered.html, Charset: "UTF-8" },
-          }
-        : { Text: { Data: body, Charset: "UTF-8" } };
-
-  const result = await ses.send(
-    new SendEmailCommand({
-      Source: source,
-      Destination: {
-        ToAddresses: recipients,
-        ...(cc.length > 0 ? { CcAddresses: cc } : {}),
-      },
-      Message: {
-        Subject: { Data: subject, Charset: "UTF-8" },
-        Body: messageBody,
-      },
-    }),
-  );
+  const result = await emailChannel.send("ses", {
+    from: source,
+    to: recipients,
+    cc,
+    subject,
+    text: rendered
+      ? rendered.text
+      : req.bodyFormat === "html"
+        ? undefined
+        : body,
+    html: rendered
+      ? rendered.html
+      : req.bodyFormat === "html"
+        ? body
+        : undefined,
+  });
 
   return {
-    messageId: result.MessageId ?? null,
+    messageId: result.providerMessageId || null,
     status: "sent",
   };
 }

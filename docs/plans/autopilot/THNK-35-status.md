@@ -11,16 +11,16 @@ status: active
 - Linear issue: THNK-35, moved from Ready to Work to In Progress after
   discovery on 2026-06-17.
 - Implementation base: `origin/main` at
-  `c83013559163983d22b615e057d1e6b88d3bb2c7` (U1 merge).
-- Active branch: `codex/thnk-35-email-channel-u2`.
+  `99f05c1e768bb85b863e911a20e152b7daa48990` (U2 merge).
+- Active branch: `codex/thnk-35-email-channel-u3`.
 
 ## Progress
 
 | Unit                                                                     | Status              | Evidence                                                          |
 | ------------------------------------------------------------------------ | ------------------- | ----------------------------------------------------------------- |
 | U1 Email plugin package and catalog contract                             | Merged              | PR #2586; merge commit `c83013559163983d22b615e057d1e6b88d3bb2c7` |
-| U2 Email channel data model, GraphQL, and ledger contract                | Implemented locally | Branch `codex/thnk-35-email-channel-u2`; focused checks passed    |
-| U3 Resend and SES provider adapter service                               | Pending             | Not started                                                       |
+| U2 Email channel data model, GraphQL, and ledger contract                | Merged              | PR #2589; merge commit `99f05c1e768bb85b863e911a20e152b7daa48990` |
+| U3 Resend and SES provider adapter service                               | Implemented locally | Branch `codex/thnk-35-email-channel-u3`; focused checks passed    |
 | U4 Readiness state machine and plugin settings surface                   | Pending             | Not started                                                       |
 | U5 Outbound channel, first-send HITL, and ledger writes                  | Pending             | Not started                                                       |
 | U6 Inbound webhook normalization, authorization, rate limits, and wakeup | Pending             | Not started                                                       |
@@ -37,6 +37,12 @@ status: active
 
 ## Verification Log
 
+- U3 focused checks:
+  - `pnpm --filter @thinkwork/api test -- src/lib/email-channel/__tests__/provider-contract.test.ts src/lib/email-channel/__tests__/resend-provider.test.ts src/lib/email-channel/__tests__/ses-provider.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `node scripts/verify-plugin-source-boundary.mjs`
+  - `bash scripts/build-lambdas.sh email-send`
+  - `bash scripts/build-lambdas.sh email-inbound`
 - U2 focused checks:
   - `pnpm schema:build`
   - `pnpm --filter @thinkwork/web codegen`

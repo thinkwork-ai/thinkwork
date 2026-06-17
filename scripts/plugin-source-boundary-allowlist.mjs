@@ -50,6 +50,11 @@ export const sharedPluginTermAllowlist = [
       "shared platform GraphQL API for the Email Channel plugin control plane.",
   },
   {
+    pathPrefix: "packages/api/src/lib/email-channel/",
+    reason:
+      "shared platform provider adapter service for the Email Channel plugin runtime path.",
+  },
+  {
     path: "packages/database-pg/__tests__/migration-0170-email-channel-plugin.test.ts",
     reason: "Email Channel plugin database contract coverage.",
   },

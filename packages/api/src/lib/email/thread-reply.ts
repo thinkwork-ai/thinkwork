@@ -22,10 +22,12 @@ import {
   threads,
 } from "@thinkwork/database-pg/schema";
 import { renderForEmail } from "../channel-rendering/index.js";
+import { createEmailChannelService } from "../email-channel/channel-service.js";
 import { generateReplyToken } from "../email-tokens.js";
 import { deriveSpaceAddress } from "./space-address.js";
 
 const db = getDb();
+const emailChannel = createEmailChannelService();
 
 const REPLY_TOKEN_AGE_DAYS = 7;
 const REPLY_TOKEN_MAX_USES = 5;
@@ -191,18 +193,14 @@ export async function sendThreadReplyEmail(
 
   const rawMessage = [...rawHeaders, "", ...partLines].join("\r\n");
 
-  const { SESClient, SendRawEmailCommand } =
-    await import("@aws-sdk/client-ses");
-  const ses = new SESClient({});
-  const result = await ses.send(
-    new SendRawEmailCommand({
-      Source: fromAddress,
-      Destinations: [senderEmail],
-      RawMessage: { Data: Buffer.from(rawMessage) },
-    }),
-  );
-
-  const sesMessageId = result.MessageId || "";
+  const result = await emailChannel.send("ses", {
+    tenantId: input.tenantId,
+    from: fromAddress,
+    to: [senderEmail],
+    subject,
+    rawMessage,
+  });
+  const sesMessageId = result.providerMessageId;
   await db.insert(emailReplyTokens).values({
     tenant_id: input.tenantId,
     agent_id: input.agentId,
