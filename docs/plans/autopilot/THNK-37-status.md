@@ -93,3 +93,34 @@ project_context: ThinkWork / Enterprise Agent OS
   passed.
 - `pnpm --filter @thinkwork/api typecheck` passed.
 - `git diff --check` passed.
+
+## Current U4 Runtime Configuration And Cache Storage Slice
+
+- Started from fresh `origin/main` at
+  `ab82681b331f0c2fdb0aa1416b97aca1763cf7ba` in branch
+  `codex/thnk-37-u4-catalog-runtime-config`.
+- Moved GitHub catalog runtime settings into the GraphQL API
+  runtime-config document instead of Lambda environment variables:
+  source mode, repository, release tag, asset name, TTL, User-Agent, S3 cache
+  bucket/key, and optional GitHub token secret ARN.
+- Kept browser access behind ThinkWork GraphQL: the runtime configuration is
+  consumed by the API catalog source, not the web client.
+- Added a verified S3 cache for GitHub catalog snapshots. The cache stores the
+  signed catalog document plus release metadata, and every cache read
+  re-verifies the signed document with the trusted public key before it can be
+  served.
+- Reused the existing API role workspace-bucket S3 permissions for cache
+  storage, and added a narrowly conditional `secretsmanager:GetSecretValue`
+  grant for the optional GitHub token secret ARN.
+- Exposed the optional token secret variable through the `thinkwork` module and
+  greenfield example. Empty keeps unauthenticated GitHub requests.
+
+### Verification
+
+- `pnpm --filter @thinkwork/api test -- src/lib/plugins/catalog-source.test.ts src/lib/plugins/catalog-github-source.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter thinkwork-cli test -- terraform-runtime-config-fixture.test.ts`
+  passed.
+- `terraform fmt` passed on touched Terraform files.
+- `git diff --check` passed.

@@ -7,9 +7,11 @@ import {
   type SignedPluginCatalogDocument,
 } from "@thinkwork/plugin-catalog";
 import {
+  createS3GitHubPluginCatalogCache,
   GitHubPluginCatalogSourceError,
   loadGitHubPluginCatalog,
   pluginCatalogGitHubConfigFromEnv,
+  pluginCatalogGitHubConfigFromRuntime,
   resetGitHubPluginCatalogCacheForTests,
   type GitHubPluginCatalogConfig,
 } from "./catalog-github-source.js";
@@ -92,6 +94,12 @@ function queuedFetch(responses: Response[]) {
 
 afterEach(() => {
   resetGitHubPluginCatalogCacheForTests();
+  delete process.env.THINKWORK_PLUGIN_CATALOG_SOURCE;
+  delete process.env.THINKWORK_PLUGIN_CATALOG_REPOSITORY;
+  delete process.env.THINKWORK_PLUGIN_CATALOG_RELEASE_TAG;
+  delete process.env.THINKWORK_PLUGIN_CATALOG_ASSET_NAME;
+  delete process.env.THINKWORK_PLUGIN_CATALOG_CACHE_TTL_SECONDS;
+  delete process.env.THINKWORK_PLUGIN_CATALOG_USER_AGENT;
   vi.restoreAllMocks();
 });
 
@@ -103,6 +111,26 @@ describe("pluginCatalogGitHubConfigFromEnv", () => {
         THINKWORK_PLUGIN_CATALOG_SOURCE: "github",
       })?.releaseTag,
     ).toBe("plugin-catalog-main");
+  });
+
+  it("reads runtime-config-backed values through the env-wins runtime loader", async () => {
+    process.env.THINKWORK_PLUGIN_CATALOG_SOURCE = "github";
+    process.env.THINKWORK_PLUGIN_CATALOG_REPOSITORY =
+      "thinkwork-ai/thinkwork-test";
+    process.env.THINKWORK_PLUGIN_CATALOG_RELEASE_TAG = "plugin-catalog-test";
+    process.env.THINKWORK_PLUGIN_CATALOG_ASSET_NAME = "catalog-test.json";
+    process.env.THINKWORK_PLUGIN_CATALOG_CACHE_TTL_SECONDS = "42";
+    process.env.THINKWORK_PLUGIN_CATALOG_USER_AGENT = "thinkwork-test";
+
+    await expect(pluginCatalogGitHubConfigFromRuntime()).resolves.toMatchObject(
+      {
+        repository: "thinkwork-ai/thinkwork-test",
+        releaseTag: "plugin-catalog-test",
+        assetName: "catalog-test.json",
+        cacheTtlMs: 42_000,
+        userAgent: "thinkwork-test",
+      },
+    );
   });
 });
 
@@ -262,5 +290,59 @@ describe("loadGitHubPluginCatalog", () => {
         fetchImpl,
       }),
     ).rejects.toBeInstanceOf(GitHubPluginCatalogSourceError);
+  });
+
+  it("persists a verified signed catalog in S3 and re-verifies it on read", async () => {
+    const keys = keyPair();
+    const document = signedDocument({ privateKeyPem: keys.privateKeyPem });
+    let objectBody = "";
+    const client = {
+      send: vi.fn(
+        async (command: { constructor: { name: string }; input: any }) => {
+          if (command.constructor.name === "PutObjectCommand") {
+            objectBody = command.input.Body;
+            return {};
+          }
+          if (command.constructor.name === "GetObjectCommand") {
+            if (!objectBody) {
+              const error = new Error("not found");
+              error.name = "NoSuchKey";
+              throw error;
+            }
+            return { Body: objectBody };
+          }
+          throw new Error(`unexpected command ${command.constructor.name}`);
+        },
+      ),
+    };
+    const cache = createS3GitHubPluginCatalogCache({
+      bucket: "cache-bucket",
+      key: "system/plugin-catalog/cache.json",
+      trustedPublicKeyPem: keys.publicKeyPem,
+      client,
+    });
+    const fetchImpl = queuedFetch([releaseResponse(), jsonResponse(document)]);
+
+    const fresh = await loadGitHubPluginCatalog({
+      config: config({ cacheTtlMs: 1 }),
+      trustedPublicKeyPem: keys.publicKeyPem,
+      fetchImpl,
+      cache,
+      now: () => new Date("2026-06-17T01:00:00.000Z"),
+    });
+    expect(fresh.status.lastRefreshStatus).toBe("fresh");
+
+    const cached = await loadGitHubPluginCatalog({
+      config: config({ cacheTtlMs: 60_000 }),
+      trustedPublicKeyPem: keys.publicKeyPem,
+      fetchImpl,
+      cache,
+      now: () => new Date("2026-06-17T01:00:01.000Z"),
+    });
+
+    expect(cached.status.sourceCommitSha).toBe(
+      "0123456789abcdef0123456789abcdef01234567",
+    );
+    expect(vi.mocked(fetchImpl)).toHaveBeenCalledTimes(2);
   });
 });

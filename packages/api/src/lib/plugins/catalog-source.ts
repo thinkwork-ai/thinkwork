@@ -48,10 +48,12 @@ import {
 } from "@thinkwork/plugin-catalog";
 import {
   loadGitHubPluginCatalog,
-  pluginCatalogGitHubConfigFromEnv,
+  pluginCatalogGitHubCacheFromRuntime,
+  pluginCatalogGitHubConfigFromRuntime,
   resetGitHubPluginCatalogCacheForTests,
   type GitHubPluginCatalogConfig,
   type GitHubPluginCatalogSnapshot,
+  type GitHubPluginCatalogCache,
 } from "./catalog-github-source.js";
 
 export class PluginCatalogUnavailableError extends Error {
@@ -67,9 +69,16 @@ export interface PluginCatalogSourceDeps {
   /** Returns the signed catalog document (parsed JSON), or null when absent. */
   loadSignedDocument?: () => Promise<unknown | null>;
   /** Returns GitHub-backed catalog config, or null when disabled. */
-  readGitHubConfig?: () => GitHubPluginCatalogConfig | null;
+  readGitHubConfig?: () =>
+    | GitHubPluginCatalogConfig
+    | null
+    | Promise<GitHubPluginCatalogConfig | null>;
   /** Fetch implementation used by the GitHub catalog source. */
   fetch?: typeof fetch;
+  /** Returns the verified GitHub catalog cache, or undefined for memory only. */
+  createGitHubCache?: (
+    trustedPublicKeyPem: string,
+  ) => GitHubPluginCatalogCache | undefined;
 }
 
 const ssm = new SSMClient({});
@@ -148,17 +157,20 @@ export async function getPluginCatalogSnapshot(
   const readKey = deps.readTrustedPublicKey ?? defaultReadTrustedPublicKey;
   const loadDocument = deps.loadSignedDocument ?? defaultLoadSignedDocument;
   const readGitHubConfig =
-    deps.readGitHubConfig ?? pluginCatalogGitHubConfigFromEnv;
+    deps.readGitHubConfig ?? pluginCatalogGitHubConfigFromRuntime;
+  const createGitHubCache =
+    deps.createGitHubCache ?? pluginCatalogGitHubCacheFromRuntime;
 
   const trustedPublicKeyPem = await readKey();
   if (trustedPublicKeyPem) {
-    const githubConfig = readGitHubConfig();
+    const githubConfig = await readGitHubConfig();
     if (githubConfig) {
       try {
         const githubSnapshot = await loadGitHubPluginCatalog({
           config: githubConfig,
           trustedPublicKeyPem,
           fetchImpl: deps.fetch,
+          cache: createGitHubCache(trustedPublicKeyPem),
         });
         return {
           catalog: githubSnapshot.catalog,

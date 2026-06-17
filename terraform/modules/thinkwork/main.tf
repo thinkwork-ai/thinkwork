@@ -905,6 +905,8 @@ module "api" {
   bucket_name = module.s3.bucket_name
   bucket_arn  = module.s3.bucket_arn
 
+  plugin_catalog_github_token_secret_arn = var.plugin_catalog_github_token_secret_arn
+
   brain_artifacts_kms_key_arn = module.kms.key_arn
 
   user_pool_id        = module.cognito.user_pool_id

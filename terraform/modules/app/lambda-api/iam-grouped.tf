@@ -235,6 +235,13 @@ locals {
         Resource = "*"
       },
     ],
+    var.plugin_catalog_github_token_secret_arn != "" ? [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.plugin_catalog_github_token_secret_arn
+      },
+    ] : [],
     # (was standalone managed policy "lambda_deployment_evidence_read")
     # Access to the deployment evidence bucket: graphql-http's deployments
     # resolvers read deployment/status/current.json (deployed-release pointer

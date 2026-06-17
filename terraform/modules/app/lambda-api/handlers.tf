@@ -152,6 +152,19 @@ locals {
     # Settings > General starts release updates from the GraphQL API.
     DEPLOYMENT_STATE_MACHINE_ARN = var.deployment_state_machine_arn
     DEPLOYMENT_EVIDENCE_BUCKET   = var.deployment_evidence_bucket
+    # THNK-37 — the GraphQL API is the runtime trust boundary for the
+    # GitHub-hosted signed plugin catalog. Browsers keep reading through
+    # GraphQL; API verifies the release asset with the trusted public key
+    # and persists only verified snapshots in the primary workspace bucket.
+    THINKWORK_PLUGIN_CATALOG_SOURCE                  = "github"
+    THINKWORK_PLUGIN_CATALOG_REPOSITORY              = "thinkwork-ai/thinkwork"
+    THINKWORK_PLUGIN_CATALOG_RELEASE_TAG             = "plugin-catalog-main"
+    THINKWORK_PLUGIN_CATALOG_ASSET_NAME              = "thinkwork-plugin-catalog-main.json"
+    THINKWORK_PLUGIN_CATALOG_CACHE_TTL_SECONDS       = "300"
+    THINKWORK_PLUGIN_CATALOG_USER_AGENT              = "thinkwork-api/${var.stage}"
+    THINKWORK_PLUGIN_CATALOG_CACHE_BUCKET            = var.bucket_name
+    THINKWORK_PLUGIN_CATALOG_CACHE_KEY               = "system/plugin-catalog/github-release-cache.json"
+    THINKWORK_PLUGIN_CATALOG_GITHUB_TOKEN_SECRET_ARN = var.plugin_catalog_github_token_secret_arn
     # Phase 3 U10 — compliance read resolvers (complianceEvents,
     # complianceEvent, complianceEventByHash) connect to Aurora as
     # the compliance_reader role. The existing secrets-manager grant in
