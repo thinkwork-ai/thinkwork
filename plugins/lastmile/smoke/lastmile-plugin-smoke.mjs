@@ -20,6 +20,12 @@
  *     for the non-activated user, plus an optional read tool call
  *     (opportunities_list) per SMOKE_LASTMILE_MCP_CALL=1.
  *
+ * THNK-37 catalog freshness note: after a LastMile version bump, use
+ * Settings -> Plugins or GraphQL `refreshPluginCatalog` to prove the deployed
+ * API has refreshed the signed GitHub-backed catalog before running this
+ * install/upgrade smoke. This smoke verifies the ThinkWork install,
+ * activation, and MCP proxy path for the verified catalog version.
+ *
  * Dry-run is the default. Set SMOKE_ENABLE_LASTMILE_PLUGIN=1 to run live.
  *
  * Live env (GraphQL, service-secret path):

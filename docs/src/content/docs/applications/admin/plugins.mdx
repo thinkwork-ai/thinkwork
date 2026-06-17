@@ -1,0 +1,105 @@
+---
+title: Plugins
+description: Operator reference for the ThinkWork application plugin catalog, GitHub-backed catalog freshness, installs, upgrades, and package-owned verification.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Plugins are tenant-installable application capabilities published from the
+first-party `plugins/*` packages. Settings -> Plugins is the operator surface
+for catalog browse, install, upgrade, uninstall, source freshness, and plugin
+activation repair. Members can use installed plugin detail pages for their own
+connections; install and refresh controls are operator-only.
+
+**Surface:** Settings -> Plugins<br />
+**Primary files:** `apps/web/src/components/settings/plugins/PluginsPage.tsx`,
+`packages/api/src/graphql/resolvers/plugins`, `packages/api/src/lib/plugins`
+
+<Aside type="note">
+  Settings -> Plugins reads the catalog through ThinkWork GraphQL. The browser
+  never fetches GitHub directly, and the API never compiles plugin TypeScript
+  from GitHub.
+</Aside>
+
+## Catalog Freshness
+
+The authored source of truth is `plugins/<plugin-key>/`. GitHub Actions turns
+that source into a signed catalog artifact, and the GraphQL API verifies and
+caches that artifact before it becomes a trusted runtime catalog.
+
+| Layer                  | What it represents                                                 | How it changes                                                    |
+| ---------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `plugins/*` source     | Package-owned manifest, skills, adapters, runtime, docs, and tests | Normal pull requests                                              |
+| Signed GitHub artifact | Machine-readable catalog generated from `plugins/*`                | `Plugin Catalog` workflow on `main` or manual dispatch            |
+| API verified cache     | Last trusted catalog snapshot served by GraphQL                    | TTL refresh, conditional GitHub revalidation, or operator refresh |
+| Tenant install pin     | Version a tenant installed or upgraded to                          | `installPlugin` / `upgradePlugin` through ThinkWork               |
+
+The stable GitHub channel is release tag `plugin-catalog-main` with asset
+`thinkwork-plugin-catalog-main.json`. The artifact carries source provenance,
+generated time, catalog digest, per-version payload digests, and an ed25519
+signature. The private signing key stays in GitHub Actions; deployed stages
+trust only the public key.
+
+## What Operators See
+
+The catalog list overlays each signed catalog entry with the tenant's installed
+state. Operator rows show:
+
+- installed pinned version versus latest verified catalog version;
+- update availability when the latest version is newer than the install pin;
+- install state and component health;
+- launch link when an installed plugin owns a deployed application runtime.
+
+The catalog source strip shows the API's current trust posture:
+
+- source mode (`github-release`, `github-release-stale`, `bundled-signed`, or
+  `bundled-unsigned`);
+- GitHub repository, release tag, source commit, and ref when available;
+- generated and fetched timestamps;
+- verified catalog digest;
+- stale fallback message and GitHub rate-limit metadata when applicable.
+
+`Refresh catalog` is visible only to operators. It calls
+`refreshPluginCatalog`, bypasses the API freshness TTL, and returns the same
+trusted metadata surface. It does not install, upgrade, or mutate plugin state.
+
+## Failure Behavior
+
+The API verifies every GitHub artifact before caching or serving it. Bad
+signature, digest mismatch, malformed JSON, missing assets, GitHub outage, and
+rate limits must not become a trusted catalog.
+
+If a previous snapshot was verified, the API may serve it as stale fallback and
+surface the failure in `pluginCatalogMetadata`. If no verified snapshot exists
+and signed mode is active, catalog reads fail closed. Installed plugin records
+remain in Aurora either way, so already-installed plugins are not deleted by a
+catalog freshness problem.
+
+## Verification Flow
+
+To prove a plugin version bump is visible without a full app deploy:
+
+1. Merge the plugin source change under `plugins/*` to `main`.
+2. Confirm the `Plugin Catalog` workflow published the stable release asset.
+3. Confirm the artifact contains the expected plugin version, source commit
+   SHA, generated timestamp, digest, and signature.
+4. In a GitHub-backed stage, click `Refresh catalog` or wait for the API cache
+   TTL, then query or view Settings -> Plugins.
+5. Confirm latest version, installed pinned version, update availability,
+   source metadata, and stale/fallback state are correct.
+6. Install or upgrade the plugin through ThinkWork.
+7. Run the package-owned smoke through ThinkWork's installed path.
+
+For LastMile, the final smoke must prove the package-owned contract through the
+ThinkWork app and MCP proxy: `lastmile--crm`, `lastmile--tasks`, and
+`lastmile--routing` are visible for the activated user and absent for a
+non-activated user.
+
+## Related
+
+- [Managed Applications](/applications/admin/managed-applications/) - optional
+  app runtime lifecycle for plugins that deploy infrastructure
+- [Tenant MCP Servers](/applications/admin/mcp-servers/) - tenant-level MCP
+  registrations and user connection split
+- [Mobile Integrations & MCP Connect](/applications/mobile/integrations-and-mcp-connect/) -
+  end-user connection flow

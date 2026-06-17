@@ -181,6 +181,10 @@ export default defineConfig({
                       slug: "applications/admin/managed-applications",
                     },
                     {
+                      label: "Plugins",
+                      slug: "applications/admin/plugins",
+                    },
+                    {
                       label: "Artifacts",
                       slug: "applications/admin/artifacts",
                     },
