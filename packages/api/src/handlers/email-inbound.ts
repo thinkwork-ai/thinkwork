@@ -31,6 +31,7 @@ import {
 import { verifyReplyToken, hashToken } from "../lib/email-tokens.js";
 import { createColdContactThread } from "../lib/email/cold-contact-trigger.js";
 import { parseSpaceRecipient } from "../lib/email/space-address.js";
+import { normalizeSesInbound } from "../lib/email-channel/providers/ses.js";
 import { validateTemplateSendEmail } from "../lib/templates/send-email-config.js";
 
 function workspaceBucket(): string {
@@ -58,7 +59,8 @@ export async function handler(event: SESEvent): Promise<void> {
 async function processRecord(record: SESEvent["Records"][0]): Promise<void> {
   const sesNotification = record.ses;
   const mail = sesNotification.mail;
-  const sesMessageId = mail.messageId;
+  const normalizedInbound = await normalizeSesInbound(record);
+  const sesMessageId = normalizedInbound.providerMessageId;
 
   const recipient = parseThinkworkRecipient(sesNotification.receipt.recipients);
   if (!recipient) return;

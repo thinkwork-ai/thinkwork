@@ -63,6 +63,7 @@
     "sanitize-html": "^2.17.4",
     "stripe": "^17.5.0",
     "sucrase": "^3.35.1",
+    "svix": "^1.95.2",
     "uuidv7": "^1.2.1"
   },
   "devDependencies": {
