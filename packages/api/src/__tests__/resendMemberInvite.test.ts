@@ -268,7 +268,7 @@ describe("resendMemberInvite", () => {
     expect(result).toMatchObject({
       status: "DELIVERY_FAILED",
       message:
-        "Invite delivery failed because the email provider rejected the send. Check SES recipient/domain verification.",
+        "Invite delivery failed because Cognito's transactional email provider rejected the send. Check Cognito/SES invite email configuration.",
     });
     expect(warn).toHaveBeenCalledWith(
       "resendMemberInvite: Cognito invite delivery failed",

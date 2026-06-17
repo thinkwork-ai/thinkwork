@@ -69,12 +69,17 @@ Examples:
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--notes <text>", "Approval notes (stored on the decision)")
+    .option(
+      "--values <json>",
+      "Structured decision values JSON, such as edited email draft fields",
+    )
     .addHelpText(
       "after",
       `
 Examples:
   $ thinkwork inbox approve ibx-abc
   $ thinkwork inbox approve ibx-abc --notes "Budget confirmed."
+  $ thinkwork inbox approve ibx-email --values '{"emailDraft":{"body":"Looks good."}}'
 `,
     )
     .action(runInboxApprove);

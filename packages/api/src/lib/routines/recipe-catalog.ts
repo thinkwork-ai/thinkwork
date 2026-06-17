@@ -948,6 +948,8 @@ const _CATALOG: RecipeDefinition[] = [
         "tenantId.$": "$$.Execution.Input.tenantId",
         "routineId.$": "$$.Execution.Input.routineId",
         "executionId.$": "$$.Execution.Id",
+        "agentId.$": "$$.Execution.Input.agentId",
+        "spaceId.$": "$$.Execution.Input.spaceId",
         to: args.to,
         subject: args.subject,
         bodyFormat: args.bodyFormat ?? "markdown",

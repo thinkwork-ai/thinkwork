@@ -7,19 +7,15 @@ import { runWithIdempotency } from "../../../lib/idempotency.js";
 import { requireTenantAdmin } from "./authz.js";
 import { resolveCallerUserId } from "./resolve-auth-user.js";
 import {
+  COGNITO_INVITE_DELIVERY_FAILURE_MESSAGE,
   createCognitoInviteClient,
+  cognitoInviteErrorName,
+  isCognitoInviteDeliveryFailure,
   isResendableInviteStatus,
   resendCognitoInvite,
 } from "./cognitoInvites.js";
 
 const cognito = createCognitoInviteClient();
-
-const DELIVERY_FAILURE_NAMES = new Set([
-  "CodeDeliveryFailureException",
-  "InvalidEmailRoleAccessPolicyException",
-]);
-const DELIVERY_FAILURE_MESSAGE =
-  "Invite delivery failed because the email provider rejected the send. Check SES recipient/domain verification.";
 
 type ResendMemberInviteStatus = "RESENT" | "NOT_PENDING" | "DELIVERY_FAILED";
 
@@ -143,16 +139,16 @@ async function resendPendingInvite(
       email,
     });
   } catch (err) {
-    if (isDeliveryFailure(err)) {
+    if (isCognitoInviteDeliveryFailure(err)) {
       console.warn("resendMemberInvite: Cognito invite delivery failed", {
         tenantId,
         memberId,
-        errorName: errorName(err),
+        errorName: cognitoInviteErrorName(err),
         errorMessage: err instanceof Error ? err.message : String(err),
       });
       return {
         status: "DELIVERY_FAILED",
-        message: DELIVERY_FAILURE_MESSAGE,
+        message: COGNITO_INVITE_DELIVERY_FAILURE_MESSAGE,
       };
     }
     throw err;
@@ -162,23 +158,4 @@ async function resendPendingInvite(
     status: "RESENT",
     message: "Invite resent.",
   };
-}
-
-function isDeliveryFailure(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "name" in err &&
-    typeof (err as { name?: unknown }).name === "string" &&
-    DELIVERY_FAILURE_NAMES.has((err as { name: string }).name)
-  );
-}
-
-function errorName(err: unknown): string | null {
-  return typeof err === "object" &&
-    err !== null &&
-    "name" in err &&
-    typeof (err as { name?: unknown }).name === "string"
-    ? (err as { name: string }).name
-    : null;
 }

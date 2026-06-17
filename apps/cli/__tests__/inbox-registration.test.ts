@@ -60,6 +60,8 @@ describe("inbox command registration", () => {
         /--notes/,
       );
     }
+    const approve = inbox.commands.find((c) => c.name() === "approve")!;
+    expect(approve.helpInformation()).toMatch(/--values/);
   });
 
   it("inbox comment carries --file", () => {

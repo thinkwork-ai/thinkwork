@@ -137,6 +137,8 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     budget_paused_at: "scheduled_jobs.budget_paused_at",
     budget_paused_reason: "scheduled_jobs.budget_paused_reason",
     name: "scheduled_jobs.name",
+    agent_id: "scheduled_jobs.agent_id",
+    space_id: "scheduled_jobs.space_id",
     config: "scheduled_jobs.config",
     created_by_type: "scheduled_jobs.created_by_type",
     created_by_id: "scheduled_jobs.created_by_id",
@@ -278,6 +280,8 @@ describe("buildRoutineExecutionInput", () => {
         emailSendFunctionName: "caller-controlled",
         tenantId: "caller-tenant",
         routineId: "caller-routine",
+        agentId: "agent-a",
+        spaceId: "space-a",
         customValue: "kept",
       },
       {
@@ -290,12 +294,29 @@ describe("buildRoutineExecutionInput", () => {
       customValue: "kept",
       tenantId: "tenant-a",
       routineId: "routine-a",
+      agentId: "agent-a",
+      spaceId: "space-a",
       inboxApprovalFunctionName: "thinkwork-dev-api-routine-approval-callback",
       emailSendFunctionName: "thinkwork-dev-api-email-send",
       routineTaskPythonFunctionName: "thinkwork-dev-api-routine-task-python",
       adminOpsMcpFunctionName: "thinkwork-dev-api-admin-ops-mcp",
       slackSendFunctionName: "thinkwork-dev-api-slack-send",
     });
+  });
+
+  it("keeps email recipe JSONPath fields present when no Space context exists", () => {
+    const input = buildRoutineExecutionInput(
+      {
+        agentId: 42,
+      },
+      {
+        tenantId: "tenant-a",
+        routineId: "routine-a",
+      },
+    );
+
+    expect(input.agentId).toBeNull();
+    expect(input.spaceId).toBeNull();
   });
 });
 

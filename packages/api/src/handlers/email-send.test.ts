@@ -70,6 +70,15 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     capability: "agentCapabilities.capability",
   },
   emailReplyTokens: {},
+  spaces: {
+    id: "spaces.id",
+    tenant_id: "spaces.tenant_id",
+    slug: "spaces.slug",
+  },
+  tenants: {
+    id: "tenants.id",
+    slug: "tenants.slug",
+  },
 }));
 
 vi.mock("../lib/email-channel/outbound-policy.js", () => ({
@@ -86,6 +95,19 @@ describe("email-send direct routine invocation", () => {
   beforeEach(() => {
     mockSesSend.mockReset();
     mockSesSend.mockResolvedValue({ MessageId: "ses-123" });
+    evaluateOutboundPolicyMock.mockReset();
+    evaluateOutboundPolicyMock.mockResolvedValue({
+      allowed: true,
+      providerInstallId: "provider-1",
+      provider: "ses",
+      firstSendReviewRequired: true,
+    });
+    requestFirstSendApprovalMock.mockReset();
+    requestFirstSendApprovalMock.mockResolvedValue({
+      status: "pending_review",
+      conversationId: "conversation-routine",
+      inboxItemId: "inbox-routine",
+    });
     resetDb();
     delete process.env.ROUTINE_EMAIL_SOURCE;
   });
@@ -122,6 +144,65 @@ describe("email-send direct routine invocation", () => {
       },
     });
     expect(result).toEqual({ messageId: "ses-123", status: "sent" });
+  });
+
+  it("routes Space routine email through channel first-send review", async () => {
+    selectRows.push(
+      [
+        {
+          id: "agent-1",
+          tenant_id: "tenant-1",
+          send_email: { enabled: true },
+        },
+      ],
+      [
+        {
+          id: "space-1",
+          tenant_id: "tenant-1",
+          slug: "finance",
+        },
+      ],
+      [{ slug: "acme" }],
+    );
+
+    const result = await handler({
+      tenantId: "tenant-1",
+      routineId: "dfef43de-33e5-48c3-b3db-9e06dd6a45e5",
+      executionId:
+        "arn:aws:states:us-east-1:123456789012:execution:routine:exec",
+      agentId: "agent-1",
+      spaceId: "space-1",
+      to: ["recipient@example.com"],
+      subject: "Austin weather update",
+      body: "Current weather for Austin: clear.",
+      bodyFormat: "markdown",
+    });
+
+    expect(result).toMatchObject({ statusCode: 202 });
+    expect(JSON.parse(result.body ?? "{}")).toEqual({
+      status: "pending_review",
+      conversationId: "conversation-routine",
+      inboxItemId: "inbox-routine",
+    });
+    expect(evaluateOutboundPolicyMock).toHaveBeenCalledWith({
+      db: expect.anything(),
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+    });
+    expect(requestFirstSendApprovalMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        providerInstallId: "provider-1",
+        provider: "ses",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        from: "finance@acme.thinkwork.ai",
+        to: ["recipient@example.com"],
+        subject: "Austin weather update",
+        body: "Current weather for Austin: clear.",
+      }),
+    );
+    expect(mockSesSend).not.toHaveBeenCalled();
   });
 
   it("rejects direct routine email events missing required fields", async () => {

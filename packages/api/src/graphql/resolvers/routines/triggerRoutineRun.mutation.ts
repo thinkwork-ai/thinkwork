@@ -121,6 +121,8 @@ export function buildRoutineExecutionInput(
     ...userInput,
     tenantId: routine.tenantId,
     routineId: routine.routineId,
+    agentId: typeof userInput.agentId === "string" ? userInput.agentId : null,
+    spaceId: typeof userInput.spaceId === "string" ? userInput.spaceId : null,
     inboxApprovalFunctionName: runtimeFunctionName(
       "ROUTINE_APPROVAL_CALLBACK_FUNCTION_NAME",
       "routine-approval-callback",
