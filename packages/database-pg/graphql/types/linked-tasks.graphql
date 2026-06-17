@@ -5,6 +5,7 @@
 enum LinkedTaskProvider {
   LASTMILE
   THINKWORK
+  TWENTY
 }
 
 enum LinkedTaskStatus {
@@ -31,6 +32,7 @@ enum LinkedTaskEventType {
   BLOCKED
   REASSIGNED
   DUE_DATE_CHANGED
+  COMMENT_ADDED
   SYNC_FAILED
   WRITEBACK_POSTED
 }

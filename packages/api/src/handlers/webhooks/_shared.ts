@@ -40,14 +40,23 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import {
   SecretsManagerClient,
   GetSecretValueCommand,
   ResourceNotFoundException,
 } from "@aws-sdk/client-secrets-manager";
 import { eq, and, sql } from "drizzle-orm";
-import { skillRuns, tenantSystemUsers } from "@thinkwork/database-pg/schema";
+import {
+  skillRuns,
+  tenantSystemUsers,
+  webhookDeliveries,
+} from "@thinkwork/database-pg/schema";
 import { db } from "../../lib/db.js";
 import { error, json } from "../../lib/response.js";
 import { hashResolvedInputs, invokeSkillRun } from "../../graphql/utils.js";
@@ -81,6 +90,7 @@ export type WebhookResolveResult =
        * a notification_pending metric (per plan).
        */
       agentId?: string | null;
+      delivery?: WebhookDeliveryMetadata;
     }
   | {
       /**
@@ -91,6 +101,7 @@ export type WebhookResolveResult =
       ok: true;
       skip: true;
       reason: string;
+      delivery?: WebhookDeliveryMetadata;
     }
   | {
       /**
@@ -101,13 +112,24 @@ export type WebhookResolveResult =
       handled: true;
       status?: number;
       body: Record<string, unknown>;
+      delivery?: WebhookDeliveryMetadata;
     }
   | {
       /** Resolver-level failure — e.g. cross-tenant entity, missing fields. */
       ok: false;
       status: number;
       message: string;
+      delivery?: WebhookDeliveryMetadata;
     };
+
+export interface WebhookDeliveryMetadata {
+  providerName?: string;
+  providerEventId?: string;
+  externalTaskId?: string;
+  providerUserId?: string;
+  normalizedKind?: string;
+  threadId?: string;
+}
 
 export type WebhookResolver = (args: {
   tenantId: string;
@@ -120,6 +142,16 @@ export interface WebhookHandlerConfig {
   integration: string;
   /** Turns the vendor envelope into a startSkillRun request (or skip/fail). */
   resolve: WebhookResolver;
+  /**
+   * Require replay freshness and bind the signature to the timestamp.
+   * When enabled, callers must send `x-thinkwork-timestamp` and sign
+   * `${timestamp}.${rawBody}`.
+   */
+  requireTimestampFreshness?: boolean;
+  /** Defaults to 5 minutes. */
+  timestampToleranceMs?: number;
+  /** Persist bounded delivery diagnostics to webhook_deliveries. */
+  recordDeliveries?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +210,16 @@ function extractSignature(headers: Record<string, string>): string | null {
 
 export function computeSignature(secret: string, rawBody: string): string {
   return createHmac("sha256", secret).update(rawBody).digest("hex");
+}
+
+export function computeTimestampedSignature(
+  secret: string,
+  timestamp: string,
+  rawBody: string,
+): string {
+  return createHmac("sha256", secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest("hex");
 }
 
 function constantTimeEqualHex(a: string, b: string): boolean {
@@ -279,39 +321,94 @@ export function createWebhookHandler(
   return async function handleWebhook(
     event: APIGatewayProxyEventV2,
   ): Promise<APIGatewayProxyStructuredResultV2> {
+    const startMs = Date.now();
     if (event.requestContext.http.method !== "POST") {
       return error("Method not allowed", 405);
     }
 
     const tenantId = extractTenantIdFromPath(event.rawPath, config.integration);
+    const rawBody = event.isBase64Encoded
+      ? Buffer.from(event.body || "", "base64").toString("utf8")
+      : event.body || "";
+    const headers = normalizeHeaders(event.headers);
+    const delivery = createDeliveryRecord({
+      config,
+      event,
+      tenantId,
+      rawBody,
+      headers,
+      startMs,
+    });
     if (!tenantId) {
       // Don't enumerate: the public ingress MUST NOT distinguish
       // "unknown tenant" from "bad signature". Both → 401.
-      return error("Unauthorized", 401);
+      return finish(error("Unauthorized", 401), delivery);
     }
 
     const rateKey = `${tenantId}:${config.integration}`;
     if (!checkRateLimit(rateKey)) {
-      return error("Rate limit exceeded", 429);
+      if (delivery) {
+        delivery.tenant_id = tenantId;
+        delivery.signature_status = "not_required";
+        delivery.resolution_status = "rate_limited";
+        delivery.status_code = 429;
+      }
+      return finish(error("Rate limit exceeded", 429), delivery);
     }
 
-    const headers = normalizeHeaders(event.headers);
     const signature = extractSignature(headers);
-    if (!signature) return error("Unauthorized", 401);
-
-    const rawBody = event.isBase64Encoded
-      ? Buffer.from(event.body || "", "base64").toString("utf8")
-      : event.body || "";
+    if (!signature) {
+      if (delivery) {
+        delivery.tenant_id = tenantId;
+        delivery.signature_status = "missing";
+        delivery.resolution_status = "unverified";
+        delivery.status_code = 401;
+      }
+      return finish(error("Unauthorized", 401), delivery);
+    }
+    const timestamp = headers["x-thinkwork-timestamp"];
+    if (config.requireTimestampFreshness) {
+      if (!timestamp || !isFreshTimestamp(timestamp, config)) {
+        if (delivery) {
+          delivery.tenant_id = tenantId;
+          delivery.signature_status = "invalid";
+          delivery.resolution_status = "unverified";
+          delivery.status_code = 401;
+        }
+        return finish(error("Unauthorized", 401), delivery);
+      }
+    }
 
     const secret = await fetchSigningSecret({
       tenantId,
       integration: config.integration,
     });
-    if (!secret) return error("Unauthorized", 401);
+    if (!secret) {
+      if (delivery) {
+        delivery.tenant_id = tenantId;
+        delivery.signature_status = "missing";
+        delivery.resolution_status = "unverified";
+        delivery.status_code = 401;
+      }
+      return finish(error("Unauthorized", 401), delivery);
+    }
 
-    const expected = computeSignature(secret, rawBody);
+    const expected =
+      config.requireTimestampFreshness && timestamp
+        ? computeTimestampedSignature(secret, timestamp, rawBody)
+        : computeSignature(secret, rawBody);
     if (!constantTimeEqualHex(signature, expected)) {
-      return error("Unauthorized", 401);
+      if (delivery) {
+        delivery.tenant_id = tenantId;
+        delivery.signature_status = "invalid";
+        delivery.resolution_status = "unverified";
+        delivery.status_code = 401;
+      }
+      return finish(error("Unauthorized", 401), delivery);
+    }
+    if (delivery) {
+      delivery.tenant_id = tenantId;
+      delivery.signature_status = "verified";
     }
 
     // Resolver runs AFTER auth — a bad payload can't surface DB-probing
@@ -324,19 +421,42 @@ export function createWebhookHandler(
         `[webhook:${config.integration}] resolver threw for tenant ${tenantId}:`,
         err,
       );
-      return error("Resolver failed", 500);
+      if (delivery) {
+        delivery.resolution_status = "error";
+        delivery.error_message = "Resolver failed";
+        delivery.status_code = 500;
+      }
+      return finish(error("Resolver failed", 500), delivery);
     }
 
     if (!resolved.ok) {
-      return error(resolved.message, resolved.status);
+      applyDeliveryMetadata(delivery, resolved.delivery);
+      if (delivery) {
+        delivery.resolution_status =
+          resolved.status >= 500 ? "error" : "invalid_body";
+        delivery.error_message = resolved.message.slice(0, 500);
+        delivery.status_code = resolved.status;
+      }
+      return finish(error(resolved.message, resolved.status), delivery);
     }
     if ("skip" in resolved && resolved.skip) {
       // Still 200 — the vendor sent a valid event, we just chose not to
       // act. Returning 4xx would make the vendor retry indefinitely.
-      return json({ skipped: true, reason: resolved.reason });
+      applyDeliveryMetadata(delivery, resolved.delivery);
+      if (delivery) {
+        delivery.resolution_status = "ignored";
+        delivery.error_message = resolved.reason.slice(0, 500);
+        delivery.status_code = 200;
+      }
+      return finish(json({ skipped: true, reason: resolved.reason }), delivery);
     }
     if ("handled" in resolved && resolved.handled) {
-      return json(resolved.body, resolved.status ?? 200);
+      applyDeliveryMetadata(delivery, resolved.delivery);
+      if (delivery) {
+        delivery.resolution_status = "ok";
+        delivery.status_code = resolved.status ?? 200;
+      }
+      return finish(json(resolved.body, resolved.status ?? 200), delivery);
     }
 
     // TypeScript narrows resolved to the dispatch branch once we've
@@ -345,6 +465,7 @@ export function createWebhookHandler(
       WebhookResolveResult,
       { ok: true; skillId: string }
     >;
+    applyDeliveryMetadata(delivery, dispatch.delivery);
     const invokerUserId = await ensureTenantSystemUser(tenantId);
     const resolvedInputs = dispatch.inputs;
     const resolvedInputsHash = hashResolvedInputs(resolvedInputs);
@@ -398,12 +519,26 @@ export function createWebhookHandler(
           ),
         );
       if (!existing) {
-        return error(
-          "concurrent webhook race: no row inserted and no matching active run",
-          500,
+        if (delivery) {
+          delivery.resolution_status = "error";
+          delivery.error_message =
+            "concurrent webhook race: no matching active run";
+          delivery.status_code = 500;
+        }
+        return finish(
+          error(
+            "concurrent webhook race: no row inserted and no matching active run",
+            500,
+          ),
+          delivery,
         );
       }
-      return json({ runId: existing.id, deduped: true });
+      if (delivery) {
+        delivery.resolution_status = "ok";
+        delivery.status_code = 200;
+        delivery.is_replay = true;
+      }
+      return finish(json({ runId: existing.id, deduped: true }), delivery);
     }
 
     const runRow = inserted[0];
@@ -435,10 +570,22 @@ export function createWebhookHandler(
           updated_at: new Date(),
         })
         .where(eq(skillRuns.id, runRow.id));
-      return error(`skill-run invoke failed: ${invokeResult.error}`, 502);
+      if (delivery) {
+        delivery.resolution_status = "error";
+        delivery.error_message = invokeResult.error.slice(0, 500);
+        delivery.status_code = 502;
+      }
+      return finish(
+        error(`skill-run invoke failed: ${invokeResult.error}`, 502),
+        delivery,
+      );
     }
 
-    return json({ runId: runRow.id, deduped: false });
+    if (delivery) {
+      delivery.resolution_status = "ok";
+      delivery.status_code = 200;
+    }
+    return finish(json({ runId: runRow.id, deduped: false }), delivery);
   };
 }
 
@@ -454,4 +601,160 @@ function normalizeHeaders(
     if (typeof v === "string") out[k.toLowerCase()] = v;
   }
   return out;
+}
+
+type DeliveryResolutionStatus =
+  | "ok"
+  | "unverified"
+  | "rate_limited"
+  | "invalid_body"
+  | "ignored"
+  | "error";
+
+type DeliverySignatureStatus =
+  | "verified"
+  | "invalid"
+  | "missing"
+  | "not_required";
+
+interface IntegrationDeliveryRecord {
+  tenant_id?: string;
+  target_type?: string;
+  provider_name?: string;
+  provider_event_id?: string;
+  external_task_id?: string;
+  provider_user_id?: string;
+  normalized_kind?: string;
+  received_at: Date;
+  source_ip?: string;
+  body_sha256?: string;
+  body_size_bytes: number;
+  headers_safe?: Record<string, string>;
+  signature_status: DeliverySignatureStatus;
+  resolution_status: DeliveryResolutionStatus;
+  thread_id?: string;
+  status_code?: number;
+  error_message?: string;
+  start_ms: number;
+  is_replay?: boolean;
+}
+
+function createDeliveryRecord(args: {
+  config: WebhookHandlerConfig;
+  event: APIGatewayProxyEventV2;
+  tenantId: string | null;
+  rawBody: string;
+  headers: Record<string, string>;
+  startMs: number;
+}): IntegrationDeliveryRecord | null {
+  if (!args.config.recordDeliveries) return null;
+  return {
+    tenant_id: args.tenantId ?? undefined,
+    target_type: "task",
+    received_at: new Date(args.startMs),
+    source_ip:
+      args.event.requestContext.http.sourceIp ||
+      args.headers["x-forwarded-for"]?.split(",")[0]?.trim(),
+    body_sha256: args.rawBody
+      ? createHash("sha256").update(args.rawBody).digest("hex")
+      : undefined,
+    body_size_bytes: Buffer.byteLength(args.rawBody, "utf8"),
+    headers_safe: redactHeaders(args.headers),
+    signature_status: "not_required",
+    resolution_status: "error",
+    start_ms: args.startMs,
+  };
+}
+
+async function finish(
+  response: APIGatewayProxyStructuredResultV2,
+  delivery: IntegrationDeliveryRecord | null,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  if (delivery && delivery.status_code === undefined) {
+    delivery.status_code = response.statusCode;
+  }
+  if (delivery) await recordIntegrationDelivery(delivery);
+  return response;
+}
+
+async function recordIntegrationDelivery(
+  record: IntegrationDeliveryRecord,
+): Promise<void> {
+  try {
+    await db.insert(webhookDeliveries).values({
+      tenant_id: record.tenant_id,
+      target_type: record.target_type,
+      provider_name: record.provider_name,
+      provider_event_id: record.provider_event_id,
+      external_task_id: record.external_task_id,
+      provider_user_id: record.provider_user_id,
+      normalized_kind: record.normalized_kind,
+      received_at: record.received_at,
+      source_ip: record.source_ip,
+      body_sha256: record.body_sha256,
+      body_size_bytes: record.body_size_bytes,
+      headers_safe: record.headers_safe,
+      signature_status: record.signature_status,
+      resolution_status: record.resolution_status,
+      thread_id: record.thread_id,
+      status_code: record.status_code,
+      error_message: record.error_message,
+      duration_ms: Date.now() - record.start_ms,
+      is_replay: record.is_replay ?? false,
+    });
+  } catch (err) {
+    console.error(
+      "[webhook] delivery_log_failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+function applyDeliveryMetadata(
+  record: IntegrationDeliveryRecord | null,
+  metadata: WebhookDeliveryMetadata | undefined,
+) {
+  if (!record || !metadata) return;
+  record.provider_name = metadata.providerName;
+  record.provider_event_id = metadata.providerEventId;
+  record.external_task_id = metadata.externalTaskId;
+  record.provider_user_id = metadata.providerUserId;
+  record.normalized_kind = metadata.normalizedKind;
+  record.thread_id = metadata.threadId;
+}
+
+function redactHeaders(
+  headers: Record<string, string>,
+): Record<string, string> {
+  const safe = ["content-type", "content-length", "user-agent", "x-request-id"];
+  const out: Record<string, string> = {};
+  for (const key of safe) {
+    const value = headers[key];
+    if (value) out[key] = value;
+  }
+  const timestamp = headers["x-thinkwork-timestamp"];
+  if (timestamp) out["x-thinkwork-timestamp"] = timestamp;
+  return out;
+}
+
+function isFreshTimestamp(
+  value: string,
+  config: Pick<WebhookHandlerConfig, "timestampToleranceMs">,
+): boolean {
+  const parsedMs = parseTimestampMs(value);
+  if (parsedMs === null) return false;
+  const toleranceMs = config.timestampToleranceMs ?? 5 * 60 * 1_000;
+  return Math.abs(Date.now() - parsedMs) <= toleranceMs;
+}
+
+function parseTimestampMs(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric)) return null;
+    return numeric > 1_000_000_000_000 ? numeric : numeric * 1_000;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? null : parsed;
 }

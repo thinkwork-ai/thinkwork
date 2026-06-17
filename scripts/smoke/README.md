@@ -27,6 +27,9 @@ This kit fills the gap.
 | `fixtures/crm-opportunity-won.json`                                  | Valid CRM close-won event. Starts or returns a Customer Onboarding Space Thread and mirrors checklist tasks.                                                                                                                                                                                                                                                                                                                                                                   |
 | `fixtures/task-completed.json`                                       | Task completion event with a `triggeredByRunId` hook. Edit before using.                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `fixtures/task-completed-no-trigger.json`                            | Task completion without metadata — verifies the "skip, don't re-tick" branch.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `fixtures/task-event-status-changed.json`                            | Normalized Twenty `thread-event-source.v1` status change fixture for THNK-33 server-contract smoke.                                                                                                                                                                                                                                                                                                                                                                            |
+| `fixtures/task-event-comment-added.json`                             | Normalized Twenty comment fixture for THNK-33 server-contract smoke and duplicate replay checks.                                                                                                                                                                                                                                                                                                                                                                               |
+| `fixtures/task-event-status-unknown.json`                            | Normalized Twenty unknown-task fixture; expected to authenticate and record an ignored diagnostic without appending or waking.                                                                                                                                                                                                                                                                                                                                                 |
 | `spaces-runbook-smoke.mjs`                                           | Computer runbook smoke. Dry-run reports expected prompts/runbooks without catalog validation; live mode checks tenant S3 catalog-backed runbooks, auto-selected confirmation, explicit Queue creation, cancellation, and no-match fallback.                                                                                                                                                                                                                                    |
 | `foundation-bootstrap-smoke.mjs`                                     | GitHub-free foundation bootstrap smoke. Dry-run reports required endpoint/evidence inputs; live mode verifies generated Spaces/API/Auth/profile/control-plane outputs and emits a support evidence envelope.                                                                                                                                                                                                                                                                   |
 | `deployment-profile-binding-smoke.mjs`                               | Deployment profile binding smoke. Dry-run reports profile requirements; live mode validates runtime-config-backed web, desktop, and mobile profile binding without recording credential material.                                                                                                                                                                                                                                                                              |
@@ -494,40 +497,35 @@ Rerunning the same fixture should be idempotent:
 { "threadId": "<same uuid>", "idempotent": true, "linkedTaskCount": 0 }
 ```
 
-## Smoke test 2 — task completion → reconciler tick 2
+## Smoke test 2 — Twenty task event server contract
 
-Edit `fixtures/task-completed.json`, replacing `triggeredByRunId` with
-the `id` from the tick-1 run (from the SQL query above). Then:
+Use the detailed runbook:
+
+```sh
+open docs/runbooks/twenty-task-event-server-contract.md
+```
+
+At minimum, seed a `linked_tasks` row with `provider = 'twenty'` and
+`external_task_id = 'twenty-smoke-task-0001'`, then send the status and comment
+fixtures:
 
 ```sh
 scripts/smoke/webhook-smoke.sh \
   --tenant-id <tenant-id> \
   --integration task-event \
-  --payload scripts/smoke/fixtures/task-completed.json
-```
+  --payload scripts/smoke/fixtures/task-event-status-changed.json
 
-**What should happen:**
-
-1. HTTP 200 with a new `runId` (assuming the prior run is no longer
-   `running` — if it is, you get `{"deduped":true}` instead).
-2. New `skill_runs` row with:
-   - `invocation_source = 'webhook'`
-   - `triggered_by_run_id` = the tick-1 run's id
-   - Same `skill_id` and `resolved_inputs` as tick 1.
-3. Same failure mode at the connector layer — again, acceptable.
-
-The "skip, don't re-tick" branch — when a task.completed event has no
-`triggeredByRunId` — can be smoke-tested with:
-
-```sh
 scripts/smoke/webhook-smoke.sh \
   --tenant-id <tenant-id> \
   --integration task-event \
-  --payload scripts/smoke/fixtures/task-completed-no-trigger.json
+  --payload scripts/smoke/fixtures/task-event-comment-added.json
 ```
 
-Expected: HTTP 200 with `{"skipped":true,"reason":"..."}` — no new
-`skill_runs` row.
+Expected: HTTP 200, a `linked_task_events` row, bounded diagnostics in
+`webhook_deliveries`, and no raw body persistence. Replaying the same comment
+fixture should not create a second milestone. This proves
+`server_contract_verified` only; it does not prove native Twenty producer or
+embedded app installation.
 
 ## Smoke test 3 — 401 on bad signature
 
