@@ -845,6 +845,14 @@ export async function completeActivation(
     pluginInstallId: install.id,
     resourceIndicator: primaryResource,
   });
+  const existingTokens = await deps.store.listActivationTokens(activation.id);
+  for (const token of existingTokens) {
+    if (token.secret_ref && token.secret_ref !== secretName) {
+      await deps.secrets.deleteSecret(token.secret_ref);
+    }
+  }
+  await deps.store.deleteActivationTokens(activation.id);
+
   await deps.secrets.putSecret(
     secretName,
     JSON.stringify({
@@ -1203,15 +1211,26 @@ export function createPluginDispatchAuthResolver(
         const wanted = normalizeResource(resource);
         // ONE token per activation covers ALL the plugin's servers (Fix C):
         // audience is not enforced, so any active token record resolves any
-        // server. Prefer an exact resource match (single-record activations
-        // and old multi-record activations that happen to have this
-        // resource), else fall back to the first active record (compat for
-        // pre-Fix-C multi-record activations whose stored resource differs).
+        // server. Prefer a fresh exact resource match, else any fresh token
+        // (compat for reauthorized pre-Fix-C activations with stale exact
+        // resource rows), then fall back to the old exact/first ordering so
+        // fully expired activations can still attempt refresh.
         const activeTokens = tokens.filter((row) => row.status === "active");
+        const nowMs = deps.now().getTime();
+        const freshTokens = activeTokens.filter((row) => {
+          if (!row.expires_at) return true;
+          return (
+            new Date(row.expires_at).getTime() - nowMs >= TOKEN_EXPIRY_BUFFER_MS
+          );
+        });
+        const exactFresh = freshTokens.find(
+          (row) => normalizeResource(row.resource_indicator) === wanted,
+        );
+        const exactActive = activeTokens.find(
+          (row) => normalizeResource(row.resource_indicator) === wanted,
+        );
         const tokenRow =
-          activeTokens.find(
-            (row) => normalizeResource(row.resource_indicator) === wanted,
-          ) ?? activeTokens[0];
+          exactFresh ?? freshTokens[0] ?? exactActive ?? activeTokens[0];
         if (!tokenRow?.secret_ref) {
           console.warn(
             `${logPrefix} Skipping plugin MCP ${slug}: no active token record for activation (resource ${wanted})`,
@@ -1235,7 +1254,6 @@ export function createPluginDispatchAuthResolver(
           resource?: string;
         };
 
-        const nowMs = deps.now().getTime();
         const isExpired =
           tokenRow.expires_at &&
           new Date(tokenRow.expires_at).getTime() - nowMs <
