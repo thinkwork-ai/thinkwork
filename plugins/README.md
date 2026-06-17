@@ -73,6 +73,38 @@ pnpm --filter @thinkwork/plugin-catalog test
 pnpm --filter @thinkwork/plugin-catalog typecheck
 ```
 
+## Signed Catalog Publication
+
+The authored source of truth stays in root `plugins/*` packages. The runtime
+freshness channel is a signed JSON artifact produced from that source by the
+`Plugin Catalog` GitHub Actions workflow.
+
+On pull requests that touch `plugins/**`, the workflow:
+
+- checks the generated first-party plugin registry;
+- runs the catalog package tests and typecheck;
+- builds a signed catalog with an ephemeral ed25519 key; and
+- verifies the signed JSON before the PR can merge.
+
+On pushes to `main`, the workflow publishes a stable GitHub Release asset only
+when catalog-affecting source changed under `plugins/catalog/**`,
+`plugins/<plugin-key>/src/**`, or `plugins/<plugin-key>/package.json`. Docs-only
+changes under plugin folders leave the previous catalog asset in place. A manual
+workflow dispatch can force a publish when an operator needs to republish the
+current `main` catalog.
+
+The stable channel is:
+
+- release tag: `plugin-catalog-main`;
+- asset: `thinkwork-plugin-catalog-main.json`;
+- private signing secret: `PLUGIN_CATALOG_SIGNING_KEY`; and
+- signed provenance: repository, ref, source commit SHA, generated timestamp,
+  catalog digest, and per-version payload digests.
+
+The signing key is used only by GitHub Actions. Deployed ThinkWork stages should
+trust the matching public key through runtime configuration and continue to read
+catalog data through ThinkWork GraphQL, not browser-side GitHub calls.
+
 Before closing a migration slice, run the source-boundary check:
 
 ```bash
