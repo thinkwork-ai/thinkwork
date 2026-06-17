@@ -6,12 +6,12 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { EmitAuditEventInput } from "../compliance/emit.js";
 import {
   cutoverTwentyPluginForTenant,
   TWENTY_PLUGIN_MCP_SLUG,
+  type TwentyCutoverAuditInput,
   type TwentyCutoverDeps,
-} from "./twenty-cutover.js";
+} from "../../src/api/cutover.js";
 
 interface FakeState {
   install: { id: string } | null;
@@ -25,7 +25,7 @@ function fakeDeps(state: FakeState) {
     invalidatedServerIds: [] as string[],
     adopted: [] as Array<Record<string, unknown>>,
     removed: [] as Array<Record<string, unknown>>,
-    audits: [] as EmitAuditEventInput[],
+    audits: [] as TwentyCutoverAuditInput[],
   };
   const deps: TwentyCutoverDeps = {
     getTwentyInstall: vi.fn(async () => state.install),

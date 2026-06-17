@@ -1,4 +1,11 @@
-import type { KnowledgeGraphOntologyExport } from "./ontology-export.js";
+export interface KnowledgeGraphOntologyExport {
+  mechanism: "cognee_owl_ontology" | "custom_prompt";
+  entityTypes: unknown[];
+  relationshipTypes: unknown[];
+  customPrompt: string;
+  ontologyKey: string | null;
+  ontologyOwlXml: string | null;
+}
 
 export interface CogneeGraphNode {
   id: string;
@@ -736,8 +743,8 @@ function isDuplicateOntologyError(err: unknown, ontologyKey: string): boolean {
 function hasOntologyKey(payload: unknown, ontologyKey: string): boolean {
   return Boolean(
     payload &&
-      typeof payload === "object" &&
-      Object.prototype.hasOwnProperty.call(payload, ontologyKey),
+    typeof payload === "object" &&
+    Object.prototype.hasOwnProperty.call(payload, ontologyKey),
   );
 }
 

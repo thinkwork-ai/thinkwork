@@ -1,6 +1,6 @@
 import { GraphQLError } from "graphql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BrainSubstrateMigrationRow } from "../../../lib/company-brain/migration.js";
+import type { BrainSubstrateMigrationRow } from "@thinkwork/plugin-company-brain/api/migration";
 
 const mocks = vi.hoisted(() => ({
   requireAdminOrServiceCaller: vi.fn(),
@@ -19,18 +19,21 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mocks.resolveCallerUserId,
 }));
 
-vi.mock("../../../lib/company-brain/migration.js", async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import("../../../lib/company-brain/migration.js")
-    >();
-  return {
-    ...actual,
-    requestCompanyBrainProductionMigration:
-      mocks.requestCompanyBrainProductionMigration,
-    updateCompanyBrainMigration: mocks.updateCompanyBrainMigration,
-  };
-});
+vi.mock(
+  "@thinkwork/plugin-company-brain/api/migration",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@thinkwork/plugin-company-brain/api/migration")
+      >();
+    return {
+      ...actual,
+      requestCompanyBrainProductionMigration:
+        mocks.requestCompanyBrainProductionMigration,
+      updateCompanyBrainMigration: mocks.updateCompanyBrainMigration,
+    };
+  },
+);
 
 let mod: typeof import("./companyBrainMigration.mutation.js");
 

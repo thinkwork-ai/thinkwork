@@ -26,6 +26,11 @@ export const twentyPluginPackage = {
       description: "Twenty managed-app Terraform module.",
     },
     {
+      kind: "api",
+      path: "plugins/twenty/src/api/cutover.ts",
+      description: "Twenty MCP cutover orchestration contract.",
+    },
+    {
       kind: "tests",
       path: "plugins/twenty/test",
       description: "Twenty package-local manifest and contract tests.",
@@ -36,16 +41,9 @@ export const twentyPluginPackage = {
       description: "Twenty package ownership and migration notes.",
     },
   ],
-  compatibilityLinks: [
-    {
-      path: "packages/api/src/lib/plugins/twenty-cutover.ts",
-      reason:
-        "Twenty MCP cutover helper is still owned by the shared API package.",
-      removal:
-        "THNK-31 U6 moves plugin-specific API helpers behind package exports.",
-    },
-  ],
+  compatibilityLinks: [],
 } as const;
 
 export { twentyManifest };
 export { twentyAdapter } from "./deployment/managed-app";
+export * from "./api/cutover";

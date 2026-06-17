@@ -1,12 +1,12 @@
 import { GraphQLError } from "graphql";
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { getDb, type Database } from "@thinkwork/database-pg";
 import {
   brainArtifactManifests,
   brainSubstrateEvents,
   brainSubstrateMigrations,
   brainSubstrateStates,
 } from "@thinkwork/database-pg/schema";
-import { db as defaultDb, type Database } from "../db.js";
 
 type BrainMigrationDb = Pick<Database, "select" | "insert" | "update"> & {
   transaction?<T>(fn: (tx: BrainMigrationDb) => Promise<T>): Promise<T>;
@@ -103,7 +103,7 @@ const PHASE_ORDER: BrainMigrationPhase[] = [
 ];
 
 export function createDrizzleBrainMigrationDeps(
-  db: BrainMigrationDb = defaultDb,
+  db: BrainMigrationDb = getDb(),
 ): BrainMigrationDeps {
   return {
     async runInTransaction(fn) {

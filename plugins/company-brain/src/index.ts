@@ -33,6 +33,12 @@ export const companyBrainPluginPackage = {
       description: "Company Brain internal substrate runtime image source.",
     },
     {
+      kind: "api",
+      path: "plugins/company-brain/src/api",
+      description:
+        "Company Brain migration helpers, context provider, substrate client, and cluster identity utilities.",
+    },
+    {
       kind: "tests",
       path: "plugins/company-brain/test",
       description: "Company Brain package-local manifest and contract tests.",
@@ -51,29 +57,12 @@ export const companyBrainPluginPackage = {
         "Company Brain operator UI is still owned by the shared web app during migration.",
       removal: "THNK-31 U5 renders plugin-owned UI from plugin detail.",
     },
-    {
-      path: "packages/api/src/lib/company-brain",
-      reason:
-        "Company Brain API helpers are still owned by the shared API package during migration.",
-      removal:
-        "THNK-31 U6 moves plugin-specific API helpers behind package exports.",
-    },
-    {
-      path: "packages/api/src/lib/context-engine/providers/company-brain.ts",
-      reason:
-        "Company Brain context provider is still owned by the shared API package during migration.",
-      removal:
-        "THNK-31 U6 moves plugin-specific API helpers behind package exports.",
-    },
-    {
-      path: "packages/api/src/lib/knowledge-graph/cognee-client.ts",
-      reason:
-        "Company Brain substrate client is still owned by the shared API package during migration.",
-      removal:
-        "THNK-31 U6 moves plugin-specific API helpers behind package exports.",
-    },
   ],
 } as const;
 
 export { companyBrainManifest };
 export { cogneeAdapter } from "./deployment/cognee-managed-app";
+export * from "./api/cognee-client";
+export * from "./api/cognee-cluster-identity";
+export * from "./api/context-engine-provider";
+export * from "./api/migration";

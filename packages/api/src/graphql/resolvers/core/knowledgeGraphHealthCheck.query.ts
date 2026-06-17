@@ -12,7 +12,7 @@ import {
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { GraphQLContext } from "../../context.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
-import { resolveCogneeClusterIdentity } from "./cogneeClusterIdentity.js";
+import { resolveCogneeClusterIdentity } from "@thinkwork/plugin-company-brain/api/cognee-cluster-identity";
 import { readCogneeStatus } from "./managedApplications.js";
 import { resolveCallerTenantId } from "./resolve-auth-user.js";
 

@@ -18,11 +18,11 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../lib/db.js";
 import { db as defaultDb } from "../lib/db.js";
+import { CogneeClient } from "@thinkwork/plugin-company-brain/api/cognee-client";
 import {
   redactedSourceRef,
   writeKnowledgeGraphIngestArtifacts,
 } from "../lib/knowledge-graph/artifacts.js";
-import { CogneeClient } from "../lib/knowledge-graph/cognee-client.js";
 import { normalizeCogneeGraph } from "../lib/knowledge-graph/normalizer.js";
 import { loadApprovedOntologyExport } from "../lib/knowledge-graph/ontology-export.js";
 import { loadObservationsKnowledgeGraphSource } from "../lib/knowledge-graph/observations-source.js";
@@ -129,9 +129,8 @@ async function selfInvokeObservationsIngest(args: {
       "observations ingest worker function name is not configured (STAGE or KNOWLEDGE_GRAPH_OBSERVATIONS_INGEST_FUNCTION_NAME)",
     );
   }
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   await lambda.send(
     new InvokeCommand({

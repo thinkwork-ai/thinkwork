@@ -4,11 +4,11 @@ import type {
   BrainMigrationDeps,
   BrainSubstrateMigrationRow,
   BrainSubstrateStateRow,
-} from "./migration.js";
+} from "../../src/api/migration.js";
 import {
   requestCompanyBrainProductionMigration,
   updateCompanyBrainMigration,
-} from "./migration.js";
+} from "../../src/api/migration.js";
 
 const now = new Date("2026-06-14T12:00:00.000Z");
 

@@ -25,47 +25,6 @@ export const pluginSourceBoundaryAllowlist = [
     reason: "legacy Cognee settings UI until web plugin extension points move",
   },
   {
-    path: "packages/api/src/graphql/resolvers/core/cogneeClusterIdentity.ts",
-    reason:
-      "legacy Cognee identity resolver until Company Brain substrate moves",
-  },
-  {
-    path: "packages/api/src/lib/company-brain/migration.test.ts",
-    reason:
-      "legacy Company Brain migration helper until API extension points move",
-  },
-  {
-    path: "packages/api/src/lib/company-brain/migration.ts",
-    reason:
-      "legacy Company Brain migration helper until API extension points move",
-  },
-  {
-    path: "packages/api/src/lib/context-engine/providers/company-brain.test.ts",
-    reason:
-      "legacy Company Brain context provider until API extension points move",
-  },
-  {
-    path: "packages/api/src/lib/context-engine/providers/company-brain.ts",
-    reason:
-      "legacy Company Brain context provider until API extension points move",
-  },
-  {
-    path: "packages/api/src/lib/knowledge-graph/cognee-client.test.ts",
-    reason: "legacy Cognee client until Company Brain substrate moves",
-  },
-  {
-    path: "packages/api/src/lib/knowledge-graph/cognee-client.ts",
-    reason: "legacy Cognee client until Company Brain substrate moves",
-  },
-  {
-    path: "packages/api/src/lib/plugins/twenty-cutover.test.ts",
-    reason: "legacy Twenty cutover helper until API extension points move",
-  },
-  {
-    path: "packages/api/src/lib/plugins/twenty-cutover.ts",
-    reason: "legacy Twenty cutover helper until API extension points move",
-  },
-  {
     path: "packages/api/test/integration/context-engine/company-brain-context.e2e.test.ts",
     reason:
       "legacy Company Brain integration coverage until API extension points move",

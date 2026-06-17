@@ -1,6 +1,6 @@
 import type { Database } from "../lib/db.js";
 import { db as defaultDb } from "../lib/db.js";
-import { CogneeClient } from "../lib/knowledge-graph/cognee-client.js";
+import { CogneeClient } from "@thinkwork/plugin-company-brain/api/cognee-client";
 import {
   redactedSourceRef,
   writeKnowledgeGraphIngestArtifacts,

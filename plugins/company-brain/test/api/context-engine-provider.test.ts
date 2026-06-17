@@ -4,8 +4,8 @@ import {
   buildBrainPrefixTsQuery,
   createCompanyBrainContextProvider,
   normalizeBrainSearchTerms,
-} from "./company-brain.js";
-import type { ContextEngineProviderRequest } from "../types.js";
+  type ContextEngineProviderRequest,
+} from "../../src/api/context-engine-provider.js";
 
 const readySubstrate = {
   id: "substrate-1",

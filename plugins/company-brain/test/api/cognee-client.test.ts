@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CogneeClient } from "./cognee-client.js";
+import { CogneeClient } from "../../src/api/cognee-client.js";
 
 const ontology = {
   mechanism: "cognee_owl_ontology" as const,

@@ -16,6 +16,8 @@ implementation notes.
   managed-app deployment adapter.
 - `terraform/cognee/` owns the internal substrate Terraform module.
 - `runtime/cognee/Dockerfile` owns the internal substrate runtime image source.
+- `src/api/` owns Company Brain migration helpers, context-engine provider,
+  internal substrate client, and cluster identity utilities.
 - `smoke/` owns Company Brain entitlement, operations, context engine, and
   internal substrate smoke scripts.
 - `test/manifest.test.ts` keeps Company Brain premium entitlement,
@@ -28,10 +30,6 @@ contain plugin-specific source:
 
 - `apps/web/src/components/settings/SettingsCogneeApplication.tsx` until
   THNK-31 U5 renders Company Brain-owned UI from plugin detail.
-- `packages/api/src/lib/company-brain`,
-  `packages/api/src/lib/context-engine/providers/company-brain.ts`, and
-  `packages/api/src/lib/knowledge-graph/cognee-client.ts` until THNK-31 U6
-  moves plugin-specific API/runtime helpers behind package exports.
 
 These links are migration debt, not shared platform ownership.
 

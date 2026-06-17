@@ -10,7 +10,7 @@ import {
   updateCompanyBrainMigration,
   type BrainMigrationDeps,
   type BrainSubstrateMigrationRow,
-} from "../../../lib/company-brain/migration.js";
+} from "@thinkwork/plugin-company-brain/api/migration";
 
 export const requestCompanyBrainProductionMigrationMutation = async (
   _parent: unknown,

@@ -34,7 +34,7 @@ const {
   reapStaleObservationIngestRunsMock: vi.fn(),
 }));
 
-vi.mock("../lib/knowledge-graph/cognee-client.js", () => ({
+vi.mock("@thinkwork/plugin-company-brain/api/cognee-client", () => ({
   CogneeClient: vi.fn(() => ({
     fetchDatasetGraph: fetchDatasetGraphMock,
     ingestDocument: ingestDocumentMock,
