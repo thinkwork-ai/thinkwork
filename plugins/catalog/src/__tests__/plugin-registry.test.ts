@@ -41,7 +41,7 @@ describe("generated first-party plugin registry", () => {
 
   it("keeps the checked-in generated aggregate fresh", () => {
     const generatedPath = fileURLToPath(
-      new URL("../plugins/generated-first-party.ts", import.meta.url),
+      new URL("../registry/generated-first-party.ts", import.meta.url),
     );
     expect(readFileSync(generatedPath, "utf8")).toBe(expectedPluginRegistry());
   });

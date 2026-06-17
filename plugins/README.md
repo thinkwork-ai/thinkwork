@@ -12,6 +12,11 @@ deployment-runner orchestration, common web shell code, database schema, and
 common test harnesses. Plugin packages own the product-specific source that
 plugs into those contracts.
 
+The generic catalog/contract package lives at `plugins/catalog` and is still
+published inside the workspace as `@thinkwork/plugin-catalog`. It is not a
+first-party application plugin; registry generation skips it and discovers only
+real `plugins/<plugin-key>/` application packages.
+
 ## Package Contract
 
 Each plugin package should include the pieces that apply to that plugin:

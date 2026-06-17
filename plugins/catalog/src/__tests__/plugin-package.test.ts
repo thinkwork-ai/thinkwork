@@ -8,7 +8,7 @@ import {
   allPluginManifests,
   firstPartyPluginPackages,
   planePluginPackage,
-} from "../plugins";
+} from "../registry";
 
 describe("first-party plugin packages", () => {
   it("registers Plane from the root plugin package boundary", () => {

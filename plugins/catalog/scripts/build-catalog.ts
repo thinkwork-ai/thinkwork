@@ -17,7 +17,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { buildPluginCatalog, signPluginCatalog } from "../src/catalog";
 import type { PluginManifest } from "../src/contracts";
-import { allPluginManifests } from "../src/plugins";
+import { allPluginManifests } from "../src/registry";
 
 export function buildSignedCatalogJson(options: {
   manifests: readonly PluginManifest[];

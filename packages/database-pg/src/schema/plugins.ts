@@ -69,7 +69,7 @@ export const PLUGIN_COMPONENT_STATES = [
 export type PluginComponentState = (typeof PLUGIN_COMPONENT_STATES)[number];
 
 /**
- * Component types mirror packages/plugin-catalog PLUGIN_COMPONENT_TYPES.
+ * Component types mirror @thinkwork/plugin-catalog PLUGIN_COMPONENT_TYPES.
  * Kept as a string column (CHECK-constrained) so the schema package stays
  * decoupled from the catalog package.
  */
