@@ -130,6 +130,8 @@ project_context: TEI ThinkWork
   and the CLI Terraform bundler/init scaffold to use plugin-owned source paths.
 - Removed the Terraform/runtime entries from the source-boundary migration
   allowlist. The guard now reports 20 migration paths, down from 33.
+- PR #2562 merged into `main` as
+  `4aad79f00db0a61f7675f7e220b4ee5d9a404906`.
 
 ### Verification
 
