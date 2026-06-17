@@ -257,6 +257,86 @@ export const SettingsEmailChannelQuery = graphql(`
   }
 `);
 
+export const SettingsSaveEmailProviderCredentialMutation = graphql(`
+  mutation SettingsSaveEmailProviderCredential(
+    $input: SaveEmailProviderCredentialInput!
+  ) {
+    saveEmailProviderCredential(input: $input) {
+      id
+      provider
+      status
+      activeForProduction
+      credentialConfigured
+      webhookSecretConfigured
+      defaultFromEmail
+      metadata
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsRunEmailReadinessProbeMutation = graphql(`
+  mutation SettingsRunEmailReadinessProbe($providerInstallId: ID!) {
+    runEmailReadinessProbe(providerInstallId: $providerInstallId) {
+      id
+      providerInstallId
+      domainId
+      checkKey
+      status
+      failureCode
+      failureMessage
+      lastCheckedAt
+    }
+  }
+`);
+
+export const SettingsUpsertEmailSpacePolicyMutation = graphql(`
+  mutation SettingsUpsertEmailSpacePolicy(
+    $input: UpsertEmailSpacePolicyInput!
+  ) {
+    upsertEmailSpacePolicy(input: $input) {
+      id
+      spaceId
+      providerInstallId
+      enabled
+      registeredUsersAllowed
+      privateSpaceMembershipRequired
+      outsideSenderDefault
+      firstSendReviewRequired
+      policy
+      allowlists {
+        id
+        valueType
+        value
+        reason
+        createdAt
+      }
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsAddEmailSpaceSenderAllowlistMutation = graphql(`
+  mutation SettingsAddEmailSpaceSenderAllowlist(
+    $input: AddEmailSpaceSenderAllowlistInput!
+  ) {
+    addEmailSpaceSenderAllowlist(input: $input) {
+      id
+      spaceId
+      valueType
+      value
+      reason
+      createdAt
+    }
+  }
+`);
+
+export const SettingsRemoveEmailSpaceSenderAllowlistMutation = graphql(`
+  mutation SettingsRemoveEmailSpaceSenderAllowlist($id: ID!) {
+    removeEmailSpaceSenderAllowlist(id: $id)
+  }
+`);
+
 export const SettingsRequestCompanyBrainProductionMigrationMutation = graphql(`
   mutation SettingsRequestCompanyBrainProductionMigration(
     $input: RequestCompanyBrainProductionMigrationInput!

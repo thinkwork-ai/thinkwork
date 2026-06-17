@@ -32,6 +32,18 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
       ),
       SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
       SettingsInstallPluginMutation: Symbol("installPlugin"),
+      SettingsEmailChannelQuery: Symbol("emailChannel"),
+      SettingsSaveEmailProviderCredentialMutation: Symbol(
+        "saveEmailProviderCredential",
+      ),
+      SettingsRunEmailReadinessProbeMutation: Symbol("runEmailReadinessProbe"),
+      SettingsUpsertEmailSpacePolicyMutation: Symbol("upsertEmailSpacePolicy"),
+      SettingsAddEmailSpaceSenderAllowlistMutation: Symbol(
+        "addEmailSpaceSenderAllowlist",
+      ),
+      SettingsRemoveEmailSpaceSenderAllowlistMutation: Symbol(
+        "removeEmailSpaceSenderAllowlist",
+      ),
       SettingsManagedApplicationDeploymentQuery: Symbol(
         "managedApplicationDeployment",
       ),
@@ -167,6 +179,17 @@ function mockQueries({
       return [
         {
           data: { managedApplicationDeployment: deploymentJob },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
+    }
+    if (query === queryDocs.SettingsEmailChannelQuery) {
+      return [
+        {
+          data: {
+            emailChannelSummary,
+          },
           fetching: false,
         },
         vi.fn(),
@@ -490,6 +513,31 @@ describe("PluginDetail", () => {
     ).toBeNull();
   });
 
+  it("renders Email channel readiness and Resend key guidance for operators", () => {
+    paramsState.pluginKey = "email-channel";
+    mockQueries({
+      install: {
+        ...baseInstall,
+        pluginKey: "email-channel",
+        state: "installed",
+      },
+      activations: [],
+      catalog: [emailChannelEntry],
+    });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("Production email blocked")).toBeTruthy();
+    expect(screen.getAllByText("Resend API key").length).toBeGreaterThan(1);
+    expect(
+      screen.getByText(/dedicated ThinkWork production key/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/sending_access with a domain scope/i),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Resend API key")).toBeTruthy();
+    expect(screen.getByText("Not stored")).toBeTruthy();
+  });
+
   it("opens an install-key dialog for unentitled Company Brain installs", async () => {
     paramsState.pluginKey = "company-brain";
     mockQueries({
@@ -696,6 +744,58 @@ const planeEntry = {
     },
   ],
   install: null,
+};
+
+const emailChannelEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "email-channel",
+  displayName: "Email",
+  description: "Tenant agent and Space email channel.",
+  latestVersion: "0.1.0",
+  updateAvailable: false,
+  premium: null,
+  entitlement: null,
+  versions: [
+    {
+      version: "0.1.0",
+      payloadSha256: "sha256:email",
+      requiredOauthScopes: [],
+      components: [
+        {
+          key: "email-channel",
+          type: "email-channel",
+          displayName: "Email channel",
+        },
+      ],
+    },
+  ],
+  install: null,
+};
+
+const emailChannelSummary = {
+  __typename: "EmailChannelSummary" as const,
+  productionReady: false,
+  ledgerEventCount: 0,
+  providers: [],
+  domains: [],
+  readinessChecks: [
+    {
+      __typename: "EmailReadinessCheck" as const,
+      id: "check-credentials",
+      providerInstallId: "provider-resend",
+      domainId: null,
+      checkKey: "CREDENTIALS",
+      status: "BLOCKED",
+      failureCode: "missing_credentials",
+      failureMessage: "Provider credentials are not configured.",
+      metadata: "{}",
+      createdAt: "2026-06-17T12:00:00Z",
+      updatedAt: "2026-06-17T12:00:00Z",
+      lastCheckedAt: "2026-06-17T12:00:00Z",
+    },
+  ],
+  blockingReadinessChecks: [],
+  spacePolicies: [],
 };
 
 const companyBrainEntitlement = {

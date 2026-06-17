@@ -55,6 +55,11 @@ export const sharedPluginTermAllowlist = [
       "shared platform provider adapter service for the Email Channel plugin runtime path.",
   },
   {
+    pathPrefix: "apps/web/src/components/settings/plugins/email-channel/",
+    reason:
+      "shared plugin settings shell renders the Email Channel plugin control plane.",
+  },
+  {
     path: "packages/database-pg/__tests__/migration-0170-email-channel-plugin.test.ts",
     reason: "Email Channel plugin database contract coverage.",
   },

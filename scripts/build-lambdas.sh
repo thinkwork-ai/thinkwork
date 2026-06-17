@@ -413,6 +413,9 @@ build_handler "email-inbound" \
 build_handler "email-send" \
   "$REPO_ROOT/packages/api/src/handlers/email-send.ts"
 
+build_handler "email-readiness-probe" \
+  "$REPO_ROOT/packages/api/src/handlers/email-readiness-probe.ts"
+
 build_handler "slack-events" \
   "$REPO_ROOT/packages/api/src/handlers/slack/events.ts"
 

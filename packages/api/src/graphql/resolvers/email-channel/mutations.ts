@@ -25,6 +25,8 @@ import {
   requireEmailProviderInstall,
   requireEmailSpace,
 } from "./shared.js";
+import { storeEmailProviderApiKey } from "../../../lib/email-channel/secrets.js";
+import { runEmailReadinessProbeMutation } from "./readiness.mutations.js";
 
 type ConfigureEmailProviderInput = {
   providerInstallId?: string | null;
@@ -46,6 +48,52 @@ type ConfigureEmailProviderInput = {
     providerMetadata?: unknown;
   } | null;
 };
+
+type SaveEmailProviderCredentialInput = {
+  providerInstallId?: string | null;
+  provider: string;
+  apiKey: string;
+  displayName?: string | null;
+  webhookSecretRef?: string | null;
+  defaultFromEmail?: string | null;
+  domain?: ConfigureEmailProviderInput["domain"];
+};
+
+export async function saveEmailProviderCredential(
+  _parent: unknown,
+  args: { input: SaveEmailProviderCredentialInput },
+  ctx: GraphQLContext,
+) {
+  const { tenantId } = await requirePluginTenantAdmin(ctx);
+  const provider = graphqlEnumToDb(args.input.provider);
+  const { secretRef, fingerprint } = await storeEmailProviderApiKey({
+    tenantId,
+    provider,
+    apiKey: args.input.apiKey,
+  });
+  return configureEmailProvider(
+    _parent,
+    {
+      input: {
+        providerInstallId: args.input.providerInstallId,
+        provider: args.input.provider,
+        displayName: args.input.displayName ?? "Email provider",
+        status: "PENDING",
+        activeForProduction: false,
+        credentialSecretRef: secretRef,
+        webhookSecretRef: args.input.webhookSecretRef,
+        defaultFromEmail: args.input.defaultFromEmail,
+        metadata: {
+          credentialMasked: "stored",
+          credentialFingerprint: fingerprint,
+          credentialUpdatedAt: new Date().toISOString(),
+        },
+        domain: args.input.domain,
+      },
+    },
+    ctx,
+  );
+}
 
 export async function configureEmailProvider(
   _parent: unknown,
@@ -383,4 +431,6 @@ export const emailChannelMutations = {
   upsertEmailSpacePolicy,
   addEmailSpaceSenderAllowlist,
   removeEmailSpaceSenderAllowlist,
+  saveEmailProviderCredential,
+  runEmailReadinessProbe: runEmailReadinessProbeMutation,
 };
