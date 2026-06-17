@@ -1,6 +1,7 @@
 import {
   myPluginActivations,
   pluginCatalog,
+  pluginCatalogMetadata,
   pluginInstall,
   pluginInstalls,
 } from "./queries.js";
@@ -20,6 +21,7 @@ import {
 
 export const pluginQueries = {
   pluginCatalog,
+  pluginCatalogMetadata,
   pluginInstalls,
   pluginInstall,
   myPluginActivations,

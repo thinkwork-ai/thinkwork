@@ -1602,6 +1602,22 @@ export const SettingsRegenerateWebhookTokenMutation = graphql(`
 
 export const SettingsPluginCatalogQuery = graphql(`
   query SettingsPluginCatalog {
+    pluginCatalogMetadata {
+      source
+      repository
+      ref
+      commitSha
+      releaseTag
+      assetName
+      catalogSha256
+      generatedAt
+      fetchedAt
+      stale
+      lastRefreshStatus
+      message
+      rateLimitRemaining
+      rateLimitReset
+    }
     pluginCatalog {
       pluginKey
       displayName

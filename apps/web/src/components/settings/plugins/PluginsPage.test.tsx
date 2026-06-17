@@ -134,7 +134,13 @@ function mockQueries({
               error: new Error("catalog down"),
               fetching: false,
             }
-          : { data: { pluginCatalog: catalogEntries }, fetching: false },
+          : {
+              data: {
+                pluginCatalog: catalogEntries,
+                pluginCatalogMetadata: catalogMetadata,
+              },
+              fetching: false,
+            },
         refreshCatalog,
       ];
     }
@@ -208,6 +214,20 @@ describe("PluginsPage", () => {
 
     // Single list now (no duplicate Installed section) — one badge.
     expect(screen.getAllByText("Update available").length).toBe(1);
+  });
+
+  it("shows catalog source freshness and installed versus latest versions", () => {
+    render(<PluginsPage />);
+
+    expect(screen.getByText("Catalog source")).toBeTruthy();
+    expect(screen.getByText("Stale fallback")).toBeTruthy();
+    expect(screen.getByText(/thinkwork-ai\/thinkwork/)).toBeTruthy();
+    expect(screen.getByText(/0123456789ab/)).toBeTruthy();
+
+    const lastmileRow = screen.getByRole("link", { name: "Open LastMile" });
+    expect(
+      within(lastmileRow).getByText(/Installed v1\.0\.0 · Latest v1\.1\.0/),
+    ).toBeTruthy();
   });
 
   it("keeps key-gated catalog rows status-only", () => {
@@ -340,6 +360,24 @@ const installedPlugins = [
     components: [],
   },
 ];
+
+const catalogMetadata = {
+  __typename: "PluginCatalogMetadata" as const,
+  source: "github-release-stale",
+  repository: "thinkwork-ai/thinkwork",
+  ref: "main",
+  commitSha: "0123456789abcdef0123456789abcdef01234567",
+  releaseTag: "plugin-catalog-main",
+  assetName: "thinkwork-plugin-catalog-main.json",
+  catalogSha256: "sha256:abcdef0123456789",
+  generatedAt: "2026-06-17T00:00:00.000Z",
+  fetchedAt: "2026-06-17T01:00:00.000Z",
+  stale: true,
+  lastRefreshStatus: "stale-fallback",
+  message: "GitHub catalog release fetch failed (403)",
+  rateLimitRemaining: "0",
+  rateLimitReset: "1760000000",
+};
 
 const catalogEntries = [
   {

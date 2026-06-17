@@ -4294,6 +4294,43 @@ export type PluginCatalogEntry = {
 };
 
 /**
+ * Source and freshness metadata for the signed plugin catalog snapshot currently
+ * trusted by the GraphQL API. This is a sibling status surface for Settings UI;
+ * catalog rows remain the install/version overlay.
+ */
+export type PluginCatalogMetadata = {
+  __typename?: 'PluginCatalogMetadata';
+  /** GitHub release asset name for release-backed catalogs. */
+  assetName?: Maybe<Scalars['String']['output']>;
+  /** sha256 of the verified catalog snapshot. */
+  catalogSha256: Scalars['String']['output'];
+  /** Source commit SHA from signed provenance. */
+  commitSha?: Maybe<Scalars['String']['output']>;
+  /** Last time the API fetched or revalidated the GitHub release metadata. */
+  fetchedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  /** Timestamp embedded in the signed catalog payload. */
+  generatedAt: Scalars['AWSDateTime']['output'];
+  /** 'fresh' | 'not-modified' | 'stale-fallback' for GitHub-backed catalogs. */
+  lastRefreshStatus?: Maybe<Scalars['String']['output']>;
+  /** Refresh failure detail when stale fallback is active. */
+  message?: Maybe<Scalars['String']['output']>;
+  /** GitHub rate limit remaining header from the last release metadata response. */
+  rateLimitRemaining?: Maybe<Scalars['String']['output']>;
+  /** GitHub rate limit reset header from the last release metadata response. */
+  rateLimitReset?: Maybe<Scalars['String']['output']>;
+  /** Git ref from the signed source provenance when present. */
+  ref?: Maybe<Scalars['String']['output']>;
+  /** GitHub release tag for release-backed catalogs. */
+  releaseTag?: Maybe<Scalars['String']['output']>;
+  /** GitHub repository when the catalog carries source provenance. */
+  repository?: Maybe<Scalars['String']['output']>;
+  /** 'bundled-unsigned' | 'bundled-signed' | 'github-release' | 'github-release-stale'. */
+  source: Scalars['String']['output'];
+  /** True when the API is serving the last verified snapshot after a refresh failure. */
+  stale: Scalars['Boolean']['output'];
+};
+
+/**
  * Premium catalog metadata declared by the signed plugin manifest. Raw install
  * keys and key digests are never exposed through GraphQL.
  */
@@ -4584,6 +4621,8 @@ export type Query = {
    * state. Fails closed (GraphQL error) on catalog signature/digest failure.
    */
   pluginCatalog: Array<PluginCatalogEntry>;
+  /** Source, provenance, and freshness metadata for the trusted plugin catalog snapshot. */
+  pluginCatalogMetadata: PluginCatalogMetadata;
   /** One install by id, with read-time component status reconciliation. */
   pluginInstall?: Maybe<PluginInstall>;
   /** The caller tenant's plugin installs (admin status surface). */

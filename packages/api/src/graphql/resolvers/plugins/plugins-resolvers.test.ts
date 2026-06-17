@@ -21,6 +21,7 @@ const {
   mockIssuePremiumInstallKey,
   mockRedeemPremiumInstallKey,
   mockRevokePremiumInstallKey,
+  mockGetPluginCatalogSnapshot,
   depsHolder,
   activationDepsHolder,
 } = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ const {
   mockIssuePremiumInstallKey: vi.fn(),
   mockRedeemPremiumInstallKey: vi.fn(),
   mockRevokePremiumInstallKey: vi.fn(),
+  mockGetPluginCatalogSnapshot: vi.fn(),
   depsHolder: { current: null as unknown },
   activationDepsHolder: { current: null as unknown },
 }));
@@ -64,6 +66,17 @@ vi.mock("../../../lib/plugins/engine.js", async (importOriginal) => {
   return {
     ...actual,
     createDefaultPluginEngineDeps: () => depsHolder.current,
+  };
+});
+
+vi.mock("../../../lib/plugins/catalog-source.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../../lib/plugins/catalog-source.js")
+    >();
+  return {
+    ...actual,
+    getPluginCatalogSnapshot: mockGetPluginCatalogSnapshot,
   };
 });
 
@@ -129,6 +142,7 @@ import {
 } from "./mutations.js";
 import {
   myPluginActivations,
+  pluginCatalogMetadata,
   pluginInstalls,
   pluginLaunchUrlForInstall,
 } from "./queries.js";
@@ -225,6 +239,14 @@ beforeEach(() => {
   mockResolveCallerTenantId.mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockResolvedValue("user-1");
   mockRequireTenantAdmin.mockResolvedValue(undefined);
+  mockGetPluginCatalogSnapshot.mockResolvedValue({
+    source: "bundled-unsigned",
+    catalog: {
+      schemaVersion: 1,
+      generatedAt: "2026-06-17T00:00:00.000Z",
+      plugins: [],
+    },
+  });
   mockStartActivation.mockResolvedValue({
     authorizeUrl: "https://auth.example.invalid/authorize?state=signed",
   });
@@ -275,6 +297,63 @@ beforeEach(() => {
       status: "revoked",
       revoked_at: new Date("2026-06-13T12:00:00.000Z"),
     },
+  });
+});
+
+describe("pluginCatalogMetadata", () => {
+  it("returns source provenance and stale GitHub fallback details for members", async () => {
+    mockGetPluginCatalogSnapshot.mockResolvedValue({
+      source: "github-release-stale",
+      catalog: {
+        schemaVersion: 1,
+        generatedAt: "2026-06-17T00:00:00.000Z",
+        source: {
+          repository: "thinkwork-ai/thinkwork",
+          ref: "main",
+          commitSha: "0123456789abcdef0123456789abcdef01234567",
+        },
+        plugins: [],
+      },
+      github: {
+        source: "github-release",
+        repository: "thinkwork-ai/thinkwork",
+        releaseTag: "plugin-catalog-main",
+        assetName: "thinkwork-plugin-catalog-main.json",
+        catalogSha256: "sha256:catalog",
+        sourceCommitSha: "0123456789abcdef0123456789abcdef01234567",
+        generatedAt: "2026-06-17T00:00:00.000Z",
+        fetchedAt: "2026-06-17T01:00:00.000Z",
+        stale: true,
+        lastRefreshStatus: "stale-fallback",
+        message: "GitHub catalog release fetch failed (403)",
+        rateLimitRemaining: "0",
+        rateLimitReset: "1760000000",
+      },
+    });
+
+    const result = (await pluginCatalogMetadata(
+      null,
+      {} as never,
+      CTX,
+    )) as Record<string, unknown>;
+
+    expect(mockResolveCallerTenantId).toHaveBeenCalledWith(CTX);
+    expect(result).toMatchObject({
+      source: "github-release-stale",
+      repository: "thinkwork-ai/thinkwork",
+      ref: "main",
+      commitSha: "0123456789abcdef0123456789abcdef01234567",
+      releaseTag: "plugin-catalog-main",
+      assetName: "thinkwork-plugin-catalog-main.json",
+      catalogSha256: "sha256:catalog",
+      generatedAt: "2026-06-17T00:00:00.000Z",
+      fetchedAt: "2026-06-17T01:00:00.000Z",
+      stale: true,
+      lastRefreshStatus: "stale-fallback",
+      message: "GitHub catalog release fetch failed (403)",
+      rateLimitRemaining: "0",
+      rateLimitReset: "1760000000",
+    });
   });
 });
 

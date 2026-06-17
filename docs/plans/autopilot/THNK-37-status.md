@@ -124,3 +124,49 @@ project_context: ThinkWork / Enterprise Agent OS
   passed.
 - `terraform fmt` passed on touched Terraform files.
 - `git diff --check` passed.
+
+## Current U5 GraphQL Metadata And Settings UI Slice
+
+- Started from fresh `origin/main` at
+  `612c30dabb780656e61c36fcd7c7ca7b6459531f` in branch
+  `codex/thnk-37-u5-catalog-status-ui`.
+- Rebasing gate: after PR #2587 checks first passed, `main` advanced to
+  `c83013559163983d22b615e057d1e6b88d3bb2c7`; rebased the U5 branch onto
+  that commit and regenerated schema/client artifacts.
+- Added sibling GraphQL query `pluginCatalogMetadata` for the trusted plugin
+  catalog snapshot. It exposes API-resolved source mode, repository/ref/commit
+  provenance, release tag/asset, verified catalog digest, generated/fetched
+  timestamps, stale fallback state, refresh message, and GitHub rate-limit
+  headers.
+- Backed the metadata query with the same verified catalog snapshot path used
+  by catalog browsing, so bad signatures or malformed artifacts still fail
+  closed at the API boundary.
+- Updated Settings > Plugins to request the metadata through GraphQL, render a
+  compact catalog source/freshness strip, show stale fallback details, and show
+  installed pinned version versus latest catalog version on operator rows.
+- Preserved non-operator behavior: self-service users still see only installed
+  auth-capable plugins and no install/update controls.
+- Regenerated derived GraphQL artifacts for web, CLI, and mobile after editing
+  the canonical GraphQL schema.
+
+### Verification
+
+- `pnpm schema:build` passed.
+- `pnpm --filter @thinkwork/web codegen` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm --filter @thinkwork/mobile codegen` passed.
+- `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/plugins/plugins-resolvers.test.ts src/lib/plugins/catalog-source.test.ts src/lib/plugins/catalog-github-source.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/plugins/PluginDetail.test.tsx`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm --filter @thinkwork/mobile typecheck` is unavailable because the
+  mobile package has no `typecheck` script.
+- Visual verification: Vite started at `http://127.0.0.1:5180/` after copying
+  the worktree `.env`, but `/settings/plugins` redirected to
+  `/sign-in?next=%2Fsettings%2Fplugins` in headless Chrome; no authenticated
+  browser session was exposed in this thread, so the UI pass was limited to
+  component tests and code review.
+- `git diff --check` passed.

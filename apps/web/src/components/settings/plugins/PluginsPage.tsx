@@ -48,6 +48,7 @@ export function PluginsPage() {
   );
 
   const catalog = catalogResult.data?.pluginCatalog ?? [];
+  const catalogMetadata = catalogResult.data?.pluginCatalogMetadata ?? null;
   const activations = activationsResult.data?.myPluginActivations ?? [];
   const catalogUnavailable = Boolean(catalogResult.error);
   const catalogLoading = catalogResult.fetching && catalog.length === 0;
@@ -148,6 +149,9 @@ export function PluginsPage() {
           )
         }
       >
+        {catalogMetadata && !catalogUnavailable ? (
+          <CatalogMetadataStrip metadata={catalogMetadata} />
+        ) : null}
         {!roleResolved ? (
           <div className="p-4 text-sm text-muted-foreground">
             Loading plugins...
@@ -242,8 +246,10 @@ export function PluginsPage() {
                     {!selfServiceOnly ? (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <span className="text-xs text-muted-foreground">
-                          Latest v{entry.latestVersion} ·{" "}
-                          {entry.versions.length}{" "}
+                          {entry.install
+                            ? `Installed v${entry.install.pinnedVersion} · Latest v${entry.latestVersion}`
+                            : `Latest v${entry.latestVersion}`}{" "}
+                          · {entry.versions.length}{" "}
                           {entry.versions.length === 1 ? "version" : "versions"}
                         </span>
                       </div>
@@ -329,6 +335,78 @@ export function PluginsPage() {
   );
 }
 
+function CatalogMetadataStrip({
+  metadata,
+}: {
+  metadata: {
+    source: string;
+    repository?: string | null;
+    ref?: string | null;
+    commitSha?: string | null;
+    releaseTag?: string | null;
+    assetName?: string | null;
+    catalogSha256: string;
+    generatedAt: string;
+    fetchedAt?: string | null;
+    stale: boolean;
+    lastRefreshStatus?: string | null;
+    message?: string | null;
+    rateLimitRemaining?: string | null;
+    rateLimitReset?: string | null;
+  };
+}) {
+  const commit = metadata.commitSha?.slice(0, 12) ?? null;
+  const digest = metadata.catalogSha256.replace(/^sha256:/, "").slice(0, 12);
+  const channel =
+    metadata.repository && metadata.releaseTag
+      ? `${metadata.repository} · ${metadata.releaseTag}`
+      : metadata.repository || sourceLabel(metadata.source);
+
+  return (
+    <div className="border-b border-border px-4 py-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-foreground">
+              Catalog source
+            </p>
+            <Badge
+              variant="outline"
+              className={
+                metadata.stale
+                  ? "border-amber-500/40 text-amber-500"
+                  : metadata.source.startsWith("github")
+                    ? "border-emerald-500/40 text-emerald-500"
+                    : undefined
+              }
+            >
+              {metadata.stale ? "Stale fallback" : sourceLabel(metadata.source)}
+            </Badge>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {channel}
+            {commit ? ` · ${commit}` : ""}
+            {metadata.ref ? ` · ${metadata.ref}` : ""}
+          </p>
+          {metadata.message ? (
+            <p className="mt-1 text-sm text-amber-500">{metadata.message}</p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground md:justify-end">
+          <span>Generated {formatDateTime(metadata.generatedAt)}</span>
+          {metadata.fetchedAt ? (
+            <span>Fetched {formatDateTime(metadata.fetchedAt)}</span>
+          ) : null}
+          <span>Digest {digest}</span>
+          {metadata.rateLimitRemaining ? (
+            <span>GitHub remaining {metadata.rateLimitRemaining}</span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function catalogListDescription(entry: {
   pluginKey: string;
   description: string;
@@ -337,6 +415,32 @@ function catalogListDescription(entry: {
     return entry.description.replace(/^Premium\s+/i, "");
   }
   return entry.description;
+}
+
+function sourceLabel(source: string): string {
+  switch (source) {
+    case "github-release":
+      return "GitHub-backed";
+    case "github-release-stale":
+      return "GitHub stale fallback";
+    case "bundled-signed":
+      return "Bundled signed";
+    case "bundled-unsigned":
+      return "Bundled unsigned";
+    default:
+      return source;
+  }
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function pluginEntryIsAuthCapable(entry: {
