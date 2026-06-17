@@ -23,7 +23,7 @@ status: active
 | U3 Resend and SES provider adapter service                               | Merged              | PR #2591; merge commit `5839b9ccd420cc60d4e69c0c6874cedfe6ec969d` |
 | U4 Readiness state machine and plugin settings surface                   | Merged              | PR #2595; merge commit `61599ac66fa03fbe4e855a0085688b81ee93458e` |
 | U5 Outbound channel, first-send HITL, and ledger writes                  | Merged              | PR #2597; merge commit `da283bb52d4b5dda04bbbdabe67c623505233a4e` |
-| U6 Inbound webhook normalization, authorization, rate limits, and wakeup | PR open             | PR #2600; commit `a42a2ae64`; focused checks passed               |
+| U6 Inbound webhook normalization, authorization, rate limits, and wakeup | Merged              | PR #2600; merge commit `51726bac8796eb084f44307d744f681ea4941832` |
 | U7 Routine, runtime, and cross-surface email parity                      | Pending             | Not started                                                       |
 | U8 SES migration, observability, documentation, and deployed validation  | Pending             | Not started                                                       |
 
@@ -37,8 +37,12 @@ status: active
 
 ## Verification Log
 
+- U6 merge:
+  - PR #2600 merged on 2026-06-17 at merge commit
+    `51726bac8796eb084f44307d744f681ea4941832`.
+  - CI passed after rebase: `cla`, `lint`, `verify`, `typecheck`, `test`.
 - U6 focused checks:
-  - PR #2600 opened: https://github.com/thinkwork-ai/thinkwork/pull/2600
+  - PR #2600: https://github.com/thinkwork-ai/thinkwork/pull/2600
   - `pnpm --filter @thinkwork/api test -- src/handlers/email-inbound.test.ts src/handlers/email-provider-webhook.test.ts src/lib/email-channel/inbound-routing.test.ts`
   - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginDetail.test.tsx`
   - `pnpm --filter @thinkwork/api typecheck`
