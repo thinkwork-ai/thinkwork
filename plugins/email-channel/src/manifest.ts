@@ -8,9 +8,9 @@ import {
 
 export const emailChannelManifest = {
   pluginKey: "email-channel",
-  displayName: "Email Channel",
+  displayName: "Resend Channel",
   description:
-    "Tenant-owned agent and Space email channel with provider readiness, first-send review, inbound authorization, SES compatibility, and ledger evidence.",
+    "Resend-backed agent and Space email channel with provider readiness, first-send review, inbound authorization, SES compatibility, and ledger evidence.",
   versions: [
     {
       version: "0.1.0",
@@ -35,7 +35,7 @@ export const emailChannelManifest = {
         {
           type: "ui-surface",
           key: "settings",
-          displayName: "Email Channel settings",
+          displayName: "Resend Channel settings",
           intendedMount: EMAIL_CHANNEL_SETTINGS_SURFACE,
         },
       ],

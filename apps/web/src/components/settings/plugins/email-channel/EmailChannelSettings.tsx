@@ -148,14 +148,14 @@ export function EmailChannelSettings() {
 
   return (
     <>
-      <SettingsSection label="Email channel">
+      <SettingsSection label="Resend channel">
         {result.fetching && !summary ? (
           <p className="p-4 text-sm text-muted-foreground">
-            Loading email channel...
+            Loading Resend channel...
           </p>
         ) : result.error ? (
           <p className="p-4 text-sm text-destructive">
-            Email channel settings could not be loaded.
+            Resend channel settings could not be loaded.
           </p>
         ) : summary ? (
           <SettingsRow
