@@ -1012,6 +1012,80 @@ def test_write_runner_files_without_domain_keeps_defaults_and_provider_alias(
     assert 'provider "cloudflare" {}' in main_tf
 
 
+def test_terraform_backend_key_keeps_platform_state_on_root_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.delenv("THINKWORK_MANAGED_APP_STATE_ISOLATION", raising=False)
+
+    assert runner.terraform_backend_key("dev", {}) == "thinkwork/dev/terraform.tfstate"
+    assert runner.terraform_workspace_name("dev", {}) == "dev"
+
+
+def test_terraform_backend_key_isolates_managed_app_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setenv("THINKWORK_MANAGED_APP_STATE_ISOLATION", "true")
+
+    payload = {"appKey": "plane", "operation": "UPGRADE"}
+
+    assert (
+        runner.terraform_backend_key("dev", payload)
+        == "thinkwork/dev/managed-apps/plane/terraform.tfstate"
+    )
+    assert runner.terraform_workspace_name("dev", payload) == "default"
+
+
+def test_write_runner_files_keeps_managed_apps_on_root_backend_until_migration_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.delenv("THINKWORK_MANAGED_APP_STATE_ISOLATION", raising=False)
+
+    runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "appKey": "plane",
+            "operation": "DESTROY",
+        },
+        {},
+    )
+
+    backend = (tf_dir / "backend.hcl").read_text(encoding="utf-8")
+    assert 'key = "thinkwork/tei-e2e/terraform.tfstate"' in backend
+    assert "managed-apps/plane" not in backend
+
+
+def test_write_runner_files_can_target_per_app_backend_after_state_migration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+
+    runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "appKey": "plane",
+            "operation": "DESTROY",
+            "features": {"managedAppStateIsolation": True},
+        },
+        {},
+    )
+
+    backend = (tf_dir / "backend.hcl").read_text(encoding="utf-8")
+    assert 'key = "thinkwork/tei-e2e/managed-apps/plane/terraform.tfstate"' in backend
+
+
 def test_plane_managed_app_runner_writes_dns_record_and_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1046,6 +1120,10 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
             "appKey": "plane",
             "operation": "UPGRADE",
             "desiredConfig": {
+                "dbUrlSecretArn": "arn:aws:secretsmanager:us-east-1:637423202447:secret:plane-db",
+                "secretKeySecretArn": "arn:aws:secretsmanager:us-east-1:637423202447:secret:plane-secret",
+                "liveServerSecretKeySecretArn": "arn:aws:secretsmanager:us-east-1:637423202447:secret:plane-live",
+                "aesSecretKeySecretArn": "arn:aws:secretsmanager:us-east-1:637423202447:secret:plane-aes",
                 "domain": "plane.thinkwork.ai",
                 "publicUrl": "https://plane.thinkwork.ai",
                 "certificateArn": "arn:aws:acm:us-east-1:637423202447:certificate/test",
@@ -1100,6 +1178,39 @@ def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPa
             "-no-color",
         ]
     ]
+
+
+def test_managed_app_overrides_reject_missing_operation() -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="operation to be one of"):
+        runner.managed_app_terraform_overrides(
+            {"appKey": "plane"},
+            "dev",
+            "487219502366",
+            {},
+            {"resources": []},
+        )
+
+
+def test_plane_managed_app_overrides_reject_missing_required_desired_state() -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="mcpImageUri"):
+        runner.managed_app_terraform_overrides(
+            {
+                "appKey": "plane",
+                "operation": "UPGRADE",
+                "desiredConfig": {
+                    "publicUrl": "https://plane.thinkwork.ai",
+                    "certificateArn": "arn:aws:acm:us-east-1:637423202447:certificate/test",
+                },
+            },
+            "dev",
+            "487219502366",
+            {},
+            {"resources": []},
+        )
 
 
 def test_validate_managed_app_plan_scope_allows_plane_dns_record() -> None:
@@ -1220,8 +1331,17 @@ def test_plane_overrides_derive_cloudflare_zone_when_state_lacks_record(
             "appKey": "plane",
             "operation": "UPGRADE",
             "desiredConfig": {
+                "mcpImageUri": (
+                    "ghcr.io/thinkwork-ai/plane-mcp:0.1.0@sha256:"
+                    "1111111111111111111111111111111111111111111111111111111111111111"
+                ),
+                "dbUrlSecretArn": "arn:aws:secretsmanager:us-east-1:487219502366:secret:plane-db",
+                "secretKeySecretArn": "arn:aws:secretsmanager:us-east-1:487219502366:secret:plane-secret",
+                "liveServerSecretKeySecretArn": "arn:aws:secretsmanager:us-east-1:487219502366:secret:plane-live",
+                "aesSecretKeySecretArn": "arn:aws:secretsmanager:us-east-1:487219502366:secret:plane-aes",
                 "domain": "plane.thinkwork.ai",
                 "publicUrl": "https://plane.thinkwork.ai",
+                "certificateArn": "arn:aws:acm:us-east-1:487219502366:certificate/test",
             },
         },
         "dev",
