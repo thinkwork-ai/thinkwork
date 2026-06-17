@@ -65,3 +65,31 @@ project_context: ThinkWork / Enterprise Agent OS
 - `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/plugin-catalog.yml")'`
   passed.
 - `git diff --check` passed.
+
+## Current U3 API GitHub Catalog Source Slice
+
+- Started from fresh `origin/main` at
+  `490852d1b54740adf212d5584210729992dd1c49` in branch
+  `codex/thnk-37-u3-api-catalog-github`.
+- Added `packages/api/src/lib/plugins/catalog-github-source.ts` as the
+  GitHub release-asset loader for signed plugin catalogs.
+- The loader fetches the stable release metadata with GitHub API headers,
+  optional bearer auth, conditional ETag requests, a warm-container TTL cache,
+  and rate-limit metadata capture.
+- Remote documents are verified with the trusted ed25519 public key before
+  becoming cache snapshots. Bad signatures, malformed documents, missing
+  assets, and GitHub/rate-limit failures do not overwrite the last verified
+  snapshot.
+- Integrated the loader into `catalog-source.ts` behind opt-in GitHub catalog
+  configuration while preserving bundled signed and unsigned fallback behavior.
+- Added tests for remote success, TTL cache, 304 not modified, stale fallback
+  on transient/rate-limit failures, bad signature rejection without cache,
+  malformed remote data preserving the last good cache, missing asset errors,
+  env config gating, and `getPluginCatalogSnapshot` integration.
+
+### Verification
+
+- `pnpm --filter @thinkwork/api test -- src/lib/plugins/catalog-source.test.ts src/lib/plugins/catalog-github-source.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `git diff --check` passed.

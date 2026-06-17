@@ -46,6 +46,13 @@ import {
   type PluginCatalogEntry,
   type PluginCatalogVersionEntry,
 } from "@thinkwork/plugin-catalog";
+import {
+  loadGitHubPluginCatalog,
+  pluginCatalogGitHubConfigFromEnv,
+  resetGitHubPluginCatalogCacheForTests,
+  type GitHubPluginCatalogConfig,
+  type GitHubPluginCatalogSnapshot,
+} from "./catalog-github-source.js";
 
 export class PluginCatalogUnavailableError extends Error {
   constructor(message: string) {
@@ -59,11 +66,25 @@ export interface PluginCatalogSourceDeps {
   readTrustedPublicKey?: () => Promise<string | null>;
   /** Returns the signed catalog document (parsed JSON), or null when absent. */
   loadSignedDocument?: () => Promise<unknown | null>;
+  /** Returns GitHub-backed catalog config, or null when disabled. */
+  readGitHubConfig?: () => GitHubPluginCatalogConfig | null;
+  /** Fetch implementation used by the GitHub catalog source. */
+  fetch?: typeof fetch;
 }
 
 const ssm = new SSMClient({});
 
-let cachedCatalog: PluginCatalog | null = null;
+export interface PluginCatalogSnapshot {
+  catalog: PluginCatalog;
+  source:
+    | "bundled-unsigned"
+    | "bundled-signed"
+    | "github-release"
+    | "github-release-stale";
+  github?: GitHubPluginCatalogSnapshot["status"];
+}
+
+let cachedBundledSnapshot: PluginCatalogSnapshot | null = null;
 
 export function trustedPublicKeyParameterName(): string {
   const stage = process.env.STAGE || process.env.THINKWORK_STAGE || "dev";
@@ -116,34 +137,80 @@ async function defaultLoadSignedDocument(): Promise<unknown | null> {
 export async function getPluginCatalog(
   deps: PluginCatalogSourceDeps = {},
 ): Promise<PluginCatalog> {
-  if (cachedCatalog) return cachedCatalog;
+  return (await getPluginCatalogSnapshot(deps)).catalog;
+}
+
+export async function getPluginCatalogSnapshot(
+  deps: PluginCatalogSourceDeps = {},
+): Promise<PluginCatalogSnapshot> {
+  if (cachedBundledSnapshot) return cachedBundledSnapshot;
 
   const readKey = deps.readTrustedPublicKey ?? defaultReadTrustedPublicKey;
   const loadDocument = deps.loadSignedDocument ?? defaultLoadSignedDocument;
+  const readGitHubConfig =
+    deps.readGitHubConfig ?? pluginCatalogGitHubConfigFromEnv;
 
   const trustedPublicKeyPem = await readKey();
   if (trustedPublicKeyPem) {
-    const document = await loadDocument();
-    if (document === null || document === undefined) {
-      throw new PluginCatalogUnavailableError(
-        "Plugin catalog signed mode is active (trusted key present in SSM) " +
-          "but no signed catalog document is available. Refusing to fall " +
-          "back to the unsigned in-process catalog.",
-      );
+    const githubConfig = readGitHubConfig();
+    if (githubConfig) {
+      try {
+        const githubSnapshot = await loadGitHubPluginCatalog({
+          config: githubConfig,
+          trustedPublicKeyPem,
+          fetchImpl: deps.fetch,
+        });
+        return {
+          catalog: githubSnapshot.catalog,
+          source: githubSnapshot.status.stale
+            ? "github-release-stale"
+            : "github-release",
+          github: githubSnapshot.status,
+        };
+      } catch (error) {
+        console.warn(
+          "[pluginCatalog] GitHub catalog unavailable; trying bundled signed fallback:",
+          error instanceof Error ? error.message : error,
+        );
+        return loadBundledSignedSnapshot(loadDocument, trustedPublicKeyPem);
+      }
     }
-    // Throws typed PluginCatalogError subclasses on tamper/bad signature.
-    cachedCatalog = verifyPluginCatalog({ document, trustedPublicKeyPem });
-    return cachedCatalog;
+
+    return loadBundledSignedSnapshot(loadDocument, trustedPublicKeyPem);
   }
 
   // Unsigned mode: build from the bundled repo-authored manifests.
   // buildPluginCatalog re-runs validatePluginManifest on every manifest.
-  cachedCatalog = buildPluginCatalog({ manifests: allPluginManifests });
-  return cachedCatalog;
+  cachedBundledSnapshot = {
+    catalog: buildPluginCatalog({ manifests: allPluginManifests }),
+    source: "bundled-unsigned",
+  };
+  return cachedBundledSnapshot;
+}
+
+async function loadBundledSignedSnapshot(
+  loadDocument: () => Promise<unknown | null>,
+  trustedPublicKeyPem: string,
+): Promise<PluginCatalogSnapshot> {
+  const document = await loadDocument();
+  if (document === null || document === undefined) {
+    throw new PluginCatalogUnavailableError(
+      "Plugin catalog signed mode is active (trusted key present in SSM) " +
+        "but no signed catalog document is available. Refusing to fall " +
+        "back to the unsigned in-process catalog.",
+    );
+  }
+  // Throws typed PluginCatalogError subclasses on tamper/bad signature.
+  cachedBundledSnapshot = {
+    catalog: verifyPluginCatalog({ document, trustedPublicKeyPem }),
+    source: "bundled-signed",
+  };
+  return cachedBundledSnapshot;
 }
 
 export function resetPluginCatalogCacheForTests(): void {
-  cachedCatalog = null;
+  cachedBundledSnapshot = null;
+  resetGitHubPluginCatalogCacheForTests();
 }
 
 // ---------------------------------------------------------------------------
