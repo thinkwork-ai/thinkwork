@@ -1,0 +1,318 @@
+"""
+Provider-neutral Email Channel Plugin contract (THNK-35 U2).
+
+Secrets and raw email bodies are intentionally absent from public GraphQL
+payloads. Provider credentials and webhook secrets are exposed only as
+configured booleans; retained body rows expose hashes, retention state, and
+redaction metadata without returning the object reference or body content.
+"""
+enum EmailChannelProvider {
+  RESEND
+  SES
+}
+
+enum EmailProviderInstallStatus {
+  PENDING
+  READY
+  FAILED
+  DISABLED
+}
+
+enum EmailDomainOwnershipType {
+  THINKWORK_OWNED
+  CUSTOMER_OWNED
+}
+
+enum EmailDomainStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  DISABLED
+}
+
+enum EmailReadinessCheckKey {
+  CREDENTIALS
+  SENDING_DOMAIN
+  INBOUND_RECEIVING
+  WEBHOOK_SIGNATURE
+  PROVIDER_EVENTS
+  LOOP_TEST
+}
+
+enum EmailReadinessStatus {
+  PENDING
+  PASS
+  FAIL
+  BLOCKED
+}
+
+enum EmailAllowlistType {
+  EMAIL
+  DOMAIN
+}
+
+enum EmailConversationStatus {
+  PENDING_APPROVAL
+  APPROVED
+  CLOSED
+  BLOCKED
+}
+
+enum EmailBodyDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum EmailLedgerEventType {
+  DRAFT_CREATED
+  APPROVAL_REQUESTED
+  APPROVAL_APPROVED
+  APPROVAL_DENIED
+  SEND_BLOCKED
+  SEND_ATTEMPTED
+  SEND_SUCCEEDED
+  SEND_FAILED
+  INBOUND_RECEIVED
+  INBOUND_AUTHORIZED
+  INBOUND_REJECTED
+  PROVIDER_EVENT
+  READINESS_CHECK
+  BODY_RETAINED
+  BODY_REDACTED
+}
+
+enum EmailProviderEventType {
+  SENT
+  DELIVERED
+  DELAYED
+  FAILED
+  BOUNCED
+  COMPLAINED
+  OPENED
+  CLICKED
+  RECEIVED
+}
+
+type EmailProviderInstall {
+  id: ID!
+  tenantId: ID!
+  provider: EmailChannelProvider!
+  displayName: String
+  status: EmailProviderInstallStatus!
+  activeForProduction: Boolean!
+  credentialConfigured: Boolean!
+  webhookSecretConfigured: Boolean!
+  defaultFromEmail: String
+  metadata: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type EmailDomain {
+  id: ID!
+  tenantId: ID!
+  providerInstallId: ID!
+  domain: String!
+  ownershipType: EmailDomainOwnershipType!
+  status: EmailDomainStatus!
+  sendingVerifiedAt: AWSDateTime
+  inboundVerifiedAt: AWSDateTime
+  dnsRecords: AWSJSON!
+  providerMetadata: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type EmailReadinessCheck {
+  id: ID!
+  tenantId: ID!
+  providerInstallId: ID!
+  domainId: ID
+  checkKey: EmailReadinessCheckKey!
+  status: EmailReadinessStatus!
+  lastCheckedAt: AWSDateTime
+  failureCode: String
+  failureMessage: String
+  metadata: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type EmailSpacePolicy {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  providerInstallId: ID
+  enabled: Boolean!
+  registeredUsersAllowed: Boolean!
+  privateSpaceMembershipRequired: Boolean!
+  outsideSenderDefault: String!
+  firstSendReviewRequired: Boolean!
+  policy: AWSJSON!
+  allowlists: [EmailSpaceSenderAllowlist!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type EmailSpaceSenderAllowlist {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  valueType: EmailAllowlistType!
+  value: String!
+  reason: String
+  createdByUserId: ID
+  createdAt: AWSDateTime!
+}
+
+type EmailConversation {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID
+  threadId: ID
+  providerInstallId: ID
+  subject: String
+  status: EmailConversationStatus!
+  approvedAt: AWSDateTime
+  approvedByUserId: ID
+  lastMessageAt: AWSDateTime
+  participantHash: String!
+  metadata: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type EmailBodyObjectRef {
+  id: ID!
+  tenantId: ID!
+  conversationId: ID
+  direction: EmailBodyDirection!
+  contentHash: String!
+  retentionUntil: AWSDateTime!
+  redactedAt: AWSDateTime
+  redactedByUserId: ID
+  redactionReason: String
+  metadata: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
+type EmailLedgerEvent {
+  id: ID!
+  tenantId: ID!
+  conversationId: ID
+  spaceId: ID
+  threadId: ID
+  messageId: ID
+  inboxItemId: ID
+  providerInstallId: ID
+  eventType: EmailLedgerEventType!
+  providerMessageId: String
+  providerEventId: String
+  actorUserId: ID
+  bodyObject: EmailBodyObjectRef
+  subject: String
+  fromEmail: String
+  toEmails: [String!]!
+  reasonCode: String
+  metadata: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
+type EmailProviderEvent {
+  id: ID!
+  tenantId: ID!
+  providerInstallId: ID!
+  ledgerEventId: ID
+  providerEventId: String!
+  providerMessageId: String
+  eventType: EmailProviderEventType!
+  occurredAt: AWSDateTime
+  payloadMetadata: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
+type EmailChannelSummary {
+  providers: [EmailProviderInstall!]!
+  domains: [EmailDomain!]!
+  readinessChecks: [EmailReadinessCheck!]!
+  spacePolicies: [EmailSpacePolicy!]!
+  productionReady: Boolean!
+  blockingReadinessChecks: [EmailReadinessCheck!]!
+  ledgerEventCount: Int!
+}
+
+input ConfigureEmailDomainInput {
+  domain: String!
+  ownershipType: EmailDomainOwnershipType!
+  status: EmailDomainStatus
+  sendingVerifiedAt: AWSDateTime
+  inboundVerifiedAt: AWSDateTime
+  dnsRecords: AWSJSON
+  providerMetadata: AWSJSON
+}
+
+input ConfigureEmailProviderInput {
+  providerInstallId: ID
+  provider: EmailChannelProvider!
+  displayName: String
+  status: EmailProviderInstallStatus
+  activeForProduction: Boolean
+  credentialSecretRef: String
+  webhookSecretRef: String
+  defaultFromEmail: String
+  metadata: AWSJSON
+  domain: ConfigureEmailDomainInput
+}
+
+input UpdateEmailReadinessCheckInput {
+  providerInstallId: ID!
+  domainId: ID
+  checkKey: EmailReadinessCheckKey!
+  status: EmailReadinessStatus!
+  failureCode: String
+  failureMessage: String
+  metadata: AWSJSON
+  lastCheckedAt: AWSDateTime
+}
+
+input UpsertEmailSpacePolicyInput {
+  spaceId: ID!
+  providerInstallId: ID
+  enabled: Boolean
+  registeredUsersAllowed: Boolean
+  privateSpaceMembershipRequired: Boolean
+  outsideSenderDefault: String
+  firstSendReviewRequired: Boolean
+  policy: AWSJSON
+}
+
+input AddEmailSpaceSenderAllowlistInput {
+  spaceId: ID!
+  valueType: EmailAllowlistType!
+  value: String!
+  reason: String
+}
+
+extend type Query {
+  emailChannelSummary: EmailChannelSummary!
+  emailSpaceEmailPolicy(spaceId: ID!): EmailSpacePolicy
+  emailChannelLedger(
+    conversationId: ID
+    spaceId: ID
+    limit: Int
+  ): [EmailLedgerEvent!]!
+}
+
+extend type Mutation {
+  configureEmailProvider(
+    input: ConfigureEmailProviderInput!
+  ): EmailProviderInstall!
+  updateEmailReadinessCheck(
+    input: UpdateEmailReadinessCheckInput!
+  ): EmailReadinessCheck!
+  upsertEmailSpacePolicy(input: UpsertEmailSpacePolicyInput!): EmailSpacePolicy!
+  addEmailSpaceSenderAllowlist(
+    input: AddEmailSpaceSenderAllowlistInput!
+  ): EmailSpaceSenderAllowlist!
+  removeEmailSpaceSenderAllowlist(id: ID!): Boolean!
+}
