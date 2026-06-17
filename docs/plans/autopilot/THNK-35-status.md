@@ -11,9 +11,9 @@ status: active
 - Linear issue: THNK-35, moved from Ready to Work to In Progress after
   discovery on 2026-06-17.
 - Implementation base: `origin/main` at
-  `c8df5e509b63bb9c21b57b3d145178fa2c309196` (Resend Channel
-  rename/setup simplification merge).
-- Active branch: `codex/thnk-35-resend-simplify-status`.
+  `947f295bdaddfa21f3b2197507aaa2b92485c767` (Resend member-invite
+  resend delivery merge).
+- Active branch: `codex/thnk-35-status-resend-invite`.
 
 ## Progress
 
@@ -28,6 +28,9 @@ status: active
 | U7 Routine, runtime, and cross-surface email parity                      | Merged  | PR #2603; merge commit `80e65ffaaed86995ccec30f8508298d0638919c3` |
 | U8 SES migration, observability, documentation, and deployed validation  | Pending | Not started                                                       |
 | Follow-up Resend Channel rename and one-key setup simplification         | Merged  | PR #2605; merge commit `c8df5e509b63bb9c21b57b3d145178fa2c309196` |
+| Follow-up initial user invite delivery through Resend                    | Merged  | PR #2610; merge commit `564a7a6970125b97cd2430aac12207be419f6d48` |
+| Follow-up branded Resend user invite email                               | Merged  | PR #2611; merge commit `3f8e35898fb3879f8ab52677bab5d83ca35eea73` |
+| Follow-up resend user invite delivery through Resend                     | Merged  | PR #2613; merge commit `947f295bdaddfa21f3b2197507aaa2b92485c767` |
 
 ## Notes
 
@@ -39,6 +42,46 @@ status: active
 
 ## Verification Log
 
+- Follow-up resend user invite delivery through Resend:
+  - PR #2613 merged on 2026-06-17 at merge commit
+    `947f295bdaddfa21f3b2197507aaa2b92485c767`.
+  - PR CI passed after branch refresh: `cla`, `lint`, `verify`, `typecheck`,
+    `test`.
+  - Main deploy run `27721968446` completed successfully for commit
+    `947f295bdaddfa21f3b2197507aaa2b92485c767`.
+  - Fixed `resendMemberInvite` so pending member resend uses the configured
+    Resend email channel when present, rotates the temporary Cognito password
+    with `AdminSetUserPassword`, and keeps Cognito delivery only as the
+    fallback when Resend is not configured.
+  - Browser verification used the local dev app at
+    `http://localhost:5174/settings/users/937834dd-a371-411e-a45d-1cf2012a5d53`;
+    clicking **Resend invite** returned the page to **Invite resent** with no
+    browser console errors.
+  - Provider verification used the stored Resend plugin secret server-side and
+    confirmed Resend sent email id `8a2b7b65-b711-4e7f-b6d8-56400befc372` to
+    `ericodom37+resend-1781729752780@gmail.com` from `noreply@thinkwork.ai`
+    with `last_event` `delivered` at `2026-06-17 22:09:30.563536+00`.
+  - The stale status-only PR #2609 was closed unmerged after being superseded by
+    #2610, #2611, and #2613.
+- Follow-up branded Resend user invite email:
+  - PR #2611 merged on 2026-06-17 at merge commit
+    `3f8e35898fb3879f8ab52677bab5d83ca35eea73`.
+  - CI passed: `cla`, `lint`, `verify`, `typecheck`, `test`.
+  - Main deploy run `27720123531` completed successfully.
+  - User invite email now includes ThinkWork branding, logo URL, CTA sign-in
+    button, temporary password block, and text fallback while preserving secret
+    safety.
+- Follow-up initial user invite delivery through Resend:
+  - PR #2610 merged on 2026-06-17 at merge commit
+    `564a7a6970125b97cd2430aac12207be419f6d48`.
+  - CI passed: `cla`, `lint`, `verify`, `typecheck`, `test`.
+  - Main deploy run `27718685598` completed successfully.
+  - Fixed Settings -> Users **Send invite** so configured Resend delivery is
+    preferred over Cognito default delivery, with Cognito retained only as
+    fallback when Resend is not configured.
+  - Browser/API verification sent `ericodom37+resend-1781729752780@gmail.com`
+    through Resend from `noreply@thinkwork.ai`; provider message
+    `0bf86834-60f1-47e4-8ada-1aa4b97792a8` was delivered.
 - Follow-up Resend Channel rename/setup simplification merge:
   - PR #2605 merged on 2026-06-17 at merge commit
     `c8df5e509b63bb9c21b57b3d145178fa2c309196`.
