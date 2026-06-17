@@ -479,6 +479,51 @@ describe("completeActivation", () => {
     ).toBeUndefined();
   });
 
+  it("reauthorization removes stale pre-Fix-C token rows and secrets", async () => {
+    const h = buildHarness();
+    const install = h.store.installs.get(h.installId)!;
+    const activation = h.store.seedActivation({
+      user_id: USER,
+      plugin_install_id: install.id,
+      status: "needs_reauth",
+      granted_scopes: ["openid", "offline_access"],
+    });
+    const primarySecret = pluginTokenSecretName({
+      stage: "test",
+      userId: USER,
+      pluginInstallId: install.id,
+      resourceIndicator: "https://crm.lastmile.invalid",
+    });
+    for (const key of ["crm", "tasks", "routing"]) {
+      const resource = `https://${key}.lastmile.invalid`;
+      const secretRef = key === "crm" ? primarySecret : `legacy-${key}`;
+      h.secrets.values.set(
+        secretRef,
+        JSON.stringify({ access_token: `old-${key}`, resource }),
+      );
+      h.store.seedToken({
+        activation_id: activation.id,
+        resource_indicator: resource,
+        secret_ref: secretRef,
+        status: "active",
+        expires_at: new Date(Date.now() - 1000),
+      });
+    }
+
+    const state = await startAndGetState(h);
+    const result = await completeActivation({ state, code: "code-1" }, h.deps);
+    expect(result.ok).toBe(true);
+
+    const tokens = await h.store.listActivationTokens(activation.id);
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]!.resource_indicator).toBe("https://crm.lastmile.invalid");
+    expect(tokens[0]!.secret_ref).toBe(primarySecret);
+    expect(h.secrets.deleted).toEqual(["legacy-tasks", "legacy-routing"]);
+    expect([...h.secrets.values.keys()]).toEqual([tokens[0]!.secret_ref]);
+    expect(h.secrets.values.get(primarySecret)).toContain("access-");
+    expect(h.store.activations.get(activation.id)!.status).toBe("active");
+  });
+
   it("no refresh token from the AS: still one token record, one exchange (Fix C)", async () => {
     const h = buildHarness();
     h.omitRefreshToken.value = true;
@@ -850,6 +895,68 @@ describe("dispatch token resolution", () => {
       // Each server resolves its own (still-present) record.
       expect(token).toBe(`legacy-${key}`);
     }
+  });
+
+  it("COMPAT: fresh shared token wins over an expired exact legacy record", async () => {
+    const h = buildHarness();
+    const install = [...h.store.installs.values()][0]!;
+    const activation = h.store.seedActivation({
+      user_id: USER,
+      plugin_install_id: install.id,
+      status: "active",
+      granted_scopes: ["openid", "offline_access"],
+    });
+    h.secrets.values.set(
+      "fresh-crm",
+      JSON.stringify({
+        access_token: "fresh-shared",
+        resource: "https://crm.lastmile.invalid",
+      }),
+    );
+    h.store.seedToken({
+      activation_id: activation.id,
+      resource_indicator: "https://crm.lastmile.invalid",
+      secret_ref: "fresh-crm",
+      status: "active",
+      expires_at: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    h.secrets.values.set(
+      "expired-tasks",
+      JSON.stringify({
+        access_token: "stale-tasks",
+        refresh_token: "stale-refresh",
+        client_id: "client-123",
+        token_endpoint: `${AUTH_DOMAIN}/token`,
+        resource: "https://tasks.lastmile.invalid",
+      }),
+    );
+    h.store.seedToken({
+      activation_id: activation.id,
+      resource_indicator: "https://tasks.lastmile.invalid",
+      secret_ref: "expired-tasks",
+      status: "active",
+      expires_at: new Date(Date.now() - 1000),
+    });
+
+    const resolver = createPluginDispatchAuthResolver({
+      store: h.store,
+      secrets: h.secrets,
+      fetchFn: h.deps.fetchFn,
+      now: () => new Date(),
+    });
+    const token = await resolver.resolveToken({
+      requesterUserId: USER,
+      pluginInstallId: install.id,
+      resource: "https://tasks.lastmile.invalid",
+      slug: "lastmile--tasks",
+      logPrefix: "[test]",
+    });
+    expect(token).toBe("fresh-shared");
+    expect(h.store.activations.get(activation.id)!.status).toBe("active");
+    const tokenCalls = h.fetchCalls.filter(
+      (call) => call.url === `${AUTH_DOMAIN}/token`,
+    );
+    expect(tokenCalls).toHaveLength(0);
   });
 
   it("refresh failure marks the activation needs_reauth and skips WITHOUT throwing", async () => {

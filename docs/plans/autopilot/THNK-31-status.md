@@ -8,6 +8,37 @@ project_context: TEI ThinkWork
 
 # THNK-31 Autopilot Status
 
+## Current LastMile Verification Fix Slice
+
+- Started from fresh `origin/main` at
+  `70d4b0aa6e14d852f0899aee7037f0588915a5b0` in branch
+  `codex/thnk-31-lastmile-token-restore`.
+- Final TEI ThinkWork verification installed the LastMile plugin through the
+  ThinkWork plugin path. Install `1d6ddb0f-0093-4dd5-b124-e06b43847834`
+  remained `installed` at pinned version `0.1.0` with CRM, tasks, routing, and
+  skills components provisioned.
+- Verified the installed plugin materialized the LastMile skill catalog at
+  `tenants/sleek-squirrel-230/skill-catalog/lastmile--crm-basics/` and assigned
+  the three plugin MCP servers to the runtime ThinkWork agent.
+- OAuth authorization completed through the deployed ThinkWork callback and
+  returned to the plugin settings success path.
+- Post-activation MCP restoration exposed a real compatibility bug: the fresh
+  LastMile CRM token resolved, but stale pre-Fix-C exact-resource token rows for
+  tasks/routing could still win token selection and mark the activation
+  `needs_reauth`.
+- Added API-side compatibility hardening:
+  - OAuth reauthorization now removes stale activation token rows and deletes
+    obsolete non-primary token secrets before writing the single current
+    plugin-level token.
+  - Plugin dispatch now prefers a fresh reusable plugin-level token over an
+    expired exact legacy token row, while preserving refresh behavior when all
+    records are expired.
+
+### Verification
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/activation.test.ts src/lib/__tests__/mcp-configs-plugin-auth.test.ts src/lib/plugins/dispatch-parity.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+
 ## Current Canonical Plugin Specification Slice
 
 - Started from fresh `origin/main` at
