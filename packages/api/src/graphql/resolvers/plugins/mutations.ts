@@ -33,6 +33,7 @@ import {
   uninstallPlugin as engineUninstallPlugin,
   upgradePlugin as engineUpgradePlugin,
 } from "../../../lib/plugins/engine.js";
+import { getPluginCatalogSnapshot } from "../../../lib/plugins/catalog-source.js";
 import type { PluginEngineDeps } from "../../../lib/plugins/engine.js";
 import type { PluginInstallRow } from "../../../lib/plugins/store.js";
 import {
@@ -51,6 +52,7 @@ import {
   requireThinkWorkPlatformOperator,
   toPluginInstallPayload,
 } from "./shared.js";
+import { pluginCatalogMetadataPayload } from "./queries.js";
 
 async function installResultPayload(
   install: PluginInstallRow,
@@ -178,6 +180,18 @@ export async function cutoverTwentyPlugin(
     },
     createDefaultTwentyCutoverDeps(),
   );
+}
+
+export async function refreshPluginCatalog(
+  _parent: unknown,
+  _args: Record<string, never>,
+  ctx: GraphQLContext,
+) {
+  await requirePluginTenantAdmin(ctx);
+  const snapshot = await getPluginCatalogSnapshot({
+    forceGitHubRefresh: true,
+  });
+  return pluginCatalogMetadataPayload(snapshot);
 }
 
 async function requireActivationCaller(

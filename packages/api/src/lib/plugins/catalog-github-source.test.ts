@@ -202,6 +202,61 @@ describe("loadGitHubPluginCatalog", () => {
     expect(vi.mocked(fetchImpl)).toHaveBeenCalledTimes(3);
   });
 
+  it("force-refreshes before the TTL expires and records 304 revalidation metadata", async () => {
+    const keys = keyPair();
+    const document = signedDocument({ privateKeyPem: keys.privateKeyPem });
+    const cacheSnapshots: Array<
+      Awaited<ReturnType<typeof loadGitHubPluginCatalog>>
+    > = [];
+    const cache = {
+      async read() {
+        return cacheSnapshots.at(-1) ?? null;
+      },
+      async write(
+        snapshot: Awaited<ReturnType<typeof loadGitHubPluginCatalog>>,
+      ) {
+        cacheSnapshots.push(snapshot);
+      },
+    };
+    const fetchImpl = queuedFetch([
+      releaseResponse(),
+      jsonResponse(document),
+      new Response(null, {
+        status: 304,
+        headers: {
+          "x-ratelimit-remaining": "4998",
+          "x-ratelimit-reset": "1760000100",
+        },
+      }),
+    ]);
+
+    await loadGitHubPluginCatalog({
+      config: config({ cacheTtlMs: 60_000 }),
+      trustedPublicKeyPem: keys.publicKeyPem,
+      fetchImpl,
+      cache,
+      now: () => new Date("2026-06-17T01:00:00.000Z"),
+    });
+    const snapshot = await loadGitHubPluginCatalog({
+      config: config({ cacheTtlMs: 60_000 }),
+      trustedPublicKeyPem: keys.publicKeyPem,
+      fetchImpl,
+      cache,
+      forceRefresh: true,
+      now: () => new Date("2026-06-17T01:00:30.000Z"),
+    });
+
+    expect(snapshot.status).toMatchObject({
+      fetchedAt: "2026-06-17T01:00:30.000Z",
+      stale: false,
+      lastRefreshStatus: "not-modified",
+      rateLimitRemaining: "4998",
+      rateLimitReset: "1760000100",
+    });
+    expect(cacheSnapshots).toHaveLength(2);
+    expect(vi.mocked(fetchImpl)).toHaveBeenCalledTimes(3);
+  });
+
   it("serves stale verified cache on transient GitHub failures", async () => {
     const keys = keyPair();
     const document = signedDocument({ privateKeyPem: keys.privateKeyPem });

@@ -60,6 +60,7 @@ export interface LoadGitHubPluginCatalogOptions {
   trustedPublicKeyPem: string;
   fetchImpl?: typeof fetch;
   cache?: GitHubPluginCatalogCache;
+  forceRefresh?: boolean;
   now?: () => Date;
 }
 
@@ -235,9 +236,11 @@ export async function loadGitHubPluginCatalog(
 
   if (
     cached &&
+    !options.forceRefresh &&
     fetchedAt.getTime() - Date.parse(cached.status.fetchedAt) <
       options.config.cacheTtlMs
   ) {
+    logGitHubCatalogRefresh("cache-hit", cached.status);
     return cached;
   }
 
@@ -249,11 +252,16 @@ export async function loadGitHubPluginCatalog(
           "GitHub catalog returned 304 but no verified cache exists",
         );
       }
-      return markSnapshot(cached, {
+      const snapshot = markSnapshot(cached, {
         fetchedAt,
         stale: false,
         lastRefreshStatus: "not-modified",
+        rateLimitRemaining: release.rateLimitRemaining,
+        rateLimitReset: release.rateLimitReset,
       });
+      await cache.write(snapshot);
+      logGitHubCatalogRefresh("not-modified", snapshot.status);
+      return snapshot;
     }
 
     const assetUrl = releaseAssetUrl(release.body, options.config.assetName);
@@ -291,15 +299,18 @@ export async function loadGitHubPluginCatalog(
       },
     };
     await cache.write(snapshot);
+    logGitHubCatalogRefresh("fresh", snapshot.status);
     return snapshot;
   } catch (error) {
     if (cached) {
-      return markSnapshot(cached, {
+      const snapshot = markSnapshot(cached, {
         fetchedAt,
         stale: true,
         lastRefreshStatus: "stale-fallback",
         message: error instanceof Error ? error.message : String(error),
       });
+      logGitHubCatalogRefresh("stale-fallback", snapshot.status);
+      return snapshot;
     }
     throw error;
   }
@@ -446,9 +457,18 @@ async function fetchRelease(
     return { notModified: true, ...metadata };
   }
   if (!response.ok) {
-    throw new GitHubPluginCatalogSourceError(
+    const message = [
       `GitHub catalog release fetch failed (${response.status})`,
-    );
+      metadata.rateLimitRemaining !== null
+        ? `rateLimitRemaining=${metadata.rateLimitRemaining}`
+        : null,
+      metadata.rateLimitReset !== null
+        ? `rateLimitReset=${metadata.rateLimitReset}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    throw new GitHubPluginCatalogSourceError(message);
   }
   return {
     notModified: false,
@@ -504,6 +524,8 @@ function markSnapshot(
   status: Pick<GitHubPluginCatalogStatus, "lastRefreshStatus" | "stale"> & {
     fetchedAt: Date;
     message?: string;
+    rateLimitRemaining?: string | null;
+    rateLimitReset?: string | null;
   },
 ): GitHubPluginCatalogSnapshot {
   return {
@@ -514,8 +536,29 @@ function markSnapshot(
       stale: status.stale,
       lastRefreshStatus: status.lastRefreshStatus,
       message: status.message,
+      rateLimitRemaining:
+        status.rateLimitRemaining ?? snapshot.status.rateLimitRemaining,
+      rateLimitReset: status.rateLimitReset ?? snapshot.status.rateLimitReset,
     },
   };
+}
+
+function logGitHubCatalogRefresh(
+  event: string,
+  status: GitHubPluginCatalogStatus,
+): void {
+  console.info("[pluginCatalog] GitHub catalog refresh", {
+    event,
+    repository: status.repository,
+    releaseTag: status.releaseTag,
+    assetName: status.assetName,
+    catalogSha256: status.catalogSha256,
+    sourceCommitSha: status.sourceCommitSha,
+    stale: status.stale,
+    lastRefreshStatus: status.lastRefreshStatus,
+    rateLimitRemaining: status.rateLimitRemaining ?? null,
+    rateLimitReset: status.rateLimitReset ?? null,
+  });
 }
 
 function secondsEnvToMs(value: string | undefined, fallback: number): number {

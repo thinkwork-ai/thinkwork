@@ -269,6 +269,12 @@ export async function pluginCatalogMetadata(
 ) {
   await requirePluginTenantMember(ctx);
   const snapshot = await getPluginCatalogSnapshot();
+  return pluginCatalogMetadataPayload(snapshot);
+}
+
+export function pluginCatalogMetadataPayload(
+  snapshot: Awaited<ReturnType<typeof getPluginCatalogSnapshot>>,
+) {
   const github = snapshot.github ?? null;
   return {
     source: snapshot.source,

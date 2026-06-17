@@ -170,3 +170,37 @@ project_context: ThinkWork / Enterprise Agent OS
   browser session was exposed in this thread, so the UI pass was limited to
   component tests and code review.
 - `git diff --check` passed.
+
+## Current U6 Operator Refresh And Observability Slice
+
+- Started from fresh `origin/main` at
+  `47c6b154db5cea19cf3afbdf071c953bc7e1e273` in branch
+  `codex/thnk-37-u6-catalog-refresh`.
+- Added tenant-admin GraphQL mutation `refreshPluginCatalog`, returning the
+  same trusted `PluginCatalogMetadata` payload as the sibling status query.
+- The refresh mutation bypasses the API GitHub catalog freshness TTL, but still
+  routes through the signed artifact verifier and stale-safe fallback path. It
+  never exposes GitHub access to the browser and never evaluates remote plugin
+  TypeScript.
+- Extended the GitHub catalog loader with explicit forced refresh support,
+  structured refresh logs, improved rate-limit failure messages, and persistent
+  cache writes for `304 Not Modified` revalidation metadata.
+- Updated Settings > Plugins so operators can trigger a server-side trusted
+  catalog refresh from the source/freshness strip; non-operators still only see
+  read-only catalog status.
+- Regenerated derived GraphQL artifacts for web, CLI, and mobile after editing
+  the canonical GraphQL schema.
+
+### Verification
+
+- `pnpm schema:build` passed.
+- `pnpm --filter @thinkwork/web codegen` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm --filter @thinkwork/mobile codegen` passed.
+- `npx vitest run src/lib/plugins/catalog-github-source.test.ts src/lib/plugins/catalog-source.test.ts src/graphql/resolvers/plugins/plugins-resolvers.test.ts`
+  from `packages/api` passed.
+- `npx vitest run src/components/settings/plugins/PluginsPage.test.tsx` from
+  `apps/web` passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.

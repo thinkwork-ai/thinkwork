@@ -137,6 +137,7 @@ import {
   installPlugin,
   issuePremiumPluginInstallKey,
   redeemPremiumPluginInstallKey,
+  refreshPluginCatalog,
   revokePremiumPluginInstallKey,
   uninstallPlugin,
 } from "./mutations.js";
@@ -353,6 +354,55 @@ describe("pluginCatalogMetadata", () => {
       message: "GitHub catalog release fetch failed (403)",
       rateLimitRemaining: "0",
       rateLimitReset: "1760000000",
+    });
+  });
+});
+
+describe("refreshPluginCatalog", () => {
+  it("requires tenant admin and force-refreshes the catalog snapshot", async () => {
+    mockGetPluginCatalogSnapshot.mockResolvedValue({
+      source: "github-release",
+      catalog: {
+        schemaVersion: 1,
+        generatedAt: "2026-06-17T00:00:00.000Z",
+        source: {
+          repository: "thinkwork-ai/thinkwork",
+          ref: "main",
+          commitSha: "0123456789abcdef0123456789abcdef01234567",
+        },
+        plugins: [],
+      },
+      github: {
+        source: "github-release",
+        repository: "thinkwork-ai/thinkwork",
+        releaseTag: "plugin-catalog-main",
+        assetName: "thinkwork-plugin-catalog-main.json",
+        catalogSha256: "sha256:catalog",
+        sourceCommitSha: "0123456789abcdef0123456789abcdef01234567",
+        generatedAt: "2026-06-17T00:00:00.000Z",
+        fetchedAt: "2026-06-17T01:05:00.000Z",
+        stale: false,
+        lastRefreshStatus: "not-modified",
+        rateLimitRemaining: "4998",
+        rateLimitReset: "1760000100",
+      },
+    });
+
+    const result = (await refreshPluginCatalog(
+      null,
+      {} as never,
+      CTX,
+    )) as Record<string, unknown>;
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(CTX, "tenant-1");
+    expect(mockGetPluginCatalogSnapshot).toHaveBeenCalledWith({
+      forceGitHubRefresh: true,
+    });
+    expect(result).toMatchObject({
+      source: "github-release",
+      lastRefreshStatus: "not-modified",
+      fetchedAt: "2026-06-17T01:05:00.000Z",
+      rateLimitRemaining: "4998",
     });
   });
 });

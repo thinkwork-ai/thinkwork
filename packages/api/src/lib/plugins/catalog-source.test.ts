@@ -174,6 +174,63 @@ describe("getPluginCatalog", () => {
     );
   });
 
+  it("passes operator force-refresh requests through to the GitHub source", async () => {
+    const { privateKeyPem, publicKeyPem } = keyPair();
+    const document = signPluginCatalog({
+      catalog: buildPluginCatalog({
+        manifests: allPluginManifests,
+        generatedAt: "2026-06-17T00:00:00.000Z",
+        source: {
+          repository: "thinkwork-ai/thinkwork",
+          ref: "main",
+          commitSha: "0123456789abcdef0123456789abcdef01234567",
+        },
+      }),
+      privateKeyPem,
+      signedAt: "2026-06-17T00:00:00.000Z",
+    });
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.includes("/releases/tags/plugin-catalog-main")) {
+        return new Response(
+          JSON.stringify({
+            assets: [
+              {
+                name: "thinkwork-plugin-catalog-main.json",
+                browser_download_url:
+                  "https://example.invalid/thinkwork-plugin-catalog-main.json",
+              },
+            ],
+          }),
+          { headers: { etag: '"catalog"' } },
+        );
+      }
+      return new Response(JSON.stringify(document));
+    });
+    const deps = {
+      readTrustedPublicKey: async () => publicKeyPem,
+      readGitHubConfig: () => ({
+        repository: "thinkwork-ai/thinkwork",
+        releaseTag: "plugin-catalog-main",
+        assetName: "thinkwork-plugin-catalog-main.json",
+        cacheTtlMs: 60_000,
+        userAgent: "thinkwork-api-test",
+      }),
+      fetch: fetchImpl as typeof fetch,
+      loadSignedDocument: async () => {
+        throw new Error("bundled signed document should not be used");
+      },
+    };
+
+    await getPluginCatalogSnapshot(deps);
+    await getPluginCatalogSnapshot({
+      ...deps,
+      forceGitHubRefresh: true,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+  });
+
   it("signed mode: fails closed on a tampered payload", async () => {
     const { privateKeyPem, publicKeyPem } = keyPair();
     const document = signedDocument(privateKeyPem);
