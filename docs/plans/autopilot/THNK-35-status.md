@@ -11,9 +11,9 @@ status: active
 - Linear issue: THNK-35, moved from Ready to Work to In Progress after
   discovery on 2026-06-17.
 - Implementation base: `origin/main` at
-  `c8df5e509b63bb9c21b57b3d145178fa2c309196` (Resend Channel
-  rename/setup simplification merge).
-- Active branch: `codex/thnk-35-resend-simplify-status`.
+  `3baeaa70a87e8d728a71ff57d892aad911656926` (Settings users
+  invite delivery through active Resend Channel merge).
+- Active branch: `codex/thnk-35-resend-invite-status`.
 
 ## Progress
 
@@ -28,6 +28,7 @@ status: active
 | U7 Routine, runtime, and cross-surface email parity                      | Merged  | PR #2603; merge commit `80e65ffaaed86995ccec30f8508298d0638919c3` |
 | U8 SES migration, observability, documentation, and deployed validation  | Pending | Not started                                                       |
 | Follow-up Resend Channel rename and one-key setup simplification         | Merged  | PR #2605; merge commit `c8df5e509b63bb9c21b57b3d145178fa2c309196` |
+| Follow-up Settings users invites through active Resend Channel           | Merged  | PR #2607; merge commit `3baeaa70a87e8d728a71ff57d892aad911656926` |
 
 ## Notes
 
@@ -39,6 +40,29 @@ status: active
 
 ## Verification Log
 
+- Follow-up Settings users invite delivery through active Resend Channel:
+  - PR #2607 merged on 2026-06-17 at merge commit
+    `3baeaa70a87e8d728a71ff57d892aad911656926`.
+  - CI passed before merge: `cla`, `lint`, `verify`, `typecheck`, `test`.
+  - Main deploy for merge commit
+    `3baeaa70a87e8d728a71ff57d892aad911656926` completed Terraform apply
+    successfully on 2026-06-17.
+  - Settings -> Users invite delivery now resolves an active ready Resend
+    Channel provider before Cognito delivery, suppresses Cognito invitation
+    email, sets a temporary Cognito password, and sends the ThinkWork
+    invitation through the configured channel. If no active ready channel is
+    present, the existing Cognito path remains the fallback.
+  - Browser E2E against `http://localhost:5174/settings/users` passed after
+    deploy: submitted
+    `ericodom37+tw-resend-1781727555852@gmail.com`, the modal closed, no
+    `[GraphQL]`/unexpected error remained, no browser console errors were
+    captured, and the invited user row appeared in the Users table.
+  - Local checks:
+    - `pnpm --filter @thinkwork/api test -- src/__tests__/inviteMember-computer-claim.test.ts src/__tests__/core-mutations-authz.test.ts src/__tests__/resendMemberInvite.test.ts`
+    - `pnpm --filter @thinkwork/api typecheck`
+    - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsUsers.test.tsx`
+    - `pnpm lint`
+    - `git diff --check`
 - Follow-up Resend Channel rename/setup simplification merge:
   - PR #2605 merged on 2026-06-17 at merge commit
     `c8df5e509b63bb9c21b57b3d145178fa2c309196`.
