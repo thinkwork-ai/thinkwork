@@ -8,9 +8,10 @@ export function ResendApiKeyInstructions() {
         value once.
       </p>
       <p className="mt-2">
-        Use least-privileged sending_access with a domain scope when ThinkWork
-        only sends from an already configured domain. Use full_access only when
-        ThinkWork must manage or verify provider resources.
+        This one-key setup lets ThinkWork create the Resend webhook and use the
+        tenant&apos;s *.thinkwork.ai email domain automatically. Use a dedicated
+        production key with the permissions needed to manage webhooks and send
+        from that domain.
       </p>
       <a
         className="mt-2 inline-block text-primary underline-offset-4 hover:underline"

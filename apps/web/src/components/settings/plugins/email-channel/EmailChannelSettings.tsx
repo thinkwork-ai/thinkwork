@@ -2,13 +2,8 @@ import { type FormEvent, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { Badge, Button, Input, Label } from "@thinkwork/ui";
-import { KeyRound } from "lucide-react";
-import {
-  EmailAllowlistType,
-  EmailChannelProvider,
-  EmailDomainOwnershipType,
-  EmailDomainStatus,
-} from "@/gql/graphql";
+import { CheckCircle2, KeyRound } from "lucide-react";
+import { EmailAllowlistType, EmailChannelProvider } from "@/gql/graphql";
 import {
   SettingsAddEmailSpaceSenderAllowlistMutation,
   SettingsEmailChannelQuery,
@@ -29,10 +24,8 @@ import { SpaceEmailPolicyPanel } from "./SpaceEmailPolicyPanel";
 export function EmailChannelSettings() {
   const [form, setForm] = useState({
     apiKey: "",
-    domain: "",
-    defaultFromEmail: "",
-    webhookSecretRef: "",
   });
+  const [editingCredential, setEditingCredential] = useState(false);
   const [result, refresh] = useQuery({
     query: SettingsEmailChannelQuery,
     requestPolicy: "cache-and-network",
@@ -57,6 +50,11 @@ export function EmailChannelSettings() {
   const resendProvider = summary?.providers.find(
     (provider) => provider.provider === "RESEND",
   );
+  const resendDomain = summary?.domains.find(
+    (domain) => domain.providerInstallId === resendProvider?.id,
+  );
+  const credentialConfigured = Boolean(resendProvider?.credentialConfigured);
+  const showCredentialInput = !credentialConfigured || editingCredential;
 
   function refetch() {
     refresh({ requestPolicy: "network-only" });
@@ -65,9 +63,8 @@ export function EmailChannelSettings() {
   async function submitCredential(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const apiKey = form.apiKey.trim();
-    const domain = form.domain.trim();
-    if (!apiKey || !domain) {
-      toast.error("Enter a Resend API key and dedicated email domain.");
+    if (!apiKey) {
+      toast.error("Enter a Resend API key.");
       return;
     }
     const response = await saveCredential({
@@ -76,13 +73,6 @@ export function EmailChannelSettings() {
         provider: EmailChannelProvider.Resend,
         apiKey,
         displayName: "Resend",
-        webhookSecretRef: form.webhookSecretRef.trim() || undefined,
-        defaultFromEmail: form.defaultFromEmail.trim() || undefined,
-        domain: {
-          domain,
-          ownershipType: EmailDomainOwnershipType.ThinkworkOwned,
-          status: EmailDomainStatus.Pending,
-        },
       },
     });
     if (response.error) {
@@ -92,6 +82,7 @@ export function EmailChannelSettings() {
       return;
     }
     setForm((current) => ({ ...current, apiKey: "" }));
+    setEditingCredential(false);
     toast.success("Resend credential stored.");
     refetch();
   }
@@ -192,82 +183,113 @@ export function EmailChannelSettings() {
             onSubmit={submitCredential}
           >
             <ResendApiKeyInstructions />
-            <div className="flex items-center justify-end gap-2">
-              <Badge
-                variant={
-                  resendProvider?.credentialConfigured ? "outline" : "secondary"
-                }
-              >
-                {resendProvider?.credentialConfigured ? "Stored" : "Not stored"}
+            <div className="flex items-center justify-between gap-3">
+              {credentialConfigured ? (
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <CheckCircle2 className="size-4 text-emerald-400" />
+                  API key configured
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Paste a Resend API key to configure production email.
+                </p>
+              )}
+              <Badge variant={credentialConfigured ? "outline" : "secondary"}>
+                {credentialConfigured ? "Stored" : "Not stored"}
               </Badge>
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="email-channel-resend-api-key">
-                Resend API key
-              </Label>
-              <Input
-                id="email-channel-resend-api-key"
-                type="password"
-                autoComplete="off"
-                value={form.apiKey}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    apiKey: event.currentTarget.value,
-                  }))
-                }
-              />
+            {showCredentialInput ? (
+              <div className="grid gap-1.5">
+                <Label htmlFor="email-channel-resend-api-key">
+                  {credentialConfigured
+                    ? "New Resend API key"
+                    : "Resend API key"}
+                </Label>
+                <Input
+                  id="email-channel-resend-api-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={
+                    credentialConfigured
+                      ? "Paste a replacement key"
+                      : "Paste Resend API key"
+                  }
+                  value={form.apiKey}
+                  onChange={(event) => {
+                    const apiKey = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      apiKey,
+                    }));
+                  }}
+                />
+              </div>
+            ) : null}
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              <p>
+                ThinkWork will automatically use the tenant&apos;s{" "}
+                <span className="font-medium text-foreground">
+                  *.thinkwork.ai
+                </span>{" "}
+                email domain, create the Resend webhook, and store the webhook
+                signing secret server-side.
+              </p>
+              {resendDomain || resendProvider?.defaultFromEmail ? (
+                <dl className="mt-2 grid gap-1">
+                  {resendDomain ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt>Domain</dt>
+                      <dd className="font-mono text-foreground">
+                        {resendDomain.domain}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {resendProvider?.defaultFromEmail ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt>Default sender</dt>
+                      <dd className="font-mono text-foreground">
+                        {resendProvider.defaultFromEmail}
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="email-channel-domain">Dedicated domain</Label>
-              <Input
-                id="email-channel-domain"
-                value={form.domain}
-                placeholder="tenant.mail.thinkwork.ai"
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    domain: event.currentTarget.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="email-channel-default-from">
-                Default from address
-              </Label>
-              <Input
-                id="email-channel-default-from"
-                value={form.defaultFromEmail}
-                placeholder="space@tenant.mail.thinkwork.ai"
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    defaultFromEmail: event.currentTarget.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="email-channel-webhook-secret-ref">
-                Webhook signing secret reference
-              </Label>
-              <Input
-                id="email-channel-webhook-secret-ref"
-                value={form.webhookSecretRef}
-                placeholder="Secrets Manager reference"
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    webhookSecretRef: event.currentTarget.value,
-                  }))
-                }
-              />
-            </div>
-            <Button type="submit" size="sm" disabled={credentialState.fetching}>
-              <KeyRound className="size-4" />
-              Save credential
-            </Button>
+            {showCredentialInput ? (
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={credentialState.fetching}
+                >
+                  <KeyRound className="size-4" />
+                  {credentialConfigured ? "Save rotated key" : "Save API key"}
+                </Button>
+                {credentialConfigured ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setForm((current) => ({ ...current, apiKey: "" }));
+                      setEditingCredential(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setEditingCredential(true)}
+              >
+                <KeyRound className="size-4" />
+                Rotate API key
+              </Button>
+            )}
           </form>
         </SettingsRow>
       </SettingsSection>

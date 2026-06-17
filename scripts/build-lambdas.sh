@@ -410,6 +410,9 @@ echo "P2: Async + integrations"
 build_handler "email-inbound" \
   "$REPO_ROOT/packages/api/src/handlers/email-inbound.ts"
 
+build_handler "email-provider-webhook" \
+  "$REPO_ROOT/packages/api/src/handlers/email-provider-webhook.ts"
+
 build_handler "email-send" \
   "$REPO_ROOT/packages/api/src/handlers/email-send.ts"
 

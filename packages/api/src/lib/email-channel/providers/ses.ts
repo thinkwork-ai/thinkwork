@@ -122,7 +122,7 @@ export async function normalizeSesInbound(input: unknown) {
     provider: "ses",
     providerEventId: mail.messageId,
     providerMessageId: mail.messageId,
-    receivedAt: new Date(mail.timestamp),
+    receivedAt: dateValue(mail.timestamp) ?? new Date(),
     fromEmail: extractEmailAddress(mail.source ?? ""),
     toEmails: record.ses.receipt.recipients ?? [],
     subject: headerValue(mail, "subject"),
@@ -199,6 +199,12 @@ function extractEmailAddress(value: string): string {
   const trimmed = value.trim().toLowerCase();
   const angleMatch = trimmed.match(/<([^>]+)>/);
   return (angleMatch?.[1] || trimmed).trim().toLowerCase();
+}
+
+function dateValue(value: unknown): Date | null {
+  if (typeof value !== "string" || !value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

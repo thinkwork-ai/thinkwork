@@ -456,6 +456,7 @@ resource "aws_lambda_function" "handler" {
     "knowledge-base-files",
     "email-send",
     "email-inbound",
+    "email-provider-webhook",
     "email-readiness-probe",
     "slack-events",
     "slack-slash-command",
@@ -1061,8 +1062,9 @@ locals {
       "ANY /api/knowledge-bases/{proxy+}" = "knowledge-base-files"
 
       # Email
-      "POST /api/email/send"            = "email-send"
-      "POST /api/email/readiness/probe" = "email-readiness-probe"
+      "POST /api/email/send"                                 = "email-send"
+      "POST /api/email/provider-webhook/{providerInstallId}" = "email-provider-webhook"
+      "POST /api/email/readiness/probe"                      = "email-readiness-probe"
 
       # Slack workspace app ingress. These unauthenticated public endpoints
       # verify Slack signatures in handler code before any tenant work happens.

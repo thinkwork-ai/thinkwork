@@ -10,6 +10,15 @@ export function emailProviderSecretName(input: {
   return `thinkwork/${stage}/email-channel/${input.tenantId}/${input.provider}/api-key`;
 }
 
+export function emailProviderWebhookSecretName(input: {
+  stage?: string | null;
+  tenantId: string;
+  provider: string;
+}): string {
+  const stage = input.stage || process.env.STAGE || "dev";
+  return `thinkwork/${stage}/email-channel/${input.tenantId}/${input.provider}/webhook-signing-secret`;
+}
+
 export function maskSecretFingerprint(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
 }
@@ -36,4 +45,33 @@ export async function storeEmailProviderApiKey(input: {
     }),
   );
   return { secretRef, fingerprint: maskSecretFingerprint(apiKey) };
+}
+
+export function readStoredEmailProviderApiKey(secretValue: string): string {
+  const value = secretValue.trim();
+  if (!value) return "";
+  if (!value.startsWith("{")) return value;
+  try {
+    const parsed = JSON.parse(value) as { apiKey?: unknown };
+    return typeof parsed.apiKey === "string" ? parsed.apiKey.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+export async function storeEmailProviderWebhookSecret(input: {
+  tenantId: string;
+  provider: string;
+  signingSecret: string;
+}): Promise<{ secretRef: string; fingerprint: string }> {
+  const signingSecret = input.signingSecret.trim();
+  if (!signingSecret) {
+    throw new Error("Webhook signing secret is required");
+  }
+  const secretRef = emailProviderWebhookSecretName({
+    tenantId: input.tenantId,
+    provider: input.provider,
+  });
+  await createSecretsManagerPluginSecrets().putSecret(secretRef, signingSecret);
+  return { secretRef, fingerprint: maskSecretFingerprint(signingSecret) };
 }

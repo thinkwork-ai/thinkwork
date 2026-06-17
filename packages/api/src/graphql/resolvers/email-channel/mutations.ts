@@ -1,3 +1,4 @@
+import { getConfig } from "@thinkwork/runtime-config";
 import { GraphQLError } from "graphql";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
@@ -6,6 +7,7 @@ import {
   emailReadinessChecks,
   emailSpacePolicies,
   emailSpaceSenderAllowlists,
+  tenants,
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { requirePluginTenantAdmin } from "../plugins/shared.js";
@@ -25,7 +27,12 @@ import {
   requireEmailProviderInstall,
   requireEmailSpace,
 } from "./shared.js";
-import { storeEmailProviderApiKey } from "../../../lib/email-channel/secrets.js";
+import {
+  storeEmailProviderApiKey,
+  storeEmailProviderWebhookSecret,
+} from "../../../lib/email-channel/secrets.js";
+import { createResendWebhook } from "../../../lib/email-channel/providers/resend.js";
+import { providerSafeError } from "../../../lib/email-channel/provider-contract.js";
 import { runEmailReadinessProbeMutation } from "./readiness.mutations.js";
 
 type ConfigureEmailProviderInput = {
@@ -71,7 +78,14 @@ export async function saveEmailProviderCredential(
     provider,
     apiKey: args.input.apiKey,
   });
-  return configureEmailProvider(
+  const defaults = await emailProviderDefaults(ctx, tenantId, provider);
+  const metadata = {
+    credentialMasked: "stored",
+    credentialFingerprint: fingerprint,
+    credentialUpdatedAt: new Date().toISOString(),
+    generatedDefaults: defaults.metadata,
+  };
+  const providerPayload = await configureEmailProvider(
     _parent,
     {
       input: {
@@ -82,17 +96,164 @@ export async function saveEmailProviderCredential(
         activeForProduction: false,
         credentialSecretRef: secretRef,
         webhookSecretRef: args.input.webhookSecretRef,
-        defaultFromEmail: args.input.defaultFromEmail,
-        metadata: {
-          credentialMasked: "stored",
-          credentialFingerprint: fingerprint,
-          credentialUpdatedAt: new Date().toISOString(),
-        },
-        domain: args.input.domain,
+        defaultFromEmail:
+          args.input.defaultFromEmail ?? defaults.defaultFromEmail,
+        metadata,
+        domain: args.input.domain ?? defaults.domain,
       },
     },
     ctx,
   );
+
+  if (provider === "resend") {
+    await configureResendWebhookFromApiKey({
+      ctx,
+      tenantId,
+      providerInstallId: providerPayload.id,
+      apiKey: args.input.apiKey,
+      existingMetadata: metadata,
+    });
+    const [updated] = await ctx.db
+      .select()
+      .from(emailProviderInstalls)
+      .where(eq(emailProviderInstalls.id, providerPayload.id))
+      .limit(1);
+    if (updated) return emailProviderInstallPayload(updated);
+  }
+
+  return providerPayload;
+}
+
+async function emailProviderDefaults(
+  ctx: GraphQLContext,
+  tenantId: string,
+  provider: string,
+) {
+  const [tenant] = await ctx.db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (!tenant?.slug) {
+    throw new GraphQLError("Tenant slug required for email defaults", {
+      extensions: { code: "FAILED_PRECONDITION" },
+    });
+  }
+  const domain = "thinkwork.ai";
+  const tenantSubdomain = `${tenant.slug}.thinkwork.ai`;
+  const defaultFromEmail = `noreply@${domain}`;
+  return {
+    defaultFromEmail,
+    domain: {
+      domain,
+      ownershipType: "THINKWORK_OWNED",
+      status: "VERIFIED",
+      sendingVerifiedAt: new Date().toISOString(),
+      inboundVerifiedAt: new Date().toISOString(),
+      providerMetadata: {
+        generatedBy: "email_channel_one_key_install",
+        domainPattern: "*.thinkwork.ai",
+        tenantSubdomain,
+        provider,
+      },
+    },
+    metadata: {
+      domain,
+      defaultFromEmail,
+      domainPattern: "*.thinkwork.ai",
+      tenantSubdomain,
+      generatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+async function configureResendWebhookFromApiKey(input: {
+  ctx: GraphQLContext;
+  tenantId: string;
+  providerInstallId: string;
+  apiKey: string;
+  existingMetadata: Record<string, unknown>;
+}) {
+  const apiBaseUrl = (getConfig("THINKWORK_API_URL") ?? "").replace(/\/$/, "");
+  if (!apiBaseUrl) {
+    await markResendWebhookSetupFailure(input, {
+      code: "EMAIL_WEBHOOK_ENDPOINT_MISSING",
+      message: "THINKWORK_API_URL is not configured.",
+    });
+    return;
+  }
+
+  const endpoint = `${apiBaseUrl}/api/email/provider-webhook/${input.providerInstallId}`;
+  try {
+    const webhook = await createResendWebhook({
+      credential: input.apiKey,
+      endpoint,
+      events: [
+        "email.sent",
+        "email.delivered",
+        "email.delivery_delayed",
+        "email.failed",
+        "email.bounced",
+        "email.complained",
+        "email.opened",
+        "email.clicked",
+        "email.received",
+      ],
+    });
+    const { secretRef, fingerprint } = await storeEmailProviderWebhookSecret({
+      tenantId: input.tenantId,
+      provider: "resend",
+      signingSecret: webhook.signingSecret,
+    });
+    await input.ctx.db
+      .update(emailProviderInstalls)
+      .set({
+        webhook_secret_ref: secretRef,
+        metadata: {
+          ...input.existingMetadata,
+          resendWebhook: {
+            id: webhook.id,
+            endpoint,
+            signingSecretFingerprint: fingerprint,
+            configuredAt: new Date().toISOString(),
+          },
+        },
+        updated_at: sql`now()`,
+      })
+      .where(eq(emailProviderInstalls.id, input.providerInstallId));
+  } catch (error) {
+    const safe = providerSafeError(error);
+    await markResendWebhookSetupFailure(input, {
+      code: safe.code,
+      message: safe.message,
+    });
+  }
+}
+
+async function markResendWebhookSetupFailure(
+  input: {
+    ctx: GraphQLContext;
+    providerInstallId: string;
+    existingMetadata: Record<string, unknown>;
+  },
+  error: { code: string; message: string },
+) {
+  await input.ctx.db
+    .update(emailProviderInstalls)
+    .set({
+      webhook_secret_ref: null,
+      metadata: {
+        ...input.existingMetadata,
+        resendWebhook: {
+          status: "failed",
+          failureCode: error.code,
+          failureMessage: error.message,
+          failedAt: new Date().toISOString(),
+        },
+      },
+      updated_at: sql`now()`,
+    })
+    .where(eq(emailProviderInstalls.id, input.providerInstallId));
 }
 
 export async function configureEmailProvider(

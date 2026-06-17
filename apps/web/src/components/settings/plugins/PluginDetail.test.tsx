@@ -531,11 +531,91 @@ describe("PluginDetail", () => {
     expect(
       screen.getByText(/dedicated ThinkWork production key/i),
     ).toBeTruthy();
-    expect(
-      screen.getByText(/sending_access with a domain scope/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/one-key setup/i)).toBeTruthy();
+    expect(screen.getAllByText(/\*\.thinkwork\.ai/i).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Resend API key")).toBeTruthy();
+    expect(screen.queryByLabelText("Dedicated domain")).toBeNull();
+    expect(
+      screen.queryByLabelText("Webhook signing secret reference"),
+    ).toBeNull();
     expect(screen.getByText("Not stored")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Resend API key"), {
+      target: { value: "re_test_123" },
+    });
+
+    expect(screen.getByDisplayValue("re_test_123")).toBeTruthy();
+    expect(screen.getByText("Save API key")).toBeTruthy();
+  });
+
+  it("shows stored Resend credentials without an empty password field", () => {
+    paramsState.pluginKey = "email-channel";
+    mockQueries({
+      install: {
+        ...baseInstall,
+        pluginKey: "email-channel",
+        state: "installed",
+      },
+      activations: [],
+      catalog: [emailChannelEntry],
+    });
+    mocks.useQuery.mockImplementation(({ query }: { query: unknown }) => {
+      if (query === queryDocs.SettingsEmailChannelQuery) {
+        return [
+          {
+            data: {
+              emailChannelSummary: storedEmailChannelSummary,
+            },
+            fetching: false,
+          },
+          vi.fn(),
+        ];
+      }
+      if (query === queryDocs.SettingsPluginCatalogQuery) {
+        return [
+          { data: { pluginCatalog: [emailChannelEntry] }, fetching: false },
+          refreshCatalog,
+        ];
+      }
+      if (query === queryDocs.SettingsPluginInstallsQuery) {
+        return [
+          {
+            data: {
+              pluginInstalls: [
+                {
+                  ...baseInstall,
+                  pluginKey: "email-channel",
+                  state: "installed",
+                },
+              ],
+            },
+            fetching: false,
+          },
+          refreshInstalls,
+        ];
+      }
+      if (query === queryDocs.SettingsMyPluginActivationsQuery) {
+        return [
+          { data: { myPluginActivations: [] }, fetching: false },
+          refreshActivations,
+        ];
+      }
+      return [{ fetching: false }, vi.fn()];
+    });
+
+    render(<PluginDetail />);
+
+    expect(screen.getByText("API key configured")).toBeTruthy();
+    expect(screen.getByText("Stored")).toBeTruthy();
+    expect(screen.queryByLabelText("Resend API key")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /rotate api key/i }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /rotate api key/i }));
+
+    expect(screen.getByLabelText("New Resend API key")).toBeTruthy();
+    expect(screen.getByText("Save rotated key")).toBeTruthy();
   });
 
   it("opens an install-key dialog for unentitled Company Brain installs", async () => {
@@ -796,6 +876,42 @@ const emailChannelSummary = {
   ],
   blockingReadinessChecks: [],
   spacePolicies: [],
+};
+
+const storedEmailChannelSummary = {
+  ...emailChannelSummary,
+  providers: [
+    {
+      __typename: "EmailProviderInstall" as const,
+      id: "provider-resend",
+      provider: "RESEND",
+      displayName: "Resend",
+      status: "PENDING",
+      activeForProduction: false,
+      credentialConfigured: true,
+      webhookConfigured: true,
+      defaultFromEmail: "noreply@thinkwork.ai",
+      metadata: "{}",
+      createdAt: "2026-06-17T12:00:00Z",
+      updatedAt: "2026-06-17T12:00:00Z",
+    },
+  ],
+  domains: [
+    {
+      __typename: "EmailDomain" as const,
+      id: "domain-thinkwork",
+      providerInstallId: "provider-resend",
+      domain: "thinkwork.ai",
+      ownershipType: "THINKWORK_OWNED",
+      status: "VERIFIED",
+      sendingVerifiedAt: "2026-06-17T12:00:00Z",
+      inboundVerifiedAt: "2026-06-17T12:00:00Z",
+      dnsRecords: null,
+      providerMetadata: null,
+      createdAt: "2026-06-17T12:00:00Z",
+      updatedAt: "2026-06-17T12:00:00Z",
+    },
+  ],
 };
 
 const companyBrainEntitlement = {

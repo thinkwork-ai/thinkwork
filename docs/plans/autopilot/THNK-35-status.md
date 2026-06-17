@@ -11,8 +11,8 @@ status: active
 - Linear issue: THNK-35, moved from Ready to Work to In Progress after
   discovery on 2026-06-17.
 - Implementation base: `origin/main` at
-  `61599ac66fa03fbe4e855a0085688b81ee93458e` (U4 merge).
-- Active branch: `codex/thnk-35-email-channel-u5`.
+  `da283bb52d4b5dda04bbbdabe67c623505233a4e` (U5 merge).
+- Active branch: `codex/thnk-35-email-channel-u6`.
 
 ## Progress
 
@@ -22,8 +22,8 @@ status: active
 | U2 Email channel data model, GraphQL, and ledger contract                | Merged              | PR #2589; merge commit `99f05c1e768bb85b863e911a20e152b7daa48990` |
 | U3 Resend and SES provider adapter service                               | Merged              | PR #2591; merge commit `5839b9ccd420cc60d4e69c0c6874cedfe6ec969d` |
 | U4 Readiness state machine and plugin settings surface                   | Merged              | PR #2595; merge commit `61599ac66fa03fbe4e855a0085688b81ee93458e` |
-| U5 Outbound channel, first-send HITL, and ledger writes                  | Implemented locally | Branch `codex/thnk-35-email-channel-u5`; focused checks passed    |
-| U6 Inbound webhook normalization, authorization, rate limits, and wakeup | Pending             | Not started                                                       |
+| U5 Outbound channel, first-send HITL, and ledger writes                  | Merged              | PR #2597; merge commit `da283bb52d4b5dda04bbbdabe67c623505233a4e` |
+| U6 Inbound webhook normalization, authorization, rate limits, and wakeup | PR open             | PR #2600; commit `a42a2ae64`; focused checks passed               |
 | U7 Routine, runtime, and cross-surface email parity                      | Pending             | Not started                                                       |
 | U8 SES migration, observability, documentation, and deployed validation  | Pending             | Not started                                                       |
 
@@ -37,6 +37,24 @@ status: active
 
 ## Verification Log
 
+- U6 focused checks:
+  - PR #2600 opened: https://github.com/thinkwork-ai/thinkwork/pull/2600
+  - `pnpm --filter @thinkwork/api test -- src/handlers/email-inbound.test.ts src/handlers/email-provider-webhook.test.ts src/lib/email-channel/inbound-routing.test.ts`
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginDetail.test.tsx`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `bash scripts/build-lambdas.sh email-inbound`
+  - `bash scripts/build-lambdas.sh email-provider-webhook`
+  - Local dev server is running on `http://localhost:5174/` for user review.
+  - Resend one-key setup was simplified so admins enter only the API key;
+    ThinkWork derives the verified `thinkwork.ai` provider domain, uses tenant
+    Space addresses under `*.thinkwork.ai`, creates the provider webhook
+    server-side, stores the webhook signing secret server-side, and keeps
+    stored credentials masked with a rotate-only input.
+- U5 merge:
+  - PR #2597 merged on 2026-06-17 at merge commit
+    `da283bb52d4b5dda04bbbdabe67c623505233a4e`.
+  - CI passed: `cla`, `lint`, `verify`, `typecheck`, `test`.
 - U4 merge:
   - PR #2595 merged on 2026-06-17 at merge commit
     `61599ac66fa03fbe4e855a0085688b81ee93458e`.
