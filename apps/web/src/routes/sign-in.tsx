@@ -6,10 +6,14 @@ import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
 import { EmailPasswordForm } from "@/components/auth/EmailPasswordForm";
 import { useAuth } from "@/context/AuthContext";
 import {
-  getGoogleSignInUrl,
-  getHostedSignInUrl,
+  getAuthOptionSignInUrl,
   isPasswordSignInConfigured,
 } from "@/lib/auth";
+import {
+  fetchPublicAuthOptions,
+  type PublicAuthOptions,
+  type PublicOAuthOption,
+} from "@/lib/auth-options";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import {
   getDesktopBridge,
@@ -40,6 +44,10 @@ export function SignInPage() {
   );
   const [isStartingOAuth, setIsStartingOAuth] = useState(false);
   const [isProfileBusy, setIsProfileBusy] = useState(false);
+  const [authOptions, setAuthOptions] = useState<PublicAuthOptions>({
+    password: { enabled: true },
+    oauthOptions: [],
+  });
 
   const refreshDesktopConfig = useCallback(async () => {
     const bridge = getDesktopBridge();
@@ -102,6 +110,17 @@ export function SignInPage() {
     });
   });
 
+  useEffect(() => {
+    if (isDesktop) return;
+    let cancelled = false;
+    void fetchPublicAuthOptions().then((options) => {
+      if (!cancelled) setAuthOptions(options);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isDesktop]);
+
   async function importDesktopProfile(json: string) {
     const bridge = getDesktopBridge();
     if (!bridge || typeof bridge.importDeploymentProfile !== "function") {
@@ -127,7 +146,7 @@ export function SignInPage() {
     }
   }
 
-  async function handleGoogle() {
+  async function handleDesktopOAuth() {
     setError(null);
     const bridge = getDesktopBridge();
     if (bridge) {
@@ -151,28 +170,25 @@ export function SignInPage() {
       }
       return;
     }
-    if (isDesktopBuild()) {
-      setError("Desktop bridge is unavailable.");
-      return;
-    }
+    setError("Desktop bridge is unavailable.");
+  }
+
+  function handlePublicOAuth(option: PublicOAuthOption) {
+    setError(null);
     if (!webDeploymentProfile.okForOAuth) {
       setError(
         `Deployment configuration is incomplete: ${webDeploymentProfile.missing.join(", ")}`,
       );
       return;
     }
-
-    // With the password form on the page, "Continue with Google" should land
-    // on Google's account picker directly — identity_provider=Google skips
-    // the unbranded Cognito hosted-UI login page. Without the form (password
-    // sign-in unconfigured), keep the generic hosted UI as the catch-all.
-    window.location.href = showPasswordForm
-      ? getGoogleSignInUrl()
-      : getHostedSignInUrl();
+    window.location.href = getAuthOptionSignInUrl(option);
   }
 
   const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
-  const showPasswordForm = !isDesktop && isPasswordSignInConfigured();
+  const publicOAuthOptions = isDesktop ? [] : authOptions.oauthOptions;
+  const showPasswordForm =
+    !isDesktop && authOptions.password.enabled && isPasswordSignInConfigured();
+  const showPublicOAuthOptions = publicOAuthOptions.length > 0;
 
   const splash = (
     <main className="flex min-h-0 flex-1 items-center justify-center px-6 py-12">
@@ -230,44 +246,67 @@ export function SignInPage() {
           </div>
         )}
         <div className="flex w-full flex-col items-center gap-4">
-          <Button
-            onClick={() => void handleGoogle()}
-            size="lg"
-            variant={showPasswordForm ? "outline" : "default"}
-            className={showPasswordForm ? "w-full" : "min-w-40"}
-            disabled={
-              isLoading ||
-              isStartingOAuth ||
-              isProfileBusy ||
-              Boolean(desktopConfig && !desktopConfig.configured) ||
-              webConfigBlocked
-            }
-          >
-            {isLoading ? (
-              "Checking session..."
-            ) : isStartingOAuth || isProfileBusy ? (
-              "Opening..."
-            ) : showPasswordForm ? (
-              <>
-                <GoogleIcon />
-                Log in with Google
-              </>
-            ) : (
-              "Log in"
-            )}
-          </Button>
+          {isDesktop ? (
+            <Button
+              onClick={() => void handleDesktopOAuth()}
+              size="lg"
+              className="min-w-40"
+              disabled={
+                isLoading ||
+                isStartingOAuth ||
+                isProfileBusy ||
+                Boolean(desktopConfig && !desktopConfig.configured)
+              }
+            >
+              {isLoading
+                ? "Checking session..."
+                : isStartingOAuth || isProfileBusy
+                  ? "Opening..."
+                  : "Log in"}
+            </Button>
+          ) : (
+            showPublicOAuthOptions &&
+            publicOAuthOptions.map((option) => (
+              <Button
+                key={option.key}
+                onClick={() => handlePublicOAuth(option)}
+                size="lg"
+                variant={showPasswordForm ? "outline" : "default"}
+                className={showPasswordForm ? "w-full" : "min-w-40"}
+                disabled={isLoading || isStartingOAuth || webConfigBlocked}
+              >
+                {isLoading ? (
+                  "Checking session..."
+                ) : isStartingOAuth ? (
+                  "Opening..."
+                ) : (
+                  <>
+                    <SsoIcon />
+                    {option.label}
+                  </>
+                )}
+              </Button>
+            ))
+          )}
           {showPasswordForm && (
             <>
-              <div
-                aria-hidden="true"
-                className="flex w-full items-center gap-3 text-xs text-muted-foreground"
-              >
-                <span className="h-px flex-1 bg-border" />
-                or
-                <span className="h-px flex-1 bg-border" />
-              </div>
+              {showPublicOAuthOptions && (
+                <div
+                  aria-hidden="true"
+                  className="flex w-full items-center gap-3 text-xs text-muted-foreground"
+                >
+                  <span className="h-px flex-1 bg-border" />
+                  or
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
               <EmailPasswordForm disabled={isLoading || webConfigBlocked} />
             </>
+          )}
+          {!isDesktop && !showPasswordForm && !showPublicOAuthOptions && (
+            <p className="text-center text-sm text-muted-foreground">
+              Sign-in options are unavailable.
+            </p>
           )}
           {!isDesktop && (
             <div className="text-center text-xs text-muted-foreground/60">
@@ -309,18 +348,30 @@ function isCentralOnboardingHost(): boolean {
   return window.location.hostname === "app.thinkwork.ai";
 }
 
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-      <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
-    </svg>
-  );
-}
-
 function desktopDeploymentLabel(config: DesktopConfig): string {
   const deployment = config.deployment;
   if (!deployment) return config.stage;
   return [deployment.displayName, deployment.stage, deployment.region]
     .filter(Boolean)
     .join(" · ");
+}
+
+function SsoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none">
+      <path
+        d="M12 3 4.5 6.5v5.4c0 4.35 3.08 7.43 7.5 9.1 4.42-1.67 7.5-4.75 7.5-9.1V6.5L12 3Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M8.5 12.2 11 14.7l4.8-5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
 }
