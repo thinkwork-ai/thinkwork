@@ -101,6 +101,7 @@ describe("fetchPublicAuthOptions", () => {
   });
 
   it("falls back to the GraphQL HTTP origin when VITE_API_URL is absent", async () => {
+    vi.stubEnv("VITE_API_URL", "");
     vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
     const fetchImpl = vi.fn(async () =>
       Response.json({ password: { enabled: true }, oauthOptions: [] }),

@@ -67,6 +67,18 @@ export interface OAuthTokens {
   refresh_token: string;
 }
 
+interface PublicOAuthOption {
+  cognitoIdentityProviderName: string;
+  route: {
+    type: string;
+    identityProvider: string;
+  };
+}
+
+interface PublicAuthOptionsResponse {
+  oauthOptions?: unknown[];
+}
+
 export type DesktopEnvProvider =
   | DesktopEnvSnapshot
   | (() => DesktopEnvSnapshot | Promise<DesktopEnvSnapshot>);
@@ -138,7 +150,14 @@ export class DesktopOAuthController {
       next: request?.next,
     });
 
-    const url = this.buildAuthorizeUrl({ challenge, clientId, env, state });
+    const identityProvider = await this.resolveIdentityProvider(env);
+    const url = this.buildAuthorizeUrl({
+      challenge,
+      clientId,
+      env,
+      identityProvider,
+      state,
+    });
     try {
       await this.shell.openExternal(url);
     } catch (error) {
@@ -234,10 +253,11 @@ export class DesktopOAuthController {
     challenge: string;
     clientId: string;
     env: DesktopEnvSnapshot;
+    identityProvider: string;
     state: string;
   }): string {
     const params = new URLSearchParams({
-      identity_provider: "Google",
+      identity_provider: options.identityProvider,
       response_type: "code",
       client_id: options.clientId,
       redirect_uri: this.redirectUri(options.env),
@@ -245,11 +265,43 @@ export class DesktopOAuthController {
       code_challenge: options.challenge,
       code_challenge_method: "S256",
       state: options.state,
-      prompt: "select_account",
     });
+    if (options.identityProvider === "Google") {
+      params.set("prompt", "select_account");
+    }
     return `${this.cognitoDomainBase(
       options.env,
     )}/oauth2/authorize?${params.toString()}`;
+  }
+
+  private async resolveIdentityProvider(env: DesktopEnvSnapshot): Promise<string> {
+    const option = await this.fetchPublicAuthOption(env);
+    return option?.route.identityProvider ?? "Google";
+  }
+
+  private async fetchPublicAuthOption(
+    env: DesktopEnvSnapshot,
+  ): Promise<PublicOAuthOption | null> {
+    const apiBaseUrl = apiBaseUrlForEnv(env);
+    if (!apiBaseUrl) return null;
+
+    try {
+      const response = await this.fetchImpl(`${apiBaseUrl}/api/auth/options`, {
+        method: "GET",
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      if (!response?.ok) return null;
+      const raw = (await response.json()) as PublicAuthOptionsResponse;
+      const options = Array.isArray(raw.oauthOptions) ? raw.oauthOptions : [];
+      for (const entry of options) {
+        const option = parsePublicOAuthOption(entry);
+        if (option) return option;
+      }
+    } catch (error) {
+      this.logger.warn("[desktop:oauth] public auth options unavailable", error);
+    }
+    return null;
   }
 
   private async exchangeCodeForTokens(
@@ -438,6 +490,53 @@ export class DesktopOAuthController {
 
 function verifierString(bytes: Buffer): string {
   return bytes.toString("base64url");
+}
+
+function apiBaseUrlForEnv(env: DesktopEnvSnapshot): string | null {
+  const explicit = trimTrailingSlash(env.apiUrl);
+  if (explicit) return explicit;
+  const graphqlHttp = trimTrailingSlash(env.graphqlHttpUrl);
+  if (graphqlHttp) return graphqlHttp.replace(/\/graphql\/?$/, "");
+  return null;
+}
+
+function trimTrailingSlash(value: string | null): string | null {
+  const trimmed = value?.trim().replace(/\/+$/, "") ?? "";
+  return trimmed || null;
+}
+
+function parsePublicOAuthOption(raw: unknown): PublicOAuthOption | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const route = record.route;
+  if (!route || typeof route !== "object" || Array.isArray(route)) return null;
+
+  const routeRecord = route as Record<string, unknown>;
+  const cognitoIdentityProviderName = safeString(
+    record.cognitoIdentityProviderName,
+  );
+  const identityProvider = safeString(routeRecord.identityProvider);
+
+  if (
+    record.provider !== "workos" ||
+    !cognitoIdentityProviderName ||
+    routeRecord.type !== "cognitoHostedUi" ||
+    identityProvider !== cognitoIdentityProviderName
+  ) {
+    return null;
+  }
+
+  return {
+    cognitoIdentityProviderName,
+    route: {
+      type: "cognitoHostedUi",
+      identityProvider,
+    },
+  };
+}
+
+function safeString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function sha256Base64Url(value: BinaryLike): string {
