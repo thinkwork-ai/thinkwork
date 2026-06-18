@@ -14,7 +14,7 @@ on:
           - wire-workflow
           - sync-and-wire
       sync_dry_run:
-        description: "Preview native app metadata without deploying/installing in Twenty"
+        description: "Validate native app package and Twenty remote auth without deploying/installing"
         type: boolean
         default: true
       wire_dry_run:

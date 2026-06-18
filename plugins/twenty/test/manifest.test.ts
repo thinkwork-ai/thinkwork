@@ -183,7 +183,7 @@ describe("twenty plugin manifest", () => {
     expect(syncScript).toContain("app:publish");
     expect(syncScript).toContain("--private");
     expect(syncScript).toContain("app:install");
-    expect(syncScript).toContain("dev");
+    expect(syncScript).toContain("remote:status");
     expect(syncScript).toContain("--dry-run");
     expect(syncScript).not.toContain("HTTP_REQUEST");
     expect(wireScript).toContain('type: "LOGIC_FUNCTION"');
