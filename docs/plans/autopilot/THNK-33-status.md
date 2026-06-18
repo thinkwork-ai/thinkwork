@@ -6,6 +6,34 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Twenty App Sync Dry-Run Config Fix
+
+- After `TWENTY_DEPLOY_API_KEY` was added as a GitHub Actions secret,
+  non-mutating `sync-app` dry-run `27777614844` advanced past the secret gate
+  on merge commit `d56c31a5d2af7419d4911ee6f0fb4fa9eb057537`.
+- The run still failed before `yarn twenty dev --once --dry-run` could start:
+  `Deploy and install native ThinkWork app` printed the dry-run summary,
+  completed `yarn install`, then exited with `Unexpected end of JSON input`.
+- Root cause: `plugins/twenty/scripts/sync-thinkwork-app.mjs` parsed
+  `~/.twenty/config.json` directly. Twenty's own config service treats an
+  empty config file as `{}`, but the wrapper called `JSON.parse("")`; any empty
+  Actions config file crashed the wrapper before the Twenty CLI could use the
+  provided remote credentials.
+- Fix in this pass:
+  - Treat missing or empty Twenty config as `{}` before writing the target
+    remote.
+  - Persist `defaultRemote: "thinkwork-crm"` alongside the remote entry so a
+    fresh runner matches the CLI state created by `yarn twenty remote:add`.
+  - Run dry-run with the explicit global remote:
+    `yarn twenty --remote thinkwork-crm dev --once --dry-run`.
+  - Add a focused node-native test for empty config handling and preserving
+    existing remotes.
+- Verification:
+  - `pnpm --filter @thinkwork/plugin-twenty test -- scripts/__tests__/sync-thinkwork-app.test.mjs`
+  - `node --check plugins/twenty/scripts/sync-thinkwork-app.mjs`
+  - `git diff --check`
+- No production Twenty mutation was run from Codex in this pass.
+
 ## 2026-06-18 Isolated Twenty App Operations Follow-Up
 
 - Latest runtime-operations gap: the guarded sync/wire inputs existed in
