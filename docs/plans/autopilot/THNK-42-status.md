@@ -62,6 +62,8 @@
   section as a single Email Provider row, removed the separate Invitation email
   section and readiness badges, and filtered the dropdown to available
   providers only.
+- 2026-06-17 fix pass: Narrowed the Deployment Email Provider dropdown and
+  top-aligned plugin catalog status badges in the plugins list.
 - 2026-06-17 fix pass: Added SendGrid API key and authenticated-domain setup to
   the Email Channel plugin settings alongside Resend.
 - 2026-06-17 fix pass: Changed `configureEmailProvider` to persist

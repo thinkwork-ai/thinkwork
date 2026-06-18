@@ -211,7 +211,7 @@ export function PluginsPage() {
                       openPlugin(entry.pluginKey);
                     }
                   }}
-                  className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3.5 outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring"
+                  className="flex cursor-pointer items-start justify-between gap-3 px-4 py-3.5 outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-1.5">
@@ -255,7 +255,7 @@ export function PluginsPage() {
                       </div>
                     ) : null}
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-start gap-2">
                     {entry.install && selfServiceOnly ? (
                       <Badge
                         variant={

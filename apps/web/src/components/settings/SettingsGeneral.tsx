@@ -287,7 +287,7 @@ function EmailProviderRow({
       description="Email service used for tenant member invitations."
     >
       <Select value={selectedProvider} onValueChange={selectProvider}>
-        <SelectTrigger aria-label="Email provider" className="w-44">
+        <SelectTrigger aria-label="Email provider" className="w-32">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
