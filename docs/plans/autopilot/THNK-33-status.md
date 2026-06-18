@@ -33,6 +33,31 @@ status: active
   `THINKWORK_WEBHOOK_URL`, wiring the Customer workflow to `ThinkWork Webhook`,
   and verifying a `source=twenty-app` delivery.
 
+## 2026-06-18 Twenty Workflow Wiring Metadata Endpoint Fix
+
+- PR #2657 merged the native app version bump:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2657`, merge commit
+  `82396ee5a57f30a13d4c4732438ffe6075ef1931`.
+- Apply-mode `sync-app` run `27787896006` on merge commit
+  `82396ee5a57f30a13d4c4732438ffe6075ef1931` succeeded:
+  - Packed `@thinkwork/twenty-app@0.1.1`.
+  - Uploaded `thinkwork-twenty-app-0.1.1.tgz`.
+  - Published with `Published @thinkwork/twenty-app v0.1.1 to thinkwork-crm`.
+  - Installed with `Application installed`.
+- Non-mutating `wire-workflow` dry-run `27787967595` then failed before
+  workflow lookup because the wiring script queried installed logic functions
+  through Twenty's data GraphQL endpoint (`/graphql`):
+  `Cannot query field "findManyLogicFunctions" on type "Query".`
+- Root cause: installed app metadata such as logic functions is exposed through
+  Twenty's metadata GraphQL endpoint (`/metadata`), while workflow records are
+  exposed through the workspace data endpoint (`/graphql`).
+- Follow-up fix: split the wiring script into a metadata client for
+  `findManyLogicFunctions` and a data client for workflow lookup/update.
+- Runtime proof still requires merging this endpoint fix, rerunning
+  non-mutating workflow wiring dry-run, applying workflow wiring to a draft,
+  configuring `THINKWORK_TRIGGER_STAGE=Customer` and `THINKWORK_WEBHOOK_URL`,
+  and verifying a `source=twenty-app` delivery.
+
 ## 2026-06-18 Twenty Logic Function Runtime Config Fix
 
 - PR #2652 merged the Twenty 2.9 compatibility fix:

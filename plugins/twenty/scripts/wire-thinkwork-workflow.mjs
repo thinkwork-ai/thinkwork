@@ -84,8 +84,8 @@ function compactObject(value) {
 }
 
 class TwentyGraphqlClient {
-  constructor({ url, apiKey }) {
-    this.endpoint = `${url}/graphql`;
+  constructor({ url, apiKey, path = "/graphql" }) {
+    this.endpoint = `${url}${path}`;
     this.apiKey = apiKey;
   }
 
@@ -410,12 +410,21 @@ async function main() {
     throw new Error("Set TWENTY_APP_SYNC_API_KEY or pass --api-key.");
   }
 
-  const client = new TwentyGraphqlClient({ url, apiKey: args.apiKey });
-  const logicFunction = await findThinkWorkLogicFunction(client);
-  let workflowVersion = await findWorkflowVersion(client, args);
+  const dataClient = new TwentyGraphqlClient({
+    url,
+    apiKey: args.apiKey,
+    path: "/graphql",
+  });
+  const metadataClient = new TwentyGraphqlClient({
+    url,
+    apiKey: args.apiKey,
+    path: "/metadata",
+  });
+  const logicFunction = await findThinkWorkLogicFunction(metadataClient);
+  let workflowVersion = await findWorkflowVersion(dataClient, args);
 
   if (!args.dryRun && workflowVersion.status !== "DRAFT" && args.createDraft) {
-    workflowVersion = await createDraftFromActive(client, workflowVersion);
+    workflowVersion = await createDraftFromActive(dataClient, workflowVersion);
   }
 
   if (!args.dryRun && workflowVersion.status !== "DRAFT") {
@@ -440,7 +449,7 @@ async function main() {
   }
 
   const updatedStep = await updateWorkflowVersionStep(
-    client,
+    dataClient,
     workflowVersion.id,
     step,
   );

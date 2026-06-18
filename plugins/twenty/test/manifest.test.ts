@@ -189,6 +189,8 @@ describe("twenty plugin manifest", () => {
     expect(wireScript).toContain('type: "LOGIC_FUNCTION"');
     expect(wireScript).toContain("UpdateWorkflowVersionStep");
     expect(wireScript).toContain("findManyLogicFunctions");
+    expect(wireScript).toContain('path: "/metadata"');
+    expect(wireScript).toContain("findThinkWorkLogicFunction(metadataClient)");
     expect(wireScript).not.toContain("AWS_LAMBDA");
   });
 
