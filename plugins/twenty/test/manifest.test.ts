@@ -192,6 +192,21 @@ describe("twenty plugin manifest", () => {
     expect(wireScript).not.toContain("AWS_LAMBDA");
   });
 
+  it("enables Twenty local logic functions for the first-party workflow action", () => {
+    const terraformModule = readRepo("plugins/twenty/terraform/twenty/main.tf");
+    const terraformReadme = readRepo(
+      "plugins/twenty/terraform/twenty/README.md",
+    );
+
+    expect(terraformModule).toContain(
+      '{ name = "LOGIC_FUNCTION_TYPE", value = "LOCAL" }',
+    );
+    expect(terraformModule).toContain("server_environment = concat");
+    expect(terraformModule).toContain("worker_environment = concat");
+    expect(terraformReadme).toContain("LOGIC_FUNCTION_TYPE=LOCAL");
+    expect(terraformReadme).toContain("ThinkWork Webhook");
+  });
+
   it("declares the infrastructure component against the twenty adapter key", () => {
     const infra = infrastructureComponent();
     expect(infra.managedAppKey).toBe("twenty");

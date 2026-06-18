@@ -72,6 +72,14 @@ Twenty UI after deployment. Infrastructure settings like `PG_DATABASE_URL`,
 `SERVER_URL`, encryption keys, and Terraform-managed email delivery settings
 remain environment-only.
 
+## Logic Functions
+
+The module sets `LOGIC_FUNCTION_TYPE=LOCAL` on both the Twenty server and worker
+containers so first-party native apps can install and run trusted workflow
+actions such as the ThinkWork Webhook. Twenty disables logic functions by
+default in production; without this setting, native app install fails before the
+workflow action can be created.
+
 ## Cache
 
 The default cache engine is Valkey because it is the lower-cost
