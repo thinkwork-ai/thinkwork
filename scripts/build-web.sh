@@ -59,13 +59,32 @@ COMPUTER_SANDBOX_CF_ID="$(tf_output_cached_raw computer_sandbox_distribution_id 
 COMPUTER_SANDBOX_URL="$(tf_output_cached_raw computer_sandbox_url 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_PARENT_ORIGINS="$(tf_output_cached_raw computer_sandbox_allowed_parent_origins 2>/dev/null || echo '')"
 MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_cached_raw mapbox_public_token 2>/dev/null || echo '')}"
-AUTH_IDENTITY_PROVIDERS="$(
+AUTH_IDENTITY_PROVIDERS_FROM_TF="$(
   jq -er '
     (.identity_provider_names.value // [])
     | map(select(. != "COGNITO"))
-    | if length == 0 then "COGNITO" else join(",") end
+    | if length == 0 then empty else join(",") end
   ' <<<"$TF_OUTPUT_JSON" 2>/dev/null || echo "Google"
 )"
+AUTH_IDENTITY_PROVIDERS="${AUTH_IDENTITY_PROVIDERS_FROM_TF}"
+
+if [[ -z "$AUTH_IDENTITY_PROVIDERS" && -n "$USER_POOL_ID" && -n "$ADMIN_CLIENT_ID" ]]; then
+  AUTH_IDENTITY_PROVIDERS="$(
+    {
+      aws cognito-idp describe-user-pool-client \
+        --region "$REGION" \
+        --user-pool-id "$USER_POOL_ID" \
+        --client-id "$ADMIN_CLIENT_ID" \
+        --query 'UserPoolClient.SupportedIdentityProviders[?@!=`COGNITO`]' \
+        --output json 2>/dev/null \
+        | jq -r 'if length == 0 then empty else join(",") end'
+    } || true
+  )"
+fi
+
+if [[ -z "$AUTH_IDENTITY_PROVIDERS" ]]; then
+  AUTH_IDENTITY_PROVIDERS="COGNITO"
+fi
 
 if [[ -z "$COMPUTER_SANDBOX_URL" || -z "$COMPUTER_SANDBOX_BUCKET" || -z "$COMPUTER_SANDBOX_CF_ID" ]]; then
   cat >&2 <<EOF

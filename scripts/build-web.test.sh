@@ -55,6 +55,21 @@ if ! grep -Eq 'VITE_AUTH_IDENTITY_PROVIDERS: \$authIdentityProviders' "$BUILD_SC
   exit 1
 fi
 
+if ! grep -Eq 'AUTH_IDENTITY_PROVIDERS_FROM_TF=' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh should prefer Terraform identity provider output when present\n' >&2
+  exit 1
+fi
+
+if ! grep -Eq 'aws cognito-idp describe-user-pool-client' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh should fall back to the live Cognito client provider list\n' >&2
+  exit 1
+fi
+
+if ! grep -Eq 'AUTH_IDENTITY_PROVIDERS="COGNITO"' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh should fall back to COGNITO when no external providers exist\n' >&2
+  exit 1
+fi
+
 if ! grep -Eq 's3://\$\{APP_BUCKET\}/thinkwork-runtime-config.json' "$BUILD_SCRIPT"; then
   printf 'build-web.sh should upload thinkwork-runtime-config.json to the app bucket\n' >&2
   exit 1
