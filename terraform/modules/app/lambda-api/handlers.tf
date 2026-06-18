@@ -422,6 +422,7 @@ resource "aws_lambda_function" "handler" {
     "stripe-subscription",
     "deployment-sessions",
     "auth-me",
+    "public-auth-options",
     "extension-proxy",
     "tenants",
     "users",
