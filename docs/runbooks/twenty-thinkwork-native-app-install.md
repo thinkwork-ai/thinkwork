@@ -53,11 +53,18 @@ Expected result:
 
 - `Validate native ThinkWork app package` passes.
 - `Check Twenty app operation secrets` passes.
-- `Deploy and install native ThinkWork app` runs in dry-run mode.
+- `Deploy and install native ThinkWork app` runs in dry-run mode and validates
+  the configured Twenty remote/auth with `yarn twenty remote:status`.
 - No production Twenty mutation happens.
 
 If the run fails with `Set repository secret TWENTY_DEPLOY_API_KEY or
 TWENTY_APP_SYNC_API_KEY`, the app cannot be installed yet.
+
+The deployed `crm.thinkwork.ai` schema does not currently accept the Twenty
+CLI's `syncApplication(dryRun:)` argument, so preflight intentionally avoids the
+unsupported metadata-diff mutation. The non-mutating gate is package build plus
+remote/auth validation; the install step below is the first app publish/install
+mutation.
 
 ## Install
 

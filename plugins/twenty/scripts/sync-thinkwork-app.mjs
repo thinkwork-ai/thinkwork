@@ -121,6 +121,10 @@ function writeTwentyRemoteConfig({ remoteName, url, apiKey }) {
   );
 }
 
+export function dryRunTwentyCommand(remoteName) {
+  return ["twenty", "--remote", remoteName, "remote:status"];
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const url = validateUrl(args.url);
@@ -138,7 +142,7 @@ function main() {
         url,
         mode: args.dryRun ? "dry-run" : "apply",
         note: args.dryRun
-          ? "Dry run previews app metadata with Twenty dev sync and writes nothing."
+          ? "Dry run validates the package and Twenty remote credentials without deploying or installing."
           : "Apply deploys the private app package to Twenty and installs it into the target workspace.",
       },
       null,
@@ -155,13 +159,9 @@ function main() {
   });
 
   if (args.dryRun) {
-    run(
-      "yarn",
-      ["twenty", "--remote", args.remoteName, "dev", "--once", "--dry-run"],
-      {
-        cwd: args.appDir,
-      },
-    );
+    run("yarn", dryRunTwentyCommand(args.remoteName), {
+      cwd: args.appDir,
+    });
     return;
   }
 

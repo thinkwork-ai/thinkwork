@@ -6,6 +6,36 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Twenty App Dry-Run Compatibility Fix
+
+- PR #2648 merged the empty-config/default-remote fix:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2648`, merge commit
+  `d0de3991558c9df8e9c7c00aabda3460676d6361`.
+- Non-mutating `sync-app` dry-run after #2648, run `27779421334` on
+  `d0de3991558c9df8e9c7c00aabda3460676d6361`, proved the wrapper now reaches
+  the Twenty CLI and target server:
+  - `Validate native ThinkWork app package` passed.
+  - `Check Twenty app operation secrets` passed.
+  - `Deploy and install native ThinkWork app` reached
+    `Using remote: thinkwork-crm`, `Checking server`, `Building manifest`,
+    `Building application files`, and `Computing metadata diff`.
+- The run failed at the deployed Twenty schema boundary:
+  `Dry run failed with error: Unknown argument "dryRun" on field "Mutation.syncApplication".`
+- Root cause: the installed/deployed Twenty server at `crm.thinkwork.ai` does
+  not currently expose the `syncApplication(dryRun:)` argument expected by
+  `twenty-sdk@2.13.0`'s `yarn twenty dev --once --dry-run` path. This is a
+  dry-run compatibility problem, not an app package build problem and not a
+  missing deploy secret.
+- Fix in this pass:
+  - Keep apply mode unchanged: private publish followed by app install.
+  - Change sync preflight/dry-run to validate the package in the workflow's
+    existing `yarn twenty dev:build` step and validate the configured Twenty
+    remote/auth with `yarn twenty --remote thinkwork-crm remote:status`.
+  - Update the runbook and workflow input wording so the non-mutating gate is
+    not described as a metadata-diff preview against the unsupported server
+    mutation.
+- No production Twenty mutation was run from Codex in this pass.
+
 ## 2026-06-18 Twenty App Sync Dry-Run Config Fix
 
 - After `TWENTY_DEPLOY_API_KEY` was added as a GitHub Actions secret,

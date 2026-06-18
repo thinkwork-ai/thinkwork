@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildTwentyRemoteConfig } from "../sync-thinkwork-app.mjs";
+import {
+  buildTwentyRemoteConfig,
+  dryRunTwentyCommand,
+} from "../sync-thinkwork-app.mjs";
 
 describe("sync-thinkwork-app", () => {
   it("builds a Twenty remote config from an empty config file", () => {
@@ -51,5 +54,14 @@ describe("sync-thinkwork-app", () => {
       apiUrl: "https://crm.thinkwork.ai",
       apiKey: "test-key",
     });
+  });
+
+  it("validates remote auth in dry-run mode without calling unsupported sync dry-run", () => {
+    expect(dryRunTwentyCommand("thinkwork-crm")).toEqual([
+      "twenty",
+      "--remote",
+      "thinkwork-crm",
+      "remote:status",
+    ]);
   });
 });
