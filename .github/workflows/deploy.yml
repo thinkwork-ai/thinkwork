@@ -37,6 +37,14 @@ on:
         description: "Release manifest SHA-256 for controller mode"
         type: string
         default: ""
+      sync_twenty_thinkwork_app:
+        description: "Sync the native ThinkWork app into the Twenty CRM instance"
+        type: boolean
+        default: false
+      sync_twenty_thinkwork_app_dry_run:
+        description: "Preview the native ThinkWork app sync without applying metadata changes"
+        type: boolean
+        default: true
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -1464,6 +1472,37 @@ jobs:
 
           delete_secret_if_present "${TWENTY_DB_URL_SECRET_ARN:-$TWENTY_DB_URL_SECRET_ID}" "database URL"
           delete_secret_if_present "${TWENTY_ENCRYPTION_KEY_SECRET_ARN:-$TWENTY_ENCRYPTION_KEY_SECRET_ID}" "encryption key"
+
+  sync-twenty-thinkwork-app:
+    name: Sync Twenty ThinkWork App
+    needs: [terraform-apply]
+    if: >-
+      always()
+      && github.event_name == 'workflow_dispatch'
+      && inputs.sync_twenty_thinkwork_app == true
+      && needs.terraform-apply.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Sync native ThinkWork app package
+        env:
+          TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          TWENTY_THINKWORK_APP_SYNC_DRY_RUN: ${{ inputs.sync_twenty_thinkwork_app_dry_run && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          mode_flag="--apply"
+          if [ "$TWENTY_THINKWORK_APP_SYNC_DRY_RUN" = "1" ]; then
+            mode_flag="--dry-run"
+          fi
+
+          node plugins/twenty/scripts/sync-thinkwork-app.mjs "$mode_flag"
 
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after

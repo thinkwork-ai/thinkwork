@@ -1,6 +1,6 @@
 export const APP_DISPLAY_NAME = "ThinkWork";
 export const APP_DESCRIPTION =
-  "Start or resume governed ThinkWork agent work from Twenty workflows.";
+  "Start or resume governed ThinkWork agent work from Twenty Opportunity stage changes.";
 
 export const APPLICATION_UNIVERSAL_IDENTIFIER =
   "8e9f89cf-d3e4-403c-9aa9-d77c58234789";
