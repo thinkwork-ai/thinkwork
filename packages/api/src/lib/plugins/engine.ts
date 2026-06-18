@@ -52,6 +52,7 @@
 import { GraphQLError } from "graphql";
 import { createHash } from "node:crypto";
 import type {
+  AuthProviderComponent,
   InfrastructureComponent,
   McpServerComponent,
   PremiumPluginMetadata,
@@ -66,6 +67,7 @@ import {
   provisionPluginInfraComponent,
   teardownPluginInfraComponent,
 } from "./handlers/infra.js";
+import { provisionPluginAuthProviderComponent } from "./handlers/auth-provider.js";
 import {
   provisionPluginMcpComponent,
   teardownPluginMcpComponent,
@@ -187,6 +189,12 @@ export interface PluginEngineDeps {
       handlerRef: Record<string, unknown>;
       requestedByUserId: string | null;
     }) => Promise<{ handlerRef: Record<string, unknown>; complete: boolean }>;
+    provisionAuthProvider: (args: {
+      tenantId: string;
+      pluginInstallId: string;
+      component: AuthProviderComponent;
+      handlerRef: Record<string, unknown>;
+    }) => Promise<Record<string, unknown>>;
   };
   premiumAccess: {
     ensureInstallAllowed(input: PremiumInstallGateInput): Promise<void>;
@@ -207,6 +215,8 @@ export function createDefaultPluginEngineDeps(): PluginEngineDeps {
       teardownSkills: (args) => teardownPluginSkillsComponent(args),
       provisionInfra: (args) => provisionPluginInfraComponent(args),
       teardownInfra: (args) => teardownPluginInfraComponent(args),
+      provisionAuthProvider: (args) =>
+        provisionPluginAuthProviderComponent(args),
     },
     premiumAccess: {
       ensureInstallAllowed: ensurePremiumInstallAllowed,
@@ -719,13 +729,13 @@ async function provisionComponent(
       // Declared-only in v1: recorded as a provisioned no-op.
       return { handlerRef: {}, provisioned: true };
     case "auth-provider":
-      // U2 declares/admin-configures auth providers only. U3 owns Cognito
-      // bridge provisioning and validation; fail closed until then.
       return {
-        handlerRef: {
-          status: "unconfigured",
-          publicOptionsPublished: false,
-        },
+        handlerRef: await deps.handlers.provisionAuthProvider({
+          tenantId: install.tenant_id,
+          pluginInstallId: install.id,
+          component,
+          handlerRef: row.handler_ref ?? {},
+        }),
         provisioned: true,
       };
     default:
