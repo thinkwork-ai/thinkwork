@@ -78,6 +78,11 @@ TWENTY_APP_SYNC_API_KEY before running Twenty app operations.` The
   environments do not currently expose either deploy key, and AWS
   Secrets Manager / SSM metadata did not show an existing Twenty deploy API key
   secret to reuse.
+- Added `docs/runbooks/twenty-thinkwork-native-app-install.md` as the concrete
+  operator checklist for the remaining install: set `TWENTY_DEPLOY_API_KEY`,
+  run `sync-app` dry-run/apply, configure the ThinkWork app Settings tab, wire
+  the Customer workflow to `ThinkWork -> ThinkWork Webhook`, and verify a
+  `source=twenty-app` delivery.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 

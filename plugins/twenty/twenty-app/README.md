@@ -92,6 +92,10 @@ Or use the guarded operations workflow:
 node plugins/twenty/scripts/sync-thinkwork-app.mjs --apply
 ```
 
+For the full operator sequence, including deploy-key setup, dry-run, apply,
+settings, workflow wiring, and verification evidence, see
+`docs/runbooks/twenty-thinkwork-native-app-install.md`.
+
 Dry-run mode uses Twenty's non-mutating dev sync preview. Apply mode follows
 Twenty's private app lifecycle: deploy the app tarball with
 `app:publish --private`, then install it into the target workspace with
