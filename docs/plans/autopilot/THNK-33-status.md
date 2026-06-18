@@ -6,6 +6,29 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Isolated Twenty App Operations Follow-Up
+
+- Latest runtime-operations gap: the guarded sync/wire inputs existed in
+  `.github/workflows/deploy.yml`, but any manual dispatch of that workflow also
+  enters the regular deploy path before Twenty app operations. That made even
+  dry-run app evidence unnecessarily coupled to Terraform/deploy jobs.
+- Added `.github/workflows/twenty-thinkwork-app.yml`, a dedicated manual
+  operations workflow for the native ThinkWork app package.
+- The new workflow always validates the Twenty app package with
+  `yarn twenty dev:build`, then can run `sync-app`, `wire-workflow`, or
+  `sync-and-wire`.
+- Dry-run remains the default for both native app sync and workflow wiring.
+  Any apply mode requires the exact confirmation string
+  `APPLY TWENTY THINKWORK APP`.
+- The workflow does not run Terraform, deploy ThinkWork, or use the custom
+  Lambda path. It only uses `TWENTY_PUBLIC_URL` plus
+  `TWENTY_APP_SYNC_API_KEY` for the native
+  `Twenty -> ThinkWork App -> ThinkWork Webhook` operations.
+- No production Twenty mutation was run from Codex. Runtime proof still
+  requires an authorized operator to dispatch this workflow in apply mode,
+  configure the ThinkWork app settings, and verify a `source=twenty-app`
+  delivery.
+
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
 - Latest objective tightening: the native Twenty app package must include a
