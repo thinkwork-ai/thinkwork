@@ -36,6 +36,10 @@ export async function resolveInviteEmailChannel(
     return null;
   }
 
+  if (provider.provider === "ses") {
+    return null;
+  }
+
   if (provider.provider === "sendgrid" && provider.status !== "ready") {
     throw new GraphQLError(
       "Invite delivery is configured for SendGrid, but SendGrid is not ready. Check the API key and authenticated sending domain in Settings.",

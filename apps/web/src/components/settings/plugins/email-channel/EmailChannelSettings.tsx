@@ -1,9 +1,23 @@
 import { type FormEvent, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { Badge, Button, Input, Label } from "@thinkwork/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@thinkwork/ui";
 import { CheckCircle2, KeyRound } from "lucide-react";
-import { EmailAllowlistType, EmailChannelProvider } from "@/gql/graphql";
+import {
+  EmailAllowlistType,
+  EmailChannelProvider,
+  EmailDomainOwnershipType,
+} from "@/gql/graphql";
 import {
   SettingsAddEmailSpaceSenderAllowlistMutation,
   SettingsEmailChannelQuery,
@@ -23,9 +37,13 @@ import { SpaceEmailPolicyPanel } from "./SpaceEmailPolicyPanel";
 
 export function EmailChannelSettings() {
   const [form, setForm] = useState({
-    apiKey: "",
+    resendApiKey: "",
+    sendGridApiKey: "",
+    sendGridDomain: "",
   });
-  const [editingCredential, setEditingCredential] = useState(false);
+  const [editingCredential, setEditingCredential] = useState<
+    Partial<Record<"resend" | "sendgrid", boolean>>
+  >({});
   const [result, refresh] = useQuery({
     query: SettingsEmailChannelQuery,
     requestPolicy: "cache-and-network",
@@ -50,11 +68,26 @@ export function EmailChannelSettings() {
   const resendProvider = summary?.providers.find(
     (provider) => provider.provider === "RESEND",
   );
+  const sendGridProvider = summary?.providers.find(
+    (provider) => provider.provider === "SENDGRID",
+  );
   const resendDomain = summary?.domains.find(
     (domain) => domain.providerInstallId === resendProvider?.id,
   );
-  const credentialConfigured = Boolean(resendProvider?.credentialConfigured);
-  const showCredentialInput = !credentialConfigured || editingCredential;
+  const sendGridDomain = summary?.domains.find(
+    (domain) => domain.providerInstallId === sendGridProvider?.id,
+  );
+  const sendGridChoices = sendGridDomainChoices(sendGridProvider?.metadata);
+  const resendCredentialConfigured = Boolean(
+    resendProvider?.credentialConfigured,
+  );
+  const sendGridCredentialConfigured = Boolean(
+    sendGridProvider?.credentialConfigured,
+  );
+  const showResendCredentialInput =
+    !resendCredentialConfigured || editingCredential.resend;
+  const showSendGridCredentialInput =
+    !sendGridCredentialConfigured || editingCredential.sendgrid;
 
   function refetch() {
     refresh({ requestPolicy: "network-only" });
@@ -62,7 +95,7 @@ export function EmailChannelSettings() {
 
   async function submitCredential(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const apiKey = form.apiKey.trim();
+    const apiKey = form.resendApiKey.trim();
     if (!apiKey) {
       toast.error("Enter a Resend API key.");
       return;
@@ -81,9 +114,48 @@ export function EmailChannelSettings() {
       );
       return;
     }
-    setForm((current) => ({ ...current, apiKey: "" }));
-    setEditingCredential(false);
+    setForm((current) => ({ ...current, resendApiKey: "" }));
+    setEditingCredential((current) => ({ ...current, resend: false }));
     toast.success("Resend API key stored and checks updated.");
+    refetch();
+  }
+
+  async function submitSendGridCredential(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const apiKey = form.sendGridApiKey.trim();
+    if (!apiKey) {
+      toast.error("Enter a SendGrid API key.");
+      return;
+    }
+    const response = await saveCredential({
+      input: {
+        providerInstallId: sendGridProvider?.id,
+        provider: EmailChannelProvider.Sendgrid,
+        apiKey,
+        displayName: "SendGrid",
+        ...(form.sendGridDomain
+          ? {
+              domain: {
+                domain: form.sendGridDomain,
+                ownershipType: EmailDomainOwnershipType.CustomerOwned,
+              },
+            }
+          : {}),
+      },
+    });
+    if (response.error) {
+      toast.error(
+        `Could not save SendGrid credential: ${response.error.message}`,
+      );
+      return;
+    }
+    setForm((current) => ({
+      ...current,
+      sendGridApiKey: "",
+      sendGridDomain: "",
+    }));
+    setEditingCredential((current) => ({ ...current, sendgrid: false }));
+    toast.success("SendGrid API key stored and checks updated.");
     refetch();
   }
 
@@ -148,9 +220,9 @@ export function EmailChannelSettings() {
 
   return (
     <>
-      <SettingsSection label="Resend provider">
+      <SettingsSection label="Provider plugins">
         <SettingsRow
-          label="Credential"
+          label="Resend"
           description="The key is stored server-side and never shown again after save."
         >
           <form
@@ -159,7 +231,7 @@ export function EmailChannelSettings() {
           >
             <ResendApiKeyInstructions />
             <div className="flex items-center justify-between gap-3">
-              {credentialConfigured ? (
+              {resendCredentialConfigured ? (
                 <div className="flex items-center gap-2 text-sm text-foreground">
                   <CheckCircle2 className="size-4 text-emerald-400" />
                   API key configured
@@ -169,14 +241,16 @@ export function EmailChannelSettings() {
                   Paste a Resend API key to configure production email.
                 </p>
               )}
-              <Badge variant={credentialConfigured ? "outline" : "secondary"}>
-                {credentialConfigured ? "Stored" : "Not stored"}
+              <Badge
+                variant={resendCredentialConfigured ? "outline" : "secondary"}
+              >
+                {resendCredentialConfigured ? "Stored" : "Not stored"}
               </Badge>
             </div>
-            {showCredentialInput ? (
+            {showResendCredentialInput ? (
               <div className="grid gap-1.5">
                 <Label htmlFor="email-channel-resend-api-key">
-                  {credentialConfigured
+                  {resendCredentialConfigured
                     ? "New Resend API key"
                     : "Resend API key"}
                 </Label>
@@ -185,16 +259,16 @@ export function EmailChannelSettings() {
                   type="password"
                   autoComplete="off"
                   placeholder={
-                    credentialConfigured
+                    resendCredentialConfigured
                       ? "Paste a replacement key"
                       : "Paste Resend API key"
                   }
-                  value={form.apiKey}
+                  value={form.resendApiKey}
                   onChange={(event) => {
-                    const apiKey = event.target.value;
+                    const resendApiKey = event.target.value;
                     setForm((current) => ({
                       ...current,
-                      apiKey,
+                      resendApiKey,
                     }));
                   }}
                 />
@@ -230,7 +304,7 @@ export function EmailChannelSettings() {
                 </dl>
               ) : null}
             </div>
-            {showCredentialInput ? (
+            {showResendCredentialInput ? (
               <div className="flex gap-2">
                 <Button
                   type="submit"
@@ -238,16 +312,24 @@ export function EmailChannelSettings() {
                   disabled={credentialState.fetching}
                 >
                   <KeyRound className="size-4" />
-                  {credentialConfigured ? "Save rotated key" : "Save API key"}
+                  {resendCredentialConfigured
+                    ? "Save rotated key"
+                    : "Save API key"}
                 </Button>
-                {credentialConfigured ? (
+                {resendCredentialConfigured ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setForm((current) => ({ ...current, apiKey: "" }));
-                      setEditingCredential(false);
+                      setForm((current) => ({
+                        ...current,
+                        resendApiKey: "",
+                      }));
+                      setEditingCredential((current) => ({
+                        ...current,
+                        resend: false,
+                      }));
                     }}
                   >
                     Cancel
@@ -259,7 +341,12 @@ export function EmailChannelSettings() {
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => setEditingCredential(true)}
+                onClick={() =>
+                  setEditingCredential((current) => ({
+                    ...current,
+                    resend: true,
+                  }))
+                }
               >
                 <KeyRound className="size-4" />
                 Rotate API key
@@ -267,16 +354,177 @@ export function EmailChannelSettings() {
             )}
           </form>
         </SettingsRow>
+
+        <SettingsRow
+          label="SendGrid"
+          description="Save a SendGrid API key and choose an authenticated sending domain."
+        >
+          <form
+            className="grid w-full min-w-[18rem] max-w-md gap-3 text-left"
+            onSubmit={submitSendGridCredential}
+          >
+            <div className="flex items-center justify-between gap-3">
+              {sendGridCredentialConfigured ? (
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <CheckCircle2 className="size-4 text-emerald-400" />
+                  API key configured
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Paste a SendGrid API key to configure invitation email.
+                </p>
+              )}
+              <Badge
+                variant={
+                  sendGridProvider?.status === "READY" ? "outline" : "secondary"
+                }
+              >
+                {sendGridProvider?.status ?? "Not stored"}
+              </Badge>
+            </div>
+            {showSendGridCredentialInput ? (
+              <>
+                {sendGridChoices.length > 1 ? (
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="email-channel-sendgrid-domain">
+                      Authenticated domain
+                    </Label>
+                    <Select
+                      value={form.sendGridDomain}
+                      onValueChange={(sendGridDomain) =>
+                        setForm((current) => ({
+                          ...current,
+                          sendGridDomain,
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="email-channel-sendgrid-domain">
+                        <SelectValue placeholder="Choose a SendGrid domain" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sendGridChoices.map((choice) => (
+                          <SelectItem key={choice.id} value={choice.domain}>
+                            {choice.domain}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+                <div className="grid gap-1.5">
+                  <Label htmlFor="email-channel-sendgrid-api-key">
+                    {sendGridCredentialConfigured
+                      ? "New SendGrid API key"
+                      : "SendGrid API key"}
+                  </Label>
+                  <Input
+                    id="email-channel-sendgrid-api-key"
+                    type="password"
+                    autoComplete="off"
+                    placeholder={
+                      sendGridCredentialConfigured
+                        ? "Paste a replacement key"
+                        : "Paste SendGrid API key"
+                    }
+                    value={form.sendGridApiKey}
+                    onChange={(event) => {
+                      const sendGridApiKey = event.target.value;
+                      setForm((current) => ({
+                        ...current,
+                        sendGridApiKey,
+                      }));
+                    }}
+                  />
+                </div>
+              </>
+            ) : null}
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              <p>
+                ThinkWork checks SendGrid for authenticated domains and stores
+                the selected sender server-side.
+              </p>
+              {sendGridDomain || sendGridProvider?.defaultFromEmail ? (
+                <dl className="mt-2 grid gap-1">
+                  {sendGridDomain ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt>Domain</dt>
+                      <dd className="font-mono text-foreground">
+                        {sendGridDomain.domain}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {sendGridProvider?.defaultFromEmail ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt>Default sender</dt>
+                      <dd className="font-mono text-foreground">
+                        {sendGridProvider.defaultFromEmail}
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
+            </div>
+            {showSendGridCredentialInput ? (
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={credentialState.fetching}
+                >
+                  <KeyRound className="size-4" />
+                  {sendGridCredentialConfigured
+                    ? "Save rotated SendGrid key"
+                    : "Save SendGrid key"}
+                </Button>
+                {sendGridCredentialConfigured ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setForm((current) => ({
+                        ...current,
+                        sendGridApiKey: "",
+                        sendGridDomain: "",
+                      }));
+                      setEditingCredential((current) => ({
+                        ...current,
+                        sendgrid: false,
+                      }));
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setEditingCredential((current) => ({
+                    ...current,
+                    sendgrid: true,
+                  }))
+                }
+              >
+                <KeyRound className="size-4" />
+                Rotate SendGrid key
+              </Button>
+            )}
+          </form>
+        </SettingsRow>
       </SettingsSection>
 
-      <SettingsSection label="Resend channel">
+      <SettingsSection label="Email channel">
         {result.fetching && !summary ? (
           <p className="p-4 text-sm text-muted-foreground">
-            Loading Resend channel...
+            Loading email channel...
           </p>
         ) : result.error ? (
           <p className="p-4 text-sm text-destructive">
-            Resend channel settings could not be loaded.
+            Email channel settings could not be loaded.
           </p>
         ) : summary ? (
           <SettingsRow
@@ -321,4 +569,21 @@ export function EmailChannelSettings() {
       ) : null}
     </>
   );
+}
+
+function sendGridDomainChoices(metadata: string | null | undefined) {
+  try {
+    const parsed = metadata ? JSON.parse(metadata) : {};
+    const choices = parsed?.sendgridDomains?.choices;
+    return Array.isArray(choices)
+      ? choices
+          .map((choice) => ({
+            id: String(choice.id ?? choice.domain ?? ""),
+            domain: String(choice.domain ?? ""),
+          }))
+          .filter((choice) => choice.id && choice.domain)
+      : [];
+  } catch {
+    return [];
+  }
 }

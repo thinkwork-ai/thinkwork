@@ -7,7 +7,6 @@ const {
   startPreflightMock,
   remediateRunnerMock,
   startReleaseUpdateMock,
-  saveEmailProviderCredentialMock,
   configureEmailProviderMock,
   refreshReleaseJobMock,
 } = vi.hoisted(() => ({
@@ -28,7 +27,6 @@ const {
   startPreflightMock: vi.fn(),
   remediateRunnerMock: vi.fn(),
   startReleaseUpdateMock: vi.fn(),
-  saveEmailProviderCredentialMock: vi.fn(),
   configureEmailProviderMock: vi.fn(),
   refreshReleaseJobMock: vi.fn(),
 }));
@@ -42,9 +40,6 @@ vi.mock("urql", () => ({
     }
     if (query === queryDocs.SettingsRemediateReleaseRunnerMutation) {
       return [{ fetching: false }, remediateRunnerMock];
-    }
-    if (query === queryDocs.SettingsSaveEmailProviderCredentialMutation) {
-      return [{ fetching: false }, saveEmailProviderCredentialMock];
     }
     if (query === queryDocs.SettingsConfigureEmailProviderMutation) {
       return [{ fetching: false }, configureEmailProviderMock];
@@ -110,9 +105,6 @@ beforeEach(() => {
         evidencePrefix: "release-updates/job-1/update",
       }),
     },
-  });
-  saveEmailProviderCredentialMock.mockReset().mockResolvedValue({
-    data: { saveEmailProviderCredential: { id: "sendgrid-1" } },
   });
   configureEmailProviderMock.mockReset().mockResolvedValue({
     data: { configureEmailProvider: { id: "sendgrid-1" } },
@@ -215,26 +207,16 @@ describe("SettingsGeneral releases", () => {
     expect(screen.getByText("c".repeat(64))).toBeTruthy();
     expect(screen.getByText("Invitation email")).toBeTruthy();
     expect(screen.getByText("SendGrid ready")).toBeTruthy();
-    expect(screen.getByText("sendgrid.example.com")).toBeTruthy();
+    expect(screen.queryByText("sendgrid.example.com")).toBeNull();
   });
 
-  it("stores a SendGrid key without echoing it", () => {
+  it("does not collect SendGrid credentials in General settings", () => {
     render(<SettingsGeneral />);
 
-    fireEvent.change(screen.getByLabelText("SendGrid API key"), {
-      target: { value: "SG.secret-key" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save SendGrid Key" }));
-
-    expect(saveEmailProviderCredentialMock).toHaveBeenCalledWith({
-      input: {
-        providerInstallId: "sendgrid-1",
-        provider: "SENDGRID",
-        apiKey: "SG.secret-key",
-        displayName: "SendGrid",
-      },
-    });
-    expect(screen.queryByText("SG.secret-key")).toBeNull();
+    expect(screen.queryByLabelText("SendGrid API key")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /save sendgrid key/i }),
+    ).toBeNull();
   });
 
   it("selects SendGrid as the invitation provider when ready", () => {

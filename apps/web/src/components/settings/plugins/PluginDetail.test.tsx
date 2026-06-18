@@ -20,6 +20,7 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
       install: vi.fn(),
       navigate: vi.fn(),
       retry: vi.fn(),
+      saveCredential: vi.fn(),
       setHeader: vi.fn(),
       uninstall: vi.fn(),
       upgrade: vi.fn(),
@@ -74,6 +75,9 @@ vi.mock("urql", () => ({
     }
     if (doc === queryDocs.SettingsRetryPluginComponentMutation) {
       return [{ fetching: false }, mocks.retry];
+    }
+    if (doc === queryDocs.SettingsSaveEmailProviderCredentialMutation) {
+      return [{ fetching: false }, mocks.saveCredential];
     }
     if (doc === queryDocs.SettingsUninstallPluginMutation) {
       return [{ fetching: false }, mocks.uninstall];
@@ -212,6 +216,9 @@ beforeEach(() => {
   });
   mocks.retry.mockResolvedValue({
     data: { retryPluginComponent: { id: "install-1", state: "installing" } },
+  });
+  mocks.saveCredential.mockResolvedValue({
+    data: { saveEmailProviderCredential: { id: "provider-sendgrid" } },
   });
   mocks.uninstall.mockResolvedValue({
     data: { uninstallPlugin: { id: "install-1", state: "uninstalling" } },
@@ -513,7 +520,7 @@ describe("PluginDetail", () => {
     ).toBeNull();
   });
 
-  it("renders Resend channel readiness and Resend key guidance for operators", () => {
+  it("renders Email Channel provider setup for operators", () => {
     paramsState.pluginKey = "email-channel";
     mockQueries({
       install: {
@@ -528,17 +535,19 @@ describe("PluginDetail", () => {
 
     expect(screen.getByText("Resend setup blocked")).toBeTruthy();
     expect(screen.getAllByText("Resend API key").length).toBeGreaterThan(1);
+    expect(screen.getAllByText("SendGrid").length).toBeGreaterThan(0);
     expect(
       screen.getByText(/dedicated ThinkWork production key/i),
     ).toBeTruthy();
     expect(screen.getByText(/one-key setup/i)).toBeTruthy();
     expect(screen.getAllByText(/\*\.thinkwork\.ai/i).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Resend API key")).toBeTruthy();
+    expect(screen.getByLabelText("SendGrid API key")).toBeTruthy();
     expect(screen.queryByLabelText("Dedicated domain")).toBeNull();
     expect(
       screen.queryByLabelText("Webhook signing secret reference"),
     ).toBeNull();
-    expect(screen.getByText("Not stored")).toBeTruthy();
+    expect(screen.getAllByText("Not stored").length).toBeGreaterThanOrEqual(2);
 
     fireEvent.change(screen.getByLabelText("Resend API key"), {
       target: { value: "re_test_123" },
@@ -546,6 +555,37 @@ describe("PluginDetail", () => {
 
     expect(screen.getByDisplayValue("re_test_123")).toBeTruthy();
     expect(screen.getByText("Save API key")).toBeTruthy();
+  });
+
+  it("stores SendGrid credentials through the Email Channel plugin settings", async () => {
+    paramsState.pluginKey = "email-channel";
+    mockQueries({
+      install: {
+        ...baseInstall,
+        pluginKey: "email-channel",
+        state: "installed",
+      },
+      activations: [],
+      catalog: [emailChannelEntry],
+    });
+    render(<PluginDetail />);
+
+    fireEvent.change(screen.getByLabelText("SendGrid API key"), {
+      target: { value: "SG.secret-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save SendGrid key" }));
+
+    await waitFor(() => {
+      expect(mocks.saveCredential).toHaveBeenCalledWith({
+        input: {
+          providerInstallId: undefined,
+          provider: "SENDGRID",
+          apiKey: "SG.secret-key",
+          displayName: "SendGrid",
+        },
+      });
+    });
+    expect(screen.queryByText("SG.secret-key")).toBeNull();
   });
 
   it("shows stored Resend credentials without an empty password field", () => {
@@ -829,8 +869,8 @@ const planeEntry = {
 const emailChannelEntry = {
   __typename: "PluginCatalogEntry" as const,
   pluginKey: "email-channel",
-  displayName: "Resend Channel",
-  description: "Resend-backed tenant agent and Space email channel.",
+  displayName: "Email Channel",
+  description: "Provider-backed tenant agent and Space email channel.",
   latestVersion: "0.1.0",
   updateAvailable: false,
   premium: null,
@@ -844,7 +884,7 @@ const emailChannelEntry = {
         {
           key: "email-channel",
           type: "email-channel",
-          displayName: "Resend channel",
+          displayName: "Email channel",
         },
       ],
     },

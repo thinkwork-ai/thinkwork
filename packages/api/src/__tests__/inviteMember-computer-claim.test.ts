@@ -429,6 +429,82 @@ describe("inviteMember onboarding claim", () => {
     );
   });
 
+  it("uses Cognito SES delivery when SES is explicitly active even if older Resend remains configured", async () => {
+    cognitoSendMock.mockResolvedValueOnce({
+      User: {
+        Attributes: [{ Name: "sub", Value: "cognito-user-1" }],
+      },
+    });
+    selectRowsQueue.push(
+      [
+        {
+          id: "provider-resend",
+          tenant_id: "tenant-A",
+          provider: "resend",
+          status: "ready",
+          active_for_production: false,
+          credential_secret_ref: "resend/api-key",
+          default_from_email: "noreply@thinkwork.ai",
+        },
+        {
+          id: "provider-ses",
+          tenant_id: "tenant-A",
+          provider: "ses",
+          status: "ready",
+          active_for_production: true,
+          credential_secret_ref: null,
+          default_from_email: null,
+        },
+      ],
+      [],
+      [],
+    );
+    insertReturningQueue.push([
+      {
+        id: "member-1",
+        tenant_id: "tenant-A",
+        principal_type: "USER",
+        principal_id: "cognito-user-1",
+        role: "member",
+        status: "active",
+      },
+    ]);
+
+    await inviteMember(
+      null,
+      {
+        tenantId: "tenant-A",
+        input: {
+          email: "alex@acme.example",
+          name: "Alex Acme",
+          role: "member",
+        },
+      },
+      {
+        auth: {
+          authType: "cognito",
+          principalId: "operator-user",
+          tenantId: "tenant-A",
+          email: "operator@acme.example",
+        },
+      } as any,
+    );
+
+    const createCommand = cognitoSendMock.mock.calls[0]?.[0] as {
+      input?: {
+        DesiredDeliveryMediums?: string[];
+        MessageAction?: string;
+        TemporaryPassword?: string;
+      };
+    };
+    expect(createCommand.input).toMatchObject({
+      DesiredDeliveryMediums: ["EMAIL"],
+    });
+    expect(createCommand.input?.MessageAction).toBeUndefined();
+    expect(createCommand.input?.TemporaryPassword).toBeUndefined();
+    expect(emailChannelSendMock).not.toHaveBeenCalled();
+  });
+
   it("resends the Cognito invitation when the existing user is still pending", async () => {
     cognitoSendMock
       .mockRejectedValueOnce({ name: "UsernameExistsException" })

@@ -11,8 +11,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Input,
-  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -23,7 +21,6 @@ import {
 } from "@thinkwork/ui";
 import {
   EmailChannelProvider,
-  EmailDomainOwnershipType,
   EmailProviderInstallStatus,
 } from "@/gql/graphql";
 import { useTenant } from "@/context/TenantContext";
@@ -47,7 +44,6 @@ import {
   SettingsEmailChannelQuery,
   SettingsReleaseUpdateJobQuery,
   SettingsRemediateReleaseRunnerMutation,
-  SettingsSaveEmailProviderCredentialMutation,
   SettingsStartDeploymentReleaseUpdateMutation,
   SettingsStartReleaseUpdatePreflightMutation,
 } from "@/lib/settings-queries";
@@ -235,12 +231,7 @@ function InvitationEmailSection({
   } | null;
   onRefresh: () => void;
 }) {
-  const [apiKey, setApiKey] = useState("");
-  const [selectedDomain, setSelectedDomain] = useState("");
-  const [credentialState, saveCredential] = useMutation(
-    SettingsSaveEmailProviderCredentialMutation,
-  );
-  const [configureState, configureProvider] = useMutation(
+  const [, configureProvider] = useMutation(
     SettingsConfigureEmailProviderMutation,
   );
   const providers = summary?.providers ?? [];
@@ -254,41 +245,9 @@ function InvitationEmailSection({
   const resendProvider = providers.find(
     (provider) => provider.provider === "RESEND",
   );
-  const sendGridDomain = summary?.domains?.find(
-    (domain) => domain.providerInstallId === sendGridProvider?.id,
+  const installedProviderOptions = providers.filter(
+    (provider) => provider.provider !== "SES",
   );
-  const choices = sendGridChoices(sendGridProvider?.metadata);
-
-  async function saveSendGridKey() {
-    const key = apiKey.trim();
-    if (!key) {
-      toast.error("Enter a SendGrid API key.");
-      return;
-    }
-    const response = await saveCredential({
-      input: {
-        providerInstallId: sendGridProvider?.id,
-        provider: EmailChannelProvider.Sendgrid,
-        apiKey: key,
-        displayName: "SendGrid",
-        ...(selectedDomain
-          ? {
-              domain: {
-                domain: selectedDomain,
-                ownershipType: EmailDomainOwnershipType.CustomerOwned,
-              },
-            }
-          : {}),
-      },
-    });
-    if (response.error) {
-      toast.error(`Could not save SendGrid key: ${response.error.message}`);
-      return;
-    }
-    setApiKey("");
-    toast.success("SendGrid key stored and domains refreshed.");
-    onRefresh();
-  }
 
   async function selectProvider(provider: string) {
     if (provider === "SES") {
@@ -355,8 +314,11 @@ function InvitationEmailSection({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="SES">SES</SelectItem>
-              <SelectItem value="RESEND">Resend</SelectItem>
-              <SelectItem value="SENDGRID">SendGrid</SelectItem>
+              {installedProviderOptions.map((provider) => (
+                <SelectItem key={provider.id} value={provider.provider}>
+                  {provider.displayName ?? providerLabel(provider.provider)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <div className="flex flex-wrap gap-2">
@@ -375,82 +337,12 @@ function InvitationEmailSection({
               selected={selectedProvider === "SENDGRID"}
             />
           </div>
-        </div>
-      </SettingsRow>
-      <SettingsRow
-        label="SendGrid"
-        description="Store a SendGrid key and fetch authenticated sending domains."
-      >
-        <div className="grid w-full min-w-[18rem] max-w-md gap-3">
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">
-              {sendGridProvider?.credentialConfigured
-                ? "API key stored"
-                : "API key not stored"}
-            </span>
-            <Badge
-              variant={
-                sendGridProvider?.status === "READY" ? "outline" : "secondary"
-              }
-            >
-              {sendGridProvider?.status ?? "NOT CONFIGURED"}
-            </Badge>
-          </div>
-          {choices.length > 1 ? (
-            <div className="grid gap-1.5">
-              <Label htmlFor="sendgrid-domain">Authenticated domain</Label>
-              <Select value={selectedDomain} onValueChange={setSelectedDomain}>
-                <SelectTrigger id="sendgrid-domain">
-                  <SelectValue placeholder="Choose a SendGrid domain" />
-                </SelectTrigger>
-                <SelectContent>
-                  {choices.map((choice) => (
-                    <SelectItem key={choice.id} value={choice.domain}>
-                      {choice.domain}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {installedProviderOptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Additional providers appear here after they are configured in the
+              Email Channel plugin.
+            </p>
           ) : null}
-          <div className="grid gap-1.5">
-            <Label htmlFor="sendgrid-api-key">SendGrid API key</Label>
-            <Input
-              id="sendgrid-api-key"
-              type="password"
-              autoComplete="off"
-              placeholder={
-                sendGridProvider?.credentialConfigured
-                  ? "Paste a replacement key"
-                  : "Paste SendGrid API key"
-              }
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-            />
-          </div>
-          <Button
-            type="button"
-            onClick={saveSendGridKey}
-            disabled={credentialState.fetching || configureState.fetching}
-          >
-            Save SendGrid Key
-          </Button>
-          <dl className="grid gap-1 text-sm text-muted-foreground">
-            {sendGridDomain ? (
-              <div className="flex items-center justify-between gap-3">
-                <dt>Selected domain</dt>
-                <dd className="font-mono text-foreground">
-                  {sendGridDomain.domain}
-                </dd>
-              </div>
-            ) : null}
-            {choices.length > 0 ? (
-              <div className="flex items-center justify-between gap-3">
-                <dt>Fetched domains</dt>
-                <dd>{choices.length}</dd>
-              </div>
-            ) : null}
-          </dl>
         </div>
       </SettingsRow>
     </SettingsSection>
@@ -479,23 +371,6 @@ function providerLabel(provider: string) {
   if (provider === "SENDGRID") return "SendGrid";
   if (provider === "RESEND") return "Resend";
   return "SES";
-}
-
-function sendGridChoices(metadata: string | null | undefined) {
-  try {
-    const parsed = metadata ? JSON.parse(metadata) : {};
-    const choices = parsed?.sendgridDomains?.choices;
-    return Array.isArray(choices)
-      ? choices
-          .map((choice) => ({
-            id: String(choice.id ?? choice.domain ?? ""),
-            domain: String(choice.domain ?? ""),
-          }))
-          .filter((choice) => choice.id && choice.domain)
-      : [];
-  } catch {
-    return [];
-  }
 }
 
 interface DeploymentReleaseRow {

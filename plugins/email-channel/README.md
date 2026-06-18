@@ -1,10 +1,10 @@
-# Resend Channel Plugin
+# Email Channel Plugin
 
-The Resend Channel plugin is the package-owned source boundary for
-tenant-owned agent and Space email. V1 is Resend-backed by default and keeps SES
-as the AWS-native compatibility provider while shared platform code owns
-installation, settings GraphQL, database state, provider execution, and runtime
-gates.
+The Email Channel plugin is the package-owned source boundary for tenant-owned
+agent and Space email. V1 recommends Resend, supports SendGrid for customer-owned
+invitation delivery, and keeps SES as the AWS-native compatibility provider while
+shared platform code owns installation, settings GraphQL, database state,
+provider execution, and runtime gates.
 
 This package is intentionally inert in U1. It publishes the catalog identity,
 provider declarations, and reserved settings surface that later units wire into
@@ -25,6 +25,8 @@ inbound authorization, and ledger evidence.
 V1 provider options are deliberately narrow:
 
 - Resend is recommended for new tenant-owned email channels.
+- SendGrid is supported for tenant member invitation delivery with authenticated
+  customer-owned sending domains.
 - SES remains the AWS-native compatibility and migration provider.
 - SMTP, Postmark, Mailgun, and other providers are deferred.
 
