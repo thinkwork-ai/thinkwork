@@ -16,6 +16,13 @@ type ThinkWorkWebhookInput = {
   workflowRunId?: unknown;
   occurredAt?: unknown;
   idempotencyKey?: unknown;
+  name?: unknown;
+  properties?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+    diff?: Record<string, unknown>;
+    updatedFields?: unknown;
+  };
 };
 
 type ThinkWorkWebhookResponse = {
@@ -37,6 +44,46 @@ function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : undefined;
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function nestedText(
+  value: unknown,
+  keys: readonly string[],
+): string | undefined {
+  const source = record(value);
+  if (!source) return undefined;
+  for (const key of keys) {
+    const candidate = text(source[key]);
+    if (candidate) return candidate;
+  }
+  return undefined;
+}
+
+function stageLabel(value: unknown): string | undefined {
+  return (
+    text(value) ?? nestedText(value, ["label", "name", "value", "displayName"])
+  );
+}
+
+function databaseEventAfter(input: ThinkWorkWebhookInput) {
+  return record(input.properties?.after);
+}
+
+function stageFromInput(input: ThinkWorkWebhookInput): string | undefined {
+  const diffStage = record(input.properties?.diff)?.stage;
+  return (
+    stageLabel(input.stage) ??
+    stageLabel(databaseEventAfter(input)?.stage) ??
+    stageLabel(record(diffStage)?.after) ??
+    stageLabel(record(diffStage)?.to) ??
+    stageLabel(record(diffStage)?.newValue)
+  );
 }
 
 function compactObject<T extends Record<string, unknown>>(value: T): T {
@@ -64,7 +111,8 @@ const handler = async (
   const configuredStage = process.env.THINKWORK_TRIGGER_STAGE?.trim()
     ? process.env.THINKWORK_TRIGGER_STAGE.trim()
     : "Customer";
-  const receivedStage = text(input.stage);
+  const after = databaseEventAfter(input);
+  const receivedStage = stageFromInput(input);
   if (
     !receivedStage ||
     normalizedStage(receivedStage) !== normalizedStage(configuredStage)
@@ -92,7 +140,8 @@ const handler = async (
   const event =
     text(input.event) ??
     `opportunity.stage.${configuredStage.toLowerCase().replace(/\s+/g, "_")}`;
-  const opportunityId = text(input.opportunityId) ?? text(input.recordId);
+  const opportunityId =
+    text(input.opportunityId) ?? text(input.recordId) ?? text(after?.id);
   const occurredAt = text(input.occurredAt) ?? new Date().toISOString();
   const workflowKey = text(input.workflowKey) ?? "customer_onboarding";
   const idempotencyKey =
@@ -114,8 +163,11 @@ const handler = async (
     opportunityId,
     customerId: text(input.customerId),
     customerName: text(input.customerName),
-    companyName: text(input.companyName),
-    opportunityName: text(input.opportunityName),
+    companyName:
+      text(input.companyName) ??
+      text(record(after?.company)?.name) ??
+      text(record(after?.account)?.name),
+    opportunityName: text(input.opportunityName) ?? text(after?.name),
     stage: receivedStage,
     triggerStage: configuredStage,
     opportunityUrl: text(input.opportunityUrl),
@@ -170,6 +222,10 @@ export default defineLogicFunction({
     "Posts a Twenty workflow event to the configured ThinkWork generic webhook.",
   timeoutSeconds: 15,
   handler,
+  databaseEventTriggerSettings: {
+    eventName: "opportunity.updated",
+    updatedFields: ["stage"],
+  },
   workflowActionTriggerSettings: {
     label: "ThinkWork Webhook",
     icon: "IconBolt",

@@ -6,6 +6,37 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Native App Sync / Producer Correction
+
+- Latest verification after PR #2627/#2628 found the gate still failing at the
+  deployed Twenty instance: the repo package existed, but Twenty had not
+  installed/synced the native `ThinkWork` app, no `ThinkWork Webhook` logic
+  function was visible, no `THINKWORK_WEBHOOK_URL` app variable existed, the
+  legacy workflow still used built-in `HTTP_REQUEST`, and ThinkWork had zero
+  `source=twenty-app` deliveries.
+- Current branch: `codex/thnk-33-install-sync-automation`.
+- Root cause now identified in repo terms: `plugins/twenty/twenty-app` was
+  owned and cataloged, but the deploy workflow had no guarded Twenty CLI sync
+  step to install/update it in the target Twenty workspace.
+- Fix in this pass:
+  - `ThinkWork Webhook` now registers a native Twenty database-event trigger:
+    `opportunity.updated` with `updatedFields=["stage"]`.
+  - The handler still gates by the installed app setting
+    `THINKWORK_TRIGGER_STAGE` (default `Customer`) and only calls the installed
+    app setting `THINKWORK_WEBHOOK_URL` when the stage matches.
+  - The workflow action remains available as an optional
+    `ThinkWork -> ThinkWork Webhook` builder action, but built-in
+    `HTTP_REQUEST` is not acceptable proof for the reopened gate.
+  - Added `plugins/twenty/scripts/sync-thinkwork-app.mjs`, a wrapper around the
+    official Twenty CLI `remote:add` + `dev --once` sync flow.
+  - Added a manual `deploy.yml` dispatch option
+    `sync_twenty_thinkwork_app` gated by `TWENTY_APP_SYNC_API_KEY`; dry-run is
+    default, and first install requires dispatching with dry-run disabled.
+- Remaining runtime requirement: an operator must run the guarded sync against
+  the target Twenty instance and then configure `THINKWORK_WEBHOOK_URL` in the
+  installed ThinkWork app Settings tab. This worker did not run production sync
+  or mutate the target Twenty instance.
+
 ## 2026-06-18 Reopened Gate Follow-Up
 
 - User correction: the fix must be configuration on the Twenty workflow path:

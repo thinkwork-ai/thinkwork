@@ -66,6 +66,10 @@ function readTwentyApp(path: string): string {
   return readFileSync(join(testDir, "..", "twenty-app", path), "utf8");
 }
 
+function readRepo(path: string): string {
+  return readFileSync(join(testDir, "..", "..", "..", path), "utf8");
+}
+
 describe("twenty plugin manifest", () => {
   it("validates: one endpointFrom mcp-server + one infrastructure component", () => {
     const validated = validatePluginManifest(twentyManifest);
@@ -110,6 +114,9 @@ describe("twenty plugin manifest", () => {
     expect(applicationConfig).toContain("THINKWORK_TRIGGER_STAGE");
     expect(applicationConfig).toContain('value: "Customer"');
     expect(workflowAction).toContain("defineLogicFunction");
+    expect(workflowAction).toContain("databaseEventTriggerSettings");
+    expect(workflowAction).toContain('eventName: "opportunity.updated"');
+    expect(workflowAction).toContain('updatedFields: ["stage"]');
     expect(workflowAction).toContain("workflowActionTriggerSettings");
     expect(workflowAction).toContain('label: "ThinkWork Webhook"');
     expect(workflowAction).toContain("process.env.THINKWORK_WEBHOOK_URL");
@@ -118,6 +125,21 @@ describe("twenty plugin manifest", () => {
     expect(workflowAction).toContain("triggerStage: configuredStage");
     expect(workflowAction).toContain('source: "twenty-app"');
     expect(workflowAction).not.toContain("opportunity.won");
+  });
+
+  it("documents the guarded deployment sync path for installing the native app", () => {
+    const deployWorkflow = readRepo(".github/workflows/deploy.yml");
+    const syncScript = readRepo(
+      "plugins/twenty/scripts/sync-thinkwork-app.mjs",
+    );
+
+    expect(deployWorkflow).toContain("sync_twenty_thinkwork_app");
+    expect(deployWorkflow).toContain("TWENTY_APP_SYNC_API_KEY");
+    expect(deployWorkflow).toContain("sync-thinkwork-app.mjs");
+    expect(syncScript).toContain("remote:add");
+    expect(syncScript).toContain("dev");
+    expect(syncScript).toContain("--dry-run");
+    expect(syncScript).not.toContain("HTTP_REQUEST");
   });
 
   it("declares the infrastructure component against the twenty adapter key", () => {

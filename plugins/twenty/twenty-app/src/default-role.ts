@@ -9,7 +9,7 @@ export default defineApplicationRole({
   universalIdentifier: DEFAULT_ROLE_UNIVERSAL_IDENTIFIER,
   label: `${APP_DISPLAY_NAME} default function role`,
   description:
-    "Least-privilege role for the ThinkWork webhook workflow action.",
+    "Least-privilege role for the ThinkWork Opportunity stage webhook.",
   canReadAllObjectRecords: false,
   canUpdateAllObjectRecords: false,
   canSoftDeleteAllObjectRecords: false,
