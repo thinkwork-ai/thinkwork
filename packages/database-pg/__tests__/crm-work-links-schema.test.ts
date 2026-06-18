@@ -10,7 +10,11 @@ import { crmWorkLinks } from "../src/schema/crm-work-links";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const MIGRATION = readFileSync(
-  resolve(__dirname, "../drizzle/0173_crm_work_links.sql"),
+  resolve(__dirname, "../drizzle/0021_crm_work_links.sql"),
+  "utf8",
+);
+const JOURNAL = readFileSync(
+  resolve(__dirname, "../drizzle/meta/_journal.json"),
   "utf8",
 );
 
@@ -39,7 +43,9 @@ describe("crm_work_links schema", () => {
     expect(MIGRATION).toContain("WHERE state IN ('starting','active')");
   });
 
-  it("ships manual-migration markers for deploy drift reporting", () => {
+  it("ships as a journaled migration with drift markers for operator inspection", () => {
+    expect(JOURNAL).toContain("0021_crm_work_links");
+
     for (const marker of [
       "public.crm_work_links",
       "public.uq_crm_work_links_active_outcome",
