@@ -57,6 +57,8 @@ non-production Cognito OIDC IdP and WorkOS redirect configuration.
 
 ## Next Action
 
-Land this artifact branch through PR, then mark THNK-43 with the most specific
-blocker labels and a Linear comment. Do not advance to U2-U7 or Verification
-until U1 live evidence is available.
+Land this artifact branch through PR, then mark THNK-43 with the `Needs
+Credentials` blocker label and a Linear comment. Do not advance to U2-U7 or
+Verification until U1 live evidence is available, or until an explicit
+stakeholder decision accepts the single SSO fallback without provider-specific
+Google/Microsoft routing.

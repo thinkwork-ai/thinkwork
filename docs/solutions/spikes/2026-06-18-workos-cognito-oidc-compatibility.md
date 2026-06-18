@@ -32,9 +32,10 @@ Safe conclusion for downstream work:
 - Provider-specific Google/Microsoft buttons are not approved yet. Ship only a
   single WorkOS-backed SSO fallback until a live Cognito-to-WorkOS test proves
   provider-specific routing and final claim match.
-- U2/U3 may design plugin state and bridge provisioning around the Cognito OIDC
-  substrate, but U5 must not expose separate Google/Microsoft buttons from this
-  evidence alone.
+- Do not advance THNK-43 into U2-U7 product implementation from this artifact
+  alone. U1 still needs a live non-production WorkOS/Cognito bridge, or an
+  explicit stakeholder decision that the single SSO fallback is acceptable
+  without provider-specific routing.
 
 ## Evidence Collected
 
@@ -52,6 +53,11 @@ secret value was recorded in this artifact.
 | AWS dev app clients      | Read-only client descriptions for `ThinkworkAdmin` and `ThinkworkMobile` showed `COGNITO` and `Google` as supported IdPs.                                                                                                                         | Even if a WorkOS IdP were created elsewhere, current dev clients would not route to it.                                                             |
 | WorkOS secrets inventory | Read-only Secrets Manager search for WorkOS-named secrets returned an empty list.                                                                                                                                                                 | No WorkOS client credentials are available for this bridge in the inspected account.                                                                |
 | Direct config search     | Repo and local deployment config search found no `workos`, `GoogleOAuth`, `MicrosoftOAuth`, or `oidc_identity_providers` values for this bridge.                                                                                                  | There is no already-approved configuration to test without new setup.                                                                               |
+
+Read-only verification also rechecked the dev `ThinkworkAdmin` and
+`ThinkworkMobile` app clients. Both currently support `COGNITO` and `Google`,
+not a WorkOS IdP. Callback URLs were inspected only to confirm routing shape;
+no client secrets or tokens were fetched.
 
 ## Cognito Requirements to Satisfy
 
@@ -123,6 +129,11 @@ Therefore the approved v1 UI decision from this spike is:
 - Do not publish Google or Microsoft buttons until a live test proves either
   Cognito forwards a supported WorkOS hint or WorkOS exposes distinct OIDC
   IdP/application surfaces with final claims that prove the selected provider.
+
+This is a blocker decision, not a completed compatibility result. The fallback
+keeps the product direction safe while credentials and a test target are
+arranged; it does not by itself prove WorkOS can complete the Cognito
+authorization-code exchange.
 
 ## Required Claim Shape
 
