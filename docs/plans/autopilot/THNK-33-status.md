@@ -21,8 +21,8 @@ status: active
   Any apply mode requires the exact confirmation string
   `APPLY TWENTY THINKWORK APP`.
 - The workflow does not run Terraform, deploy ThinkWork, or use the custom
-  Lambda path. It only uses `TWENTY_PUBLIC_URL` plus
-  `TWENTY_APP_SYNC_API_KEY` for the native
+  Lambda path. It only uses `TWENTY_PUBLIC_URL` plus `TWENTY_DEPLOY_API_KEY`
+  (preferred) or `TWENTY_APP_SYNC_API_KEY` (fallback) for the native
   `Twenty -> ThinkWork App -> ThinkWork Webhook` operations.
 - No production Twenty mutation was run from Codex. Runtime proof still
   requires an authorized operator to dispatch this workflow in apply mode,
@@ -64,6 +64,20 @@ status: active
   and installs it into the workspace with
   `yarn twenty app:install --remote ...`; dry-run remains non-mutating through
   `yarn twenty dev --once --dry-run`.
+- Non-mutating `sync-app` dry-run after the lifecycle correction still fails
+  before deploy/install because no deploy API key exists in GitHub Actions:
+  run `27772519761` on merge commit
+  `6b8163ae80bcd4d0069e9d3a6f6b88089a04a655` passed
+  `Validate native ThinkWork app package`, showed
+  `TWENTY_PUBLIC_URL=https://crm.thinkwork.ai`, then failed
+  `Check Twenty app operation secrets` with empty `TWENTY_APP_SYNC_API_KEY`
+  and message `Set repository secret TWENTY_DEPLOY_API_KEY or
+TWENTY_APP_SYNC_API_KEY before running Twenty app operations.` The
+  `Deploy and install native ThinkWork app` and workflow wiring steps were
+  skipped, so no production Twenty mutation ran. GitHub repo secrets and
+  environments do not currently expose either deploy key, and AWS
+  Secrets Manager / SSM metadata did not show an existing Twenty deploy API key
+  secret to reuse.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
