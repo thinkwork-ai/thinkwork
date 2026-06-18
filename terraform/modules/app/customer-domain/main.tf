@@ -201,6 +201,8 @@ resource "aws_route53_record" "caa" {
   type    = "CAA"
   ttl     = 300
   records = ["0 issue \"amazon.com\""]
+
+  allow_overwrite = true
 }
 
 ################################################################################
@@ -271,9 +273,10 @@ resource "aws_acm_certificate_validation" "customer" {
 resource "aws_route53_record" "app_alias_a" {
   count = local.cert_enabled ? 1 : 0
 
-  zone_id = aws_route53_zone.customer[0].zone_id
-  name    = var.customer_domain
-  type    = "A"
+  zone_id         = aws_route53_zone.customer[0].zone_id
+  name            = var.customer_domain
+  type            = "A"
+  allow_overwrite = true
 
   alias {
     name                   = var.app_distribution_domain_name
@@ -285,9 +288,10 @@ resource "aws_route53_record" "app_alias_a" {
 resource "aws_route53_record" "app_alias_aaaa" {
   count = local.cert_enabled ? 1 : 0
 
-  zone_id = aws_route53_zone.customer[0].zone_id
-  name    = var.customer_domain
-  type    = "AAAA"
+  zone_id         = aws_route53_zone.customer[0].zone_id
+  name            = var.customer_domain
+  type            = "AAAA"
+  allow_overwrite = true
 
   alias {
     name                   = var.app_distribution_domain_name
@@ -317,6 +321,8 @@ resource "aws_route53_record" "ses_verification" {
   type    = "TXT"
   ttl     = 600
   records = [aws_ses_domain_identity.customer[0].verification_token]
+
+  allow_overwrite = true
 }
 
 resource "aws_ses_domain_dkim" "customer" {
@@ -333,6 +339,8 @@ resource "aws_route53_record" "dkim" {
   type    = "CNAME"
   ttl     = 600
   records = ["${aws_ses_domain_dkim.customer[0].dkim_tokens[count.index]}.dkim.amazonses.com"]
+
+  allow_overwrite = true
 }
 
 # Custom MAIL FROM so the envelope sender (Return-Path) lives under the
@@ -354,6 +362,8 @@ resource "aws_route53_record" "mail_from_mx" {
   type    = "MX"
   ttl     = 600
   records = ["10 feedback-smtp.${var.region}.amazonses.com"]
+
+  allow_overwrite = true
 }
 
 resource "aws_route53_record" "mail_from_spf" {
@@ -363,6 +373,8 @@ resource "aws_route53_record" "mail_from_spf" {
   type    = "TXT"
   ttl     = 600
   records = ["v=spf1 include:amazonses.com ~all"]
+
+  allow_overwrite = true
 }
 
 # DMARC: monitoring-only to start (p=none). Tightening to quarantine/reject
@@ -376,6 +388,8 @@ resource "aws_route53_record" "dmarc" {
   type    = "TXT"
   ttl     = 600
   records = ["v=DMARC1; p=none"]
+
+  allow_overwrite = true
 }
 
 ################################################################################
@@ -394,6 +408,8 @@ resource "aws_route53_record" "inbound_mx" {
   type    = "MX"
   ttl     = 600
   records = ["10 ${local.inbound_smtp}"]
+
+  allow_overwrite = true
 }
 
 resource "aws_ses_receipt_rule_set" "customer" {
