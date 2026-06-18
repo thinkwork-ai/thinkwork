@@ -53,6 +53,7 @@ ADMIN_CLIENT_ID="$(tf_output_cached_raw admin_client_id)"
 AUTH_DOMAIN="$(tf_output_cached_raw auth_domain)"
 APP_BUCKET="$(tf_output_cached_raw app_bucket_name 2>/dev/null || tf_output_cached_raw computer_bucket_name)"
 APP_CF_ID="$(tf_output_cached_raw app_distribution_id 2>/dev/null || tf_output_cached_raw computer_distribution_id)"
+APP_URL="$(tf_output_cached_raw app_url 2>/dev/null || tf_output_cached_raw computer_url 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_BUCKET="$(tf_output_cached_raw computer_sandbox_bucket_name 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_CF_ID="$(tf_output_cached_raw computer_sandbox_distribution_id 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_URL="$(tf_output_cached_raw computer_sandbox_url 2>/dev/null || echo '')"
@@ -145,13 +146,56 @@ VITE_ALLOWED_PARENT_ORIGINS="${COMPUTER_SANDBOX_PARENT_ORIGINS}" \
 VITE_MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN}" \
   pnpm --filter @thinkwork/web build:iframe-shell
 
+echo "▸ Writing runtime config ..."
+RUNTIME_CONFIG_PATH="apps/web/dist/thinkwork-runtime-config.json"
+jq -n \
+  --arg apiUrl "$API_ENDPOINT" \
+  --arg graphqlHttpUrl "${API_ENDPOINT}/graphql" \
+  --arg graphqlUrl "$APPSYNC_API_URL" \
+  --arg graphqlWsUrl "$APPSYNC_WS_URL" \
+  --arg graphqlApiKey "$APPSYNC_API_KEY" \
+  --arg userPoolId "$USER_POOL_ID" \
+  --arg clientId "$ADMIN_CLIENT_ID" \
+  --arg cognitoDomain "$COGNITO_DOMAIN" \
+  --arg authIdentityProviders "$AUTH_IDENTITY_PROVIDERS" \
+  --arg appVersion "${VITE_APP_VERSION:-}" \
+  --arg releaseVersion "$WEB_RELEASE_VERSION" \
+  --arg mapboxPublicToken "$MAPBOX_PUBLIC_TOKEN" \
+  --arg sandboxIframeSrc "${COMPUTER_SANDBOX_URL:+${COMPUTER_SANDBOX_URL%/}/iframe-shell.html}" \
+  --arg allowedParentOrigins "$COMPUTER_SANDBOX_PARENT_ORIGINS" \
+  --arg stage "$STAGE" \
+  --arg awsRegion "$REGION" \
+  --arg spacesUrl "$APP_URL" \
+  '{
+    viteEnv: {
+      VITE_API_URL: $apiUrl,
+      VITE_GRAPHQL_HTTP_URL: $graphqlHttpUrl,
+      VITE_GRAPHQL_URL: $graphqlUrl,
+      VITE_GRAPHQL_WS_URL: $graphqlWsUrl,
+      VITE_GRAPHQL_API_KEY: $graphqlApiKey,
+      VITE_COGNITO_USER_POOL_ID: $userPoolId,
+      VITE_COGNITO_CLIENT_ID: $clientId,
+      VITE_COGNITO_DOMAIN: $cognitoDomain,
+      VITE_AUTH_IDENTITY_PROVIDERS: $authIdentityProviders,
+      VITE_APP_VERSION: $appVersion,
+      VITE_RELEASE_VERSION: $releaseVersion,
+      VITE_MAPBOX_PUBLIC_TOKEN: $mapboxPublicToken,
+      VITE_SANDBOX_IFRAME_SRC: $sandboxIframeSrc,
+      VITE_ALLOWED_PARENT_ORIGINS: $allowedParentOrigins,
+      VITE_STAGE: $stage,
+      VITE_AWS_REGION: $awsRegion,
+      VITE_SPACES_URL: $spacesUrl
+    }
+  }' > "$RUNTIME_CONFIG_PATH"
+
 # Content-hashed assets are safe to cache forever; index.html must NOT be
 # (browsers heuristically cache it from Last-Modified and never revalidate,
 # so new deploys go unseen until that heuristic TTL expires — the stale-UI
-# papercut). Pass 1 uploads everything (incl. index.html) with the immutable
-# header and handles --delete cleanup; pass 2 force-overwrites index.html
-# with no-cache. `cp` (not `sync`) is required because `sync` skips the
-# unchanged index.html and would leave the immutable header in place.
+# papercut). Runtime config is also live deployment metadata. Pass 1 uploads
+# everything (incl. index.html and runtime config) with the immutable header
+# and handles --delete cleanup; pass 2 force-overwrites live entry files with
+# no-cache. `cp` (not `sync`) is required because `sync` skips unchanged files
+# and would leave the immutable header in place.
 echo "▸ Syncing to S3 bucket (immutable assets): $APP_BUCKET ..."
 aws s3 sync apps/web/dist/ "s3://${APP_BUCKET}/" \
   --delete \
@@ -163,6 +207,13 @@ echo "▸ Setting no-cache on index.html ..."
 aws s3 cp apps/web/dist/index.html "s3://${APP_BUCKET}/index.html" \
   --cache-control "no-cache" \
   --content-type "text/html; charset=utf-8" \
+  --region "$REGION" \
+  --output text > /dev/null
+
+echo "▸ Setting no-cache on thinkwork-runtime-config.json ..."
+aws s3 cp "$RUNTIME_CONFIG_PATH" "s3://${APP_BUCKET}/thinkwork-runtime-config.json" \
+  --cache-control "no-cache" \
+  --content-type "application/json" \
   --region "$REGION" \
   --output text > /dev/null
 
@@ -197,7 +248,6 @@ aws cloudfront create-invalidation \
   --region "$REGION" \
   --output text > /dev/null
 
-APP_URL="$(tf_output_cached_raw app_url 2>/dev/null || tf_output_cached_raw computer_url 2>/dev/null || echo '')"
 echo ""
 echo "✓ App deployed: ${APP_URL:-https://<pending>}"
 if [[ -n "$COMPUTER_SANDBOX_URL" ]]; then

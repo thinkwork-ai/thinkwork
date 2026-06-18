@@ -45,4 +45,24 @@ if ! grep -Eq 'WEB_RELEASE_VERSION="v\$\{WEB_RELEASE_VERSION\}"' "$BUILD_SCRIPT"
   exit 1
 fi
 
+if ! grep -Eq 'RUNTIME_CONFIG_PATH="apps/web/dist/thinkwork-runtime-config.json"' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh should write thinkwork-runtime-config.json into the web dist\n' >&2
+  exit 1
+fi
+
+if ! grep -Eq 'VITE_AUTH_IDENTITY_PROVIDERS: \$authIdentityProviders' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh runtime config should publish VITE_AUTH_IDENTITY_PROVIDERS\n' >&2
+  exit 1
+fi
+
+if ! grep -Eq 's3://\$\{APP_BUCKET\}/thinkwork-runtime-config.json' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh should upload thinkwork-runtime-config.json to the app bucket\n' >&2
+  exit 1
+fi
+
+if ! grep -Eq 'content-type "application/json"' "$BUILD_SCRIPT"; then
+  printf 'build-web.sh should set application/json on thinkwork-runtime-config.json\n' >&2
+  exit 1
+fi
+
 echo "build-web tests passed"
