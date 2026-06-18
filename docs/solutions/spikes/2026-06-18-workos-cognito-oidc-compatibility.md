@@ -18,10 +18,11 @@ tags:
 
 ## Result
 
-U1 is blocked for live sign-in proof in this pass. The repository and AWS
-account already support a Cognito OIDC provider shape, but there is no
-configured non-production WorkOS Auth OIDC bridge to test without creating or
-mutating auth infrastructure.
+U1 now has a live Google-backed WorkOS-to-Cognito authorization-code proof in
+the dev environment. A temporary WorkOS staging AuthKit/OIDC application was
+registered with the dev Cognito callback, Cognito accepted it as an OIDC
+identity provider, and `ThinkworkAdmin` completed a hosted auth code exchange
+through WorkOS using a Google account in the `homecareintel.com` domain.
 
 Safe conclusion for downstream work:
 
@@ -29,19 +30,23 @@ Safe conclusion for downstream work:
 - The candidate upstream surface is a confidential WorkOS Connect OAuth
   Application/AuthKit-domain OIDC application registered with the Cognito
   `/oauth2/idpresponse` callback.
-- Provider-specific Google/Microsoft buttons are not approved yet. Ship only a
-  single WorkOS-backed SSO fallback until a live Cognito-to-WorkOS test proves
-  provider-specific routing and final claim match.
-- Do not advance THNK-43 into U2-U7 product implementation from this artifact
-  alone. U1 still needs a live non-production WorkOS/Cognito bridge, or an
-  explicit stakeholder decision that the single SSO fallback is acceptable
-  without provider-specific routing.
+- Provider-specific Google/Microsoft buttons are still not approved. WorkOS
+  rendered provider-specific choices, but the final Cognito token preserved only
+  the Cognito WorkOS IdP identity, not the selected WorkOS upstream provider or
+  connection as a durable claim. Microsoft was not independently proven because
+  the browser reused the active WorkOS Google session.
+- U2/U3 may proceed against a single WorkOS-backed `Continue with SSO` fallback
+  design. Provider-specific buttons need a later claim-mapping/session-isolation
+  decision and Microsoft proof before they ship.
 
 ## Evidence Collected
 
-Read-only checks were run on 2026-06-18 from branch
-`codex/thnk-43-workos-u1`. No production mutation, deployment change, or
-secret value was recorded in this artifact.
+Initial read-only checks were run on 2026-06-18 from branch
+`codex/thnk-43-workos-u1`. A follow-up live proof was run the same day from
+branch `codex/thnk-43-u1-google-proof` after a WorkOS staging account was
+created and explicit permission was granted for non-production Cognito/WorkOS
+configuration. No production deployment was changed, and no secret value is
+recorded in this artifact.
 
 | Check                    | Evidence                                                                                                                                                                                                                                          | Impact                                                                                                                                              |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -58,6 +63,25 @@ Read-only verification also rechecked the dev `ThinkworkAdmin` and
 `ThinkworkMobile` app clients. Both currently support `COGNITO` and `Google`,
 not a WorkOS IdP. Callback URLs were inspected only to confirm routing shape;
 no client secrets or tokens were fetched.
+
+## Live Dev Bridge Evidence
+
+The follow-up proof configured only the dev Cognito user pool and a WorkOS
+staging application:
+
+| Check                   | Evidence                                                                                                                                                                                                                                                                                                                 | Impact                                                                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WorkOS issuer discovery | WorkOS AuthKit domain `https://welcoming-nutmeg-53-staging.authkit.app` returned OIDC discovery with `/oauth2/authorize`, `/oauth2/token`, `/oauth2/userinfo`, `/oauth2/jwks`, `client_secret_post`, and `RS256`.                                                                                                        | WorkOS satisfies Cognito's OIDC discovery and token-auth requirements for the tested staging application.                                                                         |
+| WorkOS redirect         | The WorkOS Connect OAuth application redirect URI was set to `https://thinkwork-dev.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`.                                                                                                                                                                                | WorkOS can return to Cognito rather than directly to a ThinkWork app callback.                                                                                                    |
+| Cognito IdP             | Dev user pool `us-east-1_L4DhLVKis` has OIDC provider `WorkOSAuthU1` with issuer `https://welcoming-nutmeg-53-staging.authkit.app`, scopes `openid profile email`, attributes request method `GET`, and mappings `email=email`, `name=name`, `username=sub`.                                                             | Cognito can represent the WorkOS bridge without product code changes.                                                                                                             |
+| Cognito app clients     | `ThinkworkAdmin` and `ThinkworkMobile` now include `WorkOSAuthU1` alongside `COGNITO` and `Google` in `SupportedIdentityProviders`.                                                                                                                                                                                      | Web and mobile clients can initiate a WorkOS-backed Cognito hosted auth route in dev.                                                                                             |
+| WorkOS provider UI      | A Cognito `/oauth2/authorize` request with `identity_provider=WorkOSAuthU1` redirected to WorkOS AuthKit, which rendered provider links including `provider=GoogleOAuth` and `provider=MicrosoftOAuth`.                                                                                                                  | WorkOS can present provider-specific social choices behind the single Cognito WorkOS IdP.                                                                                         |
+| Google callback         | The first Google attempt returned Cognito callback error `PreSignUp failed with error Provider linked -- retrying authentication.` A retry through the same Cognito WorkOS IdP returned a Cognito authorization code.                                                                                                    | The existing pre-signup linker can link the WorkOS federated identity, but the first login after link needs the expected retry.                                                   |
+| Cognito token exchange  | Exchanging the retry authorization code at the Cognito token endpoint succeeded with HTTP 200. The ID token issuer was `https://cognito-idp.us-east-1.amazonaws.com/us-east-1_L4DhLVKis`, audience was `ThinkworkAdmin`, token use was `id`, and scope was `openid profile email`.                                       | Cognito remains the final issuer after WorkOS completes the upstream Google authentication.                                                                                       |
+| Final identity claims   | The final ID token included a stable Cognito subject/username, redacted email in the `homecareintel.com` domain, `name`, and `identities` entries for existing `Google` plus `WorkOSAuthU1` (`providerType=OIDC`). It did not include WorkOS organization, connection, credential, or selected-upstream-provider claims. | Single SSO fallback is compatible. Provider-specific buttons are not compatible until U6 or WorkOS configuration maps durable upstream provider/connection evidence into Cognito. |
+
+The WorkOS OAuth client secret and Cognito authorization code were used only
+for the live exchange and are intentionally omitted.
 
 ## Cognito Requirements to Satisfy
 
@@ -109,7 +133,8 @@ Rejected for v1 unless the OIDC bridge fails:
 
 ## Provider Routing Result
 
-Provider-specific routing is not proven.
+Provider-specific routing is partially proven, but provider-specific product
+buttons are still not approved.
 
 AWS documents `identity_provider` and `idp_identifier` as Cognito parameters
 that choose the Cognito IdP. They do not establish a supported way for ThinkWork
@@ -117,23 +142,27 @@ to append arbitrary WorkOS parameters such as `provider=GoogleOAuth` or
 `provider=MicrosoftOAuth` and have Cognito forward them to the upstream OIDC
 authorization endpoint.
 
-WorkOS documents provider-specific selection through its own authorization URL
-API and provider parameter. Cognito's OIDC bridge does not call that API; it
-redirects to the configured OIDC authorization endpoint.
+The live proof showed WorkOS AuthKit can render provider-specific links behind
+the single Cognito OIDC provider. Selecting Google completed a Cognito code
+flow after the existing pre-signup linker retried. However, the final Cognito
+claims did not identify `GoogleOAuth` as the selected WorkOS provider; Cognito
+only recorded `WorkOSAuthU1` as the federated OIDC provider. A Microsoft pass
+was attempted next, but the active WorkOS session immediately reused the Google
+session and returned to Cognito, so Microsoft remains unproven without session
+isolation or a clean Microsoft-authenticated browser state.
 
 Therefore the approved v1 UI decision from this spike is:
 
 - Publish one public option: `Continue with SSO`.
 - Internally route it with Cognito
   `/oauth2/authorize?...&identity_provider=<WorkOS Cognito IdP name>`.
-- Do not publish Google or Microsoft buttons until a live test proves either
-  Cognito forwards a supported WorkOS hint or WorkOS exposes distinct OIDC
-  IdP/application surfaces with final claims that prove the selected provider.
+- Do not publish Google or Microsoft buttons until the implementation maps or
+  derives durable provider/connection evidence and verifies both providers in
+  clean sessions.
 
-This is a blocker decision, not a completed compatibility result. The fallback
-keeps the product direction safe while credentials and a test target are
-arranged; it does not by itself prove WorkOS can complete the Cognito
-authorization-code exchange.
+This is no longer a blocker for the single SSO fallback. It remains a blocker
+for provider-specific buttons and any UX copy that promises a particular
+upstream provider.
 
 ## Required Claim Shape
 
@@ -212,22 +241,23 @@ aws secretsmanager list-secrets \
   --query 'SecretList[?contains(Name, `WorkOS`) || contains(Name, `workos`)].Name'
 ```
 
-## Blocker to Clear U1
+## Remaining Decisions After U1
 
-To complete U1 instead of blocking it, create or provide a non-production
-WorkOS OAuth application and an approved non-production Cognito test target:
+The live bridge clears the original credentials blocker for the single SSO
+fallback. The remaining decisions before provider-specific buttons are:
 
-1. WorkOS AuthKit domain or Connect OAuth Application issuer.
-2. WorkOS OAuth client id and secret stored in Secrets Manager or an approved
-   non-committed operator channel.
-3. WorkOS redirect URI set to the Cognito domain
-   `/oauth2/idpresponse`.
-4. Google and Microsoft enabled in the WorkOS staging environment.
-5. Permission to create/update a non-production Cognito OIDC IdP and attach it
-   to the test app client, or a pre-created test user pool where that mutation
-   is already approved.
-6. A test login user for Google and Microsoft, or confirmation that the
-   WorkOS-hosted provider choice flow is the only intended U1 route.
+1. Decide whether U2/U3 should persist the WorkOS OAuth client secret through
+   Terraform/Secrets Manager or a control-plane mutation path. Do not commit it
+   to tfvars.
+2. Decide where WorkOS organization, connection, credential, or selected
+   upstream provider metadata should be mapped so U6 can enforce verified,
+   auditable linking.
+3. Re-run Microsoft in a clean browser/session or with an explicit Microsoft
+   test account. The current browser reused the WorkOS Google session before a
+   Microsoft account could be selected.
+4. Preserve the first-login retry behavior in U6 tests: a newly linked WorkOS
+   federated identity may return `Provider linked -- retrying authentication`
+   once before the next Cognito authorization succeeds.
 
 ## Sources
 
