@@ -6,8 +6,7 @@ Native Twenty app source for the THNK-33 workflow path:
 Twenty workflow -> ThinkWork app -> ThinkWork Webhook
 ```
 
-The app exposes one logic function, `ThinkWork Webhook`. It is registered both
-as a native database-event trigger for Twenty Opportunity stage updates and as a
+The app exposes one logic function, `ThinkWork Webhook`. It is registered as a
 workflow action for explicit workflow-builder use. The function compares the
 incoming Twenty Opportunity stage with the configured app stage and only posts
 to the configured ThinkWork generic webhook URL when they match.
@@ -32,22 +31,9 @@ secret application variable and is only available to the server-side logic
 function. The trigger stage is intentionally editable in the app settings so the
 mapping stays in Twenty's ThinkWork app configuration.
 
-## Native Trigger
+## Workflow Action
 
-The app listens to the Twenty database event below:
-
-```text
-opportunity.updated
-  updatedFields: stage
-```
-
-The stage gate lives in the ThinkWork app settings rather than in a custom
-Lambda or a hard-coded workflow name. When the stage equals the configured
-`THINKWORK_TRIGGER_STAGE` value, the app calls `THINKWORK_WEBHOOK_URL`.
-
-## Optional Workflow Action
-
-The same logic function remains available in the Twenty workflow builder as:
+The logic function is available in the Twenty workflow builder as:
 
 ```text
 ThinkWork -> ThinkWork Webhook
@@ -99,6 +85,38 @@ node plugins/twenty/scripts/sync-thinkwork-app.mjs --apply
 
 After sync, the Twenty Applications screen should show a native installed app
 named `ThinkWork`, the app Settings tab should expose
-`THINKWORK_WEBHOOK_URL` and `THINKWORK_TRIGGER_STAGE`, and the installed logic
-function should listen for `opportunity.updated` stage changes. The workflow
-builder should also offer a workflow action named `ThinkWork Webhook`.
+`THINKWORK_WEBHOOK_URL` and `THINKWORK_TRIGGER_STAGE`, and the workflow builder
+should offer a workflow action named `ThinkWork Webhook`.
+
+## Workflow Wiring
+
+The Opportunity workflow must call the app action rather than Twenty's built-in
+HTTP request action:
+
+```text
+Twenty Opportunity stage == Customer
+  -> ThinkWork -> ThinkWork Webhook
+  -> THINKWORK_WEBHOOK_URL from ThinkWork app settings
+```
+
+Use the guarded wiring script in dry-run mode first:
+
+```bash
+node plugins/twenty/scripts/wire-thinkwork-workflow.mjs \
+  --workflow-version-id <draft-workflow-version-id> \
+  --dry-run
+```
+
+When the dry-run report identifies the intended workflow and step, an operator
+can apply it to a draft workflow version:
+
+```bash
+node plugins/twenty/scripts/wire-thinkwork-workflow.mjs \
+  --workflow-version-id <draft-workflow-version-id> \
+  --step-id <http-request-step-id> \
+  --apply
+```
+
+The Deploy workflow exposes the same guarded operation via
+`wire_twenty_thinkwork_workflow`. The script refuses to mutate an active
+workflow version unless an operator explicitly creates or targets a draft.

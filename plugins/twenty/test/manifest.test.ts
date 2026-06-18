@@ -114,9 +114,7 @@ describe("twenty plugin manifest", () => {
     expect(applicationConfig).toContain("THINKWORK_TRIGGER_STAGE");
     expect(applicationConfig).toContain('value: "Customer"');
     expect(workflowAction).toContain("defineLogicFunction");
-    expect(workflowAction).toContain("databaseEventTriggerSettings");
-    expect(workflowAction).toContain('eventName: "opportunity.updated"');
-    expect(workflowAction).toContain('updatedFields: ["stage"]');
+    expect(workflowAction).not.toContain("databaseEventTriggerSettings");
     expect(workflowAction).toContain("workflowActionTriggerSettings");
     expect(workflowAction).toContain('label: "ThinkWork Webhook"');
     expect(workflowAction).toContain("process.env.THINKWORK_WEBHOOK_URL");
@@ -132,14 +130,22 @@ describe("twenty plugin manifest", () => {
     const syncScript = readRepo(
       "plugins/twenty/scripts/sync-thinkwork-app.mjs",
     );
+    const wireScript = readRepo(
+      "plugins/twenty/scripts/wire-thinkwork-workflow.mjs",
+    );
 
     expect(deployWorkflow).toContain("sync_twenty_thinkwork_app");
     expect(deployWorkflow).toContain("TWENTY_APP_SYNC_API_KEY");
     expect(deployWorkflow).toContain("sync-thinkwork-app.mjs");
+    expect(deployWorkflow).toContain("wire-thinkwork-workflow.mjs");
     expect(syncScript).toContain("remote:add");
     expect(syncScript).toContain("dev");
     expect(syncScript).toContain("--dry-run");
     expect(syncScript).not.toContain("HTTP_REQUEST");
+    expect(wireScript).toContain('type: "LOGIC_FUNCTION"');
+    expect(wireScript).toContain("UpdateWorkflowVersionStep");
+    expect(wireScript).toContain("findManyLogicFunctions");
+    expect(wireScript).not.toContain("AWS_LAMBDA");
   });
 
   it("declares the infrastructure component against the twenty adapter key", () => {
