@@ -33,6 +33,7 @@ function graphqlApiKey(): string {
 let tokenProvider: (() => Promise<string | null>) | null = null;
 let cachedToken: string | null = null;
 let currentTenantId: string | null = null;
+const TOKEN_REFRESH_INTERVAL_MS = 15_000;
 
 export function setAuthToken(token: string | null) {
   cachedToken = token;
@@ -54,18 +55,13 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startTokenRefresh() {
   if (refreshTimer) return;
+  void refreshCachedToken();
   refreshTimer = setInterval(
     async () => {
-      if (!tokenProvider) return;
-      try {
-        const fresh = await tokenProvider();
-        if (fresh) cachedToken = fresh;
-      } catch {
-        /* best-effort */
-      }
+      await refreshCachedToken();
     },
-    5 * 60 * 1000,
-  ); // every 5 minutes
+    TOKEN_REFRESH_INTERVAL_MS,
+  );
 }
 
 export function stopTokenRefresh() {
@@ -83,6 +79,10 @@ export function stopTokenRefresh() {
  * control. Best-effort: resolves false if there's no provider or it fails.
  */
 export async function refreshAuthTokenNow(): Promise<boolean> {
+  return refreshCachedToken();
+}
+
+async function refreshCachedToken(): Promise<boolean> {
   if (!tokenProvider) return false;
   try {
     const fresh = await tokenProvider();
@@ -96,7 +96,7 @@ export async function refreshAuthTokenNow(): Promise<boolean> {
   return false;
 }
 
-function authHeaders(): Record<string, string> {
+export function buildGraphqlAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   if (currentTenantId) {
     headers["x-tenant-id"] = currentTenantId;
@@ -112,7 +112,7 @@ function authHeaders(): Record<string, string> {
   return headers;
 }
 
-function isExpiredJwt(token: string): boolean {
+function isExpiredJwt(token: string, skewMs = 0): boolean {
   const [, payload] = token.split(".");
   if (!payload) return false;
   try {
@@ -121,7 +121,7 @@ function isExpiredJwt(token: string): boolean {
     const decoded = JSON.parse(atob(padded)) as { exp?: number };
     return (
       typeof decoded.exp === "number" &&
-      decoded.exp * 1000 <= Date.now() + 30_000
+      decoded.exp * 1000 <= Date.now() + skewMs
     );
   } catch {
     return false;
@@ -347,7 +347,7 @@ export const graphqlClient = new Client({
   ],
   fetchOptions: (): RequestInit => ({
     method: "POST",
-    headers: authHeaders(),
+    headers: buildGraphqlAuthHeaders(),
   }),
   preferGetMethod: false,
 });
