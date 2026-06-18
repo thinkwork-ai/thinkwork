@@ -47,7 +47,7 @@ describe("LakeHouse plugin manifest", () => {
     );
   });
 
-  it("keeps customer-facing copy on the shell boundary", () => {
+  it("keeps customer-facing copy on the LakeHouse product scope", () => {
     const customerFacingText = [
       lakehouseManifest.displayName,
       lakehouseManifest.description,
@@ -57,8 +57,9 @@ describe("LakeHouse plugin manifest", () => {
     ].join("\n");
 
     expect(customerFacingText).toContain("LakeHouse");
-    expect(customerFacingText).toContain("solution shell");
-    expect(customerFacingText).toContain("deferred");
+    expect(customerFacingText).toContain("enterprise data platform planning");
+    expect(customerFacingText).toContain("datalake");
+    expect(customerFacingText).toContain("warehouse");
     expect(customerFacingText).not.toMatch(
       /\b(deploys?|queries|monitors?|automates?|provisions?|connects? to|operates?)\b/i,
     );
