@@ -83,6 +83,32 @@ describe("getHostedSignInUrl", () => {
   });
 });
 
+describe("getAuthOptionSignInUrl", () => {
+  it("routes public auth options through the returned Cognito IdP", async () => {
+    stubLocation("https://app.example");
+    const { getAuthOptionSignInUrl } = await import("./auth");
+
+    const url = new URL(
+      getAuthOptionSignInUrl({
+        key: "workos-sso",
+        label: "Continue with SSO",
+        icon: "sso",
+        provider: "workos",
+        providerSpecific: false,
+        cognitoIdentityProviderName: "WorkOSAuth",
+        route: {
+          type: "cognitoHostedUi",
+          identityProvider: "WorkOSAuth",
+        },
+      }),
+    );
+
+    expect(url.pathname).toBe("/oauth2/authorize");
+    expect(url.searchParams.get("identity_provider")).toBe("WorkOSAuth");
+    expect(url.searchParams.get("client_id")).toBe("test-client-id");
+  });
+});
+
 describe("signOut", () => {
   it("redirects through the Cognito /logout endpoint to clear the hosted-UI session", async () => {
     const { signOut } = await import("./auth");

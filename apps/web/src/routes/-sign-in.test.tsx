@@ -21,9 +21,12 @@ const authContextMocks = vi.hoisted(() => ({
 const authMocks = vi.hoisted(() => ({
   confirmForgotPassword: vi.fn(),
   forgotPassword: vi.fn(),
-  getHostedSignInUrl: vi.fn(),
-  getGoogleSignInUrl: vi.fn(),
+  getAuthOptionSignInUrl: vi.fn(),
   isPasswordSignInConfigured: vi.fn(),
+}));
+
+const authOptionsMocks = vi.hoisted(() => ({
+  fetchPublicAuthOptions: vi.fn(),
 }));
 
 const desktopRuntimeMocks = vi.hoisted(() => ({
@@ -63,9 +66,12 @@ vi.mock("@/context/AuthContext", () => ({
 vi.mock("@/lib/auth", () => ({
   confirmForgotPassword: authMocks.confirmForgotPassword,
   forgotPassword: authMocks.forgotPassword,
-  getHostedSignInUrl: authMocks.getHostedSignInUrl,
-  getGoogleSignInUrl: authMocks.getGoogleSignInUrl,
+  getAuthOptionSignInUrl: authMocks.getAuthOptionSignInUrl,
   isPasswordSignInConfigured: authMocks.isPasswordSignInConfigured,
+}));
+
+vi.mock("@/lib/auth-options", () => ({
+  fetchPublicAuthOptions: authOptionsMocks.fetchPublicAuthOptions,
 }));
 
 vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
@@ -101,11 +107,14 @@ beforeEach(() => {
     isAuthenticated: false,
     isLoading: false,
   });
-  authMocks.getHostedSignInUrl.mockReturnValue("https://auth.example/login");
-  authMocks.getGoogleSignInUrl.mockReturnValue(
-    "https://auth.example/login?identity_provider=Google",
+  authMocks.getAuthOptionSignInUrl.mockReturnValue(
+    "https://auth.example/login?identity_provider=WorkOSAuth",
   );
   authMocks.isPasswordSignInConfigured.mockReturnValue(false);
+  authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+    password: { enabled: true },
+    oauthOptions: [],
+  });
   routerMocks.search = { next: undefined };
   desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });
@@ -122,7 +131,7 @@ afterEach(() => {
 });
 
 describe("SignInPage", () => {
-  it("renders a blank splash with a single login action for unauthenticated users", () => {
+  it("renders no browser OAuth button when public auth options are empty", () => {
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
@@ -135,9 +144,10 @@ describe("SignInPage", () => {
     // Trust plumbing (e.g. "Unsigned build-time fallback") must not leak
     // onto the end-user login page.
     expect(screen.queryByText("Unsigned build-time fallback")).toBeNull();
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Continue with/i })).toBeNull();
+    expect(screen.getByText("Sign-in options are unavailable.")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Create one" })).toBeNull();
-    expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
   });
 
   it("shows environment creation only on the central app host", () => {
@@ -161,17 +171,34 @@ describe("SignInPage", () => {
     expect(screen.queryByRole("link", { name: "Create one" })).toBeNull();
   });
 
-  it("waits for auth restoration before enabling login", () => {
+  it("waits for auth restoration before enabling login", async () => {
     authContextMocks.useAuth.mockReturnValue({
       isAuthenticated: false,
       isLoading: true,
+    });
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: true },
+      oauthOptions: [
+        {
+          key: "workos-sso",
+          label: "Continue with SSO",
+          icon: "sso",
+          provider: "workos",
+          providerSpecific: false,
+          cognitoIdentityProviderName: "WorkOSAuth",
+          route: {
+            type: "cognitoHostedUi",
+            identityProvider: "WorkOSAuth",
+          },
+        },
+      ],
     });
 
     render(<SignInPage />);
 
     expect(
       (
-        screen.getByRole("button", {
+        await screen.findByRole("button", {
           name: "Checking session...",
         }) as HTMLButtonElement
       ).disabled,
@@ -183,6 +210,7 @@ describe("SignInPage", () => {
       url: "https://auth.example/oauth2/authorize?state=xyz",
       state: "xyz",
     });
+    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
       startOAuth,
       onOAuthError: () => () => {},
@@ -365,7 +393,24 @@ describe("SignInPage", () => {
     );
   });
 
-  it("uses the existing browser OAuth redirect outside desktop mode", () => {
+  it("uses the WorkOS SSO option from public auth options outside desktop mode", async () => {
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: true },
+      oauthOptions: [
+        {
+          key: "workos-sso",
+          label: "Continue with SSO",
+          icon: "sso",
+          provider: "workos",
+          providerSpecific: false,
+          cognitoIdentityProviderName: "WorkOSAuth",
+          route: {
+            type: "cognitoHostedUi",
+            identityProvider: "WorkOSAuth",
+          },
+        },
+      ],
+    });
     const navigations: string[] = [];
     Object.defineProperty(window, "location", {
       configurable: true,
@@ -381,9 +426,22 @@ describe("SignInPage", () => {
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue with SSO" }),
+    );
 
-    expect(navigations).toEqual(["https://auth.example/login"]);
+    expect(navigations).toEqual([
+      "https://auth.example/login?identity_provider=WorkOSAuth",
+    ]);
+    expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "workos-sso",
+        route: {
+          type: "cognitoHostedUi",
+          identityProvider: "WorkOSAuth",
+        },
+      }),
+    );
   });
 
   it("uses Terraform-provided runtime config when build-time env is empty", () => {
@@ -417,11 +475,8 @@ describe("SignInPage", () => {
     expect(
       screen.getByText("Runtime ThinkWork · tei-e2e · us-east-1"),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
+    expect(screen.getByText("Sign-in options are unavailable.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
   });
 
   it("blocks browser OAuth when required deployment profile fields are missing", () => {
@@ -444,10 +499,8 @@ describe("SignInPage", () => {
 
     expect(screen.getByText("Configuration incomplete for dev")).toBeTruthy();
     expect(screen.getByText(/Missing VITE_COGNITO_CLIENT_ID/)).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    expect(screen.getByText("Sign-in options are unavailable.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
     expect(navigations).toEqual([]);
   });
 
@@ -484,15 +537,29 @@ describe("SignInPage", () => {
     expect(screen.getByLabelText("Password")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reset password" })).toBeTruthy();
-    // OAuth demotes to a secondary action alongside the form.
-    expect(
-      screen.getByRole("button", { name: "Log in with Google" }),
-    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Continue with/i })).toBeNull();
     expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
   });
 
-  it("sends the Google button straight to the Google IdP, not the hosted login page", () => {
+  it("renders WorkOS SSO before password when a public option is returned", async () => {
     authMocks.isPasswordSignInConfigured.mockReturnValue(true);
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: true },
+      oauthOptions: [
+        {
+          key: "workos-sso",
+          label: "Continue with SSO",
+          icon: "sso",
+          provider: "workos",
+          providerSpecific: false,
+          cognitoIdentityProviderName: "WorkOSAuth",
+          route: {
+            type: "cognitoHostedUi",
+            identityProvider: "WorkOSAuth",
+          },
+        },
+      ],
+    });
     const navigations: string[] = [];
     Object.defineProperty(window, "location", {
       configurable: true,
@@ -508,12 +575,20 @@ describe("SignInPage", () => {
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Log in with Google" }));
+    expect(
+      await screen.findByRole("button", { name: "Continue with SSO" }),
+    ).toBeTruthy();
+    expect(screen.getByText("or")).toBeTruthy();
+    expect(screen.getByLabelText("Email")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue with SSO" }),
+    );
 
     expect(navigations).toEqual([
-      "https://auth.example/login?identity_provider=Google",
+      "https://auth.example/login?identity_provider=WorkOSAuth",
     ]);
-    expect(authMocks.getHostedSignInUrl).not.toHaveBeenCalled();
+    expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalled();
   });
 
   it("hides the email/password form in the desktop shell", () => {

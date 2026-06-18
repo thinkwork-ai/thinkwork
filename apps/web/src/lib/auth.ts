@@ -8,6 +8,7 @@ import {
 import type { TokenStorage } from "./token-storage";
 import { LocalStorageTokenStorage } from "./token-storage/local-storage";
 import { readRuntimeEnv } from "./runtime-config";
+import type { PublicOAuthOption } from "./auth-options";
 
 // ---------------------------------------------------------------------------
 // Config — lazy-init to avoid crashing when env vars aren't set (local dev)
@@ -407,6 +408,12 @@ export function getGoogleSignInUrl(): string {
   return getHostedSignInUrl({
     identityProvider: "Google",
     prompt: "select_account",
+  });
+}
+
+export function getAuthOptionSignInUrl(option: PublicOAuthOption): string {
+  return getHostedSignInUrl({
+    identityProvider: option.route.identityProvider,
   });
 }
 
