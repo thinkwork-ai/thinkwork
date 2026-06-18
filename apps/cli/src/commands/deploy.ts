@@ -68,7 +68,7 @@ export interface ControllerDeployInput {
   schemaVersion: 1;
   contract: "thinkwork.deployment.controller.v1";
   phase: string;
-  action: "plan" | "deploy" | "update";
+  action: "plan" | "deploy" | "update" | "web";
   sessionId: string;
   customerName: string;
   environmentName: string;
@@ -102,9 +102,9 @@ export interface ControllerDeployInput {
     requestedAction: string;
   };
   operation: {
-    kind: "foundation";
-    action: "plan" | "deploy" | "update";
-    plan: true;
+    kind: "foundation" | "web";
+    action: "plan" | "deploy" | "update" | "web";
+    plan: boolean;
     apply: boolean;
     destroy: false;
   };
@@ -144,7 +144,7 @@ export function registerDeployCommand(
     .option("-s, --stage <name>", "Deployment stage")
     .option(
       "-c, --component <tier>",
-      "Component (local: foundation|data|app|all; enterprise: all|foundation|artifacts|overlays|smokes)",
+      "Component (local: foundation|data|app|all; enterprise: all|foundation|artifacts|web|overlays|smokes)",
       "all",
     )
     .option(
@@ -169,7 +169,7 @@ export function registerDeployCommand(
     )
     .option(
       "--controller-action <action>",
-      "Deployment controller action (plan|deploy|update)",
+      "Deployment controller action (plan|deploy|update|web)",
       "update",
     )
     .option(
@@ -305,7 +305,7 @@ export async function runControllerDeploy(
 }
 
 export function buildControllerDeployInput(options: {
-  action: "plan" | "deploy" | "update";
+  action: "plan" | "deploy" | "update" | "web";
   stage: string;
   accountId: string;
   region: string;
@@ -321,6 +321,7 @@ export function buildControllerDeployInput(options: {
   // tags carry a "v"; derive the module pin from the release when not given.
   const terraformModuleVersion =
     options.terraformModuleVersion ?? options.releaseVersion.replace(/^v/, "");
+  const operationKind = options.action === "web" ? "web" : "foundation";
   return {
     schemaVersion: 1,
     contract: "thinkwork.deployment.controller.v1",
@@ -359,9 +360,9 @@ export function buildControllerDeployInput(options: {
       requestedAction: options.action,
     },
     operation: {
-      kind: "foundation",
+      kind: operationKind,
       action: options.action,
-      plan: true,
+      plan: options.action !== "web",
       apply: options.action !== "plan",
       destroy: false,
     },
@@ -397,11 +398,18 @@ function controllerExecutionName(sessionId: string): string {
 
 function normalizeControllerDeployAction(
   action: string | undefined,
-): "plan" | "deploy" | "update" {
-  if (action === "plan" || action === "deploy" || action === "update") {
+): "plan" | "deploy" | "update" | "web" {
+  if (
+    action === "plan" ||
+    action === "deploy" ||
+    action === "update" ||
+    action === "web"
+  ) {
     return action;
   }
-  throw new Error("--controller-action must be one of: plan, deploy, update");
+  throw new Error(
+    "--controller-action must be one of: plan, deploy, update, web",
+  );
 }
 
 export async function runLocalTerraformDeploy(

@@ -249,6 +249,7 @@ describe("top-level enterprise deploy routing", () => {
     ).rejects.toThrow(/Invalid enterprise deploy component "data"/);
 
     expect(validateEnterpriseDeployComponent("smokes").valid).toBe(true);
+    expect(validateEnterpriseDeployComponent("web").valid).toBe(true);
     expect(validateComponent("smokes").valid).toBe(false);
   });
 

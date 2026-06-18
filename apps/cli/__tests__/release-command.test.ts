@@ -23,7 +23,7 @@ describe("release command registration", () => {
     expect(subNames).toEqual(expect.arrayContaining(["list", "deploy"]));
   });
 
-  it("deploy carries --stage, --yes, and --no-wait flags (and the bare group mirrors them)", () => {
+  it("deploy carries shared release flags (and the bare group mirrors them)", () => {
     const program = new Command();
     registerReleaseCommand(program);
     const release = program.commands.find((c) => c.name() === "release")!;
@@ -32,7 +32,7 @@ describe("release command registration", () => {
     for (const cmd of [release, deploy]) {
       const longs = cmd.options.map((o) => o.long);
       expect(longs).toEqual(
-        expect.arrayContaining(["--stage", "--yes", "--no-wait"]),
+        expect.arrayContaining(["--stage", "--yes", "--web-only", "--no-wait"]),
       );
     }
   });
@@ -291,6 +291,33 @@ describe("buildControllerUpdateInput", () => {
       customerDomain: "tei.thinkwork.ai",
       customerDomainDelegated: true,
       customerDomainLegacyRetired: false,
+    });
+  });
+
+  it("builds web-only release update inputs without Terraform planning", () => {
+    const prior = parsePriorControllerInput(PRIOR_WITH_DOMAIN);
+    const input = buildControllerUpdateInput({
+      prior,
+      release,
+      sessionId: "session-1",
+      webOnly: true,
+    });
+
+    expect(input).toMatchObject({
+      phase: "web",
+      action: "web",
+      operation: {
+        kind: "web",
+        action: "web",
+        plan: false,
+        apply: true,
+        destroy: false,
+      },
+      preservedConfig: {
+        customerDomain: "tei.thinkwork.ai",
+        customerDomainDelegated: true,
+        customerDomainLegacyRetired: false,
+      },
     });
   });
 

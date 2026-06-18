@@ -666,6 +666,18 @@ def is_managed_app_operation(payload):
     return bool(payload.get("appKey"))
 
 
+def is_web_only_operation(payload, action=None):
+    if action == "web":
+        return True
+    operation = payload.get("operation")
+    if isinstance(operation, dict):
+        kind = str(operation.get("kind") or "").strip().lower()
+        if kind in {"web", "web-only", "web_only", "static-web"}:
+            return True
+    component = str(payload.get("component") or "").strip().lower()
+    return component == "web" or truthy(payload.get("webOnly"))
+
+
 def configure_managed_app_evidence_prefix(payload):
     if not is_managed_app_operation(payload):
         return
@@ -708,12 +720,77 @@ def validate_managed_app_plan_scope(payload, plan_json):
         )
 
 
+def destructive_plan_actions(actions):
+    return "delete" in (actions or [])
+
+
+def allow_customer_domain_removal(payload):
+    return safe_get_bool({}, payload or {}, "allowCustomerDomainRemoval", default=False)
+
+
+def validate_environment_plan_scope(payload, plan_json):
+    if is_managed_app_operation(payload):
+        return
+    if allow_customer_domain_removal(payload):
+        return
+
+    unsafe_changes = []
+    for change in plan_json.get("resource_changes", []):
+        actions = change.get("change", {}).get("actions", [])
+        if not actions or actions == ["no-op"] or actions == ["read"]:
+            continue
+        address = change.get("address", "")
+        before = change.get("change", {}).get("before") or {}
+        after = change.get("change", {}).get("after") or {}
+
+        if address.startswith("module.thinkwork.module.customer_domain.") and destructive_plan_actions(actions):
+            unsafe_changes.append({"address": address, "actions": actions})
+            continue
+
+        if (
+            address.startswith("module.thinkwork.module.computer_site.aws_cloudfront_distribution.")
+            and "update" in actions
+            and customer_domain_cloudfront_alias_removed(before, after)
+        ):
+            unsafe_changes.append({"address": address, "actions": actions})
+
+    if unsafe_changes:
+        preview = ", ".join(
+            f"{item['address']}:{'/'.join(item['actions'])}" for item in unsafe_changes[:10]
+        )
+        raise RuntimeError(
+            "Terraform plan would remove customer-domain web resources; refusing to continue. "
+            "Preserve customerDomain/customerDomainDelegated in the controller input or runner "
+            "secret. Set allowCustomerDomainRemoval=true only for an intentional, reviewed "
+            f"domain-retirement operation. Examples: {preview}"
+        )
+
+
+def customer_domain_cloudfront_alias_removed(before, after):
+    before_aliases = set(cloudfront_alias_items(before.get("aliases")))
+    after_aliases = set(cloudfront_alias_items(after.get("aliases")))
+    if before_aliases and not after_aliases:
+        return True
+    return bool(before_aliases - after_aliases)
+
+
+def cloudfront_alias_items(value):
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, dict):
+        items = value.get("items") or value.get("Items")
+        if isinstance(items, list):
+            return [str(item) for item in items if item]
+    return []
+
+
 def write_terraform_plan_evidence(payload=None):
     plan_path = Path("terraform-plan.json")
     with plan_path.open("w", encoding="utf-8") as handle:
         run(["terraform", "show", "-json", "tfplan"], cwd=TF, stdout=handle)
     plan_json = json.loads(plan_path.read_text(encoding="utf-8"))
     validate_managed_app_plan_scope(payload or {}, plan_json)
+    validate_environment_plan_scope(payload or {}, plan_json)
     artifact = {
         "fileName": plan_path.name,
         "sha256": sha256_file(plan_path),
@@ -3003,8 +3080,10 @@ output "plane_storage_bucket_name" {{ value = module.thinkwork.plane_storage_buc
     return vars_json
 
 
-def sync_release_artifacts():
+def sync_release_artifacts(artifact_types=None, artifact_names=None):
     global RELEASE_EVIDENCE
+    artifact_types = set(artifact_types or {"lambda", "static-site"})
+    artifact_names = set(artifact_names or [])
     manifest_url = os.environ.get("THINKWORK_RELEASE_MANIFEST_URL")
     expected = os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256", "").lower()
     if not manifest_url:
@@ -3022,7 +3101,9 @@ def sync_release_artifacts():
     static_files = {}
     artifact_evidence = []
     for artifact in manifest.get("artifacts", []):
-        if artifact.get("type") not in {"lambda", "static-site"}:
+        if artifact.get("type") not in artifact_types:
+            continue
+        if artifact_names and artifact.get("name") not in artifact_names:
             continue
         destination, digest, source = materialize_release_artifact(artifact, bundled_paths)
         artifact_evidence.append(
@@ -3054,6 +3135,20 @@ def sync_release_artifacts():
         "artifacts": artifact_evidence,
     }
     return static_files
+
+
+def write_current_outputs_from_state(stage, outputs_path):
+    outputs = current_terraform_outputs(stage)
+    required = ["app_bucket_name", "app_distribution_id", "app_url"]
+    missing = [name for name in required if name not in outputs]
+    if missing:
+        raise RuntimeError(
+            "Web-only update requires existing Terraform outputs in state; missing "
+            + ", ".join(missing)
+        )
+    outputs_path.parent.mkdir(parents=True, exist_ok=True)
+    outputs_path.write_text(json.dumps(outputs, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return outputs
 
 
 def write_outputs_to_ssm(outputs_path, vars_json):
@@ -3261,13 +3356,16 @@ def runtime_profile(outputs, vars_json):
     return profile, web_env + "\n"
 
 
-def sync_static(outputs_path, static_files, vars_json):
+def sync_static(outputs_path, static_files, vars_json, artifact_names=None):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
+    artifact_names = set(artifact_names or [])
     syncs = [
         ("web", "app_bucket_name", "app_distribution_id"),
         ("docs", "docs_bucket_name", "docs_distribution_id"),
     ]
     for artifact_name, bucket_output, distribution_output in syncs:
+        if artifact_names and artifact_name not in artifact_names:
+            continue
         archive = static_files.get(artifact_name)
         bucket = outputs.get(bucket_output, {}).get("value")
         if not archive or not bucket:
@@ -3393,7 +3491,7 @@ def write_deployment_status_pointer(status, vars_json=None, terraform_exit_code=
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION")
     if os.environ.get("THINKWORK_MANAGED_APP_OPERATION") == "true":
         return
-    if not bucket or action not in {"deploy", "update"}:
+    if not bucket or action not in {"deploy", "update", "web"}:
         return
     vars_json = vars_json or {}
     previous = read_current_status_pointer(bucket)
@@ -3531,7 +3629,7 @@ def main():
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION") or payload.get("action") or "deploy"
     if action == "teardown":
         action = "destroy"
-    if action not in {"deploy", "update", "destroy", "plan", "status"}:
+    if action not in {"deploy", "update", "destroy", "plan", "status", "web"}:
         raise RuntimeError(f"Unsupported deployment action: {action}")
     os.environ["THINKWORK_DEPLOYMENT_ACTION"] = action
     configure_managed_app_evidence_prefix(payload)
@@ -3552,11 +3650,13 @@ def main():
         return 0
 
     runner_secrets = secret_payload(payload)
-    static_files = (
-        sync_release_artifacts()
-        if action in {"deploy", "update"} and not is_managed_app_operation(payload)
-        else {}
-    )
+    web_only = is_web_only_operation(payload, action)
+    static_files = {}
+    if action in {"deploy", "update", "web"} and not is_managed_app_operation(payload):
+        static_files = sync_release_artifacts(
+            artifact_types={"static-site"} if web_only else None,
+            artifact_names={"web"} if web_only else None,
+        )
     vars_json = write_runner_files(payload, runner_secrets)
     controller_summary = controller_input_summary(payload)
     CONTROLLER_EVIDENCE = {
@@ -3573,6 +3673,25 @@ def main():
         )
     }
     write_evidence("running", vars_json)
+
+    if web_only:
+        outputs_path = TF / "outputs.json"
+        write_current_outputs_from_state(vars_json["stage"], outputs_path)
+        TERRAFORM_EVIDENCE["outputs"] = {
+            "fileName": "terraform-outputs.json",
+            "sha256": sha256_file(outputs_path),
+            "s3Uri": upload_evidence_artifact(outputs_path, "terraform-outputs.json"),
+            "source": "state",
+        }
+        sync_static(outputs_path, static_files, vars_json, artifact_names={"web"})
+        selected_controller_release = write_controller_release_selection_to_ssm(vars_json)
+        if selected_controller_release:
+            CONTROLLER_EVIDENCE["releaseSelection"] = write_json_evidence_artifact(
+                "controller-release-selection.json",
+                selected_controller_release,
+            )
+        write_evidence("succeeded", vars_json, 0)
+        return 0
 
     configure_cloudflare_provider_auth(vars_json["stage"])
     configure_terraform_provider_mirror()

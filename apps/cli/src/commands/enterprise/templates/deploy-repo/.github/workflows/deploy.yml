@@ -26,6 +26,7 @@ on:
           - all
           - foundation
           - artifacts
+          - web
           - overlays
           - smokes
       run_smokes:
@@ -105,24 +106,29 @@ jobs:
           terraform_wrapper: false
 
       - name: Prepare release artifacts
-        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts') }}
+        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'web') }}
         shell: bash
         run: |
           set -euo pipefail
+          PREPARE_ARGS=()
+          if [ "$COMPONENT" = "web" ]; then
+            PREPARE_ARGS+=(--artifact-type static-site --artifact-name web)
+          fi
           node scripts/apply-release.mjs prepare \
             --manifest "$RELEASE_MANIFEST" \
             --work-dir "$RELEASE_DIR" \
             --artifact-bucket "${{ steps.lock.outputs.artifact_bucket }}" \
-            --lambda-prefix "${{ steps.lock.outputs.lambda_prefix }}"
+            --lambda-prefix "${{ steps.lock.outputs.lambda_prefix }}" \
+            "${PREPARE_ARGS[@]}"
 
       - name: Terraform init
-        if: ${{ github.event.inputs.operation == 'destroy' || github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'smokes' }}
+        if: ${{ github.event.inputs.operation == 'destroy' || github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'web' || github.event.inputs.component == 'smokes' }}
         working-directory: terraform
         shell: bash
         run: terraform init -backend-config="backend-${STAGE}.hcl"
 
       - name: Select Terraform workspace
-        if: ${{ github.event.inputs.operation == 'destroy' || github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'smokes' }}
+        if: ${{ github.event.inputs.operation == 'destroy' || github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'web' || github.event.inputs.component == 'smokes' }}
         working-directory: terraform
         shell: bash
         run: |
@@ -187,14 +193,19 @@ jobs:
             --region "${{ vars.AWS_REGION }}"
 
       - name: Sync static site bundles
-        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts') }}
+        if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'foundation' || github.event.inputs.component == 'artifacts' || github.event.inputs.component == 'web') }}
         shell: bash
         run: |
           set -euo pipefail
+          STATIC_ARGS=()
+          if [ "$COMPONENT" = "web" ]; then
+            STATIC_ARGS+=(--artifact-name web)
+          fi
           node scripts/apply-release.mjs sync-static \
             --manifest "$RELEASE_MANIFEST" \
             --work-dir "$RELEASE_DIR" \
-            --terraform-dir terraform
+            --terraform-dir terraform \
+            "${STATIC_ARGS[@]}"
 
       - name: Apply customer overlay contract
         if: ${{ github.event.inputs.operation == 'deploy' && (github.event.inputs.component == 'all' || github.event.inputs.component == 'overlays') }}
