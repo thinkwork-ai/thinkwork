@@ -7,7 +7,7 @@ export const lakehouseManifest = {
   pluginKey: "lakehouse",
   displayName: "LakeHouse",
   description:
-    "LakeHouse solution shell for enterprise data platform planning. Installs the product identity now while datalake, warehouse, query, monitoring, automation, MCP, skills, and infrastructure capabilities are deferred.",
+    "LakeHouse solution for enterprise data platform planning, spanning datalake, warehouse, query, monitoring, automation, MCP, skills, and infrastructure capabilities.",
   versions: [
     {
       version: "0.1.0",
