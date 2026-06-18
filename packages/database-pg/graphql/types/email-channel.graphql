@@ -8,6 +8,7 @@ redaction metadata without returning the object reference or body content.
 """
 enum EmailChannelProvider {
   RESEND
+  SENDGRID
   SES
 }
 

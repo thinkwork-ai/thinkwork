@@ -32,6 +32,11 @@ import {
   storeEmailProviderWebhookSecret,
 } from "../../../lib/email-channel/secrets.js";
 import { createResendWebhook } from "../../../lib/email-channel/providers/resend.js";
+import {
+  listSendGridAuthenticatedDomains,
+  usableSendGridDomains,
+  type SendGridAuthenticatedDomain,
+} from "../../../lib/email-channel/providers/sendgrid.js";
 import { providerSafeError } from "../../../lib/email-channel/provider-contract.js";
 import { runEmailReadinessProbe } from "../../../lib/email-channel/readiness-probes.js";
 import { runEmailReadinessProbeMutation } from "./readiness.mutations.js";
@@ -80,11 +85,19 @@ export async function saveEmailProviderCredential(
     apiKey: args.input.apiKey,
   });
   const defaults = await emailProviderDefaults(ctx, tenantId, provider);
+  const providerConfig =
+    provider === "sendgrid"
+      ? await sendGridCredentialConfiguration({
+          apiKey: args.input.apiKey,
+          inputDomain: args.input.domain,
+        })
+      : null;
   const metadata = {
     credentialMasked: "stored",
     credentialFingerprint: fingerprint,
     credentialUpdatedAt: new Date().toISOString(),
     generatedDefaults: defaults.metadata,
+    ...(providerConfig?.metadata ?? {}),
   };
   const providerPayload = await configureEmailProvider(
     _parent,
@@ -92,15 +105,20 @@ export async function saveEmailProviderCredential(
       input: {
         providerInstallId: args.input.providerInstallId,
         provider: args.input.provider,
-        displayName: args.input.displayName ?? "Email provider",
-        status: "PENDING",
-        activeForProduction: true,
+        displayName:
+          args.input.displayName ??
+          (provider === "sendgrid" ? "SendGrid" : "Email provider"),
+        status: providerConfig?.status ?? "PENDING",
+        activeForProduction:
+          provider === "sendgrid" ? providerConfig?.status === "READY" : true,
         credentialSecretRef: secretRef,
         webhookSecretRef: args.input.webhookSecretRef,
         defaultFromEmail:
-          args.input.defaultFromEmail ?? defaults.defaultFromEmail,
+          args.input.defaultFromEmail ??
+          providerConfig?.defaultFromEmail ??
+          defaults.defaultFromEmail,
         metadata,
-        domain: args.input.domain ?? defaults.domain,
+        domain: providerConfig?.domain ?? args.input.domain ?? defaults.domain,
       },
     },
     ctx,
@@ -129,6 +147,98 @@ export async function saveEmailProviderCredential(
   if (updated) return emailProviderInstallPayload(updated);
 
   return providerPayload;
+}
+
+async function sendGridCredentialConfiguration(input: {
+  apiKey: string;
+  inputDomain?: SaveEmailProviderCredentialInput["domain"];
+}): Promise<{
+  status: "READY" | "PENDING" | "FAILED";
+  defaultFromEmail?: string;
+  domain?: ConfigureEmailProviderInput["domain"];
+  metadata: Record<string, unknown>;
+}> {
+  try {
+    const domains = await listSendGridAuthenticatedDomains({
+      credential: input.apiKey,
+    });
+    const usable = usableSendGridDomains(domains);
+    const selected =
+      selectedSendGridDomain(input.inputDomain, usable) ??
+      (usable.length === 1 ? usable[0] : null);
+    return {
+      status: selected ? "READY" : usable.length > 0 ? "PENDING" : "FAILED",
+      defaultFromEmail: selected ? `noreply@${selected.domain}` : undefined,
+      domain: selected ? sendGridDomainInput(selected) : undefined,
+      metadata: {
+        sendgridDomains: {
+          fetchedAt: new Date().toISOString(),
+          usableCount: usable.length,
+          totalCount: domains.length,
+          selectedDomainId: selected?.id ?? null,
+          choices: usable.map(sendGridDomainChoice),
+          failureCode: usable.length === 0 ? "no_usable_domains" : null,
+          guidance:
+            usable.length === 0
+              ? "Authenticate a sending domain in SendGrid, then refresh this provider."
+              : null,
+        },
+      },
+    };
+  } catch (error) {
+    const safe = providerSafeError(error);
+    return {
+      status: "FAILED",
+      metadata: {
+        sendgridDomains: {
+          fetchedAt: new Date().toISOString(),
+          usableCount: 0,
+          totalCount: 0,
+          failureCode: safe.code,
+          failureMessage: safe.message,
+        },
+      },
+    };
+  }
+}
+
+function selectedSendGridDomain(
+  inputDomain: SaveEmailProviderCredentialInput["domain"] | undefined,
+  choices: SendGridAuthenticatedDomain[],
+) {
+  if (!inputDomain?.domain) return null;
+  const requested = normalizeDomain(inputDomain.domain);
+  return (
+    choices.find(
+      (choice) =>
+        normalizeDomain(choice.domain) === requested || choice.id === requested,
+    ) ?? null
+  );
+}
+
+function sendGridDomainInput(
+  domain: SendGridAuthenticatedDomain,
+): ConfigureEmailProviderInput["domain"] {
+  const now = new Date().toISOString();
+  return {
+    domain: domain.domain,
+    ownershipType: "CUSTOMER_OWNED",
+    status: "VERIFIED",
+    sendingVerifiedAt: now,
+    inboundVerifiedAt: null,
+    dnsRecords: domain.dns,
+    providerMetadata: domain.metadata,
+  };
+}
+
+function sendGridDomainChoice(domain: SendGridAuthenticatedDomain) {
+  return {
+    id: domain.id,
+    domain: domain.domain,
+    subdomain: domain.subdomain ?? null,
+    default: domain.default,
+    username: domain.username ?? null,
+  };
 }
 
 async function runEmailReadinessAfterCredentialSave(input: {
@@ -290,9 +400,11 @@ export async function configureEmailProvider(
   const { tenantId } = await requirePluginTenantAdmin(ctx);
   const input = args.input;
   const provider = graphqlEnumToDb(input.provider);
-  const activeForProduction = input.activeForProduction ?? false;
+  const requestedActiveForProduction = input.activeForProduction ?? false;
+  const activeForProduction =
+    provider === "ses" ? false : requestedActiveForProduction;
   const metadata = jsonInput(input.metadata, "metadata");
-  if (activeForProduction) {
+  if (requestedActiveForProduction) {
     await ctx.db
       .update(emailProviderInstalls)
       .set({ active_for_production: false, updated_at: sql`now()` })

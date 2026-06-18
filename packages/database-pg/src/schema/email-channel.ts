@@ -26,7 +26,7 @@ import { threads } from "./threads";
 import { messages } from "./messages";
 import { inboxItems } from "./inbox-items";
 
-export const EMAIL_CHANNEL_PROVIDERS = ["resend", "ses"] as const;
+export const EMAIL_CHANNEL_PROVIDERS = ["resend", "sendgrid", "ses"] as const;
 export type EmailChannelProvider = (typeof EMAIL_CHANNEL_PROVIDERS)[number];
 
 export const EMAIL_PROVIDER_INSTALL_STATUSES = [
@@ -171,7 +171,7 @@ export const emailProviderInstalls = pgTable(
     ),
     check(
       "email_provider_installs_provider_allowed",
-      sql`${table.provider} IN ('resend', 'ses')`,
+      sql`${table.provider} IN ('resend', 'sendgrid', 'ses')`,
     ),
     check(
       "email_provider_installs_status_allowed",

@@ -52,7 +52,7 @@ describe("migration 0170 — Email Channel plugin schema", () => {
   });
 
   it("models the v1 provider, readiness, and ledger vocabularies", () => {
-    expect(EMAIL_CHANNEL_PROVIDERS).toEqual(["resend", "ses"]);
+    expect(EMAIL_CHANNEL_PROVIDERS).toEqual(["resend", "sendgrid", "ses"]);
     expect(EMAIL_PROVIDER_INSTALL_STATUSES).toEqual([
       "pending",
       "ready",

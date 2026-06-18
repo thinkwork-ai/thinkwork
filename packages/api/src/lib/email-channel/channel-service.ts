@@ -10,6 +10,7 @@ import {
   type NormalizedProviderEvent,
 } from "./provider-contract.js";
 import { createResendProvider } from "./providers/resend.js";
+import { createSendGridProvider } from "./providers/sendgrid.js";
 import { createSesProvider } from "./providers/ses.js";
 
 export interface EmailChannelService {
@@ -40,6 +41,7 @@ export function createEmailChannelService(
 ): EmailChannelService {
   const providers: Record<EmailChannelProvider, EmailProviderAdapter> = {
     resend: deps.providers?.resend ?? createResendProvider(),
+    sendgrid: deps.providers?.sendgrid ?? createSendGridProvider(),
     ses: deps.providers?.ses ?? createSesProvider(),
   };
 

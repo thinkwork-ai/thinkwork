@@ -1348,6 +1348,7 @@ export type EmailBodyObjectRef = {
  */
 export enum EmailChannelProvider {
   Resend = "RESEND",
+  Sendgrid = "SENDGRID",
   Ses = "SES",
 }
 
