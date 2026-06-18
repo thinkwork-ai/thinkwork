@@ -83,6 +83,13 @@ import { SettingsGeneral } from "./SettingsGeneral";
 
 beforeEach(() => {
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  const sendGrid = emailChannelSummary.providers.find(
+    (provider) => provider.provider === "SENDGRID",
+  );
+  if (sendGrid) {
+    sendGrid.status = "FAILED";
+    sendGrid.activeForProduction = false;
+  }
   useQueryMock.mockReset();
   useTenantMock.mockReturnValue({ isOperator: true, roleResolved: true });
   startPreflightMock.mockReset().mockResolvedValue({
@@ -205,8 +212,10 @@ describe("SettingsGeneral releases", () => {
     expect(screen.getByText("v0.1.0-canary.152")).toBeTruthy();
     expect(screen.getByText("Manifest SHA")).toBeTruthy();
     expect(screen.getByText("c".repeat(64))).toBeTruthy();
-    expect(screen.getByText("Invitation email")).toBeTruthy();
-    expect(screen.getByText("SendGrid ready")).toBeTruthy();
+    expect(screen.getByText("Email Provider")).toBeTruthy();
+    expect(screen.queryByText("Invitation email")).toBeNull();
+    expect(screen.queryByText("SendGrid ready")).toBeNull();
+    expect(screen.queryByText("Resend selected")).toBeNull();
     expect(screen.queryByText("sendgrid.example.com")).toBeNull();
   });
 
@@ -220,9 +229,14 @@ describe("SettingsGeneral releases", () => {
   });
 
   it("selects SendGrid as the invitation provider when ready", () => {
+    const sendGrid = emailChannelSummary.providers.find(
+      (provider) => provider.provider === "SENDGRID",
+    );
+    if (sendGrid) sendGrid.status = "READY";
+
     render(<SettingsGeneral />);
 
-    fireEvent.click(screen.getByLabelText("Invitation email provider"));
+    fireEvent.click(screen.getByLabelText("Email provider"));
     fireEvent.click(screen.getAllByText("SendGrid").at(-1)!);
 
     expect(configureEmailProviderMock).toHaveBeenCalledWith({
@@ -236,6 +250,16 @@ describe("SettingsGeneral releases", () => {
         metadata: expect.any(String),
       },
     });
+  });
+
+  it("omits unavailable providers from the Email Provider dropdown", () => {
+    render(<SettingsGeneral />);
+
+    fireEvent.click(screen.getByLabelText("Email provider"));
+
+    expect(screen.getAllByText("SES").length).toBeGreaterThan(0);
+    expect(screen.getByText("Resend")).toBeTruthy();
+    expect(screen.queryByText("SendGrid")).toBeNull();
   });
 
   it("runs preflight and shows preserved customer config before dispatch", async () => {
@@ -462,7 +486,7 @@ const emailChannelSummary = {
       id: "sendgrid-1",
       provider: "SENDGRID",
       displayName: "SendGrid",
-      status: "READY",
+      status: "FAILED",
       activeForProduction: false,
       credentialConfigured: true,
       defaultFromEmail: "noreply@sendgrid.example.com",

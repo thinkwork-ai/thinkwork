@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
-  Badge,
   Button,
   Dialog,
   DialogContent,
@@ -137,16 +136,15 @@ export function SettingsGeneral() {
                 >
                   {deployment?.agentcoreStatus ?? "…"}
                 </SettingsRow>
+                <EmailProviderRow
+                  summary={emailResult.data?.emailChannelSummary}
+                  onRefresh={() =>
+                    refreshEmailProviders({ requestPolicy: "network-only" })
+                  }
+                />
               </>
             )}
           </SettingsSection>
-
-          <InvitationEmailSection
-            summary={emailResult.data?.emailChannelSummary}
-            onRefresh={() =>
-              refreshEmailProviders({ requestPolicy: "network-only" })
-            }
-          />
 
           {!deploymentFailed ? (
             <SettingsSection label="Resources & URLs">
@@ -206,7 +204,7 @@ export function SettingsGeneral() {
   );
 }
 
-function InvitationEmailSection({
+function EmailProviderRow({
   summary,
   onRefresh,
 }: {
@@ -222,12 +220,6 @@ function InvitationEmailSection({
       metadata?: string | null;
       updatedAt?: string | null;
     }>;
-    domains?: Array<{
-      id: string;
-      providerInstallId: string;
-      domain: string;
-      status: string;
-    }>;
   } | null;
   onRefresh: () => void;
 }) {
@@ -239,14 +231,8 @@ function InvitationEmailSection({
     Boolean(provider.activeForProduction),
   );
   const selectedProvider = activeProvider?.provider ?? "SES";
-  const sendGridProvider = providers.find(
-    (provider) => provider.provider === "SENDGRID",
-  );
-  const resendProvider = providers.find(
-    (provider) => provider.provider === "RESEND",
-  );
-  const installedProviderOptions = providers.filter(
-    (provider) => provider.provider !== "SES",
+  const availableProviderOptions = providers.filter(
+    (provider) => provider.provider !== "SES" && provider.status === "READY",
   );
 
   async function selectProvider(provider: string) {
@@ -267,23 +253,17 @@ function InvitationEmailSection({
       onRefresh();
       return;
     }
-    const providerRow =
-      provider === "SENDGRID" ? sendGridProvider : resendProvider;
+    const providerRow = availableProviderOptions.find(
+      (option) => option.provider === provider,
+    );
     if (!providerRow) {
-      toast.error(`${providerLabel(provider)} is not configured.`);
-      return;
-    }
-    if (providerRow.status !== "READY") {
-      toast.error(`${providerLabel(provider)} is not ready for invitations.`);
+      toast.error(`${providerLabel(provider)} is not available.`);
       return;
     }
     const response = await configureProvider({
       input: {
         providerInstallId: providerRow.id,
-        provider:
-          provider === "SENDGRID"
-            ? EmailChannelProvider.Sendgrid
-            : EmailChannelProvider.Resend,
+        provider: emailProviderEnum(provider),
         displayName: providerLabel(provider),
         status: EmailProviderInstallStatus.Ready,
         activeForProduction: true,
@@ -302,68 +282,24 @@ function InvitationEmailSection({
   }
 
   return (
-    <SettingsSection label="Invitation email">
-      <SettingsRow
-        label="Provider"
-        description="Choose which email service sends tenant member invitations."
-      >
-        <div className="grid w-full min-w-[18rem] max-w-md gap-3">
-          <Select value={selectedProvider} onValueChange={selectProvider}>
-            <SelectTrigger aria-label="Invitation email provider">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="SES">SES</SelectItem>
-              {installedProviderOptions.map((provider) => (
-                <SelectItem key={provider.id} value={provider.provider}>
-                  {provider.displayName ?? providerLabel(provider.provider)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex flex-wrap gap-2">
-            <ProviderBadge
-              provider="SES"
-              selected={selectedProvider === "SES"}
-            />
-            <ProviderBadge
-              provider="RESEND"
-              row={resendProvider}
-              selected={selectedProvider === "RESEND"}
-            />
-            <ProviderBadge
-              provider="SENDGRID"
-              row={sendGridProvider}
-              selected={selectedProvider === "SENDGRID"}
-            />
-          </div>
-          {installedProviderOptions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Additional providers appear here after they are configured in the
-              Email Channel plugin.
-            </p>
-          ) : null}
-        </div>
-      </SettingsRow>
-    </SettingsSection>
-  );
-}
-
-function ProviderBadge({
-  provider,
-  row,
-  selected,
-}: {
-  provider: string;
-  row?: { status: string; credentialConfigured: boolean } | null;
-  selected: boolean;
-}) {
-  const ready = provider === "SES" || row?.status === "READY";
-  return (
-    <Badge variant={selected || ready ? "outline" : "secondary"}>
-      {providerLabel(provider)}{" "}
-      {selected ? "selected" : ready ? "ready" : "not ready"}
-    </Badge>
+    <SettingsRow
+      label="Email Provider"
+      description="Email service used for tenant member invitations."
+    >
+      <Select value={selectedProvider} onValueChange={selectProvider}>
+        <SelectTrigger aria-label="Email provider" className="w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="SES">SES</SelectItem>
+          {availableProviderOptions.map((provider) => (
+            <SelectItem key={provider.id} value={provider.provider}>
+              {provider.displayName ?? providerLabel(provider.provider)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </SettingsRow>
   );
 }
 
@@ -371,6 +307,12 @@ function providerLabel(provider: string) {
   if (provider === "SENDGRID") return "SendGrid";
   if (provider === "RESEND") return "Resend";
   return "SES";
+}
+
+function emailProviderEnum(provider: string) {
+  if (provider === "SENDGRID") return EmailChannelProvider.Sendgrid;
+  if (provider === "RESEND") return EmailChannelProvider.Resend;
+  return EmailChannelProvider.Ses;
 }
 
 interface DeploymentReleaseRow {

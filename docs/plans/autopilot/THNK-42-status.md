@@ -58,6 +58,10 @@
 - 2026-06-17 fix pass: Removed provider-specific SendGrid credential/domain UI
   from Settings -> General. General now only selects SES plus configured
   Email Channel providers.
+- 2026-06-17 fix pass: Moved the General Settings selector into the Deployment
+  section as a single Email Provider row, removed the separate Invitation email
+  section and readiness badges, and filtered the dropdown to available
+  providers only.
 - 2026-06-17 fix pass: Added SendGrid API key and authenticated-domain setup to
   the Email Channel plugin settings alongside Resend.
 - 2026-06-17 fix pass: Changed `configureEmailProvider` to persist
@@ -122,7 +126,7 @@
   - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/email-channel/__tests__/configure-provider.test.ts src/__tests__/inviteMember-computer-claim.test.ts`
     passed: 2 files, 8 tests.
   - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsGeneral.test.tsx src/components/settings/plugins/PluginDetail.test.tsx`
-    passed: 2 files, 25 tests.
+    passed: 2 files, 26 tests.
   - `pnpm --filter @thinkwork/web typecheck` passed.
   - `pnpm --filter @thinkwork/api typecheck` passed.
   - `pnpm --filter @thinkwork/plugin-email-channel typecheck` passed.
