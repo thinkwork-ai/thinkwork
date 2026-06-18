@@ -78,6 +78,36 @@ status: active
   configuring `THINKWORK_TRIGGER_STAGE=Customer` and `THINKWORK_WEBHOOK_URL`,
   and verifying a `source=twenty-app` delivery.
 
+## 2026-06-18 Twenty Workflow Version Root Query Fix
+
+- PR #2661 merged the relation-shape fix:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2661`, merge commit
+  `d108d15743356f38bf991c24ba8d7ebb33723df0`.
+- Non-mutating `wire-workflow` dry-run `27789671793` on that merge commit
+  confirmed nested `workflow.versions` is a null placeholder object in the
+  target Twenty response, not a hydrated versions list.
+- Branch dry-run `27789881562` on
+  `codex/thnk-33-workflow-version-shape` succeeded after loading versions from
+  the root `workflowVersions` query:
+  - Workflow: `Closed Won` (`e4c9942f-45b9-4922-96b5-fc69a5c1148c`), status
+    `ACTIVE`.
+  - Workflow version: `v1`
+    (`9e64a00d-4caa-47ea-a18a-9e310da2cd00`), status `ACTIVE`.
+  - Existing action: `Start ThinkWork thread`
+    (`71c36980-85a4-4079-920a-2c6b016a7b72`), type `HTTP_REQUEST`.
+  - Replacement action preview: `ThinkWork Webhook`, type `LOGIC_FUNCTION`,
+    logic function id `335d07e7-4415-4548-8be7-2b91976bf07d`, universal
+    identifier `85605c4e-d3db-4415-be84-08c5210d39e2`.
+  - Previewed mapping: `triggerStage=Customer`,
+    `workflowKey=customer_onboarding`.
+- Follow-up fix: when nested workflow versions are not hydrated, load
+  workflow versions from root `workflowVersions` queries before selecting the
+  draft/active version.
+- Runtime proof still requires merging this root-query fix, rerunning
+  non-mutating workflow wiring dry-run on `main`, applying workflow wiring to a
+  draft, configuring `THINKWORK_TRIGGER_STAGE=Customer` and
+  `THINKWORK_WEBHOOK_URL`, and verifying a `source=twenty-app` delivery.
+
 ## 2026-06-18 Twenty Logic Function Runtime Config Fix
 
 - PR #2652 merged the Twenty 2.9 compatibility fix:

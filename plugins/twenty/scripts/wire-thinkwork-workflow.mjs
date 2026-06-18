@@ -90,7 +90,27 @@ function relationItems(value, label) {
     return value.edges.map((edge) => edge?.node).filter(Boolean);
   }
   if (Array.isArray(value.nodes)) return value.nodes;
-  throw new Error(`Unexpected ${label} relation shape from Twenty GraphQL.`);
+  if (typeof value === "object" && "id" in value) {
+    return typeof value.id === "string" ? [value] : [];
+  }
+  throw new Error(
+    `Unexpected ${label} relation shape from Twenty GraphQL: ${describeShape(value)}`,
+  );
+}
+
+function describeShape(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return `array(length=${value.length})`;
+  if (typeof value !== "object") return typeof value;
+
+  const entries = Object.entries(value)
+    .slice(0, 12)
+    .map(([key, entry]) => {
+      if (Array.isArray(entry)) return `${key}:array`;
+      if (entry === null) return `${key}:null`;
+      return `${key}:${typeof entry}`;
+    });
+  return `object{${entries.join(",")}}`;
 }
 
 class TwentyGraphqlClient {
@@ -235,9 +255,15 @@ async function findWorkflowVersion(client, args) {
     );
   }
   const workflow = workflows[0];
-  const versions = relationItems(workflow.versions, "workflow versions").sort(
-    (left, right) => (left.createdAt > right.createdAt ? -1 : 1),
-  );
+  const nestedVersions = relationItems(
+    workflow.versions,
+    "workflow versions",
+  ).filter((version) => version.id);
+  const versions = (
+    nestedVersions.length > 0
+      ? nestedVersions
+      : await findWorkflowVersionsForWorkflow(client, workflow.id)
+  ).sort((left, right) => (left.createdAt > right.createdAt ? -1 : 1));
   const draft = versions.find((version) => version.status === "DRAFT");
   const active =
     versions.find(
@@ -256,6 +282,112 @@ async function findWorkflowVersion(client, args) {
       lastPublishedVersionId: workflow.lastPublishedVersionId,
     },
   };
+}
+
+async function findWorkflowVersionsForWorkflow(client, workflowId) {
+  const attempts = [
+    {
+      description: "workflowId filter",
+      query: `
+        query FindWorkflowVersionsByWorkflowId($workflowId: UUID!) {
+          workflowVersions(filter: { workflowId: { eq: $workflowId } }, first: 50) {
+            edges {
+              node {
+                id
+                name
+                status
+                createdAt
+                trigger
+                steps
+                workflow {
+                  id
+                  name
+                  statuses
+                  lastPublishedVersionId
+                }
+              }
+            }
+          }
+        }
+      `,
+      variables: { workflowId },
+    },
+    {
+      description: "workflow relation filter",
+      query: `
+        query FindWorkflowVersionsByWorkflowRelation($workflowId: UUID!) {
+          workflowVersions(filter: { workflow: { id: { eq: $workflowId } } }, first: 50) {
+            edges {
+              node {
+                id
+                name
+                status
+                createdAt
+                trigger
+                steps
+                workflow {
+                  id
+                  name
+                  statuses
+                  lastPublishedVersionId
+                }
+              }
+            }
+          }
+        }
+      `,
+      variables: { workflowId },
+    },
+    {
+      description: "client-side workflow filter",
+      query: `
+        query FindWorkflowVersionsForClientFilter {
+          workflowVersions(first: 100) {
+            edges {
+              node {
+                id
+                name
+                status
+                createdAt
+                trigger
+                steps
+                workflowId
+                workflow {
+                  id
+                  name
+                  statuses
+                  lastPublishedVersionId
+                }
+              }
+            }
+          }
+        }
+      `,
+      variables: {},
+      filter: (version) =>
+        version.workflowId === workflowId ||
+        version.workflow?.id === workflowId,
+    },
+  ];
+  const errors = [];
+  for (const attempt of attempts) {
+    try {
+      const data = await client.request(attempt.query, attempt.variables);
+      const versions = relationItems(
+        data.workflowVersions,
+        "workflowVersions",
+      ).filter((version) => !attempt.filter || attempt.filter(version));
+      if (versions.length > 0) return versions;
+      errors.push(`${attempt.description}: no versions returned`);
+    } catch (error) {
+      errors.push(
+        `${attempt.description}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  throw new Error(
+    `Could not load workflow versions for workflow ${workflowId}. Attempts: ${errors.join(" | ")}`,
+  );
 }
 
 async function createDraftFromActive(client, workflowVersion) {
