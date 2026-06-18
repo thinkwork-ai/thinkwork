@@ -879,6 +879,12 @@ locals {
       # Health check (keep placeholder alive too)
       # "GET /health" is handled by placeholder
 
+      # Public login capabilities. Unauthenticated by design; the handler
+      # resolves tenant-scoped OAuth options only from trusted API Gateway
+      # domain metadata and fails closed for unknown/shared hosts.
+      "GET /api/auth/options"     = "public-auth-options"
+      "OPTIONS /api/auth/options" = "public-auth-options"
+
       # Agents
       "ANY /api/agents/{proxy+}" = "agents"
       "ANY /api/agents"          = "agents"
