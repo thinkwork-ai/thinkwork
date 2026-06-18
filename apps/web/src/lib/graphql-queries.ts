@@ -546,6 +546,41 @@ export const StartCustomerOnboardingMutation = gql`
   }
 `;
 
+export const StartTwentyCustomerOnboardingMutation = gql`
+  mutation StartTwentyCustomerOnboarding(
+    $input: StartTwentyCustomerOnboardingInput!
+  ) {
+    startTwentyCustomerOnboarding(input: $input) {
+      action
+      threadId
+      goalId
+      idempotent
+      pluginActivationRequired
+      statusWritebackState
+      missingFields
+      thread {
+        id
+        title
+        spaceId
+      }
+      link {
+        id
+        objectId
+        objectUrl
+        workflowKey
+        outcomeKey
+        state
+        statusHandleState
+        statusHandleUrl
+        statusHandleAction
+        lastWritebackState
+        failureCode
+        failureMessage
+      }
+    }
+  }
+`;
+
 export const ComputerThreadQuery = gql`
   query ComputerThread($id: ID!, $messageLimit: Int) {
     thread(id: $id) {

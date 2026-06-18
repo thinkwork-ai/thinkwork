@@ -31,6 +31,7 @@ export * from "./email-channel";
 export * from "./thread-dependencies";
 export * from "./thread-participants";
 export * from "./linked-tasks";
+export * from "./crm-work-links";
 export * from "./retry-queue";
 export * from "./artifacts";
 export * from "./webhooks";

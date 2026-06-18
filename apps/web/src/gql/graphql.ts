@@ -1169,6 +1169,74 @@ export type CreateWebhookInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export enum CrmStatusHandleState {
+  Failed = "FAILED",
+  Pending = "PENDING",
+  Posted = "POSTED",
+  RequiresReauth = "REQUIRES_REAUTH",
+  WritebackBlocked = "WRITEBACK_BLOCKED",
+}
+
+export type CrmWorkLink = {
+  __typename?: "CrmWorkLink";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  failureCode?: Maybe<Scalars["String"]["output"]>;
+  failureMessage?: Maybe<Scalars["String"]["output"]>;
+  goalId?: Maybe<Scalars["ID"]["output"]>;
+  id: Scalars["ID"]["output"];
+  lastResumedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  lastWritebackState: CrmWritebackState;
+  mcpServerId?: Maybe<Scalars["ID"]["output"]>;
+  metadata: Scalars["AWSJSON"]["output"];
+  objectId: Scalars["String"]["output"];
+  objectType: CrmWorkLinkObjectType;
+  objectUrl?: Maybe<Scalars["String"]["output"]>;
+  outcomeKey: Scalars["String"]["output"];
+  pluginInstallId?: Maybe<Scalars["ID"]["output"]>;
+  provider: CrmWorkLinkProvider;
+  requesterUserId?: Maybe<Scalars["ID"]["output"]>;
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
+  startedAt: Scalars["AWSDateTime"]["output"];
+  state: CrmWorkLinkState;
+  statusHandleAction?: Maybe<Scalars["String"]["output"]>;
+  statusHandleState: CrmStatusHandleState;
+  statusHandleUrl?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  workflowKey: CrmWorkflowKey;
+};
+
+export enum CrmWorkLinkObjectType {
+  Opportunity = "OPPORTUNITY",
+}
+
+export enum CrmWorkLinkProvider {
+  Twenty = "TWENTY",
+}
+
+export enum CrmWorkLinkState {
+  Active = "ACTIVE",
+  Archived = "ARCHIVED",
+  Cancelled = "CANCELLED",
+  Completed = "COMPLETED",
+  Failed = "FAILED",
+  Starting = "STARTING",
+}
+
+export enum CrmWorkflowKey {
+  CustomerOnboarding = "CUSTOMER_ONBOARDING",
+}
+
+export enum CrmWritebackState {
+  Blocked = "BLOCKED",
+  Failed = "FAILED",
+  Pending = "PENDING",
+  Posted = "POSTED",
+  RequiresReauth = "REQUIRES_REAUTH",
+  Skipped = "SKIPPED",
+}
+
 export type CustomerOnboardingLinkedTaskResult = {
   __typename?: "CustomerOnboardingLinkedTaskResult";
   blocked: Scalars["Boolean"]["output"];
@@ -3000,6 +3068,7 @@ export type Mutation = {
   startReleaseUpdatePreflight: ReleaseUpdateJob;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
+  startTwentyCustomerOnboarding: StartTwentyCustomerOnboardingPayload;
   submitRunFeedback: SkillRun;
   syncKnowledgeBase: KnowledgeBase;
   /**
@@ -3879,6 +3948,10 @@ export type MutationStartSkillRunArgs = {
 
 export type MutationStartSlackWorkspaceInstallArgs = {
   input: StartSlackWorkspaceInstallInput;
+};
+
+export type MutationStartTwentyCustomerOnboardingArgs = {
+  input: StartTwentyCustomerOnboardingInput;
 };
 
 export type MutationSubmitRunFeedbackArgs = {
@@ -6747,6 +6820,37 @@ export type StartSlackWorkspaceInstallInput = {
   redirectUri?: InputMaybe<Scalars["AWSURL"]["input"]>;
   returnUrl?: InputMaybe<Scalars["AWSURL"]["input"]>;
   tenantId: Scalars["ID"]["input"];
+};
+
+export enum StartTwentyCustomerOnboardingAction {
+  Created = "CREATED",
+  Resumed = "RESUMED",
+}
+
+export type StartTwentyCustomerOnboardingInput = {
+  companyName?: InputMaybe<Scalars["String"]["input"]>;
+  opportunityId: Scalars["ID"]["input"];
+  opportunityName?: InputMaybe<Scalars["String"]["input"]>;
+  opportunityUrl?: InputMaybe<Scalars["String"]["input"]>;
+  outcomeKey?: InputMaybe<Scalars["String"]["input"]>;
+  recordSnapshot?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  startSeparateOutcome?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+};
+
+export type StartTwentyCustomerOnboardingPayload = {
+  __typename?: "StartTwentyCustomerOnboardingPayload";
+  action: StartTwentyCustomerOnboardingAction;
+  goalId?: Maybe<Scalars["ID"]["output"]>;
+  idempotent: Scalars["Boolean"]["output"];
+  link: CrmWorkLink;
+  linkedTasks: Array<CustomerOnboardingLinkedTaskResult>;
+  missingFields: Array<Scalars["String"]["output"]>;
+  pluginActivationRequired: Scalars["Boolean"]["output"];
+  statusWritebackState: CrmWritebackState;
+  thread: Thread;
+  threadId: Scalars["ID"]["output"];
 };
 
 export type StatusCount = {
@@ -9885,6 +9989,25 @@ export type SettingsSaveEmailProviderCredentialMutation = {
     activeForProduction: boolean;
     credentialConfigured: boolean;
     webhookSecretConfigured: boolean;
+    defaultFromEmail?: string | null;
+    metadata: any;
+    updatedAt: any;
+  };
+};
+
+export type SettingsConfigureEmailProviderMutationVariables = Exact<{
+  input: ConfigureEmailProviderInput;
+}>;
+
+export type SettingsConfigureEmailProviderMutation = {
+  __typename?: "Mutation";
+  configureEmailProvider: {
+    __typename?: "EmailProviderInstall";
+    id: string;
+    provider: EmailChannelProvider;
+    status: EmailProviderInstallStatus;
+    activeForProduction: boolean;
+    credentialConfigured: boolean;
     defaultFromEmail?: string | null;
     metadata: any;
     updatedAt: any;
@@ -18189,6 +18312,76 @@ export const SettingsSaveEmailProviderCredentialDocument = {
 } as unknown as DocumentNode<
   SettingsSaveEmailProviderCredentialMutation,
   SettingsSaveEmailProviderCredentialMutationVariables
+>;
+export const SettingsConfigureEmailProviderDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsConfigureEmailProvider" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "ConfigureEmailProviderInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "configureEmailProvider" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "provider" } },
+                { kind: "Field", name: { kind: "Name", value: "status" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "activeForProduction" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "credentialConfigured" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "defaultFromEmail" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "metadata" } },
+                { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsConfigureEmailProviderMutation,
+  SettingsConfigureEmailProviderMutationVariables
 >;
 export const SettingsRunEmailReadinessProbeDocument = {
   kind: "Document",

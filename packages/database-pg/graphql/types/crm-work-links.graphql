@@ -1,0 +1,102 @@
+enum CrmWorkLinkProvider {
+  TWENTY
+}
+
+enum CrmWorkLinkObjectType {
+  OPPORTUNITY
+}
+
+enum CrmWorkflowKey {
+  CUSTOMER_ONBOARDING
+}
+
+enum CrmWorkLinkState {
+  STARTING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  FAILED
+  ARCHIVED
+}
+
+enum CrmStatusHandleState {
+  PENDING
+  POSTED
+  REQUIRES_REAUTH
+  WRITEBACK_BLOCKED
+  FAILED
+}
+
+enum CrmWritebackState {
+  PENDING
+  POSTED
+  REQUIRES_REAUTH
+  BLOCKED
+  FAILED
+  SKIPPED
+}
+
+enum StartTwentyCustomerOnboardingAction {
+  CREATED
+  RESUMED
+}
+
+type CrmWorkLink {
+  id: ID!
+  tenantId: ID!
+  provider: CrmWorkLinkProvider!
+  objectType: CrmWorkLinkObjectType!
+  objectId: String!
+  objectUrl: String
+  workflowKey: CrmWorkflowKey!
+  outcomeKey: String!
+  spaceId: ID
+  threadId: ID
+  goalId: ID
+  requesterUserId: ID
+  pluginInstallId: ID
+  mcpServerId: ID
+  state: CrmWorkLinkState!
+  statusHandleState: CrmStatusHandleState!
+  statusHandleUrl: String
+  statusHandleAction: String
+  lastWritebackState: CrmWritebackState!
+  failureCode: String
+  failureMessage: String
+  metadata: AWSJSON!
+  startedAt: AWSDateTime!
+  lastResumedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input StartTwentyCustomerOnboardingInput {
+  tenantId: ID!
+  spaceId: ID
+  opportunityId: ID!
+  opportunityUrl: String
+  opportunityName: String
+  companyName: String
+  outcomeKey: String
+  startSeparateOutcome: Boolean
+  recordSnapshot: AWSJSON
+}
+
+type StartTwentyCustomerOnboardingPayload {
+  action: StartTwentyCustomerOnboardingAction!
+  thread: Thread!
+  threadId: ID!
+  goalId: ID
+  idempotent: Boolean!
+  missingFields: [String!]!
+  linkedTasks: [CustomerOnboardingLinkedTaskResult!]!
+  link: CrmWorkLink!
+  pluginActivationRequired: Boolean!
+  statusWritebackState: CrmWritebackState!
+}
+
+extend type Mutation {
+  startTwentyCustomerOnboarding(
+    input: StartTwentyCustomerOnboardingInput!
+  ): StartTwentyCustomerOnboardingPayload!
+}

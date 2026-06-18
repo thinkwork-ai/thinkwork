@@ -1,116 +1,118 @@
 ---
-date: 2026-06-17
+date: 2026-06-18
 linear: THNK-33
 status: active
 ---
 
-# THNK-33 Twenty Server Contract Autopilot Status
+# THNK-33 Twenty-Native Launch Proof Status
 
 ## Current State
 
-- Linear issue: THNK-33, moved to `In Progress` on 2026-06-17 after the
-  server-contract-only implementation started.
-- Implementation base: `origin/main`; active worktree branch:
-  `codex/thnk-33-twenty-server-contract`.
-- Current proof target: `server_contract_verified`.
-- Explicitly blocked proof target: `native_producer_verified = false`.
+- Linear issue: THNK-33 was reopened from `Done` to `Ready to Work` after the
+  prior pass over-advanced the issue.
+- Implementation base: fresh `origin/main`; active branch:
+  `codex/thnk-33-twenty-native-proof`.
+- Prior merged proof: PR #2612 delivered `server_contract_verified` only.
+- Current proof target: smallest user-visible Twenty Opportunity launch/resume
+  path for Customer Onboarding.
+- Explicitly not claimed: rich Twenty embedded app packaging,
+  Twenty logic-function installation, and native Twenty status writeback
+  execution.
 
-## Context Read
+## Rebound Evidence
 
-- `AGENTS.md` repository workflow, including Linear automation worktree,
-  planning/status artifact, PR, CI, merge, and cleanup requirements.
-- Linear issue THNK-33, comments, and attached documents:
-  - `U0 Verification: Twenty Embedded Application Proof Gate`
-  - `Plan: Twenty Server Contract Verification`
-  - `Requirements: Twenty-native ThinkWork operating surface`
-  - `Twenty-native ThinkWork workflow options`
-- Repo-local planning and requirements:
-  - `docs/plans/2026-06-16-001-feat-thread-event-sources-plan.md`
-  - `docs/plans/2026-06-16-001-feat-twenty-native-operating-surface-plan.md`
-  - `docs/brainstorms/2026-06-16-thread-event-sources-requirements.md`
-  - `docs/brainstorms/2026-06-16-twenty-native-operating-surface-requirements.md`
-- Application Plugin context from the U0 result:
-  - `packages/plugin-catalog/src/plugins/twenty/manifest.ts` does not exist on
-    current `main`.
-  - The desired Twenty embedded application/native producer is not installable
-    by the current plugin engine yet.
-  - Self-hosted Twenty logic-function/app packaging remains a future product
-    proof, not part of this implementation slice.
+- PR #2612 only added signed server-side task-event ingress, Twenty linked-task
+  provider support, idempotent append/wake behavior, diagnostics, fixtures, and
+  the server-contract runbook.
+- Linear comments on 2026-06-17 explicitly recorded that #2612 did not
+  implement native Twenty embedded app installation, plugin manifest packaging,
+  logic-function producer installation, or `native_producer_verified`.
+- The 2026-06-18 dispatcher prompt corrected the issue back to implementation
+  work because user-visible Twenty-native launch/status proof was missing.
 
 ## Scope Decision
 
-Proceed with a server-contract-only implementation:
+Implement a constrained fallback that proves the approved user workflow without
+claiming the blocked native producer path:
 
-- Signed normalized Twenty task-event ingress.
-- `twenty` linked-task provider support.
-- Status-change and comment-event normalization.
-- Tenant-scoped idempotent linked-task event append behavior.
-- Append-and-wake behavior through existing linked-task wake paths.
-- Durable diagnostics for authenticated deliveries, including unmatched task
-  events, without raw-body logging.
-- Smoke fixtures and deployed runbook for `server_contract_verified`.
-
-Do not implement native Twenty app installation, plugin-catalog manifest work,
-embedded component packaging, or Twenty logic-function deployment in this unit.
+- Add durable `crm_work_links` for one active
+  Twenty Opportunity + Customer Onboarding outcome.
+- Add `startTwentyCustomerOnboarding`, a first-slice GraphQL mutation that
+  resumes an existing link before requiring fresh CRM auth, and requires the
+  installed `twenty` plugin plus current-user activation before creating new
+  work.
+- Add an authenticated web launch route:
+  `/crm/twenty/opportunity/:objectId/customer_onboarding`.
+- Record status/writeback state on the link as `blocked` with
+  `NATIVE_TWENTY_WRITEBACK_NOT_VERIFIED` until deployed self-hosted Twenty app
+  runtime/writeback can be proven.
+- Document verification and blocker evidence separately from the already-landed
+  server task-event proof.
 
 ## Progress
 
-| Unit                                               | Status              | Evidence                                                                                                                |
-| -------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| U0 verification and plan pivot                     | Complete            | Linear docs updated before implementation; native producer marked blocked                                               |
-| U1 linked-task provider/event contracts            | Implemented locally | Added `twenty` provider and `comment_added` event contract plus migration                                               |
-| U2 signed task-event normalization and diagnostics | Implemented locally | Added timestamped HMAC, freshness checks, safe delivery diagnostics, Twenty fixtures                                    |
-| U3 linked-task append/wake behavior                | Implemented locally | Twenty status/comment events resolve by linked task id, dedupe by provider event id, append compact messages, wake once |
-| U4 deployed smoke/runbook                          | Implemented locally | Added runbook and smoke fixtures; live deployed smoke still pending environment execution                               |
-| PR lint fix                                        | Complete            | Renamed platform migration/fixtures to provider-neutral paths; `pnpm lint` passes locally                               |
-| Pull request                                       | Open                | PR #2612: https://github.com/thinkwork-ai/thinkwork/pull/2612                                                           |
-| Native producer / embedded app package             | Blocked follow-up   | Not attempted in this server-contract-only slice                                                                        |
+| Unit                                   | Status              | Evidence                                                                    |
+| -------------------------------------- | ------------------- | --------------------------------------------------------------------------- |
+| Discovery and rebound classification   | Complete            | Linear state history and comments confirm Done -> Ready rebound after #2612 |
+| CRM work-link schema                   | Implemented locally | `crm_work_links` schema, migration, GraphQL contract, schema test           |
+| Twenty Opportunity onboarding mutation | Implemented locally | Resume-first/create-with-activation mutation plus focused resolver tests    |
+| Web launch route                       | Implemented locally | Authenticated CRM launch page and component tests                           |
+| Native Twenty app/writeback blocker    | Documented locally  | Status link failure code and verification doc                               |
+| PR                                     | Pending             | Not opened yet                                                              |
+| CI/merge                               | Pending             | Not run remotely yet                                                        |
 
-## Security Notes
+## Native Twenty Blocker
 
-- Timestamp freshness is required for task-event ingress using
-  `x-thinkwork-timestamp`.
-- HMAC verification signs `timestamp.rawBody`.
-- Idempotency is scoped by tenant, provider, and external event id.
-- Authenticated delivery diagnostics avoid raw-body logging and store only
-  bounded safe fields such as body hash/size and normalized metadata.
-- CRM/user text is treated as untrusted and rendered as compact bounded Thread
-  message content, not raw provider payload.
-- Diagnostics retention uses the existing `webhook_deliveries` retention model;
-  this unit does not add a new retention surface.
+Current `origin/main` now contains `plugins/twenty`, but this pass still cannot
+honestly claim native Twenty embedded app or logic-function installation proof:
+
+- `plugins/twenty/src/manifest.ts` includes `mcp-server` and `infrastructure`
+  components only; it does not package a Twenty app/front component/logic
+  function producer.
+- The manifest's comments keep UI/native app surfaces out of scope for the
+  current package contract.
+- The approved native operating-surface plan says rich embedded panels and
+  native app extension packaging require deployed self-hosted capability
+  verification before they can be treated as product proof.
+- The current implementation therefore records CRM status handle state in
+  ThinkWork and exposes the launch/resume route, but leaves actual Twenty-side
+  writeback as blocked pending deployed runtime evidence.
 
 ## Verification Log
 
-Rebased branch verification on 2026-06-17:
+Local verification on 2026-06-18:
 
 - `pnpm schema:build`
 - `pnpm --filter @thinkwork/web codegen`
 - `pnpm --filter @thinkwork/mobile codegen`
 - `pnpm --filter thinkwork-cli codegen`
-- `pnpm --filter @thinkwork/api test -- src/__tests__/webhook-shared.test.ts src/__tests__/webhook-task-event.test.ts src/lib/linked-tasks/sync-linked-task.test.ts`
-- `pnpm --filter @thinkwork/database-pg test -- __tests__/linked-tasks-schema.test.ts`
-- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/database-pg test -- __tests__/crm-work-links-schema.test.ts`
+- `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/crm/startCustomerOnboardingFromCrmRecord.mutation.test.ts`
+- `pnpm --filter @thinkwork/web test -- src/components/crm/CrmCustomerOnboardingLaunch.test.tsx`
 - `pnpm --filter @thinkwork/database-pg typecheck`
+- `pnpm --filter @thinkwork/api typecheck`
 - `pnpm --filter @thinkwork/web typecheck`
-- `pnpm --filter @thinkwork/mobile typecheck` returned no matching package
-  script.
 - `pnpm --filter thinkwork-cli typecheck`
+- `pnpm lint`
+- `pnpm --filter @thinkwork/web build`
 - `git diff --check`
-- `bash -n scripts/smoke/webhook-smoke.sh`
-- `bash scripts/build-lambdas.sh webhook-task-event`
-- `pnpm --filter @thinkwork/api test` passed: 509 files, 4,890 tests; 3 files
-  and 9 tests skipped.
-- `pnpm lint` after CI plugin-source-boundary feedback.
+- Targeted Prettier check via
+  `pnpm dlx prettier@3.8.2 --check --ignore-unknown <touched files>`
 
-## Pending Autopilot Steps
+Notes:
 
-- Monitor PR #2612 CI.
-- Fix any CI failures, then squash merge when green.
-- Delete the branch/worktree after merge and sync `main`.
-- Record PR/merge evidence here and in Linear.
+- `pnpm --filter @thinkwork/api codegen` reports no matching package script on
+  current `main`.
+- `pnpm --filter @thinkwork/mobile typecheck` reports no matching package
+  script on current `main`.
+- Root `pnpm format:check` cannot run in this fresh worktree because `prettier`
+  is not installed as a root dependency; the targeted `pnpm dlx prettier`
+  check passed for touched files.
 
-## Current Recommendation
+## Next Autopilot Steps
 
-Go for the server-contract implementation. Do not claim native producer or
-embedded application proof for THNK-33 until the plugin/component model can
-install a Twenty-native producer package.
+- Run format/codegen and focused verification.
+- Commit and open the implementation PR.
+- Wait for CI, fix real failures, and merge when allowed.
+- Move THNK-33 to `Verification/Review` with Eric assigned because the issue
+  has the `Human` label.
