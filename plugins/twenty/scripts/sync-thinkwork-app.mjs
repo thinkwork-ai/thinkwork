@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_REMOTE = "thinkwork-crm";
 const DEFAULT_APP_DIR = "plugins/twenty/twenty-app";
@@ -74,27 +75,46 @@ function run(command, args, options) {
   }
 }
 
+function readTwentyConfig(configPath) {
+  if (!fs.existsSync(configPath)) {
+    return {};
+  }
+
+  const rawConfig = fs.readFileSync(configPath, "utf8");
+  if (rawConfig.trim() === "") {
+    return {};
+  }
+
+  return JSON.parse(rawConfig);
+}
+
+export function buildTwentyRemoteConfig(
+  existingConfig,
+  { remoteName, url, apiKey },
+) {
+  return {
+    ...existingConfig,
+    version: existingConfig.version ?? 1,
+    defaultRemote: remoteName,
+    remotes: {
+      ...existingConfig.remotes,
+      [remoteName]: {
+        apiUrl: url,
+        apiKey,
+      },
+    },
+  };
+}
+
 function writeTwentyRemoteConfig({ remoteName, url, apiKey }) {
   const configDir = path.join(os.homedir(), ".twenty");
   const configPath = path.join(configDir, "config.json");
   fs.mkdirSync(configDir, { recursive: true });
-  const existingConfig = fs.existsSync(configPath)
-    ? JSON.parse(fs.readFileSync(configPath, "utf8"))
-    : {};
+  const existingConfig = readTwentyConfig(configPath);
   fs.writeFileSync(
     configPath,
     JSON.stringify(
-      {
-        ...existingConfig,
-        version: existingConfig.version ?? 1,
-        remotes: {
-          ...existingConfig.remotes,
-          [remoteName]: {
-            apiUrl: url,
-            apiKey,
-          },
-        },
-      },
+      buildTwentyRemoteConfig(existingConfig, { remoteName, url, apiKey }),
       null,
       2,
     ),
@@ -135,9 +155,13 @@ function main() {
   });
 
   if (args.dryRun) {
-    run("yarn", ["twenty", "dev", "--once", "--dry-run"], {
-      cwd: args.appDir,
-    });
+    run(
+      "yarn",
+      ["twenty", "--remote", args.remoteName, "dev", "--once", "--dry-run"],
+      {
+        cwd: args.appDir,
+      },
+    );
     return;
   }
 
@@ -151,9 +175,11 @@ function main() {
   });
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
