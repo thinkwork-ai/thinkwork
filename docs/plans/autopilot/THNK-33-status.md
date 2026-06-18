@@ -28,6 +28,11 @@ status: active
   requires an authorized operator to dispatch this workflow in apply mode,
   configure the ThinkWork app settings, and verify a `source=twenty-app`
   delivery.
+- Non-mutating workflow validation on `main` exposed a package isolation issue:
+  Yarn 4 treated `plugins/twenty/twenty-app` as part of the root project unless
+  the nested app carried its own `yarn.lock`. Follow-up adds that nested
+  project marker so `yarn install` in the app directory works in GitHub Actions
+  and in the sync script.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
