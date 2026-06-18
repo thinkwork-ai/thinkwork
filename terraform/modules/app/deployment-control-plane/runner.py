@@ -3081,6 +3081,7 @@ output "db_secret_arn" {{ value = module.thinkwork.db_secret_arn }}
 output "database_name" {{ value = module.thinkwork.database_name }}
 output "user_pool_id" {{ value = module.thinkwork.user_pool_id }}
 output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
+output "identity_provider_names" {{ value = module.thinkwork.identity_provider_names }}
   output "docs_bucket_name" {{ value = module.thinkwork.docs_bucket_name }}
   output "docs_distribution_id" {{ value = module.thinkwork.docs_distribution_id }}
   output "docs_distribution_domain" {{ value = module.thinkwork.docs_distribution_domain }}

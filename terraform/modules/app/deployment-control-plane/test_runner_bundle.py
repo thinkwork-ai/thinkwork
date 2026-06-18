@@ -1043,6 +1043,10 @@ def test_write_runner_files_threads_customer_domain_vars_from_payload(
     assert 'alias  = "us_east_1"' in main_tf
     assert 'region = "us-east-1"' in main_tf
     assert "aws.us_east_1 = aws.us_east_1" in main_tf
+    assert (
+        'output "identity_provider_names" { value = module.thinkwork.identity_provider_names }'
+        in main_tf
+    )
 
 
 def test_write_runner_files_without_domain_keeps_defaults_and_provider_alias(
