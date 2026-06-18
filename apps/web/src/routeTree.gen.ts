@@ -97,6 +97,7 @@ import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./rou
 import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_shell/memory.kbs.$kbId";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.$executionId";
 import { Route as AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.edit.$testCaseId";
+import { Route as AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport } from "./routes/_authed/crm.$provider.$objectType.$objectId.$workflowKey";
 import { Route as AuthedShellSpacesSpaceIdThreadsThreadIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId.threads.$threadId";
 
 const SignInRoute = SignInRouteImport.update({
@@ -591,6 +592,12 @@ const AuthedSettingsEvaluationsStudioEditTestCaseIdRoute =
     path: "/evaluations/studio/edit/$testCaseId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute =
+  AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport.update({
+    id: "/crm/$provider/$objectType/$objectId/$workflowKey",
+    path: "/crm/$provider/$objectType/$objectId/$workflowKey",
+    getParentRoute: () => AuthedRoute,
+  } as any);
 const AuthedShellSpacesSpaceIdThreadsThreadIdRoute =
   AuthedShellSpacesSpaceIdThreadsThreadIdRouteImport.update({
     id: "/threads/$threadId",
@@ -684,6 +691,7 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
+  "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
 }
@@ -768,6 +776,7 @@ export interface FileRoutesByTo {
   "/settings/evaluations/replay-tools": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
+  "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
 }
@@ -860,6 +869,7 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/_authed/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/_authed/_shell/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
+  "/_authed/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/_authed/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/_authed/settings/routines/$routineId_/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
 }
@@ -951,6 +961,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/replay-tools/"
     | "/settings/evaluations/studio/"
     | "/spaces/$spaceId/threads/$threadId"
+    | "/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/settings/evaluations/studio/edit/$testCaseId"
     | "/settings/routines/$routineId/executions/$executionId";
   fileRoutesByTo: FileRoutesByTo;
@@ -1035,6 +1046,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/replay-tools"
     | "/settings/evaluations/studio"
     | "/spaces/$spaceId/threads/$threadId"
+    | "/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/settings/evaluations/studio/edit/$testCaseId"
     | "/settings/routines/$routineId/executions/$executionId";
   id:
@@ -1126,6 +1138,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/replay-tools/"
     | "/_authed/settings/evaluations/studio/"
     | "/_authed/_shell/spaces/$spaceId/threads/$threadId"
+    | "/_authed/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/_authed/settings/evaluations/studio/edit/$testCaseId"
     | "/_authed/settings/routines/$routineId_/executions/$executionId";
   fileRoutesById: FileRoutesById;
@@ -1759,6 +1772,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/crm/$provider/$objectType/$objectId/$workflowKey": {
+      id: "/_authed/crm/$provider/$objectType/$objectId/$workflowKey";
+      path: "/crm/$provider/$objectType/$objectId/$workflowKey";
+      fullPath: "/crm/$provider/$objectType/$objectId/$workflowKey";
+      preLoaderRoute: typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport;
+      parentRoute: typeof AuthedRoute;
+    };
     "/_authed/_shell/spaces/$spaceId/threads/$threadId": {
       id: "/_authed/_shell/spaces/$spaceId/threads/$threadId";
       path: "/threads/$threadId";
@@ -2049,11 +2069,14 @@ const AuthedSettingsRouteWithChildren = AuthedSettingsRoute._addFileChildren(
 interface AuthedRouteChildren {
   AuthedShellRoute: typeof AuthedShellRouteWithChildren;
   AuthedSettingsRoute: typeof AuthedSettingsRouteWithChildren;
+  AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute: typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedShellRoute: AuthedShellRouteWithChildren,
   AuthedSettingsRoute: AuthedSettingsRouteWithChildren,
+  AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute:
+    AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute,
 };
 
 const AuthedRouteWithChildren =

@@ -74,6 +74,7 @@ import {
 } from "./tenant-credentials/index.js";
 import { deploymentMutations, deploymentQueries } from "./deployments/index.js";
 import { pluginMutations, pluginQueries } from "./plugins/index.js";
+import { crmMutations } from "./crm/index.js";
 import {
   emailChannelMutations,
   emailChannelQueries,
@@ -177,6 +178,7 @@ export const mutationResolvers: Record<string, any> = {
   ...tenantCredentialMutations,
   ...deploymentMutations,
   ...pluginMutations,
+  ...crmMutations,
   ...emailChannelMutations,
   ...quickActionMutations,
   ...customizeMutations,
