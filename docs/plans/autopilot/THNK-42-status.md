@@ -113,6 +113,7 @@
 ## Fix-Pass Local Evidence
 
 - Branch: `codex/thnk-42-ses-selection-fix`
+- PR: `https://github.com/thinkwork-ai/thinkwork/pull/2620`
 - Local validation:
   - `pnpm --filter @thinkwork/plugin-email-channel test` passed: 1 file, 7
     tests.
