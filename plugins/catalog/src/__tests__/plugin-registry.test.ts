@@ -37,6 +37,11 @@ describe("generated first-party plugin registry", () => {
         exportName: "planePluginPackage",
       },
       {
+        packageKey: "sendgrid",
+        packageName: "@thinkwork/plugin-sendgrid",
+        exportName: "sendgridPluginPackage",
+      },
+      {
         packageKey: "twenty",
         packageName: "@thinkwork/plugin-twenty",
         exportName: "twentyPluginPackage",

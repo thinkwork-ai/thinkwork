@@ -9,24 +9,24 @@ export const emailChannelPluginPackage = {
       kind: "manifest",
       path: "plugins/email-channel/src/manifest.ts",
       description:
-        "Email Channel catalog manifest and provider capability contract.",
+        "Resend Channel catalog manifest and provider capability contract.",
     },
     {
       kind: "api",
       path: "plugins/email-channel/src/provider-contract.ts",
       description:
-        "Email Channel provider keys and package-local channel contract metadata.",
+        "Resend Channel provider keys and package-local channel contract metadata.",
     },
     {
       kind: "tests",
       path: "plugins/email-channel/test",
       description:
-        "Email Channel package-local manifest and provider scope tests.",
+        "Resend Channel package-local manifest and provider scope tests.",
     },
     {
       kind: "docs",
       path: "plugins/email-channel/README.md",
-      description: "Email Channel package ownership and verification notes.",
+      description: "Resend Channel package ownership and verification notes.",
     },
   ],
   compatibilityLinks: [],

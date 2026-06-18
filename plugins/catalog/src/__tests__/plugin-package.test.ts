@@ -17,6 +17,7 @@ describe("first-party plugin packages", () => {
       "email-channel",
       "lastmile",
       "plane",
+      "sendgrid",
       "twenty",
     ]);
     expect(planePluginPackage.sourceRoot).toBe("plugins/plane");
@@ -45,6 +46,7 @@ describe("first-party plugin packages", () => {
       "email-channel",
       "lastmile",
       "plane",
+      "sendgrid",
       "twenty",
     ]);
   });

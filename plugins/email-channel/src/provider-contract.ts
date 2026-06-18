@@ -7,7 +7,8 @@ export const EMAIL_CHANNEL_CAPABILITY_KEY = "agent-space-email" as const;
 export const EMAIL_CHANNEL_SETTINGS_SURFACE =
   "settings.plugins.email-channel" as const;
 
-export interface EmailChannelProviderDeclaration extends EmailChannelProviderOption {
+export interface EmailChannelProviderDeclaration
+  extends EmailChannelProviderOption {
   description: string;
 }
 
@@ -18,12 +19,6 @@ export const emailChannelProviders = [
     recommended: true,
     description:
       "Recommended v1 provider for tenant-owned agent and Space email.",
-  },
-  {
-    key: "sendgrid",
-    displayName: "SendGrid",
-    description:
-      "Customer-owned provider for tenant member invitations using authenticated SendGrid sending domains.",
   },
   {
     key: "ses",

@@ -520,7 +520,7 @@ describe("PluginDetail", () => {
     ).toBeNull();
   });
 
-  it("renders Email Channel provider setup for operators", () => {
+  it("renders Resend provider setup for operators", () => {
     paramsState.pluginKey = "email-channel";
     mockQueries({
       install: {
@@ -535,19 +535,18 @@ describe("PluginDetail", () => {
 
     expect(screen.getByText("Resend setup blocked")).toBeTruthy();
     expect(screen.getAllByText("Resend API key").length).toBeGreaterThan(1);
-    expect(screen.getAllByText("SendGrid").length).toBeGreaterThan(0);
     expect(
       screen.getByText(/dedicated ThinkWork production key/i),
     ).toBeTruthy();
     expect(screen.getByText(/one-key setup/i)).toBeTruthy();
     expect(screen.getAllByText(/\*\.thinkwork\.ai/i).length).toBeGreaterThan(0);
     expect(screen.getByLabelText("Resend API key")).toBeTruthy();
-    expect(screen.getByLabelText("SendGrid API key")).toBeTruthy();
+    expect(screen.queryByLabelText("SendGrid API key")).toBeNull();
     expect(screen.queryByLabelText("Dedicated domain")).toBeNull();
     expect(
       screen.queryByLabelText("Webhook signing secret reference"),
     ).toBeNull();
-    expect(screen.getAllByText("Not stored").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Not stored").length).toBeGreaterThanOrEqual(1);
 
     fireEvent.change(screen.getByLabelText("Resend API key"), {
       target: { value: "re_test_123" },
@@ -557,19 +556,20 @@ describe("PluginDetail", () => {
     expect(screen.getByText("Save API key")).toBeTruthy();
   });
 
-  it("stores SendGrid credentials through the Email Channel plugin settings", async () => {
-    paramsState.pluginKey = "email-channel";
+  it("stores SendGrid credentials through the SendGrid plugin settings", async () => {
+    paramsState.pluginKey = "sendgrid";
     mockQueries({
       install: {
         ...baseInstall,
-        pluginKey: "email-channel",
+        pluginKey: "sendgrid",
         state: "installed",
       },
       activations: [],
-      catalog: [emailChannelEntry],
+      catalog: [sendGridEntry],
     });
     render(<PluginDetail />);
 
+    expect(screen.queryByLabelText("Resend API key")).toBeNull();
     fireEvent.change(screen.getByLabelText("SendGrid API key"), {
       target: { value: "SG.secret-key" },
     });
@@ -869,8 +869,8 @@ const planeEntry = {
 const emailChannelEntry = {
   __typename: "PluginCatalogEntry" as const,
   pluginKey: "email-channel",
-  displayName: "Email Channel",
-  description: "Provider-backed tenant agent and Space email channel.",
+  displayName: "Resend Channel",
+  description: "Resend-backed tenant agent and Space email channel.",
   latestVersion: "0.1.0",
   updateAvailable: false,
   premium: null,
@@ -885,6 +885,32 @@ const emailChannelEntry = {
           key: "email-channel",
           type: "email-channel",
           displayName: "Email channel",
+        },
+      ],
+    },
+  ],
+  install: null,
+};
+
+const sendGridEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "sendgrid",
+  displayName: "SendGrid",
+  description: "SendGrid invitation email provider.",
+  latestVersion: "0.1.0",
+  updateAvailable: false,
+  premium: null,
+  entitlement: null,
+  versions: [
+    {
+      version: "0.1.0",
+      payloadSha256: "sha256:sendgrid",
+      requiredOauthScopes: [],
+      components: [
+        {
+          key: "settings",
+          type: "ui-surface",
+          displayName: "SendGrid settings",
         },
       ],
     },

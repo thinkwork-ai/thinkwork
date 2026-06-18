@@ -3,9 +3,9 @@
 ## Current State
 
 - Linear status: In Progress
-- Worker branch: `codex/thnk-42-ses-selection-fix`
-- Base: `origin/main` at `8305b3dc63f2342f4f35772a48dce934210e02c3`
-- Phase: Verification rebound fix pass
+- Worker branch: `codex/thnk-42-sendgrid-plugin-catalog`
+- Base: `origin/main` at `70acda9f5efab04a641309dbb40e04ffa4d6ab73`
+- Phase: Verification rebound fix pass (catalog/plugin correction)
 
 ## Discovery
 
@@ -72,6 +72,18 @@
 - 2026-06-17 fix pass: Added regression coverage for active SES with stale
   configured Resend, and for SendGrid credential setup living under the plugin
   settings page rather than General.
+- 2026-06-17 second fix pass: Moved THNK-42 back to In Progress after local
+  verification showed SendGrid was still hidden inside the Email Channel catalog
+  row instead of being a standalone plugin.
+- 2026-06-17 second fix pass: Added `plugins/sendgrid` as a first-party
+  `@thinkwork/plugin-sendgrid` package, regenerated the plugin catalog registry,
+  and restored the existing `email-channel` package display to Resend Channel
+  scope.
+- 2026-06-17 second fix pass: Routed the SendGrid plugin detail page to the
+  SendGrid credential/domain setup while keeping the Resend Channel page focused
+  on Resend setup.
+- 2026-06-17 second fix pass: Moved the General Settings Email Provider row
+  into Resources & URLs as the first item.
 
 ## PR Evidence
 
@@ -133,3 +145,20 @@
   - `pnpm --filter @thinkwork/api typecheck` passed.
   - `pnpm --filter @thinkwork/plugin-email-channel typecheck` passed.
   - `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+
+## Second Fix-Pass Local Evidence
+
+- Branch: `codex/thnk-42-sendgrid-plugin-catalog`
+- Local validation:
+  - `pnpm --filter @thinkwork/plugin-sendgrid test` passed: 1 file, 3 tests.
+  - `pnpm --filter @thinkwork/plugin-email-channel test` passed: 1 file, 7
+    tests.
+  - `pnpm --filter @thinkwork/plugin-catalog test` passed: 5 files, 59 tests.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginDetail.test.tsx src/components/settings/plugins/PluginsPage.test.tsx src/components/settings/SettingsGeneral.test.tsx`
+    passed: 3 files, 39 tests.
+  - `pnpm --filter @thinkwork/plugin-sendgrid typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-email-channel typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `node scripts/verify-plugin-source-boundary.mjs` passed.
+  - `git diff --check` passed.
