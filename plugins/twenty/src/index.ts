@@ -31,6 +31,12 @@ export const twentyPluginPackage = {
       description: "Twenty MCP cutover orchestration contract.",
     },
     {
+      kind: "runtime",
+      path: "plugins/twenty/twenty-app",
+      description:
+        "Native Twenty app package that exposes the ThinkWork Webhook workflow action.",
+    },
+    {
       kind: "tests",
       path: "plugins/twenty/test",
       description: "Twenty package-local manifest and contract tests.",

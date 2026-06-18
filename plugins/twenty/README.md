@@ -14,10 +14,14 @@ remaining infrastructure and activation source.
 - `src/deployment/managed-app.ts` owns the Twenty managed-app deployment
   adapter.
 - `src/api/cutover.ts` owns the Twenty MCP cutover orchestration contract.
+- `twenty-app/` owns the native Twenty app source package. It installs as an
+  application named `ThinkWork` and exposes a workflow action named
+  `ThinkWork Webhook`.
 - `terraform/twenty/` owns the Twenty managed-app Terraform module.
 - `smoke/` owns Twenty managed-app and MCP OAuth smoke scripts.
 - `test/manifest.test.ts` keeps Twenty endpoint, OAuth, infrastructure, and
-  managed-app input contracts aligned.
+  managed-app input contracts aligned, including the presence of the native
+  Twenty app package.
 
 ## Verification
 
@@ -25,3 +29,7 @@ remaining infrastructure and activation source.
 pnpm --filter @thinkwork/plugin-twenty test
 pnpm --filter @thinkwork/plugin-twenty typecheck
 ```
+
+The native Twenty app is intentionally a nested Twenty/Yarn project, not a
+pnpm workspace package. See `twenty-app/README.md` for dry-run and sync
+instructions.
