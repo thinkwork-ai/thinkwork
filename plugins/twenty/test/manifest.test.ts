@@ -163,6 +163,9 @@ describe("twenty plugin manifest", () => {
     expect(operationsWorkflow).toContain("Twenty ThinkWork App Operations");
     expect(operationsWorkflow).toContain("validate-package");
     expect(operationsWorkflow).toContain("APPLY TWENTY THINKWORK APP");
+    expect(operationsWorkflow).toContain(
+      "YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install",
+    );
     expect(operationsWorkflow).toContain("sync-thinkwork-app.mjs");
     expect(operationsWorkflow).toContain("wire-thinkwork-workflow.mjs");
     expect(operationsWorkflow).not.toContain("terraform-apply");
