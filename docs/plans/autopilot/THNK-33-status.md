@@ -46,6 +46,29 @@ status: active
     direct shared-binary fallback also could not resolve workspace package
     dependencies from this worktree.
 
+## 2026-06-18 Native Twenty App Package Follow-Up
+
+- User verification corrected the prior evidence: OAuth-only rows on Twenty's
+  Installed apps screen are not sufficient proof of a ThinkWork application
+  installed/visible inside Twenty.
+- Current implementation branch:
+  `codex/thnk-33-twenty-app-package`.
+- Added native Twenty app source package at `plugins/twenty/twenty-app`:
+  - `defineApplication` app display name: `ThinkWork`
+  - secret application variable: `THINKWORK_WEBHOOK_URL`
+  - workflow-action logic function: `ThinkWork Webhook`
+  - action source marker sent to ThinkWork: `source=twenty-app`
+- The intended workflow path is now:
+
+```text
+Twenty Closed Won workflow -> ThinkWork app action "ThinkWork Webhook" -> ThinkWork generic webhook
+```
+
+- The implementation still does not run production sync commands from this
+  worker. Installing/syncing the app into deployed Twenty is a production
+  mutation and must be done by deployment automation or an operator using
+  `plugins/twenty/twenty-app/README.md`.
+
 ## Current State
 
 - Linear issue: THNK-33 was reopened from `Done` to `Ready to Work` after the
@@ -106,9 +129,13 @@ claiming the blocked native producer path:
 Current `origin/main` now contains `plugins/twenty`, but this pass still cannot
 honestly claim native Twenty embedded app or logic-function installation proof:
 
-- `plugins/twenty/src/manifest.ts` includes `mcp-server` and `infrastructure`
-  components only; it does not package a Twenty app/front component/logic
-  function producer.
+- `plugins/twenty/src/manifest.ts` still includes `mcp-server` and
+  `infrastructure` components only because the ThinkWork plugin catalog schema
+  does not yet support a `twenty-app` component type.
+- The native Twenty app package now lives beside the manifest under
+  `plugins/twenty/twenty-app` and is tracked as plugin-owned runtime source,
+  but it must be synced through Twenty's app tooling before the deployed
+  Applications screen proves installation.
 - The manifest's comments keep UI/native app surfaces out of scope for the
   current package contract.
 - The approved native operating-surface plan says rich embedded panels and

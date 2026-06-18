@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { managedAppRegistry } from "@thinkwork/deployment-runner/apps/registry";
 
 import {
@@ -8,10 +11,13 @@ import {
   type McpServerComponent,
   type PluginManifest,
 } from "@thinkwork/plugin-catalog/contracts";
+import { defineFirstPartyPluginPackage } from "@thinkwork/plugin-catalog/plugin-package";
 
+import { twentyPluginPackage } from "../src";
 import { twentyManifest } from "../src/manifest";
 
 const validatedTwentyManifest = validatePluginManifest(twentyManifest);
+const testDir = dirname(fileURLToPath(import.meta.url));
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -56,6 +62,10 @@ function adapterRequiredInputs(operation: "ENABLE" | "UPGRADE"): string[] {
     .sort();
 }
 
+function readTwentyApp(path: string): string {
+  return readFileSync(join(testDir, "..", "twenty-app", path), "utf8");
+}
+
 describe("twenty plugin manifest", () => {
   it("validates: one endpointFrom mcp-server + one infrastructure component", () => {
     const validated = validatePluginManifest(twentyManifest);
@@ -76,6 +86,32 @@ describe("twenty plugin manifest", () => {
       path: "/mcp",
     });
     expect(mcp.auth).toEqual({ mode: "oauth-per-instance" });
+  });
+
+  it("owns a native Twenty app package for the ThinkWork Webhook workflow action", () => {
+    const defined = defineFirstPartyPluginPackage(twentyPluginPackage);
+
+    expect(defined.ownedSources).toContainEqual({
+      kind: "runtime",
+      path: "plugins/twenty/twenty-app",
+      description:
+        "Native Twenty app package that exposes the ThinkWork Webhook workflow action.",
+    });
+
+    const applicationConfig = readTwentyApp("src/application-config.ts");
+    const workflowAction = readTwentyApp(
+      "src/logic-functions/thinkwork-webhook.logic-function.ts",
+    );
+
+    expect(applicationConfig).toContain("defineApplication");
+    expect(applicationConfig).toContain("displayName: APP_DISPLAY_NAME");
+    expect(applicationConfig).toContain("THINKWORK_WEBHOOK_URL");
+    expect(applicationConfig).toContain("isSecret: true");
+    expect(workflowAction).toContain("defineLogicFunction");
+    expect(workflowAction).toContain("workflowActionTriggerSettings");
+    expect(workflowAction).toContain('label: "ThinkWork Webhook"');
+    expect(workflowAction).toContain("process.env.THINKWORK_WEBHOOK_URL");
+    expect(workflowAction).toContain('source: "twenty-app"');
   });
 
   it("declares the infrastructure component against the twenty adapter key", () => {
