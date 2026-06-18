@@ -447,6 +447,7 @@ def redacted_tfvars(vars_json):
         "api_auth_secret",
         "db_password",
         "google_oauth_client_secret",
+        "microsoft_oauth_client_secret",
     ]:
         if key in redacted:
             redacted[key] = "[redacted]"
@@ -2382,6 +2383,33 @@ def write_runner_files(payload, runner_secrets):
                 default="",
             ),
         ),
+        "microsoft_oauth_client_id": safe_get(
+            runner_secrets,
+            "microsoftOauthClientId",
+            default=safe_get(
+                reviewed_payload,
+                "microsoftOauthClientId",
+                default="",
+            ),
+        ),
+        "microsoft_oauth_client_secret": safe_get(
+            runner_secrets,
+            "microsoftOauthClientSecret",
+            default=safe_get(
+                reviewed_payload,
+                "microsoftOauthClientSecret",
+                default="",
+            ),
+        ),
+        "microsoft_oauth_tenant": safe_get(
+            runner_secrets,
+            "microsoftOauthTenant",
+            default=safe_get(
+                reviewed_payload,
+                "microsoftOauthTenant",
+                default="organizations",
+            ),
+        ),
         "cognito_email_source_arn": safe_get(
             runner_secrets,
             "cognitoEmailSourceArn",
@@ -2595,6 +2623,19 @@ variable "google_oauth_client_id" {{
 variable "google_oauth_client_secret" {{
   type      = string
   sensitive = true
+}}
+
+variable "microsoft_oauth_client_id" {{
+  type = string
+}}
+
+variable "microsoft_oauth_client_secret" {{
+  type      = string
+  sensitive = true
+}}
+
+variable "microsoft_oauth_tenant" {{
+  type = string
 }}
 
 variable "lambda_artifact_bucket" {{
@@ -2910,6 +2951,9 @@ module "thinkwork" {{
 
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
+  microsoft_oauth_client_id     = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret = var.microsoft_oauth_client_secret
+  microsoft_oauth_tenant        = var.microsoft_oauth_tenant
   platform_operator_emails   = var.platform_operator_emails
 
   cognito_email_source_arn       = var.cognito_email_source_arn
@@ -3273,6 +3317,17 @@ def runtime_profile(outputs, vars_json):
     def output_value(name):
         return outputs.get(name, {}).get("value")
 
+    def external_identity_providers():
+        raw = output_value("identity_provider_names") or []
+        if not isinstance(raw, list):
+            return ["Google"]
+        providers = [
+            provider
+            for provider in raw
+            if isinstance(provider, str) and provider != "COGNITO"
+        ]
+        return providers or ["COGNITO"]
+
     api_endpoint = output_value("api_endpoint") or ""
     app_url = output_value("app_url") or ""
     region = vars_json["region"]
@@ -3303,6 +3358,7 @@ def runtime_profile(outputs, vars_json):
         "cognitoDomain": cognito_domain,
         "cognitoUserPoolId": output_value("user_pool_id"),
         "cognitoClientId": output_value("admin_client_id"),
+        "identityProviders": external_identity_providers(),
         "controller": {
             "stateMachineArn": output_value("deployment_state_machine_arn")
             or os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN"),
@@ -3334,6 +3390,7 @@ def runtime_profile(outputs, vars_json):
         "VITE_COGNITO_DOMAIN": profile["cognitoDomain"],
         "VITE_COGNITO_USER_POOL_ID": profile["cognitoUserPoolId"],
         "VITE_COGNITO_CLIENT_ID": profile["cognitoClientId"],
+        "VITE_AUTH_IDENTITY_PROVIDERS": ",".join(profile["identityProviders"]),
         "VITE_DEPLOYMENT_ID": profile["deploymentId"],
         "VITE_DEPLOYMENT_DISPLAY_NAME": profile["displayName"],
         "VITE_DEPLOYMENT_PROFILE_ISSUED_AT": profile["issuedAt"],

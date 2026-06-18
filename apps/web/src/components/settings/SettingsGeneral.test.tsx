@@ -401,6 +401,7 @@ function releaseJob(overrides: Record<string, unknown> = {}) {
         },
         platformOperatorEmails: "ops@example.com",
         googleOauthClientIdConfigured: true,
+        microsoftOauthClientIdConfigured: true,
         optionalApps: {
           hindsight: true,
           cognee: false,

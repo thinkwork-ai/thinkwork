@@ -218,9 +218,36 @@ resource "aws_cognito_identity_provider" "google" {
   }
 }
 
+################################################################################
+# Microsoft Identity Provider
+################################################################################
+
+resource "aws_cognito_identity_provider" "microsoft" {
+  count         = local.create && var.microsoft_oauth_client_id != "" ? 1 : 0
+  user_pool_id  = aws_cognito_user_pool.main[0].id
+  provider_name = "Microsoft"
+  provider_type = "OIDC"
+
+  provider_details = {
+    client_id                 = var.microsoft_oauth_client_id
+    client_secret             = var.microsoft_oauth_client_secret
+    authorize_scopes          = "openid email profile"
+    oidc_issuer               = "https://login.microsoftonline.com/${var.microsoft_oauth_tenant}/v2.0"
+    token_request_method      = "POST"
+    attributes_request_method = "GET"
+  }
+
+  attribute_mapping = {
+    email    = "preferred_username"
+    name     = "name"
+    username = "sub"
+  }
+}
+
 locals {
   identity_providers = concat(
     var.google_oauth_client_id != "" ? ["Google"] : [],
+    var.microsoft_oauth_client_id != "" ? ["Microsoft"] : [],
     keys(local.oidc_identity_providers),
     keys(local.saml_identity_providers),
     ["COGNITO"]
@@ -315,6 +342,7 @@ resource "aws_cognito_user_pool_client" "admin" {
 
   depends_on = [
     aws_cognito_identity_provider.google,
+    aws_cognito_identity_provider.microsoft,
     aws_cognito_identity_provider.oidc,
     aws_cognito_identity_provider.saml,
   ]
@@ -369,6 +397,7 @@ resource "aws_cognito_user_pool_client" "mobile" {
 
   depends_on = [
     aws_cognito_identity_provider.google,
+    aws_cognito_identity_provider.microsoft,
     aws_cognito_identity_provider.oidc,
     aws_cognito_identity_provider.saml,
   ]

@@ -629,15 +629,18 @@ module "cognito" {
   existing_mobile_client_id = var.existing_mobile_client_id
   existing_identity_pool_id = var.existing_identity_pool_id
 
-  google_oauth_client_id     = var.google_oauth_client_id
-  google_oauth_client_secret = var.google_oauth_client_secret
-  oidc_identity_providers    = var.oidc_identity_providers
-  saml_identity_providers    = var.saml_identity_providers
-  pre_signup_lambda_zip      = var.pre_signup_lambda_zip
-  email_source_arn           = var.cognito_email_source_arn
-  from_email_address         = var.cognito_from_email_address
-  reply_to_email_address     = var.cognito_reply_to_email_address
-  invite_email_subject       = var.cognito_invite_email_subject
+  google_oauth_client_id        = var.google_oauth_client_id
+  google_oauth_client_secret    = var.google_oauth_client_secret
+  microsoft_oauth_client_id     = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret = var.microsoft_oauth_client_secret
+  microsoft_oauth_tenant        = var.microsoft_oauth_tenant
+  oidc_identity_providers       = var.oidc_identity_providers
+  saml_identity_providers       = var.saml_identity_providers
+  pre_signup_lambda_zip         = var.pre_signup_lambda_zip
+  email_source_arn              = var.cognito_email_source_arn
+  from_email_address            = var.cognito_from_email_address
+  reply_to_email_address        = var.cognito_reply_to_email_address
+  invite_email_subject          = var.cognito_invite_email_subject
   invite_email_message = (
     var.cognito_invite_email_message != ""
     ? var.cognito_invite_email_message

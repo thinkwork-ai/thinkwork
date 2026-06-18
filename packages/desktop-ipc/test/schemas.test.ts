@@ -75,6 +75,15 @@ describe("desktop IPC schemas", () => {
       next: "/new",
     });
     expect(
+      ChannelSchemas.startOAuth.request.parse({
+        next: "/new",
+        provider: "Microsoft",
+      }),
+    ).toEqual({
+      next: "/new",
+      provider: "Microsoft",
+    });
+    expect(
       ChannelSchemas.startOAuth.response.parse({
         url: "https://auth.example/oauth2/authorize?state=xyz",
         state: "xyz",

@@ -36,6 +36,7 @@ export const TokensChangedEventSchema = TokenStorageSnapshotSchema;
 
 export const StartOAuthRequestSchema = z
   .object({
+    provider: z.enum(["Google", "Microsoft"]).optional(),
     next: z
       .string()
       .min(1)

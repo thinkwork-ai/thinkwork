@@ -21,8 +21,9 @@ const authContextMocks = vi.hoisted(() => ({
 const authMocks = vi.hoisted(() => ({
   confirmForgotPassword: vi.fn(),
   forgotPassword: vi.fn(),
+  getEnabledAuthProviders: vi.fn(),
   getHostedSignInUrl: vi.fn(),
-  getGoogleSignInUrl: vi.fn(),
+  getProviderSignInUrl: vi.fn(),
   isPasswordSignInConfigured: vi.fn(),
 }));
 
@@ -63,8 +64,9 @@ vi.mock("@/context/AuthContext", () => ({
 vi.mock("@/lib/auth", () => ({
   confirmForgotPassword: authMocks.confirmForgotPassword,
   forgotPassword: authMocks.forgotPassword,
+  getEnabledAuthProviders: authMocks.getEnabledAuthProviders,
   getHostedSignInUrl: authMocks.getHostedSignInUrl,
-  getGoogleSignInUrl: authMocks.getGoogleSignInUrl,
+  getProviderSignInUrl: authMocks.getProviderSignInUrl,
   isPasswordSignInConfigured: authMocks.isPasswordSignInConfigured,
 }));
 
@@ -102,8 +104,17 @@ beforeEach(() => {
     isLoading: false,
   });
   authMocks.getHostedSignInUrl.mockReturnValue("https://auth.example/login");
-  authMocks.getGoogleSignInUrl.mockReturnValue(
-    "https://auth.example/login?identity_provider=Google",
+  authMocks.getEnabledAuthProviders.mockReturnValue([
+    {
+      key: "google",
+      label: "Google",
+      identityProvider: "Google",
+      prompt: "select_account",
+    },
+  ]);
+  authMocks.getProviderSignInUrl.mockImplementation(
+    (provider: { identityProvider: string }) =>
+      `https://auth.example/login?identity_provider=${provider.identityProvider}`,
   );
   authMocks.isPasswordSignInConfigured.mockReturnValue(false);
   routerMocks.search = { next: undefined };
@@ -135,7 +146,9 @@ describe("SignInPage", () => {
     // Trust plumbing (e.g. "Unsigned build-time fallback") must not leak
     // onto the end-user login page.
     expect(screen.queryByText("Unsigned build-time fallback")).toBeNull();
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Log in with Google" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Create one" })).toBeNull();
     expect(screen.queryByText(/Sign in with the Google account/i)).toBeNull();
   });
@@ -190,10 +203,13 @@ describe("SignInPage", () => {
     routerMocks.search = { next: "/automations/123" };
 
     render(<SignInPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Log in with Google" }));
 
     await waitFor(() =>
-      expect(startOAuth).toHaveBeenCalledWith({ next: "/automations/123" }),
+      expect(startOAuth).toHaveBeenCalledWith({
+        next: "/automations/123",
+        provider: "Google",
+      }),
     );
   });
 
@@ -204,7 +220,9 @@ describe("SignInPage", () => {
     render(<SignInPage />);
 
     expect(screen.getByRole("banner").textContent).toContain("ThinkWork");
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Log in with Google" }),
+    ).toBeTruthy();
   });
 
   it("shows incomplete packaged desktop configuration before OAuth starts", async () => {
@@ -232,8 +250,11 @@ describe("SignInPage", () => {
     await screen.findByText("Configuration incomplete for dev");
     expect(screen.getByText(/Missing VITE_API_URL/)).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("button", {
+          name: "Log in with Google",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
   });
 
@@ -365,7 +386,7 @@ describe("SignInPage", () => {
     );
   });
 
-  it("uses the existing browser OAuth redirect outside desktop mode", () => {
+  it("uses a provider-specific browser OAuth redirect outside desktop mode", () => {
     const navigations: string[] = [];
     Object.defineProperty(window, "location", {
       configurable: true,
@@ -381,9 +402,54 @@ describe("SignInPage", () => {
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    fireEvent.click(screen.getByRole("button", { name: "Log in with Google" }));
 
-    expect(navigations).toEqual(["https://auth.example/login"]);
+    expect(navigations).toEqual([
+      "https://auth.example/login?identity_provider=Google",
+    ]);
+    expect(authMocks.getHostedSignInUrl).not.toHaveBeenCalled();
+  });
+
+  it("renders Microsoft when the deployment enables it", () => {
+    authMocks.getEnabledAuthProviders.mockReturnValue([
+      {
+        key: "google",
+        label: "Google",
+        identityProvider: "Google",
+        prompt: "select_account",
+      },
+      {
+        key: "microsoft",
+        label: "Microsoft",
+        identityProvider: "Microsoft",
+        prompt: "select_account",
+      },
+    ]);
+    const navigations: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        set href(target: string) {
+          navigations.push(target);
+        },
+        get href() {
+          return navigations.at(-1) ?? "https://app.example/sign-in";
+        },
+      },
+    });
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+
+    render(<SignInPage />);
+    expect(
+      screen.getByRole("button", { name: "Log in with Google" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Log in with Microsoft" }),
+    );
+
+    expect(navigations).toEqual([
+      "https://auth.example/login?identity_provider=Microsoft",
+    ]);
   });
 
   it("uses Terraform-provided runtime config when build-time env is empty", () => {
@@ -417,10 +483,15 @@ describe("SignInPage", () => {
     expect(
       screen.getByText("Runtime ThinkWork · tei-e2e · us-east-1"),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
-        .disabled,
+      screen.getByRole("button", { name: "Log in with Google" }),
+    ).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Log in with Google",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(false);
   });
 
@@ -445,8 +516,11 @@ describe("SignInPage", () => {
     expect(screen.getByText("Configuration incomplete for dev")).toBeTruthy();
     expect(screen.getByText(/Missing VITE_COGNITO_CLIENT_ID/)).toBeTruthy();
     expect(
-      (screen.getByRole("button", { name: "Log in" }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("button", {
+          name: "Log in with Google",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(navigations).toEqual([]);
   });
@@ -524,6 +598,8 @@ describe("SignInPage", () => {
     render(<SignInPage />);
 
     expect(screen.queryByLabelText("Email")).toBeNull();
-    expect(screen.getByRole("button", { name: "Log in" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Log in with Google" }),
+    ).toBeTruthy();
   });
 });

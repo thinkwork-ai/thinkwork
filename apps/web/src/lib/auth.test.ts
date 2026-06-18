@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.stubEnv("VITE_COGNITO_USER_POOL_ID", "us-east-1_TestPool");
 vi.stubEnv("VITE_COGNITO_CLIENT_ID", "test-client-id");
 vi.stubEnv("VITE_COGNITO_DOMAIN", "thinkwork-test");
+vi.stubEnv("VITE_AUTH_IDENTITY_PROVIDERS", "");
 
 const ORIGINAL_LOCATION = window.location;
 const ORIGINAL_LOCAL_STORAGE = Object.getOwnPropertyDescriptor(
@@ -11,6 +12,7 @@ const ORIGINAL_LOCAL_STORAGE = Object.getOwnPropertyDescriptor(
 );
 
 beforeEach(() => {
+  vi.stubEnv("VITE_AUTH_IDENTITY_PROVIDERS", "");
   Object.defineProperty(window, "localStorage", {
     configurable: true,
     value: createMemoryStorage(),
@@ -67,6 +69,48 @@ describe("getGoogleSignInUrl", () => {
     expect(url.pathname).toBe("/oauth2/authorize");
     expect(url.searchParams.get("identity_provider")).toBe("Google");
     expect(url.searchParams.get("prompt")).toBe("select_account");
+  });
+});
+
+describe("getMicrosoftSignInUrl", () => {
+  it("targets the configured Microsoft Cognito IdP", async () => {
+    stubLocation("https://app.example");
+    const { getMicrosoftSignInUrl } = await import("./auth");
+
+    const url = new URL(getMicrosoftSignInUrl());
+    expect(url.pathname).toBe("/oauth2/authorize");
+    expect(url.searchParams.get("identity_provider")).toBe("Microsoft");
+    expect(url.searchParams.get("prompt")).toBe("select_account");
+  });
+});
+
+describe("getEnabledAuthProviders", () => {
+  it("uses Google by default when no provider list is configured", async () => {
+    const { getEnabledAuthProviders } = await import("./auth");
+
+    expect(getEnabledAuthProviders().map((provider) => provider.key)).toEqual([
+      "google",
+    ]);
+  });
+
+  it("parses Terraform provider output and drops Cognito/password auth", async () => {
+    vi.stubEnv(
+      "VITE_AUTH_IDENTITY_PROVIDERS",
+      JSON.stringify(["Google", "Microsoft", "COGNITO"]),
+    );
+    const { getEnabledAuthProviders } = await import("./auth");
+
+    expect(getEnabledAuthProviders().map((provider) => provider.key)).toEqual([
+      "google",
+      "microsoft",
+    ]);
+  });
+
+  it("can intentionally expose no external OAuth buttons", async () => {
+    vi.stubEnv("VITE_AUTH_IDENTITY_PROVIDERS", "COGNITO");
+    const { getEnabledAuthProviders } = await import("./auth");
+
+    expect(getEnabledAuthProviders()).toEqual([]);
   });
 });
 

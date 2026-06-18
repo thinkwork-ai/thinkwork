@@ -243,12 +243,18 @@ describe("auth bridge handlers", () => {
     });
 
     await expect(
-      ipcMain.invoke(START_OAUTH_CHANNEL, { next: "/automations/123" }),
+      ipcMain.invoke(START_OAUTH_CHANNEL, {
+        next: "/automations/123",
+        provider: "Microsoft",
+      }),
     ).resolves.toEqual({
       url: "https://auth.example/oauth2/authorize?state=xyz",
       state: "xyz",
     });
-    expect(startOAuth).toHaveBeenCalledWith({ next: "/automations/123" });
+    expect(startOAuth).toHaveBeenCalledWith({
+      next: "/automations/123",
+      provider: "Microsoft",
+    });
   });
 
   it("clears local storage before revoking during sign-out", async () => {

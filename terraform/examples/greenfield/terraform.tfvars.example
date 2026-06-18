@@ -76,6 +76,11 @@ db_password = "CHANGE_ME_strong_password_here"
 # google_oauth_client_id     = ""
 # google_oauth_client_secret = ""
 
+# Microsoft OAuth (optional — leave empty to skip Microsoft login)
+# microsoft_oauth_client_id     = ""
+# microsoft_oauth_client_secret = ""
+# microsoft_oauth_tenant        = "organizations"
+
 # Pre-signup Lambda (optional — leave empty if not using custom pre-signup logic)
 # pre_signup_lambda_zip = "./lambdas/pre-signup.zip"
 

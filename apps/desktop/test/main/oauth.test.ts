@@ -107,9 +107,23 @@ describe("DesktopOAuthController", () => {
       "thinkwork-dev://oauth/callback",
     );
     expect(url.searchParams.get("scope")).toBe("openid email profile");
+    expect(url.searchParams.get("identity_provider")).toBe("Google");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(url.searchParams.get("state")).toBe(result.state);
+  });
+
+  it("can open Microsoft as the requested Cognito identity provider", async () => {
+    const openExternal = vi.fn(async () => undefined);
+    const controller = createController({
+      shell: { openExternal },
+    });
+
+    const result = await controller.startOAuth({ provider: "Microsoft" });
+    const url = new URL(result.url);
+
+    expect(url.searchParams.get("identity_provider")).toBe("Microsoft");
+    expect(url.searchParams.get("prompt")).toBe("select_account");
   });
 
   it("prefers the packaged desktop scheme for canary builds pointed at dev", async () => {

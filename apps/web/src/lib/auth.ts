@@ -51,6 +51,32 @@ export interface AuthUser {
   groups: string[];
 }
 
+export type AuthProviderKey = "google" | "microsoft";
+
+export interface AuthProvider {
+  key: AuthProviderKey;
+  label: string;
+  identityProvider: "Google" | "Microsoft";
+  prompt?: string;
+}
+
+const AUTH_PROVIDER_CATALOG: Record<AuthProviderKey, AuthProvider> = {
+  google: {
+    key: "google",
+    label: "Google",
+    identityProvider: "Google",
+    prompt: "select_account",
+  },
+  microsoft: {
+    key: "microsoft",
+    label: "Microsoft",
+    identityProvider: "Microsoft",
+    prompt: "select_account",
+  },
+};
+
+const DEFAULT_AUTH_PROVIDER_KEYS: AuthProviderKey[] = ["google"];
+
 // ---------------------------------------------------------------------------
 // Sign in
 // ---------------------------------------------------------------------------
@@ -404,10 +430,35 @@ function getCognitoDomainBase(): string {
 }
 
 export function getGoogleSignInUrl(): string {
+  return getProviderSignInUrl("google");
+}
+
+export function getMicrosoftSignInUrl(): string {
+  return getProviderSignInUrl("microsoft");
+}
+
+export function getDefaultProviderSignInUrl(): string {
+  const [provider] = getEnabledAuthProviders();
+  return provider ? getProviderSignInUrl(provider) : getHostedSignInUrl();
+}
+
+export function getProviderSignInUrl(
+  providerOrKey: AuthProvider | AuthProviderKey,
+): string {
+  const provider =
+    typeof providerOrKey === "string"
+      ? AUTH_PROVIDER_CATALOG[providerOrKey]
+      : providerOrKey;
   return getHostedSignInUrl({
-    identityProvider: "Google",
-    prompt: "select_account",
+    identityProvider: provider.identityProvider,
+    prompt: provider.prompt,
   });
+}
+
+export function getEnabledAuthProviders(): AuthProvider[] {
+  const raw = readRuntimeEnv("VITE_AUTH_IDENTITY_PROVIDERS");
+  const keys = parseAuthProviderKeys(raw);
+  return keys.map((key) => AUTH_PROVIDER_CATALOG[key]);
 }
 
 /**
@@ -441,6 +492,56 @@ export function getHostedSignInUrl(options?: {
     params.set("prompt", options.prompt);
   }
   return `${getCognitoDomainBase()}/oauth2/authorize?${params.toString()}`;
+}
+
+function parseAuthProviderKeys(raw: string): AuthProviderKey[] {
+  const tokens = readAuthProviderTokens(raw);
+  const keys: AuthProviderKey[] = [];
+  for (const token of tokens.length > 0 ? tokens : DEFAULT_AUTH_PROVIDER_KEYS) {
+    const key = normalizeAuthProviderKey(token);
+    if (!key || keys.includes(key)) continue;
+    keys.push(key);
+  }
+  return keys;
+}
+
+function readAuthProviderTokens(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((value): value is string => {
+          return typeof value === "string" && value.trim().length > 0;
+        });
+      }
+    } catch {
+      return [];
+    }
+  }
+  return trimmed
+    .split(/[,\s]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function normalizeAuthProviderKey(token: string): AuthProviderKey | null {
+  const normalized = token
+    .trim()
+    .replace(/^["'\[]+|["'\]]+$/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  if (normalized === "google") return "google";
+  if (
+    normalized === "microsoft" ||
+    normalized === "microsoftentra" ||
+    normalized === "azuread" ||
+    normalized === "entra"
+  ) {
+    return "microsoft";
+  }
+  return null;
 }
 
 const POST_AUTH_REDIRECT_KEY = "thinkwork:post-auth-redirect";

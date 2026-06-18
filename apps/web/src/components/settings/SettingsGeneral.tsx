@@ -740,11 +740,7 @@ function ReleaseWorkflowPanel({
         />
         <ConfirmFact
           label="OAuth"
-          value={
-            preserved.googleOauthClientIdConfigured === true
-              ? "configured"
-              : "not configured"
-          }
+          value={oauthProvidersText(preserved)}
         />
         <ConfirmFact
           label="Optional apps"
@@ -991,6 +987,14 @@ function sesSenderText(fields: Record<string, unknown>): string {
     stringValue(ses.cognitoEmailSourceArn) ||
     "default"
   );
+}
+
+function oauthProvidersText(fields: Record<string, unknown>): string {
+  const providers = [
+    fields.googleOauthClientIdConfigured === true ? "Google" : null,
+    fields.microsoftOauthClientIdConfigured === true ? "Microsoft" : null,
+  ].filter(Boolean);
+  return providers.length > 0 ? providers.join(", ") : "not configured";
 }
 
 function optionalAppsText(optionalApps: Record<string, unknown>): string {

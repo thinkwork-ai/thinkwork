@@ -749,6 +749,9 @@ function summarizePreservedConfig(varsJson: Record<string, unknown> | null) {
     googleOauthClientIdConfigured: Boolean(
       stringValue(varsJson.google_oauth_client_id),
     ),
+    microsoftOauthClientIdConfigured: Boolean(
+      stringValue(varsJson.microsoft_oauth_client_id),
+    ),
     appDomain: stringValue(varsJson.app_domain) || null,
     appCertificateArn: stringValue(varsJson.app_certificate_arn) || null,
     optionalApps: {

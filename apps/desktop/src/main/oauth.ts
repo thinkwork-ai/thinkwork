@@ -138,7 +138,13 @@ export class DesktopOAuthController {
       next: request?.next,
     });
 
-    const url = this.buildAuthorizeUrl({ challenge, clientId, env, state });
+    const url = this.buildAuthorizeUrl({
+      challenge,
+      clientId,
+      env,
+      provider: request?.provider,
+      state,
+    });
     try {
       await this.shell.openExternal(url);
     } catch (error) {
@@ -234,10 +240,11 @@ export class DesktopOAuthController {
     challenge: string;
     clientId: string;
     env: DesktopEnvSnapshot;
+    provider?: "Google" | "Microsoft";
     state: string;
   }): string {
     const params = new URLSearchParams({
-      identity_provider: "Google",
+      identity_provider: options.provider ?? "Google",
       response_type: "code",
       client_id: options.clientId,
       redirect_uri: this.redirectUri(options.env),

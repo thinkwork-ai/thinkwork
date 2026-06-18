@@ -58,6 +58,13 @@ COMPUTER_SANDBOX_CF_ID="$(tf_output_cached_raw computer_sandbox_distribution_id 
 COMPUTER_SANDBOX_URL="$(tf_output_cached_raw computer_sandbox_url 2>/dev/null || echo '')"
 COMPUTER_SANDBOX_PARENT_ORIGINS="$(tf_output_cached_raw computer_sandbox_allowed_parent_origins 2>/dev/null || echo '')"
 MAPBOX_PUBLIC_TOKEN="${MAPBOX_PUBLIC_TOKEN:-$(tf_output_cached_raw mapbox_public_token 2>/dev/null || echo '')}"
+AUTH_IDENTITY_PROVIDERS="$(
+  jq -er '
+    (.identity_provider_names.value // [])
+    | map(select(. != "COGNITO"))
+    | if length == 0 then "COGNITO" else join(",") end
+  ' <<<"$TF_OUTPUT_JSON" 2>/dev/null || echo "Google"
+)"
 
 if [[ -z "$COMPUTER_SANDBOX_URL" || -z "$COMPUTER_SANDBOX_BUCKET" || -z "$COMPUTER_SANDBOX_CF_ID" ]]; then
   cat >&2 <<EOF
@@ -116,6 +123,7 @@ VITE_GRAPHQL_API_KEY=${APPSYNC_API_KEY}
 VITE_COGNITO_USER_POOL_ID=${USER_POOL_ID}
 VITE_COGNITO_CLIENT_ID=${ADMIN_CLIENT_ID}
 VITE_COGNITO_DOMAIN=${COGNITO_DOMAIN}
+VITE_AUTH_IDENTITY_PROVIDERS=${AUTH_IDENTITY_PROVIDERS}
 VITE_API_URL=${API_ENDPOINT}
 VITE_MAPBOX_PUBLIC_TOKEN=${MAPBOX_PUBLIC_TOKEN}
 VITE_SANDBOX_IFRAME_SRC=${COMPUTER_SANDBOX_URL:+${COMPUTER_SANDBOX_URL%/}/iframe-shell.html}

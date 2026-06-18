@@ -50,6 +50,25 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "microsoft_oauth_client_id" {
+  description = "Microsoft Entra OAuth client ID for Cognito social login (optional)."
+  type        = string
+  default     = ""
+}
+
+variable "microsoft_oauth_client_secret" {
+  description = "Microsoft Entra OAuth client secret."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "microsoft_oauth_tenant" {
+  description = "Microsoft Entra tenant segment for the OIDC issuer: organizations, common, consumers, or a tenant GUID."
+  type        = string
+  default     = "organizations"
+}
+
 variable "oidc_identity_providers" {
   description = "Additional Cognito OIDC identity providers for customer bootstrap."
   type = list(object({

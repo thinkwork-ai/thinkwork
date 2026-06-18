@@ -2126,6 +2126,7 @@ def test_runtime_profile_contains_customer_authority_metadata(
         "auth_domain": {"value": "thinkwork-tei-e2e"},
         "user_pool_id": {"value": "us-east-1_abc"},
         "admin_client_id": {"value": "client-id"},
+        "identity_provider_names": {"value": ["Google", "Microsoft", "COGNITO"]},
         "deployment_state_machine_arn": {
             "value": "arn:aws:states:us-east-1:123456789012:stateMachine:controller"
         },
@@ -2149,8 +2150,10 @@ def test_runtime_profile_contains_customer_authority_metadata(
     assert profile["accountId"] == "123456789012"
     assert profile["releaseVersion"] == "v0.1.0-canary.134"
     assert profile["releaseManifestSha256"] == "a" * 64
+    assert profile["identityProviders"] == ["Google", "Microsoft"]
     assert profile["controller"]["stateMachineArn"].endswith(":stateMachine:controller")
     assert profile["controller"]["codebuildProjectArn"].endswith(":project/runner")
+    assert "VITE_AUTH_IDENTITY_PROVIDERS=Google,Microsoft" in web_env
     assert "VITE_DEPLOYMENT_CONTROLLER_ARN=" in web_env
     assert "VITE_RELEASE_MANIFEST_SHA256=" in web_env
 
@@ -2164,6 +2167,7 @@ def test_redacted_tfvars_removes_secret_values() -> None:
             "db_password": "secret-db",
             "api_auth_secret": "secret-api",
             "google_oauth_client_secret": "secret-google",
+            "microsoft_oauth_client_secret": "secret-microsoft",
         }
     )
 
@@ -2172,6 +2176,7 @@ def test_redacted_tfvars_removes_secret_values() -> None:
         "db_password": "[redacted]",
         "api_auth_secret": "[redacted]",
         "google_oauth_client_secret": "[redacted]",
+        "microsoft_oauth_client_secret": "[redacted]",
     }
 
 

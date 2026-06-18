@@ -122,6 +122,30 @@ function buildTfvars(config: Record<string, string>): string {
     lines.push(`# google_oauth_client_secret = ""`);
   }
 
+  if (config.microsoft_oauth_client_id) {
+    lines.push(``);
+    lines.push(
+      `# ── Microsoft OAuth ──────────────────────────────────────────────`,
+    );
+    lines.push(
+      `microsoft_oauth_client_id     = "${config.microsoft_oauth_client_id}"`,
+    );
+    lines.push(
+      `microsoft_oauth_client_secret = "${config.microsoft_oauth_client_secret}"`,
+    );
+    lines.push(
+      `microsoft_oauth_tenant        = "${config.microsoft_oauth_tenant}"`,
+    );
+  } else {
+    lines.push(``);
+    lines.push(
+      `# ── Microsoft OAuth (uncomment to enable Microsoft login) ───────`,
+    );
+    lines.push(`# microsoft_oauth_client_id     = ""`);
+    lines.push(`# microsoft_oauth_client_secret = ""`);
+    lines.push(`# microsoft_oauth_tenant        = "organizations"`);
+  }
+
   if (config.admin_url && config.admin_url !== "http://localhost:5174") {
     lines.push(``);
     lines.push(
@@ -232,6 +256,9 @@ export function registerInitCommand(program: Command): void {
           config.enable_hindsight = "false";
           config.google_oauth_client_id = "";
           config.google_oauth_client_secret = "";
+          config.microsoft_oauth_client_id = "";
+          config.microsoft_oauth_client_secret = "";
+          config.microsoft_oauth_tenant = "organizations";
           config.admin_url = "http://localhost:5174";
           config.mobile_scheme = "thinkwork";
         } else {
@@ -282,6 +309,26 @@ export function registerInitCommand(program: Command): void {
           } else {
             config.google_oauth_client_id = "";
             config.google_oauth_client_secret = "";
+          }
+          const useMicrosoft = await ask(
+            "Enable Microsoft OAuth login? (y/N)",
+            "N",
+          );
+          if (useMicrosoft.toLowerCase() === "y") {
+            config.microsoft_oauth_client_id = await ask(
+              "Microsoft OAuth Client ID",
+            );
+            config.microsoft_oauth_client_secret = await ask(
+              "Microsoft OAuth Client Secret",
+            );
+            config.microsoft_oauth_tenant = await ask(
+              "Microsoft tenant (organizations/common/tenant GUID)",
+              "organizations",
+            );
+          } else {
+            config.microsoft_oauth_client_id = "";
+            config.microsoft_oauth_client_secret = "";
+            config.microsoft_oauth_tenant = "organizations";
           }
 
           console.log("");
@@ -608,6 +655,22 @@ variable "google_oauth_client_secret" {
   default   = ""
 }
 
+variable "microsoft_oauth_client_id" {
+  type    = string
+  default = ""
+}
+
+variable "microsoft_oauth_client_secret" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "microsoft_oauth_tenant" {
+  type    = string
+  default = "organizations"
+}
+
 variable "pre_signup_lambda_zip" {
   type    = string
   default = ""
@@ -693,6 +756,9 @@ module "thinkwork" {
   agentcore_memory_id        = var.agentcore_memory_id
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
+  microsoft_oauth_client_id     = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret = var.microsoft_oauth_client_secret
+  microsoft_oauth_tenant        = var.microsoft_oauth_tenant
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
   lambda_zips_dir            = var.lambda_zips_dir
   api_auth_secret            = var.api_auth_secret
@@ -799,6 +865,9 @@ output "agentcore_memory_id" {
         );
         console.log(
           `  ${chalk.bold("Google OAuth:")}    ${config.google_oauth_client_id ? "enabled" : "disabled"}`,
+        );
+        console.log(
+          `  ${chalk.bold("Microsoft OAuth:")} ${config.microsoft_oauth_client_id ? "enabled" : "disabled"}`,
         );
         console.log(`  ${chalk.bold("Directory:")}       ${tfDir}`);
         console.log(chalk.dim("  ─────────────────────────────────────"));

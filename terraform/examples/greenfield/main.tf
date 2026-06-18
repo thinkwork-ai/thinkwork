@@ -580,6 +580,25 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "microsoft_oauth_client_id" {
+  description = "Microsoft Entra OAuth client ID (optional — leave empty to skip Microsoft login)"
+  type        = string
+  default     = ""
+}
+
+variable "microsoft_oauth_client_secret" {
+  description = "Microsoft Entra OAuth client secret"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "microsoft_oauth_tenant" {
+  description = "Microsoft Entra tenant segment for the OIDC issuer: organizations, common, consumers, or a tenant GUID."
+  type        = string
+  default     = "organizations"
+}
+
 variable "pre_signup_lambda_zip" {
   description = "Path to the Cognito pre-signup Lambda zip"
   type        = string
@@ -1091,6 +1110,9 @@ module "thinkwork" {
   plane_certificate_arn                      = var.plane_certificate_arn != "" ? var.plane_certificate_arn : (local.plane_managed_certificate_enabled ? aws_acm_certificate_validation.plane[0].certificate_arn : "")
   google_oauth_client_id                     = var.google_oauth_client_id
   google_oauth_client_secret                 = var.google_oauth_client_secret
+  microsoft_oauth_client_id                  = var.microsoft_oauth_client_id
+  microsoft_oauth_client_secret              = var.microsoft_oauth_client_secret
+  microsoft_oauth_tenant                     = var.microsoft_oauth_tenant
   pre_signup_lambda_zip                      = var.pre_signup_lambda_zip
   lambda_zips_dir                            = var.lambda_zips_dir
   lambda_artifact_bucket                     = var.lambda_artifact_bucket

@@ -1,8 +1,8 @@
 /**
  * Cognito Pre Sign Up Lambda Trigger
  *
- * Auto-links federated (Google) users to existing email/password accounts.
- * When a Google user signs in for the first time, Cognito creates a new user.
+ * Auto-links federated users to existing email/password accounts.
+ * When an external IdP user signs in for the first time, Cognito creates a new user.
  * This trigger detects the duplicate email, links the external provider to the
  * existing native account, and throws to prevent the duplicate from being created.
  * Cognito then retries and succeeds with the linked account.
@@ -33,7 +33,7 @@ interface PreSignUpEvent {
 }
 
 export async function handler(event: PreSignUpEvent): Promise<PreSignUpEvent> {
-  // Only handle external provider sign-ups (e.g., Google federated login)
+  // Only handle external provider sign-ups (e.g., Google/Microsoft federated login)
   if (event.triggerSource !== "PreSignUp_ExternalProvider") {
     return event;
   }
@@ -61,6 +61,10 @@ export async function handler(event: PreSignUpEvent): Promise<PreSignUpEvent> {
   // needs the exact provider name as configured (e.g., "Google" not "google").
   const PROVIDER_NAME_MAP: Record<string, string> = {
     google: "Google",
+    microsoft: "Microsoft",
+    microsoftentra: "Microsoft",
+    azuread: "Microsoft",
+    entra: "Microsoft",
   };
 
   const rawPrefix = event.userName.includes("_")

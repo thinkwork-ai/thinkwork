@@ -6,8 +6,10 @@ import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
 import { EmailPasswordForm } from "@/components/auth/EmailPasswordForm";
 import { useAuth } from "@/context/AuthContext";
 import {
-  getGoogleSignInUrl,
+  type AuthProvider,
+  getEnabledAuthProviders,
   getHostedSignInUrl,
+  getProviderSignInUrl,
   isPasswordSignInConfigured,
 } from "@/lib/auth";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
@@ -30,6 +32,7 @@ export function SignInPage() {
   const navigate = useNavigate();
   const isDesktop = isDesktopBuild();
   const canCreateEnvironment = isCentralOnboardingHost();
+  const authProviders = useMemo(() => getEnabledAuthProviders(), []);
   const webDeploymentProfile = useMemo(
     () => getSpacesDeploymentProfileSnapshot(),
     [],
@@ -127,7 +130,7 @@ export function SignInPage() {
     }
   }
 
-  async function handleGoogle() {
+  async function handleProviderSignIn(provider: AuthProvider | null) {
     setError(null);
     const bridge = getDesktopBridge();
     if (bridge) {
@@ -139,7 +142,11 @@ export function SignInPage() {
       }
       setIsStartingOAuth(true);
       try {
-        await bridge.startOAuth(next ? { next } : undefined);
+        const request = {
+          ...(next ? { next } : {}),
+          ...(provider ? { provider: provider.identityProvider } : {}),
+        };
+        await bridge.startOAuth(Object.keys(request).length ? request : undefined);
       } catch (oauthError) {
         setError(
           oauthError instanceof Error
@@ -162,12 +169,11 @@ export function SignInPage() {
       return;
     }
 
-    // With the password form on the page, "Continue with Google" should land
-    // on Google's account picker directly — identity_provider=Google skips
-    // the unbranded Cognito hosted-UI login page. Without the form (password
-    // sign-in unconfigured), keep the generic hosted UI as the catch-all.
-    window.location.href = showPasswordForm
-      ? getGoogleSignInUrl()
+    // Provider-specific redirects skip the unbranded Cognito hosted-UI
+    // picker. That keeps customer deployments with password sign-in hidden
+    // from landing on Cognito's "login option is not available" form.
+    window.location.href = provider
+      ? getProviderSignInUrl(provider)
       : getHostedSignInUrl();
   }
 
@@ -230,32 +236,56 @@ export function SignInPage() {
           </div>
         )}
         <div className="flex w-full flex-col items-center gap-4">
-          <Button
-            onClick={() => void handleGoogle()}
-            size="lg"
-            variant={showPasswordForm ? "outline" : "default"}
-            className={showPasswordForm ? "w-full" : "min-w-40"}
-            disabled={
-              isLoading ||
-              isStartingOAuth ||
-              isProfileBusy ||
-              Boolean(desktopConfig && !desktopConfig.configured) ||
-              webConfigBlocked
-            }
-          >
-            {isLoading ? (
-              "Checking session..."
-            ) : isStartingOAuth || isProfileBusy ? (
-              "Opening..."
-            ) : showPasswordForm ? (
-              <>
-                <GoogleIcon />
-                Log in with Google
-              </>
+          <div className="flex w-full flex-col items-center gap-2">
+            {authProviders.length > 0 ? (
+              authProviders.map((provider, index) => (
+                <Button
+                  key={provider.key}
+                  onClick={() => void handleProviderSignIn(provider)}
+                  size="lg"
+                  variant={showPasswordForm || index > 0 ? "outline" : "default"}
+                  className="w-full"
+                  disabled={
+                    isLoading ||
+                    isStartingOAuth ||
+                    isProfileBusy ||
+                    Boolean(desktopConfig && !desktopConfig.configured) ||
+                    webConfigBlocked
+                  }
+                >
+                  {isLoading ? (
+                    "Checking session..."
+                  ) : isStartingOAuth || isProfileBusy ? (
+                    "Opening..."
+                  ) : (
+                    <>
+                      <ProviderIcon provider={provider.key} />
+                      Log in with {provider.label}
+                    </>
+                  )}
+                </Button>
+              ))
             ) : (
-              "Log in"
+              <Button
+                onClick={() => void handleProviderSignIn(null)}
+                size="lg"
+                className="w-full"
+                disabled={
+                  isLoading ||
+                  isStartingOAuth ||
+                  isProfileBusy ||
+                  Boolean(desktopConfig && !desktopConfig.configured) ||
+                  webConfigBlocked
+                }
+              >
+                {isLoading
+                  ? "Checking session..."
+                  : isStartingOAuth || isProfileBusy
+                    ? "Opening..."
+                    : "Log in"}
+              </Button>
             )}
-          </Button>
+          </div>
           {showPasswordForm && (
             <>
               <div
@@ -315,6 +345,22 @@ function GoogleIcon() {
       <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
     </svg>
   );
+}
+
+function MicrosoftIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#f25022" d="M3 3h8.5v8.5H3z" />
+      <path fill="#7fba00" d="M12.5 3H21v8.5h-8.5z" />
+      <path fill="#00a4ef" d="M3 12.5h8.5V21H3z" />
+      <path fill="#ffb900" d="M12.5 12.5H21V21h-8.5z" />
+    </svg>
+  );
+}
+
+function ProviderIcon({ provider }: { provider: AuthProvider["key"] }) {
+  if (provider === "microsoft") return <MicrosoftIcon />;
+  return <GoogleIcon />;
 }
 
 function desktopDeploymentLabel(config: DesktopConfig): string {

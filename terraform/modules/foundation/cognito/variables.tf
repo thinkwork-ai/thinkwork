@@ -128,6 +128,35 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "microsoft_oauth_client_id" {
+  description = "Microsoft Entra OAuth client ID for Cognito social login. Leave empty to skip Microsoft login."
+  type        = string
+  default     = ""
+}
+
+variable "microsoft_oauth_client_secret" {
+  description = "Microsoft Entra OAuth client secret for Cognito social login."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "microsoft_oauth_tenant" {
+  description = "Microsoft Entra tenant segment for the OIDC issuer. Use organizations for work/school accounts, common for work/school plus personal accounts, or a tenant ID."
+  type        = string
+  default     = "organizations"
+
+  validation {
+    condition = (
+      var.microsoft_oauth_tenant == "common" ||
+      var.microsoft_oauth_tenant == "organizations" ||
+      var.microsoft_oauth_tenant == "consumers" ||
+      can(regex("^[0-9a-fA-F-]{36}$", var.microsoft_oauth_tenant))
+    )
+    error_message = "microsoft_oauth_tenant must be common, organizations, consumers, or a tenant GUID."
+  }
+}
+
 variable "oidc_identity_providers" {
   description = "Additional Cognito OIDC identity providers. Secrets should be sourced from Secrets Manager/SSM by the caller, not committed to tfvars."
   type = list(object({
