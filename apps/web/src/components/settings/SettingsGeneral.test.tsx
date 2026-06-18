@@ -7,20 +7,29 @@ const {
   startPreflightMock,
   remediateRunnerMock,
   startReleaseUpdateMock,
+  saveEmailProviderCredentialMock,
+  configureEmailProviderMock,
   refreshReleaseJobMock,
 } = vi.hoisted(() => ({
   queryDocs: {
     SettingsDeploymentStatusQuery: Symbol("deploymentStatus"),
     SettingsDeploymentReleasesQuery: Symbol("deploymentReleases"),
     SettingsReleaseUpdateJobQuery: Symbol("releaseUpdateJob"),
+    SettingsEmailChannelQuery: Symbol("emailChannel"),
     SettingsRemediateReleaseRunnerMutation: Symbol("remediateRunner"),
     SettingsStartDeploymentReleaseUpdateMutation: Symbol("startReleaseUpdate"),
     SettingsStartReleaseUpdatePreflightMutation: Symbol("startPreflight"),
+    SettingsSaveEmailProviderCredentialMutation: Symbol(
+      "saveEmailProviderCredential",
+    ),
+    SettingsConfigureEmailProviderMutation: Symbol("configureEmailProvider"),
   },
   useQueryMock: vi.fn(),
   startPreflightMock: vi.fn(),
   remediateRunnerMock: vi.fn(),
   startReleaseUpdateMock: vi.fn(),
+  saveEmailProviderCredentialMock: vi.fn(),
+  configureEmailProviderMock: vi.fn(),
   refreshReleaseJobMock: vi.fn(),
 }));
 
@@ -33,6 +42,12 @@ vi.mock("urql", () => ({
     }
     if (query === queryDocs.SettingsRemediateReleaseRunnerMutation) {
       return [{ fetching: false }, remediateRunnerMock];
+    }
+    if (query === queryDocs.SettingsSaveEmailProviderCredentialMutation) {
+      return [{ fetching: false }, saveEmailProviderCredentialMock];
+    }
+    if (query === queryDocs.SettingsConfigureEmailProviderMutation) {
+      return [{ fetching: false }, configureEmailProviderMock];
     }
     return [{ fetching: false }, startReleaseUpdateMock];
   },
@@ -72,6 +87,7 @@ vi.mock("sonner", () => ({
 import { SettingsGeneral } from "./SettingsGeneral";
 
 beforeEach(() => {
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
   useQueryMock.mockReset();
   useTenantMock.mockReturnValue({ isOperator: true, roleResolved: true });
   startPreflightMock.mockReset().mockResolvedValue({
@@ -94,6 +110,12 @@ beforeEach(() => {
         evidencePrefix: "release-updates/job-1/update",
       }),
     },
+  });
+  saveEmailProviderCredentialMock.mockReset().mockResolvedValue({
+    data: { saveEmailProviderCredential: { id: "sendgrid-1" } },
+  });
+  configureEmailProviderMock.mockReset().mockResolvedValue({
+    data: { configureEmailProvider: { id: "sendgrid-1" } },
   });
   refreshReleaseJobMock.mockReset();
   useQueryMock.mockImplementation(({ query }: { query: symbol }) => {
@@ -136,6 +158,17 @@ beforeEach(() => {
         refreshReleaseJobMock,
       ];
     }
+    if (query === queryDocs.SettingsEmailChannelQuery) {
+      return [
+        {
+          data: {
+            emailChannelSummary,
+          },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
+    }
     return [{ fetching: false }, vi.fn()];
   });
 });
@@ -163,6 +196,12 @@ describe("SettingsGeneral releases", () => {
         query: queryDocs.SettingsDeploymentReleasesQuery,
       }),
     );
+    expect(useQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: queryDocs.SettingsEmailChannelQuery,
+        pause: true,
+      }),
+    );
   });
 
   it("shows deployed platform release in deployment details", () => {
@@ -174,6 +213,47 @@ describe("SettingsGeneral releases", () => {
     expect(screen.getByText("v0.1.0-canary.152")).toBeTruthy();
     expect(screen.getByText("Manifest SHA")).toBeTruthy();
     expect(screen.getByText("c".repeat(64))).toBeTruthy();
+    expect(screen.getByText("Invitation email")).toBeTruthy();
+    expect(screen.getByText("SendGrid ready")).toBeTruthy();
+    expect(screen.getByText("sendgrid.example.com")).toBeTruthy();
+  });
+
+  it("stores a SendGrid key without echoing it", () => {
+    render(<SettingsGeneral />);
+
+    fireEvent.change(screen.getByLabelText("SendGrid API key"), {
+      target: { value: "SG.secret-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save SendGrid Key" }));
+
+    expect(saveEmailProviderCredentialMock).toHaveBeenCalledWith({
+      input: {
+        providerInstallId: "sendgrid-1",
+        provider: "SENDGRID",
+        apiKey: "SG.secret-key",
+        displayName: "SendGrid",
+      },
+    });
+    expect(screen.queryByText("SG.secret-key")).toBeNull();
+  });
+
+  it("selects SendGrid as the invitation provider when ready", () => {
+    render(<SettingsGeneral />);
+
+    fireEvent.click(screen.getByLabelText("Invitation email provider"));
+    fireEvent.click(screen.getAllByText("SendGrid").at(-1)!);
+
+    expect(configureEmailProviderMock).toHaveBeenCalledWith({
+      input: {
+        providerInstallId: "sendgrid-1",
+        provider: "SENDGRID",
+        displayName: "SendGrid",
+        status: "READY",
+        activeForProduction: true,
+        defaultFromEmail: "noreply@sendgrid.example.com",
+        metadata: expect.any(String),
+      },
+    });
   });
 
   it("runs preflight and shows preserved customer config before dispatch", async () => {
@@ -379,4 +459,48 @@ const deployment = {
   twentyAlbArn: null,
   twentyTargetGroupArn: null,
   managedApplications: [],
+};
+
+const emailChannelSummary = {
+  productionReady: true,
+  ledgerEventCount: 0,
+  providers: [
+    {
+      id: "resend-1",
+      provider: "RESEND",
+      displayName: "Resend",
+      status: "READY",
+      activeForProduction: false,
+      credentialConfigured: true,
+      defaultFromEmail: "noreply@thinkwork.ai",
+      metadata: "{}",
+      updatedAt: "2026-06-17T12:00:00Z",
+    },
+    {
+      id: "sendgrid-1",
+      provider: "SENDGRID",
+      displayName: "SendGrid",
+      status: "READY",
+      activeForProduction: false,
+      credentialConfigured: true,
+      defaultFromEmail: "noreply@sendgrid.example.com",
+      metadata: JSON.stringify({
+        sendgridDomains: {
+          choices: [{ id: "123", domain: "sendgrid.example.com" }],
+        },
+      }),
+      updatedAt: "2026-06-17T12:00:00Z",
+    },
+  ],
+  domains: [
+    {
+      id: "domain-1",
+      providerInstallId: "sendgrid-1",
+      domain: "sendgrid.example.com",
+      status: "VERIFIED",
+    },
+  ],
+  readinessChecks: [],
+  blockingReadinessChecks: [],
+  spacePolicies: [],
 };

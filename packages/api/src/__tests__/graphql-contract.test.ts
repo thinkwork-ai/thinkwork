@@ -293,6 +293,7 @@ describe("GraphQL Schema Contract", () => {
 
       expect(providerEnum.getValues().map((value: any) => value.name)).toEqual([
         "RESEND",
+        "SENDGRID",
         "SES",
       ]);
       expect(readinessEnum.getValues().map((value: any) => value.name)).toEqual(

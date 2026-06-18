@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
+  Badge,
   Button,
   Dialog,
   DialogContent,
@@ -10,6 +11,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
@@ -18,6 +21,11 @@ import {
   Switch,
   useTheme,
 } from "@thinkwork/ui";
+import {
+  EmailChannelProvider,
+  EmailDomainOwnershipType,
+  EmailProviderInstallStatus,
+} from "@/gql/graphql";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktop } from "@/lib/desktop-detection";
 import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
@@ -35,8 +43,11 @@ import {
 import {
   SettingsDeploymentReleasesQuery,
   SettingsDeploymentStatusQuery,
+  SettingsConfigureEmailProviderMutation,
+  SettingsEmailChannelQuery,
   SettingsReleaseUpdateJobQuery,
   SettingsRemediateReleaseRunnerMutation,
+  SettingsSaveEmailProviderCredentialMutation,
   SettingsStartDeploymentReleaseUpdateMutation,
   SettingsStartReleaseUpdatePreflightMutation,
 } from "@/lib/settings-queries";
@@ -56,6 +67,11 @@ export function SettingsGeneral() {
   const [deployResult, refreshDeploymentStatus] = useQuery({
     query: SettingsDeploymentStatusQuery,
     pause: !showOperator,
+  });
+  const [emailResult, refreshEmailProviders] = useQuery({
+    query: SettingsEmailChannelQuery,
+    pause: !showOperator,
+    requestPolicy: "cache-and-network",
   });
 
   const deployment = deployResult.data?.deploymentStatus;
@@ -129,6 +145,13 @@ export function SettingsGeneral() {
             )}
           </SettingsSection>
 
+          <InvitationEmailSection
+            summary={emailResult.data?.emailChannelSummary}
+            onRefresh={() =>
+              refreshEmailProviders({ requestPolicy: "network-only" })
+            }
+          />
+
           {!deploymentFailed ? (
             <SettingsSection label="Resources & URLs">
               <ResourceRow
@@ -185,6 +208,294 @@ export function SettingsGeneral() {
       ) : null}
     </SettingsPane>
   );
+}
+
+function InvitationEmailSection({
+  summary,
+  onRefresh,
+}: {
+  summary?: {
+    providers?: Array<{
+      id: string;
+      provider: string;
+      displayName?: string | null;
+      status: string;
+      activeForProduction: boolean;
+      credentialConfigured: boolean;
+      defaultFromEmail?: string | null;
+      metadata?: string | null;
+      updatedAt?: string | null;
+    }>;
+    domains?: Array<{
+      id: string;
+      providerInstallId: string;
+      domain: string;
+      status: string;
+    }>;
+  } | null;
+  onRefresh: () => void;
+}) {
+  const [apiKey, setApiKey] = useState("");
+  const [selectedDomain, setSelectedDomain] = useState("");
+  const [credentialState, saveCredential] = useMutation(
+    SettingsSaveEmailProviderCredentialMutation,
+  );
+  const [configureState, configureProvider] = useMutation(
+    SettingsConfigureEmailProviderMutation,
+  );
+  const providers = summary?.providers ?? [];
+  const activeProvider = providers.find((provider) =>
+    Boolean(provider.activeForProduction),
+  );
+  const selectedProvider = activeProvider?.provider ?? "SES";
+  const sendGridProvider = providers.find(
+    (provider) => provider.provider === "SENDGRID",
+  );
+  const resendProvider = providers.find(
+    (provider) => provider.provider === "RESEND",
+  );
+  const sendGridDomain = summary?.domains?.find(
+    (domain) => domain.providerInstallId === sendGridProvider?.id,
+  );
+  const choices = sendGridChoices(sendGridProvider?.metadata);
+
+  async function saveSendGridKey() {
+    const key = apiKey.trim();
+    if (!key) {
+      toast.error("Enter a SendGrid API key.");
+      return;
+    }
+    const response = await saveCredential({
+      input: {
+        providerInstallId: sendGridProvider?.id,
+        provider: EmailChannelProvider.Sendgrid,
+        apiKey: key,
+        displayName: "SendGrid",
+        ...(selectedDomain
+          ? {
+              domain: {
+                domain: selectedDomain,
+                ownershipType: EmailDomainOwnershipType.CustomerOwned,
+              },
+            }
+          : {}),
+      },
+    });
+    if (response.error) {
+      toast.error(`Could not save SendGrid key: ${response.error.message}`);
+      return;
+    }
+    setApiKey("");
+    toast.success("SendGrid key stored and domains refreshed.");
+    onRefresh();
+  }
+
+  async function selectProvider(provider: string) {
+    if (provider === "SES") {
+      const response = await configureProvider({
+        input: {
+          provider: EmailChannelProvider.Ses,
+          displayName: "SES",
+          activeForProduction: true,
+          status: EmailProviderInstallStatus.Ready,
+        },
+      });
+      if (response.error) {
+        toast.error(`Could not select SES: ${response.error.message}`);
+        return;
+      }
+      toast.success("SES selected for invitations.");
+      onRefresh();
+      return;
+    }
+    const providerRow =
+      provider === "SENDGRID" ? sendGridProvider : resendProvider;
+    if (!providerRow) {
+      toast.error(`${providerLabel(provider)} is not configured.`);
+      return;
+    }
+    if (providerRow.status !== "READY") {
+      toast.error(`${providerLabel(provider)} is not ready for invitations.`);
+      return;
+    }
+    const response = await configureProvider({
+      input: {
+        providerInstallId: providerRow.id,
+        provider:
+          provider === "SENDGRID"
+            ? EmailChannelProvider.Sendgrid
+            : EmailChannelProvider.Resend,
+        displayName: providerLabel(provider),
+        status: EmailProviderInstallStatus.Ready,
+        activeForProduction: true,
+        defaultFromEmail: providerRow.defaultFromEmail,
+        metadata: providerRow.metadata,
+      },
+    });
+    if (response.error) {
+      toast.error(
+        `Could not select ${providerLabel(provider)}: ${response.error.message}`,
+      );
+      return;
+    }
+    toast.success(`${providerLabel(provider)} selected for invitations.`);
+    onRefresh();
+  }
+
+  return (
+    <SettingsSection label="Invitation email">
+      <SettingsRow
+        label="Provider"
+        description="Choose which email service sends tenant member invitations."
+      >
+        <div className="grid w-full min-w-[18rem] max-w-md gap-3">
+          <Select value={selectedProvider} onValueChange={selectProvider}>
+            <SelectTrigger aria-label="Invitation email provider">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="SES">SES</SelectItem>
+              <SelectItem value="RESEND">Resend</SelectItem>
+              <SelectItem value="SENDGRID">SendGrid</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex flex-wrap gap-2">
+            <ProviderBadge
+              provider="SES"
+              selected={selectedProvider === "SES"}
+            />
+            <ProviderBadge
+              provider="RESEND"
+              row={resendProvider}
+              selected={selectedProvider === "RESEND"}
+            />
+            <ProviderBadge
+              provider="SENDGRID"
+              row={sendGridProvider}
+              selected={selectedProvider === "SENDGRID"}
+            />
+          </div>
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        label="SendGrid"
+        description="Store a SendGrid key and fetch authenticated sending domains."
+      >
+        <div className="grid w-full min-w-[18rem] max-w-md gap-3">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-muted-foreground">
+              {sendGridProvider?.credentialConfigured
+                ? "API key stored"
+                : "API key not stored"}
+            </span>
+            <Badge
+              variant={
+                sendGridProvider?.status === "READY" ? "outline" : "secondary"
+              }
+            >
+              {sendGridProvider?.status ?? "NOT CONFIGURED"}
+            </Badge>
+          </div>
+          {choices.length > 1 ? (
+            <div className="grid gap-1.5">
+              <Label htmlFor="sendgrid-domain">Authenticated domain</Label>
+              <Select value={selectedDomain} onValueChange={setSelectedDomain}>
+                <SelectTrigger id="sendgrid-domain">
+                  <SelectValue placeholder="Choose a SendGrid domain" />
+                </SelectTrigger>
+                <SelectContent>
+                  {choices.map((choice) => (
+                    <SelectItem key={choice.id} value={choice.domain}>
+                      {choice.domain}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          <div className="grid gap-1.5">
+            <Label htmlFor="sendgrid-api-key">SendGrid API key</Label>
+            <Input
+              id="sendgrid-api-key"
+              type="password"
+              autoComplete="off"
+              placeholder={
+                sendGridProvider?.credentialConfigured
+                  ? "Paste a replacement key"
+                  : "Paste SendGrid API key"
+              }
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={saveSendGridKey}
+            disabled={credentialState.fetching || configureState.fetching}
+          >
+            Save SendGrid Key
+          </Button>
+          <dl className="grid gap-1 text-sm text-muted-foreground">
+            {sendGridDomain ? (
+              <div className="flex items-center justify-between gap-3">
+                <dt>Selected domain</dt>
+                <dd className="font-mono text-foreground">
+                  {sendGridDomain.domain}
+                </dd>
+              </div>
+            ) : null}
+            {choices.length > 0 ? (
+              <div className="flex items-center justify-between gap-3">
+                <dt>Fetched domains</dt>
+                <dd>{choices.length}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
+
+function ProviderBadge({
+  provider,
+  row,
+  selected,
+}: {
+  provider: string;
+  row?: { status: string; credentialConfigured: boolean } | null;
+  selected: boolean;
+}) {
+  const ready = provider === "SES" || row?.status === "READY";
+  return (
+    <Badge variant={selected || ready ? "outline" : "secondary"}>
+      {providerLabel(provider)}{" "}
+      {selected ? "selected" : ready ? "ready" : "not ready"}
+    </Badge>
+  );
+}
+
+function providerLabel(provider: string) {
+  if (provider === "SENDGRID") return "SendGrid";
+  if (provider === "RESEND") return "Resend";
+  return "SES";
+}
+
+function sendGridChoices(metadata: string | null | undefined) {
+  try {
+    const parsed = metadata ? JSON.parse(metadata) : {};
+    const choices = parsed?.sendgridDomains?.choices;
+    return Array.isArray(choices)
+      ? choices
+          .map((choice) => ({
+            id: String(choice.id ?? choice.domain ?? ""),
+            domain: String(choice.domain ?? ""),
+          }))
+          .filter((choice) => choice.id && choice.domain)
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 interface DeploymentReleaseRow {

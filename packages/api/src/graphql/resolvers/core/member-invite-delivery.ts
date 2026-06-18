@@ -8,7 +8,7 @@ import { providerSafeError } from "../../../lib/email-channel/provider-contract.
 
 export type InviteEmailChannelDelivery = {
   providerInstallId: string;
-  provider: "resend" | "ses";
+  provider: "resend" | "sendgrid" | "ses";
   from: string;
   credential: string;
 };
@@ -21,9 +21,8 @@ export async function resolveInviteEmailChannel(
     .from(emailProviderInstalls)
     .where(eq(emailProviderInstalls.tenant_id, tenantId));
   const providers = Array.isArray(rows) ? rows : [];
-  const activeResendProvider = providers.find(
-    (provider) =>
-      provider.provider === "resend" && provider.active_for_production,
+  const activeProvider = providers.find(
+    (provider) => provider.active_for_production,
   );
   const configuredResendProvider = providers.find(
     (provider) =>
@@ -31,14 +30,19 @@ export async function resolveInviteEmailChannel(
       provider.credential_secret_ref &&
       provider.default_from_email,
   );
-  const activeProvider = providers.find(
-    (provider) => provider.active_for_production,
-  );
-  const provider =
-    activeResendProvider ?? configuredResendProvider ?? activeProvider ?? null;
+  const provider = activeProvider ?? configuredResendProvider ?? null;
 
   if (!provider) {
     return null;
+  }
+
+  if (provider.provider === "sendgrid" && provider.status !== "ready") {
+    throw new GraphQLError(
+      "Invite delivery is configured for SendGrid, but SendGrid is not ready. Check the API key and authenticated sending domain in Settings.",
+      {
+        extensions: { code: "DELIVERY_FAILED" },
+      },
+    );
   }
 
   if (!provider.credential_secret_ref || !provider.default_from_email) {
@@ -63,7 +67,7 @@ export async function resolveInviteEmailChannel(
 
   return {
     providerInstallId: provider.id,
-    provider: provider.provider as "resend" | "ses",
+    provider: provider.provider as "resend" | "sendgrid" | "ses",
     from: provider.default_from_email,
     credential,
   };

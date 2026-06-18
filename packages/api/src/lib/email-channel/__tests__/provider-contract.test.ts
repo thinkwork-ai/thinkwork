@@ -78,10 +78,12 @@ describe("Email Channel provider contract", () => {
       loopTestPassed: false,
     });
     expect(productionReadinessPassed(ready)).toBe(true);
-    expect(ready.find((check) => check.checkKey === "provider_events"))
-      .toMatchObject({ status: "pending" });
-    expect(ready.find((check) => check.checkKey === "loop_test"))
-      .toMatchObject({ status: "pending" });
+    expect(
+      ready.find((check) => check.checkKey === "provider_events"),
+    ).toMatchObject({ status: "pending" });
+    expect(ready.find((check) => check.checkKey === "loop_test")).toMatchObject(
+      { status: "pending" },
+    );
   });
 
   it("records provider events idempotently before writing ledger rows", async () => {
@@ -116,7 +118,7 @@ describe("Email Channel provider contract", () => {
 });
 
 function fakeAdapter(
-  provider: "resend" | "ses",
+  provider: "resend" | "sendgrid" | "ses",
   overrides: Partial<EmailProviderAdapter> = {},
 ): EmailProviderAdapter {
   return {

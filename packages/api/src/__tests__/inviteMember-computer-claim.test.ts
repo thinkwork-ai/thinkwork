@@ -354,6 +354,81 @@ describe("inviteMember onboarding claim", () => {
     );
   });
 
+  it("prefers an active SendGrid channel over an older configured Resend fallback", async () => {
+    cognitoSendMock.mockResolvedValueOnce({
+      User: {
+        Attributes: [{ Name: "sub", Value: "cognito-user-1" }],
+      },
+    });
+    getSecretMock.mockResolvedValueOnce(JSON.stringify({ apiKey: "SG.test" }));
+    selectRowsQueue.push(
+      [
+        {
+          id: "provider-resend",
+          tenant_id: "tenant-A",
+          provider: "resend",
+          status: "pending",
+          active_for_production: false,
+          credential_secret_ref: "resend/api-key",
+          default_from_email: "noreply@thinkwork.ai",
+        },
+        {
+          id: "provider-sendgrid",
+          tenant_id: "tenant-A",
+          provider: "sendgrid",
+          status: "ready",
+          active_for_production: true,
+          credential_secret_ref: "sendgrid/api-key",
+          default_from_email: "noreply@sendgrid.example",
+        },
+      ],
+      [],
+      [],
+    );
+    insertReturningQueue.push([
+      {
+        id: "member-1",
+        tenant_id: "tenant-A",
+        principal_type: "USER",
+        principal_id: "cognito-user-1",
+        role: "member",
+        status: "active",
+      },
+    ]);
+
+    await inviteMember(
+      null,
+      {
+        tenantId: "tenant-A",
+        input: {
+          email: "alex@acme.example",
+          name: "Alex Acme",
+          role: "member",
+        },
+      },
+      {
+        auth: {
+          authType: "cognito",
+          principalId: "operator-user",
+          tenantId: "tenant-A",
+          email: "operator@acme.example",
+        },
+      } as any,
+    );
+
+    expect(emailChannelSendMock).toHaveBeenCalledWith(
+      "sendgrid",
+      expect.objectContaining({
+        tenantId: "tenant-A",
+        providerInstallId: "provider-sendgrid",
+        from: "noreply@sendgrid.example",
+        to: ["alex@acme.example"],
+        subject: "You're invited to ThinkWork",
+        credential: "SG.test",
+      }),
+    );
+  });
+
   it("resends the Cognito invitation when the existing user is still pending", async () => {
     cognitoSendMock
       .mockRejectedValueOnce({ name: "UsernameExistsException" })

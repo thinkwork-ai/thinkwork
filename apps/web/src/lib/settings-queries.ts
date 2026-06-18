@@ -275,6 +275,23 @@ export const SettingsSaveEmailProviderCredentialMutation = graphql(`
   }
 `);
 
+export const SettingsConfigureEmailProviderMutation = graphql(`
+  mutation SettingsConfigureEmailProvider(
+    $input: ConfigureEmailProviderInput!
+  ) {
+    configureEmailProvider(input: $input) {
+      id
+      provider
+      status
+      activeForProduction
+      credentialConfigured
+      defaultFromEmail
+      metadata
+      updatedAt
+    }
+  }
+`) as any;
+
 export const SettingsRunEmailReadinessProbeMutation = graphql(`
   mutation SettingsRunEmailReadinessProbe($providerInstallId: ID!) {
     runEmailReadinessProbe(providerInstallId: $providerInstallId) {
