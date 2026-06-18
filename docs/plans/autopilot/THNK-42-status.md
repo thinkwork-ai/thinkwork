@@ -46,4 +46,14 @@
   - `pnpm --filter @thinkwork/web typecheck` passed.
   - `pnpm schema:build` passed.
   - `git diff --check` passed.
+- CI remediation:
+  - PR #2617 initially failed `Migration Drift Precheck (dev)` because the
+    new hand-rolled migration had not yet been applied to dev.
+  - Applied only
+    `packages/database-pg/drizzle/0172_email_channel_sendgrid_provider.sql` to
+    the dev database.
+  - Corrected the migration marker from `creates:` to `creates-constraint:`
+    so the drift reporter probes the table constraint rather than a relation.
+  - `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0172_email_channel_sendgrid_provider.sql`
+    passed after the dev apply.
 - PR: Pending.
