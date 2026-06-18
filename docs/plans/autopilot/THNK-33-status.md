@@ -6,6 +6,46 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Reopened Gate Follow-Up
+
+- User correction: the fix must be configuration on the Twenty workflow path:
+  Twenty Opportunity -> ThinkWork App -> ThinkWork Webhook. The solution must
+  not depend on the custom `webhook-crm-opportunity` Lambda.
+- Deployed Twenty configuration updated the existing `Closed Won` workflow:
+  `opportunity.updated` on `stage`, filter `stage == CUSTOMER`, then an
+  `HTTP_REQUEST` action named `Start ThinkWork thread` posts to the ThinkWork
+  generic webhook `Twenty Opportunity Closed Won`.
+- Twenty workflow publish evidence:
+  - workflow id: `e4c9942f-45b9-4922-96b5-fc69a5c1148c`
+  - workflow version id: `9e64a00d-4caa-47ea-a18a-9e310da2cd00`
+  - automated trigger id: `d0381ec4-6c20-46d4-9b95-1c28ad60f0a0`
+- End-to-end verification:
+  - Twenty GraphQL updated Opportunity `822639e5-9bf7-40f1-8882-a11140362339`
+    (`Platform Migration`) from `PROPOSAL` to `CUSTOMER` at
+    `2026-06-18T11:53:26.772Z`.
+  - Twenty created workflow run `915b9442-adbf-4e20-ae0f-df9f8bae5fad`,
+    `#1 - Closed Won`, status `COMPLETED`, ending at
+    `2026-06-18 11:53:29.258+00`.
+  - ThinkWork webhook delivery `0e54864d-4037-4897-bf56-c0ea9babe947`
+    returned `201`/`ok` at `2026-06-18 11:53:29.188357+00` with payload
+    `source=twenty-workflow`, `event=opportunity.won`,
+    `opportunityId=822639e5-9bf7-40f1-8882-a11140362339`, and
+    `stage=CUSTOMER`.
+  - ThinkWork created thread `056ce980-500e-46cf-ba91-76989359a8d8`, title
+    `Twenty Opportunity Closed Won`, channel `webhook`, at
+    `2026-06-18 11:53:29.107923+00`.
+- Follow-up repo fix in this pass: generic webhook target types are normalized
+  to lowercase on GraphQL/REST writes and dispatched case-insensitively, and
+  delivery records now mark `thread_created=true` when the handler creates a
+  thread. This fixes the live `AGENT` vs `agent` mismatch discovered while
+  configuring the generic ThinkWork webhook.
+- Verification for repo fix:
+  - `/Users/ericodom/Projects/thinkwork/node_modules/.pnpm/node_modules/.bin/vitest run packages/api/src/graphql/resolvers/webhooks/createWebhook.mutation.test.ts packages/api/src/graphql/resolvers/webhooks/updateWebhook.mutation.test.ts packages/api/src/graphql/resolvers/webhooks/testWebhook.mutation.test.ts packages/api/src/graphql/resolvers/webhooks/webhooks.query.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck` could not run in this fresh
+    worktree because `node_modules` is absent (`tsc: command not found`). A
+    direct shared-binary fallback also could not resolve workspace package
+    dependencies from this worktree.
+
 ## Current State
 
 - Linear issue: THNK-33 was reopened from `Done` to `Ready to Work` after the

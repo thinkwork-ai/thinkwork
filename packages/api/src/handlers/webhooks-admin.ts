@@ -38,6 +38,10 @@ function generateToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+function normalizeWebhookTargetType(value: unknown): string {
+  return String(value).toLowerCase();
+}
+
 async function validateSpaceForTenant(
   spaceId: string | null,
   tenantId: string,
@@ -215,7 +219,7 @@ async function createWebhook(
     return error("name and target_type are required");
   }
 
-  const targetType = body.target_type as string;
+  const targetType = normalizeWebhookTargetType(body.target_type);
   if (targetType === "agent" && !body.agent_id) {
     return error("agent_id is required when target_type is agent");
   }
@@ -270,7 +274,9 @@ async function updateWebhook(
   const updates: Record<string, unknown> = { updated_at: new Date() };
   if (body.name !== undefined) updates.name = body.name;
   if (body.description !== undefined) updates.description = body.description;
-  if (body.target_type !== undefined) updates.target_type = body.target_type;
+  if (body.target_type !== undefined) {
+    updates.target_type = normalizeWebhookTargetType(body.target_type);
+  }
   if (body.space_id !== undefined || body.spaceId !== undefined) {
     const nextSpaceId =
       ((body.space_id ?? body.spaceId) as string | null | undefined) || null;
@@ -362,7 +368,9 @@ async function testWebhook(
 
   const testPayload = { _test: true, timestamp: new Date().toISOString() };
 
-  if (webhook.target_type === "agent" && webhook.agent_id) {
+  const targetType = webhook.target_type.toLowerCase();
+
+  if (targetType === "agent" && webhook.agent_id) {
     // Create a thread for tracking
     let threadId: string | undefined;
     try {
@@ -410,7 +418,7 @@ async function testWebhook(
       .where(eq(webhooks.id, webhook.id));
 
     return json({ ok: true, wakeupRequestId: wakeup.id }, 201);
-  } else if (webhook.target_type === "routine" && webhook.routine_id) {
+  } else if (targetType === "routine" && webhook.routine_id) {
     const [turn] = await db
       .insert(threadTurns)
       .values({

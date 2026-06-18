@@ -10,7 +10,8 @@ export const updateWebhook = async (
   const updates: Record<string, unknown> = { updated_at: new Date() };
   if (i.name !== undefined) updates.name = i.name;
   if (i.description !== undefined) updates.description = i.description;
-  if (i.targetType !== undefined) updates.target_type = i.targetType;
+  if (i.targetType !== undefined)
+    updates.target_type = i.targetType.toLowerCase();
   if (i.spaceId !== undefined) {
     if (i.spaceId) {
       const [webhookRow] = await db
