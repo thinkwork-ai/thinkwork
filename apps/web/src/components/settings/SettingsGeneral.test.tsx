@@ -213,6 +213,12 @@ describe("SettingsGeneral releases", () => {
     expect(screen.getByText("Manifest SHA")).toBeTruthy();
     expect(screen.getByText("c".repeat(64))).toBeTruthy();
     expect(screen.getByText("Email Provider")).toBeTruthy();
+    expect(
+      screen
+        .getByText("Email Provider")
+        .compareDocumentPosition(screen.getByText("S3 bucket")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.queryByText("Invitation email")).toBeNull();
     expect(screen.queryByText("SendGrid ready")).toBeNull();
     expect(screen.queryByText("Resend selected")).toBeNull();

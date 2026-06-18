@@ -326,13 +326,15 @@ describe("PluginsPage", () => {
   it("filters to installed-only when the toggle is switched", () => {
     render(<PluginsPage />);
 
-    // Both plugins visible under "All".
+    // Full catalog rows are visible under "All".
+    expect(screen.getByRole("link", { name: "Open SendGrid" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open Twenty CRM" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^installed$/i }));
 
     // Twenty (not installed) drops out; installed plugins remain.
     expect(screen.queryByRole("link", { name: "Open Twenty CRM" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open SendGrid" })).toBeNull();
     expect(screen.getByRole("link", { name: "Open LastMile" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open Docs Sync" })).toBeTruthy();
   });
@@ -503,6 +505,30 @@ const catalogEntries = [
         payloadSha256: "sha256:brain",
         requiredOauthScopes: [],
         components: [],
+      },
+    ],
+    install: null,
+  },
+  {
+    __typename: "PluginCatalogEntry" as const,
+    pluginKey: "sendgrid",
+    displayName: "SendGrid",
+    description: "SendGrid invitation email provider.",
+    latestVersion: "0.1.0",
+    launchUrl: null,
+    updateAvailable: false,
+    versions: [
+      {
+        version: "0.1.0",
+        payloadSha256: "sha256:sendgrid",
+        requiredOauthScopes: [],
+        components: [
+          {
+            key: "settings",
+            type: "ui-surface",
+            displayName: "SendGrid settings",
+          },
+        ],
       },
     ],
     install: null,

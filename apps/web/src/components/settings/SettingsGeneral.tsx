@@ -136,18 +136,18 @@ export function SettingsGeneral() {
                 >
                   {deployment?.agentcoreStatus ?? "…"}
                 </SettingsRow>
-                <EmailProviderRow
-                  summary={emailResult.data?.emailChannelSummary}
-                  onRefresh={() =>
-                    refreshEmailProviders({ requestPolicy: "network-only" })
-                  }
-                />
               </>
             )}
           </SettingsSection>
 
           {!deploymentFailed ? (
             <SettingsSection label="Resources & URLs">
+              <EmailProviderRow
+                summary={emailResult.data?.emailChannelSummary}
+                onRefresh={() =>
+                  refreshEmailProviders({ requestPolicy: "network-only" })
+                }
+              />
               <ResourceRow
                 label="S3 bucket"
                 description="Workspace and artifact storage bucket."

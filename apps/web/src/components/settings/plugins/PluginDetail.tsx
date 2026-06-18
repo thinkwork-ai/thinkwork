@@ -138,7 +138,12 @@ export function PluginDetail() {
     premium?.installKeyRequired && !hasActiveEntitlement,
   );
   const isCompanyBrain = pluginKey === "company-brain";
-  const isEmailChannel = pluginKey === "email-channel";
+  const emailProviderSettingsProvider =
+    pluginKey === "sendgrid"
+      ? "sendgrid"
+      : pluginKey === "email-channel"
+        ? "resend"
+        : null;
 
   // Mutations don't invalidate urql's document cache — refetch every affected
   // query explicitly after each one.
@@ -578,8 +583,8 @@ export function PluginDetail() {
           </SettingsSection>
         ) : null}
 
-        {isEmailChannel && install && showOperatorActions ? (
-          <EmailChannelSettings />
+        {emailProviderSettingsProvider && install && showOperatorActions ? (
+          <EmailChannelSettings provider={emailProviderSettingsProvider} />
         ) : null}
 
         {install && authCapable ? (

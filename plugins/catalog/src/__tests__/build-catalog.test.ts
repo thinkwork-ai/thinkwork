@@ -37,6 +37,7 @@ describe("buildSignedCatalogJson", () => {
       "email-channel",
       "lastmile",
       "plane",
+      "sendgrid",
       "twenty",
     ]);
     expect(verified.generatedAt).toBe("2026-06-12T00:00:00.000Z");
