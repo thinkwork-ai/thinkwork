@@ -58,6 +58,26 @@ status: active
   configuring `THINKWORK_TRIGGER_STAGE=Customer` and `THINKWORK_WEBHOOK_URL`,
   and verifying a `source=twenty-app` delivery.
 
+## 2026-06-18 Twenty Workflow Relation Shape Fix
+
+- PR #2659 merged the metadata endpoint fix:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2659`, merge commit
+  `cc88c5a1daf9bc20f3378dc33fd455c31610e87e`.
+- Non-mutating `wire-workflow` dry-run `27789128185` on that merge commit
+  confirmed the script now reaches the workflow lookup path against the target
+  Twenty instance, then failed while selecting a workflow version:
+  `TypeError: workflow.versions is not iterable`.
+- Root cause: the deployed Twenty GraphQL API returns workflow relation fields
+  in connection-style shapes for at least this query path, not always as plain
+  arrays. The script should normalize relation payloads before selecting a
+  workflow version.
+- Follow-up fix: normalize array, `edges[].node`, and `nodes` relation shapes
+  before enumerating workflows and workflow versions.
+- Runtime proof still requires merging this relation-shape fix, rerunning
+  non-mutating workflow wiring dry-run, applying workflow wiring to a draft,
+  configuring `THINKWORK_TRIGGER_STAGE=Customer` and `THINKWORK_WEBHOOK_URL`,
+  and verifying a `source=twenty-app` delivery.
+
 ## 2026-06-18 Twenty Logic Function Runtime Config Fix
 
 - PR #2652 merged the Twenty 2.9 compatibility fix:

@@ -83,6 +83,16 @@ function compactObject(value) {
   );
 }
 
+function relationItems(value, label) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value.edges)) {
+    return value.edges.map((edge) => edge?.node).filter(Boolean);
+  }
+  if (Array.isArray(value.nodes)) return value.nodes;
+  throw new Error(`Unexpected ${label} relation shape from Twenty GraphQL.`);
+}
+
 class TwentyGraphqlClient {
   constructor({ url, apiKey, path = "/graphql" }) {
     this.endpoint = `${url}${path}`;
@@ -211,7 +221,7 @@ async function findWorkflowVersion(client, args) {
     `,
     { filter: workflowFilter },
   );
-  const workflows = data.workflows.edges.map((edge) => edge.node);
+  const workflows = relationItems(data.workflows, "workflows");
   if (workflows.length === 0) {
     throw new Error(
       args.workflowId
@@ -225,8 +235,8 @@ async function findWorkflowVersion(client, args) {
     );
   }
   const workflow = workflows[0];
-  const versions = [...workflow.versions].sort((left, right) =>
-    left.createdAt > right.createdAt ? -1 : 1,
+  const versions = relationItems(workflow.versions, "workflow versions").sort(
+    (left, right) => (left.createdAt > right.createdAt ? -1 : 1),
   );
   const draft = versions.find((version) => version.status === "DRAFT");
   const active =
