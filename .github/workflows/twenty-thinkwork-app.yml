@@ -81,7 +81,7 @@ jobs:
           set -euo pipefail
           corepack enable
           cd plugins/twenty/twenty-app
-          yarn install
+          YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
           yarn twenty dev:build
 
       - name: Require explicit confirmation for apply

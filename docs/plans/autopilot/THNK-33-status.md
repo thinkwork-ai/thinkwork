@@ -33,6 +33,10 @@ status: active
   the nested app carried its own `yarn.lock`. Follow-up adds that nested
   project marker so `yarn install` in the app directory works in GitHub Actions
   and in the sync script.
+- The next non-mutating validation reached Yarn resolution and exposed that the
+  workflow validation step also needed the sync script's non-immutable install
+  behavior. Follow-up makes the workflow run non-immutable `yarn install`
+  before `yarn twenty dev:build`.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
