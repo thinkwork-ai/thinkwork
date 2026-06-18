@@ -56,4 +56,16 @@
     so the drift reporter probes the table constraint rather than a relation.
   - `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0172_email_channel_sendgrid_provider.sql`
     passed after the dev apply.
+  - PR #2617 then failed `test` because
+    `packages/database-pg/__tests__/migration-0170-email-channel-plugin.test.ts`
+    still expected the pre-THNK-42 provider list `["resend", "ses"]`.
+    Updated the characterization test to expect
+    `["resend", "sendgrid", "ses"]`.
+- Follow-up validation:
+  - `pnpm --filter @thinkwork/database-pg test -- __tests__/migration-0170-email-channel-plugin.test.ts`
+    passed: 1 file, 8 tests.
+  - `pnpm --filter @thinkwork/api test -- src/lib/email-channel/__tests__/sendgrid-provider.test.ts src/lib/email-channel/__tests__/provider-contract.test.ts src/__tests__/graphql-contract.test.ts src/__tests__/inviteMember-computer-claim.test.ts src/__tests__/resendMemberInvite.test.ts`
+    passed: 5 files, 159 tests.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsGeneral.test.tsx`
+    passed: 1 file, 7 tests.
 - PR: Pending.
