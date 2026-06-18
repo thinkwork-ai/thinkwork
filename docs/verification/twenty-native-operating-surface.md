@@ -9,8 +9,9 @@ native_producer_verified: pending_app_sync
 
 This checklist verifies the smallest user-visible THNK-33 proof: a native
 Twenty app named `ThinkWork` exposes a `ThinkWork Webhook` workflow action, the
-Closed Won workflow calls that app action, and ThinkWork starts or resumes
-Customer Onboarding through the generic webhook path.
+app settings map the Twenty Opportunity `Customer` stage to a ThinkWork webhook,
+and ThinkWork starts or resumes Customer Onboarding through that generic
+webhook path.
 
 It does not verify rich embedded panels or full native status writeback. Those
 remain follow-up work after the app/action path is installed and visible.
@@ -26,12 +27,14 @@ remain follow-up work after the app/action path is installed and visible.
   only an OAuth-only registration.
 - The installed app Settings tab has secret `THINKWORK_WEBHOOK_URL` configured
   to the ThinkWork generic webhook URL from ThinkWork Settings -> Webhooks.
+- The installed app Settings tab has `THINKWORK_TRIGGER_STAGE` set to
+  `Customer`.
 - The `crm` MCP component is provisioned as the plugin-owned `twenty--crm`
   tenant MCP server.
 - The verifying user has an active Twenty plugin activation.
 - A Customer Onboarding Space exists.
-- A real or test Twenty Opportunity record can be moved to `CUSTOMER`.
-- The Twenty `Closed Won` workflow uses the app action:
+- A real or test Twenty Opportunity record can be moved to `Customer`.
+- The Twenty Opportunity stage workflow uses the app action:
   `ThinkWork -> ThinkWork Webhook`, not the built-in `HTTP_REQUEST` action.
 
 ## Verify
@@ -40,24 +43,26 @@ remain follow-up work after the app/action path is installed and visible.
    visible and is not an OAuth-only compatibility row.
 2. Open the ThinkWork app settings and confirm `THINKWORK_WEBHOOK_URL` is
    configured as a secret application variable.
-3. In the Twenty workflow builder, confirm the Closed Won workflow action is
-   `ThinkWork Webhook`.
-4. Move a test Opportunity to `CUSTOMER`.
-5. Confirm a Twenty workflow run completed for the Closed Won workflow.
-6. Inspect ThinkWork generic webhook deliveries and confirm the payload includes
-   `source=twenty-app`, `event=opportunity.won`, and the Opportunity id.
-7. Confirm a ThinkWork Thread opens or is offered as the next action.
-8. Repeat the same Opportunity transition or replay with the same idempotency
+3. Confirm `THINKWORK_TRIGGER_STAGE` is configured as `Customer`.
+4. In the Twenty workflow builder, confirm the Opportunity stage workflow action
+   is `ThinkWork Webhook`.
+5. Move a test Opportunity to `Customer`.
+6. Confirm a Twenty workflow run completed for the Opportunity stage workflow.
+7. Inspect ThinkWork generic webhook deliveries and confirm the payload includes
+   `source=twenty-app`, `stage=Customer`, `triggerStage=Customer`, and the
+   Opportunity id.
+8. Confirm a ThinkWork Thread opens or is offered as the next action.
+9. Repeat the same Opportunity transition or replay with the same idempotency
    key and confirm ThinkWork does not create duplicate work.
-9. Inspect `crm_work_links` for one active row keyed by:
+10. Inspect `crm_work_links` for one active row keyed by:
 
 ```text
 tenant_id, provider=twenty, object_type=opportunity, object_id, workflow_key=customer_onboarding, outcome_key=default
 ```
 
-10. Confirm the row has `last_writeback_state = blocked` and
+11. Confirm the row has `last_writeback_state = blocked` and
     `failure_code = NATIVE_TWENTY_WRITEBACK_NOT_VERIFIED`.
-11. Record redacted evidence in Linear: app id/registration id, workflow id,
+12. Record redacted evidence in Linear: app id/registration id, workflow id,
     workflow run id, webhook delivery id, Opportunity id, Thread id, Goal id if
     present, and the replay/resume result.
 

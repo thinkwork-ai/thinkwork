@@ -107,11 +107,17 @@ describe("twenty plugin manifest", () => {
     expect(applicationConfig).toContain("displayName: APP_DISPLAY_NAME");
     expect(applicationConfig).toContain("THINKWORK_WEBHOOK_URL");
     expect(applicationConfig).toContain("isSecret: true");
+    expect(applicationConfig).toContain("THINKWORK_TRIGGER_STAGE");
+    expect(applicationConfig).toContain('value: "Customer"');
     expect(workflowAction).toContain("defineLogicFunction");
     expect(workflowAction).toContain("workflowActionTriggerSettings");
     expect(workflowAction).toContain('label: "ThinkWork Webhook"');
     expect(workflowAction).toContain("process.env.THINKWORK_WEBHOOK_URL");
+    expect(workflowAction).toContain("process.env.THINKWORK_TRIGGER_STAGE");
+    expect(workflowAction).toContain('status: "skipped_stage"');
+    expect(workflowAction).toContain("triggerStage: configuredStage");
     expect(workflowAction).toContain('source: "twenty-app"');
+    expect(workflowAction).not.toContain("opportunity.won");
   });
 
   it("declares the infrastructure component against the twenty adapter key", () => {

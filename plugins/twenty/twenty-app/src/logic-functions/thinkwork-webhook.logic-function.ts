@@ -20,9 +20,15 @@ type ThinkWorkWebhookInput = {
 
 type ThinkWorkWebhookResponse = {
   ok: boolean;
-  status: "delivered" | "missing_configuration" | "delivery_failed";
+  status:
+    | "delivered"
+    | "missing_configuration"
+    | "skipped_stage"
+    | "delivery_failed";
   statusCode?: number;
   idempotencyKey?: string;
+  configuredStage?: string;
+  receivedStage?: string;
   error?: string;
   thinkwork?: unknown;
 };
@@ -48,26 +54,57 @@ function parseResponseBody(body: string): unknown {
   }
 }
 
+function normalizedStage(value: string | undefined): string | undefined {
+  return value?.toLowerCase().replace(/[\s_-]+/g, "");
+}
+
 const handler = async (
   input: ThinkWorkWebhookInput,
 ): Promise<ThinkWorkWebhookResponse> => {
+  const configuredStage = process.env.THINKWORK_TRIGGER_STAGE?.trim()
+    ? process.env.THINKWORK_TRIGGER_STAGE.trim()
+    : "Customer";
+  const receivedStage = text(input.stage);
+  if (
+    !receivedStage ||
+    normalizedStage(receivedStage) !== normalizedStage(configuredStage)
+  ) {
+    return {
+      ok: true,
+      status: "skipped_stage",
+      configuredStage,
+      receivedStage,
+    };
+  }
+
   const webhookUrl = process.env.THINKWORK_WEBHOOK_URL?.trim();
   if (!webhookUrl) {
     return {
       ok: false,
       status: "missing_configuration",
+      configuredStage,
+      receivedStage,
       error:
         "Configure THINKWORK_WEBHOOK_URL on the installed ThinkWork app before using this workflow action.",
     };
   }
 
-  const event = text(input.event) ?? "opportunity.won";
+  const event =
+    text(input.event) ??
+    `opportunity.stage.${configuredStage.toLowerCase().replace(/\s+/g, "_")}`;
   const opportunityId = text(input.opportunityId) ?? text(input.recordId);
   const occurredAt = text(input.occurredAt) ?? new Date().toISOString();
   const workflowKey = text(input.workflowKey) ?? "customer_onboarding";
   const idempotencyKey =
     text(input.idempotencyKey) ??
-    ["twenty-app", event, workflowKey, opportunityId ?? "unknown", occurredAt]
+    [
+      "twenty-app",
+      event,
+      workflowKey,
+      configuredStage,
+      opportunityId ?? "unknown",
+      occurredAt,
+    ]
       .join(":")
       .slice(0, 240);
 
@@ -79,7 +116,8 @@ const handler = async (
     customerName: text(input.customerName),
     companyName: text(input.companyName),
     opportunityName: text(input.opportunityName),
-    stage: text(input.stage),
+    stage: receivedStage,
+    triggerStage: configuredStage,
     opportunityUrl: text(input.opportunityUrl),
     workflowKey,
     workflowRunId: text(input.workflowRunId),
@@ -104,6 +142,8 @@ const handler = async (
       status: "delivery_failed",
       statusCode: response.status,
       idempotencyKey,
+      configuredStage,
+      receivedStage,
       error:
         typeof responseBody === "string"
           ? responseBody
@@ -117,6 +157,8 @@ const handler = async (
     status: "delivered",
     statusCode: response.status,
     idempotencyKey,
+    configuredStage,
+    receivedStage,
     thinkwork: responseBody,
   };
 };
@@ -155,10 +197,12 @@ export default defineLogicFunction({
       {
         type: "object",
         properties: {
-          ok: { type: "boolean", label: "Delivered" },
+          ok: { type: "boolean", label: "Handled" },
           status: { type: "string", label: "Status" },
           statusCode: { type: "number", label: "HTTP Status" },
           idempotencyKey: { type: "string", label: "Idempotency Key" },
+          configuredStage: { type: "string", label: "Configured Stage" },
+          receivedStage: { type: "string", label: "Received Stage" },
           error: { type: "string", label: "Error" },
           thinkwork: { type: "object", label: "ThinkWork Response" },
         },
