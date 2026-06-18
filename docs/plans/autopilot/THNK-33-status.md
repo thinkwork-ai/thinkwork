@@ -6,6 +6,39 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Twenty 2.9 Package Compatibility Fix
+
+- After explicit operator authorization, apply-mode `sync-app` run
+  `27783189027` attempted the native app install against
+  `https://crm.thinkwork.ai`.
+- Evidence from the failed apply:
+  - `Deploy and install native ThinkWork app` ran in `mode: "apply"`.
+  - The workflow built the manifest, typechecked the app, packed
+    `@thinkwork/twenty-app@0.1.0`, and uploaded
+    `thinkwork-twenty-app-0.1.0.tgz`.
+  - Twenty rejected the upload with
+    `Upload failed: App requires Twenty server >=2.13.0 <3.0.0 but this server is 2.9.0.`
+- Root cause: the live Twenty CRM is server `2.9.0`, while the native app
+  package declared a `>=2.13.0 <3.0.0` Twenty engine range. That rejection
+  happens before workspace install, so the Twenty Applications screen still
+  only shows seeded apps and OAuth registrations.
+- Follow-up fix:
+  - Set the native app package engine to `>=2.9.0 <3.0.0`.
+  - Pin `twenty-sdk` and `twenty-client-sdk` to `2.9.0`.
+  - Regenerate the nested app `yarn.lock`.
+  - Update the manifest regression test to guard the deployed CRM compatibility
+    floor.
+- Local validation:
+  - `npx -y @yarnpkg/cli-dist@4.13.0 install` inside
+    `plugins/twenty/twenty-app`.
+  - `npx -y @yarnpkg/cli-dist@4.13.0 twenty dev:build` succeeded with
+    `Running typecheck` and `Build succeeded (4 files)`.
+- Runtime proof still requires merging this compatibility fix, rerunning
+  apply-mode `sync-app`, confirming the native `ThinkWork` app appears in
+  Twenty, configuring `THINKWORK_TRIGGER_STAGE=Customer` and
+  `THINKWORK_WEBHOOK_URL`, wiring the Customer workflow to `ThinkWork Webhook`,
+  and verifying a `source=twenty-app` delivery.
+
 ## 2026-06-18 Twenty App Non-Mutating Preflight Pass
 
 - PR #2649 merged the dry-run compatibility fix:
@@ -18,9 +51,9 @@ status: active
   - `Check Twenty app operation secrets` passed with
     `TWENTY_PUBLIC_URL=https://crm.thinkwork.ai` and a masked
     `TWENTY_APP_SYNC_API_KEY`.
-  - `Deploy and install native ThinkWork app` ran in `mode: "dry-run"` with
-    note `Dry run validates the package and Twenty remote credentials without
-    deploying or installing.`
+  - `Deploy and install native ThinkWork app` ran in `mode: "dry-run"` and
+    validated the package and Twenty remote credentials without deploying or
+    installing.
   - The Twenty CLI reported `Using remote: thinkwork-crm`,
     `Server: https://crm.thinkwork.ai`, and `Auth: api-key (valid)`.
   - `Wire Customer workflow to ThinkWork app action` was skipped because this

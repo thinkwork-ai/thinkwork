@@ -114,10 +114,10 @@ describe("twenty plugin manifest", () => {
       "src/logic-functions/thinkwork-webhook.logic-function.ts",
     );
 
-    expect(appYarnLock).toContain("twenty-sdk@npm:2.13.0");
-    expect(appYarnLock).toContain("twenty-client-sdk@npm:2.13.0");
+    expect(appYarnLock).toContain("twenty-sdk@npm:2.9.0");
+    expect(appYarnLock).toContain("twenty-client-sdk@npm:2.9.0");
     expect(appNvmrc.trim()).toBe("24");
-    expect(appPackageJson).toContain('"twenty": ">=2.13.0 <3.0.0"');
+    expect(appPackageJson).toContain('"twenty": ">=2.9.0 <3.0.0"');
     expect(appReadme).toContain(
       "docs/runbooks/twenty-thinkwork-native-app-install.md",
     );

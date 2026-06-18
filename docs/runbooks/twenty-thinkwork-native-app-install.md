@@ -16,6 +16,7 @@ native installed Twenty app with a Settings tab and workflow action.
 ## Current Target
 
 - Twenty URL: `https://crm.thinkwork.ai`
+- Current Twenty server version observed by apply workflow: `2.9.0`
 - App source: `plugins/twenty/twenty-app`
 - GitHub workflow: `Twenty ThinkWork App Operations`
 - Preferred GitHub secret: `TWENTY_DEPLOY_API_KEY`
@@ -87,6 +88,12 @@ Expected result:
   `yarn twenty app:install --remote thinkwork-crm`.
 - Twenty Applications shows a native installed app named `ThinkWork`.
 - The app detail page exposes the `Settings` tab.
+
+If publish fails with
+`App requires Twenty server >=2.13.0 <3.0.0 but this server is 2.9.0`, the app
+package was built with an incompatible Twenty engine range. The native app must
+declare compatibility with the deployed CRM server before Twenty will install
+it.
 
 ## Configure App Settings
 

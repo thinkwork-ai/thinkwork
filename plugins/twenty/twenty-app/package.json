@@ -6,7 +6,7 @@
   "type": "module",
   "engines": {
     "node": "^24.5.0",
-    "twenty": ">=2.13.0 <3.0.0",
+    "twenty": ">=2.9.0 <3.0.0",
     "npm": "please-use-yarn",
     "yarn": ">=4.0.2"
   },
@@ -20,11 +20,11 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@types/node": "^24.7.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "@types/node": "^24.7.2",
-    "twenty-client-sdk": "2.13.0",
-    "twenty-sdk": "2.13.0",
+    "twenty-client-sdk": "2.9.0",
+    "twenty-sdk": "2.9.0",
     "typescript": "^5.9.3"
   }
 }
