@@ -83,6 +83,13 @@ TWENTY_APP_SYNC_API_KEY before running Twenty app operations.` The
   run `sync-app` dry-run/apply, configure the ThinkWork app Settings tab, wire
   the Customer workflow to `ThinkWork -> ThinkWork Webhook`, and verify a
   `source=twenty-app` delivery.
+- Follow-up app-package verification on fresh `origin/main` confirmed
+  `yarn twenty dev:build` emits a manifest with app `ThinkWork`, custom
+  Settings tab front component `thinkwork-settings`, app variables
+  `THINKWORK_WEBHOOK_URL` and `THINKWORK_TRIGGER_STAGE=Customer`, and workflow
+  action `ThinkWork Webhook`. The app package now commits the real Yarn 4
+  lockfile instead of an empty project-marker lockfile, so private publish and
+  install runs use reproducible dependency resolution.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
