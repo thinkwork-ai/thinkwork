@@ -103,16 +103,33 @@ describe("twenty plugin manifest", () => {
     });
 
     const applicationConfig = readTwentyApp("src/application-config.ts");
+    const settingsComponent = readTwentyApp(
+      "src/front-components/thinkwork-settings.front-component.tsx",
+    );
     const workflowAction = readTwentyApp(
       "src/logic-functions/thinkwork-webhook.logic-function.ts",
     );
 
     expect(applicationConfig).toContain("defineApplication");
     expect(applicationConfig).toContain("displayName: APP_DISPLAY_NAME");
+    expect(applicationConfig).toContain(
+      "settingsCustomTabFrontComponentUniversalIdentifier",
+    );
+    expect(applicationConfig).toContain(
+      "THINKWORK_SETTINGS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER",
+    );
     expect(applicationConfig).toContain("THINKWORK_WEBHOOK_URL");
     expect(applicationConfig).toContain("isSecret: true");
     expect(applicationConfig).toContain("THINKWORK_TRIGGER_STAGE");
     expect(applicationConfig).toContain('value: "Customer"');
+    expect(settingsComponent).toContain("defineFrontComponent");
+    expect(settingsComponent).toContain(
+      "THINKWORK_SETTINGS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER",
+    );
+    expect(settingsComponent).toContain("updateOneApplicationVariable");
+    expect(settingsComponent).toContain("THINKWORK_WEBHOOK_URL");
+    expect(settingsComponent).toContain("THINKWORK_TRIGGER_STAGE");
+    expect(settingsComponent).toContain("Customer");
     expect(workflowAction).toContain("defineLogicFunction");
     expect(workflowAction).not.toContain("databaseEventTriggerSettings");
     expect(workflowAction).toContain("workflowActionTriggerSettings");

@@ -5,6 +5,7 @@ import {
   APP_DISPLAY_NAME,
   APPLICATION_UNIVERSAL_IDENTIFIER,
   THINKWORK_TRIGGER_STAGE_VARIABLE_UNIVERSAL_IDENTIFIER,
+  THINKWORK_SETTINGS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER,
   THINKWORK_WEBHOOK_URL_VARIABLE_UNIVERSAL_IDENTIFIER,
 } from "src/constants/universal-identifiers";
 
@@ -14,6 +15,8 @@ export default defineApplication({
   description: APP_DESCRIPTION,
   author: "ThinkWork",
   category: "Automation",
+  settingsCustomTabFrontComponentUniversalIdentifier:
+    THINKWORK_SETTINGS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER,
   applicationVariables: {
     THINKWORK_WEBHOOK_URL: {
       universalIdentifier: THINKWORK_WEBHOOK_URL_VARIABLE_UNIVERSAL_IDENTIFIER,
