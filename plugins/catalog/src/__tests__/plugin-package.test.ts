@@ -15,6 +15,7 @@ describe("first-party plugin packages", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
       "company-brain",
       "email-channel",
+      "lakehouse",
       "lastmile",
       "plane",
       "sendgrid",
@@ -44,6 +45,7 @@ describe("first-party plugin packages", () => {
     expect(allPluginManifests.map((manifest) => manifest.pluginKey)).toEqual([
       "company-brain",
       "email-channel",
+      "lakehouse",
       "lastmile",
       "plane",
       "sendgrid",

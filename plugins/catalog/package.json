@@ -23,6 +23,7 @@
   "dependencies": {
     "@thinkwork/plugin-company-brain": "workspace:*",
     "@thinkwork/plugin-email-channel": "workspace:*",
+    "@thinkwork/plugin-lakehouse": "workspace:*",
     "@thinkwork/plugin-lastmile": "workspace:*",
     "@thinkwork/plugin-plane": "workspace:*",
     "@thinkwork/plugin-sendgrid": "workspace:*",
