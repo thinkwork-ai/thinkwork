@@ -5,6 +5,7 @@
 import { defineFirstPartyPluginPackage } from "../plugin-package";
 import { companyBrainPluginPackage as rawCompanyBrainPluginPackage } from "@thinkwork/plugin-company-brain";
 import { emailChannelPluginPackage as rawEmailChannelPluginPackage } from "@thinkwork/plugin-email-channel";
+import { lakehousePluginPackage as rawLakehousePluginPackage } from "@thinkwork/plugin-lakehouse";
 import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/plugin-lastmile";
 import { planePluginPackage as rawPlanePluginPackage } from "@thinkwork/plugin-plane";
 import { sendgridPluginPackage as rawSendgridPluginPackage } from "@thinkwork/plugin-sendgrid";
@@ -15,6 +16,9 @@ export const companyBrainPluginPackage = defineFirstPartyPluginPackage(
 );
 export const emailChannelPluginPackage = defineFirstPartyPluginPackage(
   rawEmailChannelPluginPackage,
+);
+export const lakehousePluginPackage = defineFirstPartyPluginPackage(
+  rawLakehousePluginPackage,
 );
 export const lastmilePluginPackage = defineFirstPartyPluginPackage(
   rawLastmilePluginPackage,
@@ -31,6 +35,7 @@ export const twentyPluginPackage = defineFirstPartyPluginPackage(
 
 export const companyBrainManifest = companyBrainPluginPackage.manifest;
 export const emailChannelManifest = emailChannelPluginPackage.manifest;
+export const lakehouseManifest = lakehousePluginPackage.manifest;
 export const lastmileManifest = lastmilePluginPackage.manifest;
 export const planeManifest = planePluginPackage.manifest;
 export const sendgridManifest = sendgridPluginPackage.manifest;
@@ -39,6 +44,7 @@ export const twentyManifest = twentyPluginPackage.manifest;
 export const firstPartyPluginPackages = [
   companyBrainPluginPackage,
   emailChannelPluginPackage,
+  lakehousePluginPackage,
   lastmilePluginPackage,
   planePluginPackage,
   sendgridPluginPackage,

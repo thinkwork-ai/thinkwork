@@ -19,6 +19,7 @@ const PLUGIN_KEYS = [
   "company-brain",
   "cognee",
   "email-channel",
+  "lakehouse",
   "lastmile",
   "plane",
   "twenty",
@@ -28,6 +29,7 @@ const PLUGIN_SOURCE_ROOTS = new Map([
   // Cognee is the internal infrastructure substrate for Company Brain.
   ["cognee", ["plugins/company-brain/"]],
   ["email-channel", ["plugins/email-channel/"]],
+  ["lakehouse", ["plugins/lakehouse/"]],
   ["lastmile", ["plugins/lastmile/"]],
   ["plane", ["plugins/plane/"]],
   ["twenty", ["plugins/twenty/"]],

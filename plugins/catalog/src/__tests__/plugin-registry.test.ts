@@ -27,6 +27,11 @@ describe("generated first-party plugin registry", () => {
         exportName: "emailChannelPluginPackage",
       },
       {
+        packageKey: "lakehouse",
+        packageName: "@thinkwork/plugin-lakehouse",
+        exportName: "lakehousePluginPackage",
+      },
+      {
         packageKey: "lastmile",
         packageName: "@thinkwork/plugin-lastmile",
         exportName: "lastmilePluginPackage",
