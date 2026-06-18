@@ -14,7 +14,7 @@ on:
           - wire-workflow
           - sync-and-wire
       sync_dry_run:
-        description: "Preview native app sync without applying Twenty metadata changes"
+        description: "Preview native app metadata without deploying/installing in Twenty"
         type: boolean
         default: true
       wire_dry_run:
@@ -100,7 +100,7 @@ jobs:
         if: inputs.operation != 'validate-package'
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
-          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
         run: |
           set -euo pipefail
           if [ -z "$TWENTY_PUBLIC_URL" ]; then
@@ -108,15 +108,15 @@ jobs:
             exit 1
           fi
           if [ -z "$TWENTY_APP_SYNC_API_KEY" ]; then
-            echo "Set repository secret TWENTY_APP_SYNC_API_KEY before running Twenty app operations."
+            echo "Set repository secret TWENTY_DEPLOY_API_KEY or TWENTY_APP_SYNC_API_KEY before running Twenty app operations."
             exit 1
           fi
 
-      - name: Sync native ThinkWork app
+      - name: Deploy and install native ThinkWork app
         if: inputs.operation == 'sync-app' || inputs.operation == 'sync-and-wire'
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
-          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
           TWENTY_THINKWORK_APP_SYNC_DRY_RUN: ${{ inputs.sync_dry_run && '1' || '0' }}
         run: |
           set -euo pipefail
@@ -130,7 +130,7 @@ jobs:
         if: inputs.operation == 'wire-workflow' || inputs.operation == 'sync-and-wire'
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
-          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
           WIRE_DRY_RUN: ${{ inputs.wire_dry_run && '1' || '0' }}
           WIRE_WORKFLOW_ID: ${{ inputs.twenty_workflow_id || '' }}
           WIRE_WORKFLOW_VERSION_ID: ${{ inputs.twenty_workflow_version_id || '' }}

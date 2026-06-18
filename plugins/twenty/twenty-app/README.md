@@ -71,7 +71,7 @@ ThinkWork should record the resulting generic webhook delivery with
 `source=twenty-app`, `stage=Customer`, and `triggerStage=Customer`, proving that
 the path goes through the installed Twenty app settings.
 
-## Install / Sync
+## Install / Deploy
 
 Do not run these commands against production from an implementation PR. They
 mutate the target Twenty instance.
@@ -80,21 +80,28 @@ mutate the target Twenty instance.
 cd plugins/twenty/twenty-app
 corepack enable
 yarn install
-yarn twenty remote:add thinkwork-crm https://crm.thinkwork.ai
+yarn twenty remote:add --url https://crm.thinkwork.ai --api-key "$TWENTY_DEPLOY_API_KEY" --as thinkwork-crm
 yarn twenty dev --once --dry-run
-yarn twenty dev --once
+yarn twenty app:publish --private --remote thinkwork-crm
+yarn twenty app:install --remote thinkwork-crm
 ```
 
-Or use the deploy workflow's guarded sync step:
+Or use the guarded operations workflow:
 
 ```bash
 node plugins/twenty/scripts/sync-thinkwork-app.mjs --apply
 ```
 
-After sync, the Twenty Applications screen should show a native installed app
-named `ThinkWork`, the app Settings tab should render a `ThinkWork Webhook`
-configuration form for the webhook URL and trigger stage, and the workflow
-builder should offer a workflow action named `ThinkWork Webhook`.
+Dry-run mode uses Twenty's non-mutating dev sync preview. Apply mode follows
+Twenty's private app lifecycle: deploy the app tarball with
+`app:publish --private`, then install it into the target workspace with
+`app:install`.
+
+After install, the Twenty Applications screen should show a native installed
+app named `ThinkWork`, the app Settings tab should render a
+`ThinkWork Webhook` configuration form for the webhook URL and trigger stage,
+and the workflow builder should offer a workflow action named
+`ThinkWork Webhook`.
 
 ## Workflow Wiring
 

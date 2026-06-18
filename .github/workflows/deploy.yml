@@ -1502,7 +1502,7 @@ jobs:
           delete_secret_if_present "${TWENTY_ENCRYPTION_KEY_SECRET_ARN:-$TWENTY_ENCRYPTION_KEY_SECRET_ID}" "encryption key"
 
   sync-twenty-thinkwork-app:
-    name: Sync Twenty ThinkWork App
+    name: Deploy and install Twenty ThinkWork App
     needs: [terraform-apply]
     if: >-
       always()
@@ -1518,10 +1518,10 @@ jobs:
         with:
           node-version: 24
 
-      - name: Sync native ThinkWork app package
+      - name: Deploy and install native ThinkWork app package
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
-          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
           TWENTY_THINKWORK_APP_SYNC_DRY_RUN: ${{ inputs.sync_twenty_thinkwork_app_dry_run && '1' || '0' }}
         run: |
           set -euo pipefail
@@ -1556,7 +1556,7 @@ jobs:
       - name: Wire workflow to native ThinkWork app action
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
-          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
           WIRE_DRY_RUN: ${{ inputs.wire_twenty_thinkwork_workflow_dry_run && '1' || '0' }}
           WIRE_WORKFLOW_ID: ${{ inputs.twenty_thinkwork_workflow_id || '' }}
           WIRE_WORKFLOW_VERSION_ID: ${{ inputs.twenty_thinkwork_workflow_version_id || '' }}

@@ -103,6 +103,8 @@ describe("twenty plugin manifest", () => {
     });
 
     const appYarnLock = readTwentyApp("yarn.lock");
+    const appNvmrc = readTwentyApp(".nvmrc");
+    const appPackageJson = readTwentyApp("package.json");
     const applicationConfig = readTwentyApp("src/application-config.ts");
     const settingsComponent = readTwentyApp(
       "src/front-components/thinkwork-settings.front-component.tsx",
@@ -112,6 +114,8 @@ describe("twenty plugin manifest", () => {
     );
 
     expect(appYarnLock).toBeDefined();
+    expect(appNvmrc.trim()).toBe("24");
+    expect(appPackageJson).toContain('"twenty": ">=2.13.0 <3.0.0"');
     expect(applicationConfig).toContain("defineApplication");
     expect(applicationConfig).toContain("displayName: APP_DISPLAY_NAME");
     expect(applicationConfig).toContain(
@@ -157,6 +161,7 @@ describe("twenty plugin manifest", () => {
     );
 
     expect(deployWorkflow).toContain("sync_twenty_thinkwork_app");
+    expect(deployWorkflow).toContain("TWENTY_DEPLOY_API_KEY");
     expect(deployWorkflow).toContain("TWENTY_APP_SYNC_API_KEY");
     expect(deployWorkflow).toContain("sync-thinkwork-app.mjs");
     expect(deployWorkflow).toContain("wire-thinkwork-workflow.mjs");
@@ -166,10 +171,13 @@ describe("twenty plugin manifest", () => {
     expect(operationsWorkflow).toContain(
       "YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install",
     );
+    expect(operationsWorkflow).toContain("TWENTY_DEPLOY_API_KEY");
     expect(operationsWorkflow).toContain("sync-thinkwork-app.mjs");
     expect(operationsWorkflow).toContain("wire-thinkwork-workflow.mjs");
     expect(operationsWorkflow).not.toContain("terraform-apply");
-    expect(syncScript).toContain("remote:add");
+    expect(syncScript).toContain("app:publish");
+    expect(syncScript).toContain("--private");
+    expect(syncScript).toContain("app:install");
     expect(syncScript).toContain("dev");
     expect(syncScript).toContain("--dry-run");
     expect(syncScript).not.toContain("HTTP_REQUEST");
