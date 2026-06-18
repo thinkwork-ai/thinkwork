@@ -108,6 +108,49 @@ status: active
   draft, configuring `THINKWORK_TRIGGER_STAGE=Customer` and
   `THINKWORK_WEBHOOK_URL`, and verifying a `source=twenty-app` delivery.
 
+## 2026-06-18 Main Workflow Wiring Proof and Apply Blocker
+
+- PR #2662 merged the root workflow-version query fix:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2662`, merge commit
+  `10fd4635ff4426679f850337615da3df0b415447`.
+- Non-mutating `wire-workflow` dry-run `27790373002` on `main` succeeded and
+  reproduced the branch preview:
+  - Workflow: `Closed Won` (`e4c9942f-45b9-4922-96b5-fc69a5c1148c`), status
+    `ACTIVE`.
+  - Workflow version: `v1`
+    (`9e64a00d-4caa-47ea-a18a-9e310da2cd00`), status `ACTIVE`.
+  - Existing action: `Start ThinkWork thread`
+    (`71c36980-85a4-4079-920a-2c6b016a7b72`), type `HTTP_REQUEST`.
+  - Replacement action preview: `ThinkWork Webhook`, type `LOGIC_FUNCTION`,
+    logic function id `335d07e7-4415-4548-8be7-2b91976bf07d`, universal
+    identifier `85605c4e-d3db-4415-be84-08c5210d39e2`.
+  - Previewed mapping: `triggerStage=Customer`,
+    `workflowKey=customer_onboarding`.
+- Apply-to-draft run `27790404952` used explicit apply confirmation and
+  `twenty_create_draft=true`, so it attempted to create a draft from active
+  rather than edit the active workflow version directly. Twenty rejected the
+  draft creation mutation with:
+  `Twenty GraphQL errors: [{"message":"Forbidden resource","extensions":{"code":"FORBIDDEN","userFriendlyMessage":"An error occurred."}}]`
+  at `createDraftFromWorkflowVersion`.
+- Current blocker: the repository GitHub secret/API key is sufficient to publish
+  and install the native app and to read workflow/logic-function state, but it
+  is not authorized to create workflow drafts or apply workflow wiring in the
+  target Twenty instance.
+- Operator UI fallback was attempted from the local Chrome `thinkwork.ai`
+  profile, but `crm.thinkwork.ai` presented the Twenty sign-in modal, so this
+  session could not complete the UI-only workflow draft/settings step either.
+- Runtime proof still requires an operator-authenticated Twenty session or a
+  Twenty API key with workflow draft/update permissions to:
+  - configure the installed app settings:
+    `THINKWORK_TRIGGER_STAGE=Customer` and `THINKWORK_WEBHOOK_URL=<ThinkWork webhook URL>`;
+  - create or target a draft of workflow
+    `e4c9942f-45b9-4922-96b5-fc69a5c1148c`;
+  - replace action `71c36980-85a4-4079-920a-2c6b016a7b72` with the installed
+    `ThinkWork Webhook` logic function
+    `335d07e7-4415-4548-8be7-2b91976bf07d`;
+  - publish/activate the workflow if operator verification accepts the draft;
+  - verify a `source=twenty-app` delivery in ThinkWork.
+
 ## 2026-06-18 Twenty Logic Function Runtime Config Fix
 
 - PR #2652 merged the Twenty 2.9 compatibility fix:
