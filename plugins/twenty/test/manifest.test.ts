@@ -105,6 +105,7 @@ describe("twenty plugin manifest", () => {
     const appYarnLock = readTwentyApp("yarn.lock");
     const appNvmrc = readTwentyApp(".nvmrc");
     const appPackageJson = readTwentyApp("package.json");
+    const appReadme = readTwentyApp("README.md");
     const applicationConfig = readTwentyApp("src/application-config.ts");
     const settingsComponent = readTwentyApp(
       "src/front-components/thinkwork-settings.front-component.tsx",
@@ -116,6 +117,9 @@ describe("twenty plugin manifest", () => {
     expect(appYarnLock).toBeDefined();
     expect(appNvmrc.trim()).toBe("24");
     expect(appPackageJson).toContain('"twenty": ">=2.13.0 <3.0.0"');
+    expect(appReadme).toContain(
+      "docs/runbooks/twenty-thinkwork-native-app-install.md",
+    );
     expect(applicationConfig).toContain("defineApplication");
     expect(applicationConfig).toContain("displayName: APP_DISPLAY_NAME");
     expect(applicationConfig).toContain(
