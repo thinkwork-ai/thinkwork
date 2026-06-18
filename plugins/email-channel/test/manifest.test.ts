@@ -32,29 +32,31 @@ function emailCapability(
   return capability;
 }
 
-describe("Resend Channel plugin manifest", () => {
+describe("Email Channel plugin manifest", () => {
   it("validates as an inert provider-channel plugin", () => {
     const validated = validatePluginManifest(emailChannelManifest);
 
     expect(validated.pluginKey).toBe("email-channel");
-    expect(validated.displayName).toBe("Resend Channel");
+    expect(validated.displayName).toBe("Email Channel");
     expect(validated.versions[0].requiredOauthScopes).toEqual([]);
     expect(validated.versions[0].components).toEqual([
       {
         type: "ui-surface",
         key: "settings",
-        displayName: "Resend Channel settings",
+        displayName: "Email Channel settings",
         intendedMount: EMAIL_CHANNEL_SETTINGS_SURFACE,
       },
     ]);
   });
 
-  it("declares Resend as recommended and SES as compatibility", () => {
+  it("declares Resend, SendGrid, and SES provider options", () => {
     expect(emailChannelProviders.map((provider) => provider.key)).toEqual([
       "resend",
+      "sendgrid",
       "ses",
     ]);
     expect(isEmailChannelProviderKey("resend")).toBe(true);
+    expect(isEmailChannelProviderKey("sendgrid")).toBe(true);
     expect(isEmailChannelProviderKey("smtp")).toBe(false);
 
     const capability = emailCapability();
@@ -68,6 +70,12 @@ describe("Resend Channel plugin manifest", () => {
         key: "resend",
         displayName: "Resend",
         recommended: true,
+      },
+      {
+        key: "sendgrid",
+        displayName: "SendGrid",
+        compatibility: undefined,
+        recommended: undefined,
       },
       {
         key: "ses",
@@ -112,7 +120,7 @@ describe("Resend Channel plugin manifest", () => {
       kind: "manifest",
       path: "plugins/email-channel/src/manifest.ts",
       description:
-        "Resend Channel catalog manifest and provider capability contract.",
+        "Email Channel catalog manifest and provider capability contract.",
     });
     expect(defined.compatibilityLinks).toEqual([]);
   });

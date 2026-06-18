@@ -321,7 +321,7 @@ describe("validatePluginManifest", () => {
     expect(() => validatePluginManifest(ok)).not.toThrow();
   });
 
-  it("validates an email-channel capability with Resend and SES providers", () => {
+  it("validates an email-channel capability with Resend, SendGrid, and SES providers", () => {
     const ok = manifest((m) => {
       m.versions[0].capabilities = [
         {
@@ -333,6 +333,10 @@ describe("validatePluginManifest", () => {
               key: "resend",
               displayName: "Resend",
               recommended: true,
+            },
+            {
+              key: "sendgrid",
+              displayName: "SendGrid",
             },
             {
               key: "ses",

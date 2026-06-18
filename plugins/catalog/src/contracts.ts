@@ -37,7 +37,11 @@ export const PLUGIN_COMPONENT_TYPES = [
 
 export type PluginComponentType = (typeof PLUGIN_COMPONENT_TYPES)[number];
 
-export const EMAIL_CHANNEL_PROVIDER_KEYS = ["resend", "ses"] as const;
+export const EMAIL_CHANNEL_PROVIDER_KEYS = [
+  "resend",
+  "sendgrid",
+  "ses",
+] as const;
 
 export type EmailChannelProviderKey =
   (typeof EMAIL_CHANNEL_PROVIDER_KEYS)[number];

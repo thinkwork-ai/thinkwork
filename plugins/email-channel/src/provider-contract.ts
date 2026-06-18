@@ -20,6 +20,12 @@ export const emailChannelProviders = [
       "Recommended v1 provider for tenant-owned agent and Space email.",
   },
   {
+    key: "sendgrid",
+    displayName: "SendGrid",
+    description:
+      "Customer-owned provider for tenant member invitations using authenticated SendGrid sending domains.",
+  },
+  {
     key: "ses",
     displayName: "Amazon SES",
     compatibility: true,

@@ -3,9 +3,9 @@
 ## Current State
 
 - Linear status: In Progress
-- Worker branch: `codex/thnk-42-sendgrid-provider` (merged)
-- Base: `origin/main` at `11718bb662767d5802e33f921bd01243929b849a`
-- Phase: final status artifact before Verification handoff
+- Worker branch: `codex/thnk-42-ses-selection-fix`
+- Base: `origin/main` at `8305b3dc63f2342f4f35772a48dce934210e02c3`
+- Phase: Verification rebound fix pass
 
 ## Discovery
 
@@ -17,6 +17,23 @@
   invite delivery learning.
 - SendGrid docs checked for the Mail Send API and authenticated-domain list
   endpoint.
+
+## Verification Rebound
+
+- 2026-06-17: PR #2617 was merged, but verification moved THNK-42 back from
+  Verification to In Progress.
+- Verification evidence showed two issues:
+  - SES could be selected in the UI, but `configureEmailProvider` forced SES
+    `active_for_production` to `false`, allowing an older configured Resend row
+    to silently send invitations.
+  - Local UI review found the SendGrid credential flow was hard-coded into
+    Settings -> General instead of being exposed through the Email Channel
+    plugin like Resend.
+- Fix-pass direction: keep General Settings focused on email-provider
+  selection, move SendGrid credential/domain setup into the Email Channel
+  plugin settings surface, declare SendGrid in the plugin/provider capability
+  contract, and persist explicit SES selection so invite delivery uses
+  Cognito/SES when SES is active.
 
 ## Implementation Log
 
@@ -35,6 +52,26 @@
   invitation-provider selection plus SendGrid key/domain refresh.
 - 2026-06-17: Updated invite delivery to honor an active SendGrid provider and
   prefer explicit active providers over the legacy configured-Resend fallback.
+- 2026-06-17 fix pass: Renamed the provider package surface from Resend
+  Channel to Email Channel and declared provider options for Resend, SendGrid,
+  and SES in the plugin catalog contract.
+- 2026-06-17 fix pass: Removed provider-specific SendGrid credential/domain UI
+  from Settings -> General. General now only selects SES plus configured
+  Email Channel providers.
+- 2026-06-17 fix pass: Moved the General Settings selector into the Deployment
+  section as a single Email Provider row, removed the separate Invitation email
+  section and readiness badges, and filtered the dropdown to available
+  providers only.
+- 2026-06-17 fix pass: Narrowed the Deployment Email Provider dropdown and
+  top-aligned plugin catalog status badges in the plugins list.
+- 2026-06-17 fix pass: Added SendGrid API key and authenticated-domain setup to
+  the Email Channel plugin settings alongside Resend.
+- 2026-06-17 fix pass: Changed `configureEmailProvider` to persist
+  `active_for_production = true` for explicit SES selection and changed invite
+  resolution to return Cognito/SES delivery when SES is the active provider.
+- 2026-06-17 fix pass: Added regression coverage for active SES with stale
+  configured Resend, and for SendGrid credential setup living under the plugin
+  settings page rather than General.
 
 ## PR Evidence
 
@@ -78,3 +115,21 @@
 - Final artifact:
   - This status update is the remaining automation-created artifact to merge
     before moving THNK-42 to Verification.
+
+## Fix-Pass Local Evidence
+
+- Branch: `codex/thnk-42-ses-selection-fix`
+- PR: `https://github.com/thinkwork-ai/thinkwork/pull/2620`
+- Local validation:
+  - `pnpm --filter @thinkwork/plugin-email-channel test` passed: 1 file, 7
+    tests.
+  - `pnpm --filter @thinkwork/plugin-catalog test -- src/__tests__/contracts.test.ts`
+    passed: 1 file, 29 tests.
+  - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/email-channel/__tests__/configure-provider.test.ts src/__tests__/inviteMember-computer-claim.test.ts`
+    passed: 2 files, 8 tests.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsGeneral.test.tsx src/components/settings/plugins/PluginDetail.test.tsx`
+    passed: 2 files, 26 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-email-channel typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.

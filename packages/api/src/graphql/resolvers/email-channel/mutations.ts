@@ -400,11 +400,9 @@ export async function configureEmailProvider(
   const { tenantId } = await requirePluginTenantAdmin(ctx);
   const input = args.input;
   const provider = graphqlEnumToDb(input.provider);
-  const requestedActiveForProduction = input.activeForProduction ?? false;
-  const activeForProduction =
-    provider === "ses" ? false : requestedActiveForProduction;
+  const activeForProduction = input.activeForProduction ?? false;
   const metadata = jsonInput(input.metadata, "metadata");
-  if (requestedActiveForProduction) {
+  if (activeForProduction) {
     await ctx.db
       .update(emailProviderInstalls)
       .set({ active_for_production: false, updated_at: sql`now()` })
