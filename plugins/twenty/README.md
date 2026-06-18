@@ -16,7 +16,9 @@ remaining infrastructure and activation source.
 - `src/api/cutover.ts` owns the Twenty MCP cutover orchestration contract.
 - `twenty-app/` owns the native Twenty app source package. It installs as an
   application named `ThinkWork` and exposes a logic function named
-  `ThinkWork Webhook` as a workflow action.
+  `ThinkWork Webhook` as a workflow action. Its native Settings tab includes
+  a `ThinkWork Webhook` configuration form that saves the app's webhook URL and
+  trigger-stage application variables.
 - `terraform/twenty/` owns the Twenty managed-app Terraform module.
 - `smoke/` owns Twenty managed-app and MCP OAuth smoke scripts.
 - `test/manifest.test.ts` keeps Twenty endpoint, OAuth, infrastructure, and

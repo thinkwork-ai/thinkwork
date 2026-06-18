@@ -6,6 +6,32 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Native App Settings Surface Follow-Up
+
+- Latest objective tightening: the native Twenty app package must include a
+  real `ThinkWork App` settings surface for webhook configuration, not only
+  server-side application variable declarations or OAuth registration rows.
+- Added `thinkwork-settings`, a `defineFrontComponent` settings tab registered
+  through `settingsCustomTabFrontComponentUniversalIdentifier` on the
+  `ThinkWork` app package.
+- The settings tab saves `THINKWORK_WEBHOOK_URL` and
+  `THINKWORK_TRIGGER_STAGE` through Twenty's metadata
+  `updateOneApplicationVariable` mutation. `THINKWORK_TRIGGER_STAGE` still
+  defaults to `Customer`.
+- The `ThinkWork Webhook` workflow action continues to read those native app
+  variables, so the intended path is:
+  `Twenty Opportunity stage == Customer -> ThinkWork app Settings -> ThinkWork Webhook`.
+- Local non-production evidence: Twenty CLI `dev:build` succeeded and generated
+  a manifest containing app `ThinkWork`, settings custom tab front component
+  `c132535c-b8f3-43a4-8dc2-3deefb3dc825`, app variables
+  `THINKWORK_WEBHOOK_URL`/`THINKWORK_TRIGGER_STAGE`, and workflow action
+  `ThinkWork Webhook`.
+- No production Twenty mutation was run from Codex. Runtime proof still
+  requires an authorized operator to sync/install this app package, open the
+  ThinkWork app Settings tab, save the ThinkWork webhook URL, wire the Customer
+  workflow step to `ThinkWork -> ThinkWork Webhook`, and verify a
+  `source=twenty-app` delivery.
+
 ## 2026-06-18 Workflow Action Wiring Follow-Up
 
 - Latest reopened-gate root cause: the native ThinkWork app package and guarded

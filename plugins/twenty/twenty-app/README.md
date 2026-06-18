@@ -6,10 +6,18 @@ Native Twenty app source for the THNK-33 workflow path:
 Twenty workflow -> ThinkWork app -> ThinkWork Webhook
 ```
 
-The app exposes one logic function, `ThinkWork Webhook`. It is registered as a
-workflow action for explicit workflow-builder use. The function compares the
-incoming Twenty Opportunity stage with the configured app stage and only posts
-to the configured ThinkWork generic webhook URL when they match.
+The app exposes:
+
+- one settings front component, `thinkwork-settings`, rendered by the native
+  Twenty app Settings tab;
+- one logic function, `ThinkWork Webhook`, registered as a workflow action for
+  explicit workflow-builder use.
+
+The settings component writes `THINKWORK_WEBHOOK_URL` and
+`THINKWORK_TRIGGER_STAGE` as native Twenty application variables. The workflow
+action reads those variables, compares the incoming Twenty Opportunity stage
+with the configured app stage, and only posts to the configured ThinkWork
+generic webhook URL when they match.
 
 ## Configuration
 
@@ -19,17 +27,17 @@ After installing the app, open Twenty:
 Settings -> Applications -> Installed -> ThinkWork -> Settings
 ```
 
-Set the app variables:
+Set the app variables in the ThinkWork settings surface:
 
 | Variable                  | Required | Default    | Description                                                                                                                            |
 | ------------------------- | -------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `THINKWORK_WEBHOOK_URL`   | yes      | none       | Full ThinkWork generic webhook URL copied from ThinkWork Settings > Webhooks, for example `https://app.thinkwork.ai/webhooks/<token>`. |
 | `THINKWORK_TRIGGER_STAGE` | yes      | `Customer` | Twenty Opportunity stage label that should trigger the ThinkWork webhook.                                                              |
 
-The webhook URL contains the ThinkWork webhook token, so it is declared as a
-secret application variable and is only available to the server-side logic
-function. The trigger stage is intentionally editable in the app settings so the
-mapping stays in Twenty's ThinkWork app configuration.
+The webhook URL contains the ThinkWork webhook token, so the settings component
+does not display the saved secret value after save; paste a new URL to rotate
+it. The trigger stage defaults to `Customer` and is intentionally editable in
+the app settings so the mapping stays in Twenty's ThinkWork app configuration.
 
 ## Workflow Action
 
@@ -84,9 +92,9 @@ node plugins/twenty/scripts/sync-thinkwork-app.mjs --apply
 ```
 
 After sync, the Twenty Applications screen should show a native installed app
-named `ThinkWork`, the app Settings tab should expose
-`THINKWORK_WEBHOOK_URL` and `THINKWORK_TRIGGER_STAGE`, and the workflow builder
-should offer a workflow action named `ThinkWork Webhook`.
+named `ThinkWork`, the app Settings tab should render a `ThinkWork Webhook`
+configuration form for the webhook URL and trigger stage, and the workflow
+builder should offer a workflow action named `ThinkWork Webhook`.
 
 ## Workflow Wiring
 

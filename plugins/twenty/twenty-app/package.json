@@ -14,8 +14,13 @@
     "twenty": "twenty",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
   "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
     "@types/node": "^24.7.2",
     "twenty-client-sdk": "2.13.0",
     "twenty-sdk": "2.13.0",
