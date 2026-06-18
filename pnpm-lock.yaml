@@ -1610,6 +1610,9 @@ importers:
       '@thinkwork/plugin-twenty':
         specifier: workspace:*
         version: link:../twenty
+      '@thinkwork/plugin-workos-auth':
+        specifier: workspace:*
+        version: link:../workos-auth
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
@@ -1721,6 +1724,18 @@ importers:
       '@thinkwork/deployment-runner':
         specifier: workspace:*
         version: link:../../packages/deployment-runner
+      '@thinkwork/plugin-catalog':
+        specifier: workspace:*
+        version: link:../catalog
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
+
+  plugins/workos-auth:
+    devDependencies:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
         version: link:../catalog

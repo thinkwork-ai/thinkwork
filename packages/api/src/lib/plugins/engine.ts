@@ -22,7 +22,8 @@
  *                                     components exist — the destroy job
  *                                     completes via read-time reconcile)
  *
- * Handlers run skills → mcp-server → ui-surface → infrastructure and MUST
+ * Handlers run skills → infrastructure → mcp-server → auth-provider →
+ * ui-surface and MUST
  * be idempotent (create-or-repair) so a crash mid-sequence converges on
  * re-drive. A component failure aborts the sequence: later components stay
  * `pending`, the failed one records `last_error`, and the install holds at
@@ -256,7 +257,8 @@ async function ensurePremiumInstallAllowed(
 // ---------------------------------------------------------------------------
 
 /**
- * Provision order: skills → infrastructure → mcp-server → ui-surface.
+ * Provision order: skills → infrastructure → mcp-server → auth-provider →
+ * ui-surface.
  *
  * Managed-app-backed MCP components resolve their endpoint from the
  * managed_applications row, so infrastructure must run before MCP.
@@ -265,19 +267,22 @@ const COMPONENT_PROVISION_ORDER: Record<string, number> = {
   skills: 0,
   infrastructure: 1,
   "mcp-server": 2,
-  "ui-surface": 3,
+  "auth-provider": 3,
+  "ui-surface": 4,
 };
 
 /**
- * Teardown order: skills → mcp-server → ui-surface → infrastructure.
+ * Teardown order: skills → mcp-server → auth-provider → ui-surface →
+ * infrastructure.
  * Infra destroy jobs stay last so plugin-managed MCP rows disappear before
  * their backing application begins teardown.
  */
 const COMPONENT_TEARDOWN_ORDER: Record<string, number> = {
   skills: 0,
   "mcp-server": 1,
-  "ui-surface": 2,
-  infrastructure: 3,
+  "auth-provider": 2,
+  "ui-surface": 3,
+  infrastructure: 4,
 };
 
 function provisionOrder(componentType: string): number {
@@ -713,6 +718,16 @@ async function provisionComponent(
     case "ui-surface":
       // Declared-only in v1: recorded as a provisioned no-op.
       return { handlerRef: {}, provisioned: true };
+    case "auth-provider":
+      // U2 declares/admin-configures auth providers only. U3 owns Cognito
+      // bridge provisioning and validation; fail closed until then.
+      return {
+        handlerRef: {
+          status: "unconfigured",
+          publicOptionsPublished: false,
+        },
+        provisioned: true,
+      };
     default:
       throw pluginEngineError(
         "PLUGIN_COMPONENT_UNSUPPORTED",

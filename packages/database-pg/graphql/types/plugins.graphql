@@ -12,17 +12,72 @@ type PluginComponent {
   id: ID!
   "Component key from the pinned manifest version (unique within the install)."
   componentKey: String!
-  "'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'."
+  "'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'."
   componentType: String!
   "'pending' | 'provisioned' | 'failed' (failed → pending on retry)."
   state: String!
   """
   Handler linkage into real runtime rows, shape by component type:
   mcp-server { tenantMcpServerId }, skills { seededCatalogPrefix,
-  workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId }.
+  workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId },
+  auth-provider { status, publicOptionsPublished }.
   """
   handlerRef: AWSJSON!
   lastError: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+"""
+Deployment-scoped auth-provider bridge configuration. Secret values are never
+exposed here; `clientSecretConfigured` means a server-side secret ref exists.
+"""
+type AuthProviderResource {
+  id: ID!
+  "'workos' in v1."
+  providerKey: String!
+  displayName: String!
+  cognitoUserPoolId: String!
+  cognitoAppClientIds: [String!]!
+  cognitoIdentityProviderName: String!
+  issuerUrl: String!
+  clientId: String!
+  clientSecretConfigured: Boolean!
+  authorizeScopes: String!
+  "'single_sso' | 'provider_specific'."
+  publicOptionMode: String!
+  providerOptions: AWSJSON!
+  """
+  'unconfigured' | 'validating' | 'valid' | 'partially_valid' | 'invalid' |
+  'rotating_secret' | 'disabled'.
+  """
+  validationStatus: String!
+  publicOptionsPublished: Boolean!
+  lastValidatedAt: AWSDateTime
+  lastErrorCode: String
+  diagnostics: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+"""
+Tenant/deployment opt-in for a deployment auth resource. Public login options
+may be derived from this only after the linked resource validates.
+"""
+type TenantAuthProviderReference {
+  id: ID!
+  tenantId: ID!
+  pluginInstallId: ID!
+  authProviderResourceId: ID!
+  "'disabled' | 'enabled' | 'invalid' | 'decommissioning'."
+  status: String!
+  hostnames: [String!]!
+  publicOptionLabel: String!
+  enabledAt: AWSDateTime
+  disabledAt: AWSDateTime
+  lastErrorCode: String
+  metadata: AWSJSON!
+  resource: AuthProviderResource!
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
@@ -107,7 +162,7 @@ type PluginEntitlement {
 "Display summary of one manifest component for catalog browse."
 type PluginCatalogComponent {
   key: String!
-  "'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'."
+  "'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'."
   type: String!
   "Display name where the manifest declares one; null → render falls back to key."
   displayName: String
