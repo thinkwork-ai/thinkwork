@@ -90,6 +90,16 @@ TWENTY_APP_SYNC_API_KEY before running Twenty app operations.` The
   action `ThinkWork Webhook`. The app package now commits the real Yarn 4
   lockfile instead of an empty project-marker lockfile, so private publish and
   install runs use reproducible dependency resolution.
+- Non-mutating operations evidence after the real lockfile merge:
+  - `validate-package` run `27775897315` on merge commit
+    `01f6688415d2e79ec129b1f28fa3678e76549fb5` passed. It ran the native
+    app package validation and skipped secret checks, app sync/install, and
+    workflow wiring.
+  - `sync-app` dry-run `27775930121` on the same merge commit passed
+    `Validate native ThinkWork app package`, showed
+    `TWENTY_PUBLIC_URL=https://crm.thinkwork.ai`, then failed
+    `Check Twenty app operation secrets` because `TWENTY_APP_SYNC_API_KEY` was
+    empty. The log message was `Set repository secret TWENTY_DEPLOY_API_KEY or TWENTY_APP_SYNC_API_KEY before running Twenty app operations.` The deploy/install and workflow-wiring steps were skipped, so no production Twenty mutation ran.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
