@@ -6,6 +6,33 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Twenty App Package Version Retry Fix
+
+- PR #2654 merged the Twenty local logic-function runtime fix:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2654`, merge commit
+  `857f9c2338581fca7ccd90a0a6943a5c344e2de2`.
+- Main deploy run `27785104575` succeeded after applying that fix. AWS ECS
+  verification showed both live Twenty task definitions include
+  `LOGIC_FUNCTION_TYPE=LOCAL`:
+  - `thinkwork-dev-twenty-server:17`
+  - `thinkwork-dev-twenty-worker:17`
+- Apply-mode `sync-app` run `27787290464` on main commit
+  `d4314919668b38d4067a4e4079c98b92124935b9` validated the package and target
+  secrets, then failed during publish because Twenty already has
+  `@thinkwork/twenty-app` version `0.1.0` from the earlier publish attempt:
+  `Cannot deploy ...@0.1.0: version must be higher than the currently deployed version 0.1.0.`
+- Root cause: run `27784032724` successfully published the private native app
+  package at `0.1.0` before failing on install. Twenty requires monotonic app
+  package versions for subsequent publishes.
+- Follow-up fix: bump `plugins/twenty/twenty-app/package.json` to `0.1.1` so
+  the next apply-mode `sync-app` can publish a new package and retry the native
+  workspace install against the now-enabled local logic-function runtime.
+- Runtime proof still requires merging this package-version retry fix,
+  rerunning apply-mode `sync-app`, confirming the native `ThinkWork` app appears
+  in Twenty, configuring `THINKWORK_TRIGGER_STAGE=Customer` and
+  `THINKWORK_WEBHOOK_URL`, wiring the Customer workflow to `ThinkWork Webhook`,
+  and verifying a `source=twenty-app` delivery.
+
 ## 2026-06-18 Twenty Logic Function Runtime Config Fix
 
 - PR #2652 merged the Twenty 2.9 compatibility fix:
