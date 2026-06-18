@@ -37,6 +37,13 @@ status: active
   workflow validation step also needed the sync script's non-immutable install
   behavior. Follow-up makes the workflow run non-immutable `yarn install`
   before `yarn twenty dev:build`.
+- Non-mutating workflow validation now passes on `main` after PR #2634:
+  run `27769070287` on merge commit
+  `aaef174f24a8e1d373b8d6860af50a9b2846b135` completed successfully. Evidence:
+  `Validate native ThinkWork app package` ran
+  `YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install` and
+  `yarn twenty dev:build`; the apply-only confirmation, secret-check, app-sync,
+  and Customer-workflow wiring steps were skipped.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
