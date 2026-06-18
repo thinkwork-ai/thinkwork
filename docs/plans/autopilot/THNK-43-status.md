@@ -1,9 +1,9 @@
 ---
 linear: THNK-43
 title: WorkOS Auth plugin upstream of Cognito
-status: blocked
+status: in-progress
 updated: 2026-06-18
-branch: codex/thnk-43-workos-u1
+branch: codex/thnk-43-u1-google-proof
 ---
 
 # THNK-43 Autopilot Status
@@ -11,11 +11,11 @@ branch: codex/thnk-43-workos-u1
 ## Current Pass
 
 - Dispatcher marker: `dispatcher:THNK-43:Ready to Work:Codex`
-- Pass type: fresh Ready-to-Work implementation, not failed Verification/Review
-  rebound.
+- Pass type: U1 live-evidence recovery after a WorkOS staging account became
+  available.
 - Scope: U1 only, WorkOS-to-Cognito OIDC compatibility spike.
-- Branch: `codex/thnk-43-workos-u1` from `origin/main`
-  `d56c31a5d2af7419d4911ee6f0fb4fa9eb057537`.
+- Branch: `codex/thnk-43-u1-google-proof` from `origin/main`
+  `d0de3991558c9df8e9c7c00aabda3460676d6361`.
 
 ## Completed
 
@@ -29,36 +29,53 @@ branch: codex/thnk-43-workos-u1
   Manager.
 - Added U1 spike artifact:
   `docs/solutions/spikes/2026-06-18-workos-cognito-oidc-compatibility.md`.
+- Created a temporary WorkOS staging AuthKit/OIDC application and registered
+  the dev Cognito `/oauth2/idpresponse` callback.
+- Created dev Cognito OIDC IdP `WorkOSAuthU1` in user pool
+  `us-east-1_L4DhLVKis` and attached it to `ThinkworkAdmin` and
+  `ThinkworkMobile`.
+- Completed a Google-backed WorkOS AuthKit sign-in through Cognito
+  `ThinkworkAdmin`; the retry authorization code exchanged successfully at the
+  Cognito token endpoint.
 
 ## U1 Result
 
-Blocked for live token proof.
+Live Google-backed Cognito token proof is complete for the single SSO fallback.
 
-Read-only evidence showed:
+Evidence now shows:
 
-- Dev Cognito user pool `thinkwork-dev-user-pool` has only the existing
-  `Google` IdP.
-- `ThinkworkAdmin` and `ThinkworkMobile` app clients support `COGNITO` and
-  `Google`, not a WorkOS IdP.
-- No WorkOS-named Secrets Manager credential exists in the inspected account.
-- Repo/local config contains no ready `workos` or `oidc_identity_providers`
-  bridge configuration.
+- WorkOS issuer discovery works from the staging AuthKit domain and advertises
+  Cognito-compatible `client_secret_post`, `RS256`, and OIDC endpoints.
+- Dev Cognito user pool `thinkwork-dev-user-pool` now has OIDC IdP
+  `WorkOSAuthU1`.
+- `ThinkworkAdmin` and `ThinkworkMobile` app clients support `COGNITO`,
+  `Google`, and `WorkOSAuthU1`.
+- WorkOS rendered Google and Microsoft provider choices behind the single
+  Cognito WorkOS IdP.
+- Google sign-in first triggered the expected existing pre-signup linker retry,
+  then returned a Cognito authorization code on the second hosted auth attempt.
+- Cognito token exchange succeeded and Cognito remained the final issuer.
 
-The spike records the safe interim decision: use a single WorkOS-backed
-`Continue with SSO` fallback until a non-production WorkOS/Cognito bridge proves
-provider-specific Google/Microsoft routing and final Cognito claim match.
+The spike records the safe implementation decision: ship a single WorkOS-backed
+`Continue with SSO` fallback. Do not ship provider-specific Google/Microsoft
+buttons yet.
 
-## Blocker
+## Remaining Constraint
 
-U1 needs an approved non-production WorkOS OAuth application and Cognito test
-target. Required inputs are listed in the spike doc. Clearing the blocker
-requires either a pre-created bridge or explicit approval to create/update a
-non-production Cognito OIDC IdP and WorkOS redirect configuration.
+The Google-backed final Cognito ID token included `identities` entries for the
+existing native `Google` IdP and the WorkOS OIDC IdP, but it did not include
+durable WorkOS organization, connection, credential, or selected-upstream
+provider claims. A Microsoft pass was attempted, but WorkOS reused the active
+Google session before a Microsoft account could be selected.
+
+This is no longer a `Needs Credentials` blocker for the single SSO fallback.
+It remains a product/claim-design constraint for provider-specific buttons and
+U6 linking enforcement.
 
 ## Next Action
 
-Land this artifact branch through PR, then mark THNK-43 with the `Needs
-Credentials` blocker label and a Linear comment. Do not advance to U2-U7 or
-Verification until U1 live evidence is available, or until an explicit
-stakeholder decision accepts the single SSO fallback without provider-specific
-Google/Microsoft routing.
+Land this evidence update through PR, then update Linear with the PR URL,
+merged state, and U1 conclusion. Remove the `Needs Credentials` label only if
+Linear still has it. Continue THNK-43 from U2/U3 only for the single
+WorkOS-backed SSO fallback; keep provider-specific Google/Microsoft buttons out
+of scope until claim mapping and clean Microsoft proof are complete.
