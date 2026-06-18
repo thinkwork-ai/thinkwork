@@ -345,6 +345,21 @@ function harness(
           complete: false,
         };
       },
+      provisionAuthProvider: async ({ component }) => {
+        calls.push(`provision:auth-provider:${component.key}`);
+        return {
+          status: "unconfigured",
+          provider: component.provider,
+          cognitoIdentityProviderName: component.cognitoIdentityProviderName,
+          issuerHost: null,
+          authProviderResourceId: null,
+          tenantAuthProviderReferenceId: null,
+          publicOptionsPublished: false,
+          providerOptions: [],
+          lastValidatedAt: null,
+          diagnosticCode: "AUTH_PROVIDER_CONFIG_MISSING",
+        };
+      },
     },
     premiumAccess: {
       ensureInstallAllowed: async (input) => {
@@ -487,7 +502,7 @@ describe("installPlugin", () => {
     const install = await installPlugin(installArgs(), h.deps);
 
     expect(install.state).toBe("installed");
-    expect(h.calls).toEqual([]);
+    expect(h.calls).toEqual(["provision:auth-provider:workos-auth"]);
     const components = await h.deps.store.listComponents(install.id);
     expect(components).toHaveLength(2);
     const authProvider = components.find(
@@ -498,7 +513,15 @@ describe("installPlugin", () => {
       state: "provisioned",
       handler_ref: {
         status: "unconfigured",
+        provider: "workos",
+        cognitoIdentityProviderName: "WorkOSAuth",
+        issuerHost: null,
+        authProviderResourceId: null,
+        tenantAuthProviderReferenceId: null,
         publicOptionsPublished: false,
+        providerOptions: [],
+        lastValidatedAt: null,
+        diagnosticCode: "AUTH_PROVIDER_CONFIG_MISSING",
       },
     });
   });
