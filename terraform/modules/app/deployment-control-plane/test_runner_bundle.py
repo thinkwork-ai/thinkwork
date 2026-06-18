@@ -158,6 +158,79 @@ def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     assert {artifact["source"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]} == {"bundle"}
 
 
+def test_sync_release_artifacts_can_materialize_only_web_static_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    release_dir = tmp_path / "release-work"
+    manifest_path = tmp_path / "thinkwork-release.json"
+    bundle_path = tmp_path / "platform-artifacts.tar.gz"
+    lambda_bytes = b"lambda-zip"
+    web_bytes = b"web-tarball"
+    docs_bytes = b"docs-tarball"
+    write_tar(
+        bundle_path,
+        {
+            "lambdas/graphql-http.zip": lambda_bytes,
+            "static/web.tar.gz": web_bytes,
+            "static/docs.tar.gz": docs_bytes,
+        },
+    )
+    artifacts = [
+        {
+            "name": "graphql-http",
+            "type": "lambda",
+            "fileName": "graphql-http.zip",
+            "relativePath": "lambdas/graphql-http.zip",
+            "url": None,
+            "sha256": digest(lambda_bytes),
+            "sizeBytes": len(lambda_bytes),
+        },
+        {
+            "name": "web",
+            "type": "static-site",
+            "fileName": "web.tar.gz",
+            "relativePath": "static/web.tar.gz",
+            "url": None,
+            "sha256": digest(web_bytes),
+            "sizeBytes": len(web_bytes),
+        },
+        {
+            "name": "docs",
+            "type": "static-site",
+            "fileName": "docs.tar.gz",
+            "relativePath": "static/docs.tar.gz",
+            "url": None,
+            "sha256": digest(docs_bytes),
+            "sizeBytes": len(docs_bytes),
+        },
+    ]
+    manifest_sha = write_manifest(
+        manifest_path,
+        release_manifest(bundle_path, runner.sha256_file(bundle_path), artifacts),
+    )
+    calls: list[list[str]] = []
+
+    monkeypatch.setattr(runner, "RELEASE", release_dir)
+    monkeypatch.setattr(runner, "MANIFEST", release_dir / "thinkwork-release.json")
+    monkeypatch.setattr(runner, "RELEASE_EVIDENCE", {})
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", file_url(manifest_path))
+    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", manifest_sha)
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "0.1.0-canary.134")
+    monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    static_files = runner.sync_release_artifacts(
+        artifact_types={"static-site"},
+        artifact_names={"web"},
+    )
+
+    assert static_files == {"web": release_dir / "static/web.tar.gz"}
+    assert static_files["web"].read_bytes() == web_bytes
+    assert calls == []
+    assert [artifact["name"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]] == ["web"]
+
+
 def test_sync_release_artifacts_requires_signature_for_non_canary_release(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1240,6 +1313,69 @@ def test_validate_managed_app_plan_scope_rejects_other_dns_records() -> None:
                     {
                         "address": "cloudflare_record.app[0]",
                         "change": {"actions": ["create"]},
+                    }
+                ]
+            },
+        )
+
+
+def test_validate_environment_plan_scope_rejects_customer_domain_deletes() -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="customer-domain web resources"):
+        runner.validate_environment_plan_scope(
+            {},
+            {
+                "resource_changes": [
+                    {
+                        "address": (
+                            "module.thinkwork.module.customer_domain."
+                            "aws_route53_record.app_alias_a[0]"
+                        ),
+                        "change": {"actions": ["delete"]},
+                    }
+                ]
+            },
+        )
+
+
+def test_validate_environment_plan_scope_allows_reviewed_domain_removal() -> None:
+    runner = load_runner()
+
+    runner.validate_environment_plan_scope(
+        {"allowCustomerDomainRemoval": True},
+        {
+            "resource_changes": [
+                {
+                    "address": (
+                        "module.thinkwork.module.customer_domain."
+                        "aws_route53_record.app_alias_a[0]"
+                    ),
+                    "change": {"actions": ["delete"]},
+                }
+            ]
+        },
+    )
+
+
+def test_validate_environment_plan_scope_rejects_cloudfront_alias_removal() -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="customer-domain web resources"):
+        runner.validate_environment_plan_scope(
+            {},
+            {
+                "resource_changes": [
+                    {
+                        "address": (
+                            "module.thinkwork.module.computer_site."
+                            "aws_cloudfront_distribution.site"
+                        ),
+                        "change": {
+                            "actions": ["update"],
+                            "before": {"aliases": ["tei.thinkwork.ai"]},
+                            "after": {"aliases": []},
+                        },
                     }
                 ]
             },

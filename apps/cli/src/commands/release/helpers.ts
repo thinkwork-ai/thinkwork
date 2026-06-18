@@ -213,9 +213,12 @@ export function buildControllerUpdateInput(options: {
   prior: PriorControllerInput;
   release: ResolvedReleaseManifest;
   sessionId?: string;
+  webOnly?: boolean;
 }): Record<string, unknown> {
   const { prior, release } = options;
   const sessionId = options.sessionId ?? randomUUID();
+  const action = options.webOnly ? "web" : "update";
+  const operationKind = options.webOnly ? "web" : "foundation";
   const releasePin = {
     version: release.version,
     manifestUrl: release.manifestUrl,
@@ -234,8 +237,8 @@ export function buildControllerUpdateInput(options: {
   return {
     schemaVersion: 1,
     contract: "thinkwork.deployment.controller.v1",
-    phase: "update",
-    action: "update",
+    phase: action,
+    action,
     sessionId,
     customerName: prior.customerName,
     environmentName: prior.environmentName,
@@ -273,9 +276,9 @@ export function buildControllerUpdateInput(options: {
       ? { agentcorePiSourceImageUri: prior.agentcorePiSourceImageUri }
       : {}),
     operation: {
-      kind: "foundation",
-      action: "update",
-      plan: true,
+      kind: operationKind,
+      action,
+      plan: !options.webOnly,
       apply: true,
       destroy: false,
     },

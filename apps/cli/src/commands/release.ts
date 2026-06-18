@@ -47,6 +47,7 @@ interface DeployOptions {
   stage?: string;
   yes?: boolean;
   wait?: boolean;
+  webOnly?: boolean;
 }
 
 export function registerReleaseCommand(
@@ -66,7 +67,11 @@ export function registerReleaseCommand(
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-y, --yes", "Skip the confirmation prompt")
-    .option("--no-wait", "Start the controller execution and return immediately")
+    .option("--web-only", "Sync only the web application static bundle")
+    .option(
+      "--no-wait",
+      "Start the controller execution and return immediately",
+    )
     .action(async (_opts: DeployOptions, command: Command) => {
       await deployImpl(undefined, command.optsWithGlobals<DeployOptions>());
     });
@@ -89,7 +94,11 @@ export function registerReleaseCommand(
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option("-y, --yes", "Skip the confirmation prompt")
-    .option("--no-wait", "Start the controller execution and return immediately")
+    .option("--web-only", "Sync only the web application static bundle")
+    .option(
+      "--no-wait",
+      "Start the controller execution and return immediately",
+    )
     .action(
       async (
         version: string | undefined,
@@ -158,22 +167,39 @@ async function deployRelease(
   if (!version.startsWith("v")) version = `v${version}`;
 
   if (version === prior.releaseVersion && !opts.yes) {
-    printWarning(`${stage} already runs ${version}; redeploying the same release.`);
+    printWarning(
+      `${stage} already runs ${version}; redeploying the same release.`,
+    );
   }
 
   const resolved = await resolveReleaseManifest(version);
-  const input = buildControllerUpdateInput({ prior, release: resolved });
+  const input = buildControllerUpdateInput({
+    prior,
+    release: resolved,
+    webOnly: opts.webOnly,
+  });
 
   console.log("");
   console.log(`  Customer:     ${prior.customerName}`);
-  console.log(`  Environment:  ${prior.environmentName} (account ${identity.account}, ${identity.region})`);
-  console.log(`  Release:      ${prior.releaseVersion ?? "unknown"} -> ${version}`);
-  console.log(`  Manifest:     sha256 ${resolved.manifestSha256.slice(0, 16)}…`);
+  console.log(
+    `  Environment:  ${prior.environmentName} (account ${identity.account}, ${identity.region})`,
+  );
+  console.log(
+    `  Release:      ${prior.releaseVersion ?? "unknown"} -> ${version}`,
+  );
+  console.log(
+    `  Scope:        ${opts.webOnly ? "web application only" : "full controller update"}`,
+  );
+  console.log(
+    `  Manifest:     sha256 ${resolved.manifestSha256.slice(0, 16)}…`,
+  );
   console.log("");
 
   if (!opts.yes) {
     requireTty("Confirmation");
-    const ok = await confirm(`Start the controller update on ${stage}?`);
+    const ok = await confirm(
+      `Start the controller ${opts.webOnly ? "web-only update" : "update"} on ${stage}?`,
+    );
     if (!ok) {
       console.log("Aborted.");
       process.exit(1);
@@ -198,7 +224,9 @@ async function deployRelease(
       "text",
     ]).trim();
   } catch (err) {
-    printError(`Could not start the controller execution: ${(err as Error).message}`);
+    printError(
+      `Could not start the controller execution: ${(err as Error).message}`,
+    );
     process.exit(1);
   }
 
@@ -219,7 +247,9 @@ async function deployRelease(
   await waitForExecution(executionArn);
 }
 
-function resolvePriorInputOrExit(stateMachineArn: string): PriorControllerInput {
+function resolvePriorInputOrExit(
+  stateMachineArn: string,
+): PriorControllerInput {
   let executions: Array<{ executionArn: string; status: string }>;
   try {
     executions = JSON.parse(
@@ -274,7 +304,9 @@ async function waitForExecution(executionArn: string): Promise<void> {
   const startedAt = Date.now();
   process.stdout.write("  Waiting for the controller run");
   for (;;) {
-    await new Promise((resolveSleep) => setTimeout(resolveSleep, POLL_INTERVAL_MS));
+    await new Promise((resolveSleep) =>
+      setTimeout(resolveSleep, POLL_INTERVAL_MS),
+    );
     let status: { status: string; error?: string; cause?: string };
     try {
       status = JSON.parse(

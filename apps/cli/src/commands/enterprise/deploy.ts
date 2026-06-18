@@ -43,6 +43,7 @@ export const ENTERPRISE_DEPLOY_COMPONENTS = [
   "all",
   "foundation",
   "artifacts",
+  "web",
   "overlays",
   "smokes",
 ] as const;
@@ -511,6 +512,11 @@ async function resolveEnterpriseDeployComponent(
           name: "artifacts",
           value: "artifacts",
           description: "Release artifacts, runtime images, and static bundles",
+        },
+        {
+          name: "web",
+          value: "web",
+          description: "Sync only the end-user web application static bundle",
         },
         {
           name: "overlays",

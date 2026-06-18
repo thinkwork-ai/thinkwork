@@ -19,6 +19,17 @@ Lambda artifacts into the customer-owned artifact bucket, runs Terraform
 against the ThinkWork composite module, publishes static site bundles, and
 writes deployment profile pointers under `/thinkwork/<stage>/deployment`.
 
+For routine web-only redeploys, use controller action `web`. The runner
+downloads and verifies the selected release manifest, materializes only the
+`web` static-site artifact, reads the existing app bucket/distribution outputs
+from Terraform state, syncs the web bundle, invalidates CloudFront, and records
+evidence. It does not run Terraform init/plan/apply, stage Lambda artifacts,
+copy runtime images, run database migrations, or update AgentCore runtimes.
+
+Full deploy/update plans fail closed when they would delete customer-domain
+resources or remove web CloudFront aliases unless
+`allowCustomerDomainRemoval=true` is set for an intentional reviewed retirement.
+
 Platform deploys stay on the root Terraform state key:
 `thinkwork/<stage>/terraform.tfstate`.
 

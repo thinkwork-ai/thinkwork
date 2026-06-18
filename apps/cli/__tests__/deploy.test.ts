@@ -45,7 +45,9 @@ describe("deploy controller path", () => {
     expect(payload.terraformModuleVersion).toBe("0.1.0-canary.134");
     // The runner reads runner secrets only from this field; without it the
     // stage's configured secrets (domain gates, adminEmail) are ignored.
-    expect(payload.runnerSecretArn).toBe("/thinkwork/dev/deployment/runner-secrets");
+    expect(payload.runnerSecretArn).toBe(
+      "/thinkwork/dev/deployment/runner-secrets",
+    );
     expect(payload.evidence).toEqual(
       expect.objectContaining({
         bucket: "thinkwork-dev-123456789012-deploy-evidence",
@@ -81,6 +83,32 @@ describe("deploy controller path", () => {
       sessionId: "cli-dev-20260609T100000Z",
     });
     expect(payload.terraformModuleVersion).toBe("0.1.0-canary.130");
+  });
+
+  it("builds a web-only controller input that skips Terraform planning", () => {
+    const payload = buildControllerDeployInput({
+      action: "web",
+      stage: "dev",
+      accountId: "123456789012",
+      region: "us-east-1",
+      releaseVersion: "v0.1.0-canary.201",
+      manifestUrl: "https://example.com/thinkwork-release.json",
+      manifestSha256: "b".repeat(64),
+      sessionId: "cli-dev-web-20260618T100000Z",
+    });
+
+    expect(payload.action).toBe("web");
+    expect(payload.phase).toBe("web");
+    expect(payload.operation).toEqual({
+      kind: "web",
+      action: "web",
+      plan: false,
+      apply: true,
+      destroy: false,
+    });
+    expect(payload.evidence.prefix).toBe(
+      "sessions/cli-dev-web-20260618T100000Z/web",
+    );
   });
 
   it("derives the conventional deployment state machine ARN", () => {

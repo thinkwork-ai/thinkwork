@@ -48,6 +48,7 @@ describe("enterprise deploy workflow template", () => {
     expect(workflow).toContain("role-to-assume: ${{ vars.AWS_ROLE_ARN }}");
     expect(workflow).toContain("operation:");
     expect(workflow).toContain("component:");
+    expect(workflow).toContain("- web");
     expect(workflow).toContain("run_smokes:");
     expect(workflow).toContain("Fetch and verify release manifest");
     expect(workflow).toContain("sha256sum -c -");
@@ -58,6 +59,10 @@ describe("enterprise deploy workflow template", () => {
     expect(workflow).toContain("Copy runtime images into customer ECR");
     expect(workflow).toContain("Update AgentCore runtimes");
     expect(workflow).toContain("Sync static site bundles");
+    expect(workflow).toContain(
+      "PREPARE_ARGS+=(--artifact-type static-site --artifact-name web)",
+    );
+    expect(workflow).toContain("STATIC_ARGS+=(--artifact-name web)");
     expect(workflow).toContain("Apply customer overlay contract");
     expect(workflow).toContain("thinkwork-cli@${CLI_VERSION}");
     expect(workflow).toContain("enterprise overlay apply");

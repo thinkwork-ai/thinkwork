@@ -202,13 +202,14 @@ that app state is intentional for the stage.
 
 ## Workflow Components
 
-| Component    | What it does                                                                                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `all`        | First deploy and normal release upgrades: release artifact prep, Terraform apply, runtime image copy, AgentCore update, static sync, overlays, smokes. |
-| `foundation` | Terraform apply and artifact/runtime/static sync without overlays.                                                                                     |
-| `artifacts`  | Re-copy pinned Lambda/static/runtime artifacts without Terraform apply.                                                                                |
-| `overlays`   | Apply only `customer/` evals, skills, workspace defaults, seeds, and branding records.                                                                 |
-| `smokes`     | Run smoke checks against an already-deployed stage.                                                                                                    |
+| Component    | What it does                                                                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `all`        | First deploy and normal release upgrades: release artifact prep, Terraform apply, runtime image copy, AgentCore update, static sync, overlays, smokes.  |
+| `foundation` | Terraform apply and artifact/runtime/static sync without overlays.                                                                                      |
+| `artifacts`  | Re-copy pinned Lambda/static/runtime artifacts without Terraform apply.                                                                                 |
+| `web`        | Sync only the pinned end-user web static bundle and invalidate its CloudFront distribution. Does not apply Terraform, copy lambdas, or update runtimes. |
+| `overlays`   | Apply only `customer/` evals, skills, workspace defaults, seeds, and branding records.                                                                  |
+| `smokes`     | Run smoke checks against an already-deployed stage.                                                                                                     |
 
 Set workflow `operation=destroy` to remove the selected stage stack. Destroy
 always uses Terraform for the whole stage; component-specific destroy is not
@@ -271,6 +272,17 @@ supported.
 
    thinkwork deploy --customer {{CUSTOMER_SLUG}} --stage dev --component all
    ```
+
+For a web-application-only redeploy after updating `thinkwork.lock`, use:
+
+```bash
+thinkwork deploy --customer {{CUSTOMER_SLUG}} --stage dev --component web --no-run-smokes
+```
+
+This path reads existing Terraform outputs for the web bucket and CloudFront
+distribution, syncs only the `web` static release artifact, and invalidates the
+web distribution. It intentionally skips Terraform apply, Lambda artifact
+promotion, runtime image copy, AgentCore updates, overlays, and database work.
 
 3. Deploy to production after dev passes.
 

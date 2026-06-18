@@ -79,12 +79,16 @@ async function prepareArtifacts() {
   const workDir = required("--work-dir");
   const artifactBucket = required("--artifact-bucket");
   const lambdaPrefix = required("--lambda-prefix").replace(/^\/+|\/+$/g, "");
+  const artifactType = optional("--artifact-type");
+  const artifactName = optional("--artifact-name");
   const downloadDir = join(workDir, "downloads");
   await mkdir(downloadDir, { recursive: true });
   const bundle = await prepareArtifactBundle(manifest, downloadDir);
 
   const prepared = [];
   for (const artifact of manifest.artifacts ?? []) {
+    if (artifactType && artifact.type !== artifactType) continue;
+    if (artifactName && artifact.name !== artifactName) continue;
     const localPath = await prepareArtifact(artifact, downloadDir, bundle);
     prepared.push({ ...artifact, localPath });
     if (artifact.type === "lambda") {
@@ -95,6 +99,11 @@ async function prepareArtifacts() {
         `s3://${artifactBucket}/${lambdaPrefix}/${artifact.fileName}`,
       ]);
     }
+  }
+  if ((artifactType || artifactName) && prepared.length === 0) {
+    throw new Error(
+      `No release artifacts matched${artifactType ? ` type=${artifactType}` : ""}${artifactName ? ` name=${artifactName}` : ""}`,
+    );
   }
 
   await writeJson(join(workDir, "prepared-artifacts.json"), {
@@ -420,6 +429,7 @@ async function syncStaticSites() {
   const manifest = await readManifest(required("--manifest"));
   const workDir = required("--work-dir");
   const terraformDir = required("--terraform-dir");
+  const artifactName = optional("--artifact-name");
   const prepared = await readJson(join(workDir, "prepared-artifacts.json"), {
     artifacts: [],
   });
@@ -429,7 +439,8 @@ async function syncStaticSites() {
   const synced = [];
 
   for (const artifact of manifest.artifacts?.filter(
-    (item) => item.type === "static-site",
+    (item) =>
+      item.type === "static-site" && (!artifactName || item.name === artifactName),
   ) ?? []) {
     const localPath = downloadByName.get(artifact.name);
     if (!localPath) {
