@@ -6,6 +6,31 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Twenty App Non-Mutating Preflight Pass
+
+- PR #2649 merged the dry-run compatibility fix:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2649`, merge commit
+  `1290484aa314ccb7cb9ee5588ff5420f13a5c05f`.
+- Non-mutating `sync-app` preflight run `27780108426` on merge commit
+  `1290484aa314ccb7cb9ee5588ff5420f13a5c05f` passed.
+- Evidence:
+  - `Validate native ThinkWork app package` passed.
+  - `Check Twenty app operation secrets` passed with
+    `TWENTY_PUBLIC_URL=https://crm.thinkwork.ai` and a masked
+    `TWENTY_APP_SYNC_API_KEY`.
+  - `Deploy and install native ThinkWork app` ran in `mode: "dry-run"` with
+    note `Dry run validates the package and Twenty remote credentials without
+    deploying or installing.`
+  - The Twenty CLI reported `Using remote: thinkwork-crm`,
+    `Server: https://crm.thinkwork.ai`, and `Auth: api-key (valid)`.
+  - `Wire Customer workflow to ThinkWork app action` was skipped because this
+    run only validated native app sync preflight.
+- No production Twenty mutation was run from Codex. The remaining THNK-33 gate
+  still requires an explicit apply-mode install/sync of the native app into
+  Twenty, app Settings configuration for `THINKWORK_TRIGGER_STAGE=Customer` and
+  `THINKWORK_WEBHOOK_URL`, workflow wiring to `ThinkWork Webhook`, and a
+  verified `source=twenty-app` delivery.
+
 ## 2026-06-18 Twenty App Dry-Run Compatibility Fix
 
 - PR #2648 merged the empty-config/default-remote fix:
