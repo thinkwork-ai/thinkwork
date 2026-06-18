@@ -45,6 +45,34 @@ on:
         description: "Preview the native ThinkWork app sync without applying metadata changes"
         type: boolean
         default: true
+      wire_twenty_thinkwork_workflow:
+        description: "Wire a Twenty workflow draft step to ThinkWork -> ThinkWork Webhook"
+        type: boolean
+        default: false
+      wire_twenty_thinkwork_workflow_dry_run:
+        description: "Dry-run Twenty workflow wiring instead of updating a draft workflow version"
+        type: boolean
+        default: true
+      twenty_thinkwork_workflow_id:
+        description: "Optional Twenty workflow id to wire"
+        type: string
+        default: ""
+      twenty_thinkwork_workflow_version_id:
+        description: "Optional Twenty draft workflow version id to wire"
+        type: string
+        default: ""
+      twenty_thinkwork_workflow_name:
+        description: "Optional Twenty workflow name to wire"
+        type: string
+        default: ""
+      twenty_thinkwork_workflow_step_id:
+        description: "Optional Twenty workflow step id to replace"
+        type: string
+        default: ""
+      twenty_thinkwork_create_draft:
+        description: "Create a draft from the selected active workflow version before wiring"
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -1503,6 +1531,63 @@ jobs:
           fi
 
           node plugins/twenty/scripts/sync-thinkwork-app.mjs "$mode_flag"
+
+  wire-twenty-thinkwork-workflow:
+    name: Wire Twenty ThinkWork Workflow
+    needs: [terraform-apply, sync-twenty-thinkwork-app]
+    if: >-
+      always()
+      && github.event_name == 'workflow_dispatch'
+      && inputs.wire_twenty_thinkwork_workflow == true
+      && needs.terraform-apply.result == 'success'
+      && (
+        needs.sync-twenty-thinkwork-app.result == 'success' ||
+        needs.sync-twenty-thinkwork-app.result == 'skipped'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Wire workflow to native ThinkWork app action
+        env:
+          TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          WIRE_DRY_RUN: ${{ inputs.wire_twenty_thinkwork_workflow_dry_run && '1' || '0' }}
+          WIRE_WORKFLOW_ID: ${{ inputs.twenty_thinkwork_workflow_id || '' }}
+          WIRE_WORKFLOW_VERSION_ID: ${{ inputs.twenty_thinkwork_workflow_version_id || '' }}
+          WIRE_WORKFLOW_NAME: ${{ inputs.twenty_thinkwork_workflow_name || '' }}
+          WIRE_WORKFLOW_STEP_ID: ${{ inputs.twenty_thinkwork_workflow_step_id || '' }}
+          WIRE_CREATE_DRAFT: ${{ inputs.twenty_thinkwork_create_draft && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$WIRE_DRY_RUN" = "1" ]; then
+            args+=(--dry-run)
+          else
+            args+=(--apply)
+          fi
+          if [ "$WIRE_CREATE_DRAFT" = "1" ]; then
+            args+=(--create-draft-from-active)
+          fi
+          if [ -n "$WIRE_WORKFLOW_ID" ]; then
+            args+=(--workflow-id "$WIRE_WORKFLOW_ID")
+          fi
+          if [ -n "$WIRE_WORKFLOW_VERSION_ID" ]; then
+            args+=(--workflow-version-id "$WIRE_WORKFLOW_VERSION_ID")
+          fi
+          if [ -n "$WIRE_WORKFLOW_NAME" ]; then
+            args+=(--workflow-name "$WIRE_WORKFLOW_NAME")
+          fi
+          if [ -n "$WIRE_WORKFLOW_STEP_ID" ]; then
+            args+=(--step-id "$WIRE_WORKFLOW_STEP_ID")
+          fi
+
+          node plugins/twenty/scripts/wire-thinkwork-workflow.mjs "${args[@]}"
 
   # ── Database migration drift check ──────────────────────────────
   # Runs `scripts/db-migrate-manual.sh` against the dev DB after

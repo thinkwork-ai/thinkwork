@@ -29,18 +29,15 @@ remain follow-up work after the app/action path is installed and visible.
   to the ThinkWork generic webhook URL from ThinkWork Settings -> Webhooks.
 - The installed app Settings tab has `THINKWORK_TRIGGER_STAGE` set to
   `Customer`.
-- The installed app includes the native `ThinkWork Webhook` logic function with
-  `databaseEventTriggerSettings.eventName = opportunity.updated` and
-  `updatedFields = [stage]`.
+- The installed app includes the native `ThinkWork Webhook` logic function
+  exposed as a workflow action.
 - The `crm` MCP component is provisioned as the plugin-owned `twenty--crm`
   tenant MCP server.
 - The verifying user has an active Twenty plugin activation.
 - A Customer Onboarding Space exists.
 - A real or test Twenty Opportunity record can be moved to `Customer`.
-- Any legacy Twenty workflow using the built-in `HTTP_REQUEST` action is not
-  treated as proof. If a workflow is still used, it must call the app action
-  `ThinkWork -> ThinkWork Webhook`; otherwise the database-event trigger is the
-  native producer.
+- The Customer stage workflow calls the app action
+  `ThinkWork -> ThinkWork Webhook`, not the built-in `HTTP_REQUEST` action.
 
 ## Verify
 
@@ -49,13 +46,11 @@ remain follow-up work after the app/action path is installed and visible.
 2. Open the ThinkWork app settings and confirm `THINKWORK_WEBHOOK_URL` is
    configured as a secret application variable.
 3. Confirm `THINKWORK_TRIGGER_STAGE` is configured as `Customer`.
-4. Confirm the installed logic function is configured for
-   `opportunity.updated` on `stage`. If a Twenty workflow is still enabled for
-   this path, confirm its action is `ThinkWork Webhook`, not built-in
-   `HTTP_REQUEST`.
+4. Confirm the Customer stage workflow action is `ThinkWork Webhook`, not
+   built-in `HTTP_REQUEST`.
 5. Move a test Opportunity to `Customer`.
-6. Confirm the app logic function ran for the Opportunity stage update. If the
-   optional workflow action path is used, also capture the workflow run id.
+6. Confirm the workflow run called the app logic function and capture the
+   workflow run id.
 7. Inspect ThinkWork generic webhook deliveries and confirm the payload includes
    `source=twenty-app`, `stage=Customer`, `triggerStage=Customer`, and the
    Opportunity id.
@@ -79,8 +74,11 @@ tenant_id, provider=twenty, object_type=opportunity, object_id, workflow_key=cus
 - If the app is not visible in Twenty Applications after sync, capture the
   Twenty CLI output and `core.application` / `core.applicationRegistration`
   sourceType rows before claiming the gate remains blocked.
+- If the workflow still shows `HTTP_REQUEST`, capture the
+  `wire-thinkwork-workflow.mjs --dry-run` output showing the target workflow
+  version, selected step, and missing draft/apply prerequisite.
 - Actual Twenty-side status writeback must not be claimed from the workflow
   action alone. It requires deployed Twenty runtime proof and tool/write
   capability evidence.
-- The native app logic function proves the app-to-webhook path, not rich
+- The native app workflow action proves the app-to-webhook path, not rich
   embedded panels or full writeback.

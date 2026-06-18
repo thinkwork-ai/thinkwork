@@ -222,10 +222,6 @@ export default defineLogicFunction({
     "Posts a Twenty workflow event to the configured ThinkWork generic webhook.",
   timeoutSeconds: 15,
   handler,
-  databaseEventTriggerSettings: {
-    eventName: "opportunity.updated",
-    updatedFields: ["stage"],
-  },
   workflowActionTriggerSettings: {
     label: "ThinkWork Webhook",
     icon: "IconBolt",

@@ -6,6 +6,32 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Workflow Action Wiring Follow-Up
+
+- Latest reopened-gate root cause: the native ThinkWork app package and guarded
+  sync path existed, but the target Twenty Customer-stage workflow still had no
+  operator-safe repo path to replace the built-in `HTTP_REQUEST` action with
+  the installed app action `ThinkWork -> ThinkWork Webhook`.
+- Follow-up implementation removes the database-event trigger fallback from the
+  ThinkWork app package so the workflow action is the single Twenty-side
+  producer for this proof.
+- Added `plugins/twenty/scripts/wire-thinkwork-workflow.mjs`, a guarded
+  dry-run/apply utility that resolves the installed ThinkWork Webhook logic
+  function, targets an explicit workflow/workflow-version/step, and updates a
+  draft workflow step to `type: "LOGIC_FUNCTION"`.
+- Added Deploy workflow controls for the same operation:
+  `wire_twenty_thinkwork_workflow`, dry-run by default, with explicit workflow
+  id/version/name/step inputs and optional draft creation from an active
+  version.
+- No production Twenty mutation was run from Codex. Runtime proof still requires
+  an authorized operator to sync the app, configure
+  `THINKWORK_WEBHOOK_URL`/`THINKWORK_TRIGGER_STAGE`, dry-run workflow wiring,
+  apply to the intended draft, publish/activate in Twenty if required, and move
+  a test Opportunity to `Customer`.
+- Older entries below are preserved as history. Any evidence based on
+  OAuth-only app rows, built-in `HTTP_REQUEST`, or `source=twenty-workflow` is
+  not sufficient for the reopened THNK-33 gate.
+
 ## 2026-06-18 Native App Sync / Producer Correction
 
 - Latest verification after PR #2627/#2628 found the gate still failing at the
