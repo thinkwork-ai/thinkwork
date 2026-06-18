@@ -56,18 +56,32 @@ status: active
 - Added native Twenty app source package at `plugins/twenty/twenty-app`:
   - `defineApplication` app display name: `ThinkWork`
   - secret application variable: `THINKWORK_WEBHOOK_URL`
+  - app-stage mapping variable: `THINKWORK_TRIGGER_STAGE`, default `Customer`
   - workflow-action logic function: `ThinkWork Webhook`
   - action source marker sent to ThinkWork: `source=twenty-app`
 - The intended workflow path is now:
 
 ```text
-Twenty Closed Won workflow -> ThinkWork app action "ThinkWork Webhook" -> ThinkWork generic webhook
+Twenty Opportunity stage workflow -> ThinkWork app action "ThinkWork Webhook" -> app setting stage == Customer -> configured ThinkWork webhook
 ```
 
 - The implementation still does not run production sync commands from this
   worker. Installing/syncing the app into deployed Twenty is a production
   mutation and must be done by deployment automation or an operator using
   `plugins/twenty/twenty-app/README.md`.
+
+## 2026-06-18 Customer Stage Settings Follow-Up
+
+- User clarified the deployed Twenty CRM does not have an Opportunity Won stage;
+  the relevant Opportunity stage is `Customer`.
+- Follow-up branch:
+  `codex/thnk-33-customer-stage-webhook-settings`.
+- Updated the native Twenty app package so the app settings own the mapping:
+  - `THINKWORK_TRIGGER_STAGE`, default `Customer`
+  - `THINKWORK_WEBHOOK_URL`, the ThinkWork generic webhook to call
+- Updated `ThinkWork Webhook` so non-matching stages return
+  `status=skipped_stage` and do not call ThinkWork. Matching stage deliveries
+  include `source=twenty-app`, `stage`, and `triggerStage`.
 
 ## Current State
 

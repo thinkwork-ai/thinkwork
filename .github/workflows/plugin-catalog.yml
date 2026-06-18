@@ -114,7 +114,7 @@ jobs:
             files="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA")"
           fi
 
-          changed="$(printf '%s\n' "$files" | grep -E '^(plugins/catalog/|plugins/[^/]+/(src/|package\.json))' || true)"
+          changed="$(printf '%s\n' "$files" | grep -E '^(plugins/catalog/|plugins/[^/]+/(src/|package\.json|twenty-app/))' || true)"
           if [ -n "$changed" ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
             {
@@ -161,12 +161,13 @@ jobs:
             echo "::error::Missing PLUGIN_CATALOG_SIGNING_KEY secret; cannot publish signed plugin catalog."
             exit 1
           fi
-          mkdir -p dist/plugin-catalog
+          echo "CATALOG_OUTPUT_PATH=${RUNNER_TEMP}/${CATALOG_ASSET_NAME}" >> "$GITHUB_ENV"
           pnpm --filter @thinkwork/plugin-catalog build:catalog -- \
-            --out "dist/plugin-catalog/${CATALOG_ASSET_NAME}" \
+            --out "${RUNNER_TEMP}/${CATALOG_ASSET_NAME}" \
             --source-repository "$GITHUB_REPOSITORY" \
             --source-ref "$GITHUB_REF_NAME" \
             --source-commit "$GITHUB_SHA"
+          test -s "${RUNNER_TEMP}/${CATALOG_ASSET_NAME}"
 
       - name: Publish stable release asset
         env:
@@ -197,7 +198,7 @@ jobs:
           fi
 
           gh release upload "$CATALOG_RELEASE_TAG" \
-            "dist/plugin-catalog/${CATALOG_ASSET_NAME}#${CATALOG_ASSET_NAME}" \
+            "${CATALOG_OUTPUT_PATH}#${CATALOG_ASSET_NAME}" \
             --clobber
 
       - name: Summarize publication
