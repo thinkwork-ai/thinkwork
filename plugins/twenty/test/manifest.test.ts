@@ -102,6 +102,7 @@ describe("twenty plugin manifest", () => {
         "Native Twenty app package that exposes the ThinkWork Webhook workflow action.",
     });
 
+    const appYarnLock = readTwentyApp("yarn.lock");
     const applicationConfig = readTwentyApp("src/application-config.ts");
     const settingsComponent = readTwentyApp(
       "src/front-components/thinkwork-settings.front-component.tsx",
@@ -110,6 +111,7 @@ describe("twenty plugin manifest", () => {
       "src/logic-functions/thinkwork-webhook.logic-function.ts",
     );
 
+    expect(appYarnLock).toBeDefined();
     expect(applicationConfig).toContain("defineApplication");
     expect(applicationConfig).toContain("displayName: APP_DISPLAY_NAME");
     expect(applicationConfig).toContain(
