@@ -6,6 +6,39 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Twenty Logic Function Runtime Config Fix
+
+- PR #2652 merged the Twenty 2.9 compatibility fix:
+  `https://github.com/thinkwork-ai/thinkwork/pull/2652`, merge commit
+  `5fa8caadf27d889a693595cf51d9f07ef447377d`.
+- Apply-mode `sync-app` run `27784032724` on merge commit
+  `5fa8caadf27d889a693595cf51d9f07ef447377d` advanced past the prior version
+  gate:
+  - Built and packed `@thinkwork/twenty-app@0.1.0`.
+  - Uploaded `thinkwork-twenty-app-0.1.0.tgz`.
+  - Published successfully with
+    `Published @thinkwork/twenty-app v0.1.0 to thinkwork-crm`.
+- The install step then failed while creating the native app logic function:
+  `Migration action 'create' for 'logicFunction' failed` with
+  `LOGIC_FUNCTION_DISABLED`.
+- Root cause: the deployed Twenty server keeps production logic functions
+  disabled unless `LOGIC_FUNCTION_TYPE` is set to `LOCAL` or `LAMBDA`. Because
+  THNK-33 must use the native ThinkWork app workflow action and must not use a
+  custom Lambda path, the managed Twenty runtime needs to enable Twenty's local
+  logic-function driver for this first-party trusted app.
+- Follow-up fix:
+  - Set `LOGIC_FUNCTION_TYPE=LOCAL` in the shared Twenty ECS base environment,
+    which applies to both server and worker containers.
+  - Document the setting in the Twenty Terraform module README.
+  - Add plugin test coverage proving the managed Twenty module enables the
+    local logic-function driver required by `ThinkWork Webhook`.
+- Runtime proof still requires merging this config fix, applying the managed
+  Twenty deployment so ECS picks up the environment variable, rerunning
+  apply-mode `sync-app`, confirming the native `ThinkWork` app appears in
+  Twenty, configuring `THINKWORK_TRIGGER_STAGE=Customer` and
+  `THINKWORK_WEBHOOK_URL`, wiring the Customer workflow to `ThinkWork Webhook`,
+  and verifying a `source=twenty-app` delivery.
+
 ## 2026-06-18 Twenty 2.9 Package Compatibility Fix
 
 - After explicit operator authorization, apply-mode `sync-app` run

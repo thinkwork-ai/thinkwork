@@ -73,6 +73,7 @@ locals {
     { name = "STORAGE_LOCAL_PATH", value = local.storage_path },
     { name = "IS_CONFIG_VARIABLES_IN_DB_ENABLED", value = "true" },
     { name = "IS_MULTIWORKSPACE_ENABLED", value = "false" },
+    { name = "LOGIC_FUNCTION_TYPE", value = "LOCAL" },
   ]
 
   email_environment = local.smtp_enabled ? [
