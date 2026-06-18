@@ -83,6 +83,35 @@ staging application:
 The WorkOS OAuth client secret and Cognito authorization code were used only
 for the live exchange and are intentionally omitted.
 
+## Dev Tenant Bootstrap
+
+Follow-up verification on 2026-06-18 exposed a manual setup gap after the
+WorkOS plugin and public login option were enabled: SSO could complete through
+Cognito, but the app rendered the no-workspace state because `/api/auth/me`
+found no `users` row or active `tenant_members` row for the WorkOS-linked
+Cognito subject. The stale Cognito `custom:tenant_id` claim pointed at a
+nonexistent tenant, so tenant access could not be resolved from the JWT either.
+
+For dev-only WorkOS test users, run:
+
+```bash
+scripts/bootstrap-workos-auth-dev-user.sh eric@homecareintel.com
+```
+
+The helper discovers the dev database from `thinkwork-dev-api-auth-me`, finds
+the Cognito user by email, discovers the single WorkOS-enabled tenant for
+`localhost:5180` unless `WORKOS_TEST_TENANT_ID` is provided, then idempotently:
+
+- creates or heals the `users` row with `cognito_sub`;
+- creates or heals the active `tenant_members` owner row;
+- grants owner membership on public spaces so the web shell can land after
+  sign-in;
+- updates Cognito `custom:tenant_id` and `email_verified` for fresh tokens.
+
+This helper is intentionally limited to dev/manual validation. Production
+implementation still needs U6's verified-linking and tenant-context enforcement
+before WorkOS-linked sign-ins can be treated as generally safe.
+
 ## Cognito Requirements to Satisfy
 
 AWS Cognito user-pool OIDC federation supports the desired final-token shape:
