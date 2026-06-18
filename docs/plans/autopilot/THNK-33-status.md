@@ -44,6 +44,16 @@ status: active
   `YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install` and
   `yarn twenty dev:build`; the apply-only confirmation, secret-check, app-sync,
   and Customer-workflow wiring steps were skipped.
+- Non-mutating `sync-app` dry-run on `main` now fails before sync because the
+  target Twenty operation credential is not configured in GitHub Actions:
+  run `27770029462` on merge commit
+  `a3e949ce0e6ecb9db7a192a86ee294b74834523b` passed
+  `Validate native ThinkWork app package`, showed
+  `TWENTY_PUBLIC_URL=https://crm.thinkwork.ai`, then failed
+  `Check Twenty app operation secrets` with empty `TWENTY_APP_SYNC_API_KEY`.
+  No app sync, app install, workflow wiring, or production Twenty mutation ran.
+  The next required operator input is to set repository secret
+  `TWENTY_APP_SYNC_API_KEY` to a Twenty API key that can run native app sync.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
