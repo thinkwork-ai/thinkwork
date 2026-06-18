@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import process from "node:process";
 
 const DEFAULT_REMOTE = "thinkwork-crm";
@@ -32,7 +35,8 @@ function parseArgs(argv) {
   }
 
   args.url ||= process.env.TWENTY_PUBLIC_URL;
-  args.apiKey ||= process.env.TWENTY_APP_SYNC_API_KEY;
+  args.apiKey ||=
+    process.env.TWENTY_DEPLOY_API_KEY || process.env.TWENTY_APP_SYNC_API_KEY;
   return args;
 }
 
@@ -70,11 +74,40 @@ function run(command, args, options) {
   }
 }
 
+function writeTwentyRemoteConfig({ remoteName, url, apiKey }) {
+  const configDir = path.join(os.homedir(), ".twenty");
+  const configPath = path.join(configDir, "config.json");
+  fs.mkdirSync(configDir, { recursive: true });
+  const existingConfig = fs.existsSync(configPath)
+    ? JSON.parse(fs.readFileSync(configPath, "utf8"))
+    : {};
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify(
+      {
+        ...existingConfig,
+        version: existingConfig.version ?? 1,
+        remotes: {
+          ...existingConfig.remotes,
+          [remoteName]: {
+            apiUrl: url,
+            apiKey,
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const url = validateUrl(args.url);
   if (!args.apiKey) {
-    throw new Error("Set TWENTY_APP_SYNC_API_KEY or pass --api-key.");
+    throw new Error(
+      "Set TWENTY_DEPLOY_API_KEY, TWENTY_APP_SYNC_API_KEY, or pass --api-key.",
+    );
   }
 
   console.log(
@@ -85,8 +118,8 @@ function main() {
         url,
         mode: args.dryRun ? "dry-run" : "apply",
         note: args.dryRun
-          ? "Dry run previews metadata only. A first install requires --apply because Twenty cannot diff an app that has never been synced."
-          : "Apply sync will install or update the native ThinkWork app in the target Twenty workspace.",
+          ? "Dry run previews app metadata with Twenty dev sync and writes nothing."
+          : "Apply deploys the private app package to Twenty and installs it into the target workspace.",
       },
       null,
       2,
@@ -95,24 +128,27 @@ function main() {
 
   run("corepack", ["enable"], { cwd: args.appDir });
   run("yarn", ["install"], { cwd: args.appDir });
+  writeTwentyRemoteConfig({
+    remoteName: args.remoteName,
+    url,
+    apiKey: args.apiKey,
+  });
+
+  if (args.dryRun) {
+    run("yarn", ["twenty", "dev", "--once", "--dry-run"], {
+      cwd: args.appDir,
+    });
+    return;
+  }
+
   run(
     "yarn",
-    [
-      "twenty",
-      "remote:add",
-      "--as",
-      args.remoteName,
-      "--url",
-      url,
-      "--api-key",
-      args.apiKey,
-    ],
+    ["twenty", "app:publish", "--private", "--remote", args.remoteName],
     { cwd: args.appDir },
   );
-
-  const syncArgs = ["twenty", "dev", "--once"];
-  if (args.dryRun) syncArgs.push("--dry-run");
-  run("yarn", syncArgs, { cwd: args.appDir });
+  run("yarn", ["twenty", "app:install", "--remote", args.remoteName], {
+    cwd: args.appDir,
+  });
 }
 
 try {

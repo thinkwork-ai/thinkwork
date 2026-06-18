@@ -53,7 +53,17 @@ status: active
   `Check Twenty app operation secrets` with empty `TWENTY_APP_SYNC_API_KEY`.
   No app sync, app install, workflow wiring, or production Twenty mutation ran.
   The next required operator input is to set repository secret
-  `TWENTY_APP_SYNC_API_KEY` to a Twenty API key that can run native app sync.
+  `TWENTY_DEPLOY_API_KEY` (preferred Twenty naming) or
+  `TWENTY_APP_SYNC_API_KEY` to a Twenty API key that can deploy and install
+  native apps.
+- Follow-up review against Twenty's current app docs found that our package
+  shape was valid, but the apply path still used Twenty's development sync loop
+  (`yarn twenty dev --once`) instead of the documented private application
+  lifecycle for an internally deployed app. The corrected apply path now
+  deploys the tarball with `yarn twenty app:publish --private --remote ...`
+  and installs it into the workspace with
+  `yarn twenty app:install --remote ...`; dry-run remains non-mutating through
+  `yarn twenty dev --once --dry-run`.
 
 ## 2026-06-18 Native App Settings Surface Follow-Up
 
