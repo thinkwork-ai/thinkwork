@@ -2,12 +2,13 @@
  * Plugin manifest contracts.
  *
  * A plugin is a versioned package described by a manifest declaring identity
- * and components. Exactly four component types exist in v1:
+ * and components. Component types:
  *
  *   - `mcp-server`     — a hosted MCP endpoint the agent dispatches to
  *   - `skills`         — bundled skill folders seeded into the tenant catalog
  *   - `infrastructure` — a managed-app Terraform deployment
  *   - `ui-surface`     — declared-only in v1 (identity + intended mount)
+ *   - `auth-provider`  — declared/admin-configured login federation capability
  *
  * Capability declarations are catalog metadata, not install lifecycle
  * components. They let a plugin advertise channel contracts whose runtime is
@@ -33,6 +34,7 @@ export const PLUGIN_COMPONENT_TYPES = [
   "skills",
   "infrastructure",
   "ui-surface",
+  "auth-provider",
 ] as const;
 
 export type PluginComponentType = (typeof PLUGIN_COMPONENT_TYPES)[number];
@@ -185,11 +187,59 @@ export interface UiSurfaceComponent {
   intendedMount: string;
 }
 
+export const AUTH_PROVIDER_KEYS = ["workos"] as const;
+
+export type AuthProviderKey = (typeof AUTH_PROVIDER_KEYS)[number];
+
+export const AUTH_PROVIDER_CONFIG_FIELD_STORAGE = [
+  "metadata",
+  "secret-ref",
+] as const;
+
+export type AuthProviderConfigFieldStorage =
+  (typeof AUTH_PROVIDER_CONFIG_FIELD_STORAGE)[number];
+
+export interface AuthProviderConfigField {
+  /** Operator-facing input key; values are never present in the manifest. */
+  key: string;
+  displayName: string;
+  required: boolean;
+  /**
+   * metadata: non-secret config such as issuer/client id.
+   * secret-ref: stored only as an operator-managed secret reference.
+   */
+  storage: AuthProviderConfigFieldStorage;
+}
+
+export interface AuthProviderPublicOption {
+  /**
+   * Public-safe option key. For the U1-approved fallback this is `sso`; do not
+   * use provider-specific Google/Microsoft keys unless routing evidence exists.
+   */
+  key: string;
+  displayName: string;
+  providerSpecific: boolean;
+  recommended?: boolean;
+}
+
+export interface AuthProviderComponent {
+  type: "auth-provider";
+  key: string;
+  displayName: string;
+  provider: AuthProviderKey;
+  settingsSurface: string;
+  /** Cognito IdP name the validated bridge will use; not a secret. */
+  cognitoIdentityProviderName: string;
+  configFields: AuthProviderConfigField[];
+  publicOptions: AuthProviderPublicOption[];
+}
+
 export type PluginComponent =
   | McpServerComponent
   | SkillsComponent
   | InfrastructureComponent
-  | UiSurfaceComponent;
+  | UiSurfaceComponent
+  | AuthProviderComponent;
 
 export interface EmailChannelProviderOption {
   key: EmailChannelProviderKey;
@@ -408,6 +458,12 @@ function validatePluginVersion(value: unknown, pluginKey: string): void {
         break;
       case "ui-surface":
         validateUiSurfaceComponent(component as UiSurfaceComponent, label);
+        break;
+      case "auth-provider":
+        validateAuthProviderComponent(
+          component as AuthProviderComponent,
+          label,
+        );
         break;
     }
   }
@@ -814,6 +870,138 @@ function validateUiSurfaceComponent(
   const prefix = `${label}: ui-surface "${component.key}"`;
   requireString(component.displayName, `${prefix}.displayName`);
   requireString(component.intendedMount, `${prefix}.intendedMount`);
+}
+
+function validateAuthProviderComponent(
+  component: Partial<AuthProviderComponent>,
+  label: string,
+): void {
+  const prefix = `${label}: auth-provider "${component.key}"`;
+  requireString(component.displayName, `${prefix}.displayName`);
+  if (
+    typeof component.provider !== "string" ||
+    !(AUTH_PROVIDER_KEYS as readonly string[]).includes(component.provider)
+  ) {
+    throw new PluginManifestError(
+      `${prefix}.provider "${String(component.provider)}" is not supported`,
+    );
+  }
+  requireString(component.settingsSurface, `${prefix}.settingsSurface`);
+  requireString(
+    component.cognitoIdentityProviderName,
+    `${prefix}.cognitoIdentityProviderName`,
+  );
+
+  if (
+    !Array.isArray(component.configFields) ||
+    component.configFields.length === 0
+  ) {
+    throw new PluginManifestError(
+      `${prefix}.configFields must be a non-empty array`,
+    );
+  }
+  const seenConfigKeys = new Set<string>();
+  for (const [index, field] of component.configFields.entries()) {
+    const fieldPrefix = `${prefix}.configFields[${index}]`;
+    if (!field || typeof field !== "object" || Array.isArray(field)) {
+      throw new PluginManifestError(`${fieldPrefix} must be an object`);
+    }
+    rejectManifestValueCarrier(
+      field as unknown as Record<string, unknown>,
+      fieldPrefix,
+    );
+    requireString(field.key, `${fieldPrefix}.key`);
+    if (!CREDENTIAL_KEY_RE.test(field.key)) {
+      throw new PluginManifestError(
+        `${fieldPrefix}.key "${field.key}" must match ${CREDENTIAL_KEY_RE.source}`,
+      );
+    }
+    if (seenConfigKeys.has(field.key)) {
+      throw new PluginManifestError(
+        `${prefix}.configFields declares duplicate key "${field.key}"`,
+      );
+    }
+    seenConfigKeys.add(field.key);
+    requireString(field.displayName, `${fieldPrefix}.displayName`);
+    if (typeof field.required !== "boolean") {
+      throw new PluginManifestError(`${fieldPrefix}.required must be a boolean`);
+    }
+    if (
+      !(
+        AUTH_PROVIDER_CONFIG_FIELD_STORAGE as readonly string[]
+      ).includes(field.storage)
+    ) {
+      throw new PluginManifestError(
+        `${fieldPrefix}.storage must be one of ${AUTH_PROVIDER_CONFIG_FIELD_STORAGE.join(", ")}`,
+      );
+    }
+  }
+
+  if (
+    !Array.isArray(component.publicOptions) ||
+    component.publicOptions.length === 0
+  ) {
+    throw new PluginManifestError(
+      `${prefix}.publicOptions must be a non-empty array`,
+    );
+  }
+  const seenOptionKeys = new Set<string>();
+  let recommendedCount = 0;
+  for (const [index, option] of component.publicOptions.entries()) {
+    const optionPrefix = `${prefix}.publicOptions[${index}]`;
+    if (!option || typeof option !== "object" || Array.isArray(option)) {
+      throw new PluginManifestError(`${optionPrefix} must be an object`);
+    }
+    rejectManifestValueCarrier(
+      option as unknown as Record<string, unknown>,
+      optionPrefix,
+    );
+    requireString(option.key, `${optionPrefix}.key`);
+    if (!SLUG_RE.test(option.key)) {
+      throw new PluginManifestError(
+        `${optionPrefix}.key "${option.key}" must match ${SLUG_RE.source}`,
+      );
+    }
+    if (seenOptionKeys.has(option.key)) {
+      throw new PluginManifestError(
+        `${prefix}.publicOptions declares duplicate key "${option.key}"`,
+      );
+    }
+    seenOptionKeys.add(option.key);
+    requireString(option.displayName, `${optionPrefix}.displayName`);
+    if (typeof option.providerSpecific !== "boolean") {
+      throw new PluginManifestError(
+        `${optionPrefix}.providerSpecific must be a boolean`,
+      );
+    }
+    if (
+      option.recommended !== undefined &&
+      typeof option.recommended !== "boolean"
+    ) {
+      throw new PluginManifestError(
+        `${optionPrefix}.recommended must be a boolean`,
+      );
+    }
+    if (option.recommended === true) recommendedCount += 1;
+  }
+  if (recommendedCount !== 1) {
+    throw new PluginManifestError(
+      `${prefix}.publicOptions must declare exactly one recommended option`,
+    );
+  }
+}
+
+function rejectManifestValueCarrier(
+  value: Record<string, unknown>,
+  prefix: string,
+): void {
+  for (const key of ["value", "secret", "defaultValue", "currentValue"]) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      throw new PluginManifestError(
+        `${prefix}.${key} is not allowed in auth-provider manifests`,
+      );
+    }
+  }
 }
 
 function requireString(value: unknown, path: string): asserts value is string {

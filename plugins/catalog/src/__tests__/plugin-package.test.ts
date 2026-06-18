@@ -20,6 +20,7 @@ describe("first-party plugin packages", () => {
       "plane",
       "sendgrid",
       "twenty",
+      "workos-auth",
     ]);
     expect(planePluginPackage.sourceRoot).toBe("plugins/plane");
     expect(planePluginPackage.manifest.pluginKey).toBe("plane");
@@ -50,6 +51,7 @@ describe("first-party plugin packages", () => {
       "plane",
       "sendgrid",
       "twenty",
+      "workos-auth",
     ]);
   });
 

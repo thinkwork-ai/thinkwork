@@ -104,6 +104,50 @@ function withInfraVersion(): PluginVersion {
   });
 }
 
+function authProviderVersion(): PluginVersion {
+  return lastmileVersion({
+    requiredOauthScopes: [],
+    components: [
+      {
+        type: "auth-provider",
+        key: "workos-auth",
+        displayName: "WorkOS Cognito federation",
+        provider: "workos",
+        settingsSurface: "settings.plugins.workos-auth",
+        cognitoIdentityProviderName: "WorkOSAuth",
+        configFields: [
+          {
+            key: "issuerUrl",
+            displayName: "WorkOS issuer URL",
+            required: true,
+            storage: "metadata",
+          },
+          {
+            key: "clientSecret",
+            displayName: "WorkOS client secret",
+            required: true,
+            storage: "secret-ref",
+          },
+        ],
+        publicOptions: [
+          {
+            key: "sso",
+            displayName: "Continue with SSO",
+            providerSpecific: false,
+            recommended: true,
+          },
+        ],
+      },
+      {
+        type: "ui-surface",
+        key: "settings",
+        displayName: "WorkOS Auth settings",
+        intendedMount: "settings.plugins.workos-auth",
+      },
+    ],
+  });
+}
+
 function resolution(
   payload: PluginVersion,
   premium = false,
@@ -436,6 +480,27 @@ describe("installPlugin", () => {
     expect(tasks.state).toBe("pending");
     // Not installed yet — no plugin.installed audit.
     expect(h.store.audits).toHaveLength(0);
+  });
+
+  it("installs an auth-provider component as fail-closed admin configuration state", async () => {
+    const h = harness([authProviderVersion()]);
+    const install = await installPlugin(installArgs(), h.deps);
+
+    expect(install.state).toBe("installed");
+    expect(h.calls).toEqual([]);
+    const components = await h.deps.store.listComponents(install.id);
+    expect(components).toHaveLength(2);
+    const authProvider = components.find(
+      (component) => component.component_key === "workos-auth",
+    )!;
+    expect(authProvider).toMatchObject({
+      component_type: "auth-provider",
+      state: "provisioned",
+      handler_ref: {
+        status: "unconfigured",
+        publicOptionsPublished: false,
+      },
+    });
   });
 
   it("throws a structured ALREADY_INSTALLED error for an installed plugin", async () => {

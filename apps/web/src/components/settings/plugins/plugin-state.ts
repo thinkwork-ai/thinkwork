@@ -89,6 +89,8 @@ export function componentTypeLabel(type: string): string {
       return "Infrastructure";
     case "ui-surface":
       return "UI surface";
+    case "auth-provider":
+      return "Auth provider";
     default:
       return type;
   }

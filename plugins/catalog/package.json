@@ -27,7 +27,8 @@
     "@thinkwork/plugin-lastmile": "workspace:*",
     "@thinkwork/plugin-plane": "workspace:*",
     "@thinkwork/plugin-sendgrid": "workspace:*",
-    "@thinkwork/plugin-twenty": "workspace:*"
+    "@thinkwork/plugin-twenty": "workspace:*",
+    "@thinkwork/plugin-workos-auth": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

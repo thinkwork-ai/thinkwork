@@ -10,6 +10,7 @@ import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/pl
 import { planePluginPackage as rawPlanePluginPackage } from "@thinkwork/plugin-plane";
 import { sendgridPluginPackage as rawSendgridPluginPackage } from "@thinkwork/plugin-sendgrid";
 import { twentyPluginPackage as rawTwentyPluginPackage } from "@thinkwork/plugin-twenty";
+import { workosAuthPluginPackage as rawWorkosAuthPluginPackage } from "@thinkwork/plugin-workos-auth";
 
 export const companyBrainPluginPackage = defineFirstPartyPluginPackage(
   rawCompanyBrainPluginPackage,
@@ -32,6 +33,9 @@ export const sendgridPluginPackage = defineFirstPartyPluginPackage(
 export const twentyPluginPackage = defineFirstPartyPluginPackage(
   rawTwentyPluginPackage,
 );
+export const workosAuthPluginPackage = defineFirstPartyPluginPackage(
+  rawWorkosAuthPluginPackage,
+);
 
 export const companyBrainManifest = companyBrainPluginPackage.manifest;
 export const emailChannelManifest = emailChannelPluginPackage.manifest;
@@ -40,6 +44,7 @@ export const lastmileManifest = lastmilePluginPackage.manifest;
 export const planeManifest = planePluginPackage.manifest;
 export const sendgridManifest = sendgridPluginPackage.manifest;
 export const twentyManifest = twentyPluginPackage.manifest;
+export const workosAuthManifest = workosAuthPluginPackage.manifest;
 
 export const firstPartyPluginPackages = [
   companyBrainPluginPackage,
@@ -49,6 +54,7 @@ export const firstPartyPluginPackages = [
   planePluginPackage,
   sendgridPluginPackage,
   twentyPluginPackage,
+  workosAuthPluginPackage,
 ] as const;
 
 /**

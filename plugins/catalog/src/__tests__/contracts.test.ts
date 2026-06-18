@@ -321,6 +321,75 @@ describe("validatePluginManifest", () => {
     expect(() => validatePluginManifest(ok)).not.toThrow();
   });
 
+  it("validates auth-provider components", () => {
+    const ok = manifest((m) => {
+      m.versions[0].components.push({
+        type: "auth-provider",
+        key: "workos-auth",
+        displayName: "WorkOS Cognito federation",
+        provider: "workos",
+        settingsSurface: "settings.plugins.workos-auth",
+        cognitoIdentityProviderName: "WorkOSAuth",
+        configFields: [
+          {
+            key: "issuerUrl",
+            displayName: "WorkOS issuer URL",
+            required: true,
+            storage: "metadata",
+          },
+          {
+            key: "clientSecret",
+            displayName: "WorkOS client secret",
+            required: true,
+            storage: "secret-ref",
+          },
+        ],
+        publicOptions: [
+          {
+            key: "sso",
+            displayName: "Continue with SSO",
+            providerSpecific: false,
+            recommended: true,
+          },
+        ],
+      });
+    });
+    expect(() => validatePluginManifest(ok)).not.toThrow();
+  });
+
+  it("rejects auth-provider config fields that expose values in the manifest", () => {
+    const bad = manifest((m) => {
+      m.versions[0].components.push({
+        type: "auth-provider",
+        key: "workos-auth",
+        displayName: "WorkOS Cognito federation",
+        provider: "workos",
+        settingsSurface: "settings.plugins.workos-auth",
+        cognitoIdentityProviderName: "WorkOSAuth",
+        configFields: [
+          {
+            key: "clientSecret",
+            displayName: "WorkOS client secret",
+            required: true,
+            storage: "secret-ref",
+            value: "do-not-ship",
+          } as never,
+        ],
+        publicOptions: [
+          {
+            key: "sso",
+            displayName: "Continue with SSO",
+            providerSpecific: false,
+            recommended: true,
+          },
+        ],
+      });
+    });
+    expect(() => validatePluginManifest(bad)).toThrow(
+      /value is not allowed in auth-provider manifests/,
+    );
+  });
+
   it("validates an email-channel capability with Resend, SendGrid, and SES providers", () => {
     const ok = manifest((m) => {
       m.versions[0].capabilities = [

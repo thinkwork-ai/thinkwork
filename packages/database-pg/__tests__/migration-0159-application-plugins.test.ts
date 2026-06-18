@@ -59,6 +59,7 @@ describe("migration 0159 — application plugin engine schema", () => {
       "skills",
       "infrastructure",
       "ui-surface",
+      "auth-provider",
     ]);
     expect(USER_PLUGIN_ACTIVATION_STATUSES).toEqual([
       "active",
