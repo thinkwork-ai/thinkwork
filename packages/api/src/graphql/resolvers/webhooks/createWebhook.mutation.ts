@@ -9,6 +9,7 @@ export const createWebhook = async (
 ) => {
   const i = args.input;
   const token = randomBytes(32).toString("base64url");
+  const targetType = i.targetType.toLowerCase();
 
   if (i.spaceId) {
     const [spaceRow] = await db
@@ -28,7 +29,7 @@ export const createWebhook = async (
       name: i.name,
       description: i.description || null,
       token,
-      target_type: i.targetType,
+      target_type: targetType,
       space_id: i.spaceId || null,
       agent_id: i.agentId || null,
       routine_id: i.routineId || null,

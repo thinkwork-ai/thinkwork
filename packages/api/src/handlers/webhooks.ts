@@ -274,7 +274,8 @@ async function triggerByToken(
 
   record.webhook_id = webhook.id;
   record.tenant_id = webhook.tenant_id;
-  record.target_type = webhook.target_type;
+  const targetType = webhook.target_type.toLowerCase();
+  record.target_type = targetType;
 
   // 2. Rate limit check
   const limit = webhook.rate_limit ?? 60;
@@ -320,10 +321,10 @@ async function triggerByToken(
 
   // 5. Dispatch based on target type
 
-  if (webhook.target_type === "agent" && webhook.agent_id) {
+  if (targetType === "agent" && webhook.agent_id) {
     return dispatchAgent(webhook, parsedBody, idempotencyKey, record);
   }
-  if (webhook.target_type === "routine" && webhook.routine_id) {
+  if (targetType === "routine" && webhook.routine_id) {
     return dispatchRoutine(webhook, parsedBody, idempotencyKey, record);
   }
 
@@ -360,6 +361,7 @@ async function dispatchAgent(
       channel: "webhook",
     });
     threadId = result.threadId;
+    record.thread_created = true;
   } catch (err) {
     console.warn("[webhooks] Failed to create thread:", err);
   }
