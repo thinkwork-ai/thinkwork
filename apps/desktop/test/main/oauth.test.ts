@@ -62,6 +62,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function publicAuthOptionsResponse(oauthOptions: unknown[] = []): Response {
+  return jsonResponse({
+    password: { enabled: true },
+    oauthOptions,
+  });
+}
+
 describe("DesktopOAuthController", () => {
   let userDataDir: string;
 
@@ -81,7 +88,7 @@ describe("DesktopOAuthController", () => {
       storage: createStorage(),
       app: { getPath: () => userDataDir },
       shell: { openExternal: vi.fn(async () => undefined) },
-      fetch: vi.fn(),
+      fetch: vi.fn(async () => publicAuthOptionsResponse()),
       evictionIntervalMs: null,
       sleep: vi.fn(async () => undefined),
       ...overrides,
@@ -110,6 +117,49 @@ describe("DesktopOAuthController", () => {
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(url.searchParams.get("state")).toBe(result.state);
+    expect(url.searchParams.get("identity_provider")).toBe("Google");
+    expect(url.searchParams.get("prompt")).toBe("select_account");
+  });
+
+  it("uses the published WorkOS auth option for desktop OAuth when available", async () => {
+    const openExternal = vi.fn(async () => undefined);
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        publicAuthOptionsResponse([
+          {
+            key: "workos-sso",
+            label: "Continue with SSO",
+            icon: "sso",
+            provider: "workos",
+            providerSpecific: false,
+            cognitoIdentityProviderName: "WorkOSAuth",
+            route: {
+              type: "cognitoHostedUi",
+              identityProvider: "WorkOSAuth",
+            },
+          },
+        ]),
+      );
+    const controller = createController({
+      fetch: fetchImpl,
+      shell: { openExternal },
+    });
+
+    const result = await controller.startOAuth();
+    const url = new URL(result.url);
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.example.test/api/auth/options",
+      {
+        method: "GET",
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      },
+    );
+    expect(openExternal).toHaveBeenCalledWith(result.url);
+    expect(url.searchParams.get("identity_provider")).toBe("WorkOSAuth");
+    expect(url.searchParams.get("prompt")).toBeNull();
   });
 
   it("prefers the packaged desktop scheme for canary builds pointed at dev", async () => {
@@ -137,13 +187,16 @@ describe("DesktopOAuthController", () => {
       "cognito:username": "google_123",
       sub: "cognito-sub",
     });
-    const fetchImpl = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
-        id_token: idToken,
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      }),
-    );
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(publicAuthOptionsResponse())
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id_token: idToken,
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+        }),
+      );
     const controller = createController({
       fetch: fetchImpl,
       storage,
@@ -160,8 +213,8 @@ describe("DesktopOAuthController", () => {
       next: "/automations/123",
       state: started.state,
     });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const tokenRequest = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const tokenRequest = fetchImpl.mock.calls[1]?.[1] as RequestInit;
     const tokenBody = tokenRequest.body as URLSearchParams;
     const authorizeUrl = new URL(started.url);
     expect(tokenBody.get("code")).toBe("auth-code");
@@ -195,13 +248,16 @@ describe("DesktopOAuthController", () => {
       "cognito:username": "google_123",
       sub: "cognito-sub",
     });
-    const fetchImpl = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
-        id_token: idToken,
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      }),
-    );
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(publicAuthOptionsResponse())
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id_token: idToken,
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+        }),
+      );
     const controller = createController({
       env: () => activeEnv,
       fetch: fetchImpl,
@@ -222,10 +278,10 @@ describe("DesktopOAuthController", () => {
       state: started.state,
     });
 
-    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(
       "https://auth-a.example.com/oauth2/token",
     );
-    const tokenRequest = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+    const tokenRequest = fetchImpl.mock.calls[1]?.[1] as RequestInit;
     expect((tokenRequest.body as URLSearchParams).get("client_id")).toBe(
       "profile-client-a",
     );
@@ -244,7 +300,10 @@ describe("DesktopOAuthController", () => {
     await expect(
       controller.completeOAuthCallback({ code: "auth-code", state: "wrong" }),
     ).rejects.toThrow(/No in-flight OAuth attempt/);
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "https://api.example.test/api/auth/options",
+    );
     expect(controller.inFlightCount()).toBe(0);
   });
 
@@ -297,13 +356,16 @@ describe("DesktopOAuthController", () => {
 
   it("does not persist tokens when the ID token has no Cognito username", async () => {
     const storage = createStorage();
-    const fetchImpl = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
-        id_token: encodeJwtPayload({ email: "user@example.test" }),
-        access_token: "access-token",
-        refresh_token: "refresh-token",
-      }),
-    );
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(publicAuthOptionsResponse())
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id_token: encodeJwtPayload({ email: "user@example.test" }),
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+        }),
+      );
     const controller = createController({ fetch: fetchImpl, storage });
 
     const started = await controller.startOAuth();
