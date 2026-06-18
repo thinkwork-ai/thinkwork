@@ -234,6 +234,62 @@ Idempotent — safe to re-run after every deploy.
 
 ---
 
+## release
+
+List published ThinkWork platform releases and install one into an already
+deployed external environment through that environment's deployment controller.
+
+Use this command for operator recovery, support automation, or scripted
+upgrades. For day-to-day customer operations, prefer Settings -> General ->
+Releases when the deployed web app is available.
+
+```bash
+thinkwork release list
+thinkwork release deploy [version] -s <stage> [options]
+```
+
+| Flag                 | Description                                     |
+| -------------------- | ----------------------------------------------- |
+| `-s, --stage <name>` | Existing deployment stage                       |
+| `-y, --yes`          | Skip confirmation                               |
+| `--web-only`         | Sync only the web application static bundle     |
+| `--no-wait`          | Start the controller execution and return early |
+
+**Full platform upgrade:**
+
+```bash
+AWS_PROFILE=<customer-aws-profile> AWS_REGION=us-east-1 \
+  thinkwork release deploy v0.1.0-canary.201 \
+  --stage customer-dev \
+  --yes
+```
+
+Use a full upgrade when the release includes infrastructure, Lambda, database,
+runtime image, AgentCore, overlay, or managed-application changes.
+
+**Web-application-only upgrade:**
+
+```bash
+AWS_PROFILE=<customer-aws-profile> AWS_REGION=us-east-1 \
+  thinkwork release deploy v0.1.0-canary.201 \
+  --stage customer-dev \
+  --web-only \
+  --yes
+```
+
+`--web-only` verifies the release manifest, downloads only the pinned `web`
+static-site artifact, reads the existing web bucket and CloudFront distribution
+from Terraform state outputs, syncs the web bundle, writes runtime config,
+invalidates CloudFront, and records deployment evidence. It does not run
+Terraform apply, copy Lambda artifacts, run database work, copy runtime images,
+update AgentCore, apply overlays, or install managed applications.
+
+The command requires a previous successful controller deployment for the stage;
+first-time installs still go through `thinkwork deploy --bootstrap` or the
+enterprise bootstrap flow.
+
+---
+
 ## enterprise
 
 Commands for the recommended enterprise deployment repository path. See

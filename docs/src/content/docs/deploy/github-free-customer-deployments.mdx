@@ -20,45 +20,121 @@ workflow is required.
   operating model.
 </Aside>
 
-## ThinkWork Dev Dogfood
+## Release Upgrades
 
-ThinkWork dev is the first controller-managed environment. GitHub Actions still
-builds, tests, and publishes release artifacts, but dev release updates should
-be run by selecting an explicit release manifest and starting the dev deployment
-controller. In controller mode, GitHub Actions starts Step Functions and skips
-the legacy direct Terraform apply job.
+Already-bootstrapped external environments are upgraded through the deployment
+controller that lives in the customer AWS account. The controller starts Step
+Functions, runs the CodeBuild deployment runner, verifies the selected ThinkWork
+release manifest, mutates the environment, and writes evidence back to the
+customer evidence bucket.
 
-From a local operator shell:
+For normal operations, start in **Settings -> General -> Releases**. The
+Settings workflow preflights the selected release, shows the preserved customer
+configuration, and dispatches the reviewed controller job.
+
+Use the CLI path below for operator recovery, automation, or support situations
+where Settings is unavailable.
+
+### Full Platform Upgrade
+
+Use a full platform upgrade when the release includes infrastructure, Lambda,
+database, runtime image, AgentCore, overlay, or managed-application changes.
 
 ```bash
-thinkwork deploy \
-  --controller \
-  --stage dev \
-  --controller-action update \
-  --release-version v0.1.0-canary.148 \
-  --manifest-url https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.148/thinkwork-release.json \
-  --manifest-sha256 <sha256>
+AWS_PROFILE=<customer-aws-profile> AWS_REGION=us-east-1 \
+  thinkwork release deploy v0.1.0-canary.201 \
+  --stage customer-dev \
+  --yes
 ```
 
-From GitHub Actions, run `Deploy` manually with:
+This command finds the previous successful controller deployment for
+`customer-dev`, carries forward the customer-owned configuration, resolves the
+new release manifest, and starts the stage's deployment state machine.
 
-- `use_controller=true`
-- `controller_action=update`
-- `release_version=<tag>`
-- `release_manifest_url=<thinkwork-release.json URL>`
-- `release_manifest_sha256=<manifest SHA-256>`
+### Web-Application-Only Upgrade
+
+Use a web-only upgrade when the release only needs the browser application
+refreshed. This is the fastest and lowest-risk path for UI-only changes.
+
+```bash
+AWS_PROFILE=<customer-aws-profile> AWS_REGION=us-east-1 \
+  thinkwork release deploy v0.1.0-canary.201 \
+  --stage customer-dev \
+  --web-only \
+  --yes
+```
+
+The web-only path:
+
+- verifies the release manifest
+- downloads only the pinned `web` static-site artifact
+- reads the existing web bucket, CloudFront distribution, and URL from Terraform
+  state outputs
+- syncs the web bundle to S3
+- writes `thinkwork-runtime-config.json`
+- invalidates CloudFront
+- records selected-release and deployment evidence
+
+It intentionally skips Terraform plan/apply, Lambda artifact promotion,
+database migration work, runtime image copy, AgentCore updates, overlays, and
+managed-application installation.
+
+### Operator Checkout
+
+When running from an installed CLI, use `thinkwork release deploy` as shown
+above. When running from a source checkout before the CLI package is published,
+use the same arguments through the workspace command:
+
+```bash
+AWS_PROFILE=<customer-aws-profile> AWS_REGION=us-east-1 \
+  pnpm --dir apps/cli dev release deploy v0.1.0-canary.201 \
+  --stage customer-dev \
+  --web-only \
+  --yes
+```
+
+Do not add an extra `--` before `release deploy`; that passes the stage flags to
+the wrong process.
+
+### Verify the Upgrade
 
 The controller execution writes evidence under
-`sessions/<session-id>/<action>/` in the deployment evidence bucket. A dev update
-is not considered proven until the controller execution, runtime profile, and
-foundation smoke evidence are all recorded.
+`sessions/<session-id>/<action>/` in the deployment evidence bucket. An upgrade
+is not considered complete until the controller execution and CodeBuild build
+both succeed and the deployed app reports the selected release.
 
-Use a release where the shared GitHub Release contains the coordinated operator
-surface: desktop installers/updater metadata for clients plus
-`thinkwork-release.json` and `platform-artifacts.tar.gz` for the deployment
-controller. The current accepted TEI proof is `v0.1.0-canary.148`, deployed by
-the customer-owned controller with manifest SHA-256
-`5b154f800b8754d00d0b252772005bd02fc1dbbf6096036597efd700d4d6df93`.
+Check the orchestration state:
+
+```bash
+aws stepfunctions describe-execution \
+  --profile <customer-aws-profile> \
+  --region us-east-1 \
+  --execution-arn <execution-arn> \
+  --query '{status:status,error:error,cause:cause,startDate:startDate,stopDate:stopDate}'
+
+aws codebuild batch-get-builds \
+  --profile <customer-aws-profile> \
+  --region us-east-1 \
+  --ids <codebuild-build-id> \
+  --query 'builds[0].{status:buildStatus,phase:currentPhase,end:endTime}'
+```
+
+Check the deployed web runtime config and public endpoint:
+
+```bash
+aws s3 cp \
+  s3://<app-bucket>/thinkwork-runtime-config.json - \
+  --profile <customer-aws-profile> \
+  --region us-east-1 \
+  | jq '{releaseVersion, releaseManifestSha256, stage, appUrl}'
+
+curl -fsSI https://<customer-app-domain>
+```
+
+For a full platform upgrade, also run the stage's smoke checks. For a web-only
+upgrade, the minimum proof is successful Step Functions and CodeBuild status,
+runtime config showing the requested release, and an HTTP 200 from the customer
+app URL.
 
 ## Deployment Model
 
@@ -154,30 +230,6 @@ Evidence includes:
 Evidence must not include plaintext secrets, bearer tokens, API keys, database
 passwords, or raw Terraform variable files.
 
-## TEI Proof Status
-
-TEI (`tei-e2e`) is the first customer-environment proving run. The accepted
-controller update ran release `v0.1.0-canary.148` through Step Functions and
-CodeBuild, wrote deployment evidence to the TEI evidence bucket, updated the
-runtime config, and persisted selected-release status under the customer
-controller SSM prefix.
-
-Recorded as passing:
-
-- explicit canary release manifest and digest selection
-- customer-owned Step Functions and CodeBuild controller update
-- runtime config publication for web, desktop, and mobile clients
-- first-admin login
-- model catalog and agent settings smoke after the platform migration
-  remediation
-- selected-release status parameters for future update decisions
-
-Still intentionally open before calling the TEI run fully accepted:
-
-- full Cognee and Twenty optional-app deploy/smoke
-- mobile profile-selection proof
-- teardown proof, deferred while the TEI demo environment stays live
-
 ## Failure Triage
 
 | Symptom                             | First checks                                                                                                                                          |
@@ -203,5 +255,6 @@ Release upgrades for already-bootstrapped external environments should start in
 **Settings -> General -> Releases**. The Settings workflow creates a preflight
 job, verifies runner compatibility and known IAM drift, displays preserved
 customer configuration, and dispatches only a reviewed release-update job. Use
-the manual runbook only when Settings blocks and the recovery action has been
-authorized.
+the CLI runbook only when Settings blocks, when the upgrade is an approved
+support action, or when automation needs to start the same customer-owned
+controller path directly.

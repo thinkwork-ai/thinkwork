@@ -98,6 +98,41 @@ thinkwork me                       # 8. Confirm identity + tenant
 
 Eight commands, one AWS account, and you own a production-grade Agent Harness — open and yours, not rented from a black box. The harness stays yours. Full walkthrough in the [Getting Started guide](https://docs.thinkwork.ai/getting-started/) and per-command reference in [`apps/cli/README.md`](./apps/cli/README.md).
 
+## Upgrading an external environment
+
+External ThinkWork environments are upgraded through the customer-owned
+deployment controller in that AWS account. Do not run local Terraform directly
+against a customer environment as an upgrade shortcut.
+
+For a normal platform release, use Settings -> General -> Releases when
+available. For operator recovery or scripted support, start the controller from
+the CLI:
+
+```bash
+AWS_PROFILE=<customer-aws-profile> AWS_REGION=us-east-1 \
+  thinkwork release deploy v0.1.0-canary.201 \
+  --stage customer-dev \
+  --yes
+```
+
+When only the browser web application needs to move to the new release, use the
+web-only path:
+
+```bash
+AWS_PROFILE=<customer-aws-profile> AWS_REGION=us-east-1 \
+  thinkwork release deploy v0.1.0-canary.201 \
+  --stage customer-dev \
+  --web-only \
+  --yes
+```
+
+`--web-only` verifies the release manifest, syncs only the pinned web static
+bundle, writes the runtime config, invalidates CloudFront, and records evidence.
+It intentionally skips Terraform apply, Lambda promotion, database work,
+runtime image copy, AgentCore updates, and overlays. See
+[GitHub-Free Customer Deployments](https://docs.thinkwork.ai/deploy/github-free-customer-deployments/)
+for the full external-environment runbook.
+
 ## Repo layout
 
 ```
