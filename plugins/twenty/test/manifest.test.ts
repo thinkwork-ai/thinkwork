@@ -144,6 +144,9 @@ describe("twenty plugin manifest", () => {
 
   it("documents the guarded deployment sync path for installing the native app", () => {
     const deployWorkflow = readRepo(".github/workflows/deploy.yml");
+    const operationsWorkflow = readRepo(
+      ".github/workflows/twenty-thinkwork-app.yml",
+    );
     const syncScript = readRepo(
       "plugins/twenty/scripts/sync-thinkwork-app.mjs",
     );
@@ -155,6 +158,12 @@ describe("twenty plugin manifest", () => {
     expect(deployWorkflow).toContain("TWENTY_APP_SYNC_API_KEY");
     expect(deployWorkflow).toContain("sync-thinkwork-app.mjs");
     expect(deployWorkflow).toContain("wire-thinkwork-workflow.mjs");
+    expect(operationsWorkflow).toContain("Twenty ThinkWork App Operations");
+    expect(operationsWorkflow).toContain("validate-package");
+    expect(operationsWorkflow).toContain("APPLY TWENTY THINKWORK APP");
+    expect(operationsWorkflow).toContain("sync-thinkwork-app.mjs");
+    expect(operationsWorkflow).toContain("wire-thinkwork-workflow.mjs");
+    expect(operationsWorkflow).not.toContain("terraform-apply");
     expect(syncScript).toContain("remote:add");
     expect(syncScript).toContain("dev");
     expect(syncScript).toContain("--dry-run");

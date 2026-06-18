@@ -1,0 +1,170 @@
+name: Twenty ThinkWork App Operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Operation to run"
+        type: choice
+        required: true
+        default: validate-package
+        options:
+          - validate-package
+          - sync-app
+          - wire-workflow
+          - sync-and-wire
+      sync_dry_run:
+        description: "Preview native app sync without applying Twenty metadata changes"
+        type: boolean
+        default: true
+      wire_dry_run:
+        description: "Preview workflow wiring without updating a Twenty draft workflow version"
+        type: boolean
+        default: true
+      apply_confirmation:
+        description: "Required for any apply mode: type APPLY TWENTY THINKWORK APP"
+        type: string
+        default: ""
+      twenty_workflow_id:
+        description: "Optional Twenty workflow id to wire"
+        type: string
+        default: ""
+      twenty_workflow_version_id:
+        description: "Optional Twenty draft workflow version id to wire"
+        type: string
+        default: ""
+      twenty_workflow_name:
+        description: "Optional Twenty workflow name to wire"
+        type: string
+        default: ""
+      twenty_workflow_step_id:
+        description: "Optional Twenty workflow step id to replace"
+        type: string
+        default: ""
+      twenty_create_draft:
+        description: "Create a draft from the selected active workflow version before apply wiring"
+        type: boolean
+        default: false
+      trigger_stage:
+        description: "Twenty Opportunity stage configured for ThinkWork"
+        type: string
+        default: "Customer"
+      thinkwork_event:
+        description: "Event name passed to ThinkWork"
+        type: string
+        default: "opportunity.stage.customer"
+      workflow_key:
+        description: "ThinkWork workflow key passed to the webhook action"
+        type: string
+        default: "customer_onboarding"
+
+concurrency:
+  group: twenty-thinkwork-app-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  operate:
+    name: Operate Twenty ThinkWork App
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate native ThinkWork app package
+        run: |
+          set -euo pipefail
+          corepack enable
+          cd plugins/twenty/twenty-app
+          yarn install
+          yarn twenty dev:build
+
+      - name: Require explicit confirmation for apply
+        if: >-
+          (inputs.operation == 'sync-app' || inputs.operation == 'sync-and-wire') && inputs.sync_dry_run == false ||
+          (inputs.operation == 'wire-workflow' || inputs.operation == 'sync-and-wire') && inputs.wire_dry_run == false
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.apply_confirmation }}" != "APPLY TWENTY THINKWORK APP" ]; then
+            echo "Apply mode mutates the target Twenty instance."
+            echo "Re-run with apply_confirmation exactly: APPLY TWENTY THINKWORK APP"
+            exit 1
+          fi
+
+      - name: Check Twenty app operation secrets
+        if: inputs.operation != 'validate-package'
+        env:
+          TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TWENTY_PUBLIC_URL" ]; then
+            echo "Set repository variable TWENTY_PUBLIC_URL before running Twenty app operations."
+            exit 1
+          fi
+          if [ -z "$TWENTY_APP_SYNC_API_KEY" ]; then
+            echo "Set repository secret TWENTY_APP_SYNC_API_KEY before running Twenty app operations."
+            exit 1
+          fi
+
+      - name: Sync native ThinkWork app
+        if: inputs.operation == 'sync-app' || inputs.operation == 'sync-and-wire'
+        env:
+          TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          TWENTY_THINKWORK_APP_SYNC_DRY_RUN: ${{ inputs.sync_dry_run && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          mode_flag="--apply"
+          if [ "$TWENTY_THINKWORK_APP_SYNC_DRY_RUN" = "1" ]; then
+            mode_flag="--dry-run"
+          fi
+          node plugins/twenty/scripts/sync-thinkwork-app.mjs "$mode_flag"
+
+      - name: Wire Customer workflow to ThinkWork app action
+        if: inputs.operation == 'wire-workflow' || inputs.operation == 'sync-and-wire'
+        env:
+          TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_APP_SYNC_API_KEY }}
+          WIRE_DRY_RUN: ${{ inputs.wire_dry_run && '1' || '0' }}
+          WIRE_WORKFLOW_ID: ${{ inputs.twenty_workflow_id || '' }}
+          WIRE_WORKFLOW_VERSION_ID: ${{ inputs.twenty_workflow_version_id || '' }}
+          WIRE_WORKFLOW_NAME: ${{ inputs.twenty_workflow_name || '' }}
+          WIRE_WORKFLOW_STEP_ID: ${{ inputs.twenty_workflow_step_id || '' }}
+          WIRE_CREATE_DRAFT: ${{ inputs.twenty_create_draft && '1' || '0' }}
+          WIRE_TRIGGER_STAGE: ${{ inputs.trigger_stage || 'Customer' }}
+          WIRE_EVENT: ${{ inputs.thinkwork_event || 'opportunity.stage.customer' }}
+          WIRE_WORKFLOW_KEY: ${{ inputs.workflow_key || 'customer_onboarding' }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$WIRE_DRY_RUN" = "1" ]; then
+            args+=(--dry-run)
+          else
+            args+=(--apply)
+          fi
+          if [ -n "$WIRE_WORKFLOW_ID" ]; then
+            args+=(--workflow-id "$WIRE_WORKFLOW_ID")
+          fi
+          if [ -n "$WIRE_WORKFLOW_VERSION_ID" ]; then
+            args+=(--workflow-version-id "$WIRE_WORKFLOW_VERSION_ID")
+          fi
+          if [ -n "$WIRE_WORKFLOW_NAME" ]; then
+            args+=(--workflow-name "$WIRE_WORKFLOW_NAME")
+          fi
+          if [ -n "$WIRE_WORKFLOW_STEP_ID" ]; then
+            args+=(--step-id "$WIRE_WORKFLOW_STEP_ID")
+          fi
+          if [ "$WIRE_CREATE_DRAFT" = "1" ]; then
+            args+=(--create-draft-from-active)
+          fi
+          args+=(--trigger-stage "$WIRE_TRIGGER_STAGE")
+          args+=(--event "$WIRE_EVENT")
+          args+=(--workflow-key "$WIRE_WORKFLOW_KEY")
+
+          node plugins/twenty/scripts/wire-thinkwork-workflow.mjs "${args[@]}"
