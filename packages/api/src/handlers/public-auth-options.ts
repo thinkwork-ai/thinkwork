@@ -34,16 +34,15 @@ export interface PublicOAuthOption {
   icon: "sso" | "google" | "microsoft";
   provider: "workos";
   providerSpecific: boolean;
-  cognitoIdentityProviderName: string;
   route: {
-    type: "cognitoHostedUi";
-    identityProvider: string;
+    type: "workosAuthorize";
+    authorizePath: "/api/auth/workos/authorize";
+    prompt: "select_account";
   };
 }
 
 interface AuthProviderPublication {
   displayName: string;
-  cognitoIdentityProviderName: string;
   publicOptionMode: string;
   providerOptions: Array<Record<string, unknown>>;
   publicOptionLabel: string;
@@ -130,8 +129,6 @@ async function loadPublicationForHost(
   const rows = await db
     .select({
       displayName: authProviderResources.display_name,
-      cognitoIdentityProviderName:
-        authProviderResources.cognito_identity_provider_name,
       publicOptionMode: authProviderResources.public_option_mode,
       providerOptions: authProviderResources.provider_options,
       publicOptionLabel: tenantAuthProviderReferences.public_option_label,
@@ -202,10 +199,10 @@ function publicOption(
     icon: "sso",
     provider: "workos",
     providerSpecific: false,
-    cognitoIdentityProviderName: publication.cognitoIdentityProviderName,
     route: {
-      type: "cognitoHostedUi",
-      identityProvider: publication.cognitoIdentityProviderName,
+      type: "workosAuthorize",
+      authorizePath: "/api/auth/workos/authorize",
+      prompt: "select_account",
     },
   };
 }

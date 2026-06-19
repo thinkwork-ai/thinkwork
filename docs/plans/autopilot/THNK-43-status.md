@@ -3,7 +3,7 @@ linear: THNK-43
 title: WorkOS primary auth with Cognito token bridge
 status: in-progress
 updated: 2026-06-19
-branch: codex/thnk-43-u1-workos-primary-spike
+branch: codex/thnk-43-u2-workos-auth-endpoints
 ---
 
 # THNK-43 Autopilot Status
@@ -13,14 +13,26 @@ branch: codex/thnk-43-u1-workos-primary-spike
 - Dispatcher marker: `dispatcher:THNK-43:Implementation:Codex`
 - Pass type: Autopilot implementation of
   `docs/plans/2026-06-19-001-feat-workos-primary-auth-bridge-plan.md`.
-- Scope: U1 only, WorkOS-primary auth spike and Cognito custom-auth bridge
-  decision.
-- Branch: `codex/thnk-43-u1-workos-primary-spike` from `origin/main`
-  `f15fbbbe1`.
-- PR: <https://github.com/thinkwork-ai/thinkwork/pull/2671>
-- CI: pending.
+- Scope: U2 only, server-owned WorkOS auth endpoints and public/web routing
+  away from Cognito Hosted UI for WorkOS SSO.
+- Branch: `codex/thnk-43-u2-workos-auth-endpoints` from `origin/main`
+  `4daf4bcd5`.
+- PR: <https://github.com/thinkwork-ai/thinkwork/pull/2672>
+- CI: remote migration drift precheck initially failed because the new
+  hand-rolled migration was not yet applied to dev; `0174` is now applied to
+  dev and scoped drift verification is passing.
 
 ## Completed
+
+### U1 WorkOS-primary spike
+
+- Created and merged PR #2671:
+  <https://github.com/thinkwork-ai/thinkwork/pull/2671>.
+- Merge commit: `4daf4bcd52161ff953b5d6ce39bec98101ec163f`.
+- Required checks passed before merge: CLA, lint, supply-chain verify, test,
+  and typecheck.
+- Deleted the remote feature branch and removed the U1 worktree after merge.
+- Recorded PR-open and merged evidence in Linear.
 
 ### Prior hosted-bridge pass
 
@@ -107,7 +119,54 @@ merge/deploy pipeline. Forcing a live proof in U1 would require ad hoc Cognito
 trigger mutations outside the normal pipeline, which autopilot guardrails
 forbid.
 
+## U2 Current Implementation
+
+U2 is replacing the unsafe nested Cognito Hosted UI first hop for WorkOS with
+server-owned API endpoints:
+
+- Added a `workos_auth_bridges` table and migration to persist only hashed
+  one-time bridge codes plus short-lived WorkOS profile/session metadata.
+- Added `GET /api/auth/workos/authorize` to create CSRF-bound WorkOS
+  authorization redirects, enforce trusted API hosts, validate browser callback
+  origins against same-host, localhost, or explicit metadata allowlists,
+  normalize `return_to`, and request account selection.
+- Added `GET /api/auth/workos/callback` to validate signed state, exchange the
+  WorkOS authorization code, require verified email and WorkOS `sid`, store the
+  short-lived bridge record, and redirect the browser back to the web callback
+  with a one-time bridge code.
+- Updated public auth options so the installed WorkOS provider publishes a
+  `workosAuthorize` route instead of exposing a Cognito identity-provider name.
+- Updated the web sign-in UI to send WorkOS SSO clicks to the API authorize
+  endpoint with `redirect_uri`, `return_to`, and `prompt=select_account`.
+- Wired the new API handler and routes into the Lambda API Terraform module.
+
+Local verification:
+
+- `pnpm --dir packages/api test -- workos-auth.test.ts public-auth-options.test.ts`
+- `pnpm --dir apps/web test -- src/lib/auth-options.test.ts src/lib/auth.test.ts src/routes/-sign-in.test.tsx`
+- `pnpm --dir packages/database-pg test -- migration-0174-workos-auth-bridges.test.ts`
+- `pnpm --dir packages/api typecheck`
+- `pnpm --dir apps/web typecheck`
+- `pnpm --dir packages/database-pg typecheck`
+- `git diff --check`
+- `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf`
+
+Remote CI recovery:
+
+- `Migration Drift Precheck (dev)` initially failed on PR #2672 because
+  `public.workos_auth_bridges`,
+  `public.uq_workos_auth_bridges_code_digest`,
+  `public.idx_workos_auth_bridges_tenant_status`, and
+  `public.idx_workos_auth_bridges_reference` were missing in dev.
+- Applied only
+  `packages/database-pg/drizzle/0174_workos_auth_bridges.sql` to the dev
+  database with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ...`.
+- Verified with
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0174_workos_auth_bridges.sql`;
+  all declared objects are now present.
+
 ## Next Action
 
-Open and merge the U1 spike PR after CI passes, then sync `origin/main` and
-continue automatically to U2: server-owned WorkOS auth endpoints.
+Finish U2 self-review, open the U2 PR, monitor/fix required CI, squash merge,
+delete the branch/worktree, sync `origin/main`, then continue automatically to
+U3: Cognito bridge challenge exchange.

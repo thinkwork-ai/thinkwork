@@ -84,28 +84,36 @@ describe("getHostedSignInUrl", () => {
 });
 
 describe("getAuthOptionSignInUrl", () => {
-  it("routes public auth options through the returned Cognito IdP", async () => {
+  it("routes public auth options through the WorkOS API authorize endpoint", async () => {
+    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
     stubLocation("https://app.example");
     const { getAuthOptionSignInUrl } = await import("./auth");
 
     const url = new URL(
-      getAuthOptionSignInUrl({
+      getAuthOptionSignInUrl(
+        {
         key: "workos-sso",
         label: "Continue with SSO",
         icon: "sso",
         provider: "workos",
         providerSpecific: false,
-        cognitoIdentityProviderName: "WorkOSAuth",
         route: {
-          type: "cognitoHostedUi",
-          identityProvider: "WorkOSAuth",
+          type: "workosAuthorize",
+          authorizePath: "/api/auth/workos/authorize",
+          prompt: "select_account",
         },
-      }),
+        },
+        "/automations/123",
+      ),
     );
 
-    expect(url.pathname).toBe("/oauth2/authorize");
-    expect(url.searchParams.get("identity_provider")).toBe("WorkOSAuth");
-    expect(url.searchParams.get("client_id")).toBe("test-client-id");
+    expect(url.origin).toBe("https://api.example.com");
+    expect(url.pathname).toBe("/api/auth/workos/authorize");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://app.example/auth/callback",
+    );
+    expect(url.searchParams.get("return_to")).toBe("/automations/123");
+    expect(url.searchParams.get("prompt")).toBe("select_account");
   });
 });
 

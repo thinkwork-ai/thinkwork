@@ -411,10 +411,20 @@ export function getGoogleSignInUrl(): string {
   });
 }
 
-export function getAuthOptionSignInUrl(option: PublicOAuthOption): string {
-  return getHostedSignInUrl({
-    identityProvider: option.route.identityProvider,
-  });
+export function getAuthOptionSignInUrl(
+  option: PublicOAuthOption,
+  next = "/new",
+): string {
+  if (option.route.type !== "workosAuthorize") {
+    throw new Error("Unsupported auth option route");
+  }
+  const url = new URL(`${apiBaseUrl()}${option.route.authorizePath}`);
+  url.searchParams.set("redirect_uri", `${window.location.origin}/auth/callback`);
+  url.searchParams.set("return_to", safeReturnTo(next));
+  if (option.route.prompt) {
+    url.searchParams.set("prompt", option.route.prompt);
+  }
+  return url.toString();
 }
 
 /**
@@ -448,6 +458,24 @@ export function getHostedSignInUrl(options?: {
     params.set("prompt", options.prompt);
   }
   return `${getCognitoDomainBase()}/oauth2/authorize?${params.toString()}`;
+}
+
+function apiBaseUrl(): string {
+  const explicit = readRuntimeEnv("VITE_API_URL");
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const graphql = readRuntimeEnv("VITE_GRAPHQL_HTTP_URL");
+  if (graphql) return graphql.replace(/\/graphql\/?$/, "").replace(/\/+$/, "");
+  return window.location.origin;
+}
+
+function safeReturnTo(value: string): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/new";
+  try {
+    const url = new URL(value, window.location.origin);
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return "/new";
+  }
 }
 
 const POST_AUTH_REDIRECT_KEY = "thinkwork:post-auth-redirect";

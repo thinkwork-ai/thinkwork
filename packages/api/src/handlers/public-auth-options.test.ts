@@ -9,7 +9,6 @@ import {
 
 const validPublication = {
   displayName: "WorkOS Auth",
-  cognitoIdentityProviderName: "WorkOSAuth",
   publicOptionMode: "single_sso",
   providerOptions: [
     {
@@ -86,10 +85,10 @@ describe("resolvePublicAuthOptions", () => {
           icon: "sso",
           provider: "workos",
           providerSpecific: false,
-          cognitoIdentityProviderName: "WorkOSAuth",
           route: {
-            type: "cognitoHostedUi",
-            identityProvider: "WorkOSAuth",
+            type: "workosAuthorize",
+            authorizePath: "/api/auth/workos/authorize",
+            prompt: "select_account",
           },
         },
       ],

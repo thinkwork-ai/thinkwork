@@ -11,10 +11,10 @@ export interface PublicOAuthOption {
   icon: "sso" | "google" | "microsoft";
   provider: "workos";
   providerSpecific: boolean;
-  cognitoIdentityProviderName: string;
   route: {
-    type: "cognitoHostedUi";
-    identityProvider: string;
+    type: "workosAuthorize";
+    authorizePath: "/api/auth/workos/authorize";
+    prompt?: string;
   };
 }
 
@@ -74,10 +74,8 @@ function parseOAuthOption(raw: unknown): PublicOAuthOption | null {
   const key = safeString(record.key);
   const label = safeString(record.label);
   const icon = safeIcon(record.icon);
-  const cognitoIdentityProviderName = safeString(
-    record.cognitoIdentityProviderName,
-  );
-  const identityProvider = safeString(routeRecord.identityProvider);
+  const authorizePath = safeString(routeRecord.authorizePath);
+  const prompt = safeString(routeRecord.prompt);
 
   if (
     !key ||
@@ -85,10 +83,8 @@ function parseOAuthOption(raw: unknown): PublicOAuthOption | null {
     !icon ||
     record.provider !== "workos" ||
     typeof record.providerSpecific !== "boolean" ||
-    !cognitoIdentityProviderName ||
-    routeRecord.type !== "cognitoHostedUi" ||
-    !identityProvider ||
-    identityProvider !== cognitoIdentityProviderName
+    routeRecord.type !== "workosAuthorize" ||
+    authorizePath !== "/api/auth/workos/authorize"
   ) {
     return null;
   }
@@ -99,10 +95,10 @@ function parseOAuthOption(raw: unknown): PublicOAuthOption | null {
     icon,
     provider: "workos",
     providerSpecific: record.providerSpecific,
-    cognitoIdentityProviderName,
     route: {
-      type: "cognitoHostedUi",
-      identityProvider,
+      type: "workosAuthorize",
+      authorizePath,
+      ...(prompt ? { prompt } : {}),
     },
   };
 }

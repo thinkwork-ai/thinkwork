@@ -108,7 +108,7 @@ beforeEach(() => {
     isLoading: false,
   });
   authMocks.getAuthOptionSignInUrl.mockReturnValue(
-    "https://auth.example/login?identity_provider=WorkOSAuth",
+    "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
   );
   authMocks.isPasswordSignInConfigured.mockReturnValue(false);
   authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
@@ -185,10 +185,10 @@ describe("SignInPage", () => {
           icon: "sso",
           provider: "workos",
           providerSpecific: false,
-          cognitoIdentityProviderName: "WorkOSAuth",
           route: {
-            type: "cognitoHostedUi",
-            identityProvider: "WorkOSAuth",
+            type: "workosAuthorize",
+            authorizePath: "/api/auth/workos/authorize",
+            prompt: "select_account",
           },
         },
       ],
@@ -403,10 +403,10 @@ describe("SignInPage", () => {
           icon: "sso",
           provider: "workos",
           providerSpecific: false,
-          cognitoIdentityProviderName: "WorkOSAuth",
           route: {
-            type: "cognitoHostedUi",
-            identityProvider: "WorkOSAuth",
+            type: "workosAuthorize",
+            authorizePath: "/api/auth/workos/authorize",
+            prompt: "select_account",
           },
         },
       ],
@@ -431,16 +431,18 @@ describe("SignInPage", () => {
     );
 
     expect(navigations).toEqual([
-      "https://auth.example/login?identity_provider=WorkOSAuth",
+      "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
     ]);
     expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalledWith(
       expect.objectContaining({
         key: "workos-sso",
         route: {
-          type: "cognitoHostedUi",
-          identityProvider: "WorkOSAuth",
+          type: "workosAuthorize",
+          authorizePath: "/api/auth/workos/authorize",
+          prompt: "select_account",
         },
       }),
+      "/new",
     );
   });
 
@@ -552,10 +554,10 @@ describe("SignInPage", () => {
           icon: "sso",
           provider: "workos",
           providerSpecific: false,
-          cognitoIdentityProviderName: "WorkOSAuth",
           route: {
-            type: "cognitoHostedUi",
-            identityProvider: "WorkOSAuth",
+            type: "workosAuthorize",
+            authorizePath: "/api/auth/workos/authorize",
+            prompt: "select_account",
           },
         },
       ],
@@ -586,9 +588,12 @@ describe("SignInPage", () => {
     );
 
     expect(navigations).toEqual([
-      "https://auth.example/login?identity_provider=WorkOSAuth",
+      "https://api.example.com/api/auth/workos/authorize?redirect_uri=https%3A%2F%2Fapp.example%2Fauth%2Fcallback",
     ]);
-    expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalled();
+    expect(authMocks.getAuthOptionSignInUrl).toHaveBeenCalledWith(
+      expect.any(Object),
+      "/new",
+    );
   });
 
   it("hides the email/password form in the desktop shell", () => {

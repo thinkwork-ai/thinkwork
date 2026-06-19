@@ -159,6 +159,15 @@ export const TENANT_AUTH_PROVIDER_REFERENCE_STATUSES = [
 export type TenantAuthProviderReferenceStatus =
   (typeof TENANT_AUTH_PROVIDER_REFERENCE_STATUSES)[number];
 
+export const WORKOS_AUTH_BRIDGE_STATUSES = [
+  "pending",
+  "consumed",
+  "expired",
+] as const;
+
+export type WorkosAuthBridgeStatus =
+  (typeof WORKOS_AUTH_BRIDGE_STATUSES)[number];
+
 // ---------------------------------------------------------------------------
 // Premium plugin entitlements and one-time install keys
 // ---------------------------------------------------------------------------
@@ -549,6 +558,68 @@ export const tenantAuthProviderReferences = pgTable(
   ],
 );
 
+export const workosAuthBridges = pgTable(
+  "workos_auth_bridges",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    tenant_auth_provider_reference_id: uuid(
+      "tenant_auth_provider_reference_id",
+    )
+      .notNull()
+      .references(() => tenantAuthProviderReferences.id, {
+        onDelete: "cascade",
+      }),
+    auth_provider_resource_id: uuid("auth_provider_resource_id")
+      .notNull()
+      .references(() => authProviderResources.id, { onDelete: "cascade" }),
+    bridge_code_digest: text("bridge_code_digest").notNull(),
+    workos_user_id: text("workos_user_id").notNull(),
+    workos_session_id: text("workos_session_id").notNull(),
+    workos_email: text("workos_email").notNull(),
+    workos_email_verified: boolean("workos_email_verified")
+      .notNull()
+      .default(false),
+    workos_profile: jsonb("workos_profile")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    state_nonce: text("state_nonce").notNull(),
+    redirect_uri: text("redirect_uri").notNull(),
+    return_to: text("return_to").notNull(),
+    status: text("status").notNull().default("pending"),
+    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumed_at: timestamp("consumed_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("uq_workos_auth_bridges_code_digest").on(
+      table.bridge_code_digest,
+    ),
+    index("idx_workos_auth_bridges_tenant_status").on(
+      table.tenant_id,
+      table.status,
+      table.expires_at,
+    ),
+    index("idx_workos_auth_bridges_reference").on(
+      table.tenant_auth_provider_reference_id,
+    ),
+    check(
+      "workos_auth_bridges_status_allowed",
+      sql`${table.status} IN ('pending', 'consumed', 'expired')`,
+    ),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // user_plugin_activations — one app-level OAuth grant per (user, install)
 // ---------------------------------------------------------------------------
@@ -733,6 +804,24 @@ export const tenantAuthProviderReferencesRelations = relations(
     }),
     resource: one(authProviderResources, {
       fields: [tenantAuthProviderReferences.auth_provider_resource_id],
+      references: [authProviderResources.id],
+    }),
+  }),
+);
+
+export const workosAuthBridgesRelations = relations(
+  workosAuthBridges,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [workosAuthBridges.tenant_id],
+      references: [tenants.id],
+    }),
+    tenantReference: one(tenantAuthProviderReferences, {
+      fields: [workosAuthBridges.tenant_auth_provider_reference_id],
+      references: [tenantAuthProviderReferences.id],
+    }),
+    resource: one(authProviderResources, {
+      fields: [workosAuthBridges.auth_provider_resource_id],
       references: [authProviderResources.id],
     }),
   }),
