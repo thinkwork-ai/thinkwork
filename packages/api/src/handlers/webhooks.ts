@@ -357,6 +357,10 @@ async function dispatchAgent(
       tenantId: webhook.tenant_id,
       agentId: webhook.agent_id,
       spaceId: webhook.space_id ?? undefined,
+      userId:
+        webhook.created_by_type === "user"
+          ? (webhook.created_by_id ?? undefined)
+          : undefined,
       title: webhook.name,
       channel: "webhook",
     });

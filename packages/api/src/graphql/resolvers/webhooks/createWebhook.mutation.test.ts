@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   insertedValues: undefined as Record<string, unknown> | undefined,
   returning: vi.fn(),
+  resolveCallerFromAuth: vi.fn(),
 }));
 
 vi.mock("node:crypto", () => ({
@@ -24,11 +25,20 @@ vi.mock("../../utils.js", () => ({
   snakeToCamel: vi.fn((row: unknown) => row),
 }));
 
+vi.mock("../core/resolve-auth-user.js", () => ({
+  resolveCallerFromAuth: mocks.resolveCallerFromAuth,
+}));
+
 import { createWebhook } from "./createWebhook.mutation.js";
 
 beforeEach(() => {
   mocks.insertedValues = undefined;
   mocks.returning.mockReset();
+  mocks.resolveCallerFromAuth.mockReset();
+  mocks.resolveCallerFromAuth.mockResolvedValue({
+    tenantId: "tenant-1",
+    userId: "user-1",
+  });
 });
 
 describe("createWebhook", () => {
@@ -51,6 +61,8 @@ describe("createWebhook", () => {
     expect(mocks.insertedValues).toMatchObject({
       target_type: "agent",
       agent_id: "agent-1",
+      created_by_type: "user",
+      created_by_id: "user-1",
     });
   });
 });

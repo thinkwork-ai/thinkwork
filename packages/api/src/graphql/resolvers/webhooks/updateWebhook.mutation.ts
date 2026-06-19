@@ -1,5 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, spaces, webhooks, snakeToCamel } from "../../utils.js";
+import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 
 export const updateWebhook = async (
   _parent: any,
@@ -8,23 +9,35 @@ export const updateWebhook = async (
 ) => {
   const i = args.input;
   const updates: Record<string, unknown> = { updated_at: new Date() };
+  const [existingWebhook] = await db
+    .select({
+      tenant_id: webhooks.tenant_id,
+      created_by_id: webhooks.created_by_id,
+    })
+    .from(webhooks)
+    .where(eq(webhooks.id, args.id));
+  if (!existingWebhook) return null;
+
+  if (!existingWebhook.created_by_id) {
+    const caller = await resolveCallerFromAuth(ctx.auth);
+    if (caller.tenantId === existingWebhook.tenant_id && caller.userId) {
+      updates.created_by_type = "user";
+      updates.created_by_id = caller.userId;
+    }
+  }
+
   if (i.name !== undefined) updates.name = i.name;
   if (i.description !== undefined) updates.description = i.description;
   if (i.targetType !== undefined)
     updates.target_type = i.targetType.toLowerCase();
   if (i.spaceId !== undefined) {
     if (i.spaceId) {
-      const [webhookRow] = await db
-        .select({ tenant_id: webhooks.tenant_id })
-        .from(webhooks)
-        .where(eq(webhooks.id, args.id));
-      if (!webhookRow) return null;
       const [spaceRow] = await db
         .select({ tenant_id: spaces.tenant_id })
         .from(spaces)
         .where(eq(spaces.id, i.spaceId));
       if (!spaceRow) throw new Error(`Space ${i.spaceId} not found`);
-      if (spaceRow.tenant_id !== webhookRow.tenant_id) {
+      if (spaceRow.tenant_id !== existingWebhook.tenant_id) {
         throw new Error("Space does not belong to this tenant");
       }
     }
