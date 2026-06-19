@@ -188,12 +188,19 @@ U3/U4/U5/U6 before U7; U7 before U8.
 - Branch/worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u4-n8n-package-builds`
 - Git branch: `codex/thnk-50-u4-n8n-package-builds`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2702
 - Objective: add package-owned pinned public npm package validation,
   deterministic package config normalization/digesting, controlled n8n wrapper
   image build contracts, runtime Dockerfile/task-runner templates, and
   deployment-runner plan/apply safeguards so package config changes produce
   reviewed digest-pinned images before Terraform apply.
-- Status: in progress.
+- Status: PR open.
+- Linear status:
+  - PR/evidence comment posted with marker
+    `dispatcher:THNK-50:Ready to Work:Codex`.
+  - Attempted to move THNK-50 to `Review` and `In Review` after PR open, but
+    Linear returned the issue still in `In Progress`; leaving it there until PR
+    merge because no accepted review state was exposed through the Linear tool.
 - Local implementation summary:
   - Added `plugins/n8n/src/package-config.ts` to accept only exact public npm
     package specs, reject ranges/tags/URLs/paths/workspace aliases, collapse
