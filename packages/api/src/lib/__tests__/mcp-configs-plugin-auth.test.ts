@@ -413,6 +413,118 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     warn.mockRestore();
   });
 
+  it("service_credential plugin servers resolve tenant auth without requester activation", async () => {
+    const authConfig = {
+      credentialKind: "n8n-mcp-access-token",
+      secretRef:
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+      secretRefConfigKey: "serviceCredentialSecretArn",
+      headers: [
+        {
+          name: "Authorization",
+          secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+          valuePrefix: "Bearer ",
+        },
+      ],
+    };
+    mockJoinRows.mockReturnValue([
+      pluginRow("workflow-management", {
+        slug: "n8n--workflow-management",
+        name: "n8n workflow management",
+        url: "https://n8n.example.invalid/mcp-server/http",
+        auth_type: "service_credential",
+        auth_config: authConfig,
+      }),
+    ]);
+    mockSecretString.mockReturnValue(
+      JSON.stringify({
+        N8N_MCP_SERVICE_CREDENTIAL: "n8n_service_token_123",
+      }),
+    );
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: null },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toEqual([
+      {
+        name: "n8n--workflow-management",
+        url: "https://n8n.example.invalid/mcp-server/http",
+        transport: "streamable-http",
+        auth: { type: "bearer", token: "n8n_service_token_123" },
+      },
+    ]);
+  });
+
+  it("service_credential plugin servers fail closed when the secret key is missing", async () => {
+    mockJoinRows.mockReturnValue([
+      pluginRow("workflow-management", {
+        slug: "n8n--workflow-management",
+        auth_type: "service_credential",
+        auth_config: {
+          secretRef: "arn:aws:secretsmanager:us-east-1:123:secret:n8n-service",
+          headers: [
+            {
+              name: "Authorization",
+              secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+              valuePrefix: "Bearer ",
+            },
+          ],
+        },
+      }),
+    ]);
+    mockSecretString.mockReturnValue(JSON.stringify({ OTHER: "value" }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("missing key N8N_MCP_SERVICE_CREDENTIAL"),
+    );
+    warn.mockRestore();
+  });
+
+  it("service_credential plugin servers fail closed when revoked", async () => {
+    mockJoinRows.mockReturnValue([
+      pluginRow("workflow-management", {
+        slug: "n8n--workflow-management",
+        auth_type: "service_credential",
+        auth_config: {
+          revokedAt: "2026-06-19T12:00:00.000Z",
+          secretRef: "arn:aws:secretsmanager:us-east-1:123:secret:n8n-service",
+          headers: [
+            {
+              name: "Authorization",
+              secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+              valuePrefix: "Bearer ",
+            },
+          ],
+        },
+      }),
+    ]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("revoked"));
+    warn.mockRestore();
+  });
+
   it("Plane-style user_headers plugin servers resolve bearer plus headers from the requester's activation secret", async () => {
     mockJoinRows.mockReturnValue([
       pluginRow("issues", {

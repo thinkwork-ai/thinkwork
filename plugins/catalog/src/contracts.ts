@@ -86,6 +86,22 @@ export type McpServerAuth =
       bearer?: McpUserProvidedBearer;
       headers: McpUserProvidedHeader[];
     }
+  | {
+      /**
+       * Tenant-owned service credential (e.g. n8n instance-level MCP access).
+       * The manifest declares only the credential kind, the managed-app
+       * desired_config key that holds a Secrets Manager secret ref, and the
+       * HTTP header shape. Secret values are resolved server-side during MCP
+       * dispatch and are never exposed through plugin activation.
+       */
+      mode: "tenant-service-credential";
+      /** Stable non-secret kind for audit/evidence, e.g. n8n-mcp-access-token. */
+      credentialKind: string;
+      /** managed_applications.desired_config key holding the secret ARN/name. */
+      secretRefConfigKey: string;
+      /** Header bindings sourced from JSON keys inside the tenant secret. */
+      headers: McpTenantServiceCredentialHeader[];
+    }
   | { mode: "none" };
 
 export interface McpUserProvidedBearer {
@@ -106,6 +122,18 @@ export interface McpUserProvidedHeader {
   displayName: string;
   /** Marks secret fields for UI copy; values are always stored as secrets. */
   secret?: boolean;
+}
+
+export interface McpTenantServiceCredentialHeader {
+  /** HTTP header name required by the service, e.g. `Authorization`. */
+  name: string;
+  /** JSON key inside the tenant service credential secret. */
+  secretJsonKey: string;
+  /**
+   * Static prefix prepended at dispatch. Authorization headers must use
+   * `Bearer ` so the Pi runtime can route the secret through its handle store.
+   */
+  valuePrefix?: string;
 }
 
 /**
@@ -631,9 +659,18 @@ function validateMcpServerComponent(
     validateUserProvidedHeadersAuth(auth, prefix);
     return false;
   }
+  if (auth.mode === "tenant-service-credential") {
+    if (component.endpointFrom === undefined) {
+      throw new PluginManifestError(
+        `${prefix}.auth.mode "tenant-service-credential" requires endpointFrom so the service credential secret ref can resolve from the managed app desired_config`,
+      );
+    }
+    validateTenantServiceCredentialAuth(auth, prefix);
+    return false;
+  }
   if (auth.mode !== "oauth") {
     throw new PluginManifestError(
-      `${prefix}.auth.mode must be "oauth", "oauth-per-instance", "user-provided-headers", or "none"`,
+      `${prefix}.auth.mode must be "oauth", "oauth-per-instance", "user-provided-headers", "tenant-service-credential", or "none"`,
     );
   }
   const oauth = auth as Partial<Extract<McpServerAuth, { mode: "oauth" }>>;
@@ -647,6 +684,11 @@ const HTTP_HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const CREDENTIAL_KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const FORBIDDEN_USER_HEADER_NAMES = new Set([
   "authorization",
+  "proxy-authorization",
+  "cookie",
+  "set-cookie",
+]);
+const FORBIDDEN_SERVICE_CREDENTIAL_HEADER_NAMES = new Set([
   "proxy-authorization",
   "cookie",
   "set-cookie",
@@ -727,6 +769,80 @@ function validateUserProvidedHeadersAuth(
     requireString(header.displayName, `${label}.displayName`);
     if (header.secret !== undefined && typeof header.secret !== "boolean") {
       throw new PluginManifestError(`${label}.secret must be a boolean`);
+    }
+  }
+}
+
+function validateTenantServiceCredentialAuth(
+  auth: Partial<Extract<McpServerAuth, { mode: "tenant-service-credential" }>>,
+  prefix: string,
+): void {
+  requireString(auth.credentialKind, `${prefix}.auth.credentialKind`);
+  if (!SLUG_RE.test(auth.credentialKind)) {
+    throw new PluginManifestError(
+      `${prefix}.auth.credentialKind "${auth.credentialKind}" must match ${SLUG_RE.source}`,
+    );
+  }
+  requireString(auth.secretRefConfigKey, `${prefix}.auth.secretRefConfigKey`);
+  if (!CREDENTIAL_KEY_RE.test(auth.secretRefConfigKey)) {
+    throw new PluginManifestError(
+      `${prefix}.auth.secretRefConfigKey "${auth.secretRefConfigKey}" must match ${CREDENTIAL_KEY_RE.source}`,
+    );
+  }
+  if (!Array.isArray(auth.headers) || auth.headers.length === 0) {
+    throw new PluginManifestError(
+      `${prefix}.auth.headers must be a non-empty array`,
+    );
+  }
+  const seenHeaderNames = new Set<string>();
+  for (const [index, header] of auth.headers.entries()) {
+    const label = `${prefix}.auth.headers[${index}]`;
+    if (!header || typeof header !== "object" || Array.isArray(header)) {
+      throw new PluginManifestError(`${label} must be an object`);
+    }
+    rejectManifestValueCarrier(
+      header as unknown as Record<string, unknown>,
+      label,
+      "tenant-service-credential manifests",
+    );
+    requireString(header.name, `${label}.name`);
+    if (!HTTP_HEADER_NAME_RE.test(header.name)) {
+      throw new PluginManifestError(
+        `${label}.name "${header.name}" must be a valid HTTP header name`,
+      );
+    }
+    const normalizedName = header.name.toLowerCase();
+    if (FORBIDDEN_SERVICE_CREDENTIAL_HEADER_NAMES.has(normalizedName)) {
+      throw new PluginManifestError(
+        `${label}.name "${header.name}" is not allowed for tenant service credential auth`,
+      );
+    }
+    if (seenHeaderNames.has(normalizedName)) {
+      throw new PluginManifestError(
+        `${prefix}.auth.headers declares duplicate header "${header.name}"`,
+      );
+    }
+    seenHeaderNames.add(normalizedName);
+
+    requireString(header.secretJsonKey, `${label}.secretJsonKey`);
+    if (!CREDENTIAL_KEY_RE.test(header.secretJsonKey)) {
+      throw new PluginManifestError(
+        `${label}.secretJsonKey "${header.secretJsonKey}" must match ${CREDENTIAL_KEY_RE.source}`,
+      );
+    }
+    if (
+      header.valuePrefix !== undefined &&
+      typeof header.valuePrefix !== "string"
+    ) {
+      throw new PluginManifestError(`${label}.valuePrefix must be a string`);
+    }
+    if (
+      normalizedName === "authorization" &&
+      header.valuePrefix !== "Bearer "
+    ) {
+      throw new PluginManifestError(
+        `${label}.valuePrefix must be "Bearer " for Authorization service credentials`,
+      );
     }
   }
 }
@@ -924,12 +1040,14 @@ function validateAuthProviderComponent(
     seenConfigKeys.add(field.key);
     requireString(field.displayName, `${fieldPrefix}.displayName`);
     if (typeof field.required !== "boolean") {
-      throw new PluginManifestError(`${fieldPrefix}.required must be a boolean`);
+      throw new PluginManifestError(
+        `${fieldPrefix}.required must be a boolean`,
+      );
     }
     if (
-      !(
-        AUTH_PROVIDER_CONFIG_FIELD_STORAGE as readonly string[]
-      ).includes(field.storage)
+      !(AUTH_PROVIDER_CONFIG_FIELD_STORAGE as readonly string[]).includes(
+        field.storage,
+      )
     ) {
       throw new PluginManifestError(
         `${fieldPrefix}.storage must be one of ${AUTH_PROVIDER_CONFIG_FIELD_STORAGE.join(", ")}`,
@@ -994,11 +1112,12 @@ function validateAuthProviderComponent(
 function rejectManifestValueCarrier(
   value: Record<string, unknown>,
   prefix: string,
+  context = "auth-provider manifests",
 ): void {
   for (const key of ["value", "secret", "defaultValue", "currentValue"]) {
     if (Object.prototype.hasOwnProperty.call(value, key)) {
       throw new PluginManifestError(
-        `${prefix}.${key} is not allowed in auth-provider manifests`,
+        `${prefix}.${key} is not allowed in ${context}`,
       );
     }
   }

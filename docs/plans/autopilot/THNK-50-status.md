@@ -189,12 +189,13 @@ U3/U4/U5/U6 before U7; U7 before U8.
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u4-n8n-package-builds`
 - Git branch: `codex/thnk-50-u4-n8n-package-builds`
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2702
+- Merge commit: `7fe3a3b4ac00d4c398a04ec513b229ca5c382295`
 - Objective: add package-owned pinned public npm package validation,
   deterministic package config normalization/digesting, controlled n8n wrapper
   image build contracts, runtime Dockerfile/task-runner templates, and
   deployment-runner plan/apply safeguards so package config changes produce
   reviewed digest-pinned images before Terraform apply.
-- Status: PR open.
+- Status: merged.
 - Linear status:
   - PR/evidence comment posted with marker
     `dispatcher:THNK-50:Ready to Work:Codex`.
@@ -239,6 +240,61 @@ U3/U4/U5/U6 before U7; U7 before U8.
     passed.
   - `pnpm --filter @thinkwork/api typecheck` passed.
   - `pnpm lint:plugin-source` passed.
+  - `git diff --check` passed.
+- CI:
+  - PR #2702 passed signed catalog build, lint, test, typecheck, verify, and
+    CLA after rebase/fix cycles, then squash-merged to `main`.
+
+### U5: Tenant Service Credential MCP Support
+
+- Branch/worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u5-n8n-service-credential`
+- Git branch: `codex/thnk-50-u5-n8n-service-credential`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2706
+- Objective: add a generic plugin MCP `tenant-service-credential` manifest
+  contract, provision plugin-owned `service_credential` MCP rows from
+  managed-app desired config, resolve credentials server-side during dispatch,
+  and make n8n's native MCP endpoint path/secret key ready for final catalog
+  publication without requiring per-user activation.
+- Status: in progress.
+- Linear status:
+  - PR/evidence comment posted with marker
+    `dispatcher:THNK-50:Ready to Work:Codex` (`2ae1d740-b8f5-48a6-a125-a489651627f8`).
+  - Attempted to move THNK-50 to `Review` after opening PR #2706, but Linear
+    returned the issue still in `In Progress`; leaving it there until PR merge
+    because no accepted review state was exposed through the Linear tool.
+- Local implementation summary:
+  - Extended the plugin catalog MCP auth contract with
+    `tenant-service-credential`, including validation that manifests carry only
+    non-secret metadata: credential kind, managed-app secret-ref config key,
+    and header bindings sourced from secret JSON keys.
+  - Added plugin MCP provisioning support for `auth_type:
+"service_credential"` rows, resolving the tenant secret ref from the
+    managed application's `desired_config` and storing no raw credential value.
+  - Added runtime dispatch support that fetches the tenant service credential
+    from Secrets Manager and maps Bearer-shaped Authorization bindings into
+    the Pi bearer-handle path rather than raw extra headers.
+  - Recorded the verified n8n instance-level MCP path
+    `/mcp-server/http` plus the planned service credential kind/key in the
+    n8n draft manifest scaffold while keeping the plugin unpublished.
+- Local verification:
+  - `pnpm install` completed; optional `canvas@2.11.2` native build fallback
+    still reports missing local `pkg-config`, but installation completed and
+    the touched packages do not depend on that native module.
+  - `pnpm --filter @thinkwork/plugin-catalog test -- contracts` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog check:plugins` passed.
+  - `pnpm --filter @thinkwork/plugin-n8n test -- manifest` passed.
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
+  - `pnpm --filter @thinkwork/api test -- src/lib/plugins/handlers/mcp.test.ts src/lib/__tests__/mcp-configs-plugin-auth.test.ts`
+    passed.
+  - `pnpm --filter @thinkwork/api test -- src/lib/__tests__/mcp-configs-approved-filter.test.ts`
+    passed.
+  - `pnpm --filter @thinkwork/api test -- src/lib/plugins/dispatch-parity.test.ts`
+    passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm lint:plugin-source` passed.
+  - `pnpm dlx prettier@latest --check <touched files>` passed.
   - `git diff --check` passed.
 
 ## Blockers

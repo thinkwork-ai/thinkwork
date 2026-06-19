@@ -367,15 +367,137 @@ describe("user-provided header auth (THNK-27 U5)", () => {
       auth_type: "user_headers",
       auth_config: {
         bearerCredentialKey: "apiKey",
-        headers: [
-          { name: "x-workspace-slug", credentialKey: "workspaceSlug" },
-        ],
+        headers: [{ name: "x-workspace-slug", credentialKey: "workspaceSlug" }],
       },
       management_source: "plugin",
       plugin_install_id: "install-plane",
       status: "approved",
     });
     expect(JSON.stringify(insertCalls[0])).not.toContain("plane_pat");
+  });
+});
+
+describe("tenant service credential auth (THNK-50 U5)", () => {
+  it("provisions n8n MCP rows with service credential metadata but no secret values", async () => {
+    const n8nComponent: McpServerComponent = {
+      type: "mcp-server",
+      key: "workflow-management",
+      displayName: "n8n workflow management",
+      endpointFrom: {
+        managedApp: "n8n",
+        configKey: "publicUrl",
+        path: "/mcp-server/http",
+      },
+      auth: {
+        mode: "tenant-service-credential",
+        credentialKind: "n8n-mcp-access-token",
+        secretRefConfigKey: "serviceCredentialSecretArn",
+        headers: [
+          {
+            name: "Authorization",
+            secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+            valuePrefix: "Bearer ",
+          },
+        ],
+      },
+    };
+    selectQueue.push([
+      {
+        desired_config: {
+          publicUrl: "https://n8n.tenant.example.com/home",
+          serviceCredentialSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+        },
+      },
+    ]);
+    selectQueue.push([]);
+    selectQueue.push([]);
+    returningQueue.push([{ id: "server-n8n" }]);
+    selectQueue.push([{ id: "agent-default" }]);
+
+    const ref = await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-n8n",
+      pluginKey: "n8n",
+      component: n8nComponent,
+      db: mockDb as never,
+    });
+
+    expect(ref).toEqual({
+      tenantMcpServerId: "server-n8n",
+      resolvedEndpointUrl: "https://n8n.tenant.example.com/mcp-server/http",
+    });
+    expect(insertCalls[0]).toMatchObject({
+      slug: "n8n--workflow-management",
+      url: "https://n8n.tenant.example.com/mcp-server/http",
+      auth_type: "service_credential",
+      auth_config: {
+        credentialKind: "n8n-mcp-access-token",
+        secretRef:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+        secretRefConfigKey: "serviceCredentialSecretArn",
+        headers: [
+          {
+            name: "Authorization",
+            secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+            valuePrefix: "Bearer ",
+          },
+        ],
+      },
+      management_source: "plugin",
+      plugin_install_id: "install-n8n",
+      status: "approved",
+    });
+    expect(insertCalls[1]).toMatchObject({
+      agent_id: "agent-default",
+      tenant_id: "tenant-1",
+      mcp_server_id: "server-n8n",
+      enabled: true,
+    });
+    expect(JSON.stringify(insertCalls[0])).not.toContain("n8n_token_value");
+  });
+
+  it("fails clearly when the managed app desired_config lacks the service credential secret ref", async () => {
+    const n8nComponent: McpServerComponent = {
+      type: "mcp-server",
+      key: "workflow-management",
+      displayName: "n8n workflow management",
+      endpointFrom: {
+        managedApp: "n8n",
+        configKey: "publicUrl",
+        path: "/mcp-server/http",
+      },
+      auth: {
+        mode: "tenant-service-credential",
+        credentialKind: "n8n-mcp-access-token",
+        secretRefConfigKey: "serviceCredentialSecretArn",
+        headers: [
+          {
+            name: "Authorization",
+            secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+            valuePrefix: "Bearer ",
+          },
+        ],
+      },
+    };
+    selectQueue.push([
+      {
+        desired_config: {
+          publicUrl: "https://n8n.tenant.example.com",
+        },
+      },
+    ]);
+
+    await expect(
+      provisionPluginMcpComponent({
+        tenantId: "tenant-1",
+        pluginInstallId: "install-n8n",
+        pluginKey: "n8n",
+        component: n8nComponent,
+        db: mockDb as never,
+      }),
+    ).rejects.toThrow(/serviceCredentialSecretArn/);
+    expect(insertCalls).toHaveLength(0);
   });
 });
 

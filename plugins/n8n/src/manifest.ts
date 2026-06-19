@@ -2,6 +2,13 @@ export const N8N_PLUGIN_KEY = "n8n";
 
 export const N8N_PLANNED_VERSION = "0.1.0";
 
+export const N8N_MCP_ENDPOINT_PATH = "/mcp-server/http";
+
+export const N8N_SERVICE_CREDENTIAL_KIND = "n8n-mcp-access-token";
+
+export const N8N_SERVICE_CREDENTIAL_SECRET_JSON_KEY =
+  "N8N_MCP_SERVICE_CREDENTIAL";
+
 export const N8N_PUBLICATION_GATES = [
   {
     unit: "U2",
@@ -40,6 +47,9 @@ export const n8nDraftManifest = {
       type: "mcp-server",
       key: "workflow-management",
       publicationGate: "U5",
+      endpointPath: N8N_MCP_ENDPOINT_PATH,
+      serviceCredentialKind: N8N_SERVICE_CREDENTIAL_KIND,
+      serviceCredentialSecretJsonKey: N8N_SERVICE_CREDENTIAL_SECRET_JSON_KEY,
       description:
         "Native instance-level n8n MCP resolved from the managed-app public URL and authenticated with a tenant service credential.",
     },

@@ -13,12 +13,14 @@
  *   - `humanPairId`      — the agent's paired human; resolves DIRECT
  *     `per_user_oauth` servers via user_mcp_tokens exactly as before (R16).
  *   - `requesterUserId`  — the thread-turn / job owner; resolves
- *     PLUGIN-managed servers (management_source='plugin') via
+ *     PLUGIN-managed OAuth/header servers (management_source='plugin') via
  *     user_plugin_activation_tokens by (requester, plugin_install_id,
  *     resource indicator), with refresh-on-expiry per token record.
  *     Refresh failure flips the activation to needs_reauth and skips that
- *     plugin's servers (log, never throw). A null requester excludes ALL
- *     plugin servers (fail closed).
+ *     plugin's servers (log, never throw). A null requester excludes these
+ *     plugin servers (fail closed). Plugin rows declared as
+ *     service_credential are tenant-owned and resolve server-side without
+ *     requester activation.
  *
  * URL dedupe: when a plugin server and a direct server share an endpoint
  * URL, the dispatch includes the plugin entry for users whose activation
@@ -171,8 +173,22 @@ export async function buildMcpConfigs(
 
     // ── Plugin-managed servers (management_source='plugin') ──────────
     // Auth resolves from the REQUESTER's app-level activation, never
-    // from humanPairId. No resolvable requester → fail closed.
+    // from humanPairId. Service credentials are the explicit tenant-owned
+    // exception and resolve entirely server-side.
     if (isPluginRow(mcp)) {
+      if (mcp.auth_type === "service_credential") {
+        const resolved = await resolveServiceCredentialAuth(
+          (mcp.auth_config as Record<string, unknown>) || {},
+          logPrefix,
+          mcp.slug ?? mcp.name,
+        );
+        if (!resolved) continue;
+        mcpConfigs.push(
+          toMcpServerConfig(mcp, resolved.token, resolved.headers),
+        );
+        includedPluginUrls.add(normalizeServerUrl(mcp.url));
+        continue;
+      }
       if (!requesterUserId) {
         console.warn(
           `${logPrefix} Skipping plugin MCP ${mcp.slug}: no resolvable requesting user (fail closed)`,
@@ -573,6 +589,165 @@ async function resolveTenantApiKeyToken(
 
   const token = authCfg.token;
   return typeof token === "string" && token.length > 0 ? token : undefined;
+}
+
+interface ResolvedServiceCredentialAuth {
+  token?: string;
+  headers?: Record<string, string>;
+}
+
+interface ServiceCredentialHeaderBinding {
+  name: string;
+  secretJsonKey: string;
+  valuePrefix?: string;
+}
+
+async function resolveServiceCredentialAuth(
+  authCfg: Record<string, unknown>,
+  logPrefix: string,
+  slug: string,
+): Promise<ResolvedServiceCredentialAuth | undefined> {
+  if (typeof authCfg.revokedAt === "string" || authCfg.revoked === true) {
+    console.warn(
+      `${logPrefix} Skipping MCP ${slug}: service credential is revoked`,
+    );
+    return undefined;
+  }
+  const secretRef =
+    typeof authCfg.secretRef === "string" && authCfg.secretRef.trim()
+      ? authCfg.secretRef.trim()
+      : null;
+  if (!secretRef) {
+    console.warn(
+      `${logPrefix} Skipping MCP ${slug}: service credential secret ref is missing`,
+    );
+    return undefined;
+  }
+  const bindings = serviceCredentialHeaderBindings(authCfg);
+  if (bindings.length === 0) {
+    console.warn(
+      `${logPrefix} Skipping MCP ${slug}: service credential auth_config has no header bindings`,
+    );
+    return undefined;
+  }
+
+  let secretValue: ServiceCredentialSecretValue | null = null;
+  try {
+    const sm = new SecretsManagerClient({
+      region: process.env.AWS_REGION || "us-east-1",
+    });
+    const secret = await sm.send(
+      new GetSecretValueCommand({ SecretId: secretRef }),
+    );
+    secretValue = parseServiceCredentialSecret(secret.SecretString);
+  } catch (err) {
+    console.warn(
+      `${logPrefix} service credential secret lookup failed for ${slug}:`,
+      err,
+    );
+    return undefined;
+  }
+  if (!secretValue) {
+    console.warn(`${logPrefix} service credential secret for ${slug} is empty`);
+    return undefined;
+  }
+
+  let token: string | undefined;
+  const headers: Record<string, string> = {};
+  for (const binding of bindings) {
+    const raw = serviceCredentialSecretField(
+      secretValue,
+      binding.secretJsonKey,
+    );
+    if (!raw) {
+      console.warn(
+        `${logPrefix} service credential secret for ${slug} is missing key ${binding.secretJsonKey}`,
+      );
+      return undefined;
+    }
+    const headerValue = `${binding.valuePrefix ?? ""}${raw}`;
+    if (binding.name.toLowerCase() === "authorization") {
+      const bearer = headerValue.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+      if (!bearer) {
+        console.warn(
+          `${logPrefix} service credential Authorization header for ${slug} must use Bearer auth`,
+        );
+        return undefined;
+      }
+      token = bearer;
+    } else {
+      headers[binding.name] = headerValue;
+    }
+  }
+
+  const extraHeaders = Object.keys(headers).length > 0 ? headers : undefined;
+  if (!token && !extraHeaders) {
+    console.warn(
+      `${logPrefix} service credential auth_config for ${slug} resolved no usable auth material`,
+    );
+    return undefined;
+  }
+  return { token, headers: extraHeaders };
+}
+
+function serviceCredentialHeaderBindings(
+  authCfg: Record<string, unknown>,
+): ServiceCredentialHeaderBinding[] {
+  const headers = authCfg.headers;
+  if (!Array.isArray(headers)) return [];
+  const bindings: ServiceCredentialHeaderBinding[] = [];
+  for (const header of headers) {
+    if (!header || typeof header !== "object" || Array.isArray(header)) {
+      continue;
+    }
+    const entry = header as Record<string, unknown>;
+    if (
+      typeof entry.name !== "string" ||
+      !entry.name.trim() ||
+      typeof entry.secretJsonKey !== "string" ||
+      !entry.secretJsonKey.trim()
+    ) {
+      continue;
+    }
+    bindings.push({
+      name: entry.name.trim(),
+      secretJsonKey: entry.secretJsonKey.trim(),
+      ...(typeof entry.valuePrefix === "string"
+        ? { valuePrefix: entry.valuePrefix }
+        : {}),
+    });
+  }
+  return bindings;
+}
+
+type ServiceCredentialSecretValue = Record<string, unknown> | string;
+
+function parseServiceCredentialSecret(
+  secretString?: string,
+): ServiceCredentialSecretValue | null {
+  if (!secretString) return null;
+  try {
+    const parsed = JSON.parse(secretString) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return secretString.trim() ? secretString : null;
+  }
+}
+
+function serviceCredentialSecretField(
+  secretValue: ServiceCredentialSecretValue,
+  key: string,
+): string | undefined {
+  if (typeof secretValue === "string") {
+    return key === "token" && secretValue.trim()
+      ? secretValue.trim()
+      : undefined;
+  }
+  const value = secretValue[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function extractTokenFromSecretString(

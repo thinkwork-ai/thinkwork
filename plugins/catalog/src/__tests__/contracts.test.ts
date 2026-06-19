@@ -227,6 +227,35 @@ describe("validatePluginManifest", () => {
     expect(() => validatePluginManifest(ok)).not.toThrow();
   });
 
+  it("accepts tenant service credential auth without OAuth scopes", () => {
+    const ok = manifest();
+    version(ok).requiredOauthScopes = [];
+    const server = version(ok).components[0];
+    if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+    delete server.endpointUrl;
+    server.endpointFrom = {
+      managedApp: "n8n",
+      configKey: "publicUrl",
+      path: "/mcp-server/http",
+    };
+    server.auth = {
+      mode: "tenant-service-credential",
+      credentialKind: "n8n-mcp-access-token",
+      secretRefConfigKey: "serviceCredentialSecretArn",
+      headers: [
+        {
+          name: "Authorization",
+          secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+          valuePrefix: "Bearer ",
+        },
+      ],
+    };
+    for (const component of version(ok).components.slice(1)) {
+      if (component.type === "mcp-server") component.auth = { mode: "none" };
+    }
+    expect(() => validatePluginManifest(ok)).not.toThrow();
+  });
+
   it("rejects Authorization-shaped user-provided header auth", () => {
     const bad = manifest();
     const server = version(bad).components[0];
@@ -242,6 +271,80 @@ describe("validatePluginManifest", () => {
       ],
     };
     expect(() => validatePluginManifest(bad)).toThrow(/not allowed/);
+  });
+
+  it("rejects tenant service credential auth without endpointFrom", () => {
+    const bad = manifest();
+    const server = version(bad).components[0];
+    if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+    server.auth = {
+      mode: "tenant-service-credential",
+      credentialKind: "n8n-mcp-access-token",
+      secretRefConfigKey: "serviceCredentialSecretArn",
+      headers: [
+        {
+          name: "Authorization",
+          secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+          valuePrefix: "Bearer ",
+        },
+      ],
+    };
+    expect(() => validatePluginManifest(bad)).toThrow(/requires endpointFrom/);
+  });
+
+  it("rejects raw values in tenant service credential manifests", () => {
+    const bad = manifest();
+    const server = version(bad).components[0];
+    if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+    delete server.endpointUrl;
+    server.endpointFrom = {
+      managedApp: "n8n",
+      configKey: "publicUrl",
+      path: "/mcp-server/http",
+    };
+    server.auth = {
+      mode: "tenant-service-credential",
+      credentialKind: "n8n-mcp-access-token",
+      secretRefConfigKey: "serviceCredentialSecretArn",
+      headers: [
+        {
+          name: "Authorization",
+          secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+          valuePrefix: "Bearer ",
+          value: "do-not-ship",
+        } as never,
+      ],
+    };
+    expect(() => validatePluginManifest(bad)).toThrow(
+      /value is not allowed in tenant-service-credential manifests/,
+    );
+  });
+
+  it("requires Authorization service credentials to use Bearer auth", () => {
+    const bad = manifest();
+    const server = version(bad).components[0];
+    if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+    delete server.endpointUrl;
+    server.endpointFrom = {
+      managedApp: "n8n",
+      configKey: "publicUrl",
+      path: "/mcp-server/http",
+    };
+    server.auth = {
+      mode: "tenant-service-credential",
+      credentialKind: "n8n-mcp-access-token",
+      secretRefConfigKey: "serviceCredentialSecretArn",
+      headers: [
+        {
+          name: "Authorization",
+          secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+          valuePrefix: "Token ",
+        },
+      ],
+    };
+    expect(() => validatePluginManifest(bad)).toThrow(
+      /must be "Bearer " for Authorization/,
+    );
   });
 
   it("rejects malformed semver", () => {
