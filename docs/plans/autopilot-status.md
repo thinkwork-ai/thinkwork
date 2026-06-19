@@ -11,11 +11,11 @@ status: in_progress
 - Plan: `docs/plans/2026-06-19-001-feat-space-webhook-thread-start-plan.md`.
 - Origin requirements: `docs/brainstorms/2026-06-19-space-webhook-thread-start-requirements.md`.
 - Target branch: `main`.
-- Current implementation unit: U2 - Start configured Space workflows from webhook-created threads.
-- Current branch: `codex/space-webhook-u2`.
-- Current worktree: `.Codex/worktrees/space-webhook-u2`.
-- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 pending.
-- Status: U2 implementation in progress.
+- Current implementation unit: U3 - Update generic webhook agent dispatch to use the thread-start contract.
+- Current branch: `codex/space-webhook-u3`.
+- Current worktree: `.Codex/worktrees/space-webhook-u3`.
+- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 [#2679](https://github.com/thinkwork-ai/thinkwork/pull/2679) merged as `5e51e4e5c`; U3 pending.
+- Status: U3 implementation in progress.
 - Notes:
   - Created isolated U1 worktree from `origin/main` at `5ea2a8321`.
   - Copied the Space webhook requirements and plan docs into the U1 worktree because they were still untracked in the main checkout when autopilot started.
@@ -24,6 +24,9 @@ status: in_progress
   - Created isolated U2 worktree from `origin/main` at `f5ccf3b44`.
   - Added prepared-thread initialization to Customer Onboarding so webhook-created threads can receive onboarding metadata, kickoff artifacts, goals, linked tasks, progress refresh, and coordinator wakeup without creating or deduping to a second thread.
   - Added Space workflow detection to the webhook thread starter for Customer Onboarding Spaces and accepted-with-warning behavior for unsupported or failed workflow starts.
+  - U2 PR #2679 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`) on the rebased head and was squash merged to `main`.
+  - Created isolated U3 worktree from `origin/main` at `5e51e4e5c`.
+  - Updated generic agent webhook dispatch to call the Space webhook thread-start service before wakeup queueing, attach the starter's full agent context to the wakeup payload, fail pre-thread setup as retryable non-2xx, and return/record 202 accepted-with-warning when workflow initialization degraded after thread creation.
 - Local verification:
   - `pnpm install` completed; local Node 25 logged the known optional `canvas@2.11.2` native fallback build warning because `pkg-config` / `pixman-1` are not installed.
   - `pnpm exec vitest run src/lib/spaces/space-webhook-thread-start.test.ts` from `packages/api` passed: 6 tests.
@@ -31,6 +34,10 @@ status: in_progress
   - U2 `pnpm install` completed with the same optional `canvas@2.11.2` native fallback build warning.
   - U2 `pnpm exec vitest run src/lib/spaces/space-webhook-thread-start.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts` from `packages/api` passed: 20 tests.
   - U2 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U3 `pnpm install` completed with the same optional `canvas@2.11.2` native fallback build warning.
+  - U3 `pnpm exec vitest run src/handlers/webhooks.space.test.ts src/lib/spaces/space-webhook-thread-start.test.ts` from `packages/api` passed: 12 tests.
+  - U3 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U3 `git diff --check` passed.
 - Blockers: none.
 
 ## THNK-15 Company Brain Premium Plugin - 2026-06-13

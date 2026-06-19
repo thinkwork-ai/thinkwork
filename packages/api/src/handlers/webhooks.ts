@@ -29,7 +29,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
 import { json, error, notFound } from "../lib/response.js";
-import { ensureThreadForWork } from "../lib/thread-helpers.js";
+import { startSpaceWebhookThread } from "../lib/spaces/space-webhook-thread-start.js";
 
 // ---------------------------------------------------------------------------
 // In-memory rate limiter (sliding window, resets on cold start)
@@ -351,33 +351,33 @@ async function dispatchAgent(
     return error("Webhook has no valid target configured");
   }
 
-  let threadId: string | undefined;
+  let threadStart: Awaited<ReturnType<typeof startSpaceWebhookThread>>;
   try {
-    const result = await ensureThreadForWork({
+    threadStart = await startSpaceWebhookThread({
       tenantId: webhook.tenant_id,
       agentId: webhook.agent_id,
       spaceId: webhook.space_id ?? undefined,
-      userId:
-        webhook.created_by_type === "user"
-          ? (webhook.created_by_id ?? undefined)
-          : undefined,
-      title: webhook.name,
-      channel: "webhook",
+      webhookId: webhook.id,
+      webhookName: webhook.name,
+      payload: body,
     });
-    threadId = result.threadId;
-    record.thread_created = true;
   } catch (err) {
-    console.warn("[webhooks] Failed to create thread:", err);
+    console.warn("[webhooks] Failed to start webhook thread:", err);
+    record.resolution_status = "error";
+    record.error_message = (err as Error).message ?? String(err);
+    record.status_code = 500;
+    return error("Failed to start webhook thread", 500);
   }
 
   const payload: Record<string, unknown> = {
-    webhookPayload: body,
-    webhookId: webhook.id,
-    webhookName: webhook.name,
-    spaceId: webhook.space_id,
+    ...threadStart.agentContext,
+    threadId: threadStart.threadId,
+    threadIdentifier: threadStart.identifier,
+    threadNumber: threadStart.number,
+    openingMessageContent: threadStart.openingMessageContent,
+    workflow: threadStart.workflow,
   };
   if (webhook.prompt) payload.message = webhook.prompt;
-  if (threadId) payload.threadId = threadId;
 
   const [wakeup] = await db
     .insert(agentWakeupRequests)
@@ -408,10 +408,25 @@ async function dispatchAgent(
     })
     .where(eq(webhooks.id, webhook.id));
 
+  const warnings = threadStart.warnings;
   record.resolution_status = "ok";
-  record.thread_id = threadId;
-  record.status_code = 201;
-  return json({ ok: true, wakeupRequestId: wakeup.id }, 201);
+  record.thread_id = threadStart.threadId;
+  record.thread_created = true;
+  record.status_code = warnings.length > 0 ? 202 : 201;
+  record.error_message =
+    warnings.length > 0
+      ? warnings.map((warning) => warning.message).join("; ")
+      : undefined;
+  return json(
+    {
+      ok: true,
+      wakeupRequestId: wakeup.id,
+      threadId: threadStart.threadId,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      warning: warnings[0]?.message,
+    },
+    record.status_code,
+  );
 }
 
 // ---------------------------------------------------------------------------
