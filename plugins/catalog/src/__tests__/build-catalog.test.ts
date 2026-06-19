@@ -36,6 +36,7 @@ describe("buildSignedCatalogJson", () => {
       "company-brain",
       "lakehouse",
       "lastmile",
+      "n8n",
       "plane",
       "email-channel",
       "sendgrid",

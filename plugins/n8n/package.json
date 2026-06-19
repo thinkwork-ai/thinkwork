@@ -16,10 +16,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "thinkworkPlugin": {
-    "catalogPublication": "deferred",
-    "reason": "THNK-50 U1 scaffolds the n8n package before the managed-app adapter and tenant service credential MCP auth contract exist. U7 publishes the final manifest."
-  },
   "dependencies": {
     "@noble/hashes": "^2.0.1"
   },

@@ -1610,6 +1610,9 @@ importers:
       '@thinkwork/plugin-lastmile':
         specifier: workspace:*
         version: link:../lastmile
+      '@thinkwork/plugin-n8n':
+        specifier: workspace:*
+        version: link:../n8n
       '@thinkwork/plugin-plane':
         specifier: workspace:*
         version: link:../plane

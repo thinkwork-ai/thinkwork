@@ -1,6 +1,6 @@
 ---
 title: Managed Applications
-description: Operator controls for optional ThinkWork-managed applications such as Cognee Knowledge Graph, Twenty CRM, and Plane.
+description: Operator controls for optional ThinkWork-managed applications such as Cognee Knowledge Graph, Twenty CRM, Plane, and n8n.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -23,6 +23,7 @@ The first managed applications are:
 | Cognee      | Knowledge Graph substrate for ontology work  | Deployment status reports Cognee running    |
 | Twenty CRM  | Self-hosted CRM runtime managed by ThinkWork | Deployment status reports Twenty running    |
 | Plane       | Self-hosted project management runtime       | Plugin is installed and runtime is deployed |
+| n8n         | Self-hosted workflow automation runtime      | Plugin is installed and runtime is deployed |
 
 The Managed Applications section is visible only to operators. Members do not
 see deployment controls, and app-specific settings pages remain hidden until
@@ -59,6 +60,11 @@ Parking Plane stops web/API, worker, beat-worker, and live runtime capacity
 while retaining work items, pages, comments, files, database credentials,
 RabbitMQ, cache, S3 storage, endpoint wiring, and user activation records.
 
+Parking n8n stops main and worker runtime capacity while retaining workflows,
+executions, database state, queue/cache resources, binary-data storage, package
+configuration evidence, endpoint wiring, operator credentials, service
+credential material, and MCP rows.
+
 Destroying Twenty is intentionally separate from parking. It queues a
 destructive deploy that tears down the Twenty infrastructure and then removes
 the dedicated Twenty database, database role, and Twenty Secrets Manager
@@ -68,6 +74,12 @@ Destroying Plane is also separate from parking. It removes the retained Plane
 runtime substrate and app-owned data paths, including database state, file
 storage, queue/cache resources, secrets, and managed MCP rows. Use it only when
 Plane work-item history is no longer needed.
+
+Destroying n8n removes the retained n8n runtime substrate and app-owned data
+paths, including the `thinkwork_n8n` database state, storage, queue/cache
+resources, operator and service credential secrets, package image evidence, and
+managed MCP rows. Use it only when workflow automation history is no longer
+needed.
 
 Cognee follows the existing optional Knowledge Graph lifecycle. Its deploy
 control now lives in Managed Applications; the Knowledge Graph settings page is
@@ -156,6 +168,33 @@ token from another user. When the current user has no active Plane activation,
 runtime MCP assembly fails closed for Plane instead of falling back to shared
 credentials.
 
+## n8n Plugin and MCP
+
+n8n is installed from Settings -> Plugins as the `n8n` application plugin. The
+plugin detail page is the operator entry point for install/uninstall,
+infrastructure lifecycle, and custom Code node package configuration.
+
+n8n v1 is self-hosted OSS n8n. It does not use n8n Cloud, n8n Enterprise,
+per-user activation, or ThinkWork SSO. Production activation and recovery use
+one shared native n8n operator account stored as an operator-managed secret.
+
+The n8n Plugin Detail settings page lets operators add pinned public npm
+package specs for Code nodes. Saving package settings creates a reviewable
+managed-app `UPGRADE` plan that builds a digest-pinned wrapper image and
+records package digest evidence before Terraform apply. Do not use private
+registries, unpinned ranges, tarballs, git dependencies, or arbitrary Dockerfile
+edits.
+
+n8n MCP uses a tenant service credential resolved server-side from the
+managed-app desired config. There is no user activation screen for n8n in v1.
+Operators must still enable instance-level MCP inside n8n and enable MCP access
+on each workflow, project, or folder agents may inspect.
+
+The bundled `n8n--workflow-operator` skill allows agents to inspect workflows,
+draft disabled or disposable changes, and gather low-risk test evidence. It
+instructs agents to hand workflow publish, unpublish, activation, deactivation,
+credential rotation, and shared-operator recovery to the native n8n UI.
+
 ## Deployment Verification
 
 After the deploy workflow finishes, run the managed-app smoke from the repo
@@ -226,6 +265,41 @@ SMOKE_ENABLE_PLANE_MCP=1 \
 Use `SMOKE_PLANE_THINKWORK_PROXY=1` with an activated Cognito user token to
 verify the ThinkWork `/api/mcp` proxy path and per-user bearer plus header
 injection. Keep `SMOKE_PLANE_MCP_WRITE` unset for read-only checks.
+
+After n8n is installed and deployed through Settings -> Plugins, run:
+
+```sh
+node plugins/n8n/smoke/n8n-managed-app-smoke.mjs
+
+SMOKE_ENABLE_N8N_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/n8n-managed-app-smoke.json \
+  node plugins/n8n/smoke/n8n-managed-app-smoke.mjs
+```
+
+Dry-run mode prints live-mode requirements. Live mode verifies the deployed
+public n8n health path plus main/worker service, database, queue, storage,
+image digest, package digest, and service credential evidence when Terraform
+outputs are available.
+
+After native n8n MCP is enabled and the managed MCP server is assigned to an
+agent, run the ThinkWork proxy smoke:
+
+```sh
+SMOKE_ENABLE_N8N_MCP=1 \
+  SMOKE_N8N_THINKWORK_PROXY=1 \
+  SMOKE_API_BASE_URL=<api-url> \
+  SMOKE_COGNITO_ID_TOKEN=<operator-or-agent-user-token> \
+  SMOKE_AGENT_ID=<agent-id> \
+  SMOKE_N8N_INSTALL_ID=<plugin-install-id> \
+  SMOKE_TENANT_ID=<tenant-id> \
+  node plugins/n8n/smoke/n8n-mcp-smoke.mjs
+```
+
+The MCP smoke is read-only by default. It lists native n8n workflow tools
+through ThinkWork's `/api/mcp` proxy and can read a disposable workflow when
+`SMOKE_N8N_WORKFLOW_ID` and matching tool env are configured. It never
+publishes, unpublishes, activates, or deactivates production workflows.
 
 ## Related Pages
 

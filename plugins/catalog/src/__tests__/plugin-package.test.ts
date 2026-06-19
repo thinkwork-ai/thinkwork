@@ -7,16 +7,18 @@ import {
 import {
   allPluginManifests,
   firstPartyPluginPackages,
+  n8nPluginPackage,
   planePluginPackage,
 } from "../registry";
 
 describe("first-party plugin packages", () => {
-  it("registers Plane from the root plugin package boundary", () => {
+  it("registers Plane and n8n from their root plugin package boundaries", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
       "company-brain",
       "email-channel",
       "lakehouse",
       "lastmile",
+      "n8n",
       "plane",
       "sendgrid",
       "twenty",
@@ -40,6 +42,26 @@ describe("first-party plugin packages", () => {
       description: "Plane managed-app Terraform module.",
     });
     expect(planePluginPackage.compatibilityLinks).toEqual([]);
+
+    expect(n8nPluginPackage.sourceRoot).toBe("plugins/n8n");
+    expect(n8nPluginPackage.manifest.pluginKey).toBe("n8n");
+    expect(n8nPluginPackage.ownedSources).toContainEqual({
+      kind: "manifest",
+      path: "plugins/n8n/src/manifest.ts",
+      description: "n8n catalog manifest and versioned component contract.",
+    });
+    expect(n8nPluginPackage.ownedSources).toContainEqual({
+      kind: "deployment",
+      path: "plugins/n8n/src/deployment",
+      description: "n8n managed-app adapter and package image build contract.",
+    });
+    expect(n8nPluginPackage.ownedSources).toContainEqual({
+      kind: "skills",
+      path: "plugins/n8n/src/skills",
+      description:
+        "n8n workflow operator instructions seeded through the plugin catalog.",
+    });
+    expect(n8nPluginPackage.compatibilityLinks).toEqual([]);
   });
 
   it("publishes every first-party plugin manifest through the catalog aggregate", () => {
@@ -47,6 +69,7 @@ describe("first-party plugin packages", () => {
       "company-brain",
       "lakehouse",
       "lastmile",
+      "n8n",
       "plane",
       "email-channel",
       "sendgrid",
