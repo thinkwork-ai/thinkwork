@@ -573,6 +573,24 @@ variable "deployment_evidence_bucket" {
   default     = ""
 }
 
+variable "deployment_release_version" {
+  description = "Selected ThinkWork release version used for managed application deployment jobs."
+  type        = string
+  default     = "unresolved"
+}
+
+variable "deployment_release_manifest_url" {
+  description = "Selected ThinkWork release manifest URL used for managed application deployment jobs."
+  type        = string
+  default     = ""
+}
+
+variable "deployment_release_manifest_sha256" {
+  description = "Selected ThinkWork release manifest SHA-256 used for managed application deployment jobs."
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # Phase 3 U4 — compliance-outbox-drainer Aurora credentials
 # ---------------------------------------------------------------------------
