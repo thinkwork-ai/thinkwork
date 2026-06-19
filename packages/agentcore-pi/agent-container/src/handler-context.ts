@@ -60,12 +60,10 @@ function asString(value: unknown): string {
  * can surface it without leaking internal state.
  *
  * `user_id` is required for normal invocations and optional for eval-mode
- * (`payload.eval_mode === true`). Evals are user-less by construction —
- * the runtime is being exercised in isolation, not on behalf of a person —
- * so user-scoped tools (memory, hindsight) are also skipped in that mode.
- * When `user_id` is absent in eval mode, `IdentitySnapshot.userId` is the
- * empty string; downstream code that needs a user must gate on `eval_mode`
- * or check `userId` for emptiness.
+ * (`payload.eval_mode === true`) plus system-originated thread channels such
+ * as webhooks and inbound email. Those invocations are user-less by
+ * construction, so user-scoped tools (memory, hindsight) are skipped when
+ * `IdentitySnapshot.userId` is empty.
  */
 export function snapshotIdentity(
   payload: Record<string, unknown>,
@@ -75,10 +73,13 @@ export function snapshotIdentity(
   const agentId = asString(payload.assistant_id);
   const threadId = asString(payload.thread_id);
   const evalMode = payload.eval_mode === true;
+  const triggerChannel = asString(payload.trigger_channel);
+  const userlessSystemChannel =
+    triggerChannel === "webhook" || triggerChannel === "email_received";
 
   const missing: string[] = [];
   if (!tenantId) missing.push("tenant_id");
-  if (!userId && !evalMode) missing.push("user_id");
+  if (!userId && !evalMode && !userlessSystemChannel) missing.push("user_id");
   if (!agentId) missing.push("assistant_id");
   if (!threadId) missing.push("thread_id");
   if (missing.length > 0) {
