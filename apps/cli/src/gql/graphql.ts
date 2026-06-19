@@ -607,6 +607,39 @@ export enum ArtifactType {
   Report = "REPORT",
 }
 
+/**
+ * Deployment-scoped auth-provider bridge configuration. Secret values are never
+ * exposed here; `clientSecretConfigured` means a server-side secret ref exists.
+ */
+export type AuthProviderResource = {
+  __typename?: "AuthProviderResource";
+  authorizeScopes: Scalars["String"]["output"];
+  clientId: Scalars["String"]["output"];
+  clientSecretConfigured: Scalars["Boolean"]["output"];
+  cognitoAppClientIds: Array<Scalars["String"]["output"]>;
+  cognitoIdentityProviderName: Scalars["String"]["output"];
+  cognitoUserPoolId: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  diagnostics: Scalars["AWSJSON"]["output"];
+  displayName: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  issuerUrl: Scalars["String"]["output"];
+  lastErrorCode?: Maybe<Scalars["String"]["output"]>;
+  lastValidatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  /** 'workos' in v1. */
+  providerKey: Scalars["String"]["output"];
+  providerOptions: Scalars["AWSJSON"]["output"];
+  /** 'single_sso' | 'provider_specific'. */
+  publicOptionMode: Scalars["String"]["output"];
+  publicOptionsPublished: Scalars["Boolean"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  /**
+   * 'unconfigured' | 'validating' | 'valid' | 'partially_valid' | 'invalid' |
+   * 'rotating_secret' | 'disabled'.
+   */
+  validationStatus: Scalars["String"]["output"];
+};
+
 export type BedrockModelImportCandidate = {
   __typename?: "BedrockModelImportCandidate";
   alreadyImported: Scalars["Boolean"]["output"];
@@ -3105,6 +3138,8 @@ export type Mutation = {
   updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
   updateMemoryRecord: Scalars["Boolean"]["output"];
+  /** Update n8n custom package desired config and create/reuse an UPGRADE plan job. */
+  updateN8nPluginPackageSettings: UpdateN8nPluginPackageSettingsResult;
   updateOntologyChangeSet: OntologyChangeSet;
   updateOntologyEntityType: OntologyEntityType;
   updateOntologyRelationshipType: OntologyRelationshipType;
@@ -4055,6 +4090,10 @@ export type MutationUpdateMemoryRecordArgs = {
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
+export type MutationUpdateN8nPluginPackageSettingsArgs = {
+  input: UpdateN8nPluginPackageSettingsInput;
+};
+
 export type MutationUpdateOntologyChangeSetArgs = {
   input: UpdateOntologyChangeSetInput;
 };
@@ -4169,6 +4208,42 @@ export type MutationUpsertBudgetPolicyArgs = {
 
 export type MutationUpsertEmailSpacePolicyArgs = {
   input: UpsertEmailSpacePolicyInput;
+};
+
+export type N8nPackage = {
+  __typename?: "N8nPackage";
+  name: Scalars["String"]["output"];
+  spec: Scalars["String"]["output"];
+  version: Scalars["String"]["output"];
+};
+
+export type N8nPackageConfig = {
+  __typename?: "N8nPackageConfig";
+  allowExternal: Scalars["String"]["output"];
+  digest: Scalars["String"]["output"];
+  packageNames: Array<Scalars["String"]["output"]>;
+  packageSpecs: Array<Scalars["String"]["output"]>;
+  packages: Array<N8nPackage>;
+  schemaVersion: Scalars["Int"]["output"];
+};
+
+export type N8nPluginSettings = {
+  __typename?: "N8nPluginSettings";
+  currentPackageConfig: N8nPackageConfig;
+  currentStatus?: Maybe<Scalars["String"]["output"]>;
+  desiredConfig: Scalars["AWSJSON"]["output"];
+  desiredStatus?: Maybe<Scalars["String"]["output"]>;
+  installState: Scalars["String"]["output"];
+  lastEvidenceBucket?: Maybe<Scalars["String"]["output"]>;
+  lastEvidencePrefix?: Maybe<Scalars["String"]["output"]>;
+  lastJobError?: Maybe<Scalars["String"]["output"]>;
+  lastJobId?: Maybe<Scalars["ID"]["output"]>;
+  lastJobOperation?: Maybe<Scalars["String"]["output"]>;
+  lastJobStatus?: Maybe<Scalars["String"]["output"]>;
+  managedApplicationId?: Maybe<Scalars["ID"]["output"]>;
+  packageImageConfigDigest?: Maybe<Scalars["String"]["output"]>;
+  packageImageUri?: Maybe<Scalars["String"]["output"]>;
+  pluginInstallId: Scalars["ID"]["output"];
 };
 
 export type NewMessageEvent = {
@@ -4474,7 +4549,7 @@ export type PluginCatalogComponent = {
   /** Display name where the manifest declares one; null → render falls back to key. */
   displayName?: Maybe<Scalars["String"]["output"]>;
   key: Scalars["String"]["output"];
-  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
+  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'. */
   type: Scalars["String"]["output"];
 };
 
@@ -4578,13 +4653,14 @@ export type PluginComponent = {
   __typename?: "PluginComponent";
   /** Component key from the pinned manifest version (unique within the install). */
   componentKey: Scalars["String"]["output"];
-  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
+  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'. */
   componentType: Scalars["String"]["output"];
   createdAt: Scalars["AWSDateTime"]["output"];
   /**
    * Handler linkage into real runtime rows, shape by component type:
    * mcp-server { tenantMcpServerId }, skills { seededCatalogPrefix,
-   * workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId }.
+   * workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId },
+   * auth-provider { status, publicOptionsPublished }.
    */
   handlerRef: Scalars["AWSJSON"]["output"];
   id: Scalars["ID"]["output"];
@@ -4821,6 +4897,8 @@ export type Query = {
   /** The caller's plugin activations across the tenant's installs. */
   myPluginActivations: Array<UserPluginActivation>;
   mySlackLinks: Array<SlackUserLink>;
+  /** Operator settings for the installed n8n plugin package image config. */
+  n8nPluginSettings?: Maybe<N8nPluginSettings>;
   ontologyChangeSets: Array<OntologyChangeSet>;
   ontologyDefinitions: OntologyDefinitions;
   ontologyReprocessJob?: Maybe<OntologyReprocessJob>;
@@ -5359,6 +5437,10 @@ export type QueryMobileWikiSearchArgs = {
 
 export type QueryMySlackLinksArgs = {
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryN8nPluginSettingsArgs = {
+  installId: Scalars["ID"]["input"];
 };
 
 export type QueryOntologyChangeSetsArgs = {
@@ -6982,6 +7064,29 @@ export type Tenant = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+/**
+ * Tenant/deployment opt-in for a deployment auth resource. Public login options
+ * may be derived from this only after the linked resource validates.
+ */
+export type TenantAuthProviderReference = {
+  __typename?: "TenantAuthProviderReference";
+  authProviderResourceId: Scalars["ID"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  disabledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  enabledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  hostnames: Array<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  lastErrorCode?: Maybe<Scalars["String"]["output"]>;
+  metadata: Scalars["AWSJSON"]["output"];
+  pluginInstallId: Scalars["ID"]["output"];
+  publicOptionLabel: Scalars["String"]["output"];
+  resource: AuthProviderResource;
+  /** 'disabled' | 'enabled' | 'invalid' | 'decommissioning'. */
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
 export type TenantCredential = {
   __typename?: "TenantCredential";
   createdAt: Scalars["AWSDateTime"]["output"];
@@ -7656,6 +7761,19 @@ export type UpdateLinkedTaskInput = {
   status: LinkedTaskStatus;
   tenantId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
+};
+
+export type UpdateN8nPluginPackageSettingsInput = {
+  customPackageSpecs: Array<Scalars["String"]["input"]>;
+  expectedCurrentDigest?: InputMaybe<Scalars["String"]["input"]>;
+  idempotencyKey: Scalars["String"]["input"];
+  installId: Scalars["ID"]["input"];
+};
+
+export type UpdateN8nPluginPackageSettingsResult = {
+  __typename?: "UpdateN8nPluginPackageSettingsResult";
+  deploymentJob: ManagedApplicationDeploymentJob;
+  settings: N8nPluginSettings;
 };
 
 export type UpdateOntologyChangeSetInput = {

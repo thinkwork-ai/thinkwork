@@ -23,6 +23,7 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
       saveCredential: vi.fn(),
       setHeader: vi.fn(),
       uninstall: vi.fn(),
+      updateN8nPackages: vi.fn(),
       upgrade: vi.fn(),
       useQuery: vi.fn(),
       writeClipboard: vi.fn(),
@@ -50,9 +51,13 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
         "managedApplicationDeployment",
       ),
       SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
+      SettingsN8nPluginSettingsQuery: Symbol("n8nPluginSettings"),
       SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
       SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
       SettingsRetryPluginComponentMutation: Symbol("retryPluginComponent"),
+      SettingsUpdateN8nPluginPackageSettingsMutation: Symbol(
+        "updateN8nPluginPackageSettings",
+      ),
       SettingsUninstallPluginMutation: Symbol("uninstallPlugin"),
       SettingsUpgradePluginMutation: Symbol("upgradePlugin"),
     },
@@ -76,6 +81,9 @@ vi.mock("urql", () => ({
     }
     if (doc === queryDocs.SettingsRetryPluginComponentMutation) {
       return [{ fetching: false }, mocks.retry];
+    }
+    if (doc === queryDocs.SettingsUpdateN8nPluginPackageSettingsMutation) {
+      return [{ fetching: false }, mocks.updateN8nPackages];
     }
     if (doc === queryDocs.SettingsSaveEmailProviderCredentialMutation) {
       return [{ fetching: false }, mocks.saveCredential];
@@ -142,6 +150,7 @@ vi.mock(
 );
 
 import { PluginDetail } from "./PluginDetail";
+import { normalizeN8nPackageConfig } from "@thinkwork/plugin-n8n/package-config";
 
 const refreshCatalog = vi.fn();
 const refreshInstalls = vi.fn();
@@ -151,12 +160,14 @@ type Fixtures = {
   install?: Record<string, unknown> | null;
   activations?: Array<Record<string, unknown>>;
   catalog?: Array<Record<string, unknown>>;
+  n8nSettings?: Record<string, unknown> | null;
 };
 
 function mockQueries({
   install = baseInstall,
   activations = [needsReauthActivation],
   catalog = [catalogEntry],
+  n8nSettings = n8nPluginSettings,
 }: Fixtures = {}) {
   mocks.useQuery.mockImplementation(({ query }: { query: unknown }) => {
     if (query === queryDocs.SettingsPluginCatalogQuery) {
@@ -184,6 +195,15 @@ function mockQueries({
       return [
         {
           data: { managedApplicationDeployment: deploymentJob },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
+    }
+    if (query === queryDocs.SettingsN8nPluginSettingsQuery) {
+      return [
+        {
+          data: { n8nPluginSettings: n8nSettings },
           fetching: false,
         },
         vi.fn(),
@@ -223,6 +243,14 @@ beforeEach(() => {
   });
   mocks.uninstall.mockResolvedValue({
     data: { uninstallPlugin: { id: "install-1", state: "uninstalling" } },
+  });
+  mocks.updateN8nPackages.mockResolvedValue({
+    data: {
+      updateN8nPluginPackageSettings: {
+        settings: n8nPluginSettings,
+        deploymentJob,
+      },
+    },
   });
   mocks.activate.mockResolvedValue({
     data: { activatePlugin: { authorizeUrl: "https://auth.example/start" } },
@@ -597,9 +625,7 @@ describe("PluginDetail", () => {
         name: /workos setup instructions/i,
       }),
     ).toBeTruthy();
-    expect(
-      screen.getByText(/customer-owned SSO deployments/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/customer-owned SSO deployments/i)).toBeTruthy();
     expect(screen.getByText(/WorkOS client ID and API key/i)).toBeTruthy();
     expect(
       screen.getAllByText((content) =>
@@ -855,6 +881,69 @@ describe("PluginDetail", () => {
     const link = screen.getByRole("link", { name: /open ontology/i });
     expect(link.getAttribute("href")).toBe("/settings/memory/knowledge-graph");
   });
+
+  it("renders n8n package settings only for installed operator plugins", () => {
+    paramsState.pluginKey = "n8n";
+    mockQueries({ install: n8nInstall, catalog: [n8nEntry], activations: [] });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("n8n Settings")).toBeTruthy();
+    expect(screen.getByText("No custom packages configured.")).toBeTruthy();
+
+    cleanup();
+    tenantState.isOperator = false;
+    mockQueries({ install: n8nInstall, catalog: [n8nEntry], activations: [] });
+    render(<PluginDetail />);
+
+    expect(screen.queryByText("n8n Settings")).toBeNull();
+  });
+
+  it("creates an n8n package plan from normalized custom package specs", async () => {
+    paramsState.pluginKey = "n8n";
+    mockQueries({ install: n8nInstall, catalog: [n8nEntry], activations: [] });
+    render(<PluginDetail />);
+
+    fireEvent.change(screen.getByPlaceholderText("lodash@4.17.21"), {
+      target: { value: "zod@3.25.76, lodash@4.17.21, zod@3.25.76" },
+    });
+
+    expect(
+      screen.getByText(/duplicate package entry was collapsed/i),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: /create package plan/i }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.updateN8nPackages).toHaveBeenCalledWith({
+        input: expect.objectContaining({
+          installId: "install-n8n",
+          customPackageSpecs: ["lodash@4.17.21", "zod@3.25.76"],
+          expectedCurrentDigest: n8nPluginSettings.currentPackageConfig.digest,
+        }),
+      });
+    });
+    expect(await screen.findByTestId("plan-dialog")).toBeTruthy();
+  });
+
+  it("rejects invalid n8n package specs before submit", () => {
+    paramsState.pluginKey = "n8n";
+    mockQueries({ install: n8nInstall, catalog: [n8nEntry], activations: [] });
+    render(<PluginDetail />);
+
+    fireEvent.change(screen.getByPlaceholderText("lodash@4.17.21"), {
+      target: { value: "lodash" },
+    });
+
+    expect(
+      screen.getByText(/must include an exact public npm version/i),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: /create package plan/i })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
 });
 
 const baseInstall = {
@@ -994,6 +1083,83 @@ const planeEntry = {
     },
   ],
   install: null,
+};
+
+const emptyN8nPackageConfig = normalizeN8nPackageConfig([]);
+
+const n8nInstall = {
+  ...baseInstall,
+  id: "install-n8n",
+  pluginKey: "n8n",
+  pinnedVersion: "0.1.0",
+  state: "installed",
+  activatedUserCount: 0,
+  components: [
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-n8n-infra",
+      componentKey: "runtime",
+      componentType: "infrastructure",
+      state: "provisioned",
+      lastError: null,
+    },
+  ],
+};
+
+const n8nEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "n8n",
+  displayName: "n8n",
+  description: "Self-hosted n8n workflow automation runtime.",
+  latestVersion: "0.1.0",
+  updateAvailable: false,
+  premium: null,
+  entitlement: null,
+  versions: [
+    {
+      version: "0.1.0",
+      payloadSha256: "sha256:n8n",
+      requiredOauthScopes: [],
+      components: [
+        {
+          key: "runtime",
+          type: "infrastructure",
+          displayName: "n8n runtime",
+        },
+      ],
+    },
+  ],
+  install: null,
+};
+
+const n8nPluginSettings = {
+  __typename: "N8nPluginSettings" as const,
+  pluginInstallId: "install-n8n",
+  installState: "installed",
+  managedApplicationId: "app-n8n",
+  desiredStatus: "enabled",
+  currentStatus: "running",
+  desiredConfig: {
+    customPackageSpecs: [],
+    packageConfigDigest: emptyN8nPackageConfig.digest,
+  },
+  currentPackageConfig: {
+    __typename: "N8nPackageConfig" as const,
+    schemaVersion: emptyN8nPackageConfig.schemaVersion,
+    packages: [],
+    packageNames: [],
+    packageSpecs: [],
+    allowExternal: "",
+    digest: emptyN8nPackageConfig.digest,
+  },
+  packageImageUri: null,
+  packageImageConfigDigest: null,
+  lastJobId: null,
+  lastJobStatus: null,
+  lastJobOperation: null,
+  lastJobError: null,
+  lastEvidenceBucket: null,
+  lastEvidencePrefix: null,
 };
 
 const workosInstall = {

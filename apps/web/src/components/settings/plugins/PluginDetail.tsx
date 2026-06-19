@@ -52,6 +52,7 @@ import { ManagedApplicationPlanDialog } from "@/components/settings/managed-appl
 import { apiBaseUrl as deploymentApiBaseUrl } from "@/lib/deployment-sessions";
 import { EmailChannelSettings } from "./email-channel/EmailChannelSettings";
 import { InstallKeyDialog } from "./InstallKeyDialog";
+import { N8nSettings } from "./n8n/N8nSettings";
 import { UninstallPluginDialog } from "./UninstallPluginDialog";
 import {
   broadenedScopes,
@@ -628,6 +629,14 @@ export function PluginDetail() {
           <EmailChannelSettings provider={emailProviderSettingsProvider} />
         ) : null}
 
+        {pluginKey === "n8n" && install && showOperatorActions ? (
+          <N8nSettings
+            installId={install.id}
+            installState={install.state}
+            onChanged={refreshAll}
+          />
+        ) : null}
+
         {isWorkosAuth && showOperatorActions ? (
           <SettingsSection
             label="Setup"
@@ -825,8 +834,8 @@ function WorkosSetupInstructionsSheet({
                 for test tenants and Production for live customer traffic.
               </li>
               <li>
-                Open the WorkOS application Redirects page and add the
-                ThinkWork API callback URL:
+                Open the WorkOS application Redirects page and add the ThinkWork
+                API callback URL:
                 <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
                   {callbackUrl}
                 </code>
@@ -834,16 +843,16 @@ function WorkosSetupInstructionsSheet({
               <li>
                 Copy the WorkOS client ID and create an API key. Store the API
                 key in Secrets Manager or SSM for the customer deployment, then
-                register the secret reference and client ID with the
-                ThinkWork auth-provider resource.
+                register the secret reference and client ID with the ThinkWork
+                auth-provider resource.
               </li>
               <li>
                 Create a WorkOS organization for the customer. Use a stable
                 reference that matches the customer deployment or tenant record.
               </li>
               <li>
-                Configure SSO. For enterprise IdPs, invite the customer IT
-                admin through WorkOS Admin Portal. For Google/Microsoft testing,
+                Configure SSO. For enterprise IdPs, invite the customer IT admin
+                through WorkOS Admin Portal. For Google/Microsoft testing,
                 enable the provider and test with an approved domain account.
               </li>
               <li>
@@ -856,19 +865,17 @@ function WorkosSetupInstructionsSheet({
           </section>
 
           <section className="space-y-3">
-            <h3 className="font-medium text-foreground">
-              Assisted setup path
-            </h3>
+            <h3 className="font-medium text-foreground">Assisted setup path</h3>
             <p className="text-muted-foreground">
-              ThinkWork can make this smoother by generating WorkOS Admin
-              Portal setup links for customer IT admins, then recording the
-              resulting organization and connection identifiers against the
-              installed plugin. That removes most IdP-specific instructions
-              from ThinkWork because Admin Portal hosts them.
+              ThinkWork can make this smoother by generating WorkOS Admin Portal
+              setup links for customer IT admins, then recording the resulting
+              organization and connection identifiers against the installed
+              plugin. That removes most IdP-specific instructions from ThinkWork
+              because Admin Portal hosts them.
             </p>
             <p className="text-muted-foreground">
-              The deployment operator still needs a WorkOS API key and client
-              ID for the customer environment. Redirect URLs and application
+              The deployment operator still needs a WorkOS API key and client ID
+              for the customer environment. Redirect URLs and application
               settings should be confirmed in WorkOS before enabling SSO for
               production traffic.
             </p>
@@ -1184,9 +1191,9 @@ function handlerRefBoolean(value: unknown, key: string): boolean {
   }
   return Boolean(
     ref &&
-      typeof ref === "object" &&
-      !Array.isArray(ref) &&
-      (ref as Record<string, unknown>)[key] === true,
+    typeof ref === "object" &&
+    !Array.isArray(ref) &&
+    (ref as Record<string, unknown>)[key] === true,
   );
 }
 

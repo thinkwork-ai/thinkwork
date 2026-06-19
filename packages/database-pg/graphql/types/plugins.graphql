@@ -237,6 +237,39 @@ type PluginCatalogMetadata {
   rateLimitReset: String
 }
 
+type N8nPackage {
+  name: String!
+  version: String!
+  spec: String!
+}
+
+type N8nPackageConfig {
+  schemaVersion: Int!
+  packages: [N8nPackage!]!
+  packageNames: [String!]!
+  packageSpecs: [String!]!
+  allowExternal: String!
+  digest: String!
+}
+
+type N8nPluginSettings {
+  pluginInstallId: ID!
+  installState: String!
+  managedApplicationId: ID
+  desiredStatus: String
+  currentStatus: String
+  desiredConfig: AWSJSON!
+  currentPackageConfig: N8nPackageConfig!
+  packageImageUri: String
+  packageImageConfigDigest: String
+  lastJobId: ID
+  lastJobStatus: String
+  lastJobOperation: String
+  lastJobError: String
+  lastEvidenceBucket: String
+  lastEvidencePrefix: String
+}
+
 input InstallPluginInput {
   pluginKey: String!
   "Catalog version to pin; defaults to the latest published version."
@@ -308,6 +341,13 @@ input RevokePremiumPluginInstallKeyInput {
   tenantId: ID!
 }
 
+input UpdateN8nPluginPackageSettingsInput {
+  installId: ID!
+  customPackageSpecs: [String!]!
+  expectedCurrentDigest: String
+  idempotencyKey: String!
+}
+
 """
 Start of the app-level OAuth activation flow. The caller redirects the user
 to `authorizeUrl`; the callback upserts the activation and its token records
@@ -343,6 +383,11 @@ type RevokePremiumPluginInstallKeyResult {
   revokedAt: AWSDateTime
 }
 
+type UpdateN8nPluginPackageSettingsResult {
+  settings: N8nPluginSettings!
+  deploymentJob: ManagedApplicationDeploymentJob!
+}
+
 """
 Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10).
 """
@@ -368,6 +413,8 @@ extend type Query {
   pluginInstalls: [PluginInstall!]!
   "One install by id, with read-time component status reconciliation."
   pluginInstall(id: ID!): PluginInstall
+  "Operator settings for the installed n8n plugin package image config."
+  n8nPluginSettings(installId: ID!): N8nPluginSettings
   "The caller's plugin activations across the tenant's installs."
   myPluginActivations: [UserPluginActivation!]!
 }
@@ -441,6 +488,10 @@ extend type Mutation {
   revokePremiumPluginInstallKey(
     input: RevokePremiumPluginInstallKeyInput!
   ): RevokePremiumPluginInstallKeyResult!
+  "Update n8n custom package desired config and create/reuse an UPGRADE plan job."
+  updateN8nPluginPackageSettings(
+    input: UpdateN8nPluginPackageSettingsInput!
+  ): UpdateN8nPluginPackageSettingsResult!
   """
   One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
   MCP row to plugin ownership (management_source 'plugin' under the

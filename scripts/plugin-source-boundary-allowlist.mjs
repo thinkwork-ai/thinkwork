@@ -83,4 +83,19 @@ export const sharedPluginTermAllowlist = [
     reason:
       "shared platform GraphQL contract for the Email Channel plugin control plane.",
   },
+  {
+    path: "packages/api/src/graphql/resolvers/plugins/n8n-settings.ts",
+    reason:
+      "shared platform GraphQL control surface for n8n package settings; validation and runtime policy are package-owned under plugins/n8n.",
+  },
+  {
+    path: "packages/api/src/graphql/resolvers/plugins/n8n-settings.test.ts",
+    reason:
+      "shared platform GraphQL control-surface coverage for n8n package settings; package-specific validation is imported from plugins/n8n.",
+  },
+  {
+    pathPrefix: "apps/web/src/components/settings/plugins/n8n/",
+    reason:
+      "shared Plugin Detail UI shell for n8n package settings; package-specific validation is imported from plugins/n8n.",
+  },
 ];

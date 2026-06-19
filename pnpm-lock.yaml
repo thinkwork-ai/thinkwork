@@ -446,6 +446,9 @@ importers:
       '@thinkwork/graph':
         specifier: workspace:*
         version: link:../../packages/graph
+      '@thinkwork/plugin-n8n':
+        specifier: workspace:*
+        version: link:../../plugins/n8n
       '@thinkwork/pricing-config':
         specifier: workspace:*
         version: link:../../packages/pricing-config
@@ -793,6 +796,9 @@ importers:
       '@thinkwork/plugin-lastmile':
         specifier: workspace:*
         version: link:../../plugins/lastmile
+      '@thinkwork/plugin-n8n':
+        specifier: workspace:*
+        version: link:../../plugins/n8n
       '@thinkwork/plugin-twenty':
         specifier: workspace:*
         version: link:../../plugins/twenty
@@ -1692,6 +1698,10 @@ importers:
         version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
 
   plugins/n8n:
+    dependencies:
+      '@noble/hashes':
+        specifier: ^2.0.1
+        version: 2.0.1
     devDependencies:
       '@thinkwork/deployment-runner':
         specifier: workspace:*

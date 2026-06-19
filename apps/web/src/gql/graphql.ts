@@ -3138,6 +3138,8 @@ export type Mutation = {
   updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
   updateMemoryRecord: Scalars["Boolean"]["output"];
+  /** Update n8n custom package desired config and create/reuse an UPGRADE plan job. */
+  updateN8nPluginPackageSettings: UpdateN8nPluginPackageSettingsResult;
   updateOntologyChangeSet: OntologyChangeSet;
   updateOntologyEntityType: OntologyEntityType;
   updateOntologyRelationshipType: OntologyRelationshipType;
@@ -4088,6 +4090,10 @@ export type MutationUpdateMemoryRecordArgs = {
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
+export type MutationUpdateN8nPluginPackageSettingsArgs = {
+  input: UpdateN8nPluginPackageSettingsInput;
+};
+
 export type MutationUpdateOntologyChangeSetArgs = {
   input: UpdateOntologyChangeSetInput;
 };
@@ -4202,6 +4208,42 @@ export type MutationUpsertBudgetPolicyArgs = {
 
 export type MutationUpsertEmailSpacePolicyArgs = {
   input: UpsertEmailSpacePolicyInput;
+};
+
+export type N8nPackage = {
+  __typename?: "N8nPackage";
+  name: Scalars["String"]["output"];
+  spec: Scalars["String"]["output"];
+  version: Scalars["String"]["output"];
+};
+
+export type N8nPackageConfig = {
+  __typename?: "N8nPackageConfig";
+  allowExternal: Scalars["String"]["output"];
+  digest: Scalars["String"]["output"];
+  packageNames: Array<Scalars["String"]["output"]>;
+  packageSpecs: Array<Scalars["String"]["output"]>;
+  packages: Array<N8nPackage>;
+  schemaVersion: Scalars["Int"]["output"];
+};
+
+export type N8nPluginSettings = {
+  __typename?: "N8nPluginSettings";
+  currentPackageConfig: N8nPackageConfig;
+  currentStatus?: Maybe<Scalars["String"]["output"]>;
+  desiredConfig: Scalars["AWSJSON"]["output"];
+  desiredStatus?: Maybe<Scalars["String"]["output"]>;
+  installState: Scalars["String"]["output"];
+  lastEvidenceBucket?: Maybe<Scalars["String"]["output"]>;
+  lastEvidencePrefix?: Maybe<Scalars["String"]["output"]>;
+  lastJobError?: Maybe<Scalars["String"]["output"]>;
+  lastJobId?: Maybe<Scalars["ID"]["output"]>;
+  lastJobOperation?: Maybe<Scalars["String"]["output"]>;
+  lastJobStatus?: Maybe<Scalars["String"]["output"]>;
+  managedApplicationId?: Maybe<Scalars["ID"]["output"]>;
+  packageImageConfigDigest?: Maybe<Scalars["String"]["output"]>;
+  packageImageUri?: Maybe<Scalars["String"]["output"]>;
+  pluginInstallId: Scalars["ID"]["output"];
 };
 
 export type NewMessageEvent = {
@@ -4855,6 +4897,8 @@ export type Query = {
   /** The caller's plugin activations across the tenant's installs. */
   myPluginActivations: Array<UserPluginActivation>;
   mySlackLinks: Array<SlackUserLink>;
+  /** Operator settings for the installed n8n plugin package image config. */
+  n8nPluginSettings?: Maybe<N8nPluginSettings>;
   ontologyChangeSets: Array<OntologyChangeSet>;
   ontologyDefinitions: OntologyDefinitions;
   ontologyReprocessJob?: Maybe<OntologyReprocessJob>;
@@ -5393,6 +5437,10 @@ export type QueryMobileWikiSearchArgs = {
 
 export type QueryMySlackLinksArgs = {
   tenantId: Scalars["ID"]["input"];
+};
+
+export type QueryN8nPluginSettingsArgs = {
+  installId: Scalars["ID"]["input"];
 };
 
 export type QueryOntologyChangeSetsArgs = {
@@ -7713,6 +7761,19 @@ export type UpdateLinkedTaskInput = {
   status: LinkedTaskStatus;
   tenantId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
+};
+
+export type UpdateN8nPluginPackageSettingsInput = {
+  customPackageSpecs: Array<Scalars["String"]["input"]>;
+  expectedCurrentDigest?: InputMaybe<Scalars["String"]["input"]>;
+  idempotencyKey: Scalars["String"]["input"];
+  installId: Scalars["ID"]["input"];
+};
+
+export type UpdateN8nPluginPackageSettingsResult = {
+  __typename?: "UpdateN8nPluginPackageSettingsResult";
+  deploymentJob: ManagedApplicationDeploymentJob;
+  settings: N8nPluginSettings;
 };
 
 export type UpdateOntologyChangeSetInput = {
@@ -11931,6 +11992,120 @@ export type SettingsPluginInstallsQuery = {
       lastError?: string | null;
     }>;
   }>;
+};
+
+export type SettingsN8nPluginSettingsQueryVariables = Exact<{
+  installId: Scalars["ID"]["input"];
+}>;
+
+export type SettingsN8nPluginSettingsQuery = {
+  __typename?: "Query";
+  n8nPluginSettings?: {
+    __typename?: "N8nPluginSettings";
+    pluginInstallId: string;
+    installState: string;
+    managedApplicationId?: string | null;
+    desiredStatus?: string | null;
+    currentStatus?: string | null;
+    desiredConfig: any;
+    packageImageUri?: string | null;
+    packageImageConfigDigest?: string | null;
+    lastJobId?: string | null;
+    lastJobStatus?: string | null;
+    lastJobOperation?: string | null;
+    lastJobError?: string | null;
+    lastEvidenceBucket?: string | null;
+    lastEvidencePrefix?: string | null;
+    currentPackageConfig: {
+      __typename?: "N8nPackageConfig";
+      schemaVersion: number;
+      packageSpecs: Array<string>;
+      packageNames: Array<string>;
+      allowExternal: string;
+      digest: string;
+      packages: Array<{
+        __typename?: "N8nPackage";
+        name: string;
+        version: string;
+        spec: string;
+      }>;
+    };
+  } | null;
+};
+
+export type SettingsUpdateN8nPluginPackageSettingsMutationVariables = Exact<{
+  input: UpdateN8nPluginPackageSettingsInput;
+}>;
+
+export type SettingsUpdateN8nPluginPackageSettingsMutation = {
+  __typename?: "Mutation";
+  updateN8nPluginPackageSettings: {
+    __typename?: "UpdateN8nPluginPackageSettingsResult";
+    settings: {
+      __typename?: "N8nPluginSettings";
+      pluginInstallId: string;
+      installState: string;
+      managedApplicationId?: string | null;
+      desiredStatus?: string | null;
+      currentStatus?: string | null;
+      desiredConfig: any;
+      packageImageUri?: string | null;
+      packageImageConfigDigest?: string | null;
+      lastJobId?: string | null;
+      lastJobStatus?: string | null;
+      lastJobOperation?: string | null;
+      lastJobError?: string | null;
+      lastEvidenceBucket?: string | null;
+      lastEvidencePrefix?: string | null;
+      currentPackageConfig: {
+        __typename?: "N8nPackageConfig";
+        schemaVersion: number;
+        packageSpecs: Array<string>;
+        packageNames: Array<string>;
+        allowExternal: string;
+        digest: string;
+        packages: Array<{
+          __typename?: "N8nPackage";
+          name: string;
+          version: string;
+          spec: string;
+        }>;
+      };
+    };
+    deploymentJob: {
+      __typename?: "ManagedApplicationDeploymentJob";
+      id: string;
+      appKey: string;
+      operation: string;
+      status: string;
+      releaseVersion: string;
+      manifestDigest: string;
+      desiredConfigVersion: string;
+      stateMachineArn?: string | null;
+      planExecutionArn?: string | null;
+      applyExecutionArn?: string | null;
+      codebuildBuildArn?: string | null;
+      planDigest?: string | null;
+      planSummary: any;
+      dataImpact: any;
+      evidenceBucket?: string | null;
+      evidencePrefix?: string | null;
+      approvalRequired: boolean;
+      approvedAt?: any | null;
+      rejectedAt?: any | null;
+      errorMessage?: string | null;
+      createdAt: any;
+      updatedAt: any;
+      events: Array<{
+        __typename?: "ManagedApplicationDeploymentEvent";
+        id: string;
+        eventType: string;
+        message: string;
+        payload: any;
+        createdAt: any;
+      }>;
+    };
+  };
 };
 
 export type SettingsMyPluginActivationsQueryVariables = Exact<{
@@ -25245,6 +25420,456 @@ export const SettingsPluginInstallsDocument = {
 } as unknown as DocumentNode<
   SettingsPluginInstallsQuery,
   SettingsPluginInstallsQueryVariables
+>;
+export const SettingsN8nPluginSettingsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "query",
+      name: { kind: "Name", value: "SettingsN8nPluginSettings" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "installId" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: { kind: "NamedType", name: { kind: "Name", value: "ID" } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "n8nPluginSettings" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "installId" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "installId" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "pluginInstallId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "installState" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "managedApplicationId" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "currentStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "desiredConfig" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "currentPackageConfig" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "schemaVersion" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "packageSpecs" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "packageNames" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "allowExternal" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "digest" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "packages" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "name" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "version" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "spec" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "packageImageUri" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "packageImageConfigDigest" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "lastJobId" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastJobStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastJobOperation" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastJobError" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastEvidenceBucket" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "lastEvidencePrefix" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsN8nPluginSettingsQuery,
+  SettingsN8nPluginSettingsQueryVariables
+>;
+export const SettingsUpdateN8nPluginPackageSettingsDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "SettingsUpdateN8nPluginPackageSettings" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: {
+                kind: "Name",
+                value: "UpdateN8nPluginPackageSettingsInput",
+              },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "updateN8nPluginPackageSettings" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "settings" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "pluginInstallId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "installState" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "managedApplicationId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "desiredStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "currentStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "desiredConfig" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "currentPackageConfig" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "schemaVersion" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "packageSpecs" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "packageNames" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "allowExternal" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "digest" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "packages" },
+                              selectionSet: {
+                                kind: "SelectionSet",
+                                selections: [
+                                  {
+                                    kind: "Field",
+                                    name: { kind: "Name", value: "name" },
+                                  },
+                                  {
+                                    kind: "Field",
+                                    name: { kind: "Name", value: "version" },
+                                  },
+                                  {
+                                    kind: "Field",
+                                    name: { kind: "Name", value: "spec" },
+                                  },
+                                ],
+                              },
+                            },
+                          ],
+                        },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "packageImageUri" },
+                      },
+                      {
+                        kind: "Field",
+                        name: {
+                          kind: "Name",
+                          value: "packageImageConfigDigest",
+                        },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastJobId" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastJobStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastJobOperation" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastJobError" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastEvidenceBucket" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastEvidencePrefix" },
+                      },
+                    ],
+                  },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "deploymentJob" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "appKey" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "operation" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "status" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "releaseVersion" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "manifestDigest" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "desiredConfigVersion" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "stateMachineArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "planExecutionArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "applyExecutionArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "codebuildBuildArn" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "planDigest" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "planSummary" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "dataImpact" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidenceBucket" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "evidencePrefix" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "approvalRequired" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "approvedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "rejectedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "errorMessage" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "createdAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "updatedAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "events" },
+                        selectionSet: {
+                          kind: "SelectionSet",
+                          selections: [
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "id" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "eventType" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "message" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "payload" },
+                            },
+                            {
+                              kind: "Field",
+                              name: { kind: "Name", value: "createdAt" },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  SettingsUpdateN8nPluginPackageSettingsMutation,
+  SettingsUpdateN8nPluginPackageSettingsMutationVariables
 >;
 export const SettingsMyPluginActivationsDocument = {
   kind: "Document",
