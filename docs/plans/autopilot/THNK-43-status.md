@@ -419,5 +419,22 @@ Local WorkOS/dev configuration repair:
 
 ## Next Action
 
-Land this final status cleanup PR, delete the final cleanup branch/worktree,
-remove safe merged THNK-43 worktrees, and close the autopilot goal.
+No implementation units remain in
+`docs/plans/2026-06-19-001-feat-workos-primary-auth-bridge-plan.md`.
+
+Final cleanup performed after PR #2688:
+
+- Removed merged/finalized THNK-43 worktrees:
+  - `.Codex/worktrees/thnk-43-u4-workos-logout`
+  - `.Codex/worktrees/thnk-43-u5-tenant-rollout`
+  - `.Codex/worktrees/thnk-43-final-status`
+  - `.Codex/worktrees/thnk-43-status-finalize`
+- Deleted local merged cleanup branches:
+  - `codex/thnk-43-u5-tenant-rollout`
+  - `codex/thnk-43-final-status`
+  - `codex/thnk-43-status-finalize`
+- Left unmerged/superseded THNK-43 worktrees intact to preserve local history:
+  - `.Codex/worktrees/thnk-43-web-desktop-auth-update`
+  - `.Codex/worktrees/thnk-43-workos-auth-plugin`
+
+THNK-43 WorkOS primary auth autopilot is complete.
