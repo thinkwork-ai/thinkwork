@@ -31,6 +31,26 @@ function planeDesiredConfig(extra: Record<string, unknown> = {}) {
   };
 }
 
+function n8nDesiredConfig(extra: Record<string, unknown> = {}) {
+  return {
+    imageUri: `public.ecr.aws/thinkwork/n8n@sha256:${imageDigest}`,
+    databaseAdminSecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-admin",
+    databaseUrlSecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-url",
+    encryptionKeySecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-key",
+    operatorSecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-operator",
+    serviceCredentialSecretArn:
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+    storageBucketName: "thinkwork-dev-n8n",
+    publicUrl: "https://n8n.example.com",
+    certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/n8n",
+    ...extra,
+  };
+}
+
 describe("managed app deployment adapters", () => {
   it("maps Cognee deploy config into Terraform variables and smoke evidence", () => {
     const summary = buildPlanSummary({
@@ -207,6 +227,57 @@ describe("managed app deployment adapters", () => {
     expect(summary.statusOutputs).toContain("plane_cache_endpoint");
   });
 
+  it("maps n8n deploy config into Terraform variables and smoke evidence", () => {
+    const summary = buildPlanSummary({
+      evidenceBucket: "evidence-bucket",
+      input: {
+        phase: "plan",
+        tenantId: "tenant-1",
+        jobId: "job-n8n-1",
+        appKey: "n8n",
+        operation: "ENABLE",
+        releaseVersion: "1.2.3",
+        manifestDigest: digest,
+        desiredConfigVersion: "v1",
+        desiredConfig: n8nDesiredConfig({
+          customPackageSpecs: ["luxon@3.7.2", "zod@3.25.76"],
+          packageConfigDigest: "package-digest-1",
+        }),
+      },
+    });
+
+    expect(summary.displayName).toBe("n8n");
+    expect(summary.terraformVariables).toEqual(
+      expect.objectContaining({
+        n8n_provisioned: true,
+        n8n_runtime_enabled: true,
+        n8n_image_uri: `public.ecr.aws/thinkwork/n8n@sha256:${imageDigest}`,
+        n8n_database_name: "thinkwork_n8n",
+        n8n_database_admin_secret_arn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-admin",
+        n8n_database_url_secret_arn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-url",
+        n8n_storage_bucket_name: "thinkwork-dev-n8n",
+        n8n_storage_prefix: "managed-apps/n8n",
+        n8n_main_desired_count: 1,
+        n8n_worker_desired_count: 1,
+        n8n_queue_mode: true,
+        n8n_task_runners_enabled: true,
+        n8n_custom_package_specs: ["luxon@3.7.2", "zod@3.25.76"],
+        n8n_package_config_digest: "package-digest-1",
+      }),
+    );
+    expect(summary.smokeContracts).toContainEqual(
+      expect.objectContaining({
+        command: "plugins/n8n/smoke/n8n-managed-app-smoke.mjs",
+      }),
+    );
+    expect(summary.statusOutputs).toContain("n8n_url");
+    expect(summary.statusOutputs).toContain("n8n_database_name");
+    expect(summary.statusOutputs).toContain("n8n_valkey_endpoint");
+    expect(summary.statusOutputs).toContain("n8n_package_config_digest");
+  });
+
   it("hydrates managed app images from the verified release manifest contract", () => {
     const baseInput = {
       phase: "plan" as const,
@@ -298,6 +369,25 @@ describe("managed app deployment adapters", () => {
     ).toThrow(/Twenty imageUri/);
   });
 
+  it("fails n8n enable plans without required pinned image and secrets", () => {
+    expect(() =>
+      buildManagedAppPlan({
+        appKey: "n8n",
+        operation: "ENABLE",
+        desiredConfig: {},
+      }),
+    ).toThrow(/n8n imageUri|n8n databaseAdminSecretArn/);
+    expect(() =>
+      buildManagedAppPlan({
+        appKey: "n8n",
+        operation: "ENABLE",
+        desiredConfig: n8nDesiredConfig({
+          imageUri: "public.ecr.aws/thinkwork/n8n:latest",
+        }),
+      }),
+    ).toThrow(/n8n imageUri must be pinned/);
+  });
+
   it("lists destructive Twenty resource and data impact", () => {
     const summary = buildPlanSummary({
       evidenceBucket: "evidence-bucket",
@@ -329,6 +419,41 @@ describe("managed app deployment adapters", () => {
     expect(summary.terraformVariables).toEqual({
       twenty_provisioned: false,
       twenty_runtime_enabled: false,
+    });
+  });
+
+  it("lists destructive n8n resource and data impact", () => {
+    const summary = buildPlanSummary({
+      evidenceBucket: "evidence-bucket",
+      input: {
+        phase: "plan",
+        tenantId: "tenant-1",
+        jobId: "job-n8n-destroy",
+        appKey: "n8n",
+        operation: "DESTROY",
+        releaseVersion: "1.2.3",
+        manifestDigest: digest,
+        desiredConfigVersion: "v1",
+      },
+    });
+
+    expect(summary.dataImpact.destructive).toBe(true);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/main and worker/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/thinkwork_n8n/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(/Valkey|Redis/);
+    expect(summary.dataImpact.resources.join("\n")).toMatch(
+      /service credential/,
+    );
+    expect(summary.preDestroySteps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "n8n-db-drop" }),
+        expect.objectContaining({ id: "n8n-storage-inventory" }),
+        expect.objectContaining({ id: "n8n-service-credential-cleanup" }),
+      ]),
+    );
+    expect(summary.terraformVariables).toEqual({
+      n8n_provisioned: false,
+      n8n_runtime_enabled: false,
     });
   });
 
@@ -373,6 +498,42 @@ describe("managed app deployment adapters", () => {
     );
   });
 
+  it("maps n8n deploy and park plans to retained queue-mode states", () => {
+    const desiredConfig = n8nDesiredConfig({
+      mainDesiredCount: 2,
+      workerDesiredCount: 3,
+    });
+
+    expect(
+      buildManagedAppPlan({
+        appKey: "n8n",
+        operation: "ENABLE",
+        desiredConfig,
+      }).terraformVariables,
+    ).toEqual(
+      expect.objectContaining({
+        n8n_provisioned: true,
+        n8n_runtime_enabled: true,
+        n8n_public_url: "https://n8n.example.com",
+        n8n_main_desired_count: 2,
+        n8n_worker_desired_count: 3,
+        n8n_queue_mode: true,
+      }),
+    );
+    expect(
+      buildManagedAppPlan({
+        appKey: "n8n",
+        operation: "PARK",
+        desiredConfig,
+      }).terraformVariables,
+    ).toEqual(
+      expect.objectContaining({
+        n8n_provisioned: true,
+        n8n_runtime_enabled: false,
+      }),
+    );
+  });
+
   it("rebuilds apply summaries from the approved config and manifest image", () => {
     const summary = buildApplySummary({
       evidenceBucket: "evidence-bucket",
@@ -405,6 +566,34 @@ describe("managed app deployment adapters", () => {
     expect(summary.terraformVariables).toEqual(
       expect.objectContaining({
         twenty_image_uri: `public.ecr.aws/thinkwork/twenty@sha256:${imageDigest}`,
+      }),
+    );
+  });
+
+  it("hydrates n8n images from the verified release manifest contract", () => {
+    const summary = buildApplySummary({
+      evidenceBucket: "evidence-bucket",
+      verifiedManifestDigest: digest,
+      input: {
+        phase: "apply",
+        tenantId: "tenant-1",
+        jobId: "job-n8n-1",
+        appKey: "n8n",
+        operation: "ENABLE",
+        releaseVersion: "1.2.3",
+        manifestDigest: digest,
+        desiredConfigVersion: "v1",
+        desiredConfig: n8nDesiredConfig({ imageUri: undefined }),
+        manifestImages: {
+          "n8n-runtime": `public.ecr.aws/thinkwork/n8n@sha256:${"3".repeat(64)}`,
+        },
+        planDigest: "b".repeat(64),
+      },
+    });
+
+    expect(summary.terraformVariables).toEqual(
+      expect.objectContaining({
+        n8n_image_uri: `public.ecr.aws/thinkwork/n8n@sha256:${"3".repeat(64)}`,
       }),
     );
   });
@@ -571,6 +760,37 @@ describe("managed app deployment adapters", () => {
         status: "running",
         evidence: expect.objectContaining({
           storageBucketName: "thinkwork-dev-plane",
+        }),
+      }),
+    );
+  });
+
+  it("extracts n8n status from Terraform output shapes", () => {
+    expect(
+      getManagedAppAdapter("n8n").extractStatus({
+        n8n_provisioned: { value: true },
+        n8n_runtime_enabled: { value: true },
+        n8n_url: { value: "https://n8n.example.com" },
+        n8n_database_name: { value: "thinkwork_n8n" },
+        n8n_valkey_endpoint: { value: "redis://n8n-cache.example.com:6379" },
+        n8n_package_config_digest: { value: "package-digest-1" },
+        n8n_service_credential_secret_arn: {
+          value:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        provisioned: true,
+        runtimeEnabled: true,
+        endpoint: "https://n8n.example.com",
+        status: "running",
+        evidence: expect.objectContaining({
+          databaseName: "thinkwork_n8n",
+          valkeyEndpoint: "redis://n8n-cache.example.com:6379",
+          packageConfigDigest: "package-digest-1",
+          serviceCredentialSecretArn:
+            "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
         }),
       }),
     );

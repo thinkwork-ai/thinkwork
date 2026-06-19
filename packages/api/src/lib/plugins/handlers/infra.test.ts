@@ -7,7 +7,7 @@
  * managed_applications row.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InfrastructureComponent } from "@thinkwork/plugin-catalog";
 import type { PluginDeploymentJobSnapshot } from "../deployment-job-read.js";
 import {
@@ -18,6 +18,10 @@ import {
 } from "./infra.js";
 
 const TENANT = "tenant-1";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function component(
   overrides: Partial<InfrastructureComponent> = {},
@@ -453,6 +457,143 @@ describe("provisionPluginInfraComponent", () => {
       adoptedExisting: true,
     });
     expect(ref.adoptedRunningInfra).toBeUndefined();
+  });
+
+  it("n8n net-new provisioning seeds database, storage, queue, and secret desired-config defaults", async () => {
+    vi.stubEnv(
+      "THINKWORK_N8N_IMAGE_URI",
+      "public.ecr.aws/thinkwork/n8n@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    );
+    vi.stubEnv(
+      "THINKWORK_N8N_DATABASE_ADMIN_SECRET_ARN",
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-admin",
+    );
+    vi.stubEnv(
+      "THINKWORK_N8N_DATABASE_URL_SECRET_ARN",
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-url",
+    );
+    vi.stubEnv(
+      "THINKWORK_N8N_ENCRYPTION_KEY_SECRET_ARN",
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-key",
+    );
+    vi.stubEnv(
+      "THINKWORK_N8N_OPERATOR_SECRET_ARN",
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-operator",
+    );
+    vi.stubEnv(
+      "THINKWORK_N8N_SERVICE_CREDENTIAL_SECRET_ARN",
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+    );
+    vi.stubEnv("THINKWORK_N8N_STORAGE_BUCKET_NAME", "thinkwork-dev-n8n");
+    vi.stubEnv("THINKWORK_N8N_DOMAIN", "apps.example.com");
+    vi.stubEnv(
+      "THINKWORK_N8N_CERTIFICATE_ARN",
+      "arn:aws:acm:us-east-1:123456789012:certificate/n8n",
+    );
+    vi.stubEnv("THINKWORK_N8N_CUSTOM_PACKAGE_SPECS", "luxon@3.7.2,zod@3.25.76");
+
+    const deps = fakeDeps();
+    const n8nRuntime = component({
+      key: "runtime",
+      managedAppKey: "n8n",
+      terraformInputs: {
+        publicUrl: { description: "URL", type: "string" },
+      },
+    });
+
+    const ref = await provisionPluginInfraComponent(
+      provisionArgs(
+        deps,
+        {},
+        {
+          pluginKey: "n8n",
+          component: n8nRuntime,
+        },
+      ),
+    );
+
+    expect(ref).toMatchObject({
+      managedAppKey: "n8n",
+      deploymentJobId: "job-1",
+      operation: "ENABLE",
+      adoptedExisting: false,
+    });
+    expect(deps.startCalls).toHaveLength(1);
+    expect(deps.startCalls[0]).toMatchObject({
+      appKey: "n8n",
+      operation: "ENABLE",
+      releaseVersion: null,
+      manifestDigest: null,
+      desiredConfig: {
+        imageUri:
+          "public.ecr.aws/thinkwork/n8n@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        databaseAdminSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-admin",
+        databaseUrlSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-url",
+        databaseName: "thinkwork_n8n",
+        encryptionKeySecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-key",
+        operatorSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-operator",
+        serviceCredentialSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+        storageBucketName: "thinkwork-dev-n8n",
+        storagePrefix: "managed-apps/n8n",
+        publicUrl: "https://n8n.apps.example.com",
+        certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/n8n",
+        domain: "apps.example.com",
+        mainDesiredCount: 1,
+        workerDesiredCount: 1,
+        customPackageSpecs: ["luxon@3.7.2", "zod@3.25.76"],
+      },
+    });
+  });
+
+  it("n8n existing disabled rows preserve operator desired config over defaults", async () => {
+    vi.stubEnv("THINKWORK_N8N_DATABASE_NAME", "thinkwork_n8n");
+    vi.stubEnv("THINKWORK_N8N_DOMAIN", "apps.example.com");
+    const deps = fakeDeps();
+    deps.managedApps.set(`${TENANT}:n8n`, {
+      id: "app-n8n",
+      desiredConfig: {
+        publicUrl: "https://automation.example.com",
+        workerDesiredCount: 4,
+      },
+      currentStatus: "disabled",
+      selectedReleaseVersion: "v1.2.3",
+      selectedManifestDigest: "sha-123",
+    });
+    const n8nRuntime = component({
+      key: "runtime",
+      managedAppKey: "n8n",
+      terraformInputs: {
+        publicUrl: { description: "URL", type: "string" },
+      },
+    });
+
+    await provisionPluginInfraComponent(
+      provisionArgs(
+        deps,
+        {},
+        {
+          pluginKey: "n8n",
+          component: n8nRuntime,
+        },
+      ),
+    );
+
+    expect(deps.startCalls[0]).toMatchObject({
+      appKey: "n8n",
+      operation: "ENABLE",
+      releaseVersion: "v1.2.3",
+      manifestDigest: "sha-123",
+      desiredConfig: {
+        databaseName: "thinkwork_n8n",
+        publicUrl: "https://automation.example.com",
+        workerDesiredCount: 4,
+      },
+    });
   });
 
   it("Company Brain adopts existing Cognee directly when release metadata is unresolved", async () => {

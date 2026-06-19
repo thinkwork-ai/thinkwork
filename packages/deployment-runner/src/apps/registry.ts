@@ -1,11 +1,12 @@
 import { cogneeAdapter } from "@thinkwork/plugin-company-brain/deployment/cognee-managed-app";
+import { n8nAdapter } from "@thinkwork/plugin-n8n/deployment/managed-app";
 import { planeAdapter } from "@thinkwork/plugin-plane/deployment/managed-app";
 import { twentyAdapter } from "@thinkwork/plugin-twenty/deployment/managed-app";
 import type { ManagedAppOperation } from "../shared.js";
 
 export type { ManagedAppOperation } from "../shared.js";
 
-export type ManagedAppKey = "cognee" | "plane" | "twenty";
+export type ManagedAppKey = "cognee" | "n8n" | "plane" | "twenty";
 
 export interface SmokeContract {
   id: string;
@@ -68,6 +69,7 @@ export interface ManagedAppAdapter {
 
 export const managedAppRegistry = [
   cogneeAdapter,
+  n8nAdapter,
   planeAdapter,
   twentyAdapter,
 ] as const;
@@ -146,7 +148,9 @@ function manifestImageForApp(
       ? ["twenty", "twenty-crm", "managed-app-twenty"]
       : appKey === "plane"
         ? ["plane", "plane-app", "managed-app-plane"]
-        : [appKey, `managed-app-${appKey}`, `${appKey}-runtime`];
+        : appKey === "n8n"
+          ? ["n8n", "n8n-runtime", "managed-app-n8n"]
+          : [appKey, `managed-app-${appKey}`, `${appKey}-runtime`];
   for (const candidate of candidates) {
     const value = manifestImages[candidate];
     if (value) return value;

@@ -26,9 +26,14 @@ function twentyDeps(args: {
 
 function managedAppDeps(args: {
   rows?: Partial<
-    Record<"twenty" | "plane", { desiredConfig: Record<string, unknown> }>
+    Record<
+      "twenty" | "plane" | "n8n",
+      { desiredConfig: Record<string, unknown> }
+    >
   >;
-  lastSucceededOperations?: Partial<Record<"twenty" | "plane", string | null>>;
+  lastSucceededOperations?: Partial<
+    Record<"twenty" | "plane" | "n8n", string | null>
+  >;
 }): ManagedAppStatusReaderDeps {
   return {
     getManagedApplicationRow: async (_tenantId, key = "twenty") =>
@@ -50,8 +55,125 @@ describe("managed application status helpers", () => {
     expect(mod.normalizeManagedApplicationKey("project-management")).toBe(
       "plane",
     );
+    expect(mod.normalizeManagedApplicationKey("workflow-automation")).toBe(
+      "n8n",
+    );
+    expect(mod.normalizeManagedApplicationKey("n8n")).toBe("n8n");
     expect(mod.normalizeManagedApplicationKey("kestra")).toBeNull();
     expect(mod.normalizeManagedApplicationKey("unknown")).toBeNull();
+  });
+});
+
+describe("n8n status served from DB state", () => {
+  it("reports running after a succeeded ENABLE apply, with the URL from desired_config", async () => {
+    const app = await mod.readManagedApplication(
+      "n8n",
+      "tenant-1",
+      managedAppDeps({
+        rows: {
+          n8n: {
+            desiredConfig: {
+              publicUrl: "https://n8n.example.com",
+              databaseName: "thinkwork_n8n",
+              packageConfigDigest: "package-digest-1",
+            },
+          },
+        },
+        lastSucceededOperations: { n8n: "ENABLE" },
+      }),
+    );
+    expect(app).toMatchObject({
+      key: "n8n",
+      status: "running",
+      enabled: true,
+      provisioned: true,
+      runtimeEnabled: true,
+      url: "https://n8n.example.com",
+      backendMode: "queue",
+      databaseName: "thinkwork_n8n",
+      managedMcpInstallAvailable: true,
+    });
+  });
+
+  it("reports parked after a succeeded PARK apply", async () => {
+    const app = await mod.readManagedApplication(
+      "n8n",
+      "tenant-1",
+      managedAppDeps({
+        rows: {
+          n8n: {
+            desiredConfig: { publicUrl: "https://n8n.example.com" },
+          },
+        },
+        lastSucceededOperations: { n8n: "PARK" },
+      }),
+    );
+    expect(app).toMatchObject({
+      status: "parked",
+      enabled: false,
+      provisioned: true,
+      runtimeEnabled: false,
+      message:
+        "n8n runtime is parked; workflow data, credentials, and app secrets are retained.",
+    });
+  });
+
+  it("reports disabled when no row or succeeded apply exists", async () => {
+    const noRow = await mod.readN8nStatus("tenant-1", managedAppDeps({}));
+    expect(noRow.provisioned).toBe(false);
+
+    const noSucceededApply = await mod.readManagedApplication(
+      "n8n",
+      "tenant-1",
+      managedAppDeps({
+        rows: {
+          n8n: {
+            desiredConfig: { publicUrl: "https://n8n.example.com" },
+          },
+        },
+        lastSucceededOperations: { n8n: null },
+      }),
+    );
+    expect(noSucceededApply).toMatchObject({
+      status: "disabled",
+      provisioned: false,
+      runtimeEnabled: false,
+      url: null,
+      databaseName: null,
+    });
+  });
+
+  it("derives queue-mode ECS service and log identifiers from stage + account", async () => {
+    vi.stubEnv("STAGE", "dev");
+    vi.stubEnv("AWS_REGION", "us-east-1");
+    vi.stubEnv("AWS_ACCOUNT_ID", "123456789012");
+
+    const app = await mod.readManagedApplication(
+      "n8n",
+      "tenant-1",
+      managedAppDeps({
+        rows: {
+          n8n: {
+            desiredConfig: {
+              publicUrl: "https://n8n.example.com",
+              storageBucketName: "custom-n8n-bucket",
+            },
+          },
+        },
+        lastSucceededOperations: { n8n: "ENABLE" },
+      }),
+    );
+
+    expect(app).toMatchObject({
+      key: "n8n",
+      status: "running",
+      clusterArn:
+        "arn:aws:ecs:us-east-1:123456789012:cluster/thinkwork-dev-n8n-cluster",
+      serviceNames: ["thinkwork-dev-n8n-main", "thinkwork-dev-n8n-worker"],
+      logGroupNames: ["/thinkwork/dev/n8n/main", "/thinkwork/dev/n8n/worker"],
+      storageBucketName: "custom-n8n-bucket",
+      databaseName: "thinkwork_n8n",
+    });
   });
 });
 
@@ -105,10 +227,7 @@ describe("Plane status served from DB state", () => {
   });
 
   it("reports disabled when no row or succeeded apply exists", async () => {
-    const noRow = await mod.readPlaneStatus(
-      "tenant-1",
-      managedAppDeps({}),
-    );
+    const noRow = await mod.readPlaneStatus("tenant-1", managedAppDeps({}));
     expect(noRow.provisioned).toBe(false);
 
     const noSucceededApply = await mod.readManagedApplication(
