@@ -1,7 +1,7 @@
 ---
 title: "feat: Use WorkOS as primary auth with Cognito token bridge"
 owner: "Codex"
-status: "draft"
+status: "completed"
 linear: THNK-43
 created: "2026-06-19"
 supersedes: "docs/plans/2026-06-18-001-feat-workos-auth-plugin-plan.md"

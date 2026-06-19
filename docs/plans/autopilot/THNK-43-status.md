@@ -1,9 +1,9 @@
 ---
 linear: THNK-43
 title: WorkOS primary auth with Cognito token bridge
-status: in-progress
+status: completed
 updated: 2026-06-19
-branch: codex/thnk-43-u5-tenant-rollout
+branch: codex/thnk-43-final-status
 ---
 
 # THNK-43 Autopilot Status
@@ -13,11 +13,11 @@ branch: codex/thnk-43-u5-tenant-rollout
 - Dispatcher marker: `dispatcher:THNK-43:Implementation:Codex`
 - Pass type: Autopilot implementation of
   `docs/plans/2026-06-19-001-feat-workos-primary-auth-bridge-plan.md`.
-- Scope: U5, tenant/user enforcement, auditability, and rollout readiness.
-- Branch: `codex/thnk-43-u5-tenant-rollout` from `origin/main`
-  `039a748d1`.
-- PR: pending local verification.
-- CI: pending PR.
+- Scope: final status cleanup after U1-U5 completed, merged, deployed, and
+  locally verified.
+- Branch: `codex/thnk-43-final-status` from `origin/main`.
+- PR: final status cleanup.
+- CI: pending final status PR.
 
 ## Completed
 
@@ -72,6 +72,34 @@ branch: codex/thnk-43-u5-tenant-rollout
 - Local verification server was started on `localhost:5180`; the sign-in page
   rendered the WorkOS SSO control for the installed plugin.
 - Recorded merged/deployed/local-ready evidence in Linear.
+
+### U5 Tenant/user enforcement and rollout
+
+- Created and merged PR #2682:
+  <https://github.com/thinkwork-ai/thinkwork/pull/2682>.
+- Merge commit: `1267d960fd00ae0aa68a3875e1a1f006e56c79dd`.
+- Required PR checks passed before merge: CLA, lint, supply-chain verify,
+  test, and typecheck.
+- Main deploy run for the merge commit completed successfully:
+  <https://github.com/thinkwork-ai/thinkwork/actions/runs/27829057410>.
+- Dev Lambda deployment evidence:
+  - `thinkwork-dev-cognito-custom-auth` updated
+    `2026-06-19T13:41:18Z`, state `Active`, last update `Successful`.
+  - `thinkwork-dev-api-workos-auth` updated `2026-06-19T13:41:59Z`,
+    state `Active`, last update `Successful`.
+- Local `localhost:5180` verification passed after deploy:
+  - Sign-in rendered `Continue with SSO` for the installed WorkOS Auth plugin.
+  - SSO authorize redirected with WorkOS client
+    `client_01KVDY4VCJJBZBRE6J4DEWA5PV` and `prompt=select_account`.
+  - Browser clicked SSO, received a fresh `workos_bridge`, exchanged
+    successfully, and landed on `http://localhost:5180/new` without callback
+    error.
+  - App logout returned to `http://localhost:5180/sign-in?next=%2Fnew`.
+  - Clicking SSO again in the same browser profile stopped at WorkOS AuthKit
+    sign-in/provider selection instead of silently restoring the prior
+    ThinkWork session.
+- Recorded merged, deployed, local bridge, and logout/account-selection
+  evidence in Linear.
 
 ### Prior hosted-bridge pass
 
@@ -305,7 +333,7 @@ Remote CI recovery:
 - `bash scripts/build-lambdas.sh cognito-custom-auth`
 - `bash scripts/build-lambdas.sh workos-auth`
 
-## U5 Current Implementation
+## U5 Completed Implementation
 
 U5 is making the WorkOS-primary bridge auditable and preserving workspace
 boundaries:
@@ -374,10 +402,19 @@ Local WorkOS/dev configuration repair:
   and the ThinkWork user `eric@homecareintel.com` had an active owner
   `tenant_members` row. This ruled out WorkOS callback, bridge persistence, and
   no-workspace bootstrap as the cause.
-- Localhost e2e is not ready to retry until the U5 branch is merged and the dev
-  Lambda deploy has picked up the custom-auth regression fix.
+- PR #2682 was merged, the dev deploy completed, and both WorkOS-related dev
+  Lambdas report `Active` / `Successful` updates from the deploy.
+- Localhost e2e was retried after deploy and passed:
+  - `Continue with SSO` appeared for the installed WorkOS Auth plugin.
+  - WorkOS primary auth returned a fresh `workos_bridge` to the local callback.
+  - The bridge exchanged successfully and reached `/new` with no callback
+    error.
+  - Logging out through the app returned to `/sign-in`.
+  - Clicking SSO again in the same browser profile stopped at WorkOS AuthKit
+    sign-in/provider selection with Google marked as the last-used provider,
+    not stale authorization consent or silent ThinkWork re-entry.
 
 ## Next Action
 
-Finish U5 verification, open the U5 PR, monitor/fix required CI, squash merge,
-delete the branch/worktree, sync `origin/main`, and record completion in Linear.
+Land this final status cleanup PR, delete the final cleanup branch/worktree,
+remove safe merged THNK-43 worktrees, and close the autopilot goal.
