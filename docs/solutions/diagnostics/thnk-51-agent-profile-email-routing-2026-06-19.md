@@ -6,7 +6,7 @@ problem_type: debug_findings
 component: agent_profile_routing
 severity: medium
 linear: THNK-51
-status: diagnosis_only
+status: resolved
 tags:
   - agent-profiles
   - delegation
@@ -61,7 +61,12 @@ email addresses, and ordinary words near email addresses such as `current` or
 `source`, `latest`, or `today`; keep positive tests for `#Research` and any
 supported explicit `@Research` shortcut.
 
-**Fix**: Diagnosis only. No product code was changed in this PR.
+**Fix**: PR #2701 implemented the routing fix in
+`packages/agentcore-pi/agent-container/src/server.ts` and regression tests in
+`packages/agentcore-pi/agent-container/tests/server.test.ts`. Automatic
+Research routing now redacts email-address tokens before intent matching and
+suppresses generic `current`/`source` style routing for email-delivery command
+shapes.
 
 **Prevention**: Make profile routing token-aware and require explicit profile
 matches before mention-based delegation. If automatic Research routing remains,
@@ -112,7 +117,7 @@ profile parser correctly rejected the email token.
 
 ## Evidence
 
-Focused test evidence in this debug worktree:
+Focused test evidence in the debug worktree:
 
 ```bash
 pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/server.test.ts -t "automatically delegates source-backed research prompts"
@@ -154,6 +159,41 @@ Relevant existing tests and docs:
   shortcuts such as `#Research` and `#Reviewer` as parent-orchestration
   selectors.
 
+Implementation evidence from PR #2701:
+
+- `redactEmailAddresses()` replaces RFC-like email tokens with
+  `[redacted-address]` before automatic Research intent detection.
+- Automatic Research inference now separates strong research intent
+  (`research`, `cite`, `citation`, `web search`, `search the web`,
+  `find current`) from generic research words (`source`, `sources`, `latest`,
+  `current`, `today`).
+- Generic research words do not route to Research when the original message
+  contains an email address and the redacted message has an email-delivery
+  command such as `send`, `email`, `mail`, `forward`, `share`, `draft`, or
+  `reply`.
+- Explicit `#Research` and guarded `@Research` shortcuts still delegate because
+  the explicit profile parser remains start/whitespace guarded.
+- Genuine source-backed research about an email address still delegates, so the
+  fix does not remove automatic Research entirely.
+
+Final verification:
+
+```bash
+pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/server.test.ts -t "email-address tasks|research about an email address|guarded @Research|automatically delegates source-backed"
+pnpm --filter @thinkwork/agentcore-pi typecheck
+pnpm --filter @thinkwork/agentcore-pi test
+git diff --check
+```
+
+Results:
+
+- Focused routing test: 5 passed, 76 skipped.
+- Package typecheck: passed.
+- Package test suite: 31 files, 587 passed, 5 todo.
+- Diff whitespace check: passed.
+- PR #2701 CI: `cla`, `lint`, `test`, `typecheck`, and `verify` passed before
+  merge.
+
 Environment notes:
 
 - Fresh isolated worktree:
@@ -187,8 +227,8 @@ Environment notes:
 
 ## Fix Plan
 
-Do not change product behavior in this debug artifact PR. For the product fix,
-prefer the smallest routing change that preserves deliberate profile handoffs:
+The product fix used the smallest routing change that preserves deliberate
+profile handoffs:
 
 1. Keep the explicit profile shortcut parser whitespace/start guarded. That is
    already the right first check for `@` inside email addresses.
@@ -198,36 +238,34 @@ prefer the smallest routing change that preserves deliberate profile handoffs:
      `explicitAgentProfileSlugsFromMessage`;
    - compatibility option: keep `@Profile`, but continue requiring whitespace
      or start-of-message before the marker.
-3. Add an email-aware tokenizer or redaction step before automatic Research
-   intent inference. For example, replace RFC-like email tokens with
-   placeholders before running the intent regex, so `eric@Research.com` cannot
-   produce a Research hit.
-4. Narrow automatic Research delegation so it does not fire just because a
-   user mentions an email address and a generic word like `current` or
-   `source`. Prefer requiring an explicit research verb phrase, a source/cite
-   request without an email-object command shape, or disabling the automatic
-   route when the only matching terms are inside or adjacent to email tokens.
+3. Add an email-aware redaction step before automatic Research intent
+   inference. Replace RFC-like email tokens with a neutral placeholder before
+   running the intent regex, so `eric@Research.com` cannot produce a Research
+   hit.
+4. Narrow automatic Research delegation so it does not fire just because a user
+   mentions an email address and a generic word like `current` or `source`.
+   Strong research requests still route; email-delivery command shapes with
+   only generic research words stay on the parent Agent.
 5. Keep requested profile payload fields (`requested_agent_profile_slug` and
    `requested_agent_profile_slugs`) as explicit host-level overrides; those are
    not user text parsing.
 
-Recommended tests for the fix PR:
+Regression tests added in the fix PR:
 
-- Add a negative test in
-  `packages/agentcore-pi/agent-container/tests/server.test.ts` proving
-  `message: "Email eric@Research.com the notes"` does not run the Research
-  profile.
-- Add a negative test proving
-  `message: "Send eric@thinkwork.ai the current source list"` does not
-  automatically run Research unless the product intentionally keeps that
-  behavior.
-- Add a positive test proving `#Research find current sources` still delegates
-  and strips `#Research` from the child task.
-- If `@Profile` remains supported, add a positive test proving
-  `Please @Research find current sources` delegates while
-  `eric@Research.com` does not.
-- If `@Profile` is removed, update existing tests and docs to use only
-  `#Research` / `#Reviewer`.
+- Negative: `Email eric@Research.com the notes` stays on the parent Agent.
+- Negative: `Send eric@thinkwork.ai the current source list` stays on the
+  parent Agent.
+- Positive: `What current sources mention eric@thinkwork.ai?` still delegates
+  to Research.
+- Positive: guarded `@Research` still delegates and strips `@Research` from the
+  child task.
+- Existing positive: source-backed automatic Research prompts still delegate.
+
+Session-history note: the implementation self-review caught that the first
+redaction placeholder contained the word `email`, which would have made every
+redacted address look like an email-delivery command. The final placeholder is
+`[redacted-address]`, a neutral token that avoids feeding routing keywords back
+into the classifier (session history).
 
 ## Risks
 
@@ -243,12 +281,22 @@ Recommended tests for the fix PR:
   Activity/Traces evidence for deliberate profile runs; the fix only changes
   routing selection.
 
-## Next Action
+## Durable Guardrail
 
-This issue is ready for a product-fix phase after this artifact merges. The
-next worker should implement the routing tests first, then change only the
-profile selection logic needed to make those tests pass.
+Profile routing has two separate contracts:
+
+- explicit profile selection, where `#Profile` and the compatibility
+  `@Profile` form must be start/whitespace guarded and stripped from child task
+  text; and
+- automatic Research inference, where broad intent words must be evaluated on
+  token-aware/redacted text and must respect command shape.
+
+Future changes should test both contracts together. A fix that only guards the
+explicit parser can still miss automatic routing, and a fix that disables broad
+automatic Research routing can break legitimate source-backed research
+handoffs.
 
 ## Status
 
-Diagnosis only. No runtime product fix was implemented in this artifact PR.
+Resolved by PR #2701, merge commit
+`4026fdd9851eb363ceac31980e7c8da0fd7be6ff`.
