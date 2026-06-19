@@ -18,7 +18,9 @@ branch: codex/thnk-43-u2-workos-auth-endpoints
 - Branch: `codex/thnk-43-u2-workos-auth-endpoints` from `origin/main`
   `4daf4bcd5`.
 - PR: <https://github.com/thinkwork-ai/thinkwork/pull/2672>
-- CI: local targeted verification passing; remote CI pending.
+- CI: remote migration drift precheck initially failed because the new
+  hand-rolled migration was not yet applied to dev; `0174` is now applied to
+  dev and scoped drift verification is passing.
 
 ## Completed
 
@@ -148,6 +150,20 @@ Local verification:
 - `pnpm --dir packages/database-pg typecheck`
 - `git diff --check`
 - `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf`
+
+Remote CI recovery:
+
+- `Migration Drift Precheck (dev)` initially failed on PR #2672 because
+  `public.workos_auth_bridges`,
+  `public.uq_workos_auth_bridges_code_digest`,
+  `public.idx_workos_auth_bridges_tenant_status`, and
+  `public.idx_workos_auth_bridges_reference` were missing in dev.
+- Applied only
+  `packages/database-pg/drizzle/0174_workos_auth_bridges.sql` to the dev
+  database with `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ...`.
+- Verified with
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0174_workos_auth_bridges.sql`;
+  all declared objects are now present.
 
 ## Next Action
 
