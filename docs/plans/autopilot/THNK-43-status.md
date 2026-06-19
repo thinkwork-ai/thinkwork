@@ -16,8 +16,11 @@ branch: codex/thnk-43-final-status
 - Scope: final status cleanup after U1-U5 completed, merged, deployed, and
   locally verified.
 - Branch: `codex/thnk-43-final-status` from `origin/main`.
-- PR: final status cleanup.
-- CI: pending final status PR.
+- Final status cleanup PR: #2686
+  <https://github.com/thinkwork-ai/thinkwork/pull/2686>.
+- Final status cleanup merge commit:
+  `dc29f1062d0657542301ec9c76255a76e4e821d1`.
+- CI: final status cleanup checks passed before merge.
 
 ## Completed
 
