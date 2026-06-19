@@ -6,6 +6,10 @@ import {
   pluginInstalls,
 } from "./queries.js";
 import {
+  n8nPluginSettings,
+  updateN8nPluginPackageSettings,
+} from "./n8n-settings.js";
+import {
   activatePlugin,
   activatePluginWithCredentials,
   cutoverTwentyPlugin,
@@ -25,6 +29,7 @@ export const pluginQueries = {
   pluginCatalogMetadata,
   pluginInstalls,
   pluginInstall,
+  n8nPluginSettings,
   myPluginActivations,
 };
 
@@ -40,5 +45,6 @@ export const pluginMutations = {
   issuePremiumPluginInstallKey,
   redeemPremiumPluginInstallKey,
   revokePremiumPluginInstallKey,
+  updateN8nPluginPackageSettings,
   cutoverTwentyPlugin,
 };

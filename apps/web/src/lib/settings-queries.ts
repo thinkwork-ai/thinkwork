@@ -1895,6 +1895,107 @@ export const SettingsPluginInstallsQuery = graphql(`
   }
 `);
 
+export const SettingsN8nPluginSettingsQuery = graphql(`
+  query SettingsN8nPluginSettings($installId: ID!) {
+    n8nPluginSettings(installId: $installId) {
+      pluginInstallId
+      installState
+      managedApplicationId
+      desiredStatus
+      currentStatus
+      desiredConfig
+      currentPackageConfig {
+        schemaVersion
+        packageSpecs
+        packageNames
+        allowExternal
+        digest
+        packages {
+          name
+          version
+          spec
+        }
+      }
+      packageImageUri
+      packageImageConfigDigest
+      lastJobId
+      lastJobStatus
+      lastJobOperation
+      lastJobError
+      lastEvidenceBucket
+      lastEvidencePrefix
+    }
+  }
+`);
+
+export const SettingsUpdateN8nPluginPackageSettingsMutation = graphql(`
+  mutation SettingsUpdateN8nPluginPackageSettings(
+    $input: UpdateN8nPluginPackageSettingsInput!
+  ) {
+    updateN8nPluginPackageSettings(input: $input) {
+      settings {
+        pluginInstallId
+        installState
+        managedApplicationId
+        desiredStatus
+        currentStatus
+        desiredConfig
+        currentPackageConfig {
+          schemaVersion
+          packageSpecs
+          packageNames
+          allowExternal
+          digest
+          packages {
+            name
+            version
+            spec
+          }
+        }
+        packageImageUri
+        packageImageConfigDigest
+        lastJobId
+        lastJobStatus
+        lastJobOperation
+        lastJobError
+        lastEvidenceBucket
+        lastEvidencePrefix
+      }
+      deploymentJob {
+        id
+        appKey
+        operation
+        status
+        releaseVersion
+        manifestDigest
+        desiredConfigVersion
+        stateMachineArn
+        planExecutionArn
+        applyExecutionArn
+        codebuildBuildArn
+        planDigest
+        planSummary
+        dataImpact
+        evidenceBucket
+        evidencePrefix
+        approvalRequired
+        approvedAt
+        rejectedAt
+        errorMessage
+        createdAt
+        updatedAt
+        events {
+          id
+          eventType
+          message
+          payload
+          createdAt
+        }
+      }
+    }
+  }
+`);
+
 export const SettingsMyPluginActivationsQuery = graphql(`
   query SettingsMyPluginActivations {
     myPluginActivations {

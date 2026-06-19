@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 
 export const N8N_PACKAGE_CONFIG_SCHEMA_VERSION = 1;
 
@@ -168,7 +169,7 @@ function assertExactSemver(version: string, spec: string): void {
 }
 
 function sha256Hex(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
+  return bytesToHex(sha256(new TextEncoder().encode(value)));
 }
 
 function canonicalJson(value: unknown): string {

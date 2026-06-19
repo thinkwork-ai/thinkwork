@@ -46,6 +46,7 @@
     "@thinkwork/desktop-ipc": "workspace:*",
     "@thinkwork/graph": "workspace:*",
     "@thinkwork/pricing-config": "workspace:*",
+    "@thinkwork/plugin-n8n": "workspace:*",
     "@thinkwork/ui": "workspace:*",
     "@thinkwork/workspace-editor": "workspace:*",
     "@uiw/codemirror-theme-vscode": "^4.25.9",

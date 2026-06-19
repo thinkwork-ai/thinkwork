@@ -251,12 +251,13 @@ U3/U4/U5/U6 before U7; U7 before U8.
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u5-n8n-service-credential`
 - Git branch: `codex/thnk-50-u5-n8n-service-credential`
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2706
+- Merge commit: `af1e003f30dc69b09c821f4cc03a79e0a55d8e60`
 - Objective: add a generic plugin MCP `tenant-service-credential` manifest
   contract, provision plugin-owned `service_credential` MCP rows from
   managed-app desired config, resolve credentials server-side during dispatch,
   and make n8n's native MCP endpoint path/secret key ready for final catalog
   publication without requiring per-user activation.
-- Status: in progress.
+- Status: merged.
 - Linear status:
   - PR/evidence comment posted with marker
     `dispatcher:THNK-50:Ready to Work:Codex` (`2ae1d740-b8f5-48a6-a125-a489651627f8`).
@@ -296,6 +297,62 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - `pnpm lint:plugin-source` passed.
   - `pnpm dlx prettier@latest --check <touched files>` passed.
   - `git diff --check` passed.
+- CI:
+  - PR #2706 passed signed catalog build, CLA, lint, test, typecheck, and
+    verify after rebase/fix cycles, then squash-merged to `main`.
+
+### U6: n8n Plugin Detail Package Settings
+
+- Branch/worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u6-n8n-settings`
+- Git branch: `codex/thnk-50-u6-n8n-settings`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2708
+- Objective: add an operator-only n8n Plugin Detail settings surface for pinned
+  custom Code node packages, backed by package-owned package validation and a
+  GraphQL mutation that updates managed-app desired config by creating a
+  reviewable `UPGRADE` plan job.
+- Status: PR open.
+- Local implementation summary:
+  - Added `n8nPluginSettings` and `updateN8nPluginPackageSettings` GraphQL
+    operations, operator-gated against the installed n8n plugin and tenant
+    managed-application row.
+  - Reused the package-owned `plugins/n8n/src/package-config.ts` validator in
+    both API and web, swapping its digest implementation to a browser-safe
+    `@noble/hashes` sha256 helper.
+  - Added an n8n Plugin Detail settings panel for package rows, comma/newline
+    paste, normalized digest preview, duplicate collapse messaging,
+    validation errors, latest job review, and plan-job creation.
+  - Regenerated GraphQL client types for web, CLI, and mobile consumers after
+    extending the shared GraphQL schema.
+  - Documented the shared API/UI n8n settings files in the plugin source
+    boundary allowlist while keeping package-specific validation and runtime
+    policy under `plugins/n8n/`.
+  - CE code review found and fixed one idempotency edge case: reusing a package
+    settings idempotency key for a different package digest now returns
+    `CONFLICT` instead of echoing a misleading settings payload.
+- Local verification:
+  - `pnpm --filter @thinkwork/plugin-n8n test -- package-config` passed.
+  - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/plugins/n8n-settings.test.ts`
+    passed.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginDetail.test.tsx`
+    passed.
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm schema:build` passed and produced no `terraform/schema.graphql`
+    diff.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-n8n build` passed.
+  - `pnpm lint:plugin-source` passed.
+  - `node --test scripts/__tests__/verify-plugin-source-boundary.test.mjs`
+    passed.
+  - `pnpm --filter @thinkwork/web build` passed. It emitted existing
+    route/sourcemap/chunk-size warnings but no build failure.
+  - `git diff --check` passed.
+  - `pnpm dlx prettier@latest --check <touched files>` passed.
+  - CE code review artifact:
+    `.context/compound-engineering/ce-code-review/20260619-184234-549a8794/summary.md`;
+    residual actionable work: none.
 
 ## Blockers
 
