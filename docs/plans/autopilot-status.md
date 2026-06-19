@@ -6,6 +6,26 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Space Webhook Thread Starts - 2026-06-19
+
+- Plan: `docs/plans/2026-06-19-001-feat-space-webhook-thread-start-plan.md`.
+- Origin requirements: `docs/brainstorms/2026-06-19-space-webhook-thread-start-requirements.md`.
+- Target branch: `main`.
+- Current implementation unit: U1 - Create a Space webhook thread-start service.
+- Current branch: `codex/space-webhook-u1`.
+- Current worktree: `.Codex/worktrees/space-webhook-u1`.
+- Pull request: [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676).
+- Status: U1 PR opened; monitoring required CI.
+- Notes:
+  - Created isolated U1 worktree from `origin/main` at `5ea2a8321`.
+  - Copied the Space webhook requirements and plan docs into the U1 worktree because they were still untracked in the main checkout when autopilot started.
+  - Added a durable Space webhook thread-start service that creates a fresh webhook thread, inserts a readable system-trigger opening message before wakeup dispatch, returns agent context with the full structured webhook payload, and keeps transcript summaries bounded.
+- Local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional `canvas@2.11.2` native fallback build warning because `pkg-config` / `pixman-1` are not installed.
+  - `pnpm exec vitest run src/lib/spaces/space-webhook-thread-start.test.ts` from `packages/api` passed: 6 tests.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+- Blockers: none.
+
 ## THNK-15 Company Brain Premium Plugin - 2026-06-13
 
 - Plan: `docs/plans/2026-06-13-002-feat-company-brain-premium-plugin-plan.md`.
