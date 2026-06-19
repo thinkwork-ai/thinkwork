@@ -14,8 +14,8 @@ status: in_progress
 - Current implementation unit: U1 - Create a Space webhook thread-start service.
 - Current branch: `codex/space-webhook-u1`.
 - Current worktree: `.Codex/worktrees/space-webhook-u1`.
-- Pull request: pending.
-- Status: U1 implemented locally; preparing PR.
+- Pull request: [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676).
+- Status: U1 PR opened; monitoring required CI.
 - Notes:
   - Created isolated U1 worktree from `origin/main` at `5ea2a8321`.
   - Copied the Space webhook requirements and plan docs into the U1 worktree because they were still untracked in the main checkout when autopilot started.
