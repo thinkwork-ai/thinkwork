@@ -122,6 +122,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
 - Branch/worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u3-n8n-terraform`
 - Git branch: `codex/thnk-50-u3-n8n-terraform`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2696
 - Objective: add the package-owned n8n Terraform runtime module, wire it
   through the composite ThinkWork module, greenfield example, DNS module, and
   structural fixture tests, while preserving retained-substrate parking
