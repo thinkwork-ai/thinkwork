@@ -45,6 +45,10 @@ on:
         description: "Create a draft from the selected active workflow version before apply wiring"
         type: boolean
         default: false
+      twenty_allow_active_update:
+        description: "Allow applying workflow wiring directly to the selected ACTIVE workflow version"
+        type: boolean
+        default: false
       trigger_stage:
         description: "Twenty Opportunity stage configured for ThinkWork"
         type: string
@@ -137,6 +141,7 @@ jobs:
           WIRE_WORKFLOW_NAME: ${{ inputs.twenty_workflow_name || '' }}
           WIRE_WORKFLOW_STEP_ID: ${{ inputs.twenty_workflow_step_id || '' }}
           WIRE_CREATE_DRAFT: ${{ inputs.twenty_create_draft && '1' || '0' }}
+          WIRE_ALLOW_ACTIVE_UPDATE: ${{ inputs.twenty_allow_active_update && '1' || '0' }}
           WIRE_TRIGGER_STAGE: ${{ inputs.trigger_stage || 'Customer' }}
           WIRE_EVENT: ${{ inputs.thinkwork_event || 'opportunity.stage.customer' }}
           WIRE_WORKFLOW_KEY: ${{ inputs.workflow_key || 'customer_onboarding' }}
@@ -162,6 +167,9 @@ jobs:
           fi
           if [ "$WIRE_CREATE_DRAFT" = "1" ]; then
             args+=(--create-draft-from-active)
+          fi
+          if [ "$WIRE_ALLOW_ACTIVE_UPDATE" = "1" ]; then
+            args+=(--allow-active-update)
           fi
           args+=(--trigger-stage "$WIRE_TRIGGER_STAGE")
           args+=(--event "$WIRE_EVENT")

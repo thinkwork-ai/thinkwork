@@ -179,6 +179,8 @@ describe("twenty plugin manifest", () => {
     expect(operationsWorkflow).toContain("TWENTY_DEPLOY_API_KEY");
     expect(operationsWorkflow).toContain("sync-thinkwork-app.mjs");
     expect(operationsWorkflow).toContain("wire-thinkwork-workflow.mjs");
+    expect(operationsWorkflow).toContain("twenty_allow_active_update");
+    expect(operationsWorkflow).toContain("WIRE_ALLOW_ACTIVE_UPDATE");
     expect(operationsWorkflow).not.toContain("terraform-apply");
     expect(syncScript).toContain("app:publish");
     expect(syncScript).toContain("--private");
@@ -192,6 +194,13 @@ describe("twenty plugin manifest", () => {
     expect(wireScript).toContain('path: "/metadata"');
     expect(wireScript).toContain("findThinkWorkLogicFunction(metadataClient)");
     expect(wireScript).toContain("findWorkflowVersionsForWorkflow");
+    expect(wireScript).toContain("--allow-active-update");
+    expect(wireScript).toContain("{{trigger.properties.after.id}}");
+    expect(wireScript).toContain("{{trigger.properties.after.name}}");
+    expect(wireScript).toContain("{{trigger.properties.after.companyId}}");
+    expect(wireScript).toContain("{{trigger.properties.after.updatedAt}}");
+    expect(wireScript).toContain("{{trigger.properties.after.amount.amountMicros}}");
+    expect(wireScript).not.toContain("{{trigger.object.");
     expect(wireScript).not.toContain("AWS_LAMBDA");
   });
 
