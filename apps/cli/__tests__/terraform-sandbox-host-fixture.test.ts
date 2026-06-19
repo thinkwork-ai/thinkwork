@@ -395,9 +395,10 @@ describe("U11.5 — computer deploy script sandbox enforcement", () => {
 
 describe("Computer Mapbox production wiring", () => {
   it("deploy passes the Mapbox public token into Terraform; the release web build passes it to Vite", () => {
-    // deploy.yml still threads the token into terraform-apply.
+    // deploy.yml still threads the token into terraform-apply, but does so
+    // through TF_VAR_* so it does not appear in Terraform command argv.
     expect(read(DEPLOY_WORKFLOW)).toMatch(
-      /mapbox_public_token=\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
+      /TF_VAR_mapbox_public_token="\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
     );
     // The Spaces web build moved to release-desktop.yml (deploy-sync: web ships
     // on the desktop release cut), which is where the MAPBOX_PUBLIC_TOKEN env

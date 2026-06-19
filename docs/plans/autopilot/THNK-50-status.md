@@ -521,11 +521,82 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - `pnpm dlx prettier@latest --check docs/plans/autopilot/THNK-50-status.md`
     passed.
   - `git diff --check` passed.
+- Runner fix PR:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2711
+  - Merge commit: `86f735ad8ef7d1cc02eafc757eb0dff713dec404`
+  - Status: merged.
+  - Cleanup: remote branch `codex/thnk-50-u8-n8n-verification`, local branch,
+    and local U8 worktree removed after merge.
+- Post-merge deploy:
+  - Main deploy workflow run `27847037891` failed in Terraform Apply after
+    updating the deployment-runner S3 script object, so the n8n runner fix
+    landed in AWS but the platform deploy is not yet green.
+  - Failure: API Gateway v2 routes
+    `POST /api/auth/workos/logout` and
+    `OPTIONS /api/auth/workos/logout` already exist in AWS for API
+    `thinkwork-dev-api` (`ho7oyksms0`) but are missing from Terraform state,
+    causing Terraform create conflicts.
+  - Live route evidence:
+    `POST /api/auth/workos/logout` route id `5b1m09k` and
+    `OPTIONS /api/auth/workos/logout` route id `k6h15ii`, both targeting
+    integration `uc8te9d`.
+- Deploy repair branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-workos-logout-route-import`
+  - Git branch: `codex/fix-workos-logout-route-import`
+  - Objective: import the existing WorkOS logout API Gateway routes into
+    Terraform state during the deploy workflow before apply retries, then wait
+    for a green main deploy before retrying the n8n managed-app install.
+  - Started: 2026-06-19 20:41 UTC.
+  - Implementation summary:
+    - Refactored the Terraform Apply step to build one shared non-secret
+      `TF_VAR_ARGS` array for import and apply while moving sensitive values
+      (`db_password`, `api_auth_secret`, `google_oauth_client_secret`, and
+      `mapbox_public_token`) into `TF_VAR_*` environment variables so they are
+      not expanded onto Terraform command lines.
+    - Added pre-apply import for the existing WorkOS logout API Gateway routes
+      with the same `-lock-timeout=10m` state-lock tolerance as apply.
+    - Resolve the live `thinkwork-${STAGE}-api` API id by AWS API name, verify
+      any existing Terraform state entry belongs to that live API and exact
+      route key, import missing route state, and re-check imported state before
+      apply continues.
+  - Review:
+    - CE code review run
+      `.context/compound-engineering/ce-code-review/20260619-204337-4ecfd2d6`
+      reported three actionable issues; all were fixed in this branch:
+      import state lock timeout, command-line exposure of sensitive Terraform
+      variables, and stale/partial route state hardening.
+    - Residual review risk: the final proof requires the real GitHub Actions
+      deploy against the dev Terraform backend and API Gateway state.
+  - Local verification:
+    - `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml")'`
+      passed.
+    - Extracted the `Terraform Apply` `run: |` shell block from
+      `.github/workflows/deploy.yml`, substituted GitHub expressions with
+      placeholders, and `bash -n /tmp/thnk-50-terraform-apply.sh` passed.
+    - `pnpm dlx prettier@latest --check .github/workflows/deploy.yml docs/plans/autopilot/THNK-50-status.md`
+      passed.
+    - `git diff --check` passed.
+    - `actionlint` was not available locally; `pnpm dlx actionlint@latest` did
+      not expose a binary and `go` was not installed, so workflow validation is
+      limited to YAML parsing, extracted shell syntax, formatting, and the
+      GitHub workflow run after merge.
+  - CI:
+    - PR #2712 initial `test` failed in
+      `apps/cli/__tests__/terraform-sandbox-host-fixture.test.ts` because the
+      Mapbox fixture still expected the older Terraform command-line
+      `-var mapbox_public_token=...` wiring. Updated the assertion to require
+      the safer `TF_VAR_mapbox_public_token` workflow env wiring.
+    - After the fixture update,
+      `pnpm --filter thinkwork-cli test -- terraform-sandbox-host-fixture`
+      passed: 34 tests.
+    - `pnpm dlx prettier@latest --check apps/cli/__tests__/terraform-sandbox-host-fixture.test.ts .github/workflows/deploy.yml docs/plans/autopilot/THNK-50-status.md`
+      passed.
 
 ## Blockers
 
-- Active fix in progress: the first deployed n8n install exposed a deployment
-  runner regression. This branch now contains the local fix and tests; the next
-  step is to open/merge the U8 runner fix PR, wait for main deploy, then retry
-  the n8n plugin install through the deployed ThinkWork managed-application
-  path.
+- Active fix in progress: the n8n runner fix PR is merged, but the main deploy
+  is blocked by two pre-existing WorkOS logout API Gateway routes that need to
+  be imported into Terraform state before the next apply can complete. After
+  the deploy repair PR merges and the main deploy is green, retry the n8n plugin
+  install through the deployed ThinkWork managed-application path.
