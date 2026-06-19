@@ -6,10 +6,15 @@ import {
 import { and, eq, gt, sql } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
 import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
-import { users, workosAuthBridges } from "@thinkwork/database-pg/schema";
+import {
+  tenantMembers,
+  users,
+  workosAuthBridges,
+} from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "./db.js";
 import { digestBridgeCode } from "./workos-auth.js";
 import { recordWorkosAuthSession } from "./workos-auth-session.js";
+import { emitAuditEvent } from "./compliance/emit.js";
 import { signObject, verifyObject } from "./mcp-oauth/state.js";
 
 type DbLike = typeof defaultDb;
@@ -35,6 +40,7 @@ export interface WorkosBridgeUser {
   tenantId: string;
   email: string;
   name: string | null;
+  hasActiveTenantMembership: boolean;
 }
 
 export interface CognitoTokenSet {
@@ -66,6 +72,8 @@ export interface WorkosCognitoBridgeDeps {
     answer: string;
   }): Promise<CognitoTokenSet>;
   recordWorkosSession(args: WorkosAuthSessionInput): Promise<void>;
+  emitSignInSuccess(args: WorkosSignInSuccessAuditInput): Promise<void>;
+  emitSignInFailure(args: WorkosSignInFailureAuditInput): Promise<void>;
   signingSecret(): string;
   now(): Date;
   randomToken(bytes?: number): string;
@@ -84,6 +92,26 @@ export interface WorkosAuthSessionInput {
   expiresAt: Date | null;
 }
 
+export interface WorkosSignInSuccessAuditInput {
+  tenantId: string;
+  userId: string;
+  workosUserId: string;
+  cognitoSub: string;
+  authProviderResourceId: string;
+  tenantReferenceId: string;
+  hasActiveTenantMembership: boolean;
+}
+
+export interface WorkosSignInFailureAuditInput {
+  tenantId: string;
+  userId: string | null;
+  email: string | null;
+  workosUserId: string | null;
+  authProviderResourceId: string;
+  tenantReferenceId: string;
+  reason: string;
+}
+
 export function createDefaultWorkosCognitoBridgeDeps(
   db: DbLike = defaultDb,
   cognito = new CognitoIdentityProviderClient({}),
@@ -93,6 +121,8 @@ export function createDefaultWorkosCognitoBridgeDeps(
     resolveBridgeUser: (bridge) => resolveBridgeUser(bridge, db),
     startCognitoCustomAuth: (args) => startCognitoCustomAuth(args, cognito),
     recordWorkosSession: (args) => recordWorkosAuthSession(args, db),
+    emitSignInSuccess: (args) => emitWorkosSignInSuccessAudit(args, db),
+    emitSignInFailure: (args) => emitWorkosSignInFailureAudit(args, db),
     signingSecret: () => getApiAuthSecret(),
     now: () => new Date(),
     randomToken: (bytes = 32) => randomBytes(bytes).toString("base64url"),
@@ -116,14 +146,26 @@ export async function exchangeWorkosBridgeForCognitoTokens(args: {
     throw new WorkosBridgeError("bridge code is invalid or expired", 400);
   }
   if (!bridge.workosEmailVerified) {
+    await emitBridgeFailureAudit(deps, bridge, {
+      userId: null,
+      reason: "workos_email_unverified",
+    });
     throw new WorkosBridgeError("WorkOS email is not verified", 403);
   }
 
   const user = await deps.resolveBridgeUser(bridge);
   if (!user || user.tenantId !== bridge.tenantId) {
+    await emitBridgeFailureAudit(deps, bridge, {
+      userId: user?.id ?? null,
+      reason: "tenant_user_not_mapped",
+    });
     throw new WorkosBridgeError("WorkOS user is not assigned to this tenant", 403);
   }
   if (user.email.toLowerCase() !== bridge.workosEmail.toLowerCase()) {
+    await emitBridgeFailureAudit(deps, bridge, {
+      userId: user.id,
+      reason: "email_mismatch",
+    });
     throw new WorkosBridgeError("WorkOS user email mismatch", 403);
   }
 
@@ -159,6 +201,15 @@ export async function exchangeWorkosBridgeForCognitoTokens(args: {
     workosSessionId: bridge.workosSessionId,
     workosEmail: bridge.workosEmail.toLowerCase(),
     expiresAt: bridge.workosSessionExpiresAt ?? cognitoClaims.expiresAt,
+  });
+  await deps.emitSignInSuccess({
+    tenantId: user.tenantId,
+    userId: user.id,
+    workosUserId: bridge.workosUserId,
+    cognitoSub: cognitoClaims.sub,
+    authProviderResourceId: bridge.authProviderResourceId,
+    tenantReferenceId: bridge.tenantReferenceId,
+    hasActiveTenantMembership: user.hasActiveTenantMembership,
   });
   return tokens;
 }
@@ -284,8 +335,18 @@ async function resolveBridgeUser(
       tenantId: users.tenant_id,
       email: users.email,
       name: users.name,
+      membershipId: tenantMembers.id,
     })
     .from(users)
+    .leftJoin(
+      tenantMembers,
+      and(
+        eq(tenantMembers.tenant_id, bridge.tenantId),
+        eq(tenantMembers.principal_type, "user"),
+        eq(tenantMembers.principal_id, users.id),
+        eq(tenantMembers.status, "active"),
+      ),
+    )
     .where(
       and(
         eq(users.tenant_id, bridge.tenantId),
@@ -298,7 +359,85 @@ async function resolveBridgeUser(
     tenantId: row.tenantId,
     email: row.email,
     name: row.name,
+    hasActiveTenantMembership: Boolean(row.membershipId),
   };
+}
+
+async function emitBridgeFailureAudit(
+  deps: WorkosCognitoBridgeDeps,
+  bridge: WorkosBridgeRecord,
+  args: { userId: string | null; reason: string },
+): Promise<void> {
+  try {
+    await deps.emitSignInFailure({
+      tenantId: bridge.tenantId,
+      userId: args.userId,
+      email: bridge.workosEmail.toLowerCase(),
+      workosUserId: bridge.workosUserId,
+      authProviderResourceId: bridge.authProviderResourceId,
+      tenantReferenceId: bridge.tenantReferenceId,
+      reason: args.reason,
+    });
+  } catch (error) {
+    console.warn(
+      "[workos-auth] failed to emit sign-in failure audit:",
+      (error as Error)?.message,
+    );
+  }
+}
+
+async function emitWorkosSignInSuccessAudit(
+  args: WorkosSignInSuccessAuditInput,
+  db: DbLike,
+): Promise<void> {
+  await emitAuditEvent(db, {
+    tenantId: args.tenantId,
+    actorId: args.userId,
+    actorType: "user",
+    eventType: "auth.signin.success",
+    source: "lambda",
+    resourceType: "auth_provider_resource",
+    resourceId: args.authProviderResourceId,
+    action: "workos_signin",
+    outcome: args.hasActiveTenantMembership ? "success" : "no_workspace",
+    payload: {
+      userId: args.userId,
+      tenantId: args.tenantId,
+      method: "workos",
+      workosUserId: args.workosUserId,
+      cognitoSub: args.cognitoSub,
+      authProviderResourceId: args.authProviderResourceId,
+      tenantAuthProviderReferenceId: args.tenantReferenceId,
+      tenantMembershipActive: args.hasActiveTenantMembership,
+    },
+  });
+}
+
+async function emitWorkosSignInFailureAudit(
+  args: WorkosSignInFailureAuditInput,
+  db: DbLike,
+): Promise<void> {
+  await emitAuditEvent(db, {
+    tenantId: args.tenantId,
+    actorId: args.userId ?? "workos-auth",
+    actorType: args.userId ? "user" : "system",
+    eventType: "auth.signin.failure",
+    source: "lambda",
+    resourceType: "auth_provider_resource",
+    resourceId: args.authProviderResourceId,
+    action: "workos_signin",
+    outcome: "failure",
+    payload: {
+      userId: args.userId,
+      tenantId: args.tenantId,
+      email: args.email,
+      method: "workos",
+      reason: args.reason,
+      workosUserId: args.workosUserId,
+      authProviderResourceId: args.authProviderResourceId,
+      tenantAuthProviderReferenceId: args.tenantReferenceId,
+    },
+  });
 }
 
 async function startCognitoCustomAuth(
@@ -388,16 +527,13 @@ function createAuthChallenge(
 ): CognitoCustomAuthEvent {
   const signedChallenge =
     event.request.clientMetadata?.[WORKOS_BRIDGE_CHALLENGE_METADATA_KEY];
-  if (!signedChallenge) {
-    throw new WorkosBridgeError("missing WorkOS bridge challenge", 400);
-  }
-  verifyWorkosCognitoChallenge(signedChallenge, secret);
+  if (signedChallenge) verifyWorkosCognitoChallenge(signedChallenge, secret);
   event.response.publicChallengeParameters = {
     challenge: "workos_bridge",
   };
-  event.response.privateChallengeParameters = {
-    [WORKOS_BRIDGE_CHALLENGE_METADATA_KEY]: signedChallenge,
-  };
+  event.response.privateChallengeParameters = signedChallenge
+    ? { [WORKOS_BRIDGE_CHALLENGE_METADATA_KEY]: signedChallenge }
+    : {};
   return event;
 }
 
@@ -408,7 +544,7 @@ function verifyAuthChallenge(
   const signedChallenge =
     event.request.privateChallengeParameters?.[
       WORKOS_BRIDGE_CHALLENGE_METADATA_KEY
-    ];
+    ] ?? event.request.clientMetadata?.[WORKOS_BRIDGE_CHALLENGE_METADATA_KEY];
   if (!signedChallenge) {
     event.response.answerCorrect = false;
     return event;

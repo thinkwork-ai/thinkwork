@@ -1,6 +1,7 @@
 import { and, desc, eq, gt } from "drizzle-orm";
 import { workosAuthSessions } from "@thinkwork/database-pg/schema";
 import { authenticate, type AuthResult } from "./cognito-auth.js";
+import { emitAuditEvent } from "./compliance/emit.js";
 import { db as defaultDb } from "./db.js";
 
 type DbLike = typeof defaultDb;
@@ -23,6 +24,11 @@ export interface WorkosAuthSessionRecordInput {
 
 export interface WorkosLogoutSession {
   id: string;
+  tenantId: string;
+  userId: string;
+  authProviderResourceId: string;
+  tenantReferenceId: string;
+  workosUserId: string;
   workosSessionId: string;
 }
 
@@ -34,7 +40,19 @@ export interface WorkosLogoutDeps {
     cognitoPrincipalId: string;
     now: Date;
   }): Promise<WorkosLogoutSession | null>;
+  emitSignOutAudit(args: WorkosSignOutAuditInput): Promise<void>;
   now(): Date;
+}
+
+export interface WorkosSignOutAuditInput {
+  tenantId: string;
+  userId: string;
+  cognitoSub: string;
+  sessionId: string;
+  workosUserId: string;
+  authProviderResourceId: string;
+  tenantReferenceId: string;
+  result: "workos_logout_url_issued";
 }
 
 export function createDefaultWorkosLogoutDeps(
@@ -43,6 +61,7 @@ export function createDefaultWorkosLogoutDeps(
   return {
     authenticate,
     consumeActiveSession: (args) => consumeActiveWorkosSession(args, db),
+    emitSignOutAudit: (args) => emitWorkosSignOutAudit(args, db),
     now: () => new Date(),
   };
 }
@@ -88,6 +107,17 @@ export async function createWorkosLogoutRedirect(args: {
     now: deps.now(),
   });
   if (!session) return { logout_url: null };
+
+  await deps.emitSignOutAudit({
+    tenantId: session.tenantId,
+    userId: session.userId,
+    cognitoSub: auth.principalId,
+    sessionId: session.id,
+    workosUserId: session.workosUserId,
+    authProviderResourceId: session.authProviderResourceId,
+    tenantReferenceId: session.tenantReferenceId,
+    result: "workos_logout_url_issued",
+  });
 
   return {
     logout_url: buildWorkosLogoutUrl({
@@ -145,6 +175,11 @@ async function consumeActiveWorkosSession(
   const [row] = await db
     .select({
       id: workosAuthSessions.id,
+      tenantId: workosAuthSessions.tenant_id,
+      userId: workosAuthSessions.user_id,
+      tenantReferenceId: workosAuthSessions.tenant_auth_provider_reference_id,
+      authProviderResourceId: workosAuthSessions.auth_provider_resource_id,
+      workosUserId: workosAuthSessions.workos_user_id,
       workosSessionId: workosAuthSessions.workos_session_id,
     })
     .from(workosAuthSessions)
@@ -175,8 +210,40 @@ async function consumeActiveWorkosSession(
     )
     .returning({
       id: workosAuthSessions.id,
+      tenantId: workosAuthSessions.tenant_id,
+      userId: workosAuthSessions.user_id,
+      tenantReferenceId: workosAuthSessions.tenant_auth_provider_reference_id,
+      authProviderResourceId: workosAuthSessions.auth_provider_resource_id,
+      workosUserId: workosAuthSessions.workos_user_id,
       workosSessionId: workosAuthSessions.workos_session_id,
     });
 
   return updated ?? null;
+}
+
+async function emitWorkosSignOutAudit(
+  args: WorkosSignOutAuditInput,
+  db: DbLike,
+): Promise<void> {
+  await emitAuditEvent(db, {
+    tenantId: args.tenantId,
+    actorId: args.userId,
+    actorType: "user",
+    eventType: "auth.signout",
+    source: "lambda",
+    resourceType: "auth_provider_resource",
+    resourceId: args.authProviderResourceId,
+    action: "workos_signout",
+    outcome: args.result,
+    payload: {
+      userId: args.userId,
+      tenantId: args.tenantId,
+      sessionId: args.sessionId,
+      workosUserId: args.workosUserId,
+      cognitoSub: args.cognitoSub,
+      authProviderResourceId: args.authProviderResourceId,
+      tenantAuthProviderReferenceId: args.tenantReferenceId,
+      result: args.result,
+    },
+  });
 }

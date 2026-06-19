@@ -188,16 +188,46 @@ export const EVENT_PAYLOAD_SHAPES: Record<
   // ── Phase 3 starter slate (R10) ───────────────────────────────
 
   "auth.signin.success": {
-    allowedFields: new Set(["userId", "method", "ip", "userAgent"]),
+    allowedFields: new Set([
+      "userId",
+      "tenantId",
+      "method",
+      "ip",
+      "userAgent",
+      "workosUserId",
+      "cognitoSub",
+      "authProviderResourceId",
+      "tenantAuthProviderReferenceId",
+      "tenantMembershipActive",
+    ]),
   },
   "auth.signin.failure": {
     // Deliberately exclude `password` / `token` even if a caller
     // passes them — allow-list drops them. `reason` is a coarse
     // enum like `invalid_credentials` / `mfa_required`, not free-text.
-    allowedFields: new Set(["email", "method", "reason", "ip"]),
+    allowedFields: new Set([
+      "userId",
+      "tenantId",
+      "email",
+      "method",
+      "reason",
+      "ip",
+      "workosUserId",
+      "authProviderResourceId",
+      "tenantAuthProviderReferenceId",
+    ]),
   },
   "auth.signout": {
-    allowedFields: new Set(["userId", "sessionId"]),
+    allowedFields: new Set([
+      "userId",
+      "tenantId",
+      "sessionId",
+      "workosUserId",
+      "cognitoSub",
+      "authProviderResourceId",
+      "tenantAuthProviderReferenceId",
+      "result",
+    ]),
   },
 
   "user.invited": {

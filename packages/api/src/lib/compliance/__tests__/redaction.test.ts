@@ -42,6 +42,36 @@ describe("redactPayload", () => {
         ip: "10.0.0.1",
       });
     });
+
+    it("auth.signin.success retains WorkOS bridge audit identifiers without tokens", () => {
+      const result = redactPayload("auth.signin.success", {
+        userId: "u1",
+        tenantId: "t1",
+        method: "workos",
+        workosUserId: "workos-user-1",
+        cognitoSub: "cognito-sub-1",
+        authProviderResourceId: "apr-1",
+        tenantAuthProviderReferenceId: "tapr-1",
+        tenantMembershipActive: false,
+        access_token: "should-drop",
+        clientSecret: "should-drop",
+      });
+      expect(result.redacted).toMatchObject({
+        userId: "u1",
+        tenantId: "t1",
+        method: "workos",
+        workosUserId: "workos-user-1",
+        cognitoSub: "cognito-sub-1",
+        authProviderResourceId: "apr-1",
+        tenantAuthProviderReferenceId: "tapr-1",
+        tenantMembershipActive: false,
+      });
+      expect(result.redacted).not.toHaveProperty("access_token");
+      expect(result.redacted).not.toHaveProperty("clientSecret");
+      expect(result.redactedFields).toEqual(
+        expect.arrayContaining(["access_token", "clientSecret"]),
+      );
+    });
   });
 
   describe("allow-list drops disallowed fields", () => {
@@ -457,10 +487,25 @@ describe("redactPayload", () => {
     it("auth.signout retains userId + sessionId", () => {
       const result = redactPayload("auth.signout", {
         userId: "u1",
+        tenantId: "t1",
         sessionId: "s1",
+        workosUserId: "workos-user-1",
+        cognitoSub: "cognito-sub-1",
+        authProviderResourceId: "apr-1",
+        tenantAuthProviderReferenceId: "tapr-1",
+        result: "workos_logout_url_issued",
         token: "leaked",
       });
-      expect(result.redacted).toMatchObject({ userId: "u1", sessionId: "s1" });
+      expect(result.redacted).toMatchObject({
+        userId: "u1",
+        tenantId: "t1",
+        sessionId: "s1",
+        workosUserId: "workos-user-1",
+        cognitoSub: "cognito-sub-1",
+        authProviderResourceId: "apr-1",
+        tenantAuthProviderReferenceId: "tapr-1",
+        result: "workos_logout_url_issued",
+      });
       expect(result.redactedFields).toContain("token");
     });
 
