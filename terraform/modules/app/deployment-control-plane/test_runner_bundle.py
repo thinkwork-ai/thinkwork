@@ -1227,11 +1227,365 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
     assert "plane_amqp_url_secret_arn" not in tfvars
     assert 'resource "cloudflare_record" "plane"' in main_tf
     assert "content = module.thinkwork.plane_alb_dns_name" in main_tf
+    assert 'variable "n8n_provisioned"' in main_tf
+    assert "n8n_provisioned                  = var.n8n_provisioned" in main_tf
+    assert 'output "n8n_url"' in main_tf
     assert 'variable "plane_amqp_url_secret_arn"' not in main_tf
     assert "plane_amqp_url_secret_arn" not in main_tf
     assert "-target=cloudflare_record.plane" in runner.managed_app_terraform_target_args(
         {"appKey": "plane"}
     )
+    assert "-target=module.thinkwork.module.n8n" in runner.managed_app_terraform_target_args(
+        {"appKey": "n8n"}
+    )
+
+
+def test_n8n_managed_app_overrides_complete_sparse_live_install_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    n8n_image_uri = (
+        "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork/n8n"
+        "@sha256:"
+        "3333333333333333333333333333333333333333333333333333333333333333"
+    )
+    monkeypatch.setattr(
+        runner,
+        "release_runtime_image",
+        lambda name: n8n_image_uri if name == "n8n-runtime" else "",
+    )
+    state = {
+        "resources": [
+            {
+                "type": "terraform_data",
+                "name": "twenty_configuration_guardrails",
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "twenty_public_url": "https://crm.thinkwork.ai",
+                                    "twenty_certificate_arn": (
+                                        "arn:aws:acm:us-east-1:"
+                                        "487219502366:certificate/www"
+                                    ),
+                                }
+                            }
+                        }
+                    }
+                ],
+            },
+            {
+                "type": "terraform_data",
+                "name": "plane_configuration_guardrails",
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "plane_runtime_enabled": True,
+                                    "plane_image_uri": (
+                                        "artifacts.plane.so/makeplane/"
+                                        "plane-aio-commercial:stable@sha256:"
+                                        "7385b873e58f8325e68950689ae003ce1cb8d017"
+                                        "f49011ab4b3f1ad9e6e958db"
+                                    ),
+                                    "plane_mcp_image_uri": (
+                                        "ghcr.io/thinkwork-ai/plane-mcp:0.1.0@sha256:"
+                                        "111111111111111111111111111111111111111111"
+                                        "1111111111111111111111"
+                                    ),
+                                    "plane_db_url_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:plane-db"
+                                    ),
+                                    "plane_secret_key_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:plane-secret"
+                                    ),
+                                    "plane_live_server_secret_key_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:plane-live"
+                                    ),
+                                    "plane_aes_secret_key_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:plane-aes"
+                                    ),
+                                    "plane_s3_bucket_name": "thinkwork-dev-plane",
+                                    "plane_public_url": "https://plane.thinkwork.ai",
+                                    "plane_certificate_arn": (
+                                        "arn:aws:acm:us-east-1:"
+                                        "487219502366:certificate/www"
+                                    ),
+                                }
+                            }
+                        }
+                    }
+                ],
+            },
+        ]
+    }
+
+    overrides = runner.managed_app_terraform_overrides(
+        {
+            "appKey": "n8n",
+            "operation": "ENABLE",
+            "desiredConfig": {
+                "databaseName": "thinkwork_n8n",
+                "storagePrefix": "managed-apps/n8n",
+                "mainDesiredCount": 1,
+                "workerDesiredCount": 1,
+            },
+        },
+        "dev",
+        "487219502366",
+        {
+            "db_secret_arn": {
+                "value": (
+                    "arn:aws:secretsmanager:us-east-1:"
+                    "487219502366:secret:thinkwork-dev-db-credentials"
+                )
+            },
+            "n8n_provisioned": {"value": False},
+            "n8n_runtime_enabled": {"value": False},
+            "plane_provisioned": {"value": True},
+            "plane_runtime_enabled": {"value": True},
+        },
+        state,
+    )
+
+    assert overrides["n8n_provisioned"] is True
+    assert overrides["n8n_runtime_enabled"] is True
+    assert overrides["n8n_image_uri"] == n8n_image_uri
+    assert overrides["n8n_database_admin_secret_arn"].endswith(
+        ":secret:thinkwork-dev-db-credentials"
+    )
+    assert overrides["n8n_database_url_secret_arn"] == ""
+    assert overrides["n8n_encryption_key_secret_arn"] == ""
+    assert overrides["n8n_operator_secret_arn"] == ""
+    assert overrides["n8n_service_credential_secret_arn"] == ""
+    assert overrides["deployment_control_plane_create_secret_placeholders"] is True
+    assert overrides["n8n_public_url"] == "https://n8n.thinkwork.ai"
+    assert overrides["n8n_domain"] == "n8n.thinkwork.ai"
+    assert overrides["n8n_certificate_arn"].endswith(":certificate/www")
+    assert overrides["n8n_storage_bucket_name"] == "thinkwork-dev-487219502366-n8n"
+    assert overrides["n8n_storage_prefix"] == "managed-apps/n8n"
+    assert overrides["n8n_custom_package_specs"] == []
+    assert overrides["plane_provisioned"] is True
+    assert overrides["plane_runtime_enabled"] is True
+
+
+def test_n8n_managed_app_overrides_preserve_existing_plane_guardrails() -> None:
+    runner = load_runner()
+    package_config = runner.normalize_n8n_package_config(
+        {"customPackageSpecs": ["zod@3.25.76", "luxon@3.7.2"]}
+    )
+    state = {
+        "resources": [
+            {
+                "type": "terraform_data",
+                "name": "plane_configuration_guardrails",
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "plane_runtime_enabled": True,
+                                    "plane_image_uri": (
+                                        "artifacts.plane.so/makeplane/plane-aio-commercial:"
+                                        "stable@sha256:"
+                                        "7385b873e58f8325e68950689ae003ce1cb8d017"
+                                        "f49011ab4b3f1ad9e6e958db"
+                                    ),
+                                    "plane_mcp_image_uri": (
+                                        "ghcr.io/thinkwork-ai/plane-mcp:0.1.0@sha256:"
+                                        "111111111111111111111111111111111111111111"
+                                        "1111111111111111111111"
+                                    ),
+                                    "plane_db_url_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:plane-db"
+                                    ),
+                                    "plane_secret_key_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:plane-secret"
+                                    ),
+                                    "plane_live_server_secret_key_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:plane-live"
+                                    ),
+                                    "plane_aes_secret_key_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:plane-aes"
+                                    ),
+                                    "plane_s3_bucket_name": "thinkwork-dev-plane",
+                                    "plane_public_url": "https://plane.thinkwork.ai",
+                                    "plane_certificate_arn": (
+                                        "arn:aws:acm:us-east-1:"
+                                        "487219502366:certificate/plane"
+                                    ),
+                                    "plane_web_container_port": 8080,
+                                }
+                            }
+                        }
+                    }
+                ],
+            }
+        ]
+    }
+
+    overrides = runner.managed_app_terraform_overrides(
+        {
+            "appKey": "n8n",
+            "operation": "ENABLE",
+            "desiredConfig": {
+                "imageUri": (
+                    "public.ecr.aws/thinkwork/n8n@sha256:"
+                    "3333333333333333333333333333333333333333333333333333333333333333"
+                ),
+                "packageImageUri": (
+                    "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork/n8n"
+                    "@sha256:"
+                    "4444444444444444444444444444444444444444444444444444444444444444"
+                ),
+                "customPackageSpecs": ["zod@3.25.76", "luxon@3.7.2"],
+                "packageConfigDigest": package_config["digest"],
+                "packageImageConfigDigest": package_config["digest"],
+                "databaseAdminSecretArn": (
+                    "arn:aws:secretsmanager:us-east-1:487219502366:secret:n8n-db-admin"
+                ),
+                "databaseUrlSecretArn": (
+                    "arn:aws:secretsmanager:us-east-1:487219502366:secret:n8n-db-url"
+                ),
+                "databaseName": "thinkwork_n8n",
+                "encryptionKeySecretArn": (
+                    "arn:aws:secretsmanager:us-east-1:487219502366:secret:n8n-key"
+                ),
+                "operatorSecretArn": (
+                    "arn:aws:secretsmanager:us-east-1:487219502366:secret:n8n-operator"
+                ),
+                "serviceCredentialSecretArn": (
+                    "arn:aws:secretsmanager:us-east-1:487219502366:secret:n8n-service"
+                ),
+                "storageBucketName": "thinkwork-dev-n8n",
+                "storagePrefix": "managed-apps/n8n",
+                "publicUrl": "https://n8n.thinkwork.ai",
+                "certificateArn": (
+                    "arn:aws:acm:us-east-1:487219502366:certificate/n8n"
+                ),
+            },
+        },
+        "dev",
+        "487219502366",
+        {
+            "plane_provisioned": {"value": True},
+            "plane_runtime_enabled": {"value": True},
+            "n8n_provisioned": {"value": False},
+            "n8n_runtime_enabled": {"value": False},
+        },
+        state,
+    )
+
+    assert overrides["n8n_provisioned"] is True
+    assert overrides["n8n_runtime_enabled"] is True
+    assert overrides["n8n_database_name"] == "thinkwork_n8n"
+    assert overrides["n8n_storage_prefix"] == "managed-apps/n8n"
+    assert overrides["n8n_image_uri"].endswith("@" + "sha256:" + "4" * 64)
+    assert overrides["n8n_custom_package_specs"] == ["luxon@3.7.2", "zod@3.25.76"]
+    assert overrides["n8n_package_config_digest"] == package_config["digest"]
+    assert overrides["plane_provisioned"] is True
+    assert overrides["plane_runtime_enabled"] is True
+    assert overrides["plane_image_uri"]
+    assert overrides["plane_mcp_image_uri"]
+    assert overrides["plane_secret_key_secret_arn"]
+    assert overrides["plane_live_server_secret_key_secret_arn"]
+    assert overrides["plane_aes_secret_key_secret_arn"]
+    assert overrides["plane_s3_bucket_name"] == "thinkwork-dev-plane"
+    assert overrides["plane_public_url"] == "https://plane.thinkwork.ai"
+    assert overrides["plane_certificate_arn"].endswith(":certificate/plane")
+
+
+def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> None:
+    runner = load_runner()
+    state = {
+        "resources": [
+            {
+                "type": "terraform_data",
+                "name": "n8n_configuration_guardrails",
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "n8n_runtime_enabled": True,
+                                    "n8n_image_uri": (
+                                        "487219502366.dkr.ecr.us-east-1.amazonaws.com/"
+                                        "thinkwork/n8n@sha256:"
+                                        "444444444444444444444444444444444444444444"
+                                        "4444444444444444444444"
+                                    ),
+                                    "n8n_database_name": "thinkwork_n8n",
+                                    "n8n_database_username": "thinkwork_n8n",
+                                    "n8n_database_admin_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:n8n-db-admin"
+                                    ),
+                                    "n8n_database_url_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:n8n-db-url"
+                                    ),
+                                    "n8n_encryption_key_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:n8n-key"
+                                    ),
+                                    "n8n_operator_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:n8n-operator"
+                                    ),
+                                    "n8n_service_credential_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:n8n-service"
+                                    ),
+                                    "n8n_storage_bucket_name": "thinkwork-dev-n8n",
+                                    "n8n_storage_prefix": "managed-apps/n8n",
+                                    "n8n_public_url": "https://n8n.thinkwork.ai",
+                                    "n8n_certificate_arn": (
+                                        "arn:aws:acm:us-east-1:"
+                                        "487219502366:certificate/n8n"
+                                    ),
+                                    "n8n_main_desired_count": 2,
+                                    "n8n_worker_desired_count": 3,
+                                    "n8n_package_config_digest": "abc123",
+                                    "n8n_custom_package_specs": ["luxon@3.7.2"],
+                                }
+                            }
+                        }
+                    }
+                ],
+            }
+        ]
+    }
+
+    overrides = runner.managed_app_terraform_overrides(
+        {"appKey": "twenty", "operation": "UPGRADE"},
+        "dev",
+        "487219502366",
+        {
+            "n8n_provisioned": {"value": True},
+            "n8n_runtime_enabled": {"value": True},
+        },
+        state,
+    )
+
+    assert overrides["n8n_provisioned"] is True
+    assert overrides["n8n_runtime_enabled"] is True
+    assert overrides["n8n_image_uri"].endswith("@" + "sha256:" + "4" * 64)
+    assert overrides["n8n_database_name"] == "thinkwork_n8n"
+    assert overrides["n8n_public_url"] == "https://n8n.thinkwork.ai"
+    assert overrides["n8n_main_desired_count"] == 2
+    assert overrides["n8n_worker_desired_count"] == 3
+    assert overrides["n8n_package_config_digest"] == "abc123"
+    assert overrides["n8n_custom_package_specs"] == ["luxon@3.7.2"]
 
 
 def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPatch) -> None:

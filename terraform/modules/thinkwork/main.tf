@@ -544,11 +544,27 @@ resource "terraform_data" "n8n_configuration_guardrails" {
     n8n_operator_secret_arn           = var.n8n_operator_secret_arn
     n8n_service_credential_secret_arn = var.n8n_service_credential_secret_arn
     n8n_storage_bucket_name           = var.n8n_storage_bucket_name
+    n8n_create_storage_bucket         = var.n8n_create_storage_bucket
     n8n_storage_prefix                = var.n8n_storage_prefix
     n8n_public_url                    = local.n8n_public_url
     n8n_certificate_arn               = local.n8n_certificate_arn
+    n8n_main_desired_count            = var.n8n_main_desired_count
+    n8n_worker_desired_count          = var.n8n_worker_desired_count
+    n8n_worker_concurrency            = var.n8n_worker_concurrency
+    n8n_container_port                = var.n8n_container_port
     n8n_queue_mode                    = var.n8n_queue_mode
+    n8n_task_runners_enabled          = var.n8n_task_runners_enabled
+    n8n_package_config_digest         = var.n8n_package_config_digest
+    n8n_custom_package_specs          = var.n8n_custom_package_specs
+    n8n_execution_data_storage_mode   = var.n8n_execution_data_storage_mode
+    n8n_binary_data_mode              = var.n8n_binary_data_mode
     n8n_cache_engine                  = var.n8n_cache_engine
+    n8n_cache_engine_version          = var.n8n_cache_engine_version
+    n8n_cache_parameter_group_family  = var.n8n_cache_parameter_group_family
+    n8n_cache_node_type               = var.n8n_cache_node_type
+    n8n_cache_num_cache_clusters      = var.n8n_cache_num_cache_clusters
+    n8n_allowed_public_cidr_blocks    = var.n8n_allowed_public_cidr_blocks
+    n8n_kms_key_arns                  = var.n8n_kms_key_arns
     public_subnet_count               = length(module.vpc.public_subnet_ids)
     private_subnet_count              = length(module.vpc.private_subnet_ids)
   }

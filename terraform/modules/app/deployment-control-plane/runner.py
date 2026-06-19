@@ -591,13 +591,19 @@ def terraform_plan_summary(plan_json):
 
 
 def managed_app_terraform_target_args(payload):
-    if payload.get("appKey") != "plane":
-        return []
-    return [
-        "-target=module.thinkwork.terraform_data.plane_configuration_guardrails",
-        "-target=module.thinkwork.module.plane",
-        "-target=cloudflare_record.plane",
-    ]
+    app_key = payload.get("appKey")
+    if app_key == "plane":
+        return [
+            "-target=module.thinkwork.terraform_data.plane_configuration_guardrails",
+            "-target=module.thinkwork.module.plane",
+            "-target=cloudflare_record.plane",
+        ]
+    if app_key == "n8n":
+        return [
+            "-target=module.thinkwork.terraform_data.n8n_configuration_guardrails",
+            "-target=module.thinkwork.module.n8n",
+        ]
+    return []
 
 
 def truthy(value):
@@ -690,19 +696,28 @@ def configure_managed_app_evidence_prefix(payload):
 
 
 def validate_managed_app_plan_scope(payload, plan_json):
-    if payload.get("appKey") != "plane":
+    app_key = payload.get("appKey")
+    if app_key not in {"n8n", "plane"}:
         return
+    allowed_prefixes = {
+        "n8n": [
+            "module.thinkwork.module.n8n",
+            "module.thinkwork.terraform_data.n8n_configuration_guardrails",
+            "module.thinkwork.terraform_data.n8n_runtime_state_guardrails",
+        ],
+        "plane": [
+            "module.thinkwork.module.plane",
+            "module.thinkwork.terraform_data.plane_configuration_guardrails",
+            "cloudflare_record.plane",
+        ],
+    }[app_key]
     unsafe_changes = []
     for change in plan_json.get("resource_changes", []):
         actions = change.get("change", {}).get("actions", [])
         if not actions or actions == ["no-op"] or actions == ["read"]:
             continue
         address = change.get("address", "")
-        if address.startswith("module.thinkwork.module.plane"):
-            continue
-        if address.startswith("module.thinkwork.terraform_data.plane_configuration_guardrails"):
-            continue
-        if address.startswith("cloudflare_record.plane"):
+        if any(address.startswith(prefix) for prefix in allowed_prefixes):
             continue
         unsafe_changes.append(
             {
@@ -715,7 +730,8 @@ def validate_managed_app_plan_scope(payload, plan_json):
             f"{item['address']}:{'/'.join(item['actions'])}" for item in unsafe_changes[:10]
         )
         raise RuntimeError(
-            "Managed app plan for Plane contains non-Plane changes; refusing to continue. "
+            f"Managed app plan for {app_key} contains non-{app_key} changes; "
+            "refusing to continue. "
             f"Examples: {preview}"
         )
 
@@ -1043,6 +1059,496 @@ def config_value(desired_config, manifest_images, key, env_name, image_names=Non
     return os.environ.get(env_name, default)
 
 
+def config_bool(desired_config, key, env_name, default=False):
+    value = desired_config.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value:
+        return truthy(value)
+    env_value = os.environ.get(env_name)
+    if env_value:
+        return truthy(env_value)
+    return default
+
+
+def config_int(desired_config, key, env_name, default):
+    value = desired_config.get(key)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str) and value:
+        return int(value)
+    env_value = os.environ.get(env_name)
+    if env_value:
+        return int(env_value)
+    return default
+
+
+def config_string_list(desired_config, key, env_name, default=None):
+    value = desired_config.get(key)
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [item.strip() for item in value.split(",") if item.strip()]
+    env_value = os.environ.get(env_name)
+    if env_value:
+        return [item.strip() for item in env_value.split(",") if item.strip()]
+    return list(default or [])
+
+
+def required_config_value(
+    desired_config,
+    manifest_images,
+    key,
+    env_name,
+    label,
+    image_names=None,
+    default="",
+):
+    value = config_value(desired_config, manifest_images, key, env_name, image_names, default)
+    if isinstance(value, str) and value:
+        return value
+    raise RuntimeError(
+        "n8n managed app operation is missing required desired-state field: "
+        f"{label}."
+    )
+
+
+def n8n_public_url_from_domain(domain):
+    if not isinstance(domain, str) or not domain.strip():
+        return ""
+    value = domain.strip()
+    if value.startswith("http://") or value.startswith("https://"):
+        return value.rstrip("/")
+    hostname = value if value.startswith("n8n.") else f"n8n.{value}"
+    return f"https://{hostname}".rstrip("/")
+
+
+def sibling_app_base_domain(public_url):
+    hostname = url_hostname(public_url)
+    if not hostname:
+        return ""
+    labels = hostname.split(".")
+    if len(labels) <= 2:
+        return hostname
+    return ".".join(labels[1:])
+
+
+def first_non_empty_string(*values):
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def canonical_json(value):
+    if value is None or not isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(",", ":"))
+    if isinstance(value, list):
+        return "[" + ",".join(canonical_json(item) for item in value) + "]"
+    return (
+        "{"
+        + ",".join(
+            json.dumps(key, separators=(",", ":")) + ":" + canonical_json(value[key])
+            for key in sorted(value.keys())
+        )
+        + "}"
+    )
+
+
+def normalize_n8n_package_config(desired_config):
+    specs = config_string_list(
+        desired_config,
+        "customPackageSpecs",
+        "THINKWORK_N8N_CUSTOM_PACKAGE_SPECS",
+    )
+    by_name = {}
+    for raw_spec in specs:
+        if re.search(r"\s", raw_spec) or "://" in raw_spec:
+            raise RuntimeError(
+                f'n8n custom package "{raw_spec}" must be an exact public npm package spec.'
+            )
+        if raw_spec.startswith(("./", "../", "/")) or raw_spec.endswith(".tgz"):
+            raise RuntimeError(
+                f'n8n custom package "{raw_spec}" must be resolved from the public npm registry.'
+            )
+        version_separator_index = raw_spec.rfind("@")
+        if version_separator_index <= 0:
+            raise RuntimeError(
+                f'n8n custom package "{raw_spec}" must include an exact public npm version.'
+            )
+        name = raw_spec[:version_separator_index]
+        version = raw_spec[version_separator_index + 1 :]
+        if not re.fullmatch(
+            r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+            r"(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?"
+            r"(?:\+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?",
+            version,
+        ):
+            raise RuntimeError(
+                f'n8n custom package "{raw_spec}" must pin an exact semver version.'
+            )
+        existing = by_name.get(name)
+        if existing and existing["version"] != version:
+            raise RuntimeError(
+                "n8n custom package "
+                f"{name} declares multiple versions: {existing['version']} and {version}"
+            )
+        by_name[name] = {"name": name, "version": version, "spec": f"{name}@{version}"}
+
+    packages = sorted(by_name.values(), key=lambda entry: entry["name"])
+    digest_payload = {
+        "schemaVersion": 1,
+        "packages": [
+            {"name": entry["name"], "version": entry["version"]} for entry in packages
+        ],
+    }
+    digest = hashlib.sha256(canonical_json(digest_payload).encode()).hexdigest()
+    return {
+        "packageSpecs": [entry["spec"] for entry in packages],
+        "digest": digest,
+    }
+
+
+def assert_optional_digest(expected, actual, label):
+    if expected is None:
+        return
+    if not isinstance(expected, str) or not expected.strip():
+        raise RuntimeError(f"{label} must be a sha256 hex digest.")
+    if not re.fullmatch(r"[a-fA-F0-9]{64}", expected):
+        raise RuntimeError(f"{label} must be a sha256 hex digest.")
+    if expected.lower() != actual.lower():
+        raise RuntimeError(
+            f"{label} must match normalized n8n package config digest {actual}."
+        )
+
+
+def n8n_expected_package_digest(desired_config, key, env_name):
+    value = desired_config.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    env_value = os.environ.get(env_name)
+    if env_value and env_value.strip():
+        return env_value.strip()
+    return None
+
+
+def n8n_terraform_overrides(
+    stage,
+    account_id,
+    operation,
+    desired_config,
+    manifest_images,
+    current_outputs=None,
+    n8n_guardrails=None,
+    twenty_guardrails=None,
+    plane_guardrails=None,
+):
+    current_outputs = current_outputs or {}
+    n8n_guardrails = n8n_guardrails or {}
+    twenty_guardrails = twenty_guardrails or {}
+    plane_guardrails = plane_guardrails or {}
+    provisioned = operation != "DESTROY"
+    runtime_enabled = provisioned and operation != "PARK"
+    if not provisioned:
+        return {
+            "n8n_provisioned": False,
+            "n8n_runtime_enabled": False,
+        }
+
+    package_config = normalize_n8n_package_config(desired_config)
+    package_specs = package_config["packageSpecs"]
+    package_config_digest = n8n_expected_package_digest(
+        desired_config,
+        "packageConfigDigest",
+        "THINKWORK_N8N_PACKAGE_CONFIG_DIGEST",
+    )
+    package_image_config_digest = n8n_expected_package_digest(
+        desired_config,
+        "packageImageConfigDigest",
+        "THINKWORK_N8N_PACKAGE_IMAGE_CONFIG_DIGEST",
+    )
+    assert_optional_digest(
+        package_config_digest,
+        package_config["digest"],
+        "n8n packageConfigDigest",
+    )
+    assert_optional_digest(
+        package_image_config_digest,
+        package_config["digest"],
+        "n8n packageImageConfigDigest",
+    )
+
+    release_image_uri = first_non_empty_string(
+        release_runtime_image("n8n-runtime"),
+        release_runtime_image("n8n"),
+        release_runtime_image("managed-app-n8n"),
+        n8n_guardrails.get("n8n_image_uri", ""),
+    )
+    base_image_uri = required_config_value(
+        desired_config,
+        manifest_images,
+        "imageUri",
+        "THINKWORK_N8N_IMAGE_URI",
+        "imageUri",
+        ["n8n", "n8n-runtime", "managed-app-n8n"],
+        default=release_image_uri,
+    )
+    package_image_uri = config_value(
+        desired_config,
+        manifest_images,
+        "packageImageUri",
+        "THINKWORK_N8N_PACKAGE_IMAGE_URI",
+    )
+    if package_image_uri and not package_specs:
+        raise RuntimeError(
+            "n8n packageImageUri requires at least one custom package spec."
+        )
+    if package_specs and not package_image_uri:
+        raise RuntimeError("n8n custom package specs require n8n packageImageUri.")
+    resolved_image_uri = package_image_uri if package_specs else base_image_uri
+
+    inferred_base_domain = first_non_empty_string(
+        os.environ.get("THINKWORK_DOMAIN", ""),
+        sibling_app_base_domain(twenty_guardrails.get("twenty_public_url", "")),
+        sibling_app_base_domain(state_output(current_outputs, "twenty_url", "")),
+        sibling_app_base_domain(plane_guardrails.get("plane_public_url", "")),
+        sibling_app_base_domain(state_output(current_outputs, "plane_url", "")),
+        sibling_app_base_domain(state_output(current_outputs, "app_url", "")),
+    )
+    domain = config_value(
+        desired_config,
+        manifest_images,
+        "domain",
+        "THINKWORK_N8N_DOMAIN",
+        default=inferred_base_domain,
+    )
+    public_url = config_value(
+        desired_config,
+        manifest_images,
+        "publicUrl",
+        "THINKWORK_N8N_PUBLIC_URL",
+        default=n8n_guardrails.get("n8n_public_url", ""),
+    ) or n8n_public_url_from_domain(domain)
+    n8n_domain = url_hostname(public_url) or domain
+    database_admin_secret_arn = config_value(
+        desired_config,
+        manifest_images,
+        "databaseAdminSecretArn",
+        "THINKWORK_N8N_DATABASE_ADMIN_SECRET_ARN",
+        default=first_non_empty_string(
+            n8n_guardrails.get("n8n_database_admin_secret_arn", ""),
+            state_output(current_outputs, "db_secret_arn", ""),
+        ),
+    )
+    if not database_admin_secret_arn:
+        raise RuntimeError(
+            "n8n managed app operation is missing required desired-state field: "
+            "databaseAdminSecretArn."
+        )
+    database_url_secret_arn = config_value(
+        desired_config,
+        manifest_images,
+        "databaseUrlSecretArn",
+        "THINKWORK_N8N_DATABASE_URL_SECRET_ARN",
+        default=n8n_guardrails.get("n8n_database_url_secret_arn", ""),
+    )
+    encryption_key_secret_arn = config_value(
+        desired_config,
+        manifest_images,
+        "encryptionKeySecretArn",
+        "THINKWORK_N8N_ENCRYPTION_KEY_SECRET_ARN",
+        default=n8n_guardrails.get("n8n_encryption_key_secret_arn", ""),
+    )
+    operator_secret_arn = config_value(
+        desired_config,
+        manifest_images,
+        "operatorSecretArn",
+        "THINKWORK_N8N_OPERATOR_SECRET_ARN",
+        default=n8n_guardrails.get("n8n_operator_secret_arn", ""),
+    )
+    service_credential_secret_arn = config_value(
+        desired_config,
+        manifest_images,
+        "serviceCredentialSecretArn",
+        "THINKWORK_N8N_SERVICE_CREDENTIAL_SECRET_ARN",
+        default=n8n_guardrails.get("n8n_service_credential_secret_arn", ""),
+    )
+    certificate_arn = required_config_value(
+        desired_config,
+        manifest_images,
+        "certificateArn",
+        "THINKWORK_N8N_CERTIFICATE_ARN",
+        "certificateArn",
+        default=first_non_empty_string(
+            n8n_guardrails.get("n8n_certificate_arn", ""),
+            twenty_guardrails.get("twenty_certificate_arn", ""),
+            plane_guardrails.get("plane_certificate_arn", ""),
+        ),
+    )
+    create_secret_placeholders = any(
+        not value
+        for value in [
+            database_url_secret_arn,
+            encryption_key_secret_arn,
+            operator_secret_arn,
+            service_credential_secret_arn,
+        ]
+    )
+
+    return {
+        "n8n_provisioned": True,
+        "n8n_runtime_enabled": runtime_enabled,
+        "n8n_image_uri": resolved_image_uri,
+        "n8n_database_admin_secret_arn": database_admin_secret_arn,
+        "n8n_database_url_secret_arn": database_url_secret_arn,
+        "n8n_database_name": config_value(
+            desired_config,
+            manifest_images,
+            "databaseName",
+            "THINKWORK_N8N_DATABASE_NAME",
+            default=n8n_guardrails.get("n8n_database_name", "thinkwork_n8n"),
+        ),
+        "n8n_database_username": config_value(
+            desired_config,
+            manifest_images,
+            "databaseUsername",
+            "THINKWORK_N8N_DATABASE_USERNAME",
+            default=n8n_guardrails.get("n8n_database_username", "thinkwork_n8n"),
+        ),
+        "n8n_encryption_key_secret_arn": encryption_key_secret_arn,
+        "n8n_operator_secret_arn": operator_secret_arn,
+        "n8n_service_credential_secret_arn": service_credential_secret_arn,
+        "n8n_storage_bucket_name": config_value(
+            desired_config,
+            manifest_images,
+            "storageBucketName",
+            "THINKWORK_N8N_STORAGE_BUCKET_NAME",
+            default=n8n_guardrails.get(
+                "n8n_storage_bucket_name",
+                f"thinkwork-{stage}-{account_id}-n8n",
+            ),
+        ),
+        "n8n_create_storage_bucket": config_bool(
+            desired_config,
+            "createStorageBucket",
+            "THINKWORK_N8N_CREATE_STORAGE_BUCKET",
+            bool(n8n_guardrails.get("n8n_create_storage_bucket", True)),
+        ),
+        "n8n_storage_prefix": config_value(
+            desired_config,
+            manifest_images,
+            "storagePrefix",
+            "THINKWORK_N8N_STORAGE_PREFIX",
+            default=n8n_guardrails.get("n8n_storage_prefix", "managed-apps/n8n"),
+        ),
+        "n8n_domain": n8n_domain,
+        "n8n_public_url": public_url,
+        "n8n_certificate_arn": certificate_arn,
+        "n8n_main_desired_count": config_int(
+            desired_config,
+            "mainDesiredCount",
+            "THINKWORK_N8N_MAIN_DESIRED_COUNT",
+            n8n_guardrails.get("n8n_main_desired_count", 1),
+        ),
+        "n8n_worker_desired_count": config_int(
+            desired_config,
+            "workerDesiredCount",
+            "THINKWORK_N8N_WORKER_DESIRED_COUNT",
+            n8n_guardrails.get("n8n_worker_desired_count", 1),
+        ),
+        "n8n_worker_concurrency": config_int(
+            desired_config,
+            "workerConcurrency",
+            "THINKWORK_N8N_WORKER_CONCURRENCY",
+            n8n_guardrails.get("n8n_worker_concurrency", 10),
+        ),
+        "n8n_container_port": config_int(
+            desired_config,
+            "containerPort",
+            "THINKWORK_N8N_CONTAINER_PORT",
+            n8n_guardrails.get("n8n_container_port", 5678),
+        ),
+        "n8n_queue_mode": True,
+        "n8n_task_runners_enabled": config_bool(
+            desired_config,
+            "taskRunnersEnabled",
+            "THINKWORK_N8N_TASK_RUNNERS_ENABLED",
+            bool(n8n_guardrails.get("n8n_task_runners_enabled", True)),
+        ),
+        "n8n_package_config_digest": package_config["digest"]
+        if package_specs or package_config_digest is not None
+        else n8n_guardrails.get("n8n_package_config_digest", ""),
+        "n8n_custom_package_specs": package_specs
+        or n8n_guardrails.get("n8n_custom_package_specs", []),
+        "n8n_execution_data_storage_mode": config_value(
+            desired_config,
+            manifest_images,
+            "executionDataStorageMode",
+            "THINKWORK_N8N_EXECUTION_DATA_STORAGE_MODE",
+            default=n8n_guardrails.get("n8n_execution_data_storage_mode", "database"),
+        ),
+        "n8n_binary_data_mode": config_value(
+            desired_config,
+            manifest_images,
+            "binaryDataMode",
+            "THINKWORK_N8N_BINARY_DATA_MODE",
+            default=n8n_guardrails.get("n8n_binary_data_mode", "database"),
+        ),
+        "n8n_cache_engine": config_value(
+            desired_config,
+            manifest_images,
+            "cacheEngine",
+            "THINKWORK_N8N_CACHE_ENGINE",
+            default=n8n_guardrails.get("n8n_cache_engine", "valkey"),
+        ),
+        "n8n_cache_engine_version": config_value(
+            desired_config,
+            manifest_images,
+            "cacheEngineVersion",
+            "THINKWORK_N8N_CACHE_ENGINE_VERSION",
+            default=n8n_guardrails.get("n8n_cache_engine_version", "8.0"),
+        ),
+        "n8n_cache_parameter_group_family": config_value(
+            desired_config,
+            manifest_images,
+            "cacheParameterGroupFamily",
+            "THINKWORK_N8N_CACHE_PARAMETER_GROUP_FAMILY",
+            default=n8n_guardrails.get(
+                "n8n_cache_parameter_group_family",
+                "valkey8",
+            ),
+        ),
+        "n8n_cache_node_type": config_value(
+            desired_config,
+            manifest_images,
+            "cacheNodeType",
+            "THINKWORK_N8N_CACHE_NODE_TYPE",
+            default=n8n_guardrails.get("n8n_cache_node_type", "cache.t4g.micro"),
+        ),
+        "n8n_cache_num_cache_clusters": config_int(
+            desired_config,
+            "cacheNumCacheClusters",
+            "THINKWORK_N8N_CACHE_NUM_CACHE_CLUSTERS",
+            n8n_guardrails.get("n8n_cache_num_cache_clusters", 1),
+        ),
+        "n8n_allowed_public_cidr_blocks": config_string_list(
+            desired_config,
+            "allowedPublicCidrBlocks",
+            "THINKWORK_N8N_ALLOWED_PUBLIC_CIDR_BLOCKS",
+            n8n_guardrails.get("n8n_allowed_public_cidr_blocks", ["0.0.0.0/0"]),
+        ),
+        "n8n_kms_key_arns": config_string_list(
+            desired_config,
+            "kmsKeyArns",
+            "THINKWORK_N8N_KMS_KEY_ARNS",
+            n8n_guardrails.get("n8n_kms_key_arns", []),
+        ),
+        "deployment_control_plane_create_secret_placeholders": create_secret_placeholders,
+    }
+
+
 def validate_managed_app_desired_state(payload, desired_config, manifest_images):
     app_key = payload.get("appKey")
     if not app_key:
@@ -1102,6 +1608,14 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
     twenty_guardrails = state_terraform_data_input(
         current_state,
         "twenty_configuration_guardrails",
+    )
+    plane_guardrails = state_terraform_data_input(
+        current_state,
+        "plane_configuration_guardrails",
+    )
+    n8n_guardrails = state_terraform_data_input(
+        current_state,
+        "n8n_configuration_guardrails",
     )
 
     overrides = {
@@ -1202,31 +1716,133 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "enable_deployment_control_plane": False,
         "deployment_control_plane_create_secret_placeholders": False,
         "cloudflare_zone_id": state_cloudflare_zone_id(current_state),
+        "n8n_provisioned": bool(state_output(current_outputs, "n8n_provisioned", False)),
+        "n8n_runtime_enabled": bool(
+            state_output(current_outputs, "n8n_runtime_enabled", False)
+        ),
+        "n8n_image_uri": n8n_guardrails.get("n8n_image_uri", ""),
+        "n8n_database_admin_secret_arn": n8n_guardrails.get(
+            "n8n_database_admin_secret_arn",
+            "",
+        ),
+        "n8n_database_url_secret_arn": n8n_guardrails.get(
+            "n8n_database_url_secret_arn",
+            "",
+        ),
+        "n8n_database_name": n8n_guardrails.get("n8n_database_name", "thinkwork_n8n"),
+        "n8n_database_username": n8n_guardrails.get(
+            "n8n_database_username",
+            "thinkwork_n8n",
+        ),
+        "n8n_encryption_key_secret_arn": n8n_guardrails.get(
+            "n8n_encryption_key_secret_arn",
+            "",
+        ),
+        "n8n_operator_secret_arn": n8n_guardrails.get("n8n_operator_secret_arn", ""),
+        "n8n_service_credential_secret_arn": n8n_guardrails.get(
+            "n8n_service_credential_secret_arn",
+            "",
+        ),
+        "n8n_storage_bucket_name": n8n_guardrails.get("n8n_storage_bucket_name", ""),
+        "n8n_create_storage_bucket": n8n_guardrails.get("n8n_create_storage_bucket", True),
+        "n8n_storage_prefix": n8n_guardrails.get("n8n_storage_prefix", "managed-apps/n8n"),
+        "n8n_domain": "",
+        "n8n_public_url": n8n_guardrails.get(
+            "n8n_public_url",
+            state_output(current_outputs, "n8n_url", ""),
+        ),
+        "n8n_certificate_arn": n8n_guardrails.get("n8n_certificate_arn", ""),
+        "n8n_main_desired_count": n8n_guardrails.get("n8n_main_desired_count", 1),
+        "n8n_worker_desired_count": n8n_guardrails.get("n8n_worker_desired_count", 1),
+        "n8n_worker_concurrency": n8n_guardrails.get("n8n_worker_concurrency", 10),
+        "n8n_container_port": n8n_guardrails.get("n8n_container_port", 5678),
+        "n8n_queue_mode": n8n_guardrails.get("n8n_queue_mode", True),
+        "n8n_task_runners_enabled": n8n_guardrails.get("n8n_task_runners_enabled", True),
+        "n8n_package_config_digest": n8n_guardrails.get("n8n_package_config_digest", ""),
+        "n8n_custom_package_specs": n8n_guardrails.get("n8n_custom_package_specs", []),
+        "n8n_execution_data_storage_mode": n8n_guardrails.get(
+            "n8n_execution_data_storage_mode",
+            "database",
+        ),
+        "n8n_binary_data_mode": n8n_guardrails.get("n8n_binary_data_mode", "database"),
+        "n8n_cache_engine": n8n_guardrails.get("n8n_cache_engine", "valkey"),
+        "n8n_cache_engine_version": n8n_guardrails.get("n8n_cache_engine_version", "8.0"),
+        "n8n_cache_parameter_group_family": n8n_guardrails.get(
+            "n8n_cache_parameter_group_family",
+            "valkey8",
+        ),
+        "n8n_cache_node_type": n8n_guardrails.get(
+            "n8n_cache_node_type",
+            "cache.t4g.micro",
+        ),
+        "n8n_cache_num_cache_clusters": n8n_guardrails.get(
+            "n8n_cache_num_cache_clusters",
+            1,
+        ),
+        "n8n_allowed_public_cidr_blocks": n8n_guardrails.get(
+            "n8n_allowed_public_cidr_blocks",
+            ["0.0.0.0/0"],
+        ),
+        "n8n_kms_key_arns": n8n_guardrails.get("n8n_kms_key_arns", []),
         "plane_dns_enabled": False,
         "plane_dns_name": "",
         "plane_provisioned": bool(state_output(current_outputs, "plane_provisioned", False)),
         "plane_runtime_enabled": bool(
             state_output(current_outputs, "plane_runtime_enabled", False)
         ),
-        "plane_image_uri": "",
-        "plane_frontend_image_uri": "",
-        "plane_backend_image_uri": "",
-        "plane_space_image_uri": "",
-        "plane_admin_image_uri": "",
-        "plane_live_image_uri": "",
-        "plane_mcp_image_uri": "",
-        "plane_db_url_secret_arn": "",
-        "plane_secret_key_secret_arn": "",
-        "plane_live_server_secret_key_secret_arn": "",
-        "plane_aes_secret_key_secret_arn": "",
-        "plane_s3_access_key_id_secret_arn": "",
-        "plane_s3_secret_access_key_secret_arn": "",
-        "plane_s3_bucket_name": "",
+        "plane_image_uri": plane_guardrails.get("plane_image_uri", ""),
+        "plane_frontend_image_uri": plane_guardrails.get("plane_frontend_image_uri", ""),
+        "plane_backend_image_uri": plane_guardrails.get("plane_backend_image_uri", ""),
+        "plane_space_image_uri": plane_guardrails.get("plane_space_image_uri", ""),
+        "plane_admin_image_uri": plane_guardrails.get("plane_admin_image_uri", ""),
+        "plane_live_image_uri": plane_guardrails.get("plane_live_image_uri", ""),
+        "plane_mcp_image_uri": plane_guardrails.get("plane_mcp_image_uri", ""),
+        "plane_db_url_secret_arn": plane_guardrails.get("plane_db_url_secret_arn", ""),
+        "plane_secret_key_secret_arn": plane_guardrails.get(
+            "plane_secret_key_secret_arn",
+            "",
+        ),
+        "plane_live_server_secret_key_secret_arn": plane_guardrails.get(
+            "plane_live_server_secret_key_secret_arn",
+            "",
+        ),
+        "plane_aes_secret_key_secret_arn": plane_guardrails.get(
+            "plane_aes_secret_key_secret_arn",
+            "",
+        ),
+        "plane_s3_access_key_id_secret_arn": plane_guardrails.get(
+            "plane_s3_access_key_id_secret_arn",
+            "",
+        ),
+        "plane_s3_secret_access_key_secret_arn": plane_guardrails.get(
+            "plane_s3_secret_access_key_secret_arn",
+            "",
+        ),
+        "plane_s3_bucket_name": plane_guardrails.get("plane_s3_bucket_name", ""),
         "plane_domain": "",
-        "plane_public_url": "",
-        "plane_certificate_arn": "",
-        "plane_web_container_port": 8080,
+        "plane_public_url": plane_guardrails.get(
+            "plane_public_url",
+            state_output(current_outputs, "plane_url", ""),
+        ),
+        "plane_certificate_arn": plane_guardrails.get("plane_certificate_arn", ""),
+        "plane_web_container_port": plane_guardrails.get("plane_web_container_port", 8080),
     }
+
+    if app_key == "n8n":
+        overrides.update(
+            n8n_terraform_overrides(
+                stage,
+                account_id,
+                operation,
+                desired_config,
+                manifest_images,
+                current_outputs,
+                n8n_guardrails,
+                twenty_guardrails,
+                plane_guardrails,
+            )
+        )
+        return overrides
 
     if app_key != "plane":
         return overrides
@@ -2801,6 +3417,138 @@ variable "twenty_certificate_arn" {{
   type = string
 }}
 
+variable "n8n_provisioned" {{
+  type = bool
+}}
+
+variable "n8n_runtime_enabled" {{
+  type = bool
+}}
+
+variable "n8n_image_uri" {{
+  type = string
+}}
+
+variable "n8n_database_admin_secret_arn" {{
+  type = string
+}}
+
+variable "n8n_database_url_secret_arn" {{
+  type = string
+}}
+
+variable "n8n_database_username" {{
+  type = string
+}}
+
+variable "n8n_database_name" {{
+  type = string
+}}
+
+variable "n8n_encryption_key_secret_arn" {{
+  type = string
+}}
+
+variable "n8n_operator_secret_arn" {{
+  type = string
+}}
+
+variable "n8n_service_credential_secret_arn" {{
+  type = string
+}}
+
+variable "n8n_storage_bucket_name" {{
+  type = string
+}}
+
+variable "n8n_create_storage_bucket" {{
+  type = bool
+}}
+
+variable "n8n_storage_prefix" {{
+  type = string
+}}
+
+variable "n8n_domain" {{
+  type = string
+}}
+
+variable "n8n_public_url" {{
+  type = string
+}}
+
+variable "n8n_certificate_arn" {{
+  type = string
+}}
+
+variable "n8n_main_desired_count" {{
+  type = number
+}}
+
+variable "n8n_worker_desired_count" {{
+  type = number
+}}
+
+variable "n8n_worker_concurrency" {{
+  type = number
+}}
+
+variable "n8n_container_port" {{
+  type = number
+}}
+
+variable "n8n_queue_mode" {{
+  type = bool
+}}
+
+variable "n8n_task_runners_enabled" {{
+  type = bool
+}}
+
+variable "n8n_package_config_digest" {{
+  type = string
+}}
+
+variable "n8n_custom_package_specs" {{
+  type = list(string)
+}}
+
+variable "n8n_execution_data_storage_mode" {{
+  type = string
+}}
+
+variable "n8n_binary_data_mode" {{
+  type = string
+}}
+
+variable "n8n_cache_engine" {{
+  type = string
+}}
+
+variable "n8n_cache_engine_version" {{
+  type = string
+}}
+
+variable "n8n_cache_parameter_group_family" {{
+  type = string
+}}
+
+variable "n8n_cache_node_type" {{
+  type = string
+}}
+
+variable "n8n_cache_num_cache_clusters" {{
+  type = number
+}}
+
+variable "n8n_allowed_public_cidr_blocks" {{
+  type = list(string)
+}}
+
+variable "n8n_kms_key_arns" {{
+  type = list(string)
+}}
+
 variable "plane_provisioned" {{
   type = bool
 }}
@@ -2967,6 +3715,39 @@ module "thinkwork" {{
   twenty_email_from_name           = var.twenty_email_from_name
   twenty_public_url                = var.twenty_public_url
   twenty_certificate_arn           = var.twenty_certificate_arn
+  n8n_provisioned                  = var.n8n_provisioned
+  n8n_runtime_enabled              = var.n8n_runtime_enabled
+  n8n_image_uri                    = var.n8n_image_uri
+  n8n_database_admin_secret_arn    = var.n8n_database_admin_secret_arn
+  n8n_database_url_secret_arn      = var.n8n_database_url_secret_arn
+  n8n_database_username            = var.n8n_database_username
+  n8n_database_name                = var.n8n_database_name
+  n8n_encryption_key_secret_arn    = var.n8n_encryption_key_secret_arn
+  n8n_operator_secret_arn          = var.n8n_operator_secret_arn
+  n8n_service_credential_secret_arn = var.n8n_service_credential_secret_arn
+  n8n_storage_bucket_name          = var.n8n_storage_bucket_name
+  n8n_create_storage_bucket        = var.n8n_create_storage_bucket
+  n8n_storage_prefix               = var.n8n_storage_prefix
+  n8n_domain                       = var.n8n_domain
+  n8n_public_url                   = var.n8n_public_url
+  n8n_certificate_arn              = var.n8n_certificate_arn
+  n8n_main_desired_count           = var.n8n_main_desired_count
+  n8n_worker_desired_count         = var.n8n_worker_desired_count
+  n8n_worker_concurrency           = var.n8n_worker_concurrency
+  n8n_container_port               = var.n8n_container_port
+  n8n_queue_mode                   = var.n8n_queue_mode
+  n8n_task_runners_enabled         = var.n8n_task_runners_enabled
+  n8n_package_config_digest        = var.n8n_package_config_digest
+  n8n_custom_package_specs         = var.n8n_custom_package_specs
+  n8n_execution_data_storage_mode  = var.n8n_execution_data_storage_mode
+  n8n_binary_data_mode             = var.n8n_binary_data_mode
+  n8n_cache_engine                 = var.n8n_cache_engine
+  n8n_cache_engine_version         = var.n8n_cache_engine_version
+  n8n_cache_parameter_group_family = var.n8n_cache_parameter_group_family
+  n8n_cache_node_type              = var.n8n_cache_node_type
+  n8n_cache_num_cache_clusters     = var.n8n_cache_num_cache_clusters
+  n8n_allowed_public_cidr_blocks   = var.n8n_allowed_public_cidr_blocks
+  n8n_kms_key_arns                 = var.n8n_kms_key_arns
   plane_provisioned      = var.plane_provisioned
   plane_runtime_enabled  = var.plane_runtime_enabled
   plane_image_uri        = var.plane_image_uri
@@ -3043,6 +3824,25 @@ output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
 output "cognee_enabled" {{ value = module.thinkwork.cognee_enabled }}
 output "twenty_provisioned" {{ value = module.thinkwork.twenty_provisioned }}
 output "twenty_runtime_enabled" {{ value = module.thinkwork.twenty_runtime_enabled }}
+output "n8n_provisioned" {{ value = module.thinkwork.n8n_provisioned }}
+output "n8n_runtime_enabled" {{ value = module.thinkwork.n8n_runtime_enabled }}
+output "n8n_url" {{ value = module.thinkwork.n8n_url }}
+output "n8n_alb_dns_name" {{ value = module.thinkwork.n8n_alb_dns_name }}
+output "n8n_alb_arn" {{ value = module.thinkwork.n8n_alb_arn }}
+output "n8n_target_group_arn" {{ value = module.thinkwork.n8n_target_group_arn }}
+output "n8n_cluster_arn" {{ value = module.thinkwork.n8n_cluster_arn }}
+output "n8n_main_service_name" {{ value = module.thinkwork.n8n_main_service_name }}
+output "n8n_worker_service_name" {{ value = module.thinkwork.n8n_worker_service_name }}
+output "n8n_main_log_group_name" {{ value = module.thinkwork.n8n_main_log_group_name }}
+output "n8n_worker_log_group_name" {{ value = module.thinkwork.n8n_worker_log_group_name }}
+output "n8n_database_name" {{ value = module.thinkwork.n8n_database_name }}
+output "n8n_database_secret_arn" {{ value = module.thinkwork.n8n_database_secret_arn }}
+output "n8n_valkey_endpoint" {{ value = module.thinkwork.n8n_valkey_endpoint }}
+output "n8n_storage_bucket_name" {{ value = module.thinkwork.n8n_storage_bucket_name }}
+output "n8n_storage_prefix" {{ value = module.thinkwork.n8n_storage_prefix }}
+output "n8n_image_digest" {{ value = module.thinkwork.n8n_image_digest }}
+output "n8n_package_config_digest" {{ value = module.thinkwork.n8n_package_config_digest }}
+output "n8n_service_credential_secret_arn" {{ value = module.thinkwork.n8n_service_credential_secret_arn }}
 output "deployment_control_plane_enabled" {{ value = module.thinkwork.deployment_control_plane_enabled }}
 output "deployment_state_machine_arn" {{ value = module.thinkwork.deployment_state_machine_arn }}
 output "deployment_state_machine_name" {{ value = module.thinkwork.deployment_state_machine_name }}
