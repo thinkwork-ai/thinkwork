@@ -10,7 +10,9 @@ import { THINKWORK_SETTINGS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER } from "src/con
 
 const WEBHOOK_URL_KEY = "THINKWORK_WEBHOOK_URL";
 const TRIGGER_STAGE_KEY = "THINKWORK_TRIGGER_STAGE";
+const WORKSPACE_ID_KEY = "TWENTY_WORKSPACE_ID";
 const DEFAULT_TRIGGER_STAGE = "Customer";
+const DEFAULT_WORKSPACE_ID = "014f32a0-5868-402a-8152-225e54c4cf29";
 
 type GraphQLResponse<T> = {
   data?: T;
@@ -119,13 +121,17 @@ function ThinkWorkSettings() {
   const frontComponentId = useFrontComponentId();
   const savedStage =
     getApplicationVariable(TRIGGER_STAGE_KEY) || DEFAULT_TRIGGER_STAGE;
+  const savedWorkspaceId =
+    getApplicationVariable(WORKSPACE_ID_KEY) || DEFAULT_WORKSPACE_ID;
   const [webhookUrl, setWebhookUrl] = useState("");
   const [triggerStage, setTriggerStage] = useState(savedStage);
+  const [workspaceId, setWorkspaceId] = useState(savedWorkspaceId);
   const [isSaving, setIsSaving] = useState(false);
 
   async function saveSettings() {
     const normalizedWebhookUrl = webhookUrl.trim();
     const normalizedTriggerStage = triggerStage.trim() || DEFAULT_TRIGGER_STAGE;
+    const normalizedWorkspaceId = workspaceId.trim();
 
     if (!normalizedWebhookUrl) {
       await enqueueSnackbar({
@@ -143,6 +149,19 @@ function ThinkWorkSettings() {
       return;
     }
 
+    if (
+      normalizedWorkspaceId &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        normalizedWorkspaceId,
+      )
+    ) {
+      await enqueueSnackbar({
+        variant: "error",
+        message: "Twenty workspace id must be a UUID.",
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const applicationId = await getApplicationId(frontComponentId);
@@ -156,8 +175,14 @@ function ThinkWorkSettings() {
         TRIGGER_STAGE_KEY,
         normalizedTriggerStage,
       );
+      await updateApplicationVariable(
+        applicationId,
+        WORKSPACE_ID_KEY,
+        normalizedWorkspaceId,
+      );
       setWebhookUrl("");
       setTriggerStage(normalizedTriggerStage);
+      setWorkspaceId(normalizedWorkspaceId);
       await enqueueSnackbar({
         variant: "success",
         message: "ThinkWork webhook settings saved.",
@@ -219,6 +244,21 @@ function ThinkWorkSettings() {
         />
         <span style={{ color: "#667085", fontSize: "12px" }}>
           The target Twenty Opportunity stage. For this workspace, use Customer.
+        </span>
+      </label>
+
+      <label style={{ display: "grid", gap: "6px" }}>
+        <span style={{ fontSize: "13px", fontWeight: 600 }}>
+          Twenty workspace id
+        </span>
+        <input
+          onChange={(event) => setWorkspaceId(event.currentTarget.value)}
+          placeholder={DEFAULT_WORKSPACE_ID}
+          style={fieldStyle()}
+          value={workspaceId}
+        />
+        <span style={{ color: "#667085", fontSize: "12px" }}>
+          Used to generate canonical CRM record links in webhook payloads.
         </span>
       </label>
 

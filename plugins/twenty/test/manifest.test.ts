@@ -133,6 +133,10 @@ describe("twenty plugin manifest", () => {
     expect(applicationConfig).toContain("isSecret: true");
     expect(applicationConfig).toContain("THINKWORK_TRIGGER_STAGE");
     expect(applicationConfig).toContain('value: "Customer"');
+    expect(applicationConfig).toContain("TWENTY_WORKSPACE_ID");
+    expect(applicationConfig).toContain(
+      "014f32a0-5868-402a-8152-225e54c4cf29",
+    );
     expect(settingsComponent).toContain("defineFrontComponent");
     expect(settingsComponent).toContain(
       "THINKWORK_SETTINGS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER",
@@ -140,6 +144,7 @@ describe("twenty plugin manifest", () => {
     expect(settingsComponent).toContain("updateOneApplicationVariable");
     expect(settingsComponent).toContain("THINKWORK_WEBHOOK_URL");
     expect(settingsComponent).toContain("THINKWORK_TRIGGER_STAGE");
+    expect(settingsComponent).toContain("TWENTY_WORKSPACE_ID");
     expect(settingsComponent).toContain("Customer");
     expect(workflowAction).toContain("defineLogicFunction");
     expect(workflowAction).not.toContain("databaseEventTriggerSettings");
@@ -147,6 +152,9 @@ describe("twenty plugin manifest", () => {
     expect(workflowAction).toContain('label: "ThinkWork Webhook"');
     expect(workflowAction).toContain("process.env.THINKWORK_WEBHOOK_URL");
     expect(workflowAction).toContain("process.env.THINKWORK_TRIGGER_STAGE");
+    expect(workflowAction).toContain("process.env.TWENTY_WORKSPACE_ID");
+    expect(workflowAction).toContain("/object/opportunity/");
+    expect(workflowAction).toContain("objects\\/opportunities");
     expect(workflowAction).toContain('status: "skipped_stage"');
     expect(workflowAction).toContain("triggerStage: configuredStage");
     expect(workflowAction).toContain('source: "twenty-app"');
