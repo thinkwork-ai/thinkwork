@@ -25,6 +25,7 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
       uninstall: vi.fn(),
       upgrade: vi.fn(),
       useQuery: vi.fn(),
+      writeClipboard: vi.fn(),
     },
     queryDocs: {
       SettingsActivatePluginMutation: Symbol("activatePlugin"),
@@ -239,6 +240,11 @@ beforeEach(() => {
   mocks.deactivate.mockResolvedValue({
     data: { deactivatePlugin: { id: "act-1", status: "revoked" } },
   });
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: mocks.writeClipboard },
+  });
+  mocks.writeClipboard.mockResolvedValue(undefined);
   mockQueries();
   paramsState.pluginKey = "lastmile";
   window.history.replaceState({}, "", "/settings/plugins/lastmile");
@@ -518,6 +524,99 @@ describe("PluginDetail", () => {
     expect(
       screen.queryByRole("link", { name: /open deployment details/i }),
     ).toBeNull();
+  });
+
+  it("opens WorkOS setup instructions for deployment operators", async () => {
+    paramsState.pluginKey = "workos-auth";
+    mockQueries({
+      install: workosInstall,
+      activations: [],
+      catalog: [workosEntry],
+    });
+    render(<PluginDetail />);
+
+    expect(
+      screen.getAllByText((content) =>
+        content.endsWith("/api/auth/workos/callback"),
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: /copy workos callback url/i }),
+    );
+    await waitFor(() => {
+      expect(mocks.writeClipboard).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/auth\/workos\/callback$/),
+      );
+    });
+
+    expect(screen.queryByText("WorkOS account setup")).toBeNull();
+    expect(screen.queryByRole("link", { name: /create account/i })).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: /open dashboard/i })
+        .getAttribute("href"),
+    ).toBe("https://dashboard.workos.com/");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /setup instructions/i }),
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /workos setup instructions/i,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/customer-owned SSO deployments/i),
+    ).toBeTruthy();
+    expect(screen.getByText(/WorkOS client ID and API key/i)).toBeTruthy();
+    expect(
+      screen.getAllByText((content) =>
+        content.endsWith("/api/auth/workos/callback"),
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Admin Portal setup links/i)).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /admin portal docs/i }),
+    ).toBeTruthy();
+  });
+
+  it("hides WorkOS setup instructions from non-operators", () => {
+    paramsState.pluginKey = "workos-auth";
+    tenantState.isOperator = false;
+    mockQueries({
+      install: workosInstall,
+      activations: [],
+      catalog: [workosEntry],
+    });
+    render(<PluginDetail />);
+
+    expect(
+      screen.queryByRole("button", { name: /setup instructions/i }),
+    ).toBeNull();
+  });
+
+  it("shows WorkOS account setup only before the auth provider is configured", () => {
+    paramsState.pluginKey = "workos-auth";
+    mockQueries({
+      install: {
+        ...workosInstall,
+        components: workosInstall.components.map((component) => ({
+          ...component,
+          state: "pending",
+        })),
+      },
+      activations: [],
+      catalog: [workosEntry],
+    });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("WorkOS account setup")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /create account/i })
+        .getAttribute("href"),
+    ).toBe("https://dashboard.workos.com/get-started");
   });
 
   it("renders Resend provider setup for operators", () => {
@@ -859,6 +958,52 @@ const planeEntry = {
           key: "issues",
           type: "mcp-server",
           displayName: "Plane work items",
+        },
+      ],
+    },
+  ],
+  install: null,
+};
+
+const workosInstall = {
+  ...baseInstall,
+  id: "install-workos",
+  pluginKey: "workos-auth",
+  pinnedVersion: "0.1.0",
+  state: "installed",
+  activatedUserCount: 0,
+  components: [
+    {
+      __typename: "PluginComponent" as const,
+      id: "component-workos-auth",
+      componentKey: "workos-auth",
+      componentType: "auth-provider",
+      state: "provisioned",
+      lastError: null,
+    },
+  ],
+};
+
+const workosEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "workos-auth",
+  displayName: "WorkOS Auth",
+  description:
+    "WorkOS-backed SSO broker that federates through Cognito while keeping Cognito as ThinkWork's final session issuer.",
+  latestVersion: "0.1.0",
+  updateAvailable: false,
+  premium: null,
+  entitlement: null,
+  versions: [
+    {
+      version: "0.1.0",
+      payloadSha256: "sha256:workos",
+      requiredOauthScopes: [],
+      components: [
+        {
+          key: "workos-auth",
+          type: "auth-provider",
+          displayName: "WorkOS Auth settings",
         },
       ],
     },
