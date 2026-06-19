@@ -21,6 +21,7 @@ import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
+import { callerVisibleThreadPredicate } from "./access.js";
 
 export const updateThread = async (
   _parent: any,
@@ -264,6 +265,7 @@ async function applyCallerReadState(
     .select({
       tenant_id: threads.tenant_id,
       user_id: threads.user_id,
+      space_id: threads.space_id,
     })
     .from(threads)
     .where(eq(threads.id, threadId));
@@ -304,15 +306,28 @@ async function applyCallerReadState(
       ),
     );
   if (
-    (participantCount?.count ?? 0) > 0 ||
-    threadRow.user_id !== callerUserId
+    (participantCount?.count ?? 0) === 0 &&
+    threadRow.user_id === callerUserId
   ) {
-    throw new GraphQLError("Thread participant required", {
-      extensions: { code: "FORBIDDEN" },
-    });
+    return { handledByParticipant: false, lastReadAt };
   }
 
-  return { handledByParticipant: false, lastReadAt };
+  const [visibleThreadRow] = await db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.id, threadId),
+        callerVisibleThreadPredicate(callerTenantId, callerUserId),
+      ),
+    );
+  if (visibleThreadRow) {
+    return { handledByParticipant: false, lastReadAt, skipped: true };
+  }
+
+  throw new GraphQLError("Thread participant required", {
+    extensions: { code: "FORBIDDEN" },
+  });
 }
 
 function reviewRequired(value: unknown): boolean {

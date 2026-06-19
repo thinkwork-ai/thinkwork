@@ -19,6 +19,7 @@ const {
       id: tableCol("threads.id"),
       tenant_id: tableCol("threads.tenant_id"),
       user_id: tableCol("threads.user_id"),
+      space_id: tableCol("threads.space_id"),
       last_read_at: tableCol("threads.last_read_at"),
       status: tableCol("threads.status"),
     },
@@ -45,7 +46,8 @@ const {
     threadRow: {
       id: "thread-1",
       tenant_id: "tenant-1",
-      user_id: "user-1",
+      user_id: "user-1" as string | null,
+      space_id: null as string | null,
       title: "Thread",
       status: "in_progress",
       channel: "chat",
@@ -53,6 +55,7 @@ const {
     },
     participantRows: [{ id: "participant-1" }],
     userParticipantCount: 1,
+    visibleThreadRows: [] as Record<string, unknown>[],
     goalRows: [] as Record<string, unknown>[],
   };
   const participantUpdates: Record<string, unknown>[] = [];
@@ -63,7 +66,16 @@ const {
     select: vi.fn((selection?: Record<string, unknown>) => ({
       from: vi.fn((table: any) => ({
         where: vi.fn(async () => {
-          if (table === tableObjects.threads) return [mutableState.threadRow];
+          if (table === tableObjects.threads) {
+            if (
+              selection &&
+              Object.keys(selection).length === 1 &&
+              "id" in selection
+            ) {
+              return mutableState.visibleThreadRows;
+            }
+            return [mutableState.threadRow];
+          }
           if (table === tableObjects.threadParticipants) {
             if (selection && "count" in selection) {
               return [{ count: mutableState.userParticipantCount }];
@@ -161,6 +173,7 @@ beforeEach(() => {
     id: "thread-1",
     tenant_id: "tenant-1",
     user_id: "user-1",
+    space_id: null,
     title: "Thread",
     status: "in_progress",
     channel: "chat",
@@ -168,6 +181,7 @@ beforeEach(() => {
   };
   state.participantRows = [{ id: "participant-1" }];
   state.userParticipantCount = 1;
+  state.visibleThreadRows = [];
   state.goalRows = [];
   mockResolveCallerTenantId.mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockResolvedValue("user-1");
@@ -241,6 +255,7 @@ describe("updateThread participant-scoped read state", () => {
   it("rejects read-state updates from non-participant Cognito callers", async () => {
     state.participantRows = [];
     state.userParticipantCount = 1;
+    state.threadRow.space_id = null;
     mockResolveCallerUserId.mockResolvedValue("user-2");
 
     await expect(
@@ -256,6 +271,28 @@ describe("updateThread participant-scoped read state", () => {
 
     expect(updatedParticipantValues).toHaveLength(0);
     expect(updatedThreadValues).toHaveLength(0);
+  });
+
+  it("skips read-state without throwing for visible Space threads with no participant row", async () => {
+    state.threadRow.space_id = "space-1";
+    state.threadRow.user_id = null;
+    state.participantRows = [];
+    state.userParticipantCount = 0;
+    state.visibleThreadRows = [{ id: "thread-1" }];
+    mockResolveCallerUserId.mockResolvedValue("user-2");
+
+    const result = await updateThread(
+      {},
+      {
+        id: "thread-1",
+        input: { lastReadAt: "2026-05-19T12:00:00.000Z" },
+      },
+      { auth: { authType: "cognito" } } as any,
+    );
+
+    expect(updatedParticipantValues).toHaveLength(0);
+    expect(updatedThreadValues).toHaveLength(0);
+    expect(result).toBeTruthy();
   });
 
   it("routes done transitions for reviewed Goals through the Goal review policy", async () => {
