@@ -45,10 +45,10 @@ describe("first-party plugin packages", () => {
   it("publishes every first-party plugin manifest through the catalog aggregate", () => {
     expect(allPluginManifests.map((manifest) => manifest.pluginKey)).toEqual([
       "company-brain",
-      "email-channel",
       "lakehouse",
       "lastmile",
       "plane",
+      "email-channel",
       "sendgrid",
       "twenty",
       "workos-auth",

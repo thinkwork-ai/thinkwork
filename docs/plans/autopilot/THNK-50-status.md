@@ -174,6 +174,11 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - `prettier --check <touched non-HCL files>` passed via the
     lockfile-resolved Prettier 3.8.2 CLI.
   - `git diff --check` passed.
+- CI:
+  - PR #2696 initial `Validate signed catalog build` failed because
+    `plugins/catalog/src/__tests__/plugin-package.test.ts` still expected
+    aggregate manifests in plugin-key order. Fixed the assertion to match the
+    new display-name order used by `allPluginManifests`.
 
 ## Blockers
 
