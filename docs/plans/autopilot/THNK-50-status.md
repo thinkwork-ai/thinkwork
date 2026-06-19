@@ -631,12 +631,40 @@ U3/U4/U5/U6 before U7; U7 before U8.
       passed without touching remote state.
     - `terraform -chdir=terraform/examples/greenfield validate -no-color`
       passed.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2713
+    - Merge commit: `cbf273867a56efc80811bddbddbd69ae57ced77d`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+- Post-PR #2713 deploy:
+  - Main deploy workflow run `27850615026` failed in Terraform Apply.
+  - The route import logic now found the live route deterministically, but the
+    existing Terraform state entry for
+    `module.thinkwork.module.api.aws_apigatewayv2_route.handler["POST /api/auth/workos/logout"]`
+    did not expose parseable `api_id` or `route_key` fields to the guard, so
+    the workflow fail-closed with `unknown/unknown`.
+- Malformed route-state repair branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-workos-route-state-reimport`
+  - Git branch: `codex/fix-workos-route-state-reimport`
+  - Objective: make the WorkOS route import repair idempotent when Terraform
+    state contains a malformed or partial route entry by removing and
+    re-importing that exact route address from the live API Gateway route.
+  - Started: 2026-06-19 22:16 UTC.
+  - Implementation summary:
+    - Replaced the fail-only route state assertion with `check_route_state`.
+    - If state is present and matches the live API id plus route key, skip
+      import as before.
+    - If state is present and has parseable but wrong `api_id` or `route_key`,
+      still fail-close.
+    - If state is present but missing either route field, remove only that
+      Terraform state address and continue to import the live AWS route.
 
 ## Blockers
 
-- Active fix in progress: the n8n runner fix PR and first deploy repair PR are
-  merged, but the main deploy is now blocked by deterministic route import and
-  ACM validation `for_each` issues addressed by
-  `codex/fix-deploy-route-import-acm`. After this follow-up deploy repair PR
-  merges and the main deploy is green, retry the n8n plugin install through the
-  deployed ThinkWork managed-application path.
+- Active fix in progress: the n8n runner fix PR and first two deploy repair PRs
+  are merged, but the main deploy is now blocked by a malformed WorkOS logout
+  route Terraform state entry. The branch
+  `codex/fix-workos-route-state-reimport` removes and re-imports only that exact
+  malformed route state before apply. After this repair PR merges and the main
+  deploy is green, retry the n8n plugin install through the deployed ThinkWork
+  managed-application path.
