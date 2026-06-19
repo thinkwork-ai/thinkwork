@@ -103,6 +103,8 @@ let sharedMod: typeof import("./shared.js");
 beforeEach(async () => {
   vi.resetModules();
   vi.unstubAllEnvs();
+  vi.stubEnv("STAGE", "");
+  vi.stubEnv("THINKWORK_STAGE", "");
   selectQueue.length = 0;
   returningQueue.length = 0;
   insertCalls.length = 0;
@@ -272,6 +274,382 @@ describe("managed application plan jobs", () => {
     expect(mockStartExecution).not.toHaveBeenCalled();
     expect(insertCalls).toHaveLength(0);
     expect(result.status).toBe("awaiting_approval");
+  });
+
+  it("rejects unresolved release metadata before creating a deployment job", async () => {
+    selectQueue.push([]); // idempotency lookup
+
+    await expect(
+      startMod.startManagedApplicationPlan(
+        null,
+        {
+          input: {
+            key: "twenty",
+            operation: "ENABLE",
+            idempotencyKey: "idem-1",
+          },
+        },
+        {} as any,
+        { startExecution: mockStartExecution },
+      ),
+    ).rejects.toThrow(
+      'Cannot start a ENABLE deployment job for twenty: release is unresolved (releaseVersion="unresolved", manifestDigest="unresolved"). Resolve a real release before creating the job.',
+    );
+
+    expect(mockStartExecution).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it("uses Lambda release metadata defaults when UI omits release fields", async () => {
+    vi.stubEnv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:deployments");
+    vi.stubEnv("THINKWORK_RELEASE_VERSION", "2.0.0");
+    vi.stubEnv("THINKWORK_RELEASE_MANIFEST_SHA256", "b".repeat(64));
+    vi.stubEnv(
+      "THINKWORK_RELEASE_MANIFEST_URL",
+      "https://example.com/releases/2.0.0/manifest.json",
+    );
+    selectQueue.push([]); // idempotency lookup
+    selectQueue.push([]); // managed application lookup
+    returningQueue.push([{ id: "app-1" }]);
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        app_key: "twenty",
+        operation: "ENABLE",
+        status: "planning",
+        release_version: "2.0.0",
+        manifest_digest: "b".repeat(64),
+      },
+    ]);
+    mockStartExecution.mockResolvedValue({
+      executionArn: "arn:sfn:execution:plan",
+      stateMachineArn: "arn:sfn:deployments",
+    });
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        app_key: "twenty",
+        operation: "ENABLE",
+        status: "planning",
+        release_version: "2.0.0",
+        manifest_digest: "b".repeat(64),
+        plan_execution_arn: "arn:sfn:execution:plan",
+      },
+    ]);
+    selectQueue.push([{ id: "event-1", event_type: "plan_requested" }]);
+
+    await startMod.startManagedApplicationPlan(
+      null,
+      {
+        input: {
+          key: "twenty",
+          operation: "ENABLE",
+          desiredConfig: "{}",
+          idempotencyKey: "idem-1",
+        },
+      },
+      {} as any,
+      { startExecution: mockStartExecution },
+    );
+
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          app_key: "twenty",
+          release_version: "2.0.0",
+          manifest_digest: "b".repeat(64),
+          plan_summary: expect.objectContaining({
+            releaseVersion: "2.0.0",
+            manifestDigest: "b".repeat(64),
+            releaseManifestUrl:
+              "https://example.com/releases/2.0.0/manifest.json",
+          }),
+        }),
+      ]),
+    );
+    expect(mockStartExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          releaseVersion: "2.0.0",
+          manifestDigest: "b".repeat(64),
+          releaseManifestUrl:
+            "https://example.com/releases/2.0.0/manifest.json",
+        }),
+      }),
+    );
+  });
+
+  it("uses resolved deployment controller config when env lacks the state machine", async () => {
+    vi.stubEnv("THINKWORK_RELEASE_VERSION", "2.1.0");
+    vi.stubEnv("THINKWORK_RELEASE_MANIFEST_SHA256", "e".repeat(64));
+    vi.stubEnv(
+      "THINKWORK_RELEASE_MANIFEST_URL",
+      "https://example.com/releases/2.1.0/manifest.json",
+    );
+    selectQueue.push([]); // idempotency lookup
+    selectQueue.push([]); // managed application lookup
+    returningQueue.push([{ id: "app-1" }]);
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        app_key: "twenty",
+        operation: "ENABLE",
+        status: "planning",
+        release_version: "2.1.0",
+        manifest_digest: "e".repeat(64),
+      },
+    ]);
+    mockStartExecution.mockResolvedValue({
+      executionArn: "arn:sfn:execution:plan",
+      stateMachineArn: "arn:sfn:from-profile",
+    });
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        app_key: "twenty",
+        operation: "ENABLE",
+        status: "planning",
+        release_version: "2.1.0",
+        manifest_digest: "e".repeat(64),
+        state_machine_arn: "arn:sfn:from-profile",
+        plan_execution_arn: "arn:sfn:execution:plan",
+      },
+    ]);
+    selectQueue.push([{ id: "event-1", event_type: "plan_execution_started" }]);
+
+    await startMod.startManagedApplicationPlan(
+      null,
+      {
+        input: {
+          key: "twenty",
+          operation: "ENABLE",
+          desiredConfig: "{}",
+          idempotencyKey: "idem-profile",
+        },
+      },
+      {} as any,
+      {
+        startExecution: mockStartExecution,
+        resolveDeploymentControllerConfig: async () => ({
+          stateMachineArn: "arn:sfn:from-profile",
+          evidenceBucket: "profile-evidence",
+        }),
+      },
+    );
+
+    expect(mockStartExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stateMachineArn: "arn:sfn:from-profile",
+        payload: expect.objectContaining({
+          evidence: expect.objectContaining({
+            bucket: "profile-evidence",
+            prefix: "tenant-1/twenty/job-1/plan",
+          }),
+        }),
+      }),
+    );
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          state_machine_arn: "arn:sfn:from-profile",
+          evidence_bucket: "profile-evidence",
+          evidence_prefix: "tenant-1/twenty/job-1/plan",
+          plan_execution_arn: "arn:sfn:execution:plan",
+        }),
+      ]),
+    );
+  });
+
+  it("re-drives an existing planning job once controller config is available", async () => {
+    const pendingJob = {
+      id: "job-pending",
+      tenant_id: "tenant-1",
+      app_key: "twenty",
+      operation: "ENABLE",
+      status: "planning",
+      release_version: "2.1.0",
+      manifest_digest: "e".repeat(64),
+      desired_config_version: "v1",
+      plan_execution_arn: null,
+      evidence_bucket: "profile-evidence",
+      plan_summary: {
+        releaseManifestUrl: "https://example.com/releases/2.1.0/manifest.json",
+        desiredConfig: { region: "us-east-1" },
+        manifestImages: {
+          twenty: `public.ecr.aws/thinkwork/twenty@sha256:${"2".repeat(64)}`,
+        },
+      },
+    };
+    selectQueue.push([pendingJob]); // idempotency lookup
+    mockStartExecution.mockResolvedValue({
+      executionArn: "arn:sfn:execution:plan",
+      stateMachineArn: "arn:sfn:from-profile",
+    });
+    returningQueue.push([
+      {
+        ...pendingJob,
+        state_machine_arn: "arn:sfn:from-profile",
+        plan_execution_arn: "arn:sfn:execution:plan",
+      },
+    ]);
+    selectQueue.push([{ id: "event-1", event_type: "plan_execution_started" }]);
+
+    const result = await startMod.startManagedApplicationPlan(
+      null,
+      {
+        input: {
+          key: "twenty",
+          operation: "ENABLE",
+          idempotencyKey: "idem-pending",
+        },
+      },
+      {} as any,
+      {
+        startExecution: mockStartExecution,
+        resolveDeploymentControllerConfig: async () => ({
+          stateMachineArn: "arn:sfn:from-profile",
+          evidenceBucket: "profile-evidence",
+        }),
+      },
+    );
+
+    expect(result.planExecutionArn).toBe("arn:sfn:execution:plan");
+    expect(mockStartExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stateMachineArn: "arn:sfn:from-profile",
+        payload: expect.objectContaining({
+          jobId: "job-pending",
+          desiredConfig: { region: "us-east-1" },
+          manifestImages: {
+            twenty: `public.ecr.aws/thinkwork/twenty@sha256:${"2".repeat(64)}`,
+          },
+        }),
+      }),
+    );
+  });
+
+  it("rejects explicit whitespace-only release versions", async () => {
+    selectQueue.push([]); // idempotency lookup
+
+    await expect(
+      startMod.startManagedApplicationPlan(
+        null,
+        {
+          input: {
+            key: "twenty",
+            operation: "ENABLE",
+            releaseVersion: "   ",
+            manifestDigest: "c".repeat(64),
+            idempotencyKey: "idem-1",
+          },
+        },
+        {} as any,
+        { startExecution: mockStartExecution },
+      ),
+    ).rejects.toThrow(/release is unresolved/);
+
+    expect(mockStartExecution).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
+  });
+
+  it("rejects malformed manifest digests", async () => {
+    selectQueue.push([]); // idempotency lookup
+
+    await expect(
+      startMod.startManagedApplicationPlan(
+        null,
+        {
+          input: {
+            key: "twenty",
+            operation: "ENABLE",
+            releaseVersion: "2.0.0",
+            manifestDigest: "not-a-sha",
+            idempotencyKey: "idem-1",
+          },
+        },
+        {} as any,
+        { startExecution: mockStartExecution },
+      ),
+    ).rejects.toThrow(/64-character SHA-256 hex digest/);
+
+    expect(mockStartExecution).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(0);
+  });
+
+  it("normalizes explicit release metadata before storage and execution", async () => {
+    vi.stubEnv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:deployments");
+    selectQueue.push([]); // idempotency lookup
+    selectQueue.push([]); // managed application lookup
+    returningQueue.push([{ id: "app-1" }]);
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        app_key: "twenty",
+        operation: "ENABLE",
+        status: "planning",
+        release_version: "2.0.0",
+        manifest_digest: "d".repeat(64),
+      },
+    ]);
+    mockStartExecution.mockResolvedValue({
+      executionArn: "arn:sfn:execution:plan",
+      stateMachineArn: "arn:sfn:deployments",
+    });
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        app_key: "twenty",
+        operation: "ENABLE",
+        status: "planning",
+        release_version: "2.0.0",
+        manifest_digest: "d".repeat(64),
+        plan_execution_arn: "arn:sfn:execution:plan",
+      },
+    ]);
+    selectQueue.push([{ id: "event-1", event_type: "plan_requested" }]);
+
+    await startMod.startManagedApplicationPlan(
+      null,
+      {
+        input: {
+          key: "twenty",
+          operation: "ENABLE",
+          releaseVersion: " 2.0.0 ",
+          manifestDigest: ` ${"d".repeat(64)} `,
+          manifestUrl: " https://example.com/releases/2.0.0/manifest.json ",
+          desiredConfig: "{}",
+          idempotencyKey: "idem-1",
+        },
+      },
+      {} as any,
+      { startExecution: mockStartExecution },
+    );
+
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          release_version: "2.0.0",
+          manifest_digest: "d".repeat(64),
+        }),
+      ]),
+    );
+    expect(mockStartExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          releaseVersion: "2.0.0",
+          manifestDigest: "d".repeat(64),
+          releaseManifestUrl:
+            "https://example.com/releases/2.0.0/manifest.json",
+        }),
+      }),
+    );
   });
 
   it("rejects non-admin callers before side effects", async () => {

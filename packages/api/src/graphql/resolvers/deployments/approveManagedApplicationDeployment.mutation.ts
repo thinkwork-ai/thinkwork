@@ -8,12 +8,12 @@ import {
   buildManagedAppControllerPayload,
   defaultManifestUrl,
   defaultStartExecution,
-  deploymentStateMachineArn,
   executionName,
   loadDeploymentJobForTenant,
   loadJobEvents,
   normalizeDeploymentOperation,
   normalizeManagedAppKey,
+  resolveDeploymentControllerConfig,
   requireDeploymentTenantAdmin,
   toDeploymentPayload,
   type DeploymentDeps,
@@ -70,7 +70,13 @@ export async function approveManagedApplicationDeployment(
     );
   }
 
-  const stateMachineArn = job.state_machine_arn || deploymentStateMachineArn();
+  const controllerConfig = job.state_machine_arn
+    ? null
+    : await (
+        deps.resolveDeploymentControllerConfig ?? resolveDeploymentControllerConfig
+      )();
+  const stateMachineArn =
+    job.state_machine_arn || controllerConfig?.stateMachineArn;
   if (!stateMachineArn) {
     throw new GraphQLError("Deployment state machine ARN is not configured", {
       extensions: { code: "FAILED_PRECONDITION" },
@@ -116,7 +122,7 @@ export async function approveManagedApplicationDeployment(
         desiredConfig: planSummary.desiredConfig,
         manifestImages: planSummary.manifestImages,
         planDigest: job.plan_digest,
-        evidenceBucket: job.evidence_bucket,
+        evidenceBucket: job.evidence_bucket ?? controllerConfig?.evidenceBucket,
       }),
     });
     const [updated] = await db

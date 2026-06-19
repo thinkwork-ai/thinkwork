@@ -210,8 +210,16 @@ locals {
     "deployment-sessions" = {
       THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN  = var.deployment_state_machine_arn
       THINKWORK_DEPLOYMENT_EVIDENCE_BUCKET    = var.deployment_evidence_bucket
+      THINKWORK_RELEASE_VERSION               = var.deployment_release_version
+      THINKWORK_RELEASE_MANIFEST_URL          = var.deployment_release_manifest_url
+      THINKWORK_RELEASE_MANIFEST_SHA256       = var.deployment_release_manifest_sha256
       THINKWORK_BOOTSTRAP_LEASE_SECRET_PREFIX = "thinkwork/${var.stage}/deployment-bootstrap-leases"
       THINKWORK_BOOTSTRAP_LEASE_KMS_KEY_ID    = var.bootstrap_credential_lease_kms_key_id
+    }
+    "graphql-http" = {
+      THINKWORK_RELEASE_VERSION         = var.deployment_release_version
+      THINKWORK_RELEASE_MANIFEST_URL    = var.deployment_release_manifest_url
+      THINKWORK_RELEASE_MANIFEST_SHA256 = var.deployment_release_manifest_sha256
     }
     # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
     # model works; the planner + section-writer cap themselves at ~500

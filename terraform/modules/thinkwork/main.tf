@@ -1089,6 +1089,9 @@ module "api" {
   deployment_state_machine_arn                  = var.enable_deployment_control_plane ? module.deployment_control_plane[0].state_machine_arn : var.deployment_state_machine_arn
   deployment_control_plane_enabled              = var.enable_deployment_control_plane || trimspace(var.deployment_state_machine_arn) != ""
   deployment_evidence_bucket                    = var.enable_deployment_control_plane ? module.deployment_control_plane[0].evidence_bucket_name : var.deployment_evidence_bucket
+  deployment_release_version                    = var.deployment_release_version
+  deployment_release_manifest_url               = var.deployment_release_manifest_url
+  deployment_release_manifest_sha256            = var.deployment_release_manifest_sha256
   enable_stripe_billing                         = var.enable_stripe_billing
   enable_slack_workspace_app                    = var.enable_slack_workspace_app
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id

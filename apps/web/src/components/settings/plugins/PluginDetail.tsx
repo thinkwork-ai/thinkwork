@@ -155,6 +155,14 @@ export function PluginDetail() {
   );
   const isCompanyBrain = pluginKey === "company-brain";
   const isWorkosAuth = pluginKey === "workos-auth";
+  const twentyDeploymentProvisioned = Boolean(
+    pluginKey === "twenty" &&
+      install?.components.some(
+        (component) =>
+          component.componentType === "infrastructure" &&
+          component.state === "provisioned",
+      ),
+  );
   const workosCallbackUrl = isWorkosAuth ? workosAuthCallbackUrl() : null;
   const workosAccountConfigured = Boolean(
     install?.components.some(
@@ -599,12 +607,19 @@ export function PluginDetail() {
               label="Twenty CRM deployment"
               description="Runtime status, service details, health checks, and lifecycle actions for the deployed CRM."
             >
-              <Button asChild type="button" variant="outline" size="sm">
-                <Link to="/settings/crm">
+              {twentyDeploymentProvisioned ? (
+                <Button asChild type="button" variant="outline" size="sm">
+                  <Link to="/settings/crm">
+                    <Settings2 className="size-4" />
+                    Open deployment details
+                  </Link>
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" disabled>
                   <Settings2 className="size-4" />
                   Open deployment details
-                </Link>
-              </Button>
+                </Button>
+              )}
             </SettingsRow>
           </SettingsSection>
         ) : null}
