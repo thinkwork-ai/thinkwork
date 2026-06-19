@@ -9,6 +9,16 @@ linear: THNK-43
 
 # feat: Add WorkOS Auth plugin upstream of Cognito
 
+> Status update, 2026-06-19: this plan is superseded for the secure logout and
+> account-switching requirement. U1 live validation proved that Cognito can
+> receive a WorkOS-backed OIDC callback and issue Cognito tokens, but it also
+> proved the hosted Cognito -> WorkOS nested IdP shape cannot guarantee a fresh
+> WorkOS/provider account choice after logout. WorkOS' documented logout flow
+> requires the WorkOS access token `sid`; Cognito's hosted federation path keeps
+> the upstream WorkOS token/session id away from ThinkWork. PR #2667 is therefore
+> only fail-closed evidence, not a shippable product implementation. Continue
+> with `docs/plans/2026-06-19-001-feat-workos-primary-auth-bridge-plan.md`.
+
 ## Problem Frame
 
 ThinkWork needs Google, Microsoft, and future enterprise SSO to be simple for
