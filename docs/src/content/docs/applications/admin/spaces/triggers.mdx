@@ -11,13 +11,21 @@ Triggers is the Space Studio tab for work that starts or wakes inside a Space. I
 
 ## Trigger types
 
-| Type     | Purpose                                              |
-| -------- | ---------------------------------------------------- |
-| Schedule | Recurring or one-time work in the Space              |
-| Webhook  | External POSTs that create or wake work in the Space |
-| Email    | Cold-contact inbound email to the Space address      |
+| Type     | Purpose                                                                   |
+| -------- | ------------------------------------------------------------------------- |
+| Schedule | Recurring or one-time work in the Space                                   |
+| Webhook  | External POSTs that create fresh Space threads and wake work in the Space |
+| Email    | Cold-contact inbound email to the Space address                           |
 
 The table shows each trigger's name, type, description, status, and last run time when available.
+
+## Space webhooks
+
+A Webhook trigger exposes the generic webhook endpoint for the Space. Each accepted POST creates a fresh thread in that Space and inserts a readable system trigger message before the tenant platform agent is invoked. The full webhook payload remains available to the agent as structured context without dumping raw JSON into the opening transcript message.
+
+Webhook-created threads also participate in the Space's automatic thread-start workflow when one is configured. A Customer Space with Customer Onboarding enabled, for example, receives the onboarding goal and checklist on the webhook-created thread.
+
+If ThinkWork creates the thread but cannot finish workflow initialization, the webhook returns an accepted-with-warning response instead of a retry-inducing failure. Operators can open the webhook delivery history from Admin Webhooks to see the created thread id, HTTP status, and warning message.
 
 ## Add menu
 

@@ -11,11 +11,11 @@ status: in_progress
 - Plan: `docs/plans/2026-06-19-001-feat-space-webhook-thread-start-plan.md`.
 - Origin requirements: `docs/brainstorms/2026-06-19-space-webhook-thread-start-requirements.md`.
 - Target branch: `main`.
-- Current implementation unit: U5 - Align wakeup transcript behavior with pre-seeded webhook messages.
-- Current branch: `codex/space-webhook-u5`.
-- Current worktree: `.Codex/worktrees/space-webhook-u5`.
-- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 [#2679](https://github.com/thinkwork-ai/thinkwork/pull/2679) merged as `5e51e4e5c`; U3 [#2680](https://github.com/thinkwork-ai/thinkwork/pull/2680) merged as `5796d706e`; U4 [#2683](https://github.com/thinkwork-ai/thinkwork/pull/2683) merged as `43ebf575d`; U5 pending.
-- Status: U5 implementation in progress.
+- Current implementation unit: U6 - Expose degraded delivery warnings to operators and update docs.
+- Current branch: `codex/space-webhook-u6`.
+- Current worktree: `.Codex/worktrees/space-webhook-u6`.
+- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 [#2679](https://github.com/thinkwork-ai/thinkwork/pull/2679) merged as `5e51e4e5c`; U3 [#2680](https://github.com/thinkwork-ai/thinkwork/pull/2680) merged as `5796d706e`; U4 [#2683](https://github.com/thinkwork-ai/thinkwork/pull/2683) merged as `43ebf575d`; U5 [#2684](https://github.com/thinkwork-ai/thinkwork/pull/2684) merged as `1df736fa1`; U6 pending.
+- Status: U6 implementation in progress.
 - Notes:
   - Created isolated U1 worktree from `origin/main` at `5ea2a8321`.
   - Copied the Space webhook requirements and plan docs into the U1 worktree because they were still untracked in the main checkout when autopilot started.
@@ -33,6 +33,10 @@ status: in_progress
   - U4 PR #2683 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`) and was squash merged to `main`.
   - Created isolated U5 worktree from `origin/main` at `43ebf575d`.
   - Added a wakeup transcript gate that skips synthetic visible user messages only for webhook wakeups whose payload says the opening message was already persisted, while preserving legacy webhook synthetic messages and the full agent-only webhook payload.
+  - U5 PR #2684 initially failed required CI `test` because an older question-answer source-inspection test still expected the pre-refactor inline guard. Updated that assertion to pin the new helper contract, rebased twice as `main` moved during CI, then passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`) and was squash merged to `main`.
+  - Created isolated U6 worktree from `origin/main` at `1df736fa1`.
+  - Added accepted-with-warning presentation for webhook delivery rows and detail sheets when a Space webhook created a thread, returned a 2xx status, and recorded workflow warning details.
+  - Updated webhook and Space trigger docs to describe fresh Space thread creation, seeded system trigger messages, automatic thread-start workflows, and accepted-with-warning delivery semantics.
 - Local verification:
   - `pnpm install` completed; local Node 25 logged the known optional `canvas@2.11.2` native fallback build warning because `pkg-config` / `pixman-1` are not installed.
   - `pnpm exec vitest run src/lib/spaces/space-webhook-thread-start.test.ts` from `packages/api` passed: 6 tests.
@@ -55,6 +59,11 @@ status: in_progress
   - U5 CI `test` initially failed because `src/lib/user-questions/runtime-payload.test.ts` still asserted the old inline `wakeup.source !== "question_answer"` guard after the helper refactor.
   - U5 fix verification: `pnpm exec vitest run src/lib/user-questions/runtime-payload.test.ts` from `packages/api` passed: 10 tests.
   - U5 fix verification: `pnpm exec vitest run src/handlers/wakeup-processor.system-prompt.test.ts` from `packages/api` passed: 9 tests.
+  - U6 `pnpm install` completed with the same optional `canvas@2.11.2` native fallback build warning.
+  - U6 `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsWebhookDetail.test.tsx` passed: 3 tests.
+  - U6 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U6 `pnpm lint` passed; `pnpm --filter @thinkwork/web lint` reported no `lint` script for the selected package.
+  - U6 `git diff --check` passed.
 - Blockers: none.
 
 ## THNK-15 Company Brain Premium Plugin - 2026-06-13

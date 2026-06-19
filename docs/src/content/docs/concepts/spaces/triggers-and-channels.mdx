@@ -16,7 +16,7 @@ The result is still a [Thread](/concepts/threads/). The Space supplies the local
 | Chat        | A user starts or resumes a thread in a selected Space                                                                 |
 | Email       | Cold-contact email from a registered tenant user to the Space address creates or reopens an email thread when enabled |
 | Schedule    | A recurring or one-time schedule wakes work in the Space                                                              |
-| Webhook     | An external POST creates or wakes work in the Space                                                                   |
+| Webhook     | An external POST creates a fresh Space thread, seeds a system trigger message, and wakes work in the Space            |
 | Integration | A connector routes Slack, GitHub, or other provider events into the selected Space                                    |
 
 Each entry point keeps channel metadata so operators can tell where the work came from.
@@ -41,6 +41,10 @@ Token-bearing replies to agent-initiated email are different. They continue an e
 ## Trigger lifecycle
 
 Triggers are local to the Space they are configured for. A schedule or webhook attached to a Space wakes the tenant platform agent with that Space's workspace, knowledge, tools, and policy.
+
+Space webhooks are machine triggers for the Space, not impersonated users. A valid webhook token authorizes the configured webhook to create a fresh Space thread, write a readable system trigger message, and pass the full structured payload to the agent. Private Space membership still controls human access and configuration, but the webhook runtime uses explicit service-trigger authority after the webhook has passed token, enabled, tenant, and Space checks.
+
+If the Space has an automatic thread-start workflow configured, webhook-created threads start that workflow before the platform agent is invoked. If workflow setup fails after the thread exists, the webhook response is accepted with a warning and operators can inspect the warning in webhook delivery history.
 
 For the operator UI, see [Admin - Space Triggers](/applications/admin/spaces/triggers/).
 
