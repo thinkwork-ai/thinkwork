@@ -2,10 +2,24 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
-import { Badge, Button, Input, Label } from "@thinkwork/ui";
+import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@thinkwork/ui";
 import {
   ArrowDownToLine,
+  BookOpenCheck,
   Brain,
+  Check,
+  Copy,
+  ExternalLink,
   KeyRound,
   LogIn,
   LogOut,
@@ -35,6 +49,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { ManagedApplicationPlanDialog } from "@/components/settings/managed-applications/ManagedApplicationPlanDialog";
+import { apiBaseUrl as deploymentApiBaseUrl } from "@/lib/deployment-sessions";
 import { EmailChannelSettings } from "./email-channel/EmailChannelSettings";
 import { InstallKeyDialog } from "./InstallKeyDialog";
 import { UninstallPluginDialog } from "./UninstallPluginDialog";
@@ -72,6 +87,7 @@ export function PluginDetail() {
     apiKey: "",
     workspaceSlug: "",
   });
+  const [workosInstructionsOpen, setWorkosInstructionsOpen] = useState(false);
 
   const [catalogResult, refreshCatalog] = useQuery({
     query: SettingsPluginCatalogQuery,
@@ -138,6 +154,16 @@ export function PluginDetail() {
     premium?.installKeyRequired && !hasActiveEntitlement,
   );
   const isCompanyBrain = pluginKey === "company-brain";
+  const isWorkosAuth = pluginKey === "workos-auth";
+  const workosCallbackUrl = isWorkosAuth ? workosAuthCallbackUrl() : null;
+  const workosAccountConfigured = Boolean(
+    install?.components.some(
+      (component) =>
+        component.componentType === "auth-provider" &&
+        component.componentKey === "workos-auth" &&
+        component.state === "provisioned",
+    ),
+  );
   const emailProviderSettingsProvider =
     pluginKey === "sendgrid"
       ? "sendgrid"
@@ -587,6 +613,68 @@ export function PluginDetail() {
           <EmailChannelSettings provider={emailProviderSettingsProvider} />
         ) : null}
 
+        {isWorkosAuth && showOperatorActions ? (
+          <SettingsSection
+            label="Setup"
+            action={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setWorkosInstructionsOpen(true)}
+              >
+                <BookOpenCheck className="size-4" />
+                Setup Instructions
+              </Button>
+            }
+          >
+            <SettingsRow
+              label="Callback URL"
+              description="Add this URL to the WorkOS application Redirects list."
+              layout="stacked"
+            >
+              <CopyablePluginValue
+                value={workosCallbackUrl ?? ""}
+                label="WorkOS callback URL"
+              />
+            </SettingsRow>
+            {!workosAccountConfigured ? (
+              <SettingsRow
+                label="WorkOS account setup"
+                description="Create or open the WorkOS account and environment for this deployment."
+                layout="stacked"
+              >
+                <Button asChild type="button" variant="outline" size="sm">
+                  <a
+                    href="https://dashboard.workos.com/get-started"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Create account
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                </Button>
+              </SettingsRow>
+            ) : null}
+            <SettingsRow
+              label="WorkOS dashboard"
+              description="Open WorkOS to manage applications, redirects, organizations, and connections."
+              layout="stacked"
+            >
+              <Button asChild type="button" variant="outline" size="sm">
+                <a
+                  href="https://dashboard.workos.com/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open dashboard
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
+            </SettingsRow>
+          </SettingsSection>
+        ) : null}
+
         {install && authCapable ? (
           <SettingsSection label="Connection">
             {usesCredentialConnection ? (
@@ -654,9 +742,200 @@ export function PluginDetail() {
             onSubmit={(key) => void install_(key)}
           />
         ) : null}
+        {isWorkosAuth ? (
+          <WorkosSetupInstructionsSheet
+            open={workosInstructionsOpen}
+            onOpenChange={setWorkosInstructionsOpen}
+            callbackUrl={workosCallbackUrl ?? ""}
+          />
+        ) : null}
       </div>
     </div>
   );
+}
+
+function WorkosSetupInstructionsSheet({
+  open,
+  onOpenChange,
+  callbackUrl,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  callbackUrl: string;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-2xl">
+        <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
+          <SheetTitle>WorkOS setup instructions</SheetTitle>
+          <SheetDescription>
+            Use this checklist for customer-owned SSO deployments.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-6 px-6 py-5 text-sm">
+          <section className="space-y-2">
+            <h3 className="font-medium text-foreground">
+              What each deployment needs
+            </h3>
+            <ul className="list-disc space-y-1.5 pl-5 text-muted-foreground">
+              <li>
+                A WorkOS account, environment, or application owned by that
+                customer or deployment operator.
+              </li>
+              <li>
+                The WorkOS client ID and API key stored as ThinkWork managed
+                secrets for the customer stage.
+              </li>
+              <li>
+                The ThinkWork WorkOS callback URL from this plugin detail page
+                allowlisted in WorkOS Redirects.
+              </li>
+              <li>
+                A WorkOS organization for the customer and at least one active
+                SSO connection or OAuth provider.
+              </li>
+              <li>
+                ThinkWork users must be assigned to a workspace before SSO
+                sign-in can create a usable session.
+              </li>
+            </ul>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="font-medium text-foreground">Manual setup</h3>
+            <ol className="list-decimal space-y-3 pl-5 text-muted-foreground">
+              <li>
+                Create or select the customer WorkOS environment. Use Sandbox
+                for test tenants and Production for live customer traffic.
+              </li>
+              <li>
+                Open the WorkOS application Redirects page and add the
+                ThinkWork API callback URL:
+                <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
+                  {callbackUrl}
+                </code>
+              </li>
+              <li>
+                Copy the WorkOS client ID and create an API key. Store the API
+                key in Secrets Manager or SSM for the customer deployment, then
+                register the secret reference and client ID with the
+                ThinkWork auth-provider resource.
+              </li>
+              <li>
+                Create a WorkOS organization for the customer. Use a stable
+                reference that matches the customer deployment or tenant record.
+              </li>
+              <li>
+                Configure SSO. For enterprise IdPs, invite the customer IT
+                admin through WorkOS Admin Portal. For Google/Microsoft testing,
+                enable the provider and test with an approved domain account.
+              </li>
+              <li>
+                Install this plugin in ThinkWork and confirm the sign-in page
+                shows the SSO option. Sign in, log out, and sign in again to
+                confirm WorkOS shows provider/account selection instead of
+                silently reusing the previous user.
+              </li>
+            </ol>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="font-medium text-foreground">
+              Assisted setup path
+            </h3>
+            <p className="text-muted-foreground">
+              ThinkWork can make this smoother by generating WorkOS Admin
+              Portal setup links for customer IT admins, then recording the
+              resulting organization and connection identifiers against the
+              installed plugin. That removes most IdP-specific instructions
+              from ThinkWork because Admin Portal hosts them.
+            </p>
+            <p className="text-muted-foreground">
+              The deployment operator still needs a WorkOS API key and client
+              ID for the customer environment. Redirect URLs and application
+              settings should be confirmed in WorkOS before enabling SSO for
+              production traffic.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button asChild variant="outline" size="sm">
+                <a
+                  href="https://workos.com/docs/admin-portal"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Admin Portal docs
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <a
+                  href="https://workos.com/docs/reference/authkit/authentication/get-authorization-url"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  AuthKit redirect docs
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
+            </div>
+          </section>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function CopyablePluginValue({
+  value,
+  label,
+}: {
+  value: string;
+  label: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    if (!value || !navigator?.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      toast.success(`${label} copied.`);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error(`Could not copy ${label}.`);
+    }
+  }
+
+  return (
+    <div className="flex w-full min-w-0 items-center gap-2">
+      <code
+        className="min-w-0 flex-1 truncate rounded-md bg-muted px-2 py-1.5 font-mono text-xs text-muted-foreground"
+        title={value}
+      >
+        {value}
+      </code>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Copy ${label}`}
+        title={`Copy ${label}`}
+        onClick={() => void copy()}
+      >
+        {copied ? (
+          <Check className="size-4 text-emerald-400" />
+        ) : (
+          <Copy className="size-4" />
+        )}
+      </Button>
+    </div>
+  );
+}
+
+function workosAuthCallbackUrl(): string {
+  const baseUrl = deploymentApiBaseUrl() || window.location.origin;
+  return `${baseUrl}/api/auth/workos/callback`;
 }
 
 function OAuthConnectionRow({
