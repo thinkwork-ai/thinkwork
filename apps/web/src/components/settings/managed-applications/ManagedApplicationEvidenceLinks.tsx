@@ -5,8 +5,12 @@ import { SettingsDeploymentEvidenceQuery } from "@/lib/settings-queries";
 
 export function ManagedApplicationEvidenceLinks({
   jobId,
+  fallbackBucket,
+  fallbackPrefix,
 }: {
   jobId?: string | null;
+  fallbackBucket?: string | null;
+  fallbackPrefix?: string | null;
 }) {
   const [result] = useQuery({
     query: SettingsDeploymentEvidenceQuery,
@@ -26,7 +30,7 @@ export function ManagedApplicationEvidenceLinks({
     return <p className="text-sm text-muted-foreground">Loading evidence...</p>;
   }
 
-  if (result.error) {
+  if (result.error && !(fallbackBucket && fallbackPrefix)) {
     return (
       <p className="text-sm text-muted-foreground">
         Evidence is unavailable for this job.
@@ -34,7 +38,16 @@ export function ManagedApplicationEvidenceLinks({
     );
   }
 
-  const evidence = result.data?.deploymentEvidence;
+  const evidence =
+    result.data?.deploymentEvidence ??
+    (fallbackBucket && fallbackPrefix
+      ? {
+          jobId,
+          bucket: fallbackBucket,
+          prefix: fallbackPrefix,
+          urls: [],
+        }
+      : null);
   if (!evidence) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -44,10 +57,10 @@ export function ManagedApplicationEvidenceLinks({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
+    <div className="min-w-0 space-y-2">
+      <div className="min-w-0 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm">
         <p className="font-medium text-foreground">Evidence location</p>
-        <p className="mt-1 break-all text-muted-foreground">
+        <p className="mt-1 leading-5 text-muted-foreground [overflow-wrap:anywhere]">
           {evidence.bucket && evidence.prefix
             ? `s3://${evidence.bucket}/${evidence.prefix}`
             : "Evidence bucket not configured yet."}
