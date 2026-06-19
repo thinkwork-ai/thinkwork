@@ -216,6 +216,69 @@ describe("managed application deployment approval", () => {
     expect(result.applyExecutionArn).toBe("arn:sfn:execution:apply");
   });
 
+  it("uses resolved controller config when an approval-ready job lacks a stored state machine", async () => {
+    const jobWithoutController = {
+      ...destructiveJob,
+      state_machine_arn: null,
+      evidence_bucket: null,
+    };
+    selectQueue.push([jobWithoutController]);
+    returningQueue.push([{ ...jobWithoutController, status: "applying" }]);
+    mockStartExecution.mockResolvedValue({
+      executionArn: "arn:sfn:execution:apply",
+      stateMachineArn: "arn:sfn:from-profile",
+    });
+    returningQueue.push([
+      {
+        ...jobWithoutController,
+        status: "applying",
+        apply_execution_arn: "arn:sfn:execution:apply",
+      },
+    ]);
+    selectQueue.push([{ id: "event-1", event_type: "deployment_approved" }]);
+
+    await approveMod.approveManagedApplicationDeployment(
+      null,
+      {
+        input: {
+          jobId: "job-1",
+          planDigest: "b".repeat(64),
+          manifestDigest: "a".repeat(64),
+          destructiveConfirmation: "DESTROY",
+        },
+      },
+      {} as any,
+      {
+        startExecution: mockStartExecution,
+        resolveDeploymentControllerConfig: async () => ({
+          stateMachineArn: "arn:sfn:from-profile",
+          evidenceBucket: "profile-evidence",
+        }),
+      },
+    );
+
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "applying",
+          state_machine_arn: "arn:sfn:from-profile",
+        }),
+      ]),
+    );
+    expect(mockStartExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stateMachineArn: "arn:sfn:from-profile",
+        payload: expect.objectContaining({
+          phase: "apply",
+          evidence: expect.objectContaining({
+            bucket: "profile-evidence",
+            prefix: "tenant-1/twenty/job-1/apply",
+          }),
+        }),
+      }),
+    );
+  });
+
   it("rejects an approval-ready job without starting apply", async () => {
     selectQueue.push([destructiveJob]);
     returningQueue.push([

@@ -325,13 +325,21 @@ export function deploymentEvidenceBucket(): string | null {
 }
 
 export async function resolveDeploymentControllerConfig(): Promise<DeploymentControllerConfig> {
+  if (cachedDeploymentControllerConfig?.stateMachineArn) {
+    return cachedDeploymentControllerConfig;
+  }
+
   const stateMachineArn = deploymentStateMachineArn();
   const evidenceBucket = deploymentEvidenceBucket();
   if (stateMachineArn) {
-    return { stateMachineArn, evidenceBucket };
+    cachedDeploymentControllerConfig = { stateMachineArn, evidenceBucket };
+    return cachedDeploymentControllerConfig;
   }
 
-  const profile = await resolveDeploymentProfileConfig();
+  const profile = mergeDeploymentProfileConfig(
+    await resolveDeploymentProfileConfig(),
+    deploymentProfileConfigFromEnv(),
+  );
   if (profile.stateMachineArn) {
     cachedDeploymentControllerConfig = {
       stateMachineArn: profile.stateMachineArn,
@@ -339,7 +347,19 @@ export async function resolveDeploymentControllerConfig(): Promise<DeploymentCon
     };
     return cachedDeploymentControllerConfig;
   }
-  return { stateMachineArn: null, evidenceBucket };
+
+  const pointer = await resolveDeploymentStatusPointerConfig(
+    profile.evidenceBucket ?? evidenceBucket,
+  );
+  if (pointer.stateMachineArn) {
+    cachedDeploymentControllerConfig = {
+      stateMachineArn: pointer.stateMachineArn,
+      evidenceBucket: pointer.evidenceBucket ?? profile.evidenceBucket,
+    };
+    return cachedDeploymentControllerConfig;
+  }
+
+  return { stateMachineArn: null, evidenceBucket: profile.evidenceBucket };
 }
 
 export async function resolveDeploymentProfileConfig(): Promise<DeploymentProfileConfig> {

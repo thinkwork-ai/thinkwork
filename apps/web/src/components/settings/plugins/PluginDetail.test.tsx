@@ -501,7 +501,21 @@ describe("PluginDetail", () => {
   it("links operators on the twenty plugin to the deployment detail page (U10)", () => {
     paramsState.pluginKey = "twenty";
     mockQueries({
-      install: { ...baseInstall, pluginKey: "twenty" },
+      install: {
+        ...baseInstall,
+        pluginKey: "twenty",
+        components: [
+          ...baseInstall.components,
+          {
+            __typename: "PluginComponent" as const,
+            id: "component-3",
+            componentKey: "runtime",
+            componentType: "infrastructure",
+            state: "provisioned",
+            lastError: null,
+          },
+        ],
+      },
       activations: [],
     });
     render(<PluginDetail />);
@@ -510,6 +524,23 @@ describe("PluginDetail", () => {
       name: /open deployment details/i,
     });
     expect(link.getAttribute("href")).toBe("/settings/crm");
+  });
+
+  it("disables the twenty deployment detail control before runtime provisioning", () => {
+    paramsState.pluginKey = "twenty";
+    mockQueries({
+      install: { ...awaitingApprovalInstall, pluginKey: "twenty" },
+      activations: [],
+    });
+    render(<PluginDetail />);
+
+    expect(
+      screen.queryByRole("link", { name: /open deployment details/i }),
+    ).toBeNull();
+    const button = screen.getByRole("button", {
+      name: /open deployment details/i,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
   });
 
   it("hides the twenty deployment link from non-operators", () => {
