@@ -1038,15 +1038,14 @@ def enforce_customer_domain_preservation(current_outputs, vars_json, payload, ru
     if not next_domain:
         if allow_removal:
             return
-        raise RuntimeError(
-            "Refusing to clear customer_domain during a controller update. "
-            f"Current Terraform state has customer_domain={previous_domain!r}, "
-            "but this run generated an empty customer_domain. Preserve "
-            "customerDomain/customerDomainDelegated/customerDomainLegacyRetired "
-            "in the controller payload or runner secret. Set "
-            "allowCustomerDomainRemoval=true only for an intentional, reviewed "
-            "domain-retirement operation."
+        vars_json["customer_domain"] = previous_domain
+        vars_json["customer_domain_delegated"] = bool_state_output(
+            current_outputs, "customer_domain_delegated"
         )
+        vars_json["customer_domain_legacy_retired"] = bool_state_output(
+            current_outputs, "customer_domain_legacy_retired"
+        )
+        return
 
     if next_domain != previous_domain and not allow_removal:
         raise RuntimeError(
