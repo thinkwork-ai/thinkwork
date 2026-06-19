@@ -592,11 +592,51 @@ U3/U4/U5/U6 before U7; U7 before U8.
       passed: 34 tests.
     - `pnpm dlx prettier@latest --check apps/cli/__tests__/terraform-sandbox-host-fixture.test.ts .github/workflows/deploy.yml docs/plans/autopilot/THNK-50-status.md`
       passed.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2712
+    - Merge commit: `25e7ca3d0bc3bd1e37f1bf7ba5687f34b242aa26`
+    - Status: merged.
+- Post-PR #2712 deploy:
+  - Main deploy workflow run `27848846146` failed in Terraform Apply.
+  - Failure 1: the WorkOS route import lookup used AWS CLI text output for a
+    route key containing spaces, producing a multi-line import id like
+    `ho7oyksms0/None ... 5b1m09k ...` instead of the single live route id.
+  - Failure 2: Terraform import evaluates the full greenfield configuration,
+    and the n8n/Plane Cloudflare ACM validation records used `for_each` keys
+    derived from `aws_acm_certificate.*.domain_validation_options`, which are
+    unknown until apply.
+- Follow-up deploy repair branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-deploy-route-import-acm`
+  - Git branch: `codex/fix-deploy-route-import-acm`
+  - Objective: make WorkOS route import deterministic and remove unknown
+    `for_each` keys from the n8n/Plane ACM validation records so Terraform can
+    import route state before the targeted apply.
+  - Started: 2026-06-19 21:31 UTC.
+  - Implementation summary:
+    - Changed the API Gateway route lookup to parse `get-routes --output json`
+      with `jq --arg route_key`, selecting the exact `RouteKey` and taking the
+      first matching `RouteId`.
+    - Replaced the n8n and Plane ACM validation Cloudflare record `for_each`
+      maps with static domain-name sets; apply-time validation record names,
+      values, and types remain in resource values instead of instance keys.
+  - Local verification:
+    - `terraform fmt -check terraform/examples/greenfield/main.tf` passed.
+    - `ruby -e 'require "yaml"; YAML.load_file(".github/workflows/deploy.yml")'`
+      passed.
+    - Extracted the `Terraform Apply` `run: |` shell block from
+      `.github/workflows/deploy.yml`, substituted GitHub expressions with
+      placeholders, and `bash -n /tmp/thnk-50-terraform-apply-2.sh` passed.
+    - `terraform -chdir=terraform/examples/greenfield init -backend=false -input=false`
+      passed without touching remote state.
+    - `terraform -chdir=terraform/examples/greenfield validate -no-color`
+      passed.
 
 ## Blockers
 
-- Active fix in progress: the n8n runner fix PR is merged, but the main deploy
-  is blocked by two pre-existing WorkOS logout API Gateway routes that need to
-  be imported into Terraform state before the next apply can complete. After
-  the deploy repair PR merges and the main deploy is green, retry the n8n plugin
-  install through the deployed ThinkWork managed-application path.
+- Active fix in progress: the n8n runner fix PR and first deploy repair PR are
+  merged, but the main deploy is now blocked by deterministic route import and
+  ACM validation `for_each` issues addressed by
+  `codex/fix-deploy-route-import-acm`. After this follow-up deploy repair PR
+  merges and the main deploy is green, retry the n8n plugin install through the
+  deployed ThinkWork managed-application path.

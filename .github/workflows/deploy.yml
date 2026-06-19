@@ -1442,8 +1442,8 @@ jobs:
             local route_id
             route_id=$(aws apigatewayv2 get-routes \
               --api-id "$api_id" \
-              --query "Items[?RouteKey=='${route_key}'].RouteId | [0]" \
-              --output text)
+              --output json \
+              | jq -r --arg route_key "$route_key" '[.Items[]? | select(.RouteKey == $route_key) | .RouteId][0] // empty')
             if [ -z "$route_id" ] || [ "$route_id" = "None" ]; then
               echo "No existing API Gateway route ${route_key}; Terraform apply will create it."
               return 0

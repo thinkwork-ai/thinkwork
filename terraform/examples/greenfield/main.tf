@@ -1065,20 +1065,12 @@ resource "aws_acm_certificate" "n8n" {
 }
 
 resource "cloudflare_record" "n8n_acm_validation" {
-  for_each = {
-    for dvo in flatten([
-      for cert in aws_acm_certificate.n8n : tolist(cert.domain_validation_options)
-      ]) : dvo.domain_name => {
-      name  = dvo.resource_record_name
-      value = dvo.resource_record_value
-      type  = dvo.resource_record_type
-    }
-  }
+  for_each = local.n8n_managed_certificate_enabled ? toset([local.n8n_domain]) : toset([])
 
   zone_id = var.cloudflare_zone_id
-  name    = trimsuffix(each.value.name, ".")
-  content = trimsuffix(each.value.value, ".")
-  type    = each.value.type
+  name    = trimsuffix(tolist(aws_acm_certificate.n8n[0].domain_validation_options)[0].resource_record_name, ".")
+  content = trimsuffix(tolist(aws_acm_certificate.n8n[0].domain_validation_options)[0].resource_record_value, ".")
+  type    = tolist(aws_acm_certificate.n8n[0].domain_validation_options)[0].resource_record_type
   ttl     = 60
   proxied = false
   comment = "ACM DNS validation for ${each.key}"
@@ -1111,20 +1103,12 @@ resource "aws_acm_certificate" "plane" {
 }
 
 resource "cloudflare_record" "plane_acm_validation" {
-  for_each = {
-    for dvo in flatten([
-      for cert in aws_acm_certificate.plane : tolist(cert.domain_validation_options)
-      ]) : dvo.domain_name => {
-      name  = dvo.resource_record_name
-      value = dvo.resource_record_value
-      type  = dvo.resource_record_type
-    }
-  }
+  for_each = local.plane_managed_certificate_enabled ? toset([local.plane_domain]) : toset([])
 
   zone_id = var.cloudflare_zone_id
-  name    = trimsuffix(each.value.name, ".")
-  content = trimsuffix(each.value.value, ".")
-  type    = each.value.type
+  name    = trimsuffix(tolist(aws_acm_certificate.plane[0].domain_validation_options)[0].resource_record_name, ".")
+  content = trimsuffix(tolist(aws_acm_certificate.plane[0].domain_validation_options)[0].resource_record_value, ".")
+  type    = tolist(aws_acm_certificate.plane[0].domain_validation_options)[0].resource_record_type
   ttl     = 60
   proxied = false
   comment = "ACM DNS validation for ${each.key}"
