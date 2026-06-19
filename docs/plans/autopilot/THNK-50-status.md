@@ -681,13 +681,99 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - Changed `route_key` parsing to split on `=` and trim only leading/trailing
       whitespace/quotes so route keys like `POST /api/auth/workos/logout`
       remain intact.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2716
+    - Merge commit: `bc8c6d4f2df43fb7d43b2372c7930b8fc9a97185`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+  - Post-merge deploy:
+    - Main deploy workflow run `27851550169` passed after importing the existing
+      WorkOS logout routes and applying the n8n runner variable fixes.
+- Managed-app uninstall retry hardening branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-n8n-uninstall-retry`
+  - Git branch: `codex/fix-n8n-uninstall-retry`
+  - Objective: let failed managed-app uninstall components retry through the
+    normal deployment-runner path instead of staying trapped in failed state
+    after an operator-visible error.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2715
+    - Merge commit: `90dfc70181f6ffbba7560521c1d292a2f1c8fac8`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+  - Release/deploy:
+    - Canary release `v0.1.0-canary.216` published from commit
+      `90dfc70181f6ffbba7560521c1d292a2f1c8fac8`.
+    - Release workflow run `27851919847` passed.
+    - Deploy workflow run `27851891617` passed.
+    - Live deployment status pointer now records active release
+      `v0.1.0-canary.216`, manifest digest
+      `febc6ee124838b5d78abccf63f1b8bb019ad1d92341c910150b7e1ab25210e08`,
+      and commit `90dfc70181f6ffbba7560521c1d292a2f1c8fac8`.
+- n8n teardown retry after canary 216:
+  - Existing stuck install id:
+    `b984678a-30a5-4cb7-9a9c-3d215055dce2`.
+  - Retry job:
+    `c9d98655-2a14-483e-a057-d40d69a443cb`.
+  - Plan phase used release `v0.1.0-canary.216` and the matching manifest
+    digest above.
+  - Plan reached `awaiting_approval` with digest
+    `885629fadcbb7853d71d7c59e8ac3775de36591cc298e6ab5235c8fad805ceb4`.
+  - Plan summary: 9 resource changes, all `no-op`.
+  - Approved the DESTROY apply with destructive confirmation `DESTROY`.
+  - Apply failed after the targeted/no-op n8n apply while refreshing broader
+    Terraform outputs:
+    `terraform apply -refresh-only -auto-approve -no-color` exited non-zero.
+  - CodeBuild apply build:
+    `thinkwork-dev-deployment-runner:8f485b8f-701c-4873-8ab5-f0c2bffdc129`.
+  - Failure detail from CloudWatch: Terraform hit an unrelated full-root
+    evaluation error in
+    `terraform/modules/app/agentcore-memory/main.tf`, line 115, where
+    `aws_iam_role.memory_execution[0].arn` is invalid because
+    `aws_iam_role.memory_execution` is an empty tuple.
+  - Interpretation: the n8n targeted plan/apply path was no-op and isolated,
+    but managed-app jobs still failed because post-apply output refresh was
+    treated as a hard apply failure.
+- Managed-app output refresh isolation branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-managed-app-release-defaults`
+  - Git branch: `codex/fix-managed-app-release-defaults`
+  - First PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2717
+    - Merge commit: `ebcf84fdbf01a4b1295766b9c6410e7ce1d98591`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+    - Scope: made post-targeted managed-app `terraform apply -refresh-only`
+      non-fatal after the real targeted apply succeeds.
+  - Supplemental PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2718
+    - Status: open and rebased on PR #2717.
+    - Objective: keep real targeted managed-app apply failures fatal while
+      recording output refresh status in evidence and preserving managed-app job
+      success if `terraform output -json` also cannot evaluate the broader root.
+  - Implementation summary:
+    - `refresh_outputs_after_targeted_apply` now records refresh status in
+      Terraform evidence and returns a non-fatal failure detail for managed-app
+      refresh-only errors.
+    - Added managed-app output collection fallback to read existing Terraform
+      outputs from S3 state if `terraform output -json` also cannot evaluate
+      the broader root after a successful targeted apply.
+    - Full platform deploy output collection still raises on Terraform output
+      failures; the relaxed behavior is limited to managed-app operations.
+  - Local verification:
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k "managed_app_success_refreshes_root_outputs or managed_app_output_refresh_failure_is_non_fatal or managed_app_outputs_fall_back_to_state_after_output_failure"`
+      passed: 3 tests.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed: 77 tests.
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed.
+  - Rebase verification after PR #2717 landed:
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed: 77 tests.
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed.
 
 ## Blockers
 
-- Active fix in progress: the n8n runner fix PR and the deploy repair PRs
-  through #2714 are merged, but the main deploy is now blocked by the
-  whitespace-sensitive WorkOS route state parser. The branch
-  `codex/fix-workos-state-parser` makes the parser tolerant of Terraform's
-  aligned `state show` output. After this repair PR merges and the main deploy
-  is green, retry the n8n plugin install through the deployed ThinkWork
+- Active fix in progress: PR #2718 is open to add managed-app output evidence
+  and state-output fallback on top of merged PR #2717. After PR #2718 merges,
+  wait for the canary release and main deploy to pick up the runner change, then
+  retry the n8n teardown and fresh n8n install through the deployed ThinkWork
   managed-application path.

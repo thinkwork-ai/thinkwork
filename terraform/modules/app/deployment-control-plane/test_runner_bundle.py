@@ -1624,10 +1624,11 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
 def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = load_runner()
     calls: list[list[str]] = []
+    monkeypatch.setattr(runner, "TERRAFORM_EVIDENCE", {})
     monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
 
-    assert runner.refresh_outputs_after_targeted_apply({"appKey": "plane"}) is True
-    assert runner.refresh_outputs_after_targeted_apply({}) is True
+    runner.refresh_outputs_after_targeted_apply({"appKey": "plane"})
+    runner.refresh_outputs_after_targeted_apply({})
 
     assert calls == [
         [
@@ -1638,19 +1639,70 @@ def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPa
             "-no-color",
         ]
     ]
+    assert runner.TERRAFORM_EVIDENCE["outputRefresh"] == {
+        "status": "succeeded",
+        "command": [
+            "terraform",
+            "apply",
+            "-refresh-only",
+            "-auto-approve",
+            "-no-color",
+        ],
+    }
 
 
-def test_managed_app_output_refresh_failure_does_not_fail_apply(
+def test_managed_app_output_refresh_failure_is_non_fatal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = load_runner()
+    monkeypatch.setattr(runner, "TERRAFORM_EVIDENCE", {})
 
-    def fail_refresh(*_args, **_kwargs):
-        raise subprocess.CalledProcessError(1, ["terraform", "apply"])
+    def fail_refresh(args, **_kwargs):
+        raise subprocess.CalledProcessError(1, args)
 
     monkeypatch.setattr(runner, "run", fail_refresh)
 
-    assert runner.refresh_outputs_after_targeted_apply({"appKey": "n8n"}) is False
+    result = runner.refresh_outputs_after_targeted_apply({"appKey": "n8n"})
+
+    assert result["status"] == "failed"
+    assert result["nonFatal"] is True
+    assert runner.TERRAFORM_EVIDENCE["outputRefresh"]["exitCode"] == 1
+
+
+def test_managed_app_outputs_fall_back_to_state_after_output_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    outputs_path = tmp_path / "outputs.json"
+    monkeypatch.setattr(runner, "TERRAFORM_EVIDENCE", {})
+    monkeypatch.setattr(runner, "refresh_outputs_after_targeted_apply", lambda _payload: None)
+    monkeypatch.setattr(
+        runner,
+        "output",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            subprocess.CalledProcessError(1, ["terraform", "output", "-json"])
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_outputs",
+        lambda stage: {
+            "app_url": {"value": f"https://{stage}.thinkwork.ai", "type": "string"},
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "upload_evidence_artifact",
+        lambda path, name=None: f"s3://evidence/{name or Path(path).name}",
+    )
+
+    runner.write_outputs_after_apply({"appKey": "n8n"}, {"stage": "dev"}, outputs_path)
+
+    assert json.loads(outputs_path.read_text(encoding="utf-8")) == {
+        "app_url": {"value": "https://dev.thinkwork.ai", "type": "string"}
+    }
+    assert runner.TERRAFORM_EVIDENCE["outputs"]["source"] == "state"
+    assert runner.TERRAFORM_EVIDENCE["outputReadFallback"]["status"] == "succeeded"
 
 
 def test_managed_app_overrides_reject_missing_operation() -> None:
