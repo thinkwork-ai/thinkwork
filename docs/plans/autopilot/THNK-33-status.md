@@ -6,6 +6,54 @@ status: active
 
 # THNK-33 Twenty-Native Launch Proof Status
 
+## 2026-06-18 Native Twenty App Workflow Gate Passed
+
+- Operator-authenticated Twenty UI verification completed the reopened native
+  gate without using Lambda or the built-in `HTTP_REQUEST` action as the final
+  solution.
+- Installed native app evidence:
+  - Twenty Applications shows the native `ThinkWork` app as type `Tarball`.
+  - The app detail page shows version `0.1.1`, one front component, and one
+    logic function.
+  - The app Settings page persisted `THINKWORK_TRIGGER_STAGE=Customer` and the
+    configured `THINKWORK_WEBHOOK_URL` as a masked secret value.
+- Workflow wiring evidence:
+  - Workflow `Closed Won`
+    (`e4c9942f-45b9-4922-96b5-fc69a5c1148c`) was edited through the Twenty UI.
+  - The legacy `Start ThinkWork thread` `HTTP_REQUEST` action was deleted from
+    the draft.
+  - The installed native app action `ThinkWork Webhook · ThinkWork` was added
+    after the existing `When stage is Customer` filter.
+  - The native action was configured with
+    `event=opportunity.stage.customer`, `stage=Customer`, and
+    `workflowKey=customer_onboarding`.
+  - Publishing the draft created active workflow version `v2`
+    (`cadf3148-14bf-45dd-94a1-b32cfefd78f9`) and archived the prior `v1`
+    (`9e64a00d-4caa-47ea-a18a-9e310da2cd00`).
+  - The active `v2` workflow canvas shows:
+    `Record is updated -> When stage is Customer -> ThinkWork Webhook`.
+- Runtime delivery evidence:
+  - Test opportunity: `Design Partnership`
+    (`9457f8e9-16ae-43b9-92ee-cbd21f3dded5`) was moved from `New` to
+    `Customer` in Twenty.
+  - ThinkWork generic webhook `af5e5b7d-de31-4858-b290-2a41f8d972b9`
+    recorded delivery `a73af9a4-8d62-4e71-aaf7-e76b206434c2` at
+    `2026-06-19T00:01:53.728Z`.
+  - Delivery result: `resolutionStatus=ok`, `statusCode=201`,
+    `threadId=ca607620-60f3-4e17-b120-f9b3b89b95b6`.
+  - Delivery `bodyPreview` proves the reopened gate:
+    `{"source":"twenty-app","event":"opportunity.stage.customer","stage":"Customer","triggerStage":"Customer","workflowKey":"customer_onboarding","occurredAt":"2026-06-19T00:01:51.724Z"}`.
+- Verification commands:
+  - `cd apps/cli && pnpm dev -- webhook deliveries af5e5b7d-de31-4858-b290-2a41f8d972b9 --stage dev --limit 10 --json`
+  - Direct admin GraphQL query for `webhookDeliveries(...){ id receivedAt resolutionStatus statusCode threadId bodyPreview }`
+- Notes:
+  - The repository/GitHub Actions deploy API key still lacks
+    workflow draft/update permission; it reproduced `Forbidden resource` for
+    both `createDraftFromWorkflowVersion` and `updateWorkflowVersionStep`.
+  - Operator-authenticated Twenty UI access was sufficient to create the draft,
+    replace the action, publish v2, and trigger the native app delivery.
+  - No webhook URL or token is recorded in this artifact.
+
 ## 2026-06-18 Twenty App Package Version Retry Fix
 
 - PR #2654 merged the Twenty local logic-function runtime fix:
