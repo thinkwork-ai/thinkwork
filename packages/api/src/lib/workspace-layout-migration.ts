@@ -22,6 +22,7 @@ import {
 } from "@thinkwork/database-pg/utils/workspace-folder-name";
 import { shouldRenderWorkspaceSourcePath } from "./workspace-renderer.js";
 import { renderWorkspaceTuple } from "./workspace-renderer/compose-tuple.js";
+import { spaceTriggerServiceIdentity } from "./workspace-renderer/space-membership-check.js";
 
 const REGION =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -427,7 +428,10 @@ class DefaultWorkspaceLayoutRenderer implements WorkspaceLayoutRenderer {
         spaceId: input.spaceId,
         threadId: input.threadId,
         userId: input.userId,
-        invokingServiceIdentity: "workspace-layout-migration",
+        invokingServiceIdentity: spaceTriggerServiceIdentity({
+          tenantId: input.tenantId,
+          spaceId: input.spaceId,
+        }),
       },
       { bucket: input.bucket },
     );
