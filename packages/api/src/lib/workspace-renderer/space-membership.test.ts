@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertSpaceAccessAllowed,
+  spaceTriggerServiceIdentity,
   type SpaceMembershipRepository,
 } from "./space-membership-check.js";
 
@@ -55,17 +56,34 @@ describe("assertSpaceAccessAllowed", () => {
     ).rejects.toMatchObject({ code: "SpaceAccessDenied" });
   });
 
-  it("allows private Spaces for an authorized service identity", async () => {
+  it("allows private Spaces for the matching Space trigger service identity", async () => {
     await expect(
       assertSpaceAccessAllowed(
         {
           ...BASE_INPUT,
           accessMode: "private",
           invokingUserId: null,
-          invokingServiceIdentity: "service-user-1",
+          invokingServiceIdentity: spaceTriggerServiceIdentity(BASE_INPUT),
         },
-        new FakeMembershipRepository(["service-user-1"]),
+        new FakeMembershipRepository([]),
       ),
     ).resolves.toBeUndefined();
+  });
+
+  it("denies private Spaces for service identities scoped to another Space", async () => {
+    await expect(
+      assertSpaceAccessAllowed(
+        {
+          ...BASE_INPUT,
+          accessMode: "private",
+          invokingUserId: null,
+          invokingServiceIdentity: spaceTriggerServiceIdentity({
+            tenantId: "tenant-1",
+            spaceId: "space-2",
+          }),
+        },
+        new FakeMembershipRepository([]),
+      ),
+    ).rejects.toMatchObject({ code: "SpaceAccessDenied" });
   });
 });

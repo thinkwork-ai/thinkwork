@@ -20,6 +20,27 @@ export interface SpaceAccessCheckInput {
   invokingServiceIdentity?: string | null;
 }
 
+export function spaceTriggerServiceIdentity(input: {
+  tenantId: string;
+  spaceId: string;
+}): string {
+  return `space-trigger:${input.tenantId}:${input.spaceId}:webhook`;
+}
+
+export function isSpaceTriggerServiceIdentity(input: {
+  tenantId: string;
+  spaceId: string;
+  invokingServiceIdentity: string;
+}): boolean {
+  return (
+    input.invokingServiceIdentity ===
+    spaceTriggerServiceIdentity({
+      tenantId: input.tenantId,
+      spaceId: input.spaceId,
+    })
+  );
+}
+
 export class SpaceAccessDeniedError extends WorkspaceRenderError {
   constructor(spaceSlug: string) {
     super(
@@ -58,7 +79,20 @@ export async function assertSpaceAccessAllowed(
 ): Promise<void> {
   if (input.accessMode !== "private") return;
 
-  const actorId = input.invokingUserId ?? input.invokingServiceIdentity ?? null;
+  if (input.invokingServiceIdentity) {
+    if (
+      isSpaceTriggerServiceIdentity({
+        tenantId: input.tenantId,
+        spaceId: input.spaceId,
+        invokingServiceIdentity: input.invokingServiceIdentity,
+      })
+    ) {
+      return;
+    }
+    throw new SpaceAccessDeniedError(input.spaceSlug);
+  }
+
+  const actorId = input.invokingUserId ?? null;
   if (!actorId) throw new SpaceAccessDeniedError(input.spaceSlug);
 
   if (

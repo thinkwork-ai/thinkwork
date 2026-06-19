@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderWorkspaceTupleForWakeup } from "./wakeup-processor.js";
+import {
+  renderWorkspaceTupleForWakeup,
+  serviceIdentityForWebhookSpaceWakeup,
+} from "./wakeup-processor.js";
 
 /**
  * U6 (plan 2026-06-12-002) — wakeup dispatch parity for the per-turn
@@ -77,6 +80,91 @@ describe("renderWorkspaceTupleForWakeup — hydrate manifest passthrough", () =>
     });
     expect(result.rendered).toBe(true);
     expect(result.hydrateManifest).toBeUndefined();
+  });
+
+  it("serializes invokingServiceIdentity into the renderer Lambda payload", async () => {
+    mocks.lambdaSend.mockResolvedValue({
+      Payload: new TextEncoder().encode(JSON.stringify(okPayload)),
+    });
+
+    await renderWorkspaceTupleForWakeup({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      spaceId: "space-1",
+      threadId: "thread-1",
+      userId: null,
+      invokingServiceIdentity: "space-trigger:tenant-1:space-1:webhook",
+    });
+
+    const command = mocks.lambdaSend.mock.calls[0]?.[0] as {
+      input: { Payload: Uint8Array };
+    };
+    const payload = JSON.parse(new TextDecoder().decode(command.input.Payload));
+    expect(payload).toMatchObject({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      spaceId: "space-1",
+      threadId: "thread-1",
+      userId: null,
+      invokingServiceIdentity: "space-trigger:tenant-1:space-1:webhook",
+    });
+  });
+});
+
+describe("serviceIdentityForWebhookSpaceWakeup", () => {
+  it("creates a Space trigger identity for trusted webhook wakeups", () => {
+    expect(
+      serviceIdentityForWebhookSpaceWakeup({
+        tenantId: "tenant-1",
+        source: "webhook",
+        triggerDetail: "webhook:webhook-1",
+        requestedByActorType: "system",
+        spaceId: "space-1",
+        payload: {
+          webhookId: "webhook-1",
+          spaceId: "space-1",
+        },
+      }),
+    ).toBe("space-trigger:tenant-1:space-1:webhook");
+  });
+
+  it("does not create service authority for untrusted or incomplete wakeups", () => {
+    const trusted = {
+      tenantId: "tenant-1",
+      source: "webhook",
+      triggerDetail: "webhook:webhook-1",
+      requestedByActorType: "system",
+      spaceId: "space-1",
+      payload: {
+        webhookId: "webhook-1",
+        spaceId: "space-1",
+      },
+    };
+
+    expect(
+      serviceIdentityForWebhookSpaceWakeup({
+        ...trusted,
+        source: "schedule",
+      }),
+    ).toBeNull();
+    expect(
+      serviceIdentityForWebhookSpaceWakeup({
+        ...trusted,
+        requestedByActorType: "user",
+      }),
+    ).toBeNull();
+    expect(
+      serviceIdentityForWebhookSpaceWakeup({
+        ...trusted,
+        triggerDetail: "webhook:other-webhook",
+      }),
+    ).toBeNull();
+    expect(
+      serviceIdentityForWebhookSpaceWakeup({
+        ...trusted,
+        payload: { webhookId: "webhook-1", spaceId: "space-2" },
+      }),
+    ).toBeNull();
   });
 });
 

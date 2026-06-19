@@ -5,7 +5,10 @@ import {
   agentsMdHistoryKey,
   renderWorkspaceTuple,
 } from "./compose-tuple.js";
-import type { SpaceMembershipRepository } from "./space-membership-check.js";
+import {
+  spaceTriggerServiceIdentity,
+  type SpaceMembershipRepository,
+} from "./space-membership-check.js";
 import type {
   ResolvedWorkspaceRenderTuple,
   WorkspaceAgentProfileRoutingEntry,
@@ -1231,7 +1234,10 @@ modelRouting:
           tenantId: "tenant-1",
           agentId: "agent-1",
           spaceId: "space-1",
-          invokingServiceIdentity: "service-user-1",
+          invokingServiceIdentity: spaceTriggerServiceIdentity({
+            tenantId: "tenant-1",
+            spaceId: "space-1",
+          }),
         },
         {
           bucket: "workspace",
@@ -1241,9 +1247,7 @@ modelRouting:
             userId: null,
           }),
           objectStore: serviceStore,
-          spaceMembershipRepository: new FakeMembershipRepository([
-            "service-user-1",
-          ]),
+          spaceMembershipRepository: new FakeMembershipRepository([]),
         },
       ),
     ).resolves.toMatchObject({ cacheStatus: "miss" });
