@@ -181,7 +181,7 @@ export function SignInPage() {
       );
       return;
     }
-    window.location.href = getAuthOptionSignInUrl(option);
+    window.location.href = getAuthOptionSignInUrl(option, next || "/new");
   }
 
   const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
