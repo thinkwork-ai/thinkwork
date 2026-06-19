@@ -90,6 +90,7 @@ import {
 } from "../lib/resolve-runtime-function-name.js";
 import {
   isToolAllowed,
+  spaceTriggerServiceIdentity,
   type EffectiveWorkspacePolicy,
 } from "../lib/workspace-renderer/index.js";
 import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
@@ -319,6 +320,7 @@ export async function renderWorkspaceTupleForWakeup(input: {
   threadId?: string | null;
   threadSlug?: string | null;
   userId?: string | null;
+  invokingServiceIdentity?: string | null;
   agentBlockedTools?: unknown;
   agentAllowedTools?: unknown;
 }): Promise<RenderWorkspaceTupleForWakeupResult> {
@@ -343,6 +345,7 @@ export async function renderWorkspaceTupleForWakeup(input: {
           threadId: input.threadId ?? null,
           threadSlug: input.threadSlug ?? input.threadId ?? null,
           userId: input.userId ?? null,
+          invokingServiceIdentity: input.invokingServiceIdentity ?? null,
           agentBlockedTools: input.agentBlockedTools,
           agentAllowedTools: input.agentAllowedTools,
         }),
@@ -565,6 +568,30 @@ interface WakeupRow {
   // undefined so the admin skill's R15 "no invoker" refusal fires.
   requested_by_actor_type: string | null;
   requested_by_actor_id: string | null;
+}
+
+export function serviceIdentityForWebhookSpaceWakeup(input: {
+  tenantId: string;
+  source: string;
+  triggerDetail: string | null;
+  requestedByActorType: string | null;
+  spaceId?: string | null;
+  payload: Record<string, unknown> | null;
+}): string | null {
+  if (input.source !== "webhook") return null;
+  if (input.requestedByActorType !== "system") return null;
+  const spaceId = stringValue(input.spaceId);
+  if (!spaceId) return null;
+  const payloadSpaceId = stringValue(input.payload?.spaceId);
+  if (payloadSpaceId !== spaceId) return null;
+  const webhookId = stringValue(input.payload?.webhookId);
+  if (!webhookId) return null;
+  if (input.triggerDetail !== `webhook:${webhookId}`) return null;
+  return spaceTriggerServiceIdentity({ tenantId: input.tenantId, spaceId });
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 async function processWakeup(wakeup: WakeupRow): Promise<void> {
@@ -1578,6 +1605,14 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         threadId: runThreadId ?? null,
         threadSlug: runThreadId ?? null,
         userId: costOwnerUserId ?? null,
+        invokingServiceIdentity: serviceIdentityForWebhookSpaceWakeup({
+          tenantId: wakeup.tenant_id,
+          source: wakeup.source,
+          triggerDetail: wakeup.trigger_detail,
+          requestedByActorType: wakeup.requested_by_actor_type,
+          spaceId: runSpaceId,
+          payload,
+        }),
         agentBlockedTools: blockedTools,
       });
       if (renderedWorkspace.rendered) {
