@@ -3,7 +3,7 @@ linear: THNK-43
 title: WorkOS primary auth with Cognito token bridge
 status: in-progress
 updated: 2026-06-19
-branch: codex/thnk-43-u4-workos-logout
+branch: codex/thnk-43-u5-tenant-rollout
 ---
 
 # THNK-43 Autopilot Status
@@ -13,11 +13,10 @@ branch: codex/thnk-43-u4-workos-logout
 - Dispatcher marker: `dispatcher:THNK-43:Implementation:Codex`
 - Pass type: Autopilot implementation of
   `docs/plans/2026-06-19-001-feat-workos-primary-auth-bridge-plan.md`.
-- Scope: U4, correct WorkOS browser-session logout after WorkOS-primary
-  callback.
-- Branch: `codex/thnk-43-u4-workos-logout` from `origin/main`
-  `5ea2a8321`.
-- PR: pending.
+- Scope: U5, tenant/user enforcement, auditability, and rollout readiness.
+- Branch: `codex/thnk-43-u5-tenant-rollout` from `origin/main`
+  `039a748d1`.
+- PR: pending local verification.
 - CI: pending PR.
 
 ## Completed
@@ -61,6 +60,18 @@ branch: codex/thnk-43-u4-workos-logout
   directly. Fixed by using `@thinkwork/runtime-config` and re-pushed.
 - The branch was then rebased onto current `main`, force-pushed with lease,
   rechecked, squash-merged, and recorded in Linear.
+
+### U4 Correct WorkOS logout
+
+- Created and merged PR #2674:
+  <https://github.com/thinkwork-ai/thinkwork/pull/2674>.
+- Merge commit: `777142a107879c1007b3982121aa38d8faedfdb6`.
+- Required PR checks passed before merge.
+- Main deploy for commit `f5ccf3b44500afdfe755a8f48f571b4063adbd44`
+  completed successfully after the API Gateway route-conflict recovery.
+- Local verification server was started on `localhost:5180`; the sign-in page
+  rendered the WorkOS SSO control for the installed plugin.
+- Recorded merged/deployed/local-ready evidence in Linear.
 
 ### Prior hosted-bridge pass
 
@@ -234,7 +245,7 @@ Local verification:
   directly, violating the runtime-config fixture guardrail. The fix was pushed,
   checks passed, and PR #2673 was merged.
 
-## U4 Current Implementation
+## U4 Completed Implementation
 
 U4 makes WorkOS-primary logout end the upstream WorkOS browser session instead
 of only clearing ThinkWork's local Cognito tokens:
@@ -294,8 +305,79 @@ Remote CI recovery:
 - `bash scripts/build-lambdas.sh cognito-custom-auth`
 - `bash scripts/build-lambdas.sh workos-auth`
 
+## U5 Current Implementation
+
+U5 is making the WorkOS-primary bridge auditable and preserving workspace
+boundaries:
+
+- The WorkOS bridge resolver now joins `tenant_members` and carries an explicit
+  `hasActiveTenantMembership` signal for the mapped ThinkWork user.
+- WorkOS bridge success emits `auth.signin.success` audit evidence with
+  ThinkWork user id, tenant id, WorkOS user id, Cognito sub, auth-provider
+  resource id, tenant auth-provider reference id, and tenant-membership state.
+- Cognito custom-auth now handles the live AWS behavior where
+  `CreateAuthChallenge` does not receive the WorkOS bridge metadata from
+  `AdminInitiateAuth`; it creates a generic private challenge there and
+  verifies the signed bridge metadata from `AdminRespondToAuthChallenge`.
+- WorkOS bridge failures after a bridge record is consumed emit best-effort
+  `auth.signin.failure` evidence without logging tokens or raw secrets.
+- WorkOS logout now emits `auth.signout` audit evidence with ThinkWork user id,
+  tenant id, WorkOS user id, Cognito sub, WorkOS session row id, auth-provider
+  resource id, tenant auth-provider reference id, and logout result.
+- `/api/auth/me` now treats missing or inactive `tenant_members` rows as the
+  existing no-workspace response shape, even if the historical `users.tenant_id`
+  column is set.
+- Compliance redaction allowlists were expanded only for the WorkOS audit
+  identifiers above; token and client-secret shaped fields are still dropped.
+
+Local verification:
+
+- `pnpm install --store-dir .pnpm-store`
+  - Install succeeded. The optional `canvas` native build still emitted the
+    known Node 25/pkg-config warning, but pnpm exited 0.
+- `pnpm --dir packages/api test -- workos-cognito-bridge.test.ts workos-auth.test.ts lib/compliance/__tests__/redaction.test.ts`
+  - 99 tests passed across WorkOS bridge, WorkOS auth handler, and compliance
+    redaction.
+  - After live local e2e exposed Cognito's missing initiate-auth metadata, this
+    was rerun with 101 passing tests including the regression case.
+- `pnpm --dir packages/api typecheck`
+- `bash scripts/build-lambdas.sh cognito-custom-auth`
+- `bash scripts/build-lambdas.sh workos-auth`
+- `git diff --check`
+
+Local WorkOS/dev configuration repair:
+
+- `localhost:5180` was started from the U5 worktree using the copied local web
+  env and confirmed with `curl -I`.
+- Browser testing initially reached WorkOS `client-id-invalid`.
+- Confirmed the dev API still redirected with the old WorkOS client id suffix
+  `QA9640`, while the new ThinkWork WorkOS Staging app client id suffix is
+  `EWA5PV`.
+- Updated the dev `auth_provider_resources` row
+  `d6be764b-f2d0-43a3-b793-c94527e0238d` to the new WorkOS client id and
+  rotated the existing Secrets Manager value at the stored `client_secret_ref`
+  to the new WorkOS API key.
+- Browser/curl follow then reached `redirect-uri-invalid`, so the deployed dev
+  API callback URI
+  `https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/api/auth/workos/callback`
+  was added to the new WorkOS app redirect settings.
+- Follow check now lands on the AuthKit app URL using client suffix `EWA5PV`
+  with HTTP 200 instead of WorkOS error pages.
+- Browser e2e then reached
+  `http://localhost:5180/auth/callback?workos_bridge=...` but the web callback
+  showed `WorkOS bridge exchange failed`.
+- CloudWatch evidence from `/aws/lambda/thinkwork-dev-cognito-custom-auth`
+  showed `missing WorkOS bridge challenge` in `CreateAuthChallenge`, and
+  `/aws/lambda/thinkwork-dev-api-workos-auth` surfaced
+  `CreateAuthChallenge failed with error missing WorkOS bridge challenge`.
+- The dev database confirmed the WorkOS bridge rows were verified and consumed,
+  and the ThinkWork user `eric@homecareintel.com` had an active owner
+  `tenant_members` row. This ruled out WorkOS callback, bridge persistence, and
+  no-workspace bootstrap as the cause.
+- Localhost e2e is not ready to retry until the U5 branch is merged and the dev
+  Lambda deploy has picked up the custom-auth regression fix.
+
 ## Next Action
 
-Finish U3 implementation, run targeted local verification, open the U3 PR,
-monitor/fix required CI, squash merge, delete the branch/worktree, sync
-`origin/main`, then continue automatically to U4: correct WorkOS logout.
+Finish U5 verification, open the U5 PR, monitor/fix required CI, squash merge,
+delete the branch/worktree, sync `origin/main`, and record completion in Linear.

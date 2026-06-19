@@ -125,6 +125,16 @@ describe("workos-auth handler", () => {
       cognitoPrincipalId: "cognito-sub-123",
       now: new Date("2026-06-19T12:00:00Z"),
     });
+    expect(logoutDeps.emitSignOutAudit).toHaveBeenCalledWith({
+      tenantId: "tenant-123",
+      userId: "user-123",
+      cognitoSub: "cognito-sub-123",
+      sessionId: "session-row-123",
+      workosUserId: "workos-user-123",
+      authProviderResourceId: "resource-123",
+      tenantReferenceId: "tenant-ref-123",
+      result: "workos_logout_url_issued",
+    });
   });
 
   it("requires Cognito auth for WorkOS logout", async () => {
@@ -219,6 +229,7 @@ function bridgeDepsForHandler(): WorkosCognitoBridgeDeps {
       tenantId: "tenant-123",
       email: "eric@homecareintel.com",
       name: "Eric",
+      hasActiveTenantMembership: true,
     })),
     startCognitoCustomAuth: vi.fn(async () => ({
       id_token: jwt({
@@ -230,6 +241,8 @@ function bridgeDepsForHandler(): WorkosCognitoBridgeDeps {
       refresh_token: "refresh-token",
     })),
     recordWorkosSession: vi.fn(async () => undefined),
+    emitSignInSuccess: vi.fn(async () => undefined),
+    emitSignInFailure: vi.fn(async () => undefined),
     signingSecret: () => "api-secret",
     now: () => new Date("2026-06-19T11:00:00Z"),
     randomToken: () => "answer-token",
@@ -261,9 +274,15 @@ function logoutDepsForHandler(overrides: {
         ? overrides.session!
         : {
             id: "session-row-123",
+            tenantId: "tenant-123",
+            userId: "user-123",
+            tenantReferenceId: "tenant-ref-123",
+            authProviderResourceId: "resource-123",
+            workosUserId: "workos-user-123",
             workosSessionId: "workos-session-123",
           },
     ),
+    emitSignOutAudit: vi.fn(async () => undefined),
     now: () => new Date("2026-06-19T12:00:00Z"),
   };
 }

@@ -92,9 +92,21 @@ export async function handler(
         eq(tenantMembers.tenant_id, tenantId),
         eq(tenantMembers.principal_type, "user"),
         eq(tenantMembers.principal_id, userRow.id),
+        eq(tenantMembers.status, "active"),
       ),
     )
     .limit(1);
+
+  if (!memberRow) {
+    return json({
+      email: userRow.email,
+      userId: userRow.id,
+      tenantId: null,
+      role: null,
+      name: userRow.name ?? null,
+      note: "tenant_membership_inactive",
+    });
+  }
 
   return json({
     email: userRow.email,
