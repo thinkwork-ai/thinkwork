@@ -50,6 +50,25 @@ variable "google_oauth_client_secret" {
   default     = ""
 }
 
+variable "microsoft_oauth_client_id" {
+  description = "Microsoft OAuth client ID reserved for future Cognito/OAuth wiring. Accepted here so deployment-control-plane generated wrappers stay forward-compatible."
+  type        = string
+  default     = ""
+}
+
+variable "microsoft_oauth_client_secret" {
+  description = "Microsoft OAuth client secret reserved for future Cognito/OAuth wiring."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "microsoft_oauth_tenant" {
+  description = "Microsoft OAuth tenant reserved for future Cognito/OAuth wiring."
+  type        = string
+  default     = "organizations"
+}
+
 variable "oidc_identity_providers" {
   description = "Additional Cognito OIDC identity providers for customer bootstrap."
   type = list(object({
