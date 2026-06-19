@@ -76,11 +76,12 @@ U3/U4/U5/U6 before U7; U7 before U8.
 - Branch/worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u2-n8n-managed-app`
 - Git branch: `codex/thnk-50-u2-n8n-managed-app`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2694
 - Objective: add a real package-owned `n8nAdapter`, register it in the
   deployment-runner managed-app registry, define conservative desired-config
   inputs/defaults, and add runner/API tests for plan/apply summaries and
   greenfield plan job creation without publishing the final catalog manifest.
-- Status: in progress.
+- Status: PR opened; waiting for CI.
 - Local implementation summary:
   - Added package-owned `n8nAdapter` under `plugins/n8n/src/deployment/` with
     queue-mode plan variables, required secret/public URL inputs, destroy data
