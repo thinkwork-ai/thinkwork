@@ -492,6 +492,32 @@ describe("PluginDetail", () => {
     });
   });
 
+  it("lets operators re-drive an uninstall that is still marked uninstalling", async () => {
+    mockQueries({
+      install: {
+        ...baseInstall,
+        state: "uninstalling",
+        lastError: "Uninstall incomplete: runtime: Deployment plan failed",
+      },
+    });
+    render(<PluginDetail />);
+
+    fireEvent.click(screen.getByRole("button", { name: /retry uninstall/i }));
+    fireEvent.change(screen.getByPlaceholderText("lastmile"), {
+      target: { value: "lastmile" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^uninstall plugin$/i }));
+
+    await waitFor(() => {
+      expect(mocks.uninstall).toHaveBeenCalledWith({
+        input: {
+          installId: "install-1",
+          destructiveConfirmation: "lastmile",
+        },
+      });
+    });
+  });
+
   it("renders the Review-deployment-plan handoff for awaiting_approval and opens the dialog with the linked job", async () => {
     mockQueries({ install: awaitingApprovalInstall });
     render(<PluginDetail />);
