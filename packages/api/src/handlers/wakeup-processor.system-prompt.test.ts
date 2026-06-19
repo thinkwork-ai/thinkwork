@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extractComposedSystemPrompt,
   invokeAgentCore,
+  shouldInsertSyntheticWakeupUserMessage,
   SOURCES_WITH_MESSAGES,
 } from "./wakeup-processor.js";
 
@@ -111,10 +112,48 @@ describe("wakeup processor system prompt capture", () => {
       "webhook",
     ]);
 
-    // The catch-all is gated on the exclusion list…
-    expect(source).toContain("!SOURCES_WITH_MESSAGES.includes(wakeup.source)");
+    // The synthetic user-message insert is gated through the shared helper…
+    expect(source).toContain("shouldInsertSyntheticWakeupUserMessage({");
     // …and the chat branch really does handle question_answer.
     expect(source).toContain('wakeup.source === "question_answer"');
+  });
+
+  it("skips synthetic visible user messages for pre-seeded webhook openings only", () => {
+    expect(
+      shouldInsertSyntheticWakeupUserMessage({
+        source: "webhook",
+        payload: {
+          openingMessageAlreadyPersisted: true,
+          webhookPayload: { hello: "agent still sees this" },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      shouldInsertSyntheticWakeupUserMessage({
+        source: "webhook",
+        payload: {
+          webhookPayload: { legacy: true },
+        },
+      }),
+    ).toBe(true);
+    expect(
+      shouldInsertSyntheticWakeupUserMessage({
+        source: "schedule",
+        payload: null,
+      }),
+    ).toBe(true);
+    expect(
+      shouldInsertSyntheticWakeupUserMessage({
+        source: "chat_message",
+        payload: null,
+      }),
+    ).toBe(false);
+    expect(
+      shouldInsertSyntheticWakeupUserMessage({
+        source: "question_answer",
+        payload: null,
+      }),
+    ).toBe(false);
   });
 
   it("routes legacy Strands wakeups to the Pi AgentCore runtime", async () => {

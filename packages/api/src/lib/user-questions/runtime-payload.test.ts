@@ -141,7 +141,10 @@ describe("wakeup-processor delivery (card route, source 'question_answer')", () 
 
   it("does not insert a synthetic user message for question_answer wakeups (the answered card is the user input)", () => {
     expect(wakeupProcessorSource).toContain(
-      'wakeup.source !== "question_answer"',
+      "shouldInsertSyntheticWakeupUserMessage({",
+    );
+    expect(wakeupProcessorSource).toContain(
+      'if (input.source === "question_answer") return false',
     );
   });
 
