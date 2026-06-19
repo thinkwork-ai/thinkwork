@@ -590,6 +590,21 @@ export function serviceIdentityForWebhookSpaceWakeup(input: {
   return spaceTriggerServiceIdentity({ tenantId: input.tenantId, spaceId });
 }
 
+export function shouldInsertSyntheticWakeupUserMessage(input: {
+  source: string;
+  payload: Record<string, unknown> | null;
+}): boolean {
+  if (input.source === "chat_message") return false;
+  if (input.source === "question_answer") return false;
+  if (
+    input.source === "webhook" &&
+    input.payload?.openingMessageAlreadyPersisted === true
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -1844,8 +1859,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   // 2026-06-09-005 U3).
   if (
     runThreadId &&
-    wakeup.source !== "chat_message" &&
-    wakeup.source !== "question_answer"
+    shouldInsertSyntheticWakeupUserMessage({
+      source: wakeup.source,
+      payload,
+    })
   ) {
     const userContent = agentMessage.trim();
     await insertUserMessage(runThreadId, wakeup.tenant_id, userContent);

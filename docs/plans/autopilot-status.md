@@ -11,11 +11,11 @@ status: in_progress
 - Plan: `docs/plans/2026-06-19-001-feat-space-webhook-thread-start-plan.md`.
 - Origin requirements: `docs/brainstorms/2026-06-19-space-webhook-thread-start-requirements.md`.
 - Target branch: `main`.
-- Current implementation unit: U4 - Propagate service-trigger authority into no-user Space rendering.
-- Current branch: `codex/space-webhook-u4`.
-- Current worktree: `.Codex/worktrees/space-webhook-u4`.
-- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 [#2679](https://github.com/thinkwork-ai/thinkwork/pull/2679) merged as `5e51e4e5c`; U3 [#2680](https://github.com/thinkwork-ai/thinkwork/pull/2680) merged as `5796d706e`; U4 pending.
-- Status: U4 implementation in progress.
+- Current implementation unit: U5 - Align wakeup transcript behavior with pre-seeded webhook messages.
+- Current branch: `codex/space-webhook-u5`.
+- Current worktree: `.Codex/worktrees/space-webhook-u5`.
+- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 [#2679](https://github.com/thinkwork-ai/thinkwork/pull/2679) merged as `5e51e4e5c`; U3 [#2680](https://github.com/thinkwork-ai/thinkwork/pull/2680) merged as `5796d706e`; U4 [#2683](https://github.com/thinkwork-ai/thinkwork/pull/2683) merged as `43ebf575d`; U5 pending.
+- Status: U5 implementation in progress.
 - Notes:
   - Created isolated U1 worktree from `origin/main` at `5ea2a8321`.
   - Copied the Space webhook requirements and plan docs into the U1 worktree because they were still untracked in the main checkout when autopilot started.
@@ -30,6 +30,9 @@ status: in_progress
   - U3 PR #2680 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`) and was squash merged to `main`.
   - Created isolated U4 worktree from `origin/main` at `5796d706e`.
   - Added deterministic Space-trigger service identities for trusted webhook wakeups, allowed exact-match identities through private Space rendering, denied mismatched service identities, and serialized the service identity to the workspace renderer Lambda only when webhook source, trigger detail, payload webhook id, system attribution, and Space id align.
+  - U4 PR #2683 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`) and was squash merged to `main`.
+  - Created isolated U5 worktree from `origin/main` at `43ebf575d`.
+  - Added a wakeup transcript gate that skips synthetic visible user messages only for webhook wakeups whose payload says the opening message was already persisted, while preserving legacy webhook synthetic messages and the full agent-only webhook payload.
 - Local verification:
   - `pnpm install` completed; local Node 25 logged the known optional `canvas@2.11.2` native fallback build warning because `pkg-config` / `pixman-1` are not installed.
   - `pnpm exec vitest run src/lib/spaces/space-webhook-thread-start.test.ts` from `packages/api` passed: 6 tests.
@@ -45,6 +48,13 @@ status: in_progress
   - U4 `pnpm exec vitest run src/lib/workspace-renderer/space-membership.test.ts src/lib/workspace-renderer/compose-tuple.test.ts src/handlers/wakeup-processor.workspace-projection.test.ts` from `packages/api` passed: 32 tests.
   - U4 `pnpm --filter @thinkwork/api typecheck` passed.
   - U4 `git diff --check` passed.
+  - U5 `pnpm install` completed with the same optional `canvas@2.11.2` native fallback build warning.
+  - U5 `pnpm exec vitest run src/handlers/wakeup-processor.system-prompt.test.ts` from `packages/api` passed: 9 tests.
+  - U5 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U5 `git diff --check` passed.
+  - U5 CI `test` initially failed because `src/lib/user-questions/runtime-payload.test.ts` still asserted the old inline `wakeup.source !== "question_answer"` guard after the helper refactor.
+  - U5 fix verification: `pnpm exec vitest run src/lib/user-questions/runtime-payload.test.ts` from `packages/api` passed: 10 tests.
+  - U5 fix verification: `pnpm exec vitest run src/handlers/wakeup-processor.system-prompt.test.ts` from `packages/api` passed: 9 tests.
 - Blockers: none.
 
 ## THNK-15 Company Brain Premium Plugin - 2026-06-13
