@@ -1397,7 +1397,7 @@ jobs:
               --output text
           }
 
-          assert_route_state_matches() {
+          check_route_state() {
             local route_key="$1"
             local address="$2"
             local expected_api_id="$3"
@@ -1409,6 +1409,11 @@ jobs:
             state_route_key=$(awk -F' = ' '$1 ~ /^[[:space:]]*route_key$/ { gsub(/"/, "", $2); print $2; exit }' <<< "$state")
             if [ "$state_api_id" = "$expected_api_id" ] && [ "$state_route_key" = "$route_key" ]; then
               return 0
+            fi
+            if [ -z "$state_api_id" ] || [ -z "$state_route_key" ]; then
+              echo "::warning::Terraform state for ${address} is missing api_id or route_key; removing malformed state before import."
+              terraform state rm "$address"
+              return 1
             fi
 
             echo "::error::Terraform state for ${address} is ${state_api_id:-unknown}/${state_route_key:-unknown}, expected ${expected_api_id}/${route_key}."
@@ -1434,9 +1439,10 @@ jobs:
             fi
 
             if state=$(terraform state show "$address" 2>/dev/null); then
-              assert_route_state_matches "$route_key" "$address" "$api_id" "$state"
-              echo "Terraform state already tracks ${route_key}; skipping import."
-              return 0
+              if check_route_state "$route_key" "$address" "$api_id" "$state"; then
+                echo "Terraform state already tracks ${route_key}; skipping import."
+                return 0
+              fi
             fi
 
             local route_id
@@ -1452,7 +1458,7 @@ jobs:
             echo "Importing existing API Gateway route ${route_key} (${api_id}/${route_id})."
             terraform import -input=false -lock-timeout=10m "${TF_VAR_ARGS[@]}" "$address" "${api_id}/${route_id}"
             state=$(terraform state show "$address")
-            assert_route_state_matches "$route_key" "$address" "$api_id" "$state"
+            check_route_state "$route_key" "$address" "$api_id" "$state"
           }
 
           import_existing_api_route \
