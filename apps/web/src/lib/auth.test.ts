@@ -202,6 +202,12 @@ describe("signOut", () => {
     stubLocation("https://app.example");
     signOut();
     await flushAsyncLogout();
+    expect(
+      window.localStorage.getItem("thinkwork:workos-logout-marker"),
+    ).toContain("user_01KVDYR6GCPSJ1MP6YAG1G5YE0");
+    expect(
+      window.sessionStorage.getItem("thinkwork:workos-logout-marker"),
+    ).toBeNull();
 
     const staleIdToken = makeIdToken({
       email: "eric@homecareintel.com",

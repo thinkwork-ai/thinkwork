@@ -320,7 +320,7 @@ function rememberWorkosLogoutMarker(idToken: string): void {
   const workosIdentity = findWorkosIdentity(payload);
   if (!workosIdentity) return;
 
-  sessionStorage.setItem(
+  localStorage.setItem(
     WORKOS_LOGOUT_MARKER_KEY,
     JSON.stringify({
       email: typeof payload.email === "string" ? payload.email : null,
@@ -330,7 +330,7 @@ function rememberWorkosLogoutMarker(idToken: string): void {
 }
 
 function readWorkosLogoutMarker(): WorkosLogoutMarker | null {
-  const raw = sessionStorage.getItem(WORKOS_LOGOUT_MARKER_KEY);
+  const raw = localStorage.getItem(WORKOS_LOGOUT_MARKER_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<WorkosLogoutMarker>;
@@ -615,7 +615,7 @@ export async function assertNotStaleWorkosOAuthSession(
     );
   }
 
-  sessionStorage.removeItem(WORKOS_LOGOUT_MARKER_KEY);
+  localStorage.removeItem(WORKOS_LOGOUT_MARKER_KEY);
 }
 
 export async function exchangeCodeForSession(
