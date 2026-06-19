@@ -307,11 +307,12 @@ U3/U4/U5/U6 before U7; U7 before U8.
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u6-n8n-settings`
 - Git branch: `codex/thnk-50-u6-n8n-settings`
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2708
+- Merge commit: `352dd54ce20bc9dd281fa0d790ceb39fecbc1727`
 - Objective: add an operator-only n8n Plugin Detail settings surface for pinned
   custom Code node packages, backed by package-owned package validation and a
   GraphQL mutation that updates managed-app desired config by creating a
   reviewable `UPGRADE` plan job.
-- Status: PR open.
+- Status: merged.
 - Local implementation summary:
   - Added `n8nPluginSettings` and `updateN8nPluginPackageSettings` GraphQL
     operations, operator-gated against the installed n8n plugin and tenant
@@ -353,6 +354,61 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - CE code review artifact:
     `.context/compound-engineering/ce-code-review/20260619-184234-549a8794/summary.md`;
     residual actionable work: none.
+- CI:
+  - PR #2708 passed signed catalog build, CLA, lint, test, typecheck, and
+    verify after rebase/fix cycles, then squash-merged to `main`.
+
+### U7: Publish Manifest, Smokes, Docs, and Agent Instructions
+
+- Branch/worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u7-n8n-publish`
+- Git branch: `codex/thnk-50-u7-n8n-publish`
+- Objective: publish the final n8n catalog manifest, remove the deferred
+  publication gate, regenerate the first-party plugin registry, add package
+  smokes and bundled workflow-operator instructions, and document the
+  operator install/MCP/custom-package/teardown paths.
+- Status: in progress.
+- Local implementation summary:
+  - Replaced the n8n draft scaffold with a published `n8nManifest` and
+    `n8nPluginPackage`.
+  - Declared the n8n runtime infrastructure component, native
+    tenant-service-credential MCP component, Plugin Detail custom package UI
+    surface, and `n8n--workflow-operator` skill.
+  - Removed `thinkworkPlugin.catalogPublication = "deferred"` from
+    `plugins/n8n/package.json`.
+  - Added `@thinkwork/plugin-n8n` to the plugin catalog package dependency set
+    and regenerated `plugins/catalog/src/registry/generated-first-party.ts`.
+  - Added dry-run/live smoke scripts for managed-app deployment evidence and
+    native n8n MCP verification through the ThinkWork proxy path.
+  - Updated the n8n README plus admin/deploy docs for queue-mode runtime,
+    tenant service credential MCP, custom package image plans, shared native
+    operator account, activation guardrails, and teardown.
+  - Started the web dev server from this worktree on
+    `http://localhost:5175/settings/plugins`; in-app browser automation was
+    blocked by enterprise localhost policy, but the generated signed catalog
+    now contains nine plugins ordered
+    `company-brain,lakehouse,lastmile,n8n,plane,email-channel,sendgrid,twenty,workos-auth`.
+- Local verification:
+  - `pnpm install` completed; optional `canvas@2.11.2` native fallback reported
+    missing local `pkg-config`, but package installation completed and the
+    touched packages do not depend on that native module.
+  - `pnpm --filter @thinkwork/plugin-n8n test` passed.
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-n8n build` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog test` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog build` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog check:plugins` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog build:catalog -- --key /tmp/thnk-50-plugin-catalog-test-key.pem --out /tmp/thnk-50-plugin-catalog.json`
+    passed with a throwaway local Ed25519 key and wrote a signed 9-plugin
+    catalog.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/PluginsPage.test.tsx`
+    passed.
+  - `pnpm lint:plugin-source` passed.
+  - `node --test scripts/__tests__/verify-plugin-source-boundary.test.mjs`
+    passed.
+  - `node plugins/n8n/smoke/n8n-managed-app-smoke.mjs` passed dry-run mode.
+  - `node plugins/n8n/smoke/n8n-mcp-smoke.mjs` passed dry-run mode.
 
 ## Blockers
 

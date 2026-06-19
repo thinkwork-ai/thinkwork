@@ -1,13 +1,13 @@
 ---
 title: Managed Applications
-description: Deploy, park, destroy, and diagnose ThinkWork-managed applications such as Cognee, Twenty CRM, and Plane without customer GitHub Actions.
+description: Deploy, park, destroy, and diagnose ThinkWork-managed applications such as Cognee, Twenty CRM, Plane, and n8n without customer GitHub Actions.
 ---
 
 import { Aside, Steps } from "@astrojs/starlight/components";
 
 Managed applications are optional applications operated inside the customer
 ThinkWork AWS deployment. V1 proves the lifecycle with Cognee Knowledge Graph,
-Twenty CRM, and Plane.
+Twenty CRM, Plane, and n8n.
 
 Operators use Spaces Settings -> Managed Applications for the normal path:
 plan, review impact, approve, watch progress, and inspect evidence.
@@ -16,14 +16,14 @@ Managed-app jobs use the same deployment controller contract as full
 environment updates. A plan or apply request names the selected release
 manifest URL and SHA-256 digest, records a controller evidence prefix, and
 passes only release-verified image URIs or customer-owned secret ARNs into the
-runner. Base installs keep Cognee, Twenty, Plane, Slack, and Stripe disabled
-until an operator explicitly plans and approves the optional app.
+runner. Base installs keep Cognee, Twenty, Plane, n8n, Slack, and Stripe
+disabled until an operator explicitly plans and approves the optional app.
 
 The TEI proving environment keeps optional apps disabled in the base install.
 That is expected: foundation login, model catalog, runtime config, and release
-update proof can pass before Cognee, Twenty, or Plane are selected. The full
-managed-app gate is accepted only after an operator plans, approves, applies,
-and smokes the selected optional app through the customer controller.
+update proof can pass before Cognee, Twenty, Plane, or n8n are selected. The
+full managed-app gate is accepted only after an operator plans, approves,
+applies, and smokes the selected optional app through the customer controller.
 
 ## Application Plugin Source
 
@@ -166,6 +166,83 @@ Known limits for Plane v1:
   UUID resolution before UUID-only tool calls.
 - Live MCP write smoke intentionally requires `SMOKE_PLANE_MCP_WRITE=1` so
   read-only verification cannot create or comment on work items by accident.
+
+## n8n
+
+n8n is a self-hosted workflow automation runtime packaged as the `n8n`
+application plugin. Operators install it from Settings -> Plugins, then the
+plugin infrastructure component uses the managed-app deployment runner to
+provision the retained n8n substrate.
+
+Deploying n8n provisions the public n8n endpoint, main and worker ECS/Fargate
+services, a dedicated `thinkwork_n8n` database on the existing ThinkWork
+database instance, managed Valkey/Redis queue resources, binary-data storage,
+CloudWatch logs, the shared native operator credential, and the tenant service
+credential used by native n8n MCP. Parking n8n stops runtime capacity while
+retaining workflow data, queue/cache/storage resources, endpoint wiring,
+package image evidence, and MCP rows. Destroying n8n is destructive and removes
+the retained runtime plus app-owned database state, storage, queue/cache
+resources, secrets, and managed MCP rows.
+
+n8n v1 uses a shared native n8n local account for operation and recovery.
+ThinkWork does not deploy n8n Enterprise, n8n Cloud, per-user n8n activation,
+or n8n SSO. Native workflow activation stays in the n8n UI.
+
+Operators can configure pinned public npm packages for Code nodes from the n8n
+Plugin Detail settings page. Saving package settings creates a reviewable
+managed-app `UPGRADE` plan that builds a digest-pinned wrapper image and
+records package digest evidence. Package specs must be exact public npm package
+versions; private registries, ranges, tags, tarballs, git dependencies, and
+arbitrary Dockerfile edits are rejected.
+
+Run the managed-app smoke after deploy, park, redeploy, or destroy:
+
+```bash
+node plugins/n8n/smoke/n8n-managed-app-smoke.mjs
+
+SMOKE_ENABLE_N8N_MANAGED_APP=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/n8n-managed-app-smoke.json \
+  node plugins/n8n/smoke/n8n-managed-app-smoke.mjs
+```
+
+The smoke skips cleanly when n8n is unprovisioned or parked. When the runtime
+is enabled, it requires an HTTPS n8n URL and a successful health-path response.
+It also verifies main/worker service, database, queue, storage, image digest,
+package digest, and service credential evidence when Terraform outputs are
+available.
+
+After n8n is deployed, native instance-level MCP is enabled, MCP access is
+enabled on the target workflow/project/folder, and the managed MCP server is
+assigned to an agent, run the ThinkWork proxy smoke:
+
+```bash
+SMOKE_ENABLE_N8N_MCP=1 \
+  SMOKE_N8N_THINKWORK_PROXY=1 \
+  SMOKE_API_BASE_URL=<api-url> \
+  SMOKE_COGNITO_ID_TOKEN=<operator-or-agent-user-token> \
+  SMOKE_AGENT_ID=<agent-id> \
+  SMOKE_N8N_INSTALL_ID=<plugin-install-id> \
+  SMOKE_TENANT_ID=<tenant-id> \
+  node plugins/n8n/smoke/n8n-mcp-smoke.mjs
+```
+
+The MCP smoke is read-only by default. It proves `tools/list` through the
+ThinkWork MCP proxy and can read a disposable workflow when
+`SMOKE_N8N_WORKFLOW_ID` and tool env are configured. It never publishes,
+unpublishes, activates, or deactivates production workflows.
+
+Known limits for n8n v1:
+
+- n8n is not a per-user connector. The tenant service credential is shared for
+  the managed n8n MCP server.
+- Agents can inspect, draft, and run explicitly allowed low-risk tests, but
+  production publish/unpublish and activation stay with the shared native n8n
+  operator.
+- Operators must enable instance-level MCP and workflow/project/folder MCP
+  access in n8n before agents can see native workflow tools.
+- Custom Code node packages require a reviewed package image plan and evidence
+  before Terraform apply.
 
 ## Evidence Fields
 

@@ -39,6 +39,11 @@ describe("generated first-party plugin registry", () => {
         exportName: "lastmilePluginPackage",
       },
       {
+        packageKey: "n8n",
+        packageName: "@thinkwork/plugin-n8n",
+        exportName: "n8nPluginPackage",
+      },
+      {
         packageKey: "plane",
         packageName: "@thinkwork/plugin-plane",
         exportName: "planePluginPackage",
