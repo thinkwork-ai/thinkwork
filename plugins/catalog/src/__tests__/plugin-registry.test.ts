@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -59,6 +61,28 @@ describe("generated first-party plugin registry", () => {
     ]);
   });
 
+  it("skips packages whose catalog publication is deferred", () => {
+    const repoRoot = mkdtempRepo();
+    try {
+      writePluginPackage(repoRoot, "alpha", "@thinkwork/plugin-alpha");
+      writePluginPackage(repoRoot, "n8n", "@thinkwork/plugin-n8n", {
+        catalogPublication: "deferred",
+      });
+
+      expect(discoverPluginRegistryEntries({ repoRoot })).toEqual([
+        {
+          packageKey: "alpha",
+          packageName: "@thinkwork/plugin-alpha",
+          exportName: "alphaPluginPackage",
+          manifestExportName: "alphaManifest",
+          rawExportName: "rawAlphaPluginPackage",
+        },
+      ]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("keeps the checked-in generated aggregate fresh", () => {
     const generatedPath = fileURLToPath(
       new URL("../registry/generated-first-party.ts", import.meta.url),
@@ -66,3 +90,26 @@ describe("generated first-party plugin registry", () => {
     expect(readFileSync(generatedPath, "utf8")).toBe(expectedPluginRegistry());
   });
 });
+
+function mkdtempRepo() {
+  const repoRoot = join(
+    tmpdir(),
+    `thinkwork-plugin-registry-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
+  mkdirSync(join(repoRoot, "plugins"), { recursive: true });
+  return repoRoot;
+}
+
+function writePluginPackage(
+  repoRoot: string,
+  packageKey: string,
+  packageName: string,
+  thinkworkPlugin?: { catalogPublication?: string },
+) {
+  const packageRoot = join(repoRoot, "plugins", packageKey);
+  mkdirSync(packageRoot, { recursive: true });
+  writeFileSync(
+    join(packageRoot, "package.json"),
+    `${JSON.stringify({ name: packageName, thinkworkPlugin }, null, 2)}\n`,
+  );
+}

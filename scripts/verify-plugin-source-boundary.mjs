@@ -21,6 +21,7 @@ const PLUGIN_KEYS = [
   "email-channel",
   "lakehouse",
   "lastmile",
+  "n8n",
   "plane",
   "twenty",
 ];
@@ -31,6 +32,7 @@ const PLUGIN_SOURCE_ROOTS = new Map([
   ["email-channel", ["plugins/email-channel/"]],
   ["lakehouse", ["plugins/lakehouse/"]],
   ["lastmile", ["plugins/lastmile/"]],
+  ["n8n", ["plugins/n8n/"]],
   ["plane", ["plugins/plane/"]],
   ["twenty", ["plugins/twenty/"]],
 ]);

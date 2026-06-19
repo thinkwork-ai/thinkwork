@@ -60,6 +60,16 @@ export const sharedPluginTermAllowlist = [
       "shared plugin settings shell renders the Email Channel plugin control plane.",
   },
   {
+    path: "packages/api/src/graphql/resolvers/routines/importN8nRoutine.mutation.ts",
+    reason:
+      "legacy n8n workflow-to-Routine import mutation; THNK-50 application plugin source lives under plugins/n8n.",
+  },
+  {
+    pathPrefix: "packages/api/src/lib/routines/n8n/",
+    reason:
+      "legacy n8n workflow-to-Routine migration/import substrate, not THNK-50 application plugin source.",
+  },
+  {
     path: "packages/database-pg/__tests__/migration-0170-email-channel-plugin.test.ts",
     reason: "Email Channel plugin database contract coverage.",
   },
