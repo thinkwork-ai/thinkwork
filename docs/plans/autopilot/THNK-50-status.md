@@ -363,11 +363,13 @@ U3/U4/U5/U6 before U7; U7 before U8.
 - Branch/worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u7-n8n-publish`
 - Git branch: `codex/thnk-50-u7-n8n-publish`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2709
+- Merge commit: `ededec8828cd4415c8ae2c7209ed2a31c0652d6d`
 - Objective: publish the final n8n catalog manifest, remove the deferred
   publication gate, regenerate the first-party plugin registry, add package
   smokes and bundled workflow-operator instructions, and document the
   operator install/MCP/custom-package/teardown paths.
-- Status: in progress.
+- Status: merged.
 - Local implementation summary:
   - Replaced the n8n draft scaffold with a published `n8nManifest` and
     `n8nPluginPackage`.
@@ -409,7 +411,121 @@ U3/U4/U5/U6 before U7; U7 before U8.
     passed.
   - `node plugins/n8n/smoke/n8n-managed-app-smoke.mjs` passed dry-run mode.
   - `node plugins/n8n/smoke/n8n-mcp-smoke.mjs` passed dry-run mode.
+- CI:
+  - PR #2709 initial `Validate signed catalog build` failed because
+    `plugins/catalog/src/__tests__/plugin-registry.test.ts` still expected the
+    previous discovered package list. Fixed the assertion to include n8n.
+  - PR #2709 final checks passed: signed catalog build, CLA, lint, test,
+    typecheck, and verify, then squash-merged to `main`.
+
+### U8: End-to-End Verification and Linear Handoff
+
+- Branch/worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u8-n8n-verification`
+- Git branch: `codex/thnk-50-u8-n8n-verification`
+- Objective: prove the n8n plugin through the deployed ThinkWork
+  application-plugin path: install from Settings -> Plugins, approve/apply the
+  managed-app plan, verify the public n8n runtime and deployment evidence,
+  exercise valid and invalid custom package configuration, verify native n8n
+  MCP through ThinkWork with the tenant service credential and agent
+  instructions, then park and destroy through the managed-application lifecycle
+  with teardown evidence.
+- Status: in progress.
+- Local setup:
+  - U8 started from fresh `origin/main` at
+    `ededec8828cd4415c8ae2c7209ed2a31c0652d6d`.
+  - Copied the local web `.env` from the main checkout and started
+    `http://localhost:5180/settings/plugins` from this worktree for operator
+    catalog inspection.
+  - `pnpm install` completed; optional `canvas@2.11.2` native build fallback
+    reported missing local `pkg-config`, but installation completed and the web
+    dev server started successfully.
+- Catalog proof:
+  - The deployed dev API `pluginCatalogMetadata` returned source
+    `github-release` for repository `thinkwork-ai/thinkwork`, ref `main`,
+    commit `ededec8828cd4415c8ae2c7209ed2a31c0652d6d`, release tag
+    `plugin-catalog-main`, and `lastRefreshStatus: fresh`.
+  - The deployed dev API `pluginCatalog` returned nine entries in display-name
+    order including `n8n` between `lastmile` and `plane`.
+  - Main branch Test workflow for `ededec8828cd4415c8ae2c7209ed2a31c0652d6d`
+    passed; the Deploy workflow was still in Terraform Apply when catalog proof
+    was captured, so managed-app install verification waited for the platform
+    deploy to finish to avoid Terraform state-lock contention.
+- Install attempt:
+  - After the Deploy workflow for
+    `ededec8828cd4415c8ae2c7209ed2a31c0652d6d` completed successfully, the
+    deployed dev GraphQL `installPlugin(pluginKey: "n8n")` mutation created
+    plugin install `b984678a-30a5-4cb7-9a9c-3d215055dce2` and managed-app
+    deployment plan job `15a5f4d9-2127-4ac3-b3e0-15d2ad92e694`.
+  - The runtime component entered `awaiting_approval` with handler ref
+    `managedAppKey: n8n`, operation `ENABLE`, managed application
+    `105d8192-ffbf-4eda-9ebe-d018ea1c2b43`, and desired config version `v1`.
+  - Plan evidence bucket/prefix:
+    `thinkwork-dev-487219502366-deploy-evidence/0015953e-aa13-4cab-8398-2e70f73dda63/n8n/15a5f4d9-2127-4ac3-b3e0-15d2ad92e694/plan`.
+  - The plan job failed before Terraform plan summary generation with latest
+    event `plan_evidence_failed`; CodeBuild build ARN
+    `arn:aws:codebuild:us-east-1:487219502366:build/thinkwork-dev-deployment-runner:259525c1-6c97-4d65-881b-7834c2024396`.
+- Runner regression found during install:
+  - `redacted-terraform-vars.json` for the failed n8n plan contained no
+    `n8n_*` desired variables because the generated Terraform wrapper had not
+    declared or passed n8n variables through to `module.thinkwork`.
+  - The live install payload intentionally contained only the plugin-level
+    desired config (`databaseName`, `storagePrefix`, `mainDesiredCount`,
+    `workerDesiredCount`) and expected the deployment layer to fill in release
+    image, shared database-admin secret, generated runtime secret placeholders,
+    public URL, and certificate defaults.
+  - The same generated tfvars preserved `plane_provisioned = true` and
+    `plane_runtime_enabled = true` from current Terraform outputs while
+    clearing Plane's required image/secret/storage/public URL/certificate
+    values to empty strings. Terraform therefore failed Plane configuration
+    preconditions during the unrelated n8n plan.
+  - Root cause: `terraform/modules/app/deployment-control-plane/runner.py`
+    preserved Cognee and Twenty guardrails but not Plane guardrails, and it had
+    no Python-side n8n override generation for managed-app plan payloads.
+- Runner fix in this U8 branch:
+  - Added Python n8n managed-app override generation for `ENABLE`, `PARK`,
+    `UPGRADE`, and `DESTROY`, including queue-mode defaults, the separate
+    `thinkwork_n8n` database default, `managed-apps/n8n` storage prefix,
+    tenant service credential/operator/encryption/database secret ARN inputs,
+    digest-pinned base/package image handling, and custom-package digest
+    validation.
+  - Preserved Plane guardrail values from
+    `terraform_data.plane_configuration_guardrails` during non-Plane managed
+    app plans so an unrelated n8n plan cannot blank an existing Plane runtime.
+  - Preserved n8n guardrail values during unrelated managed-app plans, and
+    expanded `terraform_data.n8n_configuration_guardrails` to record package,
+    runtime count, container port, storage mode, cache, CIDR, and KMS settings
+    needed for future preservation.
+  - Added generated-runner Terraform declarations, module pass-throughs, and
+    root outputs for n8n so `terraform.auto.tfvars.json` values are consumed
+    during plan/apply and refreshed after apply.
+  - Added n8n targeted Terraform plan/apply scope
+    (`module.thinkwork.terraform_data.n8n_configuration_guardrails` and
+    `module.thinkwork.module.n8n`) plus scope validation to keep the retry
+    isolated to the n8n managed-app substrate.
+  - Taught the runner to complete sparse n8n install payloads from the release
+    manifest/runtime image, current `db_secret_arn`, generated secret
+    placeholders, sibling app public URL/certificate guardrails, and safe n8n
+    storage/runtime defaults.
+- Local verification for the runner fix:
+  - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`
+    passed.
+  - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    passed: 74 tests.
+  - `terraform fmt -check terraform/modules/thinkwork` passed.
+  - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed: 9
+    tests.
+  - `pnpm --filter @thinkwork/deployment-runner test -- deployment-runner-managed-apps`
+    passed: 23 tests.
+  - `pnpm --filter @thinkwork/deployment-runner typecheck` passed.
+  - `pnpm dlx prettier@latest --check docs/plans/autopilot/THNK-50-status.md`
+    passed.
+  - `git diff --check` passed.
 
 ## Blockers
 
-- None currently.
+- Active fix in progress: the first deployed n8n install exposed a deployment
+  runner regression. This branch now contains the local fix and tests; the next
+  step is to open/merge the U8 runner fix PR, wait for main deploy, then retry
+  the n8n plugin install through the deployed ThinkWork managed-application
+  path.
