@@ -27,9 +27,15 @@ export function discoverPluginRegistryEntries({
       if (!existsSync(packageJsonPath)) return null;
       const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
         name?: string;
+        thinkworkPlugin?: {
+          catalogPublication?: string;
+        };
       };
       if (!packageJson.name?.startsWith("@thinkwork/plugin-")) return null;
       if (packageJson.name === "@thinkwork/plugin-catalog") return null;
+      if (packageJson.thinkworkPlugin?.catalogPublication === "deferred") {
+        return null;
+      }
       const exportName = `${camelCase(packageKey)}PluginPackage`;
       return {
         packageKey,

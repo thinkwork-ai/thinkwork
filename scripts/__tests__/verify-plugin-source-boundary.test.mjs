@@ -28,6 +28,7 @@ describe("verify-plugin-source-boundary", () => {
       );
       await writeFixtureFile(dir, "plugins/email-channel/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/lakehouse/src/manifest.ts");
+      await writeFixtureFile(dir, "plugins/n8n/src/manifest.ts");
 
       const result = await scanFixture(dir);
 
@@ -44,10 +45,11 @@ describe("verify-plugin-source-boundary", () => {
         "plugins/lastmile/src/email-channel-notes.md",
       );
       await writeFixtureFile(dir, "plugins/lastmile/src/lakehouse-notes.md");
+      await writeFixtureFile(dir, "plugins/lastmile/src/n8n-notes.md");
 
       const result = await scanFixture(dir);
 
-      assert.equal(result.violations.length, 3);
+      assert.equal(result.violations.length, 4);
       assert.equal(
         result.violations[0].path,
         "plugins/lastmile/src/email-channel-notes.md",
@@ -60,9 +62,14 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations[1].pluginKeys, ["lakehouse"]);
       assert.equal(
         result.violations[2].path,
+        "plugins/lastmile/src/n8n-notes.md",
+      );
+      assert.deepEqual(result.violations[2].pluginKeys, ["n8n"]);
+      assert.equal(
+        result.violations[3].path,
         "plugins/lastmile/src/plane-notes.md",
       );
-      assert.deepEqual(result.violations[2].pluginKeys, ["plane"]);
+      assert.deepEqual(result.violations[3].pluginKeys, ["plane"]);
     });
   });
 
@@ -76,10 +83,11 @@ describe("verify-plugin-source-boundary", () => {
         dir,
         "packages/api/src/lib/plugins/lakehouse-extra.ts",
       );
+      await writeFixtureFile(dir, "packages/api/src/lib/plugins/n8n-extra.ts");
 
       const result = await scanFixture(dir);
 
-      assert.equal(result.violations.length, 2);
+      assert.equal(result.violations.length, 3);
       assert.equal(
         result.violations[0].path,
         "packages/api/src/lib/plugins/lakehouse-extra.ts",
@@ -87,9 +95,14 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations[0].pluginKeys, ["lakehouse"]);
       assert.equal(
         result.violations[1].path,
+        "packages/api/src/lib/plugins/n8n-extra.ts",
+      );
+      assert.deepEqual(result.violations[1].pluginKeys, ["n8n"]);
+      assert.equal(
+        result.violations[2].path,
         "packages/api/src/lib/plugins/plane-extra.ts",
       );
-      assert.deepEqual(result.violations[1].pluginKeys, ["plane"]);
+      assert.deepEqual(result.violations[2].pluginKeys, ["plane"]);
     });
   });
 
