@@ -651,18 +651,26 @@ def terraform_workspace_name(stage, payload):
 
 def refresh_outputs_after_targeted_apply(payload):
     if not is_managed_app_operation(payload):
-        return
+        return True
     print("[runner] refreshing Terraform outputs after targeted managed-app apply")
-    run(
-        [
-            "terraform",
-            "apply",
-            "-refresh-only",
-            "-auto-approve",
-            "-no-color",
-        ],
-        cwd=TF,
-    )
+    try:
+        run(
+            [
+                "terraform",
+                "apply",
+                "-refresh-only",
+                "-auto-approve",
+                "-no-color",
+            ],
+            cwd=TF,
+        )
+        return True
+    except subprocess.CalledProcessError as exc:
+        print(
+            "[runner] managed-app apply succeeded, but the optional root "
+            f"output refresh failed; continuing: {exc}"
+        )
+        return False
 
 
 def is_managed_app_operation(payload):

@@ -1626,8 +1626,8 @@ def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPa
     calls: list[list[str]] = []
     monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
 
-    runner.refresh_outputs_after_targeted_apply({"appKey": "plane"})
-    runner.refresh_outputs_after_targeted_apply({})
+    assert runner.refresh_outputs_after_targeted_apply({"appKey": "plane"}) is True
+    assert runner.refresh_outputs_after_targeted_apply({}) is True
 
     assert calls == [
         [
@@ -1638,6 +1638,19 @@ def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPa
             "-no-color",
         ]
     ]
+
+
+def test_managed_app_output_refresh_failure_does_not_fail_apply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+
+    def fail_refresh(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(1, ["terraform", "apply"])
+
+    monkeypatch.setattr(runner, "run", fail_refresh)
+
+    assert runner.refresh_outputs_after_targeted_apply({"appKey": "n8n"}) is False
 
 
 def test_managed_app_overrides_reject_missing_operation() -> None:
