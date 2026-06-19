@@ -17,7 +17,7 @@ export const Route = createFileRoute("/auth/callback")({
   }),
 });
 
-function AuthCallback() {
+export function AuthCallback() {
   const { code, error: oauthError, error_description } = Route.useSearch();
   const [error, setError] = useState<string | null>(null);
   const exchanged = useRef(false);
@@ -64,6 +64,13 @@ function AuthCallback() {
         window.location.href = next;
       })
       .catch((err) => {
+        if (
+          err instanceof Error &&
+          err.message.includes("WorkOS is still signed in")
+        ) {
+          window.location.href = getGoogleSignInUrl();
+          return;
+        }
         setError(err instanceof Error ? err.message : "OAuth callback failed");
       });
   }, [code, error_description, oauthError]);
