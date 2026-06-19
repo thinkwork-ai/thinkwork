@@ -26,3 +26,4 @@ export const lakehousePluginPackage = {
 } as const;
 
 export { lakehouseManifest };
+export * from "./edge-integration";

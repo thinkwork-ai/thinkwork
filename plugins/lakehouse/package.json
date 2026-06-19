@@ -6,7 +6,11 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./manifest": "./src/manifest.ts"
+    "./manifest": "./src/manifest.ts",
+    "./edge-integration": "./src/edge-integration/index.ts",
+    "./runner": "./runner/src/index.ts",
+    "./mcp": "./mcp/src/index.ts",
+    "./parity": "./parity/src/index.ts"
   },
   "scripts": {
     "build": "tsc --build",
