@@ -23,22 +23,22 @@ export function ManagedApplicationJobTimeline({
   }
 
   return (
-    <ol className="space-y-2">
+    <ol className="min-w-0 space-y-2">
       {job.events.map((event) => (
         <li
           key={event.id}
-          className="rounded-md border border-border bg-muted/20 px-3 py-2"
+          className="min-w-0 rounded-md border border-border bg-muted/20 px-3 py-2"
         >
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">
+              <p className="text-sm font-medium leading-5 text-foreground [overflow-wrap:anywhere]">
                 {event.message}
               </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {event.eventType}
               </p>
             </div>
-            <Badge variant="outline" className="shrink-0">
+            <Badge variant="outline" className="w-fit shrink-0 whitespace-nowrap">
               {formatTimestamp(event.createdAt)}
             </Badge>
           </div>
