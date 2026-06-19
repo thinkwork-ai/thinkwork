@@ -16,6 +16,8 @@ function parseArgs(argv) {
     workflowKey:
       process.env.TWENTY_THINKWORK_WORKFLOW_KEY || DEFAULT_WORKFLOW_KEY,
     createDraft: process.env.TWENTY_THINKWORK_CREATE_DRAFT_FROM_ACTIVE === "1",
+    allowActiveUpdate:
+      process.env.TWENTY_THINKWORK_ALLOW_ACTIVE_UPDATE === "1",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -40,6 +42,8 @@ function parseArgs(argv) {
       args.workflowKey = requireValue(argv, ++index, arg);
     } else if (arg === "--create-draft-from-active") {
       args.createDraft = true;
+    } else if (arg === "--allow-active-update") {
+      args.allowActiveUpdate = true;
     } else if (arg === "--dry-run") {
       args.dryRun = true;
     } else if (arg === "--apply") {
@@ -454,6 +458,9 @@ function selectStep(workflowVersion, stepId) {
 }
 
 function buildThinkWorkStep({ existingStep, logicFunction, args }) {
+  const opportunityId = "{{trigger.properties.after.id}}";
+  const opportunityUpdatedAt = "{{trigger.properties.after.updatedAt}}";
+
   return compactObject({
     id: existingStep.id || uuid(),
     name: "ThinkWork Webhook",
@@ -466,13 +473,25 @@ function buildThinkWorkStep({ existingStep, logicFunction, args }) {
         logicFunctionId: logicFunction.id,
         logicFunctionInput: {
           event: args.event,
-          opportunityId: "{{trigger.object.id}}",
-          opportunityName: "{{trigger.object.name}}",
-          companyName: "{{trigger.object.company.name}}",
-          stage: "{{trigger.object.stage}}",
+          opportunityId,
+          recordId: opportunityId,
+          opportunityName: "{{trigger.properties.after.name}}",
+          companyId: "{{trigger.properties.after.companyId}}",
+          customerId: "{{trigger.properties.after.companyId}}",
+          companyName: "{{trigger.properties.after.company.name}}",
+          amount: {
+            amountMicros: "{{trigger.properties.after.amount.amountMicros}}",
+            currencyCode: "{{trigger.properties.after.amount.currencyCode}}",
+          },
+          closeDate: "{{trigger.properties.after.closeDate}}",
+          ownerId: "{{trigger.properties.after.ownerId}}",
+          pointOfContactId: "{{trigger.properties.after.pointOfContactId}}",
+          stage: "{{trigger.properties.after.stage}}",
           workflowKey: args.workflowKey,
-          occurredAt: "{{trigger.object.updatedAt}}",
-          idempotencyKey: `twenty-app:${args.workflowKey}:{{trigger.object.id}}:${args.triggerStage}`,
+          updatedAt: opportunityUpdatedAt,
+          occurredAt: opportunityUpdatedAt,
+          opportunityUrl: `${args.url}/objects/opportunities/${opportunityId}`,
+          idempotencyKey: `twenty-app:${args.workflowKey}:${opportunityId}:${args.triggerStage}:${opportunityUpdatedAt}`,
         },
       },
     },
@@ -500,6 +519,7 @@ function summarize({
       name: workflowVersion.name,
       status: workflowVersion.status,
     },
+    allowActiveUpdate: args.allowActiveUpdate,
     existingStep: {
       id: existingStep.id,
       name: existingStep.name,
@@ -513,6 +533,7 @@ function summarize({
       logicFunctionUniversalIdentifier: logicFunction.universalIdentifier,
       triggerStage: args.triggerStage,
       workflowKey: args.workflowKey,
+      logicFunctionInput: step.settings?.input?.logicFunctionInput,
     },
   };
 }
@@ -548,6 +569,7 @@ async function updateWorkflowVersionStep(client, workflowVersionId, step) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const url = validateUrl(args.url);
+  args.url = url;
   if (!args.apiKey) {
     throw new Error("Set TWENTY_APP_SYNC_API_KEY or pass --api-key.");
   }
@@ -569,9 +591,13 @@ async function main() {
     workflowVersion = await createDraftFromActive(dataClient, workflowVersion);
   }
 
-  if (!args.dryRun && workflowVersion.status !== "DRAFT") {
+  if (
+    !args.dryRun &&
+    workflowVersion.status !== "DRAFT" &&
+    !(workflowVersion.status === "ACTIVE" && args.allowActiveUpdate)
+  ) {
     throw new Error(
-      `Workflow version ${workflowVersion.id} is ${workflowVersion.status}; create or target a DRAFT version before applying workflow wiring.`,
+      `Workflow version ${workflowVersion.id} is ${workflowVersion.status}; create or target a DRAFT version before applying workflow wiring, or pass --allow-active-update for an intentional active-version update.`,
     );
   }
 
