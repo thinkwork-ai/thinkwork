@@ -16,22 +16,23 @@ lightweight, reviewable, code-first runner over a heavier integration platform
 that ThinkWork must operate as another product.
 
 The selected direction is a ThinkWork Edge Integration Runner: ThinkWork owns the
-LakeHouse plugin, integration review loop, run policy, approvals, evidence, and
-remediation experience; a customer-side edge runner executes approved Meltano
-project bundles near Oracle/JDE, injects local secrets at runtime, uploads raw
-outputs to customer AWS, and reports structured evidence back to ThinkWork. The
-existing `lakehouse` plugin remains the product identity established by
+LakeHouse plugin, integration review loop, config publication, run policy,
+approvals, evidence, and remediation experience; a customer-side edge runner
+pulls an approved Meltano config version before each run, materializes it near
+Oracle/JDE, injects local secrets at runtime, uploads raw outputs to customer
+AWS, and reports structured evidence back to ThinkWork. The existing
+`lakehouse` plugin remains the product identity established by
 `docs/brainstorms/2026-06-18-lakehouse-plugin-shell-requirements.md`.
 
 ```mermaid
 flowchart LR
-    TW["ThinkWork / Customer AWS<br/>LakeHouse plugin, review UI, desired state, approvals, evidence"]
-    Runner["On-prem Edge Runner<br/>Meltano bundle, MCP control server, local secrets, schedules"]
+    TW["ThinkWork / Customer AWS<br/>LakeHouse plugin, review UI, approved config, approvals, evidence"]
+    Runner["On-prem Edge Runner<br/>Pull-before-run config, MCP control server, local secrets"]
     JDE["Oracle / JDE<br/>Curated sales extract views"]
     Raw["Customer AWS raw landing zone<br/>S3 / Iceberg handoff"]
     Assets["LakeHouse assets<br/>dbt / Dagster / health checks"]
 
-    TW -->|"approved bundle pull only"| Runner
+    TW -->|"approved config version pull only"| Runner
     Runner -->|"local network reads"| JDE
     Runner -->|"raw outputs, row counts, schema snapshots"| Raw
     Raw --> Assets
@@ -68,6 +69,13 @@ Recommendation: use the Meltano Edge Runner for v1, scoped to a McPherson sales
 slice and designed so the runner contract can become reusable after the spike
 proves parity.
 
+Config publication recommendation: keep the canonical, human-reviewable Meltano
+project source in a Git-backed review path, then publish a signed, immutable S3
+artifact bundle into the customer AWS account for runner consumption. Private
+GitHub remains acceptable for authoring/review if the customer approves it;
+CodeCommit and a broader ThinkWork release-bundle channel are contingencies
+rather than the v1 default.
+
 ---
 
 ## Key Flows
@@ -75,26 +83,27 @@ proves parity.
 - F1. Author and approve an integration bundle
   - **Trigger:** McPherson selects a JDE sales slice to migrate or shadow-run.
   - **Actors:** A1, A2, A4, A5
-  - **Steps:** ThinkWork agents generate or update a Meltano project bundle;
-    reviewers inspect diffs for extract views, job definitions, schedule policy,
-    state handling, destination, and dbt/Dagster handoff; approval records the
-    desired bundle version and run policy.
-  - **Outcome:** A reviewable, approved integration bundle is ready for the
-    customer-side runner to pull.
-  - **Covered by:** R1, R2, R3, R4, R16
+  - **Steps:** ThinkWork agents generate or update a Meltano project; reviewers
+    inspect diffs for extract views, job definitions, schedule policy, state
+    handling, destination, and dbt/Dagster handoff; approval records the desired
+    config version, artifact digest, and run policy.
+  - **Outcome:** A reviewable, approved integration config is published as an
+    immutable bundle for the customer-side runner to pull.
+  - **Covered by:** R1, R2, R3, R4, R5, R6, R7, R8
 
 - F2. Run the approved bundle on the edge
   - **Trigger:** Schedule policy or an approved manual run requests execution.
   - **Actors:** A2, A3, A4
-  - **Steps:** The runner pulls only approved bundle versions outbound; injects
-    local Oracle, destination, and optional Vault/secret values at runtime;
-    executes allowlisted Meltano jobs; writes raw outputs to the customer AWS
-    landing zone; captures state, logs, row counts, freshness, schema snapshots,
-    and errors.
+  - **Steps:** The runner pulls only the approved config version outbound into a
+    clean local work directory; verifies bundle identity and checksum/signature;
+    injects local Oracle, destination, and optional Vault/secret values at
+    runtime; executes allowlisted Meltano jobs; writes raw outputs to the
+    customer AWS landing zone; captures state, logs, row counts, freshness,
+    schema snapshots, and errors.
   - **Outcome:** Data lands in customer AWS and ThinkWork receives enough
     structured evidence to reason about health without seeing raw Oracle
     credentials or requiring inbound database access.
-  - **Covered by:** R5, R6, R7, R8, R9, R10, R11, R12
+  - **Covered by:** R5, R7, R8, R9, R10, R11, R12, R17, R18, R19
 
 - F3. Inspect, remediate, and audit through MCP
   - **Trigger:** A run fails, schema drift appears, parity falls behind, or an
@@ -106,7 +115,7 @@ proves parity.
     actor, bundle version, inputs, redactions, and result in an audit trail.
   - **Outcome:** Agents can operate the integration safely without arbitrary
     shell access, unrestricted Meltano CLI execution, or secret exposure.
-  - **Covered by:** R13, R14, R15, R16, R17
+  - **Covered by:** R20, R21, R22
 
 - F4. Shadow-run against Fivetran
   - **Trigger:** The first representative sales slice is ready for validation.
@@ -116,7 +125,7 @@ proves parity.
     delete/reversal behavior, schema drift, and downstream dbt outputs.
   - **Outcome:** ThinkWork can decide whether to expand the runner, adjust the
     extract contract, or keep Fivetran for specific sources.
-  - **Covered by:** R18, R19, R20
+  - **Covered by:** R23, R24, R25
 
 ---
 
@@ -134,71 +143,84 @@ proves parity.
 - R4. Configuration changes must be reviewable as source diffs before execution,
   not opaque remote API mutations.
 
-**Meltano project bundle**
+**Meltano project bundle and config lifecycle**
 
 - R5. Each integration bundle must define the generated Meltano project shape:
   `meltano.yml`, environments, extractor and loader configuration, jobs,
   schedules or run policy references, state conventions, log conventions,
   destination handoff, and dbt/Dagster handoff metadata.
-- R6. The bundle must separate non-sensitive configuration from
+- R6. Canonical authoring must happen through a Git-backed review path so
+  config changes remain inspectable as diffs before publication.
+- R7. The v1 runner-consumed publication target must be narrowed to a signed,
+  immutable S3 artifact bundle copied into the customer AWS account; private
+  GitHub can support authoring/review when approved, while CodeCommit and
+  broader ThinkWork release bundles remain contingencies.
+- R8. Before each scheduled or approved manual run, the runner must fetch the
+  approved config version into a clean local work directory, verify its
+  identity/checksum or signature, and record the version plus digest in run
+  evidence.
+- R9. Local edits to the materialized Meltano project must not become the source
+  of truth; durable changes must flow back through ThinkWork review and config
+  publication.
+- R10. The bundle must separate non-sensitive configuration from
   environment-specific and sensitive runtime values; raw Oracle credentials must
   not be stored in ThinkWork or committed project files.
-- R7. Bundle execution must pin connector/plugin versions or otherwise record
+- R11. Bundle execution must pin connector/plugin versions or otherwise record
   the resolved runtime versions in evidence so parity failures are reproducible.
-- R8. The runner must expose state summaries and state recovery controls as
+- R12. The runner must expose state summaries and state recovery controls as
   policy-bound operations, with destructive or overwrite-style state changes
   requiring explicit approval.
 
 **Oracle/JDE extract contract**
 
-- R9. V1 must prefer curated Oracle views or extract tables over raw JDE base
+- R13. V1 must prefer curated Oracle views or extract tables over raw JDE base
   table sprawl.
-- R10. Every selected extract must declare stable business keys, update cursor
+- R14. Every selected extract must declare stable business keys, update cursor
   fields, source timestamps, extract timestamps, and expected stream names.
-- R11. The extract contract must define a rolling-window reconciliation strategy
+- R15. The extract contract must define a rolling-window reconciliation strategy
   for late corrections and a delete/reversal strategy for records where updates
   are not append-only.
-- R12. Raw landing output must preserve enough metadata for replay and audit:
+- R16. Raw landing output must preserve enough metadata for replay and audit:
   source system, extract view/table, bundle version, job/run ID, extract window,
   row counts, schema version or snapshot, and load timestamp.
 
 **Edge runner lifecycle and security**
 
-- R13. The runner must operate outbound-only by default: it pulls approved
+- R17. The runner must operate outbound-only by default: it pulls approved
   bundles or receives approved commands through a customer-accepted channel and
   reports evidence back, with no default inbound database or firewall dependency
   from ThinkWork cloud.
-- R14. The runner must inject local secrets at execution time from customer
+- R18. The runner must inject local secrets at execution time from customer
   approved sources such as local environment, file, or Vault/Secrets Manager
   integration; ThinkWork stores references and policy, not raw Oracle
   credentials.
-- R15. The runner must upload raw outputs to the customer AWS landing zone and
+- R19. The runner must upload raw outputs to the customer AWS landing zone and
   report structured evidence to ThinkWork without uploading source row payloads
   into ThinkWork control-plane storage.
 
 **MCP/control surface**
 
-- R16. The ThinkWork-owned Meltano MCP/control server must default to read-only
+- R20. The ThinkWork-owned Meltano MCP/control server must default to read-only
   tools for version, project inspection, plugin inventory, extractor/loader/job
   lists, environment lists, catalog and selected-stream introspection, recent
   redacted logs, state summaries, schema snapshots, and run evidence.
-- R17. Write-capable tools must be explicitly gated by mode, policy, and
+- R21. Write-capable tools must be explicitly gated by mode, policy, and
   allowlists for project changes, bundle acceptance, selected job execution,
   plugin tests, state recovery, and reruns; arbitrary shell execution and
   unrestricted Meltano CLI invocation are out of scope.
-- R18. Every MCP response must use a structured success/error envelope and
+- R22. Every MCP response must use a structured success/error envelope and
   redact secrets from output; every write-capable operation must append an audit
   event with actor, tool, project, bundle version, policy decision, and result.
 
 **Spike and parity proof**
 
-- R19. The first spike must migrate a narrow sales slice of 5-10 representative
+- R23. The first spike must migrate a narrow sales slice of 5-10 representative
   JDE sales views/tables and shadow-run it beside the existing Fivetran setup
   for at least one representative window.
-- R20. The parity report must compare row counts, freshness, cursor/update
+- R24. The parity report must compare row counts, freshness, cursor/update
   handling, late corrections, deletes/reversals, schema drift, failed-run
   recovery, and downstream dbt output.
-- R21. The spike must explicitly decide whether the runner remains
+- R25. The spike must explicitly decide whether the runner remains
   McPherson-specific for the next slice or graduates into a reusable integration
   substrate for future LakeHouse customers.
 
@@ -210,20 +232,25 @@ proves parity.
   McPherson sales integration, when a reviewer inspects it, then the change is
   visible as a Meltano project bundle diff tied to the existing `lakehouse`
   plugin and cannot run until approved.
-- AE2. **Covers R9-R12.** Given a JDE sales extract is selected for the spike,
+- AE2. **Covers R5-R12.** Given an approved config version exists, when the
+  runner starts a scheduled job, then it pulls the signed S3 artifact bundle
+  into a clean local directory, verifies its digest/signature, records the
+  version in evidence, and rejects local unreviewed config edits as canonical
+  changes.
+- AE3. **Covers R13-R16.** Given a JDE sales extract is selected for the spike,
   when it is added to the contract, then it declares keys, cursor fields,
   timestamps, reconciliation window, delete/reversal handling, and raw landing
   metadata before implementation planning completes.
-- AE3. **Covers R13-R15.** Given the runner executes on-prem, when the hourly
+- AE4. **Covers R17-R19.** Given the runner executes on-prem, when the hourly
   sales job runs, then Oracle access stays local, secrets are injected locally,
   raw outputs land in customer AWS, and ThinkWork receives only structured
   evidence and redacted logs.
-- AE4. **Covers R16-R18.** Given an agent asks the MCP server to inspect a
+- AE5. **Covers R20-R22.** Given an agent asks the MCP server to inspect a
   project, when it uses read-only tools, then it can see project, catalog,
   stream, state, logs, and evidence summaries; when it attempts a write or run,
   the operation is denied unless policy, mode, and allowlist all permit it and
   an audit event is recorded.
-- AE5. **Covers R19-R21.** Given the spike shadow-runs beside Fivetran, when the
+- AE6. **Covers R23-R25.** Given the spike shadow-runs beside Fivetran, when the
   representative window ends, then the team has a parity report that supports a
   go/no-go decision for expanding the runner.
 
@@ -239,7 +266,8 @@ proves parity.
   operations.
 - The downstream planner can design the first spike without inventing control
   plane/data plane boundaries, MCP safety behavior, extract contract
-  expectations, or parity criteria.
+  expectations, config publication behavior, pull-before-run evidence, or
+  parity criteria.
 
 ---
 
@@ -252,6 +280,8 @@ proves parity.
 - Do not expose arbitrary shell execution, unrestricted Meltano CLI execution,
   or unbounded filesystem access through MCP.
 - Do not make Meltano the customer-facing product UI.
+- Do not make local runner state or local project edits the canonical
+  integration definition.
 - Do not adopt `butkeraites/meltano-mcp-server` wholesale; borrow safety and
   inspection ideas for a ThinkWork-owned control surface.
 - Do not introduce Kubernetes, Docker Compose, GCP, or Azure assumptions into
@@ -269,6 +299,9 @@ proves parity.
   shows Meltano cannot meet the sales-slice needs.
 - Keep ThinkWork as the integration brain: desired state, approvals, evidence,
   health, and remediation live in the LakeHouse plugin/control plane.
+- Publish runner-consumed config as signed, immutable S3 artifact bundles in
+  customer AWS for v1, while preserving Git-backed review as the authoring
+  experience.
 - Start McPherson-specific but design the runner contract for reuse. The spike
   must prove whether reuse is warranted rather than making the first slice carry
   speculative multi-customer complexity.
@@ -301,17 +334,16 @@ proves parity.
 
 ### Deferred to Planning
 
-- [Affects R5-R8][Technical] What exact bundle format and signing/versioning
-  mechanism should the runner consume?
-- [Affects R13-R15][Technical] Which outbound channel should the runner use for
-  approved bundle pulls and evidence reporting in the deployed ThinkWork
-  environment?
-- [Affects R9-R12][Needs research] Which Meltano/Singer Oracle approach is
+- [Affects R5-R12][Technical] What exact S3 bundle manifest, signature, and
+  version naming format should the runner consume?
+- [Affects R17-R19][Technical] Which deployed ThinkWork mechanism publishes the
+  approved bundle into customer AWS and receives evidence reports?
+- [Affects R13-R16][Needs research] Which Meltano/Singer Oracle approach is
   mature enough for the sales-slice spike, and where is a custom tap or wrapper
   required?
-- [Affects R19-R20][Technical] What parity query set should compare Fivetran,
+- [Affects R23-R24][Technical] What parity query set should compare Fivetran,
   raw landing output, and downstream dbt output?
-- [Affects R16-R18][Technical] Which MCP tools are required for the first spike
+- [Affects R20-R22][Technical] Which MCP tools are required for the first spike
   versus later operations, and what approval primitive should gate write tools?
 
 ---
