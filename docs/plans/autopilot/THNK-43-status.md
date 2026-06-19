@@ -17,6 +17,8 @@ branch: codex/thnk-43-u1-workos-primary-spike
   decision.
 - Branch: `codex/thnk-43-u1-workos-primary-spike` from `origin/main`
   `f15fbbbe1`.
+- PR: <https://github.com/thinkwork-ai/thinkwork/pull/2671>
+- CI: pending.
 
 ## Completed
 
@@ -85,6 +87,12 @@ U6 linking enforcement.
 - Add
   `docs/solutions/spikes/2026-06-19-workos-primary-cognito-custom-auth-spike.md`
   to record the bridge decision and the remaining live-proof dependency.
+- Local verification:
+  - `pnpm --dir packages/api test -- workos-primary-auth-spike.test.ts`
+  - `pnpm --dir packages/api typecheck`
+  - `git diff --check`
+- Formatter note: `pnpm exec prettier --check ...` could not run locally
+  because this workspace does not install a `prettier` binary.
 
 ### U1 WorkOS-Primary Decision
 
