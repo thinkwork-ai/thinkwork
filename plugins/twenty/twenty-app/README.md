@@ -133,9 +133,12 @@ can apply it to a draft workflow version:
 node plugins/twenty/scripts/wire-thinkwork-workflow.mjs \
   --workflow-version-id <draft-workflow-version-id> \
   --step-id <http-request-step-id> \
+  --workspace-id <twenty-workspace-id> \
   --apply
 ```
 
 The Deploy workflow exposes the same guarded operation via
 `wire_twenty_thinkwork_workflow`. The script refuses to mutate an active
 workflow version unless an operator explicitly creates or targets a draft.
+Set the repository variable `TWENTY_WORKSPACE_ID` so generated Opportunity
+links use Twenty's canonical `/object/opportunity/<id>#<workspace-id>` route.
