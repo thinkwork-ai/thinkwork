@@ -3,7 +3,7 @@ title: Admin — Webhooks
 description: Custom HTTP webhooks that fire an agent or a routine when an external system POSTs to them. Token-based auth, rate limiting, invocation log, and test invocation.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Webhooks are custom HTTP endpoints that external systems can POST to in order to trigger an agent turn or a routine. They're blank slates — any system that can make an authenticated HTTP POST can become a ThinkWork trigger through a webhook.
 
@@ -14,15 +14,15 @@ Webhooks are custom HTTP endpoints that external systems can POST to in order to
 
 A searchable `DataTable` with:
 
-| Column | Notes |
-|---|---|
-| Name | Display name |
-| Type | Badge: **Agent** or **Routine** depending on what the webhook targets |
-| Target | Agent or routine name |
-| Enabled | Enabled / Disabled badge |
-| Last Invoked | Relative timestamp |
-| Invocation count | Lifetime count |
-| Created | Timestamp |
+| Column           | Notes                                                                 |
+| ---------------- | --------------------------------------------------------------------- |
+| Name             | Display name                                                          |
+| Type             | Badge: **Agent** or **Routine** depending on what the webhook targets |
+| Target           | Agent or routine name                                                 |
+| Enabled          | Enabled / Disabled badge                                              |
+| Last Invoked     | Relative timestamp                                                    |
+| Invocation count | Lifetime count                                                        |
+| Created          | Timestamp                                                             |
 
 A **New Webhook** button opens the creation dialog.
 
@@ -57,21 +57,21 @@ Read-only display of:
 
 An expandable table of run cards, one per invocation:
 
-- Status — succeeded / failed
+- Status — succeeded / failed / accepted with warning
 - Started at / finished at
-- Error message (for failures)
+- Error or warning message
 - Context snapshot — the JSON payload the webhook received, used for replay and debugging
 
 ## REST endpoints
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/webhooks` | List webhooks |
-| `GET /api/webhooks/:webhookId` | Detail |
-| `GET /api/webhooks/:webhookId/runs` | Invocation history |
-| `POST /api/webhooks` | Create |
-| `PATCH /api/webhooks/:webhookId` | Update |
-| `DELETE /api/webhooks/:webhookId` | Delete |
+| Endpoint                             | Purpose                |
+| ------------------------------------ | ---------------------- |
+| `GET /api/webhooks`                  | List webhooks          |
+| `GET /api/webhooks/:webhookId`       | Detail                 |
+| `GET /api/webhooks/:webhookId/runs`  | Invocation history     |
+| `POST /api/webhooks`                 | Create                 |
+| `PATCH /api/webhooks/:webhookId`     | Update                 |
+| `DELETE /api/webhooks/:webhookId`    | Delete                 |
 | `POST /api/webhooks/:webhookId/test` | Manual test invocation |
 
 ## External usage
@@ -89,11 +89,19 @@ The backend:
 
 1. Validates the token
 2. Checks the rate limit (returns 429 if exceeded)
-3. Invokes the target (agent turn or routine execution)
-4. Writes a row to the invocation log with the full payload in `context_snapshot`
+3. Creates or queues the target work
+4. Writes a delivery row with the payload preview, response code, thread id when applicable, and any warning or error message
 5. Returns a response once the target starts (not once it finishes)
 
 The webhook is fire-and-forget from the caller's perspective. If the caller wants to know the result, they should read it from the created thread or poll the run status.
+
+## Space webhooks
+
+When a webhook is attached to a Space and targets an agent, each accepted POST creates a fresh Space thread. ThinkWork seeds that thread with a readable system trigger message before waking the tenant platform agent, and the agent receives the full structured webhook payload in turn context.
+
+If the Space has an automatic thread-start workflow configured, the webhook-created thread starts that workflow just like a manually created thread. For example, a Customer Space configured for Customer Onboarding gets the onboarding goal, kickoff details, and task checklist during thread creation.
+
+If thread creation succeeds but workflow initialization fails, the endpoint still returns an accepted response, usually HTTP 202, so external systems do not retry into duplicate threads. The delivery history shows this as **Accepted with warning** and stores the warning in the delivery detail.
 
 ## Data model
 
@@ -147,6 +155,7 @@ The admin UI does not currently expose an in-place token rotation. If a token le
 4. Update the external system with the new token and URL
 
 The webhook id changes, so the URL also changes. Plan for that in the external system's configuration.
+
 </Aside>
 
 ## Known limits
@@ -154,7 +163,7 @@ The webhook id changes, so the URL also changes. Plan for that in the external s
 - **No in-place token rotation.** Rotation is delete + recreate.
 - **Per-instance rate limiting.** The rate limit is enforced per warm Lambda instance, not distributed. Distributed usage can collectively exceed the declared limit.
 - **No queue.** Rate-limited requests are rejected, not queued.
-- **Fire-and-forget.** The caller gets an immediate ack; the actual result lands on the thread created by the invocation.
+- **Fire-and-forget.** The caller gets an immediate ack; the actual result lands on the thread created by the invocation. For Space webhooks, a 202 accepted-with-warning response means a thread exists but workflow initialization degraded; operators should inspect the delivery warning and thread rather than blindly retrying.
 - **REST-only.** Webhooks don't flow through urql; the list refetches after each mutation.
 
 ## Related pages

@@ -151,6 +151,62 @@ type WebhookDelivery = {
 
 const NO_SPACE_VALUE = "__none__";
 
+type DeliveryStatusPresentation = {
+  label: string;
+  variant: "secondary" | "destructive" | "outline";
+  className?: string;
+  issueLabel?: "Warning" | "Error";
+  issueClassName?: string;
+};
+
+export function isAcceptedWithWarning(
+  delivery: Pick<
+    WebhookDelivery,
+    "threadCreated" | "statusCode" | "resolutionStatus" | "errorMessage"
+  >,
+): boolean {
+  const statusCode = delivery.statusCode ?? 0;
+  return (
+    delivery.threadCreated === true &&
+    delivery.resolutionStatus !== "error" &&
+    statusCode >= 200 &&
+    statusCode < 300 &&
+    Boolean(delivery.errorMessage?.trim())
+  );
+}
+
+export function deliveryStatusPresentation(
+  delivery: Pick<
+    WebhookDelivery,
+    "threadCreated" | "statusCode" | "resolutionStatus" | "errorMessage"
+  >,
+): DeliveryStatusPresentation {
+  if (isAcceptedWithWarning(delivery)) {
+    return {
+      label: "Accepted with warning",
+      variant: "outline",
+      className:
+        "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-200",
+      issueLabel: "Warning",
+      issueClassName: "text-amber-700 dark:text-amber-200",
+    };
+  }
+
+  if (delivery.resolutionStatus === "error") {
+    return {
+      label: delivery.resolutionStatus,
+      variant: "destructive",
+      issueLabel: "Error",
+      issueClassName: "text-destructive",
+    };
+  }
+
+  return {
+    label: delivery.resolutionStatus,
+    variant: "secondary",
+  };
+}
+
 function ConfigSection({
   webhook,
   onSaved,
@@ -410,36 +466,11 @@ function DeliveriesSection({ webhookId }: { webhookId: string }) {
       ) : (
         <div className="divide-y divide-border">
           {deliveries.map((d) => (
-            <button
+            <DeliveryRow
               key={d.id}
-              type="button"
-              onClick={() => setSelectedDelivery(d)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {d.providerName ?? d.normalizedKind ?? "Delivery"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatDeliveryTime(d.receivedAt)}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {d.threadCreated ? (
-                  <Badge variant="secondary" className="text-xs">
-                    Thread
-                  </Badge>
-                ) : null}
-                <Badge
-                  variant={
-                    d.resolutionStatus === "error" ? "destructive" : "secondary"
-                  }
-                  className="text-xs"
-                >
-                  {d.resolutionStatus}
-                </Badge>
-              </div>
-            </button>
+              delivery={d}
+              onSelect={() => setSelectedDelivery(d)}
+            />
           ))}
         </div>
       )}
@@ -453,6 +484,46 @@ function DeliveriesSection({ webhookId }: { webhookId: string }) {
   );
 }
 
+function DeliveryRow({
+  delivery,
+  onSelect,
+}: {
+  delivery: WebhookDelivery;
+  onSelect: () => void;
+}) {
+  const status = deliveryStatusPresentation(delivery);
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-foreground">
+          {delivery.providerName ?? delivery.normalizedKind ?? "Delivery"}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {formatDeliveryTime(delivery.receivedAt)}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {delivery.threadCreated ? (
+          <Badge variant="secondary" className="text-xs">
+            Thread
+          </Badge>
+        ) : null}
+        <Badge
+          variant={status.variant}
+          className={["text-xs", status.className].filter(Boolean).join(" ")}
+        >
+          {status.label}
+        </Badge>
+      </div>
+    </button>
+  );
+}
+
 function DeliveryDetailSheet({
   delivery,
   onOpenChange,
@@ -461,6 +532,7 @@ function DeliveryDetailSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const payload = formatPayloadPreview(delivery?.bodyPreview);
+  const status = delivery ? deliveryStatusPresentation(delivery) : null;
 
   return (
     <Sheet open={Boolean(delivery)} onOpenChange={onOpenChange}>
@@ -484,15 +556,11 @@ function DeliveryDetailSheet({
         {delivery ? (
           <div className="space-y-6 px-6 py-5">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant={
-                  delivery.resolutionStatus === "error"
-                    ? "destructive"
-                    : "secondary"
-                }
-              >
-                {delivery.resolutionStatus}
-              </Badge>
+              {status ? (
+                <Badge variant={status.variant} className={status.className}>
+                  {status.label}
+                </Badge>
+              ) : null}
               {delivery.threadCreated ? (
                 <Badge variant="secondary">Thread created</Badge>
               ) : null}
@@ -534,8 +602,10 @@ function DeliveryDetailSheet({
                 </DeliveryMeta>
               ) : null}
               {delivery.errorMessage ? (
-                <DeliveryMeta label="Error">
-                  <span className="text-destructive">
+                <DeliveryMeta label={status?.issueLabel ?? "Error"}>
+                  <span
+                    className={status?.issueClassName ?? "text-destructive"}
+                  >
                     {delivery.errorMessage}
                   </span>
                 </DeliveryMeta>
