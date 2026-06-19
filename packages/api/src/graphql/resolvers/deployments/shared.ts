@@ -592,15 +592,91 @@ function isMissingS3ObjectError(error: unknown): boolean {
 }
 
 export function defaultReleaseVersion(): string {
-  return process.env.THINKWORK_RELEASE_VERSION || "unresolved";
+  return process.env.THINKWORK_RELEASE_VERSION?.trim() || "unresolved";
 }
 
 export function defaultManifestDigest(): string {
-  return process.env.THINKWORK_RELEASE_MANIFEST_SHA256 || "unresolved";
+  return process.env.THINKWORK_RELEASE_MANIFEST_SHA256?.trim() || "unresolved";
 }
 
 export function defaultManifestUrl(): string {
-  return process.env.THINKWORK_RELEASE_MANIFEST_URL || "";
+  return process.env.THINKWORK_RELEASE_MANIFEST_URL?.trim() || "";
+}
+
+export interface ResolvedReleaseMetadata {
+  releaseVersion: string;
+  manifestDigest: string;
+  releaseManifestUrl: string;
+}
+
+export function assertResolvedRelease(args: {
+  appKey: ManagedAppKey;
+  operation: DeploymentOperation;
+  releaseVersion: string | null | undefined;
+  manifestDigest: string | null | undefined;
+  releaseManifestUrl?: string | null | undefined;
+}): ResolvedReleaseMetadata {
+  const releaseVersion = args.releaseVersion?.trim() || "unresolved";
+  const manifestDigest = args.manifestDigest?.trim() || "unresolved";
+  const releaseManifestUrl = args.releaseManifestUrl?.trim() || "";
+  if (releaseVersion === "unresolved" || manifestDigest === "unresolved") {
+    throw new GraphQLError(
+      `Cannot start a ${args.operation} deployment job for ${args.appKey}: release is ` +
+        `unresolved (releaseVersion="${releaseVersion}", ` +
+        `manifestDigest="${manifestDigest}"). Resolve a real release before ` +
+        `creating the job.`,
+      { extensions: { code: "FAILED_PRECONDITION" } },
+    );
+  }
+  if (!/^[a-f0-9]{64}$/i.test(manifestDigest)) {
+    throw new GraphQLError(
+      `Cannot start a ${args.operation} deployment job for ${args.appKey}: ` +
+        "manifestDigest must be a 64-character SHA-256 hex digest.",
+      { extensions: { code: "FAILED_PRECONDITION" } },
+    );
+  }
+  return { releaseVersion, manifestDigest, releaseManifestUrl };
+}
+
+export async function resolveDefaultReleaseMetadata(): Promise<{
+  releaseVersion: string | null;
+  manifestDigest: string | null;
+  releaseManifestUrl: string | null;
+}> {
+  const env = deploymentProfileConfigFromEnv();
+  const profile = await resolveDeploymentProfileConfig();
+  const pointer = await resolveDeploymentStatusPointerConfig(
+    profile.evidenceBucket ?? env.evidenceBucket,
+  );
+  return {
+    releaseVersion: firstResolvedReleaseValue(
+      pointer.releaseVersion,
+      profile.releaseVersion,
+      env.releaseVersion,
+      defaultReleaseVersion(),
+    ),
+    manifestDigest: firstResolvedReleaseValue(
+      pointer.releaseManifestSha256,
+      profile.releaseManifestSha256,
+      env.releaseManifestSha256,
+      defaultManifestDigest(),
+    ),
+    releaseManifestUrl:
+      pointer.releaseManifestUrl ??
+      profile.releaseManifestUrl ??
+      env.releaseManifestUrl ??
+      defaultManifestUrl(),
+  };
+}
+
+function firstResolvedReleaseValue(
+  ...values: Array<string | null | undefined>
+): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed && trimmed !== "unresolved") return trimmed;
+  }
+  return null;
 }
 
 export function buildManagedAppControllerPayload(args: {
