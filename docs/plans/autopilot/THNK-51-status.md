@@ -30,6 +30,8 @@ Conservative decision: preserve existing explicit `@Profile` compatibility with 
 - 2026-06-19: Implemented email-aware automatic Research routing and regression tests in `packages/agentcore-pi/agent-container/src/server.ts` and `packages/agentcore-pi/agent-container/tests/server.test.ts`.
 - 2026-06-19: Initial focused test run failed only because the no-profile response shape returns `agent_profile_runs: []`; corrected the assertion to match the existing API shape.
 - 2026-06-19: Self-review found the first redaction placeholder contained `email`, which made all redacted addresses look like email-delivery commands. Changed it to `[redacted-address]` and added a positive regression for genuine source-backed research about an email address.
+- 2026-06-19: Opened PR #2701: https://github.com/thinkwork-ai/thinkwork/pull/2701.
+- 2026-06-19: Attempted to move THNK-51 to `Review`, but the ThinkWork Linear team has no plain `Review` status. Available review-like states are `Requirements Review` and `Plan Review`, neither of which matches an implementation PR, so THNK-51 remains `In Progress` until merge.
 
 ## Verification
 
@@ -41,7 +43,7 @@ Conservative decision: preserve existing explicit `@Profile` compatibility with 
 
 ## PRs
 
-- Pending.
+- https://github.com/thinkwork-ai/thinkwork/pull/2701
 
 ## Blockers
 
