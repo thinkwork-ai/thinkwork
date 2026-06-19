@@ -63,6 +63,33 @@ describe("snapshotIdentity", () => {
     },
   );
 
+  it.each([["webhook"], ["email_received"]])(
+    "treats user_id as optional for %s invocations",
+    (triggerChannel) => {
+      const out = snapshotIdentity({
+        tenant_id: "tenant-1",
+        assistant_id: "agent-1",
+        thread_id: "thread-1",
+        trigger_channel: triggerChannel,
+      });
+      expect(out.userId).toBe("");
+      expect(out.tenantId).toBe("tenant-1");
+      expect(out.agentId).toBe("agent-1");
+      expect(out.threadId).toBe("thread-1");
+    },
+  );
+
+  it("still requires user_id for unknown non-eval channels", () => {
+    expect(() =>
+      snapshotIdentity({
+        tenant_id: "tenant-1",
+        assistant_id: "agent-1",
+        thread_id: "thread-1",
+        trigger_channel: "manual",
+      }),
+    ).toThrow(/user_id/);
+  });
+
   it("includes every missing field name in the error message", () => {
     expect(() => snapshotIdentity({})).toThrow(
       /tenant_id.*user_id.*assistant_id.*thread_id/,

@@ -1,14 +1,37 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
-import { CheckIcon, CopyIcon, RefreshCw, Trash2 } from "lucide-react";
-import { Badge, Button, Input, Switch, Textarea } from "@thinkwork/ui";
+import {
+  CheckIcon,
+  CopyIcon,
+  RefreshCw,
+  Trash2,
+  WebhookIcon,
+} from "lucide-react";
+import {
+  Badge,
+  Button,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  Switch,
+  Textarea,
+} from "@thinkwork/ui";
 import { toast } from "sonner";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   SettingsDeleteWebhookMutation,
   SettingsRegenerateWebhookTokenMutation,
+  SettingsSpacesListQuery,
   SettingsUpdateWebhookMutation,
   SettingsWebhookDeliveriesQuery,
   SettingsWebhookQuery,
@@ -98,13 +121,35 @@ export function SettingsWebhookDetail() {
 
 type WebhookConfig = {
   id: string;
+  tenantId: string;
   name: string;
   description?: string | null;
   targetType: string;
+  spaceId?: string | null;
   prompt?: string | null;
   enabled: boolean;
   rateLimit?: number | null;
 };
+
+type WebhookDelivery = {
+  id: string;
+  receivedAt: unknown;
+  providerName?: string | null;
+  normalizedKind?: string | null;
+  signatureStatus: string;
+  resolutionStatus: string;
+  statusCode?: number | null;
+  threadId?: string | null;
+  threadCreated?: boolean | null;
+  bodyPreview?: string | null;
+  bodySizeBytes?: number | null;
+  bodySha256?: string | null;
+  sourceIp?: string | null;
+  errorMessage?: string | null;
+  durationMs?: number | null;
+};
+
+const NO_SPACE_VALUE = "__none__";
 
 function ConfigSection({
   webhook,
@@ -117,6 +162,7 @@ function ConfigSection({
     name: webhook.name,
     description: webhook.description ?? "",
     prompt: webhook.prompt ?? "",
+    spaceId: webhook.spaceId ?? null,
     enabled: webhook.enabled,
     rateLimit: webhook.rateLimit != null ? String(webhook.rateLimit) : "",
   });
@@ -125,12 +171,19 @@ function ConfigSection({
   const [{ fetching: saving }, updateWebhook] = useMutation(
     SettingsUpdateWebhookMutation,
   );
+  const [spacesResult] = useQuery({
+    query: SettingsSpacesListQuery,
+    variables: { tenantId: webhook.tenantId },
+    requestPolicy: "cache-and-network",
+  });
+  const spaces = spacesResult.data?.spaces ?? [];
 
   useEffect(() => {
     setForm({
       name: webhook.name,
       description: webhook.description ?? "",
       prompt: webhook.prompt ?? "",
+      spaceId: webhook.spaceId ?? null,
       enabled: webhook.enabled,
       rateLimit: webhook.rateLimit != null ? String(webhook.rateLimit) : "",
     });
@@ -150,6 +203,7 @@ function ConfigSection({
       input: {
         name: form.name.trim(),
         description: form.description,
+        spaceId: form.spaceId,
         prompt: form.prompt,
         enabled: form.enabled,
         rateLimit: rate,
@@ -177,6 +231,37 @@ function ConfigSection({
         description="What an inbound call dispatches to."
       >
         <Badge variant="outline">{webhook.targetType}</Badge>
+      </SettingsRow>
+      <SettingsRow
+        label="Space"
+        description="Threads created from this webhook will start in this Space."
+      >
+        <Select
+          value={form.spaceId ?? NO_SPACE_VALUE}
+          onValueChange={(value) =>
+            setForm((f) => ({
+              ...f,
+              spaceId: value === NO_SPACE_VALUE ? null : value,
+            }))
+          }
+          disabled={spacesResult.fetching && spaces.length === 0}
+        >
+          <SelectTrigger className="w-72">
+            <SelectValue
+              placeholder={
+                spacesResult.fetching ? "Loading Spaces..." : "No Space"
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_SPACE_VALUE}>No Space</SelectItem>
+            {spaces.map((space) => (
+              <SelectItem key={space.id} value={space.id}>
+                {space.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </SettingsRow>
       <SettingsRow
         label="Description"
@@ -307,6 +392,8 @@ function EndpointSection({
 }
 
 function DeliveriesSection({ webhookId }: { webhookId: string }) {
+  const [selectedDelivery, setSelectedDelivery] =
+    useState<WebhookDelivery | null>(null);
   const [result] = useQuery({
     query: SettingsWebhookDeliveriesQuery,
     variables: { webhookId, limit: 10 },
@@ -323,9 +410,11 @@ function DeliveriesSection({ webhookId }: { webhookId: string }) {
       ) : (
         <div className="divide-y divide-border">
           {deliveries.map((d) => (
-            <div
+            <button
               key={d.id}
-              className="flex items-center justify-between gap-3 px-4 py-3"
+              type="button"
+              onClick={() => setSelectedDelivery(d)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left outline-none transition-colors hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-foreground">
@@ -350,12 +439,144 @@ function DeliveriesSection({ webhookId }: { webhookId: string }) {
                   {d.resolutionStatus}
                 </Badge>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
+      <DeliveryDetailSheet
+        delivery={selectedDelivery}
+        onOpenChange={(open) => {
+          if (!open) setSelectedDelivery(null);
+        }}
+      />
     </SettingsSection>
   );
+}
+
+function DeliveryDetailSheet({
+  delivery,
+  onOpenChange,
+}: {
+  delivery: WebhookDelivery | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const payload = formatPayloadPreview(delivery?.bodyPreview);
+
+  return (
+    <Sheet open={Boolean(delivery)} onOpenChange={onOpenChange}>
+      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(560px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+        <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+          <div className="flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/30">
+              <WebhookIcon className="size-4 text-muted-foreground" />
+            </span>
+            <div className="min-w-0">
+              <SheetTitle>Webhook delivery</SheetTitle>
+              <SheetDescription>
+                {delivery
+                  ? formatDeliveryTime(delivery.receivedAt)
+                  : "Delivery"}
+              </SheetDescription>
+            </div>
+          </div>
+        </SheetHeader>
+
+        {delivery ? (
+          <div className="space-y-6 px-6 py-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant={
+                  delivery.resolutionStatus === "error"
+                    ? "destructive"
+                    : "secondary"
+                }
+              >
+                {delivery.resolutionStatus}
+              </Badge>
+              {delivery.threadCreated ? (
+                <Badge variant="secondary">Thread created</Badge>
+              ) : null}
+              {delivery.statusCode != null ? (
+                <Badge variant="outline">HTTP {delivery.statusCode}</Badge>
+              ) : null}
+              {delivery.durationMs != null ? (
+                <Badge variant="outline">{delivery.durationMs} ms</Badge>
+              ) : null}
+            </div>
+
+            <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
+              <DeliveryMeta label="Provider">
+                {delivery.providerName ?? delivery.normalizedKind ?? "Delivery"}
+              </DeliveryMeta>
+              <DeliveryMeta label="Signature">
+                {delivery.signatureStatus}
+              </DeliveryMeta>
+              {delivery.threadId ? (
+                <DeliveryMeta label="Thread">
+                  <span className="font-mono text-xs">{delivery.threadId}</span>
+                </DeliveryMeta>
+              ) : null}
+              {delivery.sourceIp ? (
+                <DeliveryMeta label="Source IP">
+                  {delivery.sourceIp}
+                </DeliveryMeta>
+              ) : null}
+              {delivery.bodySizeBytes != null ? (
+                <DeliveryMeta label="Body size">
+                  {delivery.bodySizeBytes.toLocaleString()} bytes
+                </DeliveryMeta>
+              ) : null}
+              {delivery.bodySha256 ? (
+                <DeliveryMeta label="SHA-256">
+                  <span className="font-mono text-xs">
+                    {delivery.bodySha256}
+                  </span>
+                </DeliveryMeta>
+              ) : null}
+              {delivery.errorMessage ? (
+                <DeliveryMeta label="Error">
+                  <span className="text-destructive">
+                    {delivery.errorMessage}
+                  </span>
+                </DeliveryMeta>
+              ) : null}
+            </dl>
+
+            <section>
+              <h3 className="text-sm font-medium text-foreground">Payload</h3>
+              <pre className="mt-2 max-h-[50vh] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-5 text-foreground">
+                <code>{payload}</code>
+              </pre>
+            </section>
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DeliveryMeta({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-foreground">{children}</dd>
+    </>
+  );
+}
+
+function formatPayloadPreview(value?: string | null): string {
+  if (!value) return "No payload captured.";
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2);
+  } catch {
+    return value;
+  }
 }
 
 function DangerSection({

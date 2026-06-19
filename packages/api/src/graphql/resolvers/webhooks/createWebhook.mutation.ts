@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, spaces, webhooks, snakeToCamel } from "../../utils.js";
+import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 
 export const createWebhook = async (
   _parent: any,
@@ -10,6 +11,9 @@ export const createWebhook = async (
   const i = args.input;
   const token = randomBytes(32).toString("base64url");
   const targetType = i.targetType.toLowerCase();
+  const caller = await resolveCallerFromAuth(ctx.auth);
+  const createdById =
+    caller.tenantId === i.tenantId ? (caller.userId ?? null) : null;
 
   if (i.spaceId) {
     const [spaceRow] = await db
@@ -38,6 +42,7 @@ export const createWebhook = async (
       enabled: true,
       rate_limit: i.rateLimit || 60,
       created_by_type: "user",
+      created_by_id: createdById,
     })
     .returning();
 

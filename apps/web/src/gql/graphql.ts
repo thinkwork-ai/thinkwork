@@ -607,6 +607,39 @@ export enum ArtifactType {
   Report = "REPORT",
 }
 
+/**
+ * Deployment-scoped auth-provider bridge configuration. Secret values are never
+ * exposed here; `clientSecretConfigured` means a server-side secret ref exists.
+ */
+export type AuthProviderResource = {
+  __typename?: "AuthProviderResource";
+  authorizeScopes: Scalars["String"]["output"];
+  clientId: Scalars["String"]["output"];
+  clientSecretConfigured: Scalars["Boolean"]["output"];
+  cognitoAppClientIds: Array<Scalars["String"]["output"]>;
+  cognitoIdentityProviderName: Scalars["String"]["output"];
+  cognitoUserPoolId: Scalars["String"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  diagnostics: Scalars["AWSJSON"]["output"];
+  displayName: Scalars["String"]["output"];
+  id: Scalars["ID"]["output"];
+  issuerUrl: Scalars["String"]["output"];
+  lastErrorCode?: Maybe<Scalars["String"]["output"]>;
+  lastValidatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  /** 'workos' in v1. */
+  providerKey: Scalars["String"]["output"];
+  providerOptions: Scalars["AWSJSON"]["output"];
+  /** 'single_sso' | 'provider_specific'. */
+  publicOptionMode: Scalars["String"]["output"];
+  publicOptionsPublished: Scalars["Boolean"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  /**
+   * 'unconfigured' | 'validating' | 'valid' | 'partially_valid' | 'invalid' |
+   * 'rotating_secret' | 'disabled'.
+   */
+  validationStatus: Scalars["String"]["output"];
+};
+
 export type BedrockModelImportCandidate = {
   __typename?: "BedrockModelImportCandidate";
   alreadyImported: Scalars["Boolean"]["output"];
@@ -4474,7 +4507,7 @@ export type PluginCatalogComponent = {
   /** Display name where the manifest declares one; null → render falls back to key. */
   displayName?: Maybe<Scalars["String"]["output"]>;
   key: Scalars["String"]["output"];
-  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
+  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'. */
   type: Scalars["String"]["output"];
 };
 
@@ -4578,13 +4611,14 @@ export type PluginComponent = {
   __typename?: "PluginComponent";
   /** Component key from the pinned manifest version (unique within the install). */
   componentKey: Scalars["String"]["output"];
-  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface'. */
+  /** 'mcp-server' | 'skills' | 'infrastructure' | 'ui-surface' | 'auth-provider'. */
   componentType: Scalars["String"]["output"];
   createdAt: Scalars["AWSDateTime"]["output"];
   /**
    * Handler linkage into real runtime rows, shape by component type:
    * mcp-server { tenantMcpServerId }, skills { seededCatalogPrefix,
-   * workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId }.
+   * workspaceFolders }, infrastructure { managedApplicationId, deploymentJobId },
+   * auth-provider { status, publicOptionsPublished }.
    */
   handlerRef: Scalars["AWSJSON"]["output"];
   id: Scalars["ID"]["output"];
@@ -6979,6 +7013,29 @@ export type Tenant = {
   sandboxInterpreterPublicId?: Maybe<Scalars["String"]["output"]>;
   settings?: Maybe<TenantSettings>;
   slug: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+/**
+ * Tenant/deployment opt-in for a deployment auth resource. Public login options
+ * may be derived from this only after the linked resource validates.
+ */
+export type TenantAuthProviderReference = {
+  __typename?: "TenantAuthProviderReference";
+  authProviderResourceId: Scalars["ID"]["output"];
+  createdAt: Scalars["AWSDateTime"]["output"];
+  disabledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  enabledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  hostnames: Array<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  lastErrorCode?: Maybe<Scalars["String"]["output"]>;
+  metadata: Scalars["AWSJSON"]["output"];
+  pluginInstallId: Scalars["ID"]["output"];
+  publicOptionLabel: Scalars["String"]["output"];
+  resource: AuthProviderResource;
+  /** 'disabled' | 'enabled' | 'invalid' | 'decommissioning'. */
+  status: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
@@ -11663,10 +11720,12 @@ export type SettingsWebhookQuery = {
   webhook?: {
     __typename?: "Webhook";
     id: string;
+    tenantId: string;
     name: string;
     description?: string | null;
     token: string;
     targetType: string;
+    spaceId?: string | null;
     prompt?: string | null;
     enabled: boolean;
     rateLimit?: number | null;
@@ -11692,7 +11751,14 @@ export type SettingsWebhookDeliveriesQuery = {
     signatureStatus: string;
     resolutionStatus: string;
     statusCode?: number | null;
+    threadId?: string | null;
     threadCreated?: boolean | null;
+    bodyPreview?: string | null;
+    bodySizeBytes?: number | null;
+    bodySha256?: string | null;
+    sourceIp?: string | null;
+    errorMessage?: string | null;
+    durationMs?: number | null;
   }>;
 };
 
@@ -11708,6 +11774,7 @@ export type SettingsUpdateWebhookMutation = {
     id: string;
     name: string;
     description?: string | null;
+    spaceId?: string | null;
     prompt?: string | null;
     enabled: boolean;
     rateLimit?: number | null;
@@ -24535,10 +24602,12 @@ export const SettingsWebhookDocument = {
               kind: "SelectionSet",
               selections: [
                 { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "tenantId" } },
                 { kind: "Field", name: { kind: "Name", value: "name" } },
                 { kind: "Field", name: { kind: "Name", value: "description" } },
                 { kind: "Field", name: { kind: "Name", value: "token" } },
                 { kind: "Field", name: { kind: "Name", value: "targetType" } },
+                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
                 { kind: "Field", name: { kind: "Name", value: "prompt" } },
                 { kind: "Field", name: { kind: "Name", value: "enabled" } },
                 { kind: "Field", name: { kind: "Name", value: "rateLimit" } },
@@ -24636,10 +24705,23 @@ export const SettingsWebhookDeliveriesDocument = {
                   name: { kind: "Name", value: "resolutionStatus" },
                 },
                 { kind: "Field", name: { kind: "Name", value: "statusCode" } },
+                { kind: "Field", name: { kind: "Name", value: "threadId" } },
                 {
                   kind: "Field",
                   name: { kind: "Name", value: "threadCreated" },
                 },
+                { kind: "Field", name: { kind: "Name", value: "bodyPreview" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "bodySizeBytes" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "bodySha256" } },
+                { kind: "Field", name: { kind: "Name", value: "sourceIp" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "errorMessage" },
+                },
+                { kind: "Field", name: { kind: "Name", value: "durationMs" } },
               ],
             },
           },
@@ -24712,6 +24794,7 @@ export const SettingsUpdateWebhookDocument = {
                 { kind: "Field", name: { kind: "Name", value: "id" } },
                 { kind: "Field", name: { kind: "Name", value: "name" } },
                 { kind: "Field", name: { kind: "Name", value: "description" } },
+                { kind: "Field", name: { kind: "Name", value: "spaceId" } },
                 { kind: "Field", name: { kind: "Name", value: "prompt" } },
                 { kind: "Field", name: { kind: "Name", value: "enabled" } },
                 { kind: "Field", name: { kind: "Name", value: "rateLimit" } },
