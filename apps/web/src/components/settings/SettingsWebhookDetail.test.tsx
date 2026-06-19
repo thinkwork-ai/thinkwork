@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deliveryStatusPresentation,
+  deliveryThreadRoute,
   isAcceptedWithWarning,
 } from "./SettingsWebhookDetail";
 
@@ -52,5 +53,40 @@ describe("SettingsWebhookDetail delivery presentation", () => {
       variant: "destructive",
       issueLabel: "Error",
     });
+  });
+});
+
+describe("SettingsWebhookDetail thread links", () => {
+  it("links Space webhook deliveries to the Space thread conversation", () => {
+    expect(
+      deliveryThreadRoute({
+        spaceId: "space-1",
+        threadId: "thread-1",
+      }),
+    ).toEqual({
+      to: "/spaces/$spaceId/threads/$threadId",
+      params: { spaceId: "space-1", threadId: "thread-1" },
+    });
+  });
+
+  it("falls back to the global thread conversation route without a Space", () => {
+    expect(
+      deliveryThreadRoute({
+        spaceId: null,
+        threadId: "thread-1",
+      }),
+    ).toEqual({
+      to: "/threads/$id",
+      params: { id: "thread-1" },
+    });
+  });
+
+  it("does not create a link when the delivery has no thread", () => {
+    expect(
+      deliveryThreadRoute({
+        spaceId: "space-1",
+        threadId: null,
+      }),
+    ).toBeNull();
   });
 });
