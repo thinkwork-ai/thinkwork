@@ -77,6 +77,7 @@ describe("startSpaceWebhookThread", () => {
       {
         ensureThreadForWork,
         insertOpeningMessage,
+        findSpace: vi.fn(async () => null),
         now: () => now,
       },
     );
@@ -107,6 +108,8 @@ describe("startSpaceWebhookThread", () => {
       number: 42,
       openingMessageId: "message-1",
       openingMessageAlreadyPersisted: true,
+      warnings: [],
+      workflow: null,
       openingMessageContent: expect.stringContaining(
         'Webhook "Twenty Customer Stage" was triggered.',
       ),
@@ -122,6 +125,188 @@ describe("startSpaceWebhookThread", () => {
         spaceId: "space-1",
       },
     });
+  });
+
+  it("initializes Customer Onboarding on the already-created webhook thread", async () => {
+    const ensureThreadForWork = vi.fn(async () => ({
+      threadId: "thread-1",
+      identifier: "HOOK-42",
+      number: 42,
+    }));
+    const startCustomerOnboardingWorkflow = vi.fn(async () => ({
+      thread: {
+        id: "thread-1",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        title: "McPherson Oil onboarding",
+        identifier: "HOOK-42",
+        metadata: {
+          customerOnboarding: {
+            workflow: "customer_onboarding",
+          },
+        },
+      },
+      idempotent: false,
+      linkedTasks: [
+        {
+          checklistItemId: "item-1",
+          provider: "thinkwork" as const,
+          title: "Send DocuSign package",
+          externalTaskId: "thinkwork:thread-1:docusign_package",
+          externalTaskUrl: null,
+          status: "todo" as const,
+          blocked: false,
+          syncStatus: "synced" as const,
+        },
+      ],
+      missingFields: ["primaryContact"],
+    }));
+
+    const result = await startSpaceWebhookThread(
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        webhookId: "webhook-1",
+        webhookName: "Twenty Customer Stage",
+        payload: {
+          event: "opportunity.stage.customer",
+          opportunityId: "opp-1",
+          companyName: "McPherson Oil",
+        },
+      },
+      {
+        ensureThreadForWork,
+        insertOpeningMessage: vi.fn(async () => ({ id: "message-1" })),
+        findSpace: vi.fn(async () => ({
+          id: "space-1",
+          tenantId: "tenant-1",
+          kind: "custom",
+          templateKey: null,
+          config: { workflow: "customer_onboarding" },
+        })),
+        startCustomerOnboardingWorkflow,
+      },
+    );
+
+    expect(startCustomerOnboardingWorkflow).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      source: "webhook",
+      opportunity: {
+        event: "opportunity.stage.customer",
+        opportunityId: "opp-1",
+        companyName: "McPherson Oil",
+      },
+      preparedThread: {
+        id: "thread-1",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        title: "Twenty Customer Stage",
+        identifier: "HOOK-42",
+        metadata: null,
+      },
+      startedBy: { type: "system" },
+    });
+    expect(result.workflow).toEqual({
+      key: "customer_onboarding",
+      threadId: "thread-1",
+      idempotent: false,
+      missingFields: ["primaryContact"],
+      linkedTaskCount: 1,
+    });
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("does not call Customer Onboarding for generic Spaces without workflows", async () => {
+    const startCustomerOnboardingWorkflow = vi.fn();
+
+    await startSpaceWebhookThread(
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        webhookId: "webhook-1",
+        webhookName: "Generic Webhook",
+        payload: {},
+      },
+      {
+        ensureThreadForWork: vi.fn(async () => ({
+          threadId: "thread-1",
+          identifier: "HOOK-1",
+          number: 1,
+        })),
+        insertOpeningMessage: vi.fn(async () => ({ id: "message-1" })),
+        findSpace: vi.fn(async () => ({
+          id: "space-1",
+          tenantId: "tenant-1",
+          kind: "custom",
+          templateKey: null,
+          config: { workflow: "general" },
+        })),
+        startCustomerOnboardingWorkflow,
+      },
+    );
+
+    expect(startCustomerOnboardingWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("returns workflow warnings when onboarding initialization fails after thread creation", async () => {
+    const insertWorkflowWarningMessage = vi.fn(async () => ({
+      id: "warning-message-1",
+    }));
+
+    const result = await startSpaceWebhookThread(
+      {
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        spaceId: "space-1",
+        webhookId: "webhook-1",
+        webhookName: "Twenty Customer Stage",
+        payload: { opportunityId: "opp-no-customer" },
+      },
+      {
+        ensureThreadForWork: vi.fn(async () => ({
+          threadId: "thread-1",
+          identifier: "HOOK-1",
+          number: 1,
+        })),
+        insertOpeningMessage: vi.fn(async () => ({ id: "message-1" })),
+        findSpace: vi.fn(async () => ({
+          id: "space-1",
+          tenantId: "tenant-1",
+          kind: "customer_onboarding",
+          templateKey: null,
+          config: {},
+        })),
+        startCustomerOnboardingWorkflow: vi.fn(async () => {
+          throw new Error("customerId or customerName is required");
+        }),
+        insertWorkflowWarningMessage,
+      },
+    );
+
+    expect(result.workflow).toBeNull();
+    expect(result.warnings).toEqual([
+      {
+        code: "CUSTOMER_ONBOARDING_WORKFLOW_FAILED",
+        message:
+          "Customer Onboarding workflow could not be initialized for this webhook-created thread. customerId or customerName is required",
+        workflowKey: "customer_onboarding",
+      },
+    ]);
+    expect(result.agentContext.workflowWarnings).toEqual(result.warnings);
+    expect(insertWorkflowWarningMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        content: result.warnings[0]?.message,
+        metadata: expect.objectContaining({
+          kind: "workflow_warning",
+          workflowKey: "customer_onboarding",
+        }),
+      }),
+    );
   });
 
   it("does not insert a message when thread creation fails", async () => {

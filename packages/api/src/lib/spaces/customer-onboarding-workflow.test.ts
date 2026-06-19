@@ -293,6 +293,69 @@ describe("startCustomerOnboardingWorkflow", () => {
     expect(taskAdapter.createTask).not.toHaveBeenCalled();
   });
 
+  it("initializes a prepared webhook Thread instead of deduping or creating another case", async () => {
+    const repository = makeRepository({
+      existingThread: {
+        id: "thread-existing",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        title: "Existing Acme onboarding",
+        identifier: "HOOK-7",
+        metadata: null,
+      },
+      space: nativeSpace,
+    });
+    const taskAdapter = { createTask: vi.fn() };
+
+    const result = await startCustomerOnboardingWorkflow(
+      {
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        source: "webhook",
+        opportunity: completeNativePayload,
+        preparedThread: {
+          id: "thread-prepared",
+          tenantId: "tenant-1",
+          spaceId: "space-1",
+          title: "Twenty Customer Stage",
+          identifier: "HOOK-42",
+          metadata: null,
+        },
+        startedBy: { type: "system" },
+      },
+      { repository, taskAdapter, coordinator: noopCoordinator },
+    );
+
+    expect(result.thread).toMatchObject({
+      id: "thread-prepared",
+      title: "Acme Corp onboarding",
+      identifier: "HOOK-42",
+    });
+    expect(result.idempotent).toBe(false);
+    expect(result.linkedTasks).toHaveLength(7);
+    expect(repository.findExistingThread).not.toHaveBeenCalled();
+    expect(repository.createdCases).toEqual([]);
+    expect(repository.initializedCases).toEqual([
+      expect.objectContaining({
+        thread: expect.objectContaining({ id: "thread-prepared" }),
+        title: "Acme Corp onboarding",
+        metadata: expect.objectContaining({
+          customerOnboarding: expect.objectContaining({
+            workflow: "customer_onboarding",
+            opportunityId: "opp-123",
+          }),
+        }),
+      }),
+    ]);
+    expect(repository.linkedTasks).toHaveLength(7);
+    expect(repository.ensuredGoals).toEqual([
+      expect.objectContaining({
+        thread: expect.objectContaining({ id: "thread-prepared" }),
+        startedBy: { type: "system" },
+      }),
+    ]);
+  });
+
   it("keeps missing optional CRM facts in the kickoff instead of failing", async () => {
     const repository = makeRepository({
       space: { ...baseSpace, checklistItems: [baseSpace.checklistItems[0]!] },
@@ -790,6 +853,11 @@ function makeRepository(
     createdCases: [] as Parameters<
       CustomerOnboardingWorkflowRepository["createCase"]
     >[0][],
+    initializedCases: [] as Parameters<
+      NonNullable<
+        CustomerOnboardingWorkflowRepository["initializePreparedCase"]
+      >
+    >[0][],
     linkedTasks: [] as Parameters<
       CustomerOnboardingWorkflowRepository["createLinkedTask"]
     >[0][],
@@ -799,9 +867,9 @@ function makeRepository(
     async findSpace() {
       return options.space ?? baseSpace;
     },
-    async findExistingThread() {
+    findExistingThread: vi.fn(async () => {
       return options.existingThread ?? null;
-    },
+    }),
     async createCase(input) {
       repository.createdCases.push(input);
       return {
@@ -810,6 +878,14 @@ function makeRepository(
         spaceId: input.space.id,
         title: input.title,
         identifier: input.channel === "webhook" ? "HOOK-42" : "TICK-42",
+        metadata: input.metadata,
+      };
+    },
+    async initializePreparedCase(input) {
+      repository.initializedCases.push(input);
+      return {
+        ...input.thread,
+        title: input.title,
         metadata: input.metadata,
       };
     },
@@ -822,6 +898,11 @@ function makeRepository(
   } satisfies CustomerOnboardingWorkflowRepository & {
     createdCases: Parameters<
       CustomerOnboardingWorkflowRepository["createCase"]
+    >[0][];
+    initializedCases: Parameters<
+      NonNullable<
+        CustomerOnboardingWorkflowRepository["initializePreparedCase"]
+      >
     >[0][];
     linkedTasks: Parameters<
       CustomerOnboardingWorkflowRepository["createLinkedTask"]
