@@ -13,11 +13,11 @@ The app exposes:
 - one logic function, `ThinkWork Webhook`, registered as a workflow action for
   explicit workflow-builder use.
 
-The settings component writes `THINKWORK_WEBHOOK_URL` and
-`THINKWORK_TRIGGER_STAGE` as native Twenty application variables. The workflow
-action reads those variables, compares the incoming Twenty Opportunity stage
-with the configured app stage, and only posts to the configured ThinkWork
-generic webhook URL when they match.
+The settings component writes `THINKWORK_WEBHOOK_URL`,
+`THINKWORK_TRIGGER_STAGE`, and `TWENTY_WORKSPACE_ID` as native Twenty
+application variables. The workflow action reads those variables, compares the
+incoming Twenty Opportunity stage with the configured app stage, and only posts
+to the configured ThinkWork generic webhook URL when they match.
 
 ## Configuration
 
@@ -29,10 +29,11 @@ Settings -> Applications -> Installed -> ThinkWork -> Settings
 
 Set the app variables in the ThinkWork settings surface:
 
-| Variable                  | Required | Default    | Description                                                                                                                            |
-| ------------------------- | -------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `THINKWORK_WEBHOOK_URL`   | yes      | none       | Full ThinkWork generic webhook URL copied from ThinkWork Settings > Webhooks, for example `https://app.thinkwork.ai/webhooks/<token>`. |
-| `THINKWORK_TRIGGER_STAGE` | yes      | `Customer` | Twenty Opportunity stage label that should trigger the ThinkWork webhook.                                                              |
+| Variable                  | Required | Default                 | Description                                                                                                                            |
+| ------------------------- | -------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `THINKWORK_WEBHOOK_URL`   | yes      | none                    | Full ThinkWork generic webhook URL copied from ThinkWork Settings > Webhooks, for example `https://app.thinkwork.ai/webhooks/<token>`. |
+| `THINKWORK_TRIGGER_STAGE` | yes      | `Customer`              | Twenty Opportunity stage label that should trigger the ThinkWork webhook.                                                              |
+| `TWENTY_WORKSPACE_ID`     | no       | production workspace id | Twenty workspace id appended to canonical CRM record links.                                                                            |
 
 The webhook URL contains the ThinkWork webhook token, so the settings component
 does not display the saved secret value after save; paste a new URL to rotate
@@ -66,6 +67,9 @@ The logic function sends those fields to ThinkWork with
 `source: "twenty-app"` and `triggerStage: "<configured stage>"` when the
 incoming stage matches `THINKWORK_TRIGGER_STAGE`. If the stage does not match,
 the action returns `status: "skipped_stage"` and does not call ThinkWork.
+The action normalizes legacy Opportunity links like
+`/objects/opportunities/<id>` into Twenty's canonical
+`/object/opportunity/<id>#<workspace-id>` route before sending the payload.
 
 ThinkWork should record the resulting generic webhook delivery with
 `source=twenty-app`, `stage=Customer`, and `triggerStage=Customer`, proving that

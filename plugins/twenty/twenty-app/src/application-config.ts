@@ -7,6 +7,7 @@ import {
   THINKWORK_TRIGGER_STAGE_VARIABLE_UNIVERSAL_IDENTIFIER,
   THINKWORK_SETTINGS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER,
   THINKWORK_WEBHOOK_URL_VARIABLE_UNIVERSAL_IDENTIFIER,
+  TWENTY_WORKSPACE_ID_VARIABLE_UNIVERSAL_IDENTIFIER,
 } from "src/constants/universal-identifiers";
 
 export default defineApplication({
@@ -30,6 +31,13 @@ export default defineApplication({
       description:
         'Twenty Opportunity stage label that triggers the ThinkWork webhook. Defaults to "Customer".',
       value: "Customer",
+      isSecret: false,
+    },
+    TWENTY_WORKSPACE_ID: {
+      universalIdentifier: TWENTY_WORKSPACE_ID_VARIABLE_UNIVERSAL_IDENTIFIER,
+      description:
+        "Twenty workspace id appended to generated CRM record links.",
+      value: "014f32a0-5868-402a-8152-225e54c4cf29",
       isSecret: false,
     },
   },

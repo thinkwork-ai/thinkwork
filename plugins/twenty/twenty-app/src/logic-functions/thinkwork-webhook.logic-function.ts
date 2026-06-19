@@ -147,6 +147,31 @@ function normalizedStage(value: string | undefined): string | undefined {
   return value?.toLowerCase().replace(/[\s_-]+/g, "");
 }
 
+function canonicalOpportunityUrl(
+  value: string | undefined,
+  opportunityId: string | undefined,
+  workspaceId: string | undefined,
+): string | undefined {
+  if (!value) return undefined;
+
+  try {
+    const url = new URL(value);
+    const pathMatch = url.pathname.match(
+      /^\/(?:objects\/opportunities|object\/opportunity)\/([^/]+)\/?$/,
+    );
+    if (!pathMatch) return value;
+
+    const recordId = opportunityId ?? decodeURIComponent(pathMatch[1]);
+    url.pathname = `/object/opportunity/${recordId}`;
+    if (workspaceId) {
+      url.hash = workspaceId;
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
 const handler = async (
   input: ThinkWorkWebhookInput,
 ): Promise<ThinkWorkWebhookResponse> => {
@@ -184,6 +209,7 @@ const handler = async (
     `opportunity.stage.${configuredStage.toLowerCase().replace(/\s+/g, "_")}`;
   const opportunityId =
     text(input.opportunityId) ?? text(input.recordId) ?? text(after?.id);
+  const twentyWorkspaceId = text(process.env.TWENTY_WORKSPACE_ID);
   const updatedAt = text(input.updatedAt) ?? text(after?.updatedAt);
   const occurredAt = text(input.occurredAt) ?? updatedAt ?? new Date().toISOString();
   const workflowKey = text(input.workflowKey) ?? "customer_onboarding";
@@ -224,7 +250,11 @@ const handler = async (
     stage: receivedStage,
     triggerStage: configuredStage,
     updatedAt,
-    opportunityUrl: text(input.opportunityUrl),
+    opportunityUrl: canonicalOpportunityUrl(
+      text(input.opportunityUrl),
+      opportunityId,
+      twentyWorkspaceId,
+    ),
     workflowKey,
     workflowRunId: text(input.workflowRunId),
     occurredAt,
