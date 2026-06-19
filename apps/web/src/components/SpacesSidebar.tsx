@@ -149,11 +149,6 @@ export function SpacesSidebar() {
             }}
             onSignOut={() => {
               signOut();
-              navigate({
-                to: "/sign-in",
-                search: { next: currentPath },
-                replace: true,
-              });
             }}
           />
         </SidebarFooter>

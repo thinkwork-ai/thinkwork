@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { createWorkosAuthHandler } from "./workos-auth.js";
 import { signWorkosAuthorizeState, type WorkosAuthDeps } from "../lib/workos-auth.js";
+import type { WorkosLogoutDeps } from "../lib/workos-auth-session.js";
 import type { WorkosCognitoBridgeDeps } from "../lib/workos-cognito-bridge.js";
 
 describe("workos-auth handler", () => {
@@ -86,13 +87,62 @@ describe("workos-auth handler", () => {
     );
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body ?? "{}")).toEqual({
-      id_token: "id-token",
+    expect(JSON.parse(response.body ?? "{}")).toMatchObject({
       access_token: "access-token",
       refresh_token: "refresh-token",
     });
     expect(bridgeDeps.consumePendingBridge).toHaveBeenCalled();
     expect(bridgeDeps.startCognitoCustomAuth).toHaveBeenCalled();
+  });
+
+  it("returns a WorkOS logout URL for authenticated WorkOS sessions", async () => {
+    const logoutDeps = logoutDepsForHandler();
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps: bridgeDepsForHandler(),
+      logoutDeps,
+    });
+
+    const response = await handler(
+      event({
+        path: "/api/auth/workos/logout",
+        method: "POST",
+        headers: { authorization: "Bearer id-token" },
+        body: { return_to: "https://app.customer.example/sign-in" },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body ?? "{}") as { logout_url: string };
+    const url = new URL(body.logout_url);
+    expect(url.origin).toBe("https://api.workos.com");
+    expect(url.pathname).toBe("/user_management/sessions/logout");
+    expect(url.searchParams.get("session_id")).toBe("workos-session-123");
+    expect(url.searchParams.get("return_to")).toBe(
+      "https://app.customer.example/sign-in",
+    );
+    expect(logoutDeps.consumeActiveSession).toHaveBeenCalledWith({
+      cognitoPrincipalId: "cognito-sub-123",
+      now: new Date("2026-06-19T12:00:00Z"),
+    });
+  });
+
+  it("requires Cognito auth for WorkOS logout", async () => {
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps: bridgeDepsForHandler(),
+      logoutDeps: logoutDepsForHandler({ auth: null }),
+    });
+
+    const response = await handler(
+      event({
+        path: "/api/auth/workos/logout",
+        method: "POST",
+        body: { return_to: "https://app.customer.example/sign-in" },
+      }),
+    );
+
+    expect(response.statusCode).toBe(401);
   });
 
   it("fails closed when a bridge POST has invalid JSON", async () => {
@@ -159,6 +209,7 @@ function bridgeDepsForHandler(): WorkosCognitoBridgeDeps {
       authProviderResourceId: "resource-123",
       workosUserId: "workos-user-123",
       workosSessionId: "workos-session-123",
+      workosSessionExpiresAt: new Date("2026-06-19T12:30:00Z"),
       workosEmail: "eric@homecareintel.com",
       workosEmailVerified: true,
       returnTo: "/new",
@@ -170,13 +221,50 @@ function bridgeDepsForHandler(): WorkosCognitoBridgeDeps {
       name: "Eric",
     })),
     startCognitoCustomAuth: vi.fn(async () => ({
-      id_token: "id-token",
+      id_token: jwt({
+        sub: "cognito-sub-123",
+        "cognito:username": "cognito-user-123",
+        exp: 1781870400,
+      }),
       access_token: "access-token",
       refresh_token: "refresh-token",
     })),
+    recordWorkosSession: vi.fn(async () => undefined),
     signingSecret: () => "api-secret",
     now: () => new Date("2026-06-19T11:00:00Z"),
     randomToken: () => "answer-token",
+  };
+}
+
+function logoutDepsForHandler(overrides: {
+  auth?: Awaited<ReturnType<WorkosLogoutDeps["authenticate"]>>;
+  session?: Awaited<ReturnType<WorkosLogoutDeps["consumeActiveSession"]>>;
+} = {}): WorkosLogoutDeps {
+  const defaultAuth: NonNullable<
+    Awaited<ReturnType<WorkosLogoutDeps["authenticate"]>>
+  > = {
+    principalId: "cognito-sub-123",
+    tenantId: "tenant-123",
+    email: "eric@homecareintel.com",
+    emailVerified: true,
+    authType: "cognito",
+    agentId: null,
+  };
+  return {
+    authenticate: vi.fn(async () =>
+      Object.prototype.hasOwnProperty.call(overrides, "auth")
+        ? overrides.auth!
+        : defaultAuth,
+    ),
+    consumeActiveSession: vi.fn(async () =>
+      Object.prototype.hasOwnProperty.call(overrides, "session")
+        ? overrides.session!
+        : {
+            id: "session-row-123",
+            workosSessionId: "workos-session-123",
+          },
+    ),
+    now: () => new Date("2026-06-19T12:00:00Z"),
   };
 }
 
@@ -184,6 +272,7 @@ function event(args: {
   path: string;
   method?: string;
   query?: Record<string, string>;
+  headers?: Record<string, string>;
   body?: Record<string, unknown>;
   rawBody?: string;
 }): APIGatewayProxyEventV2 {
@@ -194,7 +283,7 @@ function event(args: {
     rawQueryString: "",
     queryStringParameters: args.query,
     body: args.rawBody ?? (args.body ? JSON.stringify(args.body) : undefined),
-    headers: {},
+    headers: args.headers ?? {},
     requestContext: {
       accountId: "123",
       apiId: "api",

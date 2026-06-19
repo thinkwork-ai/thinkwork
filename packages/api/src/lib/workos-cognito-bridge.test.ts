@@ -18,6 +18,7 @@ const bridge: WorkosBridgeRecord = {
   authProviderResourceId: "resource-123",
   workosUserId: "workos-user-123",
   workosSessionId: "workos-session-123",
+  workosSessionExpiresAt: new Date("2026-06-19T12:30:00Z"),
   workosEmail: "eric@homecareintel.com",
   workosEmailVerified: true,
   returnTo: "/new",
@@ -43,9 +44,25 @@ describe("exchangeWorkosBridgeForCognitoTokens", () => {
       answer: "answer-token",
     });
     expect(tokens).toEqual({
-      id_token: "id-token",
+      id_token: jwt({
+        sub: "cognito-sub-123",
+        "cognito:username": "cognito-user-123",
+        exp: 1781870400,
+      }),
       access_token: "access-token",
       refresh_token: "refresh-token",
+    });
+    expect(deps.recordWorkosSession).toHaveBeenCalledWith({
+      tenantId: "tenant-123",
+      userId: "user-123",
+      tenantReferenceId: "tenant-ref-123",
+      authProviderResourceId: "resource-123",
+      cognitoPrincipalId: "cognito-sub-123",
+      cognitoUsername: "cognito-user-123",
+      workosUserId: "workos-user-123",
+      workosSessionId: "workos-session-123",
+      workosEmail: "eric@homecareintel.com",
+      expiresAt: new Date("2026-06-19T12:30:00Z"),
     });
 
     const signedChallenge = vi.mocked(deps.startCognitoCustomAuth).mock
@@ -192,14 +209,27 @@ function depsForBridge(overrides: {
           },
     ),
     startCognitoCustomAuth: vi.fn(async () => ({
-      id_token: "id-token",
+      id_token: jwt({
+        sub: "cognito-sub-123",
+        "cognito:username": "cognito-user-123",
+        exp: 1781870400,
+      }),
       access_token: "access-token",
       refresh_token: "refresh-token",
     })),
+    recordWorkosSession: vi.fn(async () => undefined),
     signingSecret: () => "api-secret",
     now: () => new Date("2026-06-19T11:00:00Z"),
     randomToken: () => "answer-token",
   };
+}
+
+function jwt(payload: Record<string, unknown>): string {
+  return [
+    "header",
+    Buffer.from(JSON.stringify(payload)).toString("base64url"),
+    "signature",
+  ].join(".");
 }
 
 function customAuthEvent(

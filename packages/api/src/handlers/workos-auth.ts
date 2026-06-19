@@ -15,16 +15,24 @@ import {
   exchangeWorkosBridgeForCognitoTokens,
   type WorkosCognitoBridgeDeps,
 } from "../lib/workos-cognito-bridge.js";
+import {
+  WorkosLogoutError,
+  createDefaultWorkosLogoutDeps,
+  createWorkosLogoutRedirect,
+  type WorkosLogoutDeps,
+} from "../lib/workos-auth-session.js";
 import { handleCors, json } from "../lib/response.js";
 
 export interface WorkosAuthHandlerDeps {
   workosAuthDeps?: WorkosAuthDeps;
   bridgeDeps?: WorkosCognitoBridgeDeps;
+  logoutDeps?: WorkosLogoutDeps;
 }
 
 export function createWorkosAuthHandler(deps: WorkosAuthHandlerDeps = {}) {
   const workosAuthDeps = deps.workosAuthDeps ?? createDefaultWorkosAuthDeps();
   const bridgeDeps = deps.bridgeDeps ?? createDefaultWorkosCognitoBridgeDeps();
+  const logoutDeps = deps.logoutDeps ?? createDefaultWorkosLogoutDeps();
 
   return async function workosAuthHandler(
     event: APIGatewayProxyEventV2,
@@ -74,10 +82,23 @@ export function createWorkosAuthHandler(deps: WorkosAuthHandlerDeps = {}) {
         return json(tokens);
       }
 
+      if (event.rawPath === "/api/auth/workos/logout" && method === "POST") {
+        const body = parseJsonBody(event);
+        const result = await createWorkosLogoutRedirect({
+          headers: event.headers as Record<string, string | undefined>,
+          returnTo:
+            stringBodyField(body, "return_to") ??
+            stringBodyField(body, "returnTo"),
+          deps: logoutDeps,
+        });
+        return json(result);
+      }
+
       if (
         event.rawPath === "/api/auth/workos/authorize" ||
         event.rawPath === "/api/auth/workos/callback" ||
-        event.rawPath === "/api/auth/workos/bridge"
+        event.rawPath === "/api/auth/workos/bridge" ||
+        event.rawPath === "/api/auth/workos/logout"
       ) {
         return json({ error: "Method not allowed" }, 405);
       }
@@ -85,7 +106,9 @@ export function createWorkosAuthHandler(deps: WorkosAuthHandlerDeps = {}) {
       return json({ error: "Not found" }, 404);
     } catch (error) {
       const statusCode =
-        error instanceof WorkosAuthError || error instanceof WorkosBridgeError
+        error instanceof WorkosAuthError ||
+        error instanceof WorkosBridgeError ||
+        error instanceof WorkosLogoutError
           ? error.statusCode
           : 500;
       console.error("[workos-auth] failed:", {

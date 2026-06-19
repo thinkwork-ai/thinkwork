@@ -244,11 +244,7 @@ describe("SpacesSidebar", () => {
     // Confirming in the dialog performs the sign-out.
     fireEvent.click(screen.getByTestId("logout-confirm"));
     expect(authMocks.signOut).toHaveBeenCalledTimes(1);
-    expect(routerMocks.navigate).toHaveBeenCalledWith({
-      to: "/sign-in",
-      search: { next: "/threads/abc123" },
-      replace: true,
-    });
+    expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
 
   it("opens the caller profile from the account menu", () => {
