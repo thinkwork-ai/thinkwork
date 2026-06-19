@@ -105,6 +105,12 @@ variable "cognito_auth_domain" {
   default     = ""
 }
 
+variable "workos_api_key_secret_arn" {
+  description = "Optional Secrets Manager ARN/name containing the WorkOS API key used to revoke upstream AuthKit sessions during logout."
+  type        = string
+  default     = ""
+}
+
 variable "appsync_api_url" {
   description = "AppSync subscriptions endpoint URL"
   type        = string

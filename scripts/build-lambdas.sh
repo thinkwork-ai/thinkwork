@@ -282,6 +282,9 @@ build_handler "deployment-sessions" \
 build_handler "auth-me" \
   "$REPO_ROOT/packages/api/src/handlers/auth-me.ts"
 
+build_handler "auth-workos-logout" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-workos-logout.ts"
+
 build_handler "extension-proxy" \
   "$REPO_ROOT/packages/api/src/handlers/extension-proxy.ts"
 

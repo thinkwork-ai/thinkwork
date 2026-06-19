@@ -81,6 +81,12 @@ variable "plugin_catalog_github_token_secret_arn" {
   default     = ""
 }
 
+variable "workos_api_key_secret_arn" {
+  description = "Optional Secrets Manager ARN/name containing the WorkOS API key used to revoke upstream AuthKit sessions during logout."
+  type        = string
+  default     = ""
+}
+
 variable "db_password" {
   description = "Master password for the Aurora cluster"
   type        = string
@@ -1098,6 +1104,7 @@ module "thinkwork" {
   require_lambda_artifacts                   = var.require_lambda_artifacts
   enable_workspace_orchestration             = var.enable_workspace_orchestration
   api_auth_secret                            = var.api_auth_secret
+  workos_api_key_secret_arn                  = var.workos_api_key_secret_arn
   platform_operator_emails                   = var.platform_operator_emails
 
   # Public website custom domain (optional — wired only when www_domain is set)

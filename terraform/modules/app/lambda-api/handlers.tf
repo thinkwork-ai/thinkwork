@@ -70,6 +70,7 @@ locals {
     MCP_OAUTH_CALLBACK_URL      = "${local.mcp_oauth_api_base_url}/mcp/oauth/callback"
     MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
     COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
+    WORKOS_API_KEY_SECRET_ARN   = var.workos_api_key_secret_arn
     APPSYNC_ENDPOINT            = var.appsync_api_url
     THINKWORK_API_URL           = "https://${aws_apigatewayv2_api.main.id}.execute-api.${var.region}.amazonaws.com"
     # Comma-separated allowlist of caller emails permitted to invoke
@@ -422,6 +423,7 @@ resource "aws_lambda_function" "handler" {
     "stripe-subscription",
     "deployment-sessions",
     "auth-me",
+    "auth-workos-logout",
     "public-auth-options",
     "extension-proxy",
     "tenants",
@@ -1015,6 +1017,8 @@ locals {
       "OPTIONS /api/deployment-sessions/{sessionId}/teardown"                   = "deployment-sessions"
       "GET /api/auth/me"                                                        = "auth-me"
       "OPTIONS /api/auth/me"                                                    = "auth-me"
+      "POST /api/auth/workos/logout"                                            = "auth-workos-logout"
+      "OPTIONS /api/auth/workos/logout"                                         = "auth-workos-logout"
       "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
       "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 

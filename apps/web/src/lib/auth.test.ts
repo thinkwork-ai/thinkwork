@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.stubEnv("VITE_COGNITO_USER_POOL_ID", "us-east-1_TestPool");
 vi.stubEnv("VITE_COGNITO_CLIENT_ID", "test-client-id");
 vi.stubEnv("VITE_COGNITO_DOMAIN", "thinkwork-test");
+vi.stubEnv("VITE_API_URL", "https://api.example.com");
 
 const ORIGINAL_LOCATION = window.location;
 const ORIGINAL_LOCAL_STORAGE = Object.getOwnPropertyDescriptor(
@@ -56,6 +57,10 @@ function base64Url(payload: object): string {
 
 function makeIdToken(payload: object): string {
   return ["header", base64Url(payload), "signature"].join(".");
+}
+
+async function flushAsyncLogout(): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
 }
 
 describe("getGoogleSignInUrl", () => {
@@ -113,8 +118,11 @@ describe("signOut", () => {
   it("redirects through the Cognito /logout endpoint to clear the hosted-UI session", async () => {
     const { signOut } = await import("./auth");
     const { navigations } = stubLocation("https://app.example");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
 
     signOut();
+    await flushAsyncLogout();
 
     expect(navigations).toHaveLength(1);
     const target = new URL(navigations[0]);
@@ -123,6 +131,44 @@ describe("signOut", () => {
     // Cognito LogoutURLs allowlist contains bare origins; the `_authed` route
     // guard bounces the unauthenticated user to /sign-in once they land.
     expect(target.searchParams.get("logout_uri")).toBe("https://app.example");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("revokes upstream WorkOS sessions before redirecting through Cognito logout", async () => {
+    const idToken = makeIdToken({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      sub: "user-sub",
+      "cognito:username": "workos-user",
+    });
+    window.localStorage.setItem(
+      "CognitoIdentityServiceProvider.test-client-id.LastAuthUser",
+      "workos-user",
+    );
+    window.localStorage.setItem(
+      "CognitoIdentityServiceProvider.test-client-id.workos-user.idToken",
+      idToken,
+    );
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { signOut } = await import("./auth");
+    const { navigations } = stubLocation("https://app.example");
+
+    signOut();
+    await flushAsyncLogout();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.com/api/auth/workos/logout",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+      }),
+    );
+    expect(navigations).toHaveLength(1);
+    expect(new URL(navigations[0]).pathname).toBe("/logout");
   });
 });
 

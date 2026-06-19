@@ -906,6 +906,7 @@ module "api" {
   bucket_arn  = module.s3.bucket_arn
 
   plugin_catalog_github_token_secret_arn = var.plugin_catalog_github_token_secret_arn
+  workos_api_key_secret_arn              = var.workos_api_key_secret_arn
 
   brain_artifacts_kms_key_arn = module.kms.key_arn
 

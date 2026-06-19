@@ -187,6 +187,12 @@ export function confirmForgotPassword(
 // "Continue with Google" silently re-uses the existing Cognito session and
 // never reaches Google's account chooser.
 export function signOut(): void {
+  void revokeWorkosSessionsBeforeLogout().finally(() => {
+    redirectToCognitoLogout();
+  });
+}
+
+function redirectToCognitoLogout(): void {
   clearLocalAuthSession();
 
   const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
@@ -204,6 +210,34 @@ export function signOut(): void {
     logout_uri: window.location.origin,
   });
   window.location.href = `${getCognitoDomainBase()}/logout?${params.toString()}`;
+}
+
+async function revokeWorkosSessionsBeforeLogout(): Promise<void> {
+  const apiBase = getApiBaseUrl();
+  if (!apiBase) return;
+
+  const token = await getIdToken();
+  if (!token) return;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 3_000);
+  try {
+    const response = await fetch(`${apiBase}/api/auth/workos/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      console.warn("[auth] WorkOS logout revocation failed", response.status);
+    }
+  } catch (error) {
+    console.warn("[auth] WorkOS logout revocation failed", error);
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 export function clearLocalAuthSession(): void {
@@ -402,6 +436,18 @@ function getCognitoDomainBase(): string {
   if (raw.startsWith("https://")) return raw;
   // Otherwise treat it as the domain prefix
   return `https://${raw}.auth.us-east-1.amazoncognito.com`;
+}
+
+function getApiBaseUrl(): string {
+  const explicit = readRuntimeEnv("VITE_API_URL");
+  if (explicit) return trimTrailingSlash(explicit);
+  const graphql = readRuntimeEnv("VITE_GRAPHQL_HTTP_URL");
+  if (graphql) return trimTrailingSlash(graphql.replace(/\/graphql\/?$/, ""));
+  return "";
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
 }
 
 export function getGoogleSignInUrl(): string {
