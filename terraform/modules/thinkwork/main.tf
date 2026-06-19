@@ -66,6 +66,11 @@ locals {
   plane_domain          = var.plane_domain != "" ? var.plane_domain : (var.www_domain != "" ? "plane.${var.www_domain}" : "")
   plane_public_url      = var.plane_public_url != "" ? var.plane_public_url : (local.plane_domain != "" ? "https://${local.plane_domain}" : "")
   plane_certificate_arn = var.plane_certificate_arn != "" ? var.plane_certificate_arn : var.www_certificate_arn
+  n8n_provisioned       = var.n8n_provisioned
+  n8n_runtime_enabled   = var.n8n_provisioned && var.n8n_runtime_enabled
+  n8n_domain            = var.n8n_domain != "" ? var.n8n_domain : (var.www_domain != "" ? "n8n.${var.www_domain}" : "")
+  n8n_public_url        = var.n8n_public_url != "" ? var.n8n_public_url : (local.n8n_domain != "" ? "https://${local.n8n_domain}" : "")
+  n8n_certificate_arn   = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : var.www_certificate_arn
   cognee_worker_subnet_ids = (
     length(module.vpc.private_subnet_ids) > 0
     ? module.vpc.private_subnet_ids
@@ -521,6 +526,128 @@ resource "terraform_data" "plane_runtime_state_guardrails" {
     precondition {
       condition     = !var.plane_runtime_enabled || var.plane_provisioned
       error_message = "plane_runtime_enabled requires plane_provisioned = true."
+    }
+  }
+}
+
+resource "terraform_data" "n8n_configuration_guardrails" {
+  count = local.n8n_provisioned ? 1 : 0
+
+  input = {
+    n8n_runtime_enabled               = local.n8n_runtime_enabled
+    n8n_image_uri                     = var.n8n_image_uri
+    n8n_database_name                 = var.n8n_database_name
+    n8n_database_username             = var.n8n_database_username
+    n8n_database_admin_secret_arn     = var.n8n_database_admin_secret_arn
+    n8n_database_url_secret_arn       = var.n8n_database_url_secret_arn
+    n8n_encryption_key_secret_arn     = var.n8n_encryption_key_secret_arn
+    n8n_operator_secret_arn           = var.n8n_operator_secret_arn
+    n8n_service_credential_secret_arn = var.n8n_service_credential_secret_arn
+    n8n_storage_bucket_name           = var.n8n_storage_bucket_name
+    n8n_storage_prefix                = var.n8n_storage_prefix
+    n8n_public_url                    = local.n8n_public_url
+    n8n_certificate_arn               = local.n8n_certificate_arn
+    n8n_queue_mode                    = var.n8n_queue_mode
+    n8n_cache_engine                  = var.n8n_cache_engine
+    public_subnet_count               = length(module.vpc.public_subnet_ids)
+    private_subnet_count              = length(module.vpc.private_subnet_ids)
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.n8n_image_uri != ""
+      error_message = "n8n_provisioned requires n8n_image_uri pinned to an immutable digest."
+    }
+
+    precondition {
+      condition     = var.n8n_queue_mode
+      error_message = "n8n_provisioned requires n8n_queue_mode = true."
+    }
+
+    precondition {
+      condition     = var.n8n_database_admin_secret_arn != ""
+      error_message = "n8n_provisioned requires n8n_database_admin_secret_arn for dedicated database lifecycle setup."
+    }
+
+    precondition {
+      condition     = var.n8n_database_url_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
+      error_message = "n8n_provisioned requires n8n_database_url_secret_arn or deployment_control_plane_create_secret_placeholders = true."
+    }
+
+    precondition {
+      condition     = var.n8n_encryption_key_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
+      error_message = "n8n_provisioned requires n8n_encryption_key_secret_arn or deployment_control_plane_create_secret_placeholders = true."
+    }
+
+    precondition {
+      condition     = var.n8n_operator_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
+      error_message = "n8n_provisioned requires n8n_operator_secret_arn or deployment_control_plane_create_secret_placeholders = true."
+    }
+
+    precondition {
+      condition     = var.n8n_service_credential_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
+      error_message = "n8n_provisioned requires n8n_service_credential_secret_arn or deployment_control_plane_create_secret_placeholders = true."
+    }
+
+    precondition {
+      condition     = var.n8n_database_url_secret_arn == "" || var.n8n_database_url_secret_arn != module.database.graphql_db_secret_arn
+      error_message = "n8n_provisioned requires a dedicated n8n database URL secret, not the shared Thinkwork admin database secret."
+    }
+
+    precondition {
+      condition     = var.n8n_database_name != var.database_name
+      error_message = "n8n_database_name must be distinct from the shared Thinkwork database name."
+    }
+
+    precondition {
+      condition     = var.n8n_storage_bucket_name != ""
+      error_message = "n8n_provisioned requires n8n_storage_bucket_name."
+    }
+
+    precondition {
+      condition     = trim(var.n8n_storage_prefix, "/") != ""
+      error_message = "n8n_provisioned requires a non-empty n8n_storage_prefix."
+    }
+
+    precondition {
+      condition     = local.n8n_public_url != ""
+      error_message = "n8n_provisioned requires n8n_public_url or a www_domain-derived n8n.<domain> URL."
+    }
+
+    precondition {
+      condition     = local.n8n_certificate_arn != ""
+      error_message = "n8n_provisioned requires n8n_certificate_arn or www_certificate_arn."
+    }
+
+    precondition {
+      condition     = length(module.vpc.public_subnet_ids) > 0
+      error_message = "n8n_provisioned requires at least one public subnet for the public ALB and phase-1 task egress pattern."
+    }
+
+    precondition {
+      condition     = length(module.vpc.private_subnet_ids) > 0
+      error_message = "n8n_provisioned requires at least one private subnet for managed Valkey/Redis."
+    }
+
+    precondition {
+      condition     = !var.n8n_runtime_enabled || var.n8n_provisioned
+      error_message = "n8n_runtime_enabled requires n8n_provisioned = true."
+    }
+  }
+}
+
+resource "terraform_data" "n8n_runtime_state_guardrails" {
+  count = var.n8n_runtime_enabled && !var.n8n_provisioned ? 1 : 0
+
+  input = {
+    n8n_provisioned     = var.n8n_provisioned
+    n8n_runtime_enabled = var.n8n_runtime_enabled
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.n8n_runtime_enabled || var.n8n_provisioned
+      error_message = "n8n_runtime_enabled requires n8n_provisioned = true."
     }
   }
 }
@@ -1258,6 +1385,60 @@ module "twenty" {
   kms_key_arns                 = var.twenty_kms_key_arns
 
   depends_on = [terraform_data.twenty_configuration_guardrails]
+}
+
+module "n8n" {
+  count  = local.n8n_provisioned ? 1 : 0
+  source = "../../../plugins/n8n/terraform/n8n"
+
+  stage                = var.stage
+  vpc_id               = module.vpc.vpc_id
+  subnet_ids           = module.vpc.public_subnet_ids
+  cache_subnet_ids     = module.vpc.private_subnet_ids
+  db_security_group_id = module.database.db_security_group_id
+  database_host        = module.database.cluster_endpoint
+  public_url           = local.n8n_public_url
+  certificate_arn      = local.n8n_certificate_arn
+  image_uri            = var.n8n_image_uri
+
+  runtime_enabled      = local.n8n_runtime_enabled
+  main_desired_count   = var.n8n_main_desired_count
+  worker_desired_count = var.n8n_worker_desired_count
+  worker_concurrency   = var.n8n_worker_concurrency
+  container_port       = var.n8n_container_port
+
+  database_admin_secret_arn     = var.n8n_database_admin_secret_arn
+  database_url_secret_arn       = var.n8n_database_url_secret_arn
+  database_name                 = var.n8n_database_name
+  database_username             = var.n8n_database_username
+  encryption_key_secret_arn     = var.n8n_encryption_key_secret_arn
+  operator_secret_arn           = var.n8n_operator_secret_arn
+  service_credential_secret_arn = var.n8n_service_credential_secret_arn
+  create_secret_placeholders    = var.deployment_control_plane_create_secret_placeholders
+
+  storage_bucket_name = var.n8n_storage_bucket_name
+  create_storage_bucket = (
+    var.n8n_storage_bucket_name != "" ? var.n8n_create_storage_bucket : false
+  )
+  storage_prefix              = var.n8n_storage_prefix
+  execution_data_storage_mode = var.n8n_execution_data_storage_mode
+  binary_data_mode            = var.n8n_binary_data_mode
+
+  queue_mode            = var.n8n_queue_mode
+  task_runners_enabled  = var.n8n_task_runners_enabled
+  package_config_digest = var.n8n_package_config_digest
+  custom_package_specs  = var.n8n_custom_package_specs
+
+  cache_engine                 = var.n8n_cache_engine
+  cache_engine_version         = var.n8n_cache_engine_version
+  cache_parameter_group_family = var.n8n_cache_parameter_group_family
+  cache_node_type              = var.n8n_cache_node_type
+  cache_num_cache_clusters     = var.n8n_cache_num_cache_clusters
+
+  allowed_public_cidr_blocks = var.n8n_allowed_public_cidr_blocks
+  kms_key_arns               = var.n8n_kms_key_arns
+
+  depends_on = [terraform_data.n8n_configuration_guardrails]
 }
 
 module "plane" {

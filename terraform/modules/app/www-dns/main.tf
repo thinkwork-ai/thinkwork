@@ -14,6 +14,8 @@
 #   8. Optional computer.<domain> → app.<domain> 301 compatibility redirect.
 #   9. Optional crm.<domain> CNAME → Twenty CRM public ALB. The CRM ALB uses
 #      its own certificate; this module only owns the public CNAME.
+#  10. Optional n8n.<domain> CNAME → n8n public ALB. The n8n ALB uses its own
+#      certificate; this module only owns the public CNAME.
 #
 # Cloudflare records MUST be DNS-only (grey cloud). CloudFront terminates TLS
 # with the ACM cert and needs the real Host header.
@@ -42,6 +44,7 @@ locals {
   sandbox  = "sandbox.${var.domain}"
   api      = "api.${var.domain}"
   crm      = "crm.${var.domain}"
+  n8n      = "n8n.${var.domain}"
   plane    = "plane.${var.domain}"
   name_id  = replace(var.domain, ".", "-")
 
@@ -72,6 +75,7 @@ locals {
   create_computer_record = var.include_computer
   create_api_record      = var.include_api && var.api_gateway_id != ""
   create_crm_record      = var.include_crm
+  create_n8n_record      = var.include_n8n
   create_plane_record    = var.include_plane
 }
 
@@ -394,6 +398,22 @@ resource "cloudflare_record" "crm" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} crm → Twenty CRM public ALB"
+}
+
+################################################################################
+# n8n.<domain> -> n8n public ALB (optional)
+################################################################################
+
+resource "cloudflare_record" "n8n" {
+  count = local.create_n8n_record ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = local.n8n
+  content = var.n8n_alb_dns_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${var.stage} n8n -> n8n public ALB"
 }
 
 ################################################################################

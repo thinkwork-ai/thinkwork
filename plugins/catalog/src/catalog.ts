@@ -149,6 +149,7 @@ export function buildPluginCatalog(options: {
       })),
     });
   }
+  plugins.sort(compareCatalogPluginNames);
   return {
     schemaVersion: PLUGIN_CATALOG_SCHEMA_VERSION,
     generatedAt: toIso(options.generatedAt ?? new Date()),
@@ -157,6 +158,16 @@ export function buildPluginCatalog(options: {
       : undefined,
     plugins,
   };
+}
+
+function compareCatalogPluginNames(
+  left: PluginCatalogEntry,
+  right: PluginCatalogEntry,
+) {
+  const byName = left.displayName.localeCompare(right.displayName, undefined, {
+    sensitivity: "base",
+  });
+  return byName === 0 ? left.pluginKey.localeCompare(right.pluginKey) : byName;
 }
 
 export function signPluginCatalog(options: {

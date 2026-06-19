@@ -411,6 +411,102 @@ variable "twenty_certificate_arn" {
   default     = ""
 }
 
+variable "n8n_provisioned" {
+  description = "Provision the retained n8n managed-app substrate. Runtime can be parked independently with n8n_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "n8n_runtime_enabled" {
+  description = "Run n8n main/worker tasks when the retained substrate is provisioned."
+  type        = bool
+  default     = false
+}
+
+variable "n8n_image_uri" {
+  description = "Thin ThinkWork n8n wrapper image URI pinned to an immutable sha256 digest. Required when n8n_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_database_admin_secret_arn" {
+  description = "Secrets Manager ARN for an admin database credential allowed to create/drop the dedicated n8n database and role."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_database_url_secret_arn" {
+  description = "Secrets Manager ARN containing n8n's least-privilege database secret."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_database_username" {
+  description = "Dedicated PostgreSQL username for n8n."
+  type        = string
+  default     = "thinkwork_n8n"
+}
+
+variable "n8n_database_name" {
+  description = "Dedicated PostgreSQL database name for n8n."
+  type        = string
+  default     = "thinkwork_n8n"
+}
+
+variable "n8n_encryption_key_secret_arn" {
+  description = "Secrets Manager ARN containing N8N_ENCRYPTION_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_operator_secret_arn" {
+  description = "Secrets Manager ARN containing the shared native n8n operator account credential."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_service_credential_secret_arn" {
+  description = "Secrets Manager ARN containing the tenant service credential used by the native n8n MCP integration."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_storage_bucket_name" {
+  description = "S3 bucket name used for n8n managed artifacts and optional storage mode objects."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_public_url" {
+  description = "Public HTTPS URL for n8n. Leave empty to derive https://n8n.<www_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_domain" {
+  description = "Public DNS name for n8n. Leave empty to derive n8n.<www_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_certificate_arn" {
+  description = "ACM certificate ARN for the n8n public ALB. Leave empty to create a dedicated n8n.<www_domain> certificate when n8n is provisioned."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_container_port" {
+  description = "n8n HTTP listener/container port exposed through the public ALB."
+  type        = number
+  default     = 5678
+}
+
+variable "n8n_cache_engine" {
+  description = "ElastiCache engine for n8n. Prefer valkey; redis is available as a compatibility fallback."
+  type        = string
+  default     = "valkey"
+}
+
 variable "plane_provisioned" {
   description = "Provision the retained Plane managed-app substrate. Runtime can be parked independently with plane_runtime_enabled."
   type        = bool
@@ -850,11 +946,14 @@ locals {
   sandbox_domain  = var.www_domain != "" ? "sandbox.${var.www_domain}" : ""
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
   crm_domain      = var.www_domain != "" ? "crm.${var.www_domain}" : ""
+  n8n_domain      = var.n8n_domain != "" ? var.n8n_domain : (var.www_domain != "" ? "n8n.${var.www_domain}" : "")
   plane_domain    = var.plane_domain != "" ? var.plane_domain : (var.www_domain != "" ? "plane.${var.www_domain}" : "")
   twenty_url      = var.twenty_public_url != "" ? var.twenty_public_url : (local.crm_domain != "" ? "https://${local.crm_domain}" : "")
+  n8n_url         = var.n8n_public_url != "" ? var.n8n_public_url : (local.n8n_domain != "" ? "https://${local.n8n_domain}" : "")
   plane_url       = var.plane_public_url != "" ? var.plane_public_url : (local.plane_domain != "" ? "https://${local.plane_domain}" : "")
 
   twenty_managed_certificate_enabled = local.www_dns_enabled && var.twenty_provisioned && var.twenty_certificate_arn == "" && local.crm_domain != ""
+  n8n_managed_certificate_enabled    = local.www_dns_enabled && var.n8n_provisioned && var.n8n_certificate_arn == "" && local.n8n_domain != ""
   plane_managed_certificate_enabled  = local.www_dns_enabled && var.plane_provisioned && var.plane_certificate_arn == "" && local.plane_domain != ""
 }
 
@@ -947,6 +1046,52 @@ resource "aws_acm_certificate_validation" "twenty" {
   certificate_arn = aws_acm_certificate.twenty[0].arn
   validation_record_fqdns = [
     for record in cloudflare_record.twenty_acm_validation : record.hostname
+  ]
+}
+
+resource "aws_acm_certificate" "n8n" {
+  count = local.n8n_managed_certificate_enabled ? 1 : 0
+
+  domain_name       = local.n8n_domain
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "thinkwork-${var.stage}-n8n"
+  }
+}
+
+resource "cloudflare_record" "n8n_acm_validation" {
+  for_each = {
+    for dvo in flatten([
+      for cert in aws_acm_certificate.n8n : tolist(cert.domain_validation_options)
+      ]) : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = var.cloudflare_zone_id
+  name    = trimsuffix(each.value.name, ".")
+  content = trimsuffix(each.value.value, ".")
+  type    = each.value.type
+  ttl     = 60
+  proxied = false
+  comment = "ACM DNS validation for ${each.key}"
+
+  allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "n8n" {
+  count = local.n8n_managed_certificate_enabled ? 1 : 0
+
+  certificate_arn = aws_acm_certificate.n8n[0].arn
+  validation_record_fqdns = [
+    for record in cloudflare_record.n8n_acm_validation : record.hostname
   ]
 }
 
@@ -1069,6 +1214,22 @@ module "thinkwork" {
   twenty_email_from_name                     = var.twenty_email_from_name
   twenty_public_url                          = local.twenty_url
   twenty_certificate_arn                     = var.twenty_certificate_arn != "" ? var.twenty_certificate_arn : (local.twenty_managed_certificate_enabled ? aws_acm_certificate_validation.twenty[0].certificate_arn : "")
+  n8n_provisioned                            = var.n8n_provisioned
+  n8n_runtime_enabled                        = var.n8n_runtime_enabled
+  n8n_image_uri                              = var.n8n_image_uri
+  n8n_database_admin_secret_arn              = var.n8n_database_admin_secret_arn
+  n8n_database_url_secret_arn                = var.n8n_database_url_secret_arn
+  n8n_database_username                      = var.n8n_database_username
+  n8n_database_name                          = var.n8n_database_name
+  n8n_encryption_key_secret_arn              = var.n8n_encryption_key_secret_arn
+  n8n_operator_secret_arn                    = var.n8n_operator_secret_arn
+  n8n_service_credential_secret_arn          = var.n8n_service_credential_secret_arn
+  n8n_storage_bucket_name                    = var.n8n_storage_bucket_name
+  n8n_container_port                         = var.n8n_container_port
+  n8n_cache_engine                           = var.n8n_cache_engine
+  n8n_domain                                 = local.n8n_domain
+  n8n_public_url                             = local.n8n_url
+  n8n_certificate_arn                        = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : (local.n8n_managed_certificate_enabled ? aws_acm_certificate_validation.n8n[0].certificate_arn : "")
   plane_provisioned                          = var.plane_provisioned
   plane_runtime_enabled                      = var.plane_runtime_enabled
   plane_image_uri                            = var.plane_image_uri
@@ -1222,6 +1383,11 @@ module "www_dns" {
   # this module owns only the public CNAME to the ALB.
   include_crm      = var.twenty_provisioned
   crm_alb_dns_name = module.thinkwork.twenty_alb_dns_name != null ? module.thinkwork.twenty_alb_dns_name : ""
+
+  # n8n custom domain (n8n.<apex>). n8n uses its own ACM certificate; this
+  # module owns only the public CNAME to the ALB.
+  include_n8n      = var.n8n_provisioned
+  n8n_alb_dns_name = module.thinkwork.n8n_alb_dns_name != null ? module.thinkwork.n8n_alb_dns_name : ""
 
   # Plane custom domain (plane.<apex>). Plane uses its own ACM certificate;
   # this module owns only the public CNAME to the ALB.
@@ -1447,6 +1613,46 @@ output "twenty_worker_log_group_name" {
 output "twenty_cache_endpoint" {
   description = "ElastiCache primary endpoint for Twenty CRM (null when twenty_provisioned = false)"
   value       = module.thinkwork.twenty_cache_endpoint
+}
+
+output "n8n_provisioned" {
+  description = "Whether the n8n retained managed-app substrate is provisioned"
+  value       = module.thinkwork.n8n_provisioned
+}
+
+output "n8n_runtime_enabled" {
+  description = "Whether n8n ECS services are enabled"
+  value       = module.thinkwork.n8n_runtime_enabled
+}
+
+output "n8n_url" {
+  description = "Public n8n URL (null when n8n_provisioned = false)"
+  value       = module.thinkwork.n8n_url
+}
+
+output "n8n_cluster_arn" {
+  description = "ECS cluster ARN for n8n (null when n8n_provisioned = false)"
+  value       = module.thinkwork.n8n_cluster_arn
+}
+
+output "n8n_main_service_name" {
+  description = "ECS service name for n8n main (null when n8n_provisioned = false)"
+  value       = module.thinkwork.n8n_main_service_name
+}
+
+output "n8n_worker_service_name" {
+  description = "ECS service name for n8n worker (null when n8n_provisioned = false)"
+  value       = module.thinkwork.n8n_worker_service_name
+}
+
+output "n8n_valkey_endpoint" {
+  description = "ElastiCache primary endpoint for n8n queue mode (null when n8n_provisioned = false)"
+  value       = module.thinkwork.n8n_valkey_endpoint
+}
+
+output "n8n_storage_bucket_name" {
+  description = "S3 bucket name used for n8n managed artifacts (null when n8n_provisioned = false)"
+  value       = module.thinkwork.n8n_storage_bucket_name
 }
 
 output "plane_provisioned" {

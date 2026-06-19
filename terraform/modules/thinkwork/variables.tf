@@ -796,6 +796,242 @@ variable "twenty_kms_key_arns" {
   default     = []
 }
 
+variable "n8n_provisioned" {
+  description = "Provision the retained n8n managed-app substrate. Runtime can be parked independently with n8n_runtime_enabled."
+  type        = bool
+  default     = false
+}
+
+variable "n8n_runtime_enabled" {
+  description = "Run n8n main/worker tasks when the retained substrate is provisioned. Set false to park runtime while retaining data resources."
+  type        = bool
+  default     = false
+}
+
+variable "n8n_image_uri" {
+  description = "Thin ThinkWork n8n wrapper image URI pinned to an immutable sha256 digest. Required when n8n_provisioned = true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.n8n_image_uri == "" || can(regex("@sha256:[0-9a-f]{64}$", var.n8n_image_uri))
+    error_message = "n8n_image_uri must be empty or pinned to an immutable sha256 image digest."
+  }
+}
+
+variable "n8n_database_admin_secret_arn" {
+  description = "Secrets Manager ARN for an admin database credential allowed to create/drop the dedicated n8n database and role."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_database_url_secret_arn" {
+  description = "Secrets Manager ARN containing n8n's least-privilege database secret. Runtime injection expects JSON fields DATABASE_URL and DB_POSTGRESDB_PASSWORD."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_database_username" {
+  description = "Dedicated PostgreSQL username for n8n. Do not use the shared Aurora admin/master user."
+  type        = string
+  default     = "thinkwork_n8n"
+
+  validation {
+    condition     = !contains(["postgres", "thinkwork_admin", "rdsadmin"], lower(var.n8n_database_username))
+    error_message = "n8n_database_username must be a dedicated least-privilege n8n database user."
+  }
+}
+
+variable "n8n_database_name" {
+  description = "Dedicated PostgreSQL database name for n8n. Do not use the shared Thinkwork application database."
+  type        = string
+  default     = "thinkwork_n8n"
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.n8n_database_name))
+    error_message = "n8n_database_name must be a valid PostgreSQL identifier."
+  }
+}
+
+variable "n8n_encryption_key_secret_arn" {
+  description = "Secrets Manager ARN containing N8N_ENCRYPTION_KEY."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_operator_secret_arn" {
+  description = "Secrets Manager ARN containing the shared native n8n operator account credential."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_service_credential_secret_arn" {
+  description = "Secrets Manager ARN containing the tenant service credential used by the native n8n MCP integration."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_storage_bucket_name" {
+  description = "S3 bucket name used for n8n managed artifacts and optional storage mode objects. Required when n8n_provisioned = true."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_create_storage_bucket" {
+  description = "Create the S3 bucket named by n8n_storage_bucket_name. Set false to use an existing retained bucket."
+  type        = bool
+  default     = true
+}
+
+variable "n8n_storage_prefix" {
+  description = "S3 prefix reserved for n8n managed artifacts."
+  type        = string
+  default     = "managed-apps/n8n"
+}
+
+variable "n8n_domain" {
+  description = "Public hostname for n8n. Leave empty to derive n8n.<www_domain> when www_domain is set."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_public_url" {
+  description = "Public HTTPS URL for n8n. Leave empty to derive https://<n8n_domain>."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_certificate_arn" {
+  description = "ACM certificate ARN for the n8n public ALB. Leave empty to reuse www_certificate_arn."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_main_desired_count" {
+  description = "Desired n8n main task count when n8n_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "n8n_worker_desired_count" {
+  description = "Desired n8n worker task count when n8n_runtime_enabled is true."
+  type        = number
+  default     = 1
+}
+
+variable "n8n_worker_concurrency" {
+  description = "n8n worker execution concurrency."
+  type        = number
+  default     = 10
+}
+
+variable "n8n_container_port" {
+  description = "n8n HTTP listener/container port exposed through the public ALB."
+  type        = number
+  default     = 5678
+}
+
+variable "n8n_queue_mode" {
+  description = "n8n queue mode toggle. THNK-50 requires queue mode."
+  type        = bool
+  default     = true
+}
+
+variable "n8n_task_runners_enabled" {
+  description = "Enable n8n task runners for code-node execution."
+  type        = bool
+  default     = true
+}
+
+variable "n8n_package_config_digest" {
+  description = "Digest of the reviewed custom-package configuration injected into the n8n wrapper image."
+  type        = string
+  default     = ""
+}
+
+variable "n8n_custom_package_specs" {
+  description = "Pinned public npm package specs approved for n8n code nodes."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for spec in var.n8n_custom_package_specs :
+      can(regex("^(@[^/]+/[^@]+|[^@]+)@[0-9][0-9A-Za-z.+-]*$", spec))
+    ])
+    error_message = "n8n_custom_package_specs must contain exact public npm specs such as lodash@4.17.21 or @scope/package@1.2.3."
+  }
+}
+
+variable "n8n_execution_data_storage_mode" {
+  description = "n8n execution data storage mode. OSS queue-mode defaults to database; s3 is reserved for a licensed enterprise deployment."
+  type        = string
+  default     = "database"
+
+  validation {
+    condition     = contains(["database", "s3"], var.n8n_execution_data_storage_mode)
+    error_message = "n8n_execution_data_storage_mode must be database or s3."
+  }
+}
+
+variable "n8n_binary_data_mode" {
+  description = "n8n binary data mode. OSS queue-mode defaults to database; s3 is reserved for a licensed enterprise deployment."
+  type        = string
+  default     = "database"
+
+  validation {
+    condition     = contains(["database", "s3"], var.n8n_binary_data_mode)
+    error_message = "n8n_binary_data_mode must be database or s3."
+  }
+}
+
+variable "n8n_cache_engine" {
+  description = "ElastiCache engine for n8n. Prefer valkey; redis is available as a compatibility fallback."
+  type        = string
+  default     = "valkey"
+
+  validation {
+    condition     = contains(["valkey", "redis"], var.n8n_cache_engine)
+    error_message = "n8n_cache_engine must be valkey or redis."
+  }
+}
+
+variable "n8n_cache_engine_version" {
+  description = "ElastiCache engine version for n8n."
+  type        = string
+  default     = "8.0"
+}
+
+variable "n8n_cache_parameter_group_family" {
+  description = "ElastiCache parameter group family matching n8n_cache_engine/n8n_cache_engine_version."
+  type        = string
+  default     = "valkey8"
+}
+
+variable "n8n_cache_node_type" {
+  description = "ElastiCache node type for the n8n queue."
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "n8n_cache_num_cache_clusters" {
+  description = "Number of n8n cache nodes in the replication group. Use 1 for the smallest v1 deployment."
+  type        = number
+  default     = 1
+}
+
+variable "n8n_allowed_public_cidr_blocks" {
+  description = "CIDR blocks allowed to reach the public n8n HTTPS ALB."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "n8n_kms_key_arns" {
+  description = "Optional KMS key ARNs needed to decrypt n8n-injected secrets."
+  type        = list(string)
+  default     = []
+}
+
 variable "plane_provisioned" {
   description = "Provision the retained Plane managed-app substrate. Runtime can be parked independently with plane_runtime_enabled."
   type        = bool

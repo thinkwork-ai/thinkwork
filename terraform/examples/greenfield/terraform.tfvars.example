@@ -41,6 +41,31 @@ database_engine = "rds-postgres"
 # twenty_email_from_address         = "" # empty derives noreply@ses_inbound_domain for SES SMTP
 # twenty_email_from_name            = "ThinkWork CRM"
 #
+#   n8n is optional. First enable should set both booleans true after the
+#   managed-app workflow has prepared the dedicated thinkwork_n8n database URL
+#   secret, N8N_ENCRYPTION_KEY secret, shared operator credential, tenant
+#   service credential, wrapper image, and retained artifact bucket. Later
+#   disable should leave n8n_provisioned=true and set
+#   n8n_runtime_enabled=false so workflow data, credentials, cache, and
+#   artifacts are retained.
+#
+# n8n_provisioned                       = false
+# n8n_runtime_enabled                   = false
+# n8n_image_uri                         = "123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork-n8n@sha256:..."
+# n8n_database_admin_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/database-admin-..."
+# n8n_database_url_secret_arn           = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/n8n/database-url-..."
+# n8n_database_username                 = "thinkwork_n8n"
+# n8n_database_name                     = "thinkwork_n8n"
+# n8n_encryption_key_secret_arn         = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/n8n/encryption-key-..."
+# n8n_operator_secret_arn               = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/n8n/operator-..."
+# n8n_service_credential_secret_arn     = "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/n8n/service-credential-..."
+# n8n_storage_bucket_name               = "thinkwork-dev-n8n"
+# n8n_container_port                    = 5678
+# n8n_cache_engine                      = "valkey"
+# n8n_domain                            = "" # empty derives n8n.<www_domain>
+# n8n_public_url                        = "" # empty derives https://n8n.<www_domain>
+# n8n_certificate_arn                   = "" # empty creates a dedicated n8n.<www_domain> certificate
+#
 #   Plane is optional. First enable should set both booleans true after the
 #   deployment workflow has prepared a dedicated database URL secret, app
 #   secrets, S3 credential secrets, and storage bucket. Terraform creates
