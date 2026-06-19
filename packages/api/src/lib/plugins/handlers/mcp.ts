@@ -17,6 +17,10 @@
  *     `auth_config` stores only header-name/credential-key bindings. Actual
  *     values live in user_plugin_activation_tokens secrets and resolve at
  *     dispatch time for the requester.
+ *   - Tenant service credential servers use `auth_type: 'service_credential'`;
+ *     their `auth_config` stores only a managed-app secret ref plus header
+ *     metadata. Dispatch resolves the secret server-side without per-user
+ *     activation.
  *
  * Direct-add coexistence: when a `manual` row already points at the same
  * endpoint URL, provisioning adopts that row in place instead of creating a
@@ -67,6 +71,11 @@ export interface McpHandlerRef extends Record<string, unknown> {
   resolvedEndpointUrl: string;
 }
 
+interface ResolvedPluginMcpEndpoint {
+  endpointUrl: string;
+  managedAppDesiredConfig?: Record<string, unknown>;
+}
+
 export function pluginMcpServerSlug(
   pluginKey: string,
   componentKey: string,
@@ -81,6 +90,7 @@ function normalizeMcpEndpointUrl(value: string): string {
 function pluginMcpAuthFields(
   component: McpServerComponent,
   endpointUrl: string,
+  managedAppDesiredConfig?: Record<string, unknown>,
 ): {
   auth_type: string;
   auth_config: Record<string, unknown> | null;
@@ -114,6 +124,30 @@ function pluginMcpAuthFields(
       },
     };
   }
+  if (component.auth.mode === "tenant-service-credential") {
+    const secretRef =
+      managedAppDesiredConfig?.[component.auth.secretRefConfigKey];
+    if (typeof secretRef !== "string" || secretRef.trim() === "") {
+      throw new Error(
+        `MCP component "${component.key}": managed application desired_config has no "${component.auth.secretRefConfigKey}" service credential secret ref yet — retry after the deployment configuration lands`,
+      );
+    }
+    return {
+      auth_type: "service_credential",
+      auth_config: {
+        credentialKind: component.auth.credentialKind,
+        secretRef: secretRef.trim(),
+        secretRefConfigKey: component.auth.secretRefConfigKey,
+        headers: component.auth.headers.map((header) => ({
+          name: header.name,
+          secretJsonKey: header.secretJsonKey,
+          ...(header.valuePrefix !== undefined
+            ? { valuePrefix: header.valuePrefix }
+            : {}),
+        })),
+      },
+    };
+  }
   return { auth_type: "none", auth_config: null };
 }
 
@@ -127,8 +161,16 @@ export async function resolvePluginMcpEndpoint(args: {
   component: McpServerComponent;
   db?: DbLike;
 }): Promise<string> {
+  return (await resolvePluginMcpEndpointContext(args)).endpointUrl;
+}
+
+async function resolvePluginMcpEndpointContext(args: {
+  tenantId: string;
+  component: McpServerComponent;
+  db?: DbLike;
+}): Promise<ResolvedPluginMcpEndpoint> {
   const { component } = args;
-  if (component.endpointUrl) return component.endpointUrl;
+  if (component.endpointUrl) return { endpointUrl: component.endpointUrl };
   const endpointFrom = component.endpointFrom;
   if (!endpointFrom) {
     throw new Error(
@@ -176,7 +218,10 @@ export async function resolvePluginMcpEndpoint(args: {
   if (endpointFrom.path) url.pathname = endpointFrom.path;
   url.search = "";
   url.hash = "";
-  return url.toString().replace(/\/$/, "");
+  return {
+    endpointUrl: url.toString().replace(/\/$/, ""),
+    managedAppDesiredConfig: desiredConfig,
+  };
 }
 
 export async function provisionPluginMcpComponent(args: {
@@ -188,14 +233,16 @@ export async function provisionPluginMcpComponent(args: {
 }): Promise<McpHandlerRef> {
   const db = args.db ?? defaultDb;
   const slug = pluginMcpServerSlug(args.pluginKey, args.component.key);
-  const endpointUrl = await resolvePluginMcpEndpoint({
+  const resolvedEndpoint = await resolvePluginMcpEndpointContext({
     tenantId: args.tenantId,
     component: args.component,
     db,
   });
+  const endpointUrl = resolvedEndpoint.endpointUrl;
   const { auth_type, auth_config } = pluginMcpAuthFields(
     args.component,
     endpointUrl,
+    resolvedEndpoint.managedAppDesiredConfig,
   );
   const urlHash = computeMcpUrlHash(endpointUrl, auth_config);
 

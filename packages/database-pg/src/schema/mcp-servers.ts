@@ -9,6 +9,7 @@
  * Auth patterns:
  *   - 'none': no auth headers
  *   - 'tenant_api_key': shared API key stored in Secrets Manager (via auth_config.secretRef)
+ *   - 'service_credential': plugin-owned tenant credential stored in Secrets Manager
  *   - 'oauth': server-managed OAuth per RFC 9728; the MCP server advertises its own
  *     auth requirements via /.well-known/oauth-protected-resource. Per-user tokens
  *     stored in user_mcp_tokens after the user completes the OAuth flow.
@@ -51,9 +52,9 @@ export const tenantMcpServers = pgTable(
     url: text("url").notNull(),
     /** Transport type: 'streamable-http' | 'sse' */
     transport: text("transport").notNull().default("streamable-http"),
-    /** Auth pattern: 'none' | 'tenant_api_key' | 'oauth' */
+    /** Auth pattern: 'none' | 'tenant_api_key' | 'service_credential' | 'oauth' */
     auth_type: text("auth_type").notNull().default("none"),
-    /** For tenant_api_key: { secretRef: "arn:..." }. For other types: null */
+    /** For tenant_api_key/service_credential: { secretRef: "arn:..." }. */
     auth_config: jsonb("auth_config"),
     /** @deprecated — use RFC 9728 discovery instead. Kept for migration compat. */
     oauth_provider: text("oauth_provider"),

@@ -51,6 +51,16 @@ describe("n8n plugin scaffold", () => {
       plannedManagedAppKey: "n8n",
       publicationGate: "U2",
     });
+    expect(
+      n8nDraftManifest.plannedComponents.find(
+        (component) => component.type === "mcp-server",
+      ),
+    ).toMatchObject({
+      endpointPath: "/mcp-server/http",
+      serviceCredentialKind: "n8n-mcp-access-token",
+      serviceCredentialSecretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+      publicationGate: "U5",
+    });
   });
 
   it("keeps LastMile runtime source out of the n8n package scaffold", async () => {
