@@ -1716,10 +1716,12 @@ export const SettingsWebhookQuery = graphql(`
   query SettingsWebhook($id: ID!) {
     webhook(id: $id) {
       id
+      tenantId
       name
       description
       token
       targetType
+      spaceId
       prompt
       enabled
       rateLimit
@@ -1740,7 +1742,14 @@ export const SettingsWebhookDeliveriesQuery = graphql(`
       signatureStatus
       resolutionStatus
       statusCode
+      threadId
       threadCreated
+      bodyPreview
+      bodySizeBytes
+      bodySha256
+      sourceIp
+      errorMessage
+      durationMs
     }
   }
 `);
@@ -1751,6 +1760,7 @@ export const SettingsUpdateWebhookMutation = graphql(`
       id
       name
       description
+      spaceId
       prompt
       enabled
       rateLimit

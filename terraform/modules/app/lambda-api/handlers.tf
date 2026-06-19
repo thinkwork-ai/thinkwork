@@ -423,6 +423,7 @@ resource "aws_lambda_function" "handler" {
     "deployment-sessions",
     "auth-me",
     "public-auth-options",
+    "workos-auth",
     "extension-proxy",
     "tenants",
     "users",
@@ -883,8 +884,12 @@ locals {
       # Public login capabilities. Unauthenticated by design; the handler
       # resolves tenant-scoped OAuth options only from trusted API Gateway
       # domain metadata and fails closed for unknown/shared hosts.
-      "GET /api/auth/options"     = "public-auth-options"
-      "OPTIONS /api/auth/options" = "public-auth-options"
+      "GET /api/auth/options"              = "public-auth-options"
+      "OPTIONS /api/auth/options"          = "public-auth-options"
+      "GET /api/auth/workos/authorize"     = "workos-auth"
+      "OPTIONS /api/auth/workos/authorize" = "workos-auth"
+      "GET /api/auth/workos/callback"      = "workos-auth"
+      "OPTIONS /api/auth/workos/callback"  = "workos-auth"
 
       # Agents
       "ANY /api/agents/{proxy+}" = "agents"

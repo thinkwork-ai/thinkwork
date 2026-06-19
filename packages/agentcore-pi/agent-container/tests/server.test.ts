@@ -128,6 +128,32 @@ describe("handleInvocation — payload validation", () => {
     expect(result.body.runtime).toBe("pi");
   });
 
+  it("accepts user-less webhook invocations", async () => {
+    let observedTools: string[] = [];
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        user_id: "",
+        trigger_channel: "webhook",
+        use_memory: true,
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({ tools }) => {
+          observedTools = tools.map((tool) => tool.name);
+          return {
+            content: "stub response",
+            modelId: "amazon-bedrock/test-model",
+            toolsCalled: [],
+            toolInvocations: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(observedTools).not.toContain("recall");
+    expect(observedTools).not.toContain("reflect");
+  });
+
   it("returns 400 when message is empty", async () => {
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({ message: "" }),

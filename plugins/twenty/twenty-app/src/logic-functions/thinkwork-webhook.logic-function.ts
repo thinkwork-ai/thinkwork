@@ -9,8 +9,14 @@ type ThinkWorkWebhookInput = {
   opportunityName?: unknown;
   customerId?: unknown;
   customerName?: unknown;
+  companyId?: unknown;
   companyName?: unknown;
+  amount?: unknown;
+  closeDate?: unknown;
+  ownerId?: unknown;
+  pointOfContactId?: unknown;
   stage?: unknown;
+  updatedAt?: unknown;
   opportunityUrl?: unknown;
   workflowKey?: unknown;
   workflowRunId?: unknown;
@@ -86,6 +92,42 @@ function stageFromInput(input: ThinkWorkWebhookInput): string | undefined {
   );
 }
 
+function decimalFromMicros(value: number | bigint | string): string | undefined {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return undefined;
+    return String(value / 1_000_000);
+  }
+
+  const raw = String(value).trim();
+  if (!/^-?\d+$/.test(raw)) return undefined;
+
+  const sign = raw.startsWith("-") ? "-" : "";
+  const absolute = sign ? raw.slice(1) : raw;
+  const padded = absolute.padStart(7, "0");
+  const whole = padded.slice(0, -6).replace(/^0+(?=\d)/, "");
+  const fractional = padded.slice(-6).replace(/0+$/, "");
+
+  return fractional ? `${sign}${whole}.${fractional}` : `${sign}${whole}`;
+}
+
+function currencyAmount(value: unknown): string | undefined {
+  const source = record(value);
+  if (!source) return text(value);
+  const amountMicros = source.amountMicros;
+  const amount = source.amount;
+  const currencyCode = text(source.currencyCode);
+  const amountText =
+    typeof amountMicros === "number" ||
+    typeof amountMicros === "bigint" ||
+    typeof amountMicros === "string"
+      ? decimalFromMicros(amountMicros)
+      : typeof amount === "number" || typeof amount === "bigint"
+        ? String(amount)
+        : text(amount);
+  if (!amountText) return undefined;
+  return [amountText, currencyCode].filter(Boolean).join(" ");
+}
+
 function compactObject<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
@@ -142,7 +184,8 @@ const handler = async (
     `opportunity.stage.${configuredStage.toLowerCase().replace(/\s+/g, "_")}`;
   const opportunityId =
     text(input.opportunityId) ?? text(input.recordId) ?? text(after?.id);
-  const occurredAt = text(input.occurredAt) ?? new Date().toISOString();
+  const updatedAt = text(input.updatedAt) ?? text(after?.updatedAt);
+  const occurredAt = text(input.occurredAt) ?? updatedAt ?? new Date().toISOString();
   const workflowKey = text(input.workflowKey) ?? "customer_onboarding";
   const idempotencyKey =
     text(input.idempotencyKey) ??
@@ -163,13 +206,24 @@ const handler = async (
     opportunityId,
     customerId: text(input.customerId),
     customerName: text(input.customerName),
+    companyId:
+      text(input.companyId) ??
+      text(input.customerId) ??
+      text(after?.companyId) ??
+      text(record(after?.company)?.id),
     companyName:
       text(input.companyName) ??
       text(record(after?.company)?.name) ??
       text(record(after?.account)?.name),
     opportunityName: text(input.opportunityName) ?? text(after?.name),
+    amount: currencyAmount(input.amount) ?? currencyAmount(after?.amount),
+    closeDate: text(input.closeDate) ?? text(after?.closeDate),
+    ownerId: text(input.ownerId) ?? text(after?.ownerId),
+    pointOfContactId:
+      text(input.pointOfContactId) ?? text(after?.pointOfContactId),
     stage: receivedStage,
     triggerStage: configuredStage,
+    updatedAt,
     opportunityUrl: text(input.opportunityUrl),
     workflowKey,
     workflowRunId: text(input.workflowRunId),
@@ -235,8 +289,14 @@ export default defineLogicFunction({
           opportunityName: { type: "string", label: "Opportunity Name" },
           customerId: { type: "string", label: "Customer ID" },
           customerName: { type: "string", label: "Customer Name" },
+          companyId: { type: "string", label: "Company ID" },
           companyName: { type: "string", label: "Company Name" },
+          amount: { type: "object", label: "Amount" },
+          closeDate: { type: "string", label: "Close Date" },
+          ownerId: { type: "string", label: "Owner ID" },
+          pointOfContactId: { type: "string", label: "Point of Contact ID" },
           stage: { type: "string", label: "Stage" },
+          updatedAt: { type: "string", label: "Updated At" },
           opportunityUrl: { type: "string", label: "Opportunity URL" },
           workflowKey: { type: "string", label: "Workflow Key" },
           workflowRunId: { type: "string", label: "Workflow Run ID" },

@@ -1329,9 +1329,9 @@ export async function buildInvocationResources(
     });
   }
 
-  // Memory — engine selector lives in env. Eval-mode invocations are user-less
-  // by construction, so user-scoped memory is skipped entirely (matching
-  // `eval_tools_enabled: false` semantics in the direct AgentCore eval payload).
+  // Memory — engine selector lives in env. Eval-mode and system-originated
+  // invocations can be user-less by construction, so user-scoped memory is
+  // skipped entirely when no invoking user exists.
   //
   // Plan §004 U5 — the Hindsight path is now a Pi EXTENSION (the tracer bullet):
   // a Hindsight-backed MemoryProvider wrapped by `createMemoryExtension`, loaded
@@ -1343,6 +1343,13 @@ export async function buildInvocationResources(
     logStructured({
       level: "info",
       event: "memory_skipped_eval_mode",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+    });
+  } else if (!args.identity.userId) {
+    logStructured({
+      level: "info",
+      event: "memory_skipped_no_user",
       tenantId: args.identity.tenantId,
       threadId: args.identity.threadId,
     });
