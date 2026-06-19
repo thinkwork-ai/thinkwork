@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import {
   CheckIcon,
@@ -109,7 +109,7 @@ export function SettingsWebhookDetail() {
         token={webhook.token}
         onRegenerated={() => refetch({ requestPolicy: "network-only" })}
       />
-      <DeliveriesSection webhookId={webhookId} />
+      <DeliveriesSection webhookId={webhookId} spaceId={webhook.spaceId} />
       <DangerSection
         webhookId={webhookId}
         name={webhook.name}
@@ -150,6 +150,13 @@ type WebhookDelivery = {
 };
 
 const NO_SPACE_VALUE = "__none__";
+
+type DeliveryThreadRoute =
+  | {
+      to: "/spaces/$spaceId/threads/$threadId";
+      params: { spaceId: string; threadId: string };
+    }
+  | { to: "/threads/$id"; params: { id: string } };
 
 type DeliveryStatusPresentation = {
   label: string;
@@ -205,6 +212,24 @@ export function deliveryStatusPresentation(
     label: delivery.resolutionStatus,
     variant: "secondary",
   };
+}
+
+export function deliveryThreadRoute(input: {
+  threadId?: string | null;
+  spaceId?: string | null;
+}): DeliveryThreadRoute | null {
+  const threadId = input.threadId?.trim();
+  if (!threadId) return null;
+
+  const spaceId = input.spaceId?.trim();
+  if (spaceId) {
+    return {
+      to: "/spaces/$spaceId/threads/$threadId",
+      params: { spaceId, threadId },
+    };
+  }
+
+  return { to: "/threads/$id", params: { id: threadId } };
 }
 
 function ConfigSection({
@@ -447,7 +472,13 @@ function EndpointSection({
   );
 }
 
-function DeliveriesSection({ webhookId }: { webhookId: string }) {
+function DeliveriesSection({
+  webhookId,
+  spaceId,
+}: {
+  webhookId: string;
+  spaceId?: string | null;
+}) {
   const [selectedDelivery, setSelectedDelivery] =
     useState<WebhookDelivery | null>(null);
   const [result] = useQuery({
@@ -476,6 +507,7 @@ function DeliveriesSection({ webhookId }: { webhookId: string }) {
       )}
       <DeliveryDetailSheet
         delivery={selectedDelivery}
+        spaceId={spaceId}
         onOpenChange={(open) => {
           if (!open) setSelectedDelivery(null);
         }}
@@ -526,13 +558,19 @@ function DeliveryRow({
 
 function DeliveryDetailSheet({
   delivery,
+  spaceId,
   onOpenChange,
 }: {
   delivery: WebhookDelivery | null;
+  spaceId?: string | null;
   onOpenChange: (open: boolean) => void;
 }) {
   const payload = formatPayloadPreview(delivery?.bodyPreview);
   const status = delivery ? deliveryStatusPresentation(delivery) : null;
+  const threadRoute = deliveryThreadRoute({
+    threadId: delivery?.threadId,
+    spaceId,
+  });
 
   return (
     <Sheet open={Boolean(delivery)} onOpenChange={onOpenChange}>
@@ -581,7 +619,27 @@ function DeliveryDetailSheet({
               </DeliveryMeta>
               {delivery.threadId ? (
                 <DeliveryMeta label="Thread">
-                  <span className="font-mono text-xs">{delivery.threadId}</span>
+                  {threadRoute?.to === "/spaces/$spaceId/threads/$threadId" ? (
+                    <Link
+                      to={threadRoute.to}
+                      params={threadRoute.params}
+                      className="font-mono text-xs text-primary underline-offset-4 hover:underline"
+                    >
+                      {delivery.threadId}
+                    </Link>
+                  ) : threadRoute ? (
+                    <Link
+                      to={threadRoute.to}
+                      params={threadRoute.params}
+                      className="font-mono text-xs text-primary underline-offset-4 hover:underline"
+                    >
+                      {delivery.threadId}
+                    </Link>
+                  ) : (
+                    <span className="font-mono text-xs">
+                      {delivery.threadId}
+                    </span>
+                  )}
                 </DeliveryMeta>
               ) : null}
               {delivery.sourceIp ? (
