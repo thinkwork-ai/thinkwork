@@ -7,7 +7,8 @@ import {
 import { db as defaultDb } from "../../utils.js";
 import { resolveCogneeClusterIdentity } from "@thinkwork/plugin-company-brain/api/cognee-cluster-identity";
 
-export type ManagedApplicationKey = "cognee" | "plane" | "twenty";
+export type ManagedApplicationKey = "cognee" | "n8n" | "plane" | "twenty";
+type DbBackedManagedApplicationKey = Exclude<ManagedApplicationKey, "cognee">;
 
 export type CogneeStatus = {
   enabled: boolean;
@@ -42,6 +43,22 @@ export type PlaneStatus = {
   appTargetGroupArn: string | null;
   mcpTargetGroupArn: string | null;
   storageBucketName: string | null;
+};
+
+export type N8nStatus = {
+  provisioned: boolean;
+  runtimeEnabled: boolean;
+  url: string | null;
+  clusterArn: string | null;
+  mainServiceName: string | null;
+  workerServiceName: string | null;
+  mainLogGroupName: string | null;
+  workerLogGroupName: string | null;
+  albArn: string | null;
+  targetGroupArn: string | null;
+  storageBucketName: string | null;
+  databaseName: string | null;
+  packageConfigDigest: string | null;
 };
 
 export type ManagedApplicationStatus = {
@@ -89,6 +106,9 @@ export function normalizeManagedApplicationKey(
   }
   if (key === "plane" || key === "tasks" || key === "project-management") {
     return "plane";
+  }
+  if (key === "n8n" || key === "workflow-automation") {
+    return "n8n";
   }
   return null;
 }
@@ -155,12 +175,12 @@ export function readCogneeStatus(): CogneeStatus {
 export interface TwentyStatusReaderDeps {
   getManagedApplicationRow(
     tenantId: string,
-    key?: "twenty" | "plane",
+    key?: DbBackedManagedApplicationKey,
   ): Promise<{ desiredConfig: Record<string, unknown> } | null>;
   /** Latest SUCCEEDED deployment job for the managed app, if any. */
   getLatestSucceededJobOperation(
     tenantId: string,
-    key?: "twenty" | "plane",
+    key?: DbBackedManagedApplicationKey,
   ): Promise<string | null>;
 }
 
@@ -205,11 +225,11 @@ export function createDrizzleTwentyStatusReaderDeps(
 export interface ManagedAppStatusReaderDeps {
   getManagedApplicationRow(
     tenantId: string,
-    key?: "twenty" | "plane",
+    key?: DbBackedManagedApplicationKey,
   ): Promise<{ desiredConfig: Record<string, unknown> } | null>;
   getLatestSucceededJobOperation(
     tenantId: string,
-    key?: "twenty" | "plane",
+    key?: DbBackedManagedApplicationKey,
   ): Promise<string | null>;
 }
 
@@ -278,6 +298,22 @@ const DISABLED_PLANE_STATUS: PlaneStatus = {
   appTargetGroupArn: null,
   mcpTargetGroupArn: null,
   storageBucketName: null,
+};
+
+const DISABLED_N8N_STATUS: N8nStatus = {
+  provisioned: false,
+  runtimeEnabled: false,
+  url: null,
+  clusterArn: null,
+  mainServiceName: null,
+  workerServiceName: null,
+  mainLogGroupName: null,
+  workerLogGroupName: null,
+  albArn: null,
+  targetGroupArn: null,
+  storageBucketName: null,
+  databaseName: null,
+  packageConfigDigest: null,
 };
 
 /**
@@ -363,12 +399,56 @@ export async function readPlaneStatus(
   };
 }
 
+export async function readN8nStatus(
+  tenantId: string | null,
+  deps: ManagedAppStatusReaderDeps = createDrizzleManagedAppStatusReaderDeps(),
+): Promise<N8nStatus> {
+  if (!tenantId) return DISABLED_N8N_STATUS;
+  const row = await deps.getManagedApplicationRow(tenantId, "n8n");
+  if (!row) return DISABLED_N8N_STATUS;
+  const operation = await deps.getLatestSucceededJobOperation(tenantId, "n8n");
+  if (!operation || operation === "DESTROY") return DISABLED_N8N_STATUS;
+
+  const provisioned = true;
+  const runtimeEnabled = operation !== "PARK";
+  const publicUrl = row.desiredConfig.publicUrl;
+  const storageBucketName = row.desiredConfig.storageBucketName;
+  const databaseName = row.desiredConfig.databaseName;
+  const packageConfigDigest = row.desiredConfig.packageConfigDigest;
+  const defaults = deriveN8nDefaults(provisioned);
+  return {
+    provisioned,
+    runtimeEnabled,
+    url: typeof publicUrl === "string" && publicUrl.trim() ? publicUrl : null,
+    clusterArn: defaults.clusterArn,
+    mainServiceName: defaults.mainServiceName,
+    workerServiceName: defaults.workerServiceName,
+    mainLogGroupName: defaults.mainLogGroupName,
+    workerLogGroupName: defaults.workerLogGroupName,
+    albArn: null,
+    targetGroupArn: null,
+    storageBucketName:
+      typeof storageBucketName === "string" && storageBucketName.trim()
+        ? storageBucketName
+        : defaults.storageBucketName,
+    databaseName:
+      typeof databaseName === "string" && databaseName.trim()
+        ? databaseName
+        : defaults.databaseName,
+    packageConfigDigest:
+      typeof packageConfigDigest === "string" && packageConfigDigest.trim()
+        ? packageConfigDigest
+        : null,
+  };
+}
+
 export async function readManagedApplications(
   tenantId: string | null,
   deps?: ManagedAppStatusReaderDeps,
 ): Promise<ManagedApplicationStatus[]> {
   return [
     cogneeManagedApplication(),
+    await n8nManagedApplication(tenantId, deps),
     await planeManagedApplication(tenantId, deps),
     await twentyManagedApplication(tenantId, deps),
   ];
@@ -380,6 +460,7 @@ export async function readManagedApplication(
   deps?: ManagedAppStatusReaderDeps,
 ): Promise<ManagedApplicationStatus> {
   if (key === "cognee") return cogneeManagedApplication();
+  if (key === "n8n") return n8nManagedApplication(tenantId, deps);
   if (key === "plane") return planeManagedApplication(tenantId, deps);
   return twentyManagedApplication(tenantId, deps);
 }
@@ -485,6 +566,57 @@ async function twentyManagedApplication(
   };
 }
 
+async function n8nManagedApplication(
+  tenantId: string | null,
+  deps?: ManagedAppStatusReaderDeps,
+): Promise<ManagedApplicationStatus> {
+  const n8n = await readN8nStatus(tenantId, deps);
+  const status = n8n.runtimeEnabled
+    ? "running"
+    : n8n.provisioned
+      ? "parked"
+      : "disabled";
+  const logGroupNames = [n8n.mainLogGroupName, n8n.workerLogGroupName].filter(
+    (value): value is string => Boolean(value),
+  );
+  const serviceNames = [n8n.mainServiceName, n8n.workerServiceName].filter(
+    (value): value is string => Boolean(value),
+  );
+
+  return {
+    key: "n8n",
+    displayName: "n8n",
+    description:
+      "Self-hosted workflow automation runtime managed by ThinkWork.",
+    status,
+    enabled: n8n.runtimeEnabled,
+    provisioned: n8n.provisioned,
+    runtimeEnabled: n8n.runtimeEnabled,
+    url: n8n.url,
+    endpoint: n8n.url,
+    backendMode: "queue",
+    logGroupName: n8n.mainLogGroupName,
+    logGroupNames,
+    clusterArn: n8n.clusterArn,
+    serviceName: n8n.mainServiceName,
+    serviceNames,
+    albArn: n8n.albArn,
+    targetGroupArn: n8n.targetGroupArn,
+    storageBucketName: n8n.storageBucketName,
+    databaseName: n8n.databaseName,
+    message: n8nStatusMessage(status),
+    managedMcpServerId: null,
+    managedMcpStatus: "missing",
+    managedMcpInstalled: false,
+    managedMcpInstallAvailable:
+      status === "running" && n8n.provisioned && Boolean(n8n.url),
+    managedMcpMessage:
+      status === "running" && n8n.url
+        ? "n8n MCP service credential has not been registered yet."
+        : null,
+  };
+}
+
 async function planeManagedApplication(
   tenantId: string | null,
   deps?: ManagedAppStatusReaderDeps,
@@ -549,6 +681,21 @@ function planeStatusMessage(
   }
   if (status === "unknown") {
     return "Plane deployment status could not be parsed.";
+  }
+  return null;
+}
+
+function n8nStatusMessage(
+  status: ManagedApplicationStatus["status"],
+): string | null {
+  if (status === "parked") {
+    return "n8n runtime is parked; workflow data, credentials, and app secrets are retained.";
+  }
+  if (status === "disabled") {
+    return "n8n has not been provisioned for this stage.";
+  }
+  if (status === "unknown") {
+    return "n8n deployment status could not be parsed.";
   }
   return null;
 }
@@ -643,5 +790,46 @@ function derivePlaneDefaults(
     storageBucketName: accountId
       ? `thinkwork-${stage}-${accountId}-plane`
       : null,
+  };
+}
+
+function deriveN8nDefaults(
+  provisioned: boolean,
+): Pick<
+  N8nStatus,
+  | "clusterArn"
+  | "mainServiceName"
+  | "workerServiceName"
+  | "mainLogGroupName"
+  | "workerLogGroupName"
+  | "storageBucketName"
+  | "databaseName"
+> {
+  if (!provisioned) {
+    return {
+      clusterArn: null,
+      mainServiceName: null,
+      workerServiceName: null,
+      mainLogGroupName: null,
+      workerLogGroupName: null,
+      storageBucketName: null,
+      databaseName: null,
+    };
+  }
+
+  const stage = process.env.STAGE || "unknown";
+  const region = process.env.AWS_REGION || "us-east-1";
+  const accountId = process.env.AWS_ACCOUNT_ID || null;
+
+  return {
+    clusterArn: accountId
+      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-n8n-cluster`
+      : null,
+    mainServiceName: `thinkwork-${stage}-n8n-main`,
+    workerServiceName: `thinkwork-${stage}-n8n-worker`,
+    mainLogGroupName: `/thinkwork/${stage}/n8n/main`,
+    workerLogGroupName: `/thinkwork/${stage}/n8n/worker`,
+    storageBucketName: accountId ? `thinkwork-${stage}-${accountId}-n8n` : null,
+    databaseName: "thinkwork_n8n",
   };
 }

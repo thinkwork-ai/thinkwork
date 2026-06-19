@@ -105,10 +105,11 @@ export function parseRunnerInput(value: unknown): DeploymentRunnerInput {
   }
   if (
     input.appKey !== "cognee" &&
+    input.appKey !== "n8n" &&
     input.appKey !== "plane" &&
     input.appKey !== "twenty"
   ) {
-    throw new Error("appKey must be cognee, plane, or twenty");
+    throw new Error("appKey must be cognee, n8n, plane, or twenty");
   }
   if (
     !["ENABLE", "PARK", "DESTROY", "UPGRADE"].includes(String(input.operation))

@@ -15,7 +15,7 @@ export const n8nPluginScaffold = {
       kind: "deployment",
       path: "plugins/n8n/src/deployment",
       description:
-        "Planned n8n managed-app adapter source, introduced after U2 creates the real deployment-runner contract.",
+        "Package-owned n8n managed-app adapter source for the deployment-runner contract.",
     },
     {
       kind: "terraform",
@@ -59,3 +59,4 @@ export const n8nPluginScaffold = {
 } as const;
 
 export { n8nDraftManifest };
+export { n8nAdapter } from "./deployment/managed-app";

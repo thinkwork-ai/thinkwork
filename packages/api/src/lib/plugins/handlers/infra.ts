@@ -329,6 +329,62 @@ function planeDefaultDesiredConfig(): Record<string, unknown> {
   });
 }
 
+function n8nDefaultDesiredConfig(): Record<string, unknown> {
+  const domain =
+    process.env.THINKWORK_N8N_DOMAIN ?? process.env.THINKWORK_DOMAIN;
+  return compactRecord({
+    imageUri: process.env.THINKWORK_N8N_IMAGE_URI,
+    databaseAdminSecretArn: process.env.THINKWORK_N8N_DATABASE_ADMIN_SECRET_ARN,
+    databaseUrlSecretArn: process.env.THINKWORK_N8N_DATABASE_URL_SECRET_ARN,
+    databaseName: process.env.THINKWORK_N8N_DATABASE_NAME ?? "thinkwork_n8n",
+    databaseUsername: process.env.THINKWORK_N8N_DATABASE_USERNAME,
+    encryptionKeySecretArn: process.env.THINKWORK_N8N_ENCRYPTION_KEY_SECRET_ARN,
+    operatorSecretArn: process.env.THINKWORK_N8N_OPERATOR_SECRET_ARN,
+    serviceCredentialSecretArn:
+      process.env.THINKWORK_N8N_SERVICE_CREDENTIAL_SECRET_ARN,
+    storageBucketName: process.env.THINKWORK_N8N_STORAGE_BUCKET_NAME,
+    storagePrefix:
+      process.env.THINKWORK_N8N_STORAGE_PREFIX ?? "managed-apps/n8n",
+    publicUrl:
+      process.env.THINKWORK_N8N_PUBLIC_URL ?? n8nPublicUrlFromDomain(domain),
+    certificateArn: process.env.THINKWORK_N8N_CERTIFICATE_ARN,
+    domain,
+    mainDesiredCount: envNumber("THINKWORK_N8N_MAIN_DESIRED_COUNT") ?? 1,
+    workerDesiredCount: envNumber("THINKWORK_N8N_WORKER_DESIRED_COUNT") ?? 1,
+    packageConfigDigest: process.env.THINKWORK_N8N_PACKAGE_CONFIG_DIGEST,
+    customPackageSpecs: envStringList("THINKWORK_N8N_CUSTOM_PACKAGE_SPECS"),
+  });
+}
+
+function n8nPublicUrlFromDomain(
+  domain: string | undefined,
+): string | undefined {
+  if (!domain?.trim()) return undefined;
+  const value = domain.trim();
+  const url =
+    value.startsWith("http://") || value.startsWith("https://")
+      ? value
+      : `https://n8n.${value}`;
+  return url.replace(/\/+$/, "");
+}
+
+function envNumber(key: string): number | undefined {
+  const raw = process.env[key];
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function envStringList(key: string): string[] | undefined {
+  const raw = process.env[key];
+  if (!raw) return undefined;
+  const entries = raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return entries.length ? entries : undefined;
+}
+
 function desiredConfigForPlanJob(args: {
   tenantId: string;
   pluginKey: string;
@@ -339,6 +395,12 @@ function desiredConfigForPlanJob(args: {
   if (args.appKey === "plane") {
     return {
       ...planeDefaultDesiredConfig(),
+      ...existingConfig,
+    };
+  }
+  if (args.appKey === "n8n") {
+    return {
+      ...n8nDefaultDesiredConfig(),
       ...existingConfig,
     };
   }

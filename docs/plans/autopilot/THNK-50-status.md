@@ -16,7 +16,7 @@ marker: dispatcher:THNK-50:Ready to Work:Codex
 - Attached plan document: `Plan: Add n8n application plugin`
 - Repo-local requirements on main:
   `docs/brainstorms/2026-06-19-n8n-application-plugin-requirements.md`
-- Repo-local plan carried into this PR:
+- Repo-local plan:
   `docs/plans/2026-06-19-003-feat-n8n-application-plugin-plan.md`
 
 Context discovery found no child Linear issues or additional Linear documents
@@ -54,10 +54,11 @@ U3/U4/U5/U6 before U7; U7 before U8.
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u1-n8n-scaffold`
 - Git branch: `codex/thnk-50-u1-n8n-scaffold`
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2691
+- Merge commit: `3a5ef6cb4169bf4483b5df076fd233287a7da0b5`
 - Objective: add `plugins/n8n/` package metadata, draft manifest constants,
   package descriptor, README, package-local tests, and source-boundary
   registration without publishing a final catalog-visible n8n manifest.
-- Status: PR opened; waiting for CI.
+- Status: merged.
 - Verification:
   - `pnpm --filter @thinkwork/plugin-n8n test` passed.
   - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
@@ -69,6 +70,51 @@ U3/U4/U5/U6 before U7; U7 before U8.
     passed.
   - `node scripts/verify-plugin-source-boundary.mjs` passed.
   - `pnpm dlx prettier@latest --check <touched files>` passed.
+
+### U2: n8n Managed-App Adapter and Desired Config Contract
+
+- Branch/worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u2-n8n-managed-app`
+- Git branch: `codex/thnk-50-u2-n8n-managed-app`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2694
+- Objective: add a real package-owned `n8nAdapter`, register it in the
+  deployment-runner managed-app registry, define conservative desired-config
+  inputs/defaults, and add runner/API tests for plan/apply summaries and
+  greenfield plan job creation without publishing the final catalog manifest.
+- Status: PR opened; waiting for CI.
+- Local implementation summary:
+  - Added package-owned `n8nAdapter` under `plugins/n8n/src/deployment/` with
+    queue-mode plan variables, required secret/public URL inputs, destroy data
+    impact, pre-destroy steps, smoke contract, and Terraform status output
+    extraction.
+  - Registered `n8n` in the deployment-runner managed-app registry and runner
+    input parser, including release-manifest image hydration keys.
+  - Added API desired-config defaults for net-new n8n plugin infra plan jobs:
+    `thinkwork_n8n`, default storage prefix, queue service counts, public URL
+    derivation, secret/image/storage/certificate env inputs, and package spec
+    env parsing.
+  - Added API managed-application status projection for n8n with queue-mode
+    service/log defaults, retained database/storage metadata, and native MCP
+    readiness messaging.
+  - Widened the managed-app settings row helper so n8n and Plane route to their
+    own Plugin Detail pages instead of being coerced to Company Brain.
+- Verification:
+  - `pnpm --filter @thinkwork/plugin-n8n test` passed.
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-n8n build` passed.
+  - `pnpm --filter @thinkwork/deployment-runner test -- deployment-runner-managed-apps`
+    passed.
+  - `pnpm --filter @thinkwork/deployment-runner typecheck` passed.
+  - `pnpm --filter @thinkwork/api test -- managedApplications infra` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `node scripts/verify-plugin-source-boundary.mjs` passed.
+  - `node --test scripts/__tests__/verify-plugin-source-boundary.test.mjs`
+    passed.
+  - `pnpm --filter @thinkwork/plugin-catalog check:plugins` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog test -- plugin-registry` passed.
+  - `prettier --check <touched files>` passed via the lockfile-resolved
+    Prettier 3.8.2 CLI.
 
 ## Blockers
 

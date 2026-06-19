@@ -27,7 +27,9 @@ export function ManagedApplicationRow({
   const detailPath =
     key === "twenty" ? "/settings/crm" : "/settings/plugins/$pluginKey";
   const detailParams =
-    key === "twenty" ? undefined : { pluginKey: "company-brain" };
+    key === "twenty"
+      ? undefined
+      : { pluginKey: key === "cognee" ? "company-brain" : key };
 
   return (
     <Link
@@ -38,9 +40,7 @@ export function ManagedApplicationRow({
     >
       <div className="min-w-0">
         <div className="flex items-center gap-1">
-          <h3 className="text-sm font-medium text-foreground">
-            {displayName}
-          </h3>
+          <h3 className="text-sm font-medium text-foreground">{displayName}</h3>
           {runtime?.url && runtimeEnabled ? (
             <Button
               type="button"
@@ -76,6 +76,12 @@ export function ManagedApplicationRow({
 function managedAppDescription(key: ManagedAppKey): string {
   if (key === "twenty") {
     return "Customer-owned CRM runtime with dedicated database, cache, files, and generated secrets.";
+  }
+  if (key === "plane") {
+    return "Self-hosted project management runtime with task-local sidecars and managed MCP integration.";
+  }
+  if (key === "n8n") {
+    return "Self-hosted workflow automation runtime with queue workers, retained workflow data, and native MCP integration.";
   }
   return "Company Brain knowledge graph substrate with dedicated graph/vector storage and provider credentials.";
 }

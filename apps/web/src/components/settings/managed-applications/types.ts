@@ -4,7 +4,7 @@ import type {
   SettingsManagedApplicationsQuery,
 } from "@/gql/graphql";
 
-export type ManagedAppKey = "cognee" | "twenty";
+export type ManagedAppKey = "cognee" | "n8n" | "plane" | "twenty";
 
 export type ManagedApplication =
   SettingsManagedApplicationsQuery["managedApplications"][number];
@@ -24,6 +24,8 @@ export interface DataImpact {
 
 export function asManagedAppKey(value: string): ManagedAppKey {
   if (value === "twenty") return "twenty";
+  if (value === "plane") return "plane";
+  if (value === "n8n") return "n8n";
   return "cognee";
 }
 
@@ -54,6 +56,8 @@ export function terminalJobStatus(status: string): boolean {
 export function appDisplayName(key: string): string {
   if (key === "twenty") return "Twenty CRM";
   if (key === "cognee") return "Cognee";
+  if (key === "plane") return "Plane";
+  if (key === "n8n") return "n8n";
   return key;
 }
 
