@@ -32,6 +32,8 @@ export function buildApplySummary(args: {
         operation: input.operation,
         desiredConfig: input.desiredConfig,
         manifestImages: input.manifestImages,
+        tenantId: input.tenantId,
+        releaseVersion: input.releaseVersion,
       })
     : null;
   return {
@@ -47,6 +49,7 @@ export function buildApplySummary(args: {
     planDigest: input.planDigest!,
     dataImpact: appPlan?.dataImpact ?? adapter.dataImpact(input.operation),
     terraformVariables: appPlan?.terraformVariables,
+    imageBuild: appPlan?.imageBuild,
     preDestroySteps:
       appPlan?.preDestroySteps ?? adapter.preDestroySteps(input.operation),
     smokeContracts: adapter.smokeContracts,

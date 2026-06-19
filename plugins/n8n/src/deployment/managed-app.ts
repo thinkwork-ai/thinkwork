@@ -11,6 +11,14 @@ import {
   requireStringInput,
   stringOutput,
 } from "@thinkwork/deployment-runner/apps/utils";
+import {
+  buildN8nPackageImageBuildContract,
+  n8nPackageImageBuildSummary,
+} from "./image-build";
+import {
+  assertN8nPackageConfigDigest,
+  normalizeN8nPackageConfig,
+} from "../package-config";
 
 const smokeContracts = [
   {
@@ -120,14 +128,46 @@ export const n8nAdapter: ManagedAppAdapter = {
     }
 
     const runtimeEnabled = operation !== "PARK";
+    const packageConfig = normalizeN8nPackageConfig(desiredConfig);
+    assertN8nPackageConfigDigest({
+      expectedDigest: desiredConfig?.packageConfigDigest,
+      actualDigest: packageConfig.digest,
+      fieldName: "n8n packageConfigDigest",
+    });
+    assertN8nPackageConfigDigest({
+      expectedDigest: desiredConfig?.packageImageConfigDigest,
+      actualDigest: packageConfig.digest,
+      fieldName: "n8n packageImageConfigDigest",
+    });
+    const baseImageUri = requireDigestImage(
+      desiredConfig,
+      "imageUri",
+      "n8n imageUri",
+    );
+    const packageImageUri = optionalString(desiredConfig, "packageImageUri");
+    if (packageImageUri && packageConfig.packageSpecs.length === 0) {
+      throw new Error(
+        "n8n packageImageUri requires at least one custom package spec",
+      );
+    }
+    const resolvedImageUri =
+      packageConfig.packageSpecs.length > 0
+        ? requireDigestImage(
+            desiredConfig,
+            "packageImageUri",
+            "n8n packageImageUri",
+          )
+        : baseImageUri;
+    const packageConfigDigest =
+      packageConfig.packageSpecs.length > 0 ||
+      desiredConfig?.packageConfigDigest !== undefined
+        ? packageConfig.digest
+        : undefined;
+
     return compactObject({
       n8n_provisioned: true,
       n8n_runtime_enabled: runtimeEnabled,
-      n8n_image_uri: requireDigestImage(
-        desiredConfig,
-        "imageUri",
-        "n8n imageUri",
-      ),
+      n8n_image_uri: resolvedImageUri,
       n8n_database_admin_secret_arn: requireStringInput(
         desiredConfig,
         "databaseAdminSecretArn",
@@ -184,14 +224,8 @@ export const n8nAdapter: ManagedAppAdapter = {
       n8n_queue_mode: true,
       n8n_task_runners_enabled:
         optionalBoolean(desiredConfig, "taskRunnersEnabled") ?? true,
-      n8n_package_config_digest: optionalString(
-        desiredConfig,
-        "packageConfigDigest",
-      ),
-      n8n_custom_package_specs: optionalStringArray(
-        desiredConfig,
-        "customPackageSpecs",
-      ),
+      n8n_package_config_digest: packageConfigDigest,
+      n8n_custom_package_specs: packageConfig.packageSpecs,
       n8n_cache_engine: optionalString(desiredConfig, "cacheEngine"),
       n8n_cache_engine_version: optionalString(
         desiredConfig,
@@ -212,6 +246,38 @@ export const n8nAdapter: ManagedAppAdapter = {
       ),
       n8n_kms_key_arns: optionalStringArray(desiredConfig, "kmsKeyArns"),
     });
+  },
+  buildImageBuildPlan({ operation, desiredConfig, tenantId, releaseVersion }) {
+    if (operation === "DESTROY") return undefined;
+    const packageConfig = normalizeN8nPackageConfig(desiredConfig);
+    const packageImageUri = optionalString(desiredConfig, "packageImageUri");
+    if (packageConfig.packageSpecs.length === 0 && !packageImageUri) {
+      return undefined;
+    }
+    if (!tenantId) {
+      throw new Error(
+        "tenantId is required to plan an n8n package image build",
+      );
+    }
+
+    const baseImageUri = requireDigestImage(
+      desiredConfig,
+      "imageUri",
+      "n8n imageUri",
+    );
+    const taskRunnersEnabled =
+      optionalBoolean(desiredConfig, "taskRunnersEnabled") ?? true;
+    const contract = buildN8nPackageImageBuildContract({
+      tenantId,
+      pluginVersion: releaseVersion ?? "0.0.0",
+      baseImageUri,
+      taskRunnersEnabled,
+      customPackageSpecs: packageConfig.packageSpecs,
+      packageConfigDigest: desiredConfig?.packageConfigDigest,
+      packageImageUri: desiredConfig?.packageImageUri,
+      packageImageConfigDigest: desiredConfig?.packageImageConfigDigest,
+    });
+    return n8nPackageImageBuildSummary(contract);
   },
   dataImpact(operation) {
     if (operation !== "DESTROY") {

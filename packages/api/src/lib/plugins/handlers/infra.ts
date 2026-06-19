@@ -352,6 +352,9 @@ function n8nDefaultDesiredConfig(): Record<string, unknown> {
     mainDesiredCount: envNumber("THINKWORK_N8N_MAIN_DESIRED_COUNT") ?? 1,
     workerDesiredCount: envNumber("THINKWORK_N8N_WORKER_DESIRED_COUNT") ?? 1,
     packageConfigDigest: process.env.THINKWORK_N8N_PACKAGE_CONFIG_DIGEST,
+    packageImageConfigDigest:
+      process.env.THINKWORK_N8N_PACKAGE_IMAGE_CONFIG_DIGEST,
+    packageImageUri: process.env.THINKWORK_N8N_PACKAGE_IMAGE_URI,
     customPackageSpecs: envStringList("THINKWORK_N8N_CUSTOM_PACKAGE_SPECS"),
   });
 }

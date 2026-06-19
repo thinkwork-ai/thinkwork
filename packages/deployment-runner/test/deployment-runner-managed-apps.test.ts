@@ -5,9 +5,12 @@ import {
 } from "../src/apps/registry";
 import { buildApplySummary } from "../src/apply";
 import { buildPlanSummary } from "../src/plan";
+import { normalizeN8nPackageConfig } from "@thinkwork/plugin-n8n/package-config";
 
 const digest = "a".repeat(64);
 const imageDigest = "1".repeat(64);
+const n8nPackageImageDigest = "4".repeat(64);
+const n8nPackageImageUri = `123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork/n8n@sha256:${n8nPackageImageDigest}`;
 const planeImageConfig = {
   imageUri: `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${imageDigest}`,
   mcpImageUri: `ghcr.io/astral-sh/uv@sha256:${imageDigest}`,
@@ -228,6 +231,10 @@ describe("managed app deployment adapters", () => {
   });
 
   it("maps n8n deploy config into Terraform variables and smoke evidence", () => {
+    const packageConfig = normalizeN8nPackageConfig([
+      "luxon@3.7.2",
+      "zod@3.25.76",
+    ]);
     const summary = buildPlanSummary({
       evidenceBucket: "evidence-bucket",
       input: {
@@ -240,8 +247,10 @@ describe("managed app deployment adapters", () => {
         manifestDigest: digest,
         desiredConfigVersion: "v1",
         desiredConfig: n8nDesiredConfig({
-          customPackageSpecs: ["luxon@3.7.2", "zod@3.25.76"],
-          packageConfigDigest: "package-digest-1",
+          customPackageSpecs: ["zod@3.25.76", "luxon@3.7.2"],
+          packageConfigDigest: packageConfig.digest,
+          packageImageConfigDigest: packageConfig.digest,
+          packageImageUri: n8nPackageImageUri,
         }),
       },
     });
@@ -251,7 +260,7 @@ describe("managed app deployment adapters", () => {
       expect.objectContaining({
         n8n_provisioned: true,
         n8n_runtime_enabled: true,
-        n8n_image_uri: `public.ecr.aws/thinkwork/n8n@sha256:${imageDigest}`,
+        n8n_image_uri: n8nPackageImageUri,
         n8n_database_name: "thinkwork_n8n",
         n8n_database_admin_secret_arn:
           "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-db-admin",
@@ -263,8 +272,16 @@ describe("managed app deployment adapters", () => {
         n8n_worker_desired_count: 1,
         n8n_queue_mode: true,
         n8n_task_runners_enabled: true,
-        n8n_custom_package_specs: ["luxon@3.7.2", "zod@3.25.76"],
-        n8n_package_config_digest: "package-digest-1",
+        n8n_custom_package_specs: packageConfig.packageSpecs,
+        n8n_package_config_digest: packageConfig.digest,
+      }),
+    );
+    expect(summary.imageBuild).toEqual(
+      expect.objectContaining({
+        required: true,
+        packageConfigDigest: packageConfig.digest,
+        outputImageUri: n8nPackageImageUri,
+        nodeFunctionAllowExternal: "luxon,zod",
       }),
     );
     expect(summary.smokeContracts).toContainEqual(
@@ -276,6 +293,65 @@ describe("managed app deployment adapters", () => {
     expect(summary.statusOutputs).toContain("n8n_database_name");
     expect(summary.statusOutputs).toContain("n8n_valkey_endpoint");
     expect(summary.statusOutputs).toContain("n8n_package_config_digest");
+  });
+
+  it("changes n8n plan digest when custom package config changes", () => {
+    const lodashConfig = normalizeN8nPackageConfig(["lodash@4.17.21"]);
+    const dateFnsConfig = normalizeN8nPackageConfig(["date-fns@4.1.0"]);
+    const commonInput = {
+      phase: "plan" as const,
+      tenantId: "tenant-1",
+      jobId: "job-n8n-package",
+      appKey: "n8n" as const,
+      operation: "ENABLE" as const,
+      releaseVersion: "1.2.3",
+      manifestDigest: digest,
+      desiredConfigVersion: "v1",
+    };
+
+    const first = buildPlanSummary({
+      evidenceBucket: "evidence-bucket",
+      input: {
+        ...commonInput,
+        desiredConfig: n8nDesiredConfig({
+          customPackageSpecs: ["lodash@4.17.21"],
+          packageConfigDigest: lodashConfig.digest,
+          packageImageConfigDigest: lodashConfig.digest,
+          packageImageUri: n8nPackageImageUri,
+        }),
+      },
+    });
+    const second = buildPlanSummary({
+      evidenceBucket: "evidence-bucket",
+      input: {
+        ...commonInput,
+        desiredConfig: n8nDesiredConfig({
+          customPackageSpecs: ["date-fns@4.1.0"],
+          packageConfigDigest: dateFnsConfig.digest,
+          packageImageConfigDigest: dateFnsConfig.digest,
+          packageImageUri: n8nPackageImageUri,
+        }),
+      },
+    });
+
+    expect(first.planDigest).not.toBe(second.planDigest);
+    expect(first.terraformVariables).toEqual(
+      expect.objectContaining({
+        n8n_image_uri: n8nPackageImageUri,
+        n8n_package_config_digest: lodashConfig.digest,
+        n8n_custom_package_specs: ["lodash@4.17.21"],
+      }),
+    );
+    expect(first.imageBuild).toEqual(
+      expect.objectContaining({
+        packageConfigDigest: lodashConfig.digest,
+        packageNames: ["lodash"],
+        security: expect.objectContaining({
+          runtimeSecretsIncluded: false,
+          buildSecretKeys: [],
+        }),
+      }),
+    );
   });
 
   it("hydrates managed app images from the verified release manifest contract", () => {
@@ -596,6 +672,31 @@ describe("managed app deployment adapters", () => {
         n8n_image_uri: `public.ecr.aws/thinkwork/n8n@sha256:${"3".repeat(64)}`,
       }),
     );
+  });
+
+  it("rejects n8n apply when the approved package digest is stale", () => {
+    expect(() =>
+      buildApplySummary({
+        evidenceBucket: "evidence-bucket",
+        verifiedManifestDigest: digest,
+        input: {
+          phase: "apply",
+          tenantId: "tenant-1",
+          jobId: "job-n8n-stale-package",
+          appKey: "n8n",
+          operation: "ENABLE",
+          releaseVersion: "1.2.3",
+          manifestDigest: digest,
+          desiredConfigVersion: "v1",
+          desiredConfig: n8nDesiredConfig({
+            customPackageSpecs: ["lodash@4.17.21"],
+            packageConfigDigest: "0".repeat(64),
+            packageImageUri: n8nPackageImageUri,
+          }),
+          planDigest: "b".repeat(64),
+        },
+      }),
+    ).toThrow(/packageConfigDigest must match/);
   });
 
   it("extracts app status from Terraform output shapes", () => {

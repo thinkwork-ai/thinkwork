@@ -27,7 +27,7 @@ export const n8nPluginScaffold = {
       kind: "runtime",
       path: "plugins/n8n/runtime",
       description:
-        "Planned thin n8n wrapper image assets for pinned public Code node packages.",
+        "Thin n8n wrapper image and task-runner allow-list template for pinned public Code node packages.",
     },
     {
       kind: "web",
@@ -60,3 +60,5 @@ export const n8nPluginScaffold = {
 
 export { n8nDraftManifest };
 export { n8nAdapter } from "./deployment/managed-app";
+export { buildN8nPackageImageBuildContract } from "./deployment/image-build";
+export { normalizeN8nPackageConfig } from "./package-config";
