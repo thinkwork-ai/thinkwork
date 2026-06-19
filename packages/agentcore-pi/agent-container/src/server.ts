@@ -263,6 +263,17 @@ function explicitAgentProfileSlugsFromMessage(
     });
 }
 
+const EMAIL_ADDRESS_PATTERN =
+  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu;
+
+function redactEmailAddresses(message: string): string {
+  return message.replace(EMAIL_ADDRESS_PATTERN, " [redacted-address] ");
+}
+
+function containsEmailAddress(message: string): boolean {
+  return new RegExp(EMAIL_ADDRESS_PATTERN).test(message);
+}
+
 function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.flatMap((item) => {
@@ -588,11 +599,19 @@ function inferAutomaticAgentProfileSlug(
   message: string,
   profiles: AgentProfileConfig[],
 ): string {
-  const normalized = message.toLowerCase();
-  const researchIntent =
-    /\b(research|source|sources|cite|citation|web search|search the web|latest|current|today|find current)\b/i.test(
+  const hasEmailAddress = containsEmailAddress(message);
+  const normalized = redactEmailAddresses(message).toLowerCase();
+  const strongResearchIntent =
+    /\b(research|cite|citation|web search|search the web|find current)\b/i.test(
       normalized,
     );
+  const genericResearchIntent =
+    /\b(source|sources|latest|current|today)\b/i.test(normalized);
+  const emailDeliveryCommand =
+    /\b(send|email|mail|forward|share|draft|reply)\b/i.test(normalized);
+  const researchIntent =
+    strongResearchIntent ||
+    (genericResearchIntent && !(hasEmailAddress && emailDeliveryCommand));
   if (!researchIntent) return "";
 
   const researchProfile = profiles.find((profile) => {
