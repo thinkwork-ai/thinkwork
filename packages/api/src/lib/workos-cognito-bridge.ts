@@ -5,7 +5,7 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { randomBytes, createHash } from "node:crypto";
-import { getApiAuthSecret } from "@thinkwork/runtime-config";
+import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
 import { users, workosAuthBridges } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "./db.js";
 import { digestBridgeCode } from "./workos-auth.js";
@@ -277,8 +277,8 @@ async function startCognitoCustomAuth(
   },
   cognito: CognitoIdentityProviderClient,
 ): Promise<CognitoTokenSet> {
-  const userPoolId = process.env.COGNITO_USER_POOL_ID;
-  const clientId = process.env.ADMIN_CLIENT_ID;
+  const userPoolId = getConfig("COGNITO_USER_POOL_ID", "");
+  const clientId = getConfig("ADMIN_CLIENT_ID", "");
   if (!userPoolId || !clientId) {
     throw new WorkosBridgeError("Cognito bridge is not configured", 500);
   }

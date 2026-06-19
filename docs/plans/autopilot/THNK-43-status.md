@@ -214,6 +214,16 @@ Local verification:
 - `pnpm --dir apps/cli test -- terraform-enterprise-artifact-fixture.test.ts terraform-cognito-identity-provider-fixture.test.ts no-required-options.test.ts`
   - 10 tests passed across Terraform artifact, Cognito IdP, and init command
     fixture coverage.
+- CI `test` initially failed on PR #2673 because
+  `packages/api/src/lib/workos-cognito-bridge.ts` read
+  `process.env.COGNITO_USER_POOL_ID` and `process.env.ADMIN_CLIENT_ID`
+  directly, violating the runtime-config fixture guardrail.
+- Recovery: switched those reads to `getConfig(...)` from
+  `@thinkwork/runtime-config`.
+- Recovery verification:
+  - `pnpm --dir apps/cli test -- terraform-runtime-config-fixture.test.ts`
+  - `pnpm --dir packages/api test -- workos-cognito-bridge.test.ts workos-auth.test.ts`
+  - `pnpm --dir packages/api typecheck`
 - `terraform fmt -check` on touched Terraform files.
 - `git diff --check`
 - `bash scripts/build-lambdas.sh cognito-custom-auth`
