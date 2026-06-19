@@ -7,7 +7,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./manifest": "./src/manifest.ts",
-    "./deployment/managed-app": "./src/deployment/managed-app.ts"
+    "./deployment/managed-app": "./src/deployment/managed-app.ts",
+    "./deployment/image-build": "./src/deployment/image-build.ts",
+    "./package-config": "./src/package-config.ts"
   },
   "scripts": {
     "build": "tsc --build",

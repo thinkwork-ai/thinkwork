@@ -491,6 +491,10 @@ describe("provisionPluginInfraComponent", () => {
       "arn:aws:acm:us-east-1:123456789012:certificate/n8n",
     );
     vi.stubEnv("THINKWORK_N8N_CUSTOM_PACKAGE_SPECS", "luxon@3.7.2,zod@3.25.76");
+    vi.stubEnv(
+      "THINKWORK_N8N_PACKAGE_IMAGE_URI",
+      "123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork/n8n@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    );
 
     const deps = fakeDeps();
     const n8nRuntime = component({
@@ -545,6 +549,8 @@ describe("provisionPluginInfraComponent", () => {
         domain: "apps.example.com",
         mainDesiredCount: 1,
         workerDesiredCount: 1,
+        packageImageUri:
+          "123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork/n8n@sha256:2222222222222222222222222222222222222222222222222222222222222222",
         customPackageSpecs: ["luxon@3.7.2", "zod@3.25.76"],
       },
     });

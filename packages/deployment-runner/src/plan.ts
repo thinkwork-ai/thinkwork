@@ -20,6 +20,8 @@ export function buildPlanSummary(args: {
     operation: input.operation,
     desiredConfig: input.desiredConfig,
     manifestImages: input.manifestImages,
+    tenantId: input.tenantId,
+    releaseVersion: input.releaseVersion,
   });
   const body = {
     jobId: input.jobId,
@@ -33,6 +35,7 @@ export function buildPlanSummary(args: {
     manifestImages: input.manifestImages,
     dataImpact: appPlan.dataImpact,
     terraformVariables: appPlan.terraformVariables,
+    imageBuild: appPlan.imageBuild,
     preDestroySteps: appPlan.preDestroySteps,
     smokeContracts: appPlan.smokeContracts,
     statusOutputs: appPlan.statusOutputs,

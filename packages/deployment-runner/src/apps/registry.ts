@@ -41,8 +41,11 @@ export interface ManagedAppStatus {
   evidence: Record<string, string | boolean | number | null>;
 }
 
+export type ManagedAppImageBuildPlan = Record<string, unknown>;
+
 export interface ManagedAppPlan {
   terraformVariables: Record<string, unknown>;
+  imageBuild?: ManagedAppImageBuildPlan;
   dataImpact: ManagedAppDataImpact;
   preDestroySteps: PreDestroyStep[];
   smokeContracts: readonly SmokeContract[];
@@ -60,6 +63,12 @@ export interface ManagedAppAdapter {
     operation: ManagedAppOperation;
     desiredConfig?: Record<string, unknown>;
   }): Record<string, unknown>;
+  buildImageBuildPlan?(args: {
+    operation: ManagedAppOperation;
+    desiredConfig?: Record<string, unknown>;
+    tenantId?: string;
+    releaseVersion?: string;
+  }): ManagedAppImageBuildPlan | undefined;
   dataImpact(operation: ManagedAppOperation): ManagedAppDataImpact;
   preDestroySteps(operation: ManagedAppOperation): PreDestroyStep[];
   smokeContracts: readonly SmokeContract[];
@@ -89,6 +98,8 @@ export function buildManagedAppPlan(args: {
   operation: ManagedAppOperation;
   desiredConfig?: Record<string, unknown>;
   manifestImages?: Record<string, string>;
+  tenantId?: string;
+  releaseVersion?: string;
 }): ManagedAppPlan {
   const adapter = getManagedAppAdapter(args.appKey);
   const desiredConfig = resolveManagedAppDesiredConfig(args);
@@ -96,6 +107,12 @@ export function buildManagedAppPlan(args: {
     terraformVariables: adapter.buildTerraformVariables({
       operation: args.operation,
       desiredConfig,
+    }),
+    imageBuild: adapter.buildImageBuildPlan?.({
+      operation: args.operation,
+      desiredConfig,
+      tenantId: args.tenantId,
+      releaseVersion: args.releaseVersion,
     }),
     dataImpact: adapter.dataImpact(args.operation),
     preDestroySteps: adapter.preDestroySteps(args.operation),

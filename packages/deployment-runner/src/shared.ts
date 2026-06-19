@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   dataImpactForManagedApp,
   type ManagedAppDataImpact,
+  type ManagedAppImageBuildPlan,
   type ManagedAppKey,
   type PreDestroyStep,
   type SmokeContract,
@@ -64,6 +65,7 @@ export interface DeploymentSummary {
   planDigest: string;
   dataImpact: ManagedAppDataImpact;
   terraformVariables?: Record<string, unknown>;
+  imageBuild?: ManagedAppImageBuildPlan;
   preDestroySteps?: PreDestroyStep[];
   smokeContracts?: readonly SmokeContract[];
   statusOutputs?: string[];

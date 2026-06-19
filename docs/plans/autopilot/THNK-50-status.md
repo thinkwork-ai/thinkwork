@@ -123,6 +123,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u3-n8n-terraform`
 - Git branch: `codex/thnk-50-u3-n8n-terraform`
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2696
+- Merge commit: `0780b93acd800de5dfe61b46718502ace949a76c`
 - Objective: add the package-owned n8n Terraform runtime module, wire it
   through the composite ThinkWork module, greenfield example, DNS module, and
   structural fixture tests, while preserving retained-substrate parking
@@ -130,7 +131,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
 - Additional user-requested tweak folded into this unit: rename catalog entries
   `Resend Channel` -> `Resend Email` and `SendGrid` -> `SendGrid Email`, and
   sort plugin catalog rows alphabetically by display name.
-- Status: in progress.
+- Status: merged.
 - Local implementation summary:
   - Added the package-owned `plugins/n8n/terraform/n8n` module with an HTTPS ALB,
     Fargate main/worker services, managed Valkey queue substrate, S3 artifact
@@ -179,6 +180,66 @@ U3/U4/U5/U6 before U7; U7 before U8.
     `plugins/catalog/src/__tests__/plugin-package.test.ts` still expected
     aggregate manifests in plugin-key order. Fixed the assertion to match the
     new display-name order used by `allPluginManifests`.
+  - PR #2696 final checks passed: signed catalog build, lint, test, typecheck,
+    verify, and CLA.
+
+### U4: Pinned Package Validation and Controlled Image Builds
+
+- Branch/worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u4-n8n-package-builds`
+- Git branch: `codex/thnk-50-u4-n8n-package-builds`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2702
+- Objective: add package-owned pinned public npm package validation,
+  deterministic package config normalization/digesting, controlled n8n wrapper
+  image build contracts, runtime Dockerfile/task-runner templates, and
+  deployment-runner plan/apply safeguards so package config changes produce
+  reviewed digest-pinned images before Terraform apply.
+- Status: PR open.
+- Linear status:
+  - PR/evidence comment posted with marker
+    `dispatcher:THNK-50:Ready to Work:Codex`.
+  - Attempted to move THNK-50 to `Review` and `In Review` after PR open, but
+    Linear returned the issue still in `In Progress`; leaving it there until PR
+    merge because no accepted review state was exposed through the Linear tool.
+- Local implementation summary:
+  - Added `plugins/n8n/src/package-config.ts` to accept only exact public npm
+    package specs, reject ranges/tags/URLs/paths/workspace aliases, collapse
+    duplicate same-version specs, reject conflicting versions, sort packages
+    deterministically, and compute a stable sha256 package config digest.
+  - Added `plugins/n8n/src/deployment/image-build.ts` to describe the
+    controlled package image build contract: idempotency key inputs, base image
+    digest, normalized package digest, digest-pinned output image, task-runner
+    allow-list value, evidence artifacts, and a no-runtime-secrets security
+    boundary.
+  - Added `plugins/n8n/runtime/Dockerfile` and
+    `plugins/n8n/runtime/n8n-task-runners.json.template` so controlled wrapper
+    builds install generated package-lock dependencies into n8n's module tree
+    and register the `NODE_FUNCTION_ALLOW_EXTERNAL` allow-list for external
+    task runners.
+  - Extended the n8n managed-app adapter so `imageUri` remains the pinned base
+    image, non-empty custom package specs require a digest-pinned
+    `packageImageUri`, package digests are recomputed and verified before plan
+    or apply, and Terraform receives normalized package specs plus the approved
+    package image URI.
+  - Extended deployment-runner summaries with optional `imageBuild` evidence and
+    passed tenant/release context into adapters so package image changes alter
+    the managed-app plan digest.
+  - Added API desired-config handoff fields for
+    `THINKWORK_N8N_PACKAGE_IMAGE_URI` and
+    `THINKWORK_N8N_PACKAGE_IMAGE_CONFIG_DIGEST`.
+- Local verification:
+  - `pnpm install` completed; optional `canvas@2.11.2` native fallback reported
+    missing local `pkg-config`, but package installation completed and the
+    touched packages do not depend on that native module.
+  - `pnpm --filter @thinkwork/plugin-n8n test` passed.
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
+  - `pnpm --filter @thinkwork/deployment-runner test` passed.
+  - `pnpm --filter @thinkwork/deployment-runner typecheck` passed.
+  - `pnpm --filter @thinkwork/api test -- src/lib/plugins/handlers/infra.test.ts`
+    passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm lint:plugin-source` passed.
+  - `git diff --check` passed.
 
 ## Blockers
 
