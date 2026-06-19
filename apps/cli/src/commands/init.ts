@@ -613,6 +613,11 @@ variable "pre_signup_lambda_zip" {
   default = ""
 }
 
+variable "cognito_custom_auth_lambda_zip" {
+  type    = string
+  default = ""
+}
+
 variable "lambda_zips_dir" {
   type    = string
   default = ""
@@ -693,13 +698,14 @@ module "thinkwork" {
   agentcore_memory_id        = var.agentcore_memory_id
   google_oauth_client_id     = var.google_oauth_client_id
   google_oauth_client_secret = var.google_oauth_client_secret
-  pre_signup_lambda_zip      = var.pre_signup_lambda_zip
-  lambda_zips_dir            = var.lambda_zips_dir
-  api_auth_secret            = var.api_auth_secret
-  admin_callback_urls        = var.admin_callback_urls
-  admin_logout_urls          = var.admin_logout_urls
-  mobile_callback_urls       = var.mobile_callback_urls
-  mobile_logout_urls         = var.mobile_logout_urls
+  pre_signup_lambda_zip                = var.pre_signup_lambda_zip
+  cognito_custom_auth_lambda_zip = var.cognito_custom_auth_lambda_zip
+  lambda_zips_dir                      = var.lambda_zips_dir
+  api_auth_secret                      = var.api_auth_secret
+  admin_callback_urls                  = var.admin_callback_urls
+  admin_logout_urls                    = var.admin_logout_urls
+  mobile_callback_urls                 = var.mobile_callback_urls
+  mobile_logout_urls                   = var.mobile_logout_urls
 }
 
 output "api_endpoint" {

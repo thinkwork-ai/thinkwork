@@ -7,8 +7,9 @@
 ################################################################################
 
 locals {
-  create            = var.create_cognito
-  create_pre_signup = local.create && var.pre_signup_lambda_zip != ""
+  create             = var.create_cognito
+  create_pre_signup  = local.create && var.pre_signup_lambda_zip != ""
+  create_custom_auth = local.create && var.custom_auth_lambda_zip != ""
 
   user_pool_id     = local.create ? aws_cognito_user_pool.main[0].id : var.existing_user_pool_id
   user_pool_arn    = local.create ? aws_cognito_user_pool.main[0].arn : var.existing_user_pool_arn
@@ -91,6 +92,64 @@ resource "aws_lambda_permission" "cognito_pre_signup" {
 }
 
 ################################################################################
+# Custom Auth Challenge Lambda
+################################################################################
+
+resource "aws_iam_role" "custom_auth" {
+  count = local.create_custom_auth ? 1 : 0
+  name  = "thinkwork-${var.stage}-cognito-custom-auth-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "custom_auth_basic" {
+  count      = local.create_custom_auth ? 1 : 0
+  role       = aws_iam_role.custom_auth[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_lambda_function" "custom_auth" {
+  count         = local.create_custom_auth ? 1 : 0
+  function_name = "thinkwork-${var.stage}-cognito-custom-auth"
+  filename      = var.custom_auth_lambda_zip
+  handler       = "index.handler"
+  runtime       = "nodejs20.x"
+  timeout       = 10
+  role          = aws_iam_role.custom_auth[0].arn
+
+  environment {
+    variables = {
+      API_AUTH_SECRET = var.api_auth_secret
+    }
+  }
+
+  source_code_hash = filebase64sha256(var.custom_auth_lambda_zip)
+
+  lifecycle {
+    precondition {
+      condition     = var.api_auth_secret != ""
+      error_message = "custom_auth_lambda_zip requires api_auth_secret so Cognito custom-auth challenges can be verified."
+    }
+  }
+}
+
+resource "aws_lambda_permission" "cognito_custom_auth" {
+  count         = local.create_custom_auth ? 1 : 0
+  statement_id  = "AllowCognitoInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.custom_auth[0].function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main[0].arn
+}
+
+################################################################################
 # User Pool
 ################################################################################
 
@@ -159,9 +218,12 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   dynamic "lambda_config" {
-    for_each = local.create_pre_signup ? [1] : []
+    for_each = local.create_pre_signup || local.create_custom_auth ? [1] : []
     content {
-      pre_sign_up = aws_lambda_function.pre_signup[0].arn
+      pre_sign_up                    = local.create_pre_signup ? aws_lambda_function.pre_signup[0].arn : null
+      define_auth_challenge          = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
+      create_auth_challenge          = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
+      verify_auth_challenge_response = local.create_custom_auth ? aws_lambda_function.custom_auth[0].arn : null
     }
   }
 
@@ -285,6 +347,13 @@ resource "aws_cognito_user_pool_client" "admin" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
 
+  explicit_auth_flows = [
+    "ALLOW_CUSTOM_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_USER_SRP_AUTH",
+  ]
+
   supported_identity_providers = local.identity_providers
 
   callback_urls = distinct(concat(var.admin_callback_urls, var.desktop_callback_urls))
@@ -330,6 +399,7 @@ resource "aws_cognito_user_pool_client" "mobile" {
   user_pool_id = aws_cognito_user_pool.main[0].id
 
   explicit_auth_flows = [
+    "ALLOW_CUSTOM_AUTH",
     "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_USER_SRP_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH",

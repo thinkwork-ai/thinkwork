@@ -3,7 +3,7 @@ linear: THNK-43
 title: WorkOS primary auth with Cognito token bridge
 status: in-progress
 updated: 2026-06-19
-branch: codex/thnk-43-u2-workos-auth-endpoints
+branch: codex/thnk-43-u3-cognito-bridge
 ---
 
 # THNK-43 Autopilot Status
@@ -13,14 +13,12 @@ branch: codex/thnk-43-u2-workos-auth-endpoints
 - Dispatcher marker: `dispatcher:THNK-43:Implementation:Codex`
 - Pass type: Autopilot implementation of
   `docs/plans/2026-06-19-001-feat-workos-primary-auth-bridge-plan.md`.
-- Scope: U2 only, server-owned WorkOS auth endpoints and public/web routing
-  away from Cognito Hosted UI for WorkOS SSO.
-- Branch: `codex/thnk-43-u2-workos-auth-endpoints` from `origin/main`
-  `4daf4bcd5`.
-- PR: <https://github.com/thinkwork-ai/thinkwork/pull/2672>
-- CI: remote migration drift precheck initially failed because the new
-  hand-rolled migration was not yet applied to dev; `0174` is now applied to
-  dev and scoped drift verification is passing.
+- Scope: U3 only, Cognito custom-auth bridge for the server-owned WorkOS
+  callback.
+- Branch: `codex/thnk-43-u3-cognito-bridge` from `origin/main`
+  `53691e2d1`.
+- PR: pending.
+- CI: pending PR.
 
 ## Completed
 
@@ -33,6 +31,23 @@ branch: codex/thnk-43-u2-workos-auth-endpoints
   and typecheck.
 - Deleted the remote feature branch and removed the U1 worktree after merge.
 - Recorded PR-open and merged evidence in Linear.
+
+### U2 Server-owned WorkOS auth endpoints
+
+- Created and merged PR #2672:
+  <https://github.com/thinkwork-ai/thinkwork/pull/2672>.
+- Merge commit: `53691e2d1c80351bac09d52b4027513872cd3675`.
+- Required checks passed before merge: CLA, lint, Migration Drift Precheck
+  (dev), supply-chain verify, test, and typecheck.
+- Remote migration drift precheck initially failed because the new
+  hand-rolled `0174_workos_auth_bridges.sql` migration was not yet applied to
+  dev.
+- Applied only `packages/database-pg/drizzle/0174_workos_auth_bridges.sql` to
+  dev, then verified
+  `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0174_workos_auth_bridges.sql`
+  reported all declared objects present.
+- Squash-merged, deleted the remote feature branch, removed the U2 worktree,
+  and recorded PR-open and merged evidence in Linear.
 
 ### Prior hosted-bridge pass
 
@@ -119,9 +134,9 @@ merge/deploy pipeline. Forcing a live proof in U1 would require ad hoc Cognito
 trigger mutations outside the normal pipeline, which autopilot guardrails
 forbid.
 
-## U2 Current Implementation
+## U2 Completed Implementation
 
-U2 is replacing the unsafe nested Cognito Hosted UI first hop for WorkOS with
+U2 replaced the unsafe nested Cognito Hosted UI first hop for WorkOS with
 server-owned API endpoints:
 
 - Added a `workos_auth_bridges` table and migration to persist only hashed
@@ -165,8 +180,57 @@ Remote CI recovery:
   `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0174_workos_auth_bridges.sql`;
   all declared objects are now present.
 
+## U3 Current Implementation
+
+U3 is preserving the existing Cognito-token contract after direct WorkOS auth:
+
+- Add Cognito Define/Create/Verify auth challenge handlers backed by signed
+  short-lived WorkOS bridge challenges.
+- Add `POST /api/auth/workos/bridge` to consume a one-time WorkOS bridge code,
+  resolve an existing tenant user by verified WorkOS email, and complete
+  Cognito `CUSTOM_AUTH` server-side.
+- Update the web callback so a `workos_bridge` callback stores returned
+  Cognito tokens through the existing localStorage key layout.
+- Wire the custom-auth trigger Lambda, Lambda build artifact, app-client
+  `ALLOW_CUSTOM_AUTH`, API Gateway bridge route, and Cognito admin-auth IAM
+  actions through Terraform.
+
+Local verification:
+
+- `pnpm install --store-dir .pnpm-store`
+  - Initial plain `pnpm install` hit a broken global pnpm-store tarball entry
+    for `nth-check`; isolated store install succeeded.
+  - Node 25 caused the known optional `canvas` native build warning because
+    `pkg-config` is unavailable, but pnpm exited successfully.
+- `pnpm --dir packages/api test -- workos-cognito-bridge.test.ts workos-auth.test.ts`
+  - 20 tests passed across bridge logic, WorkOS auth library, and handler.
+- `pnpm --dir apps/web test -- src/lib/auth.test.ts src/routes/auth/callback.test.tsx`
+  - 12 tests passed, including callback coverage proving `workos_bridge`
+    stores returned Cognito tokens only after a successful server bridge
+    exchange.
+- `pnpm --dir packages/api typecheck`
+- `pnpm --dir apps/web typecheck`
+- `pnpm --dir apps/cli typecheck`
+- `pnpm --dir apps/cli test -- terraform-enterprise-artifact-fixture.test.ts terraform-cognito-identity-provider-fixture.test.ts no-required-options.test.ts`
+  - 10 tests passed across Terraform artifact, Cognito IdP, and init command
+    fixture coverage.
+- CI `test` initially failed on PR #2673 because
+  `packages/api/src/lib/workos-cognito-bridge.ts` read
+  `process.env.COGNITO_USER_POOL_ID` and `process.env.ADMIN_CLIENT_ID`
+  directly, violating the runtime-config fixture guardrail.
+- Recovery: switched those reads to `getConfig(...)` from
+  `@thinkwork/runtime-config`.
+- Recovery verification:
+  - `pnpm --dir apps/cli test -- terraform-runtime-config-fixture.test.ts`
+  - `pnpm --dir packages/api test -- workos-cognito-bridge.test.ts workos-auth.test.ts`
+  - `pnpm --dir packages/api typecheck`
+- `terraform fmt -check` on touched Terraform files.
+- `git diff --check`
+- `bash scripts/build-lambdas.sh cognito-custom-auth`
+- `bash scripts/build-lambdas.sh workos-auth`
+
 ## Next Action
 
-Finish U2 self-review, open the U2 PR, monitor/fix required CI, squash merge,
-delete the branch/worktree, sync `origin/main`, then continue automatically to
-U3: Cognito bridge challenge exchange.
+Finish U3 implementation, run targeted local verification, open the U3 PR,
+monitor/fix required CI, squash merge, delete the branch/worktree, sync
+`origin/main`, then continue automatically to U4: correct WorkOS logout.

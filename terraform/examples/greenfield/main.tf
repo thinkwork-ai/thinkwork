@@ -586,6 +586,12 @@ variable "pre_signup_lambda_zip" {
   default     = ""
 }
 
+variable "cognito_custom_auth_lambda_zip" {
+  description = "Path to the Cognito custom-auth challenge Lambda zip"
+  type        = string
+  default     = ""
+}
+
 variable "lambda_zips_dir" {
   description = "Local directory containing Lambda zip artifacts (from pnpm build:lambdas)"
   type        = string
@@ -1092,6 +1098,7 @@ module "thinkwork" {
   google_oauth_client_id                     = var.google_oauth_client_id
   google_oauth_client_secret                 = var.google_oauth_client_secret
   pre_signup_lambda_zip                      = var.pre_signup_lambda_zip
+  cognito_custom_auth_lambda_zip             = var.cognito_custom_auth_lambda_zip
   lambda_zips_dir                            = var.lambda_zips_dir
   lambda_artifact_bucket                     = var.lambda_artifact_bucket
   lambda_artifact_prefix                     = var.lambda_artifact_prefix
