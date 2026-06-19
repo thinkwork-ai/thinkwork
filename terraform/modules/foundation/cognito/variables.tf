@@ -170,6 +170,19 @@ variable "pre_signup_lambda_zip" {
   default     = ""
 }
 
+variable "custom_auth_lambda_zip" {
+  description = "Path to the Cognito custom-auth challenge Lambda zip file"
+  type        = string
+  default     = ""
+}
+
+variable "api_auth_secret" {
+  description = "Shared signing secret used by the custom-auth challenge Lambda"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # Callback URLs (configurable per deployment)
 # ---------------------------------------------------------------------------

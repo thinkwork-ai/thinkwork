@@ -1322,12 +1322,17 @@ jobs:
           if [ -f "$LAMBDA_DIR/cognito-pre-signup.zip" ]; then
             PRE_SIGNUP_ZIP="$LAMBDA_DIR/cognito-pre-signup.zip"
           fi
+          COGNITO_CUSTOM_AUTH_ZIP=""
+          if [ -f "$LAMBDA_DIR/cognito-custom-auth.zip" ]; then
+            COGNITO_CUSTOM_AUTH_ZIP="$LAMBDA_DIR/cognito-custom-auth.zip"
+          fi
           TF_TARGET_ARGS=()
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ needs.detect-changes.outputs.terraform }}" != "true" ]; then
             echo "No Terraform source changes detected; targeting API Lambda handlers and API IAM recovery resources."
             TF_TARGET_ARGS+=(
               -target=module.thinkwork.module.api.aws_iam_policy.api_data_plane
               -target=module.thinkwork.module.api.aws_lambda_function.handler
+              -target=module.thinkwork.module.cognito.aws_lambda_function.custom_auth
             )
           fi
           # -refresh=false skips ~30s of "Refreshing state…" against ~700
@@ -1385,6 +1390,7 @@ jobs:
             -var "google_oauth_client_secret=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
             -var "lambda_zips_dir=$LAMBDA_DIR" \
             -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP" \
+            -var "cognito_custom_auth_lambda_zip=$COGNITO_CUSTOM_AUTH_ZIP" \
             -var "platform_operator_emails=$THINKWORK_PLATFORM_OPERATOR_EMAILS" \
             -var "www_domain=${{ vars.WWW_DOMAIN }}" \
             -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \

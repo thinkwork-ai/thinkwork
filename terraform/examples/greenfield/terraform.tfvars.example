@@ -76,8 +76,9 @@ db_password = "CHANGE_ME_strong_password_here"
 # google_oauth_client_id     = ""
 # google_oauth_client_secret = ""
 
-# Pre-signup Lambda (optional — leave empty if not using custom pre-signup logic)
-# pre_signup_lambda_zip = "./lambdas/pre-signup.zip"
+# Cognito trigger Lambdas (optional — leave empty if not using custom auth logic)
+# pre_signup_lambda_zip           = "./lambdas/cognito-pre-signup.zip"
+# cognito_custom_auth_lambda_zip  = "./lambdas/cognito-custom-auth.zip"
 
 # Lambda artifacts:
 # - Source checkout deploys can set lambda_zips_dir after `pnpm build:lambdas`.

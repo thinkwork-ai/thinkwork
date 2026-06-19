@@ -715,6 +715,9 @@ importers:
       '@aws-sdk/client-codebuild':
         specifier: ^3.1043.0
         version: 3.1068.0
+      '@aws-sdk/client-cognito-identity-provider':
+        specifier: ^3.1010.0
+        version: 3.1028.0
       '@aws-sdk/client-dynamodb':
         specifier: ^3.1024.0
         version: 3.1037.0
@@ -854,9 +857,6 @@ importers:
       '@aws-sdk/client-bedrock-agentcore-control':
         specifier: ^3.917.0
         version: 3.1034.0
-      '@aws-sdk/client-cognito-identity-provider':
-        specifier: ^3.1010.0
-        version: 3.1028.0
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1023.0
         version: 3.1028.0

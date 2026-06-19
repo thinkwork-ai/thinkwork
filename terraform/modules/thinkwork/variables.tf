@@ -1231,6 +1231,12 @@ variable "pre_signup_lambda_zip" {
   default     = ""
 }
 
+variable "cognito_custom_auth_lambda_zip" {
+  description = "Path to the Cognito custom-auth challenge Lambda zip"
+  type        = string
+  default     = ""
+}
+
 # ---------------------------------------------------------------------------
 # Docs site (custom domain — optional)
 # ---------------------------------------------------------------------------

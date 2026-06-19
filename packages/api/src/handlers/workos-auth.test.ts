@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { createWorkosAuthHandler } from "./workos-auth.js";
 import { signWorkosAuthorizeState, type WorkosAuthDeps } from "../lib/workos-auth.js";
+import type { WorkosCognitoBridgeDeps } from "../lib/workos-cognito-bridge.js";
 
 describe("workos-auth handler", () => {
   it("redirects authorize requests to WorkOS", async () => {
-    const handler = createWorkosAuthHandler(depsForHandler());
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps: bridgeDepsForHandler(),
+    });
 
     const response = await handler(
       event({
@@ -37,7 +41,10 @@ describe("workos-auth handler", () => {
       },
       "state-secret",
     );
-    const handler = createWorkosAuthHandler(depsForHandler());
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps: bridgeDepsForHandler(),
+    });
 
     const response = await handler(
       event({
@@ -53,11 +60,59 @@ describe("workos-auth handler", () => {
   });
 
   it("fails closed for unsupported paths", async () => {
-    const handler = createWorkosAuthHandler(depsForHandler());
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps: bridgeDepsForHandler(),
+    });
 
     const response = await handler(event({ path: "/api/auth/workos/nope" }));
 
     expect(response.statusCode).toBe(404);
+  });
+
+  it("exchanges a WorkOS bridge code for Cognito tokens", async () => {
+    const bridgeDeps = bridgeDepsForHandler();
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps,
+    });
+
+    const response = await handler(
+      event({
+        path: "/api/auth/workos/bridge",
+        method: "POST",
+        body: { bridge_code: "browser-bridge-code" },
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body ?? "{}")).toEqual({
+      id_token: "id-token",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+    expect(bridgeDeps.consumePendingBridge).toHaveBeenCalled();
+    expect(bridgeDeps.startCognitoCustomAuth).toHaveBeenCalled();
+  });
+
+  it("fails closed when a bridge POST has invalid JSON", async () => {
+    const handler = createWorkosAuthHandler({
+      workosAuthDeps: depsForHandler(),
+      bridgeDeps: bridgeDepsForHandler(),
+    });
+
+    const response = await handler(
+      event({
+        path: "/api/auth/workos/bridge",
+        method: "POST",
+        rawBody: "{not-json",
+      }),
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body ?? "{}")).toEqual({
+      error: "WorkOS authentication failed",
+    });
   });
 });
 
@@ -95,10 +150,42 @@ function depsForHandler(): WorkosAuthDeps {
   };
 }
 
+function bridgeDepsForHandler(): WorkosCognitoBridgeDeps {
+  return {
+    consumePendingBridge: vi.fn(async () => ({
+      id: "bridge-row-123",
+      tenantId: "tenant-123",
+      tenantReferenceId: "tenant-ref-123",
+      authProviderResourceId: "resource-123",
+      workosUserId: "workos-user-123",
+      workosSessionId: "workos-session-123",
+      workosEmail: "eric@homecareintel.com",
+      workosEmailVerified: true,
+      returnTo: "/new",
+    })),
+    resolveBridgeUser: vi.fn(async () => ({
+      id: "user-123",
+      tenantId: "tenant-123",
+      email: "eric@homecareintel.com",
+      name: "Eric",
+    })),
+    startCognitoCustomAuth: vi.fn(async () => ({
+      id_token: "id-token",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    })),
+    signingSecret: () => "api-secret",
+    now: () => new Date("2026-06-19T11:00:00Z"),
+    randomToken: () => "answer-token",
+  };
+}
+
 function event(args: {
   path: string;
   method?: string;
   query?: Record<string, string>;
+  body?: Record<string, unknown>;
+  rawBody?: string;
 }): APIGatewayProxyEventV2 {
   return {
     version: "2.0",
@@ -106,6 +193,7 @@ function event(args: {
     rawPath: args.path,
     rawQueryString: "",
     queryStringParameters: args.query,
+    body: args.rawBody ?? (args.body ? JSON.stringify(args.body) : undefined),
     headers: {},
     requestContext: {
       accountId: "123",

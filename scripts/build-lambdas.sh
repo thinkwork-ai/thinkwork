@@ -125,8 +125,14 @@ build_handler "graphql-http" \
 build_handler "cognito-pre-signup" \
   "$REPO_ROOT/packages/api/src/handlers/cognito-pre-signup.ts"
 
+build_handler "cognito-custom-auth" \
+  "$REPO_ROOT/packages/api/src/handlers/cognito-custom-auth.ts"
+
 build_handler "public-auth-options" \
   "$REPO_ROOT/packages/api/src/handlers/public-auth-options.ts"
+
+build_handler "workos-auth" \
+  "$REPO_ROOT/packages/api/src/handlers/workos-auth.ts"
 
 # ---------------------------------------------------------------------------
 # P1: Agent invoke + thread management

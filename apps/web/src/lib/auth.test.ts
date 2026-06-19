@@ -301,6 +301,42 @@ describe("Cognito token storage", () => {
   });
 });
 
+describe("exchangeWorkosBridgeForSession", () => {
+  it("posts the one-time WorkOS bridge code to the API and validates Cognito tokens", async () => {
+    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id_token: "id-token",
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const { exchangeWorkosBridgeForSession } = await import("./auth");
+
+    await expect(
+      exchangeWorkosBridgeForSession("browser-bridge-code"),
+    ).resolves.toEqual({
+      id_token: "id-token",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.com/api/auth/workos/bridge",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ bridge_code: "browser-bridge-code" }),
+      },
+    );
+  });
+});
+
 function createMemoryStorage(): Storage {
   const values = new Map<string, string>();
 

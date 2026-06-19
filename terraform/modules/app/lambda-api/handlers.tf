@@ -890,6 +890,8 @@ locals {
       "OPTIONS /api/auth/workos/authorize" = "workos-auth"
       "GET /api/auth/workos/callback"      = "workos-auth"
       "OPTIONS /api/auth/workos/callback"  = "workos-auth"
+      "POST /api/auth/workos/bridge"       = "workos-auth"
+      "OPTIONS /api/auth/workos/bridge"    = "workos-auth"
 
       # Agents
       "ANY /api/agents/{proxy+}" = "agents"

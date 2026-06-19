@@ -542,6 +542,35 @@ export async function exchangeCodeForSession(
   };
 }
 
+export async function exchangeWorkosBridgeForSession(
+  bridgeCode: string,
+): Promise<OAuthTokens> {
+  const res = await fetch(`${apiBaseUrl()}/api/auth/workos/bridge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ bridge_code: bridgeCode }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`WorkOS bridge exchange failed: ${text}`);
+  }
+
+  const raw = (await res.json()) as Record<string, unknown>;
+  if (
+    typeof raw.id_token !== "string" ||
+    typeof raw.access_token !== "string" ||
+    typeof raw.refresh_token !== "string"
+  ) {
+    throw new Error("WorkOS bridge returned an unexpected response shape");
+  }
+  return {
+    id_token: raw.id_token,
+    access_token: raw.access_token,
+    refresh_token: raw.refresh_token,
+  };
+}
+
 export function storeTokensInCognitoStorage(tokens: OAuthTokens): void {
   // Decode the id token to extract the username (sub claim)
   const payload = JSON.parse(atob(tokens.id_token.split(".")[1]));

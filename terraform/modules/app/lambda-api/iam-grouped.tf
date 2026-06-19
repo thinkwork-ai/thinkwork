@@ -132,6 +132,8 @@ locals {
         Action = [
           "cognito-idp:AdminCreateUser",
           "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminInitiateAuth",
+          "cognito-idp:AdminRespondToAuthChallenge",
           "cognito-idp:AdminSetUserPassword",
           "cognito-idp:AdminUpdateUserAttributes",
           "cognito-idp:ListUsers",

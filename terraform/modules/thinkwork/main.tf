@@ -634,6 +634,8 @@ module "cognito" {
   oidc_identity_providers    = var.oidc_identity_providers
   saml_identity_providers    = var.saml_identity_providers
   pre_signup_lambda_zip      = var.pre_signup_lambda_zip
+  custom_auth_lambda_zip     = var.cognito_custom_auth_lambda_zip
+  api_auth_secret            = var.api_auth_secret
   email_source_arn           = var.cognito_email_source_arn
   from_email_address         = var.cognito_from_email_address
   reply_to_email_address     = var.cognito_reply_to_email_address

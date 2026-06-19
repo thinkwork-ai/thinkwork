@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   consumePostAuthRedirect,
   exchangeCodeForSession,
+  exchangeWorkosBridgeForSession,
   storeTokensInCognitoStorage,
   getGoogleSignInUrl,
 } from "@/lib/auth";
@@ -11,13 +12,21 @@ export const Route = createFileRoute("/auth/callback")({
   component: AuthCallback,
   validateSearch: (search: Record<string, unknown>) => ({
     code: (search.code as string) || "",
+    workos_bridge: (search.workos_bridge as string) || "",
+    next: (search.next as string) || "",
     error: (search.error as string) || "",
     error_description: (search.error_description as string) || "",
   }),
 });
 
-function AuthCallback() {
-  const { code, error: oauthError, error_description } = Route.useSearch();
+export function AuthCallback() {
+  const {
+    code,
+    workos_bridge,
+    next,
+    error: oauthError,
+    error_description,
+  } = Route.useSearch();
   const [error, setError] = useState<string | null>(null);
   const exchanged = useRef(false);
 
@@ -39,7 +48,7 @@ function AuthCallback() {
       return;
     }
 
-    if (!code) {
+    if (!code && !workos_bridge) {
       setError("No authorization code received.");
       return;
     }
@@ -48,23 +57,27 @@ function AuthCallback() {
     if (exchanged.current) return;
     exchanged.current = true;
 
-    exchangeCodeForSession(code)
+    const exchange = workos_bridge
+      ? exchangeWorkosBridgeForSession(workos_bridge)
+      : exchangeCodeForSession(code);
+
+    exchange
       .then((tokens) => {
         storeTokensInCognitoStorage(tokens);
-        const next = consumePostAuthRedirect();
+        const nextTarget = consumePostAuthRedirect(safeCallbackNext(next));
         // If opened as popup, notify parent and close
         if (window.opener) {
-          window.opener.location.href = next;
+          window.opener.location.href = nextTarget;
           window.close();
           return;
         }
         // Full reload so AuthProvider picks up the new session from localStorage
-        window.location.href = next;
+        window.location.href = nextTarget;
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "OAuth callback failed");
       });
-  }, [code, error_description, oauthError]);
+  }, [code, error_description, next, oauthError, workos_bridge]);
 
   if (error) {
     const isLinking = error.includes("linking") || error.includes("try again");
@@ -96,4 +109,14 @@ function AuthCallback() {
       <p className="text-sm text-muted-foreground">Signing you in...</p>
     </div>
   );
+}
+
+function safeCallbackNext(value: string): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/new";
+  try {
+    const url = new URL(value, window.location.origin);
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return "/new";
+  }
 }
