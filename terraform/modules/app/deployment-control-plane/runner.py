@@ -651,26 +651,71 @@ def terraform_workspace_name(stage, payload):
 
 def refresh_outputs_after_targeted_apply(payload):
     if not is_managed_app_operation(payload):
-        return True
+        return {"status": "skipped", "reason": "not-managed-app"}
     print("[runner] refreshing Terraform outputs after targeted managed-app apply")
+    command = [
+        "terraform",
+        "apply",
+        "-refresh-only",
+        "-auto-approve",
+        "-no-color",
+    ]
     try:
-        run(
-            [
-                "terraform",
-                "apply",
-                "-refresh-only",
-                "-auto-approve",
-                "-no-color",
-            ],
-            cwd=TF,
-        )
-        return True
-    except subprocess.CalledProcessError as exc:
+        run(command, cwd=TF)
+    except subprocess.CalledProcessError as error:
+        detail = {
+            "status": "failed",
+            "command": [str(part) for part in command],
+            "exitCode": error.returncode,
+            "nonFatal": True,
+        }
+        TERRAFORM_EVIDENCE["outputRefresh"] = detail
         print(
-            "[runner] managed-app apply succeeded, but the optional root "
-            f"output refresh failed; continuing: {exc}"
+            "[runner] managed-app output refresh failed after targeted apply "
+            f"(non-fatal): {error}"
         )
-        return False
+        return detail
+    detail = {"status": "succeeded", "command": [str(part) for part in command]}
+    TERRAFORM_EVIDENCE["outputRefresh"] = detail
+    return detail
+
+
+def write_outputs_after_apply(payload, vars_json, outputs_path):
+    refresh_outputs_after_targeted_apply(payload)
+    try:
+        outputs_path.write_text(output(["terraform", "output", "-json"], cwd=TF), encoding="utf-8")
+        source = "terraform-output"
+    except Exception as error:
+        if not is_managed_app_operation(payload):
+            raise
+        outputs = current_terraform_outputs(str(vars_json.get("stage") or ""))
+        if not outputs:
+            TERRAFORM_EVIDENCE["outputs"] = {
+                "status": "unavailable",
+                "source": "state",
+                "error": str(error),
+            }
+            print(
+                "[runner] managed-app Terraform outputs unavailable after targeted apply "
+                f"(non-fatal): {error}"
+            )
+            return
+        outputs_path.write_text(
+            json.dumps(outputs, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        TERRAFORM_EVIDENCE["outputReadFallback"] = {
+            "status": "succeeded",
+            "source": "state",
+            "reason": str(error),
+        }
+        source = "state"
+    TERRAFORM_EVIDENCE["outputs"] = {
+        "fileName": "terraform-outputs.json",
+        "sha256": sha256_file(outputs_path),
+        "s3Uri": upload_evidence_artifact(outputs_path, "terraform-outputs.json"),
+        "source": source,
+    }
 
 
 def is_managed_app_operation(payload):
@@ -4572,13 +4617,7 @@ def main():
 
     outputs_path = TF / "outputs.json"
     if result.returncode == 0 and action in {"deploy", "update"}:
-        refresh_outputs_after_targeted_apply(payload)
-        outputs_path.write_text(output(["terraform", "output", "-json"], cwd=TF), encoding="utf-8")
-        TERRAFORM_EVIDENCE["outputs"] = {
-            "fileName": "terraform-outputs.json",
-            "sha256": sha256_file(outputs_path),
-            "s3Uri": upload_evidence_artifact(outputs_path, "terraform-outputs.json"),
-        }
+        write_outputs_after_apply(payload, vars_json, outputs_path)
         if not is_managed_app_operation(payload):
             push_database_schema(outputs_path, vars_json)
             ensure_first_admin(outputs_path, vars_json, payload, runner_secrets)
