@@ -959,6 +959,39 @@ def test_write_runner_files_threads_cognito_email_vars_from_payload(
         assert f"= var.{name}" in main_tf
 
 
+def test_write_runner_files_repins_stale_thinkwork_git_module_source_to_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setenv(
+        "THINKWORK_TERRAFORM_MODULE_SOURCE",
+        "git::https://github.com/thinkwork-ai/thinkwork.git"
+        "//terraform/modules/thinkwork?ref=c66a3aa7f3a5606c66b920b40b39af57a7cc06d0",
+    )
+    monkeypatch.setenv("THINKWORK_TERRAFORM_MODULE_VERSION", "0.1.0-canary.150")
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {},
+    )
+
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+
+    assert "ref=abc123" in main_tf
+    assert "ref=c66a3aa7f3a5606c66b920b40b39af57a7cc06d0" not in main_tf
+    assert vars_json["deployment_terraform_module_source"].endswith(
+        "//terraform/modules/thinkwork?ref=abc123"
+    )
+    assert vars_json["deployment_terraform_module_version"] == ""
+
+
 def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -179,6 +179,7 @@ export function PluginDetail() {
       : pluginKey === "email-channel"
         ? "resend"
         : null;
+  const uninstalling = install?.state === "uninstalling";
 
   // Mutations don't invalidate urql's document cache — refetch every affected
   // query explicitly after each one.
@@ -734,11 +735,14 @@ export function PluginDetail() {
             <Button
               type="button"
               variant="destructive"
-              disabled={install.state === "uninstalling"}
               onClick={() => setUninstallOpen(true)}
             >
-              <Trash2 className="mr-2 size-4" />
-              Uninstall plugin
+              {uninstalling ? (
+                <RotateCw className="mr-2 size-4" />
+              ) : (
+                <Trash2 className="mr-2 size-4" />
+              )}
+              {uninstalling ? "Retry uninstall" : "Uninstall plugin"}
             </Button>
           </div>
         ) : null}

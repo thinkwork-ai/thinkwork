@@ -2104,6 +2104,36 @@ def terraform_module_source_and_version(module_source, module_version, release_v
     return module_source, module_version
 
 
+def is_pinned_thinkwork_module_source(module_source):
+    source = module_source.removeprefix("git::")
+    source_path, _, _query = source.partition("?")
+    return source_path in {
+        "https://github.com/thinkwork-ai/thinkwork.git//terraform/modules/thinkwork",
+        "https://github.com/thinkwork-ai/thinkwork//terraform/modules/thinkwork",
+        "github.com/thinkwork-ai/thinkwork.git//terraform/modules/thinkwork",
+        "github.com/thinkwork-ai/thinkwork//terraform/modules/thinkwork",
+    }
+
+
+def selected_module_source_inputs(payload, release_version):
+    payload_module_source = safe_get(payload, "terraformModuleSource", default="")
+    if payload_module_source:
+        return (
+            payload_module_source,
+            safe_get(payload, "terraformModuleVersion", default=""),
+        )
+
+    module_source = os.environ["THINKWORK_TERRAFORM_MODULE_SOURCE"]
+    module_version = os.environ.get("THINKWORK_TERRAFORM_MODULE_VERSION", "")
+    if is_pinned_thinkwork_module_source(module_source):
+        # Existing controllers may have persisted a concrete git ref for the
+        # module source. Managed-app payloads still generate the wrapper from
+        # the selected release, so the child module must follow that release
+        # too or new app arguments fail Terraform config loading immediately.
+        return "thinkwork-ai/thinkwork/aws", release_version.removeprefix("v")
+    return module_source, module_version
+
+
 def checkout_source(module_source, release_version):
     if SOURCE.exists():
         return
@@ -2909,15 +2939,9 @@ def write_runner_files(payload, runner_secrets):
         separators=(",", ":"),
         sort_keys=True,
     )
-    module_source = safe_get(
+    module_source, module_version = selected_module_source_inputs(
         payload,
-        "terraformModuleSource",
-        default=os.environ["THINKWORK_TERRAFORM_MODULE_SOURCE"],
-    )
-    module_version = safe_get(
-        payload,
-        "terraformModuleVersion",
-        default=os.environ.get("THINKWORK_TERRAFORM_MODULE_VERSION", ""),
+        release_version,
     )
     terraform_module_source, terraform_module_version = terraform_module_source_and_version(
         module_source,
@@ -3065,7 +3089,7 @@ def write_runner_files(payload, runner_secrets):
             "",
         ),
         "deployment_evidence_bucket": os.environ.get("THINKWORK_EVIDENCE_BUCKET", ""),
-        "deployment_terraform_module_source": module_source,
+        "deployment_terraform_module_source": terraform_module_source,
         "deployment_terraform_module_version": terraform_module_version,
         "agentcore_pi_source_image_uri": safe_get(
             payload,
