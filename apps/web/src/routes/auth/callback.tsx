@@ -50,8 +50,8 @@ function AuthCallback() {
     exchanged.current = true;
 
     exchangeCodeForSession(code)
-      .then((tokens) => {
-        assertNotStaleWorkosOAuthSession(tokens);
+      .then(async (tokens) => {
+        await assertNotStaleWorkosOAuthSession(tokens);
         storeTokensInCognitoStorage(tokens);
         const next = consumePostAuthRedirect();
         // If opened as popup, notify parent and close

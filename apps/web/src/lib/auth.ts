@@ -214,12 +214,15 @@ function redirectToCognitoLogout(): void {
 }
 
 async function revokeWorkosSessionsBeforeLogout(): Promise<void> {
-  const apiBase = getApiBaseUrl();
-  if (!apiBase) return;
-
   const token = await getIdToken();
   if (!token) return;
   rememberWorkosLogoutMarker(token);
+  await revokeWorkosAccessWithToken(token);
+}
+
+async function revokeWorkosAccessWithToken(token: string): Promise<void> {
+  const apiBase = getApiBaseUrl();
+  if (!apiBase) return;
 
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 3_000);
@@ -591,7 +594,9 @@ interface OAuthTokens {
   refresh_token: string;
 }
 
-export function assertNotStaleWorkosOAuthSession(tokens: OAuthTokens): void {
+export async function assertNotStaleWorkosOAuthSession(
+  tokens: OAuthTokens,
+): Promise<void> {
   const marker = readWorkosLogoutMarker();
   if (!marker) return;
 
@@ -604,6 +609,7 @@ export function assertNotStaleWorkosOAuthSession(tokens: OAuthTokens): void {
     marker.userId === workosIdentity.userId ||
     (marker.email && email && marker.email.toLowerCase() === email.toLowerCase())
   ) {
+    await revokeWorkosAccessWithToken(tokens.id_token);
     throw new Error(
       "WorkOS is still signed in as the account that just logged out. Sign out of WorkOS or use a different browser profile before using SSO again.",
     );

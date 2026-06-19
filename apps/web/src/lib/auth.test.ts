@@ -42,6 +42,7 @@ afterEach(() => {
     value: ORIGINAL_LOCATION,
   });
   window.localStorage.clear();
+  window.sessionStorage.clear();
   if (ORIGINAL_LOCAL_STORAGE) {
     Object.defineProperty(window, "localStorage", ORIGINAL_LOCAL_STORAGE);
   }
@@ -191,10 +192,10 @@ describe("signOut", () => {
       `${prefix}.workos-user.idToken`,
       signedOutIdToken,
     );
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("{}", { status: 200 })),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
 
     const { assertNotStaleWorkosOAuthSession, signOut } =
       await import("./auth");
@@ -202,8 +203,68 @@ describe("signOut", () => {
     signOut();
     await flushAsyncLogout();
 
-    expect(() =>
+    const staleIdToken = makeIdToken({
+      email: "eric@homecareintel.com",
+      identities: [
+        {
+          providerName: "WorkOSAuth",
+          providerType: "OIDC",
+          userId: "user_01KVDYR6GCPSJ1MP6YAG1G5YE0",
+        },
+      ],
+    });
+
+    await expect(
       assertNotStaleWorkosOAuthSession({
+        id_token: staleIdToken,
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      }),
+    ).rejects.toThrow(/still signed in/);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "https://api.example.com/api/auth/workos/logout",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${staleIdToken}`,
+        },
+      }),
+    );
+  });
+
+  it("keeps revoking WorkOS access when repeated stale callbacks recreate the app grant", async () => {
+    const signedOutIdToken = makeIdToken({
+      email: "eric@homecareintel.com",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      identities: [
+        {
+          providerName: "WorkOSAuth",
+          providerType: "OIDC",
+          userId: "user_01KVDYR6GCPSJ1MP6YAG1G5YE0",
+        },
+      ],
+      sub: "user-sub",
+      "cognito:username": "workos-user",
+    });
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, "workos-user");
+    window.localStorage.setItem(
+      `${prefix}.workos-user.idToken`,
+      signedOutIdToken,
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { assertNotStaleWorkosOAuthSession, signOut } =
+      await import("./auth");
+    stubLocation("https://app.example");
+    signOut();
+    await flushAsyncLogout();
+
+    const staleTokens = {
         id_token: makeIdToken({
           email: "eric@homecareintel.com",
           identities: [
@@ -216,8 +277,15 @@ describe("signOut", () => {
         }),
         access_token: "access-token",
         refresh_token: "refresh-token",
-      }),
-    ).toThrow(/still signed in/);
+      };
+
+    await expect(
+      assertNotStaleWorkosOAuthSession(staleTokens),
+    ).rejects.toThrow(/still signed in/);
+    await expect(
+      assertNotStaleWorkosOAuthSession(staleTokens),
+    ).rejects.toThrow(/still signed in/);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("allows a WorkOS callback for a different user after logout", async () => {
@@ -251,7 +319,7 @@ describe("signOut", () => {
     signOut();
     await flushAsyncLogout();
 
-    expect(() =>
+    await expect(
       assertNotStaleWorkosOAuthSession({
         id_token: makeIdToken({
           email: "other@example.com",
@@ -266,7 +334,7 @@ describe("signOut", () => {
         access_token: "access-token",
         refresh_token: "refresh-token",
       }),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 });
 
