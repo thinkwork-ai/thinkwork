@@ -111,6 +111,12 @@ variable "workos_api_key_secret_arn" {
   default     = ""
 }
 
+variable "workos_connect_application_id" {
+  description = "Optional WorkOS Connect application id whose per-user authorization is deleted during WorkOS logout to force fresh authorization on next SSO."
+  type        = string
+  default     = ""
+}
+
 variable "appsync_api_url" {
   description = "AppSync subscriptions endpoint URL"
   type        = string

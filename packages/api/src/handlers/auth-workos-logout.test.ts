@@ -128,7 +128,10 @@ describe("auth-workos-logout handler", () => {
 
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body as string)).toEqual({
-      revoked: 2,
+      revoked: {
+        revokedAuthorizedApplications: 0,
+        revokedSessions: 2,
+      },
       workosUserId: "user_01KVDYR6GCPSJ1MP6YAG1G5YE0",
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -218,6 +221,79 @@ describe("auth-workos-logout handler", () => {
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(
       "Bearer sk_secret_value",
     );
+  });
+
+  it("deletes the configured WorkOS Connect application authorization", async () => {
+    vi.stubEnv("WORKOS_API_KEY", "sk_test_workos");
+    vi.stubEnv(
+      "WORKOS_CONNECT_APPLICATION_ID",
+      "connect_app_01KVENEBCBASBQ5PGV6W5BPFVB",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: [], list_metadata: {} }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await handler(
+      event(
+        makeJwt({
+          identities: [
+            {
+              providerName: "WorkOSAuth",
+              providerType: "OIDC",
+              userId: "user_abc",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body as string)).toEqual({
+      revoked: {
+        revokedAuthorizedApplications: 1,
+        revokedSessions: 0,
+      },
+      workosUserId: "user_abc",
+    });
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      "https://api.workos.com/user_management/users/user_abc/authorized_applications/connect_app_01KVENEBCBASBQ5PGV6W5BPFVB",
+    );
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "DELETE" });
+  });
+
+  it("treats a missing WorkOS Connect application authorization as already logged out", async () => {
+    vi.stubEnv("WORKOS_API_KEY", "sk_test_workos");
+    vi.stubEnv(
+      "WORKOS_CONNECT_APPLICATION_ID",
+      "connect_app_01KVENEBCBASBQ5PGV6W5BPFVB",
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: [], list_metadata: {} }))
+      .mockResolvedValueOnce(jsonResponse({ code: "entity_not_found" }, 404));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await handler(
+      event(
+        makeJwt({
+          identities: [
+            {
+              providerName: "WorkOSAuth",
+              providerType: "OIDC",
+              userId: "user_abc",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body as string).revoked).toEqual({
+      revokedAuthorizedApplications: 0,
+      revokedSessions: 0,
+    });
   });
 
   it("requires Cognito authentication", async () => {

@@ -907,6 +907,7 @@ module "api" {
 
   plugin_catalog_github_token_secret_arn = var.plugin_catalog_github_token_secret_arn
   workos_api_key_secret_arn              = var.workos_api_key_secret_arn
+  workos_connect_application_id          = var.workos_connect_application_id
 
   brain_artifacts_kms_key_arn = module.kms.key_arn
 

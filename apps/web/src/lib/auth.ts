@@ -16,6 +16,7 @@ import type { PublicOAuthOption } from "./auth-options";
 let _userPool: CognitoUserPool | null = null;
 let tokenStorage: TokenStorage = new LocalStorageTokenStorage();
 const TOKEN_REFRESH_SKEW_MS = 30_000;
+const WORKOS_LOGOUT_MARKER_KEY = "thinkwork:workos-logout-marker";
 
 export function configureTokenStorage(storage: TokenStorage): void {
   if (tokenStorage === storage) return;
@@ -218,6 +219,7 @@ async function revokeWorkosSessionsBeforeLogout(): Promise<void> {
 
   const token = await getIdToken();
   if (!token) return;
+  rememberWorkosLogoutMarker(token);
 
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 3_000);
@@ -302,6 +304,77 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+interface WorkosLogoutMarker {
+  email: string | null;
+  userId: string;
+}
+
+function rememberWorkosLogoutMarker(idToken: string): void {
+  const payload = decodeJwtPayload(idToken);
+  if (!payload) return;
+  const workosIdentity = findWorkosIdentity(payload);
+  if (!workosIdentity) return;
+
+  sessionStorage.setItem(
+    WORKOS_LOGOUT_MARKER_KEY,
+    JSON.stringify({
+      email: typeof payload.email === "string" ? payload.email : null,
+      userId: workosIdentity.userId,
+    } satisfies WorkosLogoutMarker),
+  );
+}
+
+function readWorkosLogoutMarker(): WorkosLogoutMarker | null {
+  const raw = sessionStorage.getItem(WORKOS_LOGOUT_MARKER_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<WorkosLogoutMarker>;
+    if (typeof parsed.userId !== "string" || !parsed.userId.startsWith("user_")) {
+      return null;
+    }
+    return {
+      email: typeof parsed.email === "string" ? parsed.email : null,
+      userId: parsed.userId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function findWorkosIdentity(
+  claims: Record<string, unknown>,
+): { userId: string } | null {
+  const identities = parseIdentities(claims.identities);
+  const namedWorkos = identities.find((identity) =>
+    String(identity.providerName ?? "").toLowerCase().includes("workos"),
+  );
+  const fallbackOidc = identities.find(
+    (identity) =>
+      identity.providerType === "OIDC" &&
+      typeof identity.userId === "string" &&
+      identity.userId.startsWith("user_"),
+  );
+  const userId = namedWorkos?.userId ?? fallbackOidc?.userId;
+  return typeof userId === "string" && userId.startsWith("user_")
+    ? { userId }
+    : null;
+}
+
+function parseIdentities(raw: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(raw)) return raw.filter(isObject);
+  if (typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter(isObject) : [];
+  } catch {
+    return [];
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function isExpiredJwt(token: string): boolean {
@@ -516,6 +589,27 @@ interface OAuthTokens {
   id_token: string;
   access_token: string;
   refresh_token: string;
+}
+
+export function assertNotStaleWorkosOAuthSession(tokens: OAuthTokens): void {
+  const marker = readWorkosLogoutMarker();
+  if (!marker) return;
+
+  const payload = decodeJwtPayload(tokens.id_token);
+  const workosIdentity = payload ? findWorkosIdentity(payload) : null;
+  if (!payload || !workosIdentity) return;
+
+  const email = typeof payload.email === "string" ? payload.email : null;
+  if (
+    marker.userId === workosIdentity.userId ||
+    (marker.email && email && marker.email.toLowerCase() === email.toLowerCase())
+  ) {
+    throw new Error(
+      "WorkOS is still signed in as the account that just logged out. Sign out of WorkOS or use a different browser profile before using SSO again.",
+    );
+  }
+
+  sessionStorage.removeItem(WORKOS_LOGOUT_MARKER_KEY);
 }
 
 export async function exchangeCodeForSession(

@@ -170,6 +170,104 @@ describe("signOut", () => {
     expect(navigations).toHaveLength(1);
     expect(new URL(navigations[0]).pathname).toBe("/logout");
   });
+
+  it("rejects a stale WorkOS callback for the same user after logout", async () => {
+    const signedOutIdToken = makeIdToken({
+      email: "eric@homecareintel.com",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      identities: [
+        {
+          providerName: "WorkOSAuth",
+          providerType: "OIDC",
+          userId: "user_01KVDYR6GCPSJ1MP6YAG1G5YE0",
+        },
+      ],
+      sub: "user-sub",
+      "cognito:username": "workos-user",
+    });
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, "workos-user");
+    window.localStorage.setItem(
+      `${prefix}.workos-user.idToken`,
+      signedOutIdToken,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("{}", { status: 200 })),
+    );
+
+    const { assertNotStaleWorkosOAuthSession, signOut } =
+      await import("./auth");
+    stubLocation("https://app.example");
+    signOut();
+    await flushAsyncLogout();
+
+    expect(() =>
+      assertNotStaleWorkosOAuthSession({
+        id_token: makeIdToken({
+          email: "eric@homecareintel.com",
+          identities: [
+            {
+              providerName: "WorkOSAuth",
+              providerType: "OIDC",
+              userId: "user_01KVDYR6GCPSJ1MP6YAG1G5YE0",
+            },
+          ],
+        }),
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      }),
+    ).toThrow(/still signed in/);
+  });
+
+  it("allows a WorkOS callback for a different user after logout", async () => {
+    const signedOutIdToken = makeIdToken({
+      email: "eric@homecareintel.com",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      identities: [
+        {
+          providerName: "WorkOSAuth",
+          providerType: "OIDC",
+          userId: "user_old",
+        },
+      ],
+      sub: "user-sub",
+      "cognito:username": "workos-user",
+    });
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    window.localStorage.setItem(`${prefix}.LastAuthUser`, "workos-user");
+    window.localStorage.setItem(
+      `${prefix}.workos-user.idToken`,
+      signedOutIdToken,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("{}", { status: 200 })),
+    );
+
+    const { assertNotStaleWorkosOAuthSession, signOut } =
+      await import("./auth");
+    stubLocation("https://app.example");
+    signOut();
+    await flushAsyncLogout();
+
+    expect(() =>
+      assertNotStaleWorkosOAuthSession({
+        id_token: makeIdToken({
+          email: "other@example.com",
+          identities: [
+            {
+              providerName: "WorkOSAuth",
+              providerType: "OIDC",
+              userId: "user_new",
+            },
+          ],
+        }),
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      }),
+    ).not.toThrow();
+  });
 });
 
 describe("post-auth redirects", () => {

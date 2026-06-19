@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   consumePostAuthRedirect,
   exchangeCodeForSession,
+  assertNotStaleWorkosOAuthSession,
   storeTokensInCognitoStorage,
   getGoogleSignInUrl,
 } from "@/lib/auth";
@@ -50,6 +51,7 @@ function AuthCallback() {
 
     exchangeCodeForSession(code)
       .then((tokens) => {
+        assertNotStaleWorkosOAuthSession(tokens);
         storeTokensInCognitoStorage(tokens);
         const next = consumePostAuthRedirect();
         // If opened as popup, notify parent and close

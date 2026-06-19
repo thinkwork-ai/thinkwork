@@ -11,6 +11,7 @@ import { authenticate } from "../lib/cognito-auth.js";
 import { error, handleCors, json, unauthorized } from "../lib/response.js";
 
 const WORKOS_API_BASE_URL = "https://api.workos.com";
+const WORKOS_NOT_FOUND = "workos_not_found";
 
 interface CognitoIdentity {
   providerName?: unknown;
@@ -21,6 +22,11 @@ interface CognitoIdentity {
 interface WorkosListSessionsResponse {
   data?: Array<{ id?: unknown; status?: unknown }>;
   list_metadata?: { after?: unknown };
+}
+
+interface WorkosLogoutResult {
+  revokedSessions: number;
+  revokedAuthorizedApplications: number;
 }
 
 let cachedApiKey: string | null = null;
@@ -55,8 +61,12 @@ export async function handler(
   const payload = token ? decodeJwtPayload(token) : null;
   const workosUserId = payload ? findWorkosUserId(payload) : null;
   if (!workosUserId) {
+    console.log("[auth-workos-logout] No WorkOS identity in Cognito token");
     return json({ revoked: 0, reason: "no_workos_identity" });
   }
+  console.log("[auth-workos-logout] Revoking WorkOS access", {
+    workosUserId,
+  });
 
   let apiKey: string;
   try {
@@ -69,10 +79,14 @@ export async function handler(
   }
 
   try {
-    const revoked = await revokeActiveWorkosSessions(workosUserId, apiKey);
+    const revoked = await revokeWorkosAccess(workosUserId, apiKey);
+    console.log("[auth-workos-logout] Revoked WorkOS access", {
+      workosUserId,
+      ...revoked,
+    });
     return json({ revoked, workosUserId });
   } catch (err) {
-    console.error("[auth-workos-logout] WorkOS session revocation failed", {
+    console.error("[auth-workos-logout] WorkOS access revocation failed", {
       workosUserId,
       message: (err as Error).message,
     });
@@ -189,11 +203,26 @@ function parseApiKeySecret(value: string): string | null {
   return null;
 }
 
+async function revokeWorkosAccess(
+  workosUserId: string,
+  apiKey: string,
+): Promise<WorkosLogoutResult> {
+  const [revokedSessions, revokedAuthorizedApplications] = await Promise.all([
+    revokeActiveWorkosSessions(workosUserId, apiKey),
+    deleteWorkosAuthorizedApplication(workosUserId, apiKey),
+  ]);
+  return { revokedSessions, revokedAuthorizedApplications };
+}
+
 async function revokeActiveWorkosSessions(
   workosUserId: string,
   apiKey: string,
 ): Promise<number> {
   const sessions = await listActiveWorkosSessionIds(workosUserId, apiKey);
+  console.log("[auth-workos-logout] Listed WorkOS sessions", {
+    workosUserId,
+    sessions: sessions.length,
+  });
   let revoked = 0;
   for (const sessionId of sessions) {
     await workosFetch("/user_management/sessions/revoke", apiKey, {
@@ -203,6 +232,33 @@ async function revokeActiveWorkosSessions(
     revoked += 1;
   }
   return revoked;
+}
+
+async function deleteWorkosAuthorizedApplication(
+  workosUserId: string,
+  apiKey: string,
+): Promise<number> {
+  const applicationId = getWorkosConnectApplicationId();
+  if (!applicationId) return 0;
+
+  const deleted = await workosFetch(
+    `/user_management/users/${encodeURIComponent(
+      workosUserId,
+    )}/authorized_applications/${encodeURIComponent(applicationId)}`,
+    apiKey,
+    { method: "DELETE" },
+    { notFoundValue: WORKOS_NOT_FOUND },
+  );
+  return deleted === WORKOS_NOT_FOUND ? 0 : 1;
+}
+
+function getWorkosConnectApplicationId(): string | null {
+  const value =
+    getConfig("WORKOS_CONNECT_APPLICATION_ID") ||
+    process.env.WORKOS_CONNECT_APPLICATION_ID ||
+    "";
+  const trimmed = value.trim();
+  return trimmed.startsWith("connect_app_") ? trimmed : null;
 }
 
 async function listActiveWorkosSessionIds(
@@ -239,6 +295,7 @@ async function workosFetch(
   path: string,
   apiKey: string,
   init: RequestInit,
+  options: { notFoundValue?: unknown } = {},
 ): Promise<unknown> {
   const response = await fetch(`${WORKOS_API_BASE_URL}${path}`, {
     ...init,
@@ -250,6 +307,9 @@ async function workosFetch(
   });
   const text = await response.text();
   const body = text ? tryParseJson(text) : null;
+  if (response.status === 404 && "notFoundValue" in options) {
+    return options.notFoundValue;
+  }
   if (!response.ok) {
     throw new Error(
       `WorkOS API ${response.status}: ${typeof body === "string" ? body : text}`,

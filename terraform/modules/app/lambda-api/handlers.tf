@@ -200,6 +200,9 @@ locals {
   }
 
   handler_extra_env = {
+    "auth-workos-logout" = {
+      WORKOS_CONNECT_APPLICATION_ID = var.workos_connect_application_id
+    }
     "extension-proxy" = {
       EXTENSION_PROXY_BACKENDS_JSON  = var.extension_proxy_backends_json
       EXTENSION_PROXY_SIGNING_SECRET = var.extension_proxy_signing_secret
