@@ -96,6 +96,18 @@ variable "crm_alb_dns_name" {
   default     = ""
 }
 
+variable "include_n8n" {
+  description = "When true, create a Cloudflare CNAME for the n8n public ALB. The n8n ALB uses its own certificate."
+  type        = bool
+  default     = false
+}
+
+variable "n8n_alb_dns_name" {
+  description = "Public ALB DNS name for n8n. Used as the target for the n8n.<domain> Cloudflare CNAME when include_n8n is true."
+  type        = string
+  default     = ""
+}
+
 variable "include_plane" {
   description = "When true, create a Cloudflare CNAME for the Plane public ALB. The Plane ALB uses its own certificate."
   type        = bool

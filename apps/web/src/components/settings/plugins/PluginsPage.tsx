@@ -58,7 +58,9 @@ export function PluginsPage() {
     SettingsRefreshPluginCatalogMutation,
   );
 
-  const catalog = catalogResult.data?.pluginCatalog ?? [];
+  const catalog = sortPluginEntriesByName(
+    catalogResult.data?.pluginCatalog ?? [],
+  );
   const catalogMetadata = catalogResult.data?.pluginCatalogMetadata ?? null;
   const activations = activationsResult.data?.myPluginActivations ?? [];
   const catalogUnavailable = Boolean(catalogResult.error);
@@ -464,6 +466,21 @@ function catalogMetadataActionKey(metadata: CatalogMetadata): string {
   ]
     .filter(Boolean)
     .join("|");
+}
+
+function sortPluginEntriesByName<
+  T extends { displayName: string; pluginKey: string },
+>(entries: readonly T[]): T[] {
+  return [...entries].sort((left, right) => {
+    const byName = left.displayName.localeCompare(
+      right.displayName,
+      undefined,
+      { sensitivity: "base" },
+    );
+    return byName === 0
+      ? left.pluginKey.localeCompare(right.pluginKey)
+      : byName;
+  });
 }
 
 function catalogListDescription(entry: {

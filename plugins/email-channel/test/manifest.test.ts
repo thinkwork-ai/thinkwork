@@ -32,18 +32,18 @@ function emailCapability(
   return capability;
 }
 
-describe("Resend Channel plugin manifest", () => {
+describe("Resend Email plugin manifest", () => {
   it("validates as an inert provider-channel plugin", () => {
     const validated = validatePluginManifest(emailChannelManifest);
 
     expect(validated.pluginKey).toBe("email-channel");
-    expect(validated.displayName).toBe("Resend Channel");
+    expect(validated.displayName).toBe("Resend Email");
     expect(validated.versions[0].requiredOauthScopes).toEqual([]);
     expect(validated.versions[0].components).toEqual([
       {
         type: "ui-surface",
         key: "settings",
-        displayName: "Resend Channel settings",
+        displayName: "Resend Email settings",
         intendedMount: EMAIL_CHANNEL_SETTINGS_SURFACE,
       },
     ]);
@@ -112,7 +112,7 @@ describe("Resend Channel plugin manifest", () => {
       kind: "manifest",
       path: "plugins/email-channel/src/manifest.ts",
       description:
-        "Resend Channel catalog manifest and provider capability contract.",
+        "Resend Email catalog manifest and provider capability contract.",
     });
     expect(defined.compatibilityLinks).toEqual([]);
   });

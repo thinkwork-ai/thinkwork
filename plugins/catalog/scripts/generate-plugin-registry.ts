@@ -94,7 +94,12 @@ ${packageList}
  */
 export const allPluginManifests = firstPartyPluginPackages
   .map((pluginPackage) => pluginPackage.manifest)
-  .sort((a, b) => a.pluginKey.localeCompare(b.pluginKey));
+  .sort((a, b) => {
+    const byName = a.displayName.localeCompare(b.displayName, undefined, {
+      sensitivity: "base",
+    });
+    return byName === 0 ? a.pluginKey.localeCompare(b.pluginKey) : byName;
+  });
 `;
 }
 

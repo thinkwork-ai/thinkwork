@@ -93,6 +93,17 @@ describe("buildPluginCatalog", () => {
     ).toThrow(/Duplicate plugin key in catalog: lastmile/);
   });
 
+  it("sorts catalog plugins alphabetically by display name", () => {
+    const catalog = buildPluginCatalog({
+      manifests: [lastmileManifest, companyBrainManifest],
+    });
+
+    expect(catalog.plugins.map((plugin) => plugin.displayName)).toEqual([
+      "Company Brain",
+      "LastMile",
+    ]);
+  });
+
   it("preserves premium metadata on catalog entries", () => {
     const catalog = buildPluginCatalog({ manifests: [companyBrainManifest] });
     expect(catalog.plugins[0].pluginKey).toBe("company-brain");

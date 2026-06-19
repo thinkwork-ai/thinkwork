@@ -34,13 +34,13 @@ describe("SendGrid plugin manifest", () => {
     const validated = validatePluginManifest(sendgridManifest);
 
     expect(validated.pluginKey).toBe("sendgrid");
-    expect(validated.displayName).toBe("SendGrid");
+    expect(validated.displayName).toBe("SendGrid Email");
     expect(validated.versions[0].requiredOauthScopes).toEqual([]);
     expect(validated.versions[0].components).toEqual([
       {
         type: "ui-surface",
         key: "settings",
-        displayName: "SendGrid settings",
+        displayName: "SendGrid Email settings",
         intendedMount: SENDGRID_SETTINGS_SURFACE,
       },
     ]);
@@ -73,7 +73,7 @@ describe("SendGrid plugin manifest", () => {
       kind: "manifest",
       path: "plugins/sendgrid/src/manifest.ts",
       description:
-        "SendGrid catalog manifest and provider capability contract.",
+        "SendGrid Email catalog manifest and provider capability contract.",
     });
     expect(defined.compatibilityLinks).toEqual([]);
   });

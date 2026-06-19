@@ -1014,7 +1014,7 @@ const workosEntry = {
 const emailChannelEntry = {
   __typename: "PluginCatalogEntry" as const,
   pluginKey: "email-channel",
-  displayName: "Resend Channel",
+  displayName: "Resend Email",
   description: "Resend-backed tenant agent and Space email channel.",
   latestVersion: "0.1.0",
   updateAvailable: false,
@@ -1040,7 +1040,7 @@ const emailChannelEntry = {
 const sendGridEntry = {
   __typename: "PluginCatalogEntry" as const,
   pluginKey: "sendgrid",
-  displayName: "SendGrid",
+  displayName: "SendGrid Email",
   description: "SendGrid invitation email provider.",
   latestVersion: "0.1.0",
   updateAvailable: false,
@@ -1055,7 +1055,7 @@ const sendGridEntry = {
         {
           key: "settings",
           type: "ui-surface",
-          displayName: "SendGrid settings",
+          displayName: "SendGrid Email settings",
         },
       ],
     },

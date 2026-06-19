@@ -27,3 +27,8 @@ output "crm_custom_domain_name" {
   description = "Custom domain name for Twenty CRM (e.g. crm.thinkwork.ai). Empty string when include_crm is false."
   value       = var.include_crm ? "crm.${var.domain}" : ""
 }
+
+output "n8n_custom_domain_name" {
+  description = "Custom domain name for n8n (e.g. n8n.thinkwork.ai). Empty string when include_n8n is false."
+  value       = var.include_n8n ? "n8n.${var.domain}" : ""
+}

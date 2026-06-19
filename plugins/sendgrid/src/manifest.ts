@@ -8,7 +8,7 @@ import {
 
 export const sendgridManifest = {
   pluginKey: "sendgrid",
-  displayName: "SendGrid",
+  displayName: "SendGrid Email",
   description:
     "SendGrid email provider for tenant member invitations with authenticated-domain readiness.",
   versions: [
@@ -28,7 +28,7 @@ export const sendgridManifest = {
         {
           type: "ui-surface",
           key: "settings",
-          displayName: "SendGrid settings",
+          displayName: "SendGrid Email settings",
           intendedMount: SENDGRID_SETTINGS_SURFACE,
         },
       ],

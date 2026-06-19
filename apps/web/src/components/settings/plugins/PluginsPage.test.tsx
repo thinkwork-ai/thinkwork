@@ -240,6 +240,24 @@ describe("PluginsPage", () => {
     expect(screen.queryByText("Reconnect needed")).toBeNull();
   });
 
+  it("renders plugin rows alphabetically by display name", () => {
+    render(<PluginsPage />);
+
+    const rowLabels = screen
+      .getAllByRole("link")
+      .map((element) => element.getAttribute("aria-label"))
+      .filter((label): label is string =>
+        Boolean(label?.startsWith("Open ") && !label.includes("application")),
+      );
+    expect(rowLabels).toEqual([
+      "Open Company Brain",
+      "Open Docs Sync",
+      "Open LastMile",
+      "Open SendGrid Email",
+      "Open Twenty CRM",
+    ]);
+  });
+
   it("renders the update-available badge once for the single catalog list", () => {
     render(<PluginsPage />);
 
@@ -327,14 +345,18 @@ describe("PluginsPage", () => {
     render(<PluginsPage />);
 
     // Full catalog rows are visible under "All".
-    expect(screen.getByRole("link", { name: "Open SendGrid" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Open SendGrid Email" }),
+    ).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open Twenty CRM" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^installed$/i }));
 
     // Twenty (not installed) drops out; installed plugins remain.
     expect(screen.queryByRole("link", { name: "Open Twenty CRM" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Open SendGrid" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Open SendGrid Email" }),
+    ).toBeNull();
     expect(screen.getByRole("link", { name: "Open LastMile" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open Docs Sync" })).toBeTruthy();
   });
@@ -512,7 +534,7 @@ const catalogEntries = [
   {
     __typename: "PluginCatalogEntry" as const,
     pluginKey: "sendgrid",
-    displayName: "SendGrid",
+    displayName: "SendGrid Email",
     description: "SendGrid invitation email provider.",
     latestVersion: "0.1.0",
     launchUrl: null,
@@ -526,7 +548,7 @@ const catalogEntries = [
           {
             key: "settings",
             type: "ui-surface",
-            displayName: "SendGrid settings",
+            displayName: "SendGrid Email settings",
           },
         ],
       },

@@ -392,6 +392,101 @@ output "twenty_storage_file_system_id" {
   value       = local.twenty_provisioned ? module.twenty[0].twenty_storage_file_system_id : null
 }
 
+output "n8n_provisioned" {
+  description = "Whether the retained n8n substrate is provisioned"
+  value       = local.n8n_provisioned
+}
+
+output "n8n_runtime_enabled" {
+  description = "Whether n8n ECS services are configured to run"
+  value       = local.n8n_runtime_enabled
+}
+
+output "n8n_url" {
+  description = "Public n8n URL (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_url : null
+}
+
+output "n8n_alb_dns_name" {
+  description = "Public ALB DNS name for n8n (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_alb_dns_name : null
+}
+
+output "n8n_alb_arn" {
+  description = "Public ALB ARN for n8n (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_alb_arn : null
+}
+
+output "n8n_target_group_arn" {
+  description = "Target group ARN for the n8n main service (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_target_group_arn : null
+}
+
+output "n8n_cluster_arn" {
+  description = "ECS cluster ARN for n8n (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_cluster_arn : null
+}
+
+output "n8n_main_service_name" {
+  description = "ECS service name for the n8n main service (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_main_service_name : null
+}
+
+output "n8n_worker_service_name" {
+  description = "ECS service name for the n8n worker service (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_worker_service_name : null
+}
+
+output "n8n_main_log_group_name" {
+  description = "CloudWatch log group for the n8n main service (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_main_log_group_name : null
+}
+
+output "n8n_worker_log_group_name" {
+  description = "CloudWatch log group for the n8n worker service (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_worker_log_group_name : null
+}
+
+output "n8n_database_name" {
+  description = "Dedicated n8n database name (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_database_name : null
+}
+
+output "n8n_database_secret_arn" {
+  description = "Secrets Manager ARN used for n8n database runtime credentials (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_database_secret_arn : null
+}
+
+output "n8n_valkey_endpoint" {
+  description = "ElastiCache primary endpoint for n8n queue mode (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_valkey_endpoint : null
+}
+
+output "n8n_storage_bucket_name" {
+  description = "S3 bucket name used for n8n managed artifacts (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_storage_bucket_name : null
+}
+
+output "n8n_storage_prefix" {
+  description = "S3 prefix reserved for n8n managed artifacts (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_storage_prefix : null
+}
+
+output "n8n_image_digest" {
+  description = "Immutable digest extracted from the n8n wrapper image URI (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_image_digest : null
+}
+
+output "n8n_package_config_digest" {
+  description = "Digest of the reviewed n8n custom-package configuration (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_package_config_digest : null
+}
+
+output "n8n_service_credential_secret_arn" {
+  description = "Secrets Manager ARN used for the n8n MCP tenant service credential (null when n8n_provisioned = false)"
+  value       = local.n8n_provisioned ? module.n8n[0].n8n_service_credential_secret_arn : null
+}
+
 output "plane_provisioned" {
   description = "Whether the retained Plane substrate is provisioned"
   value       = local.plane_provisioned

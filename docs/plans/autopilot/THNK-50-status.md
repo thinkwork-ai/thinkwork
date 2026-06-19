@@ -77,11 +77,12 @@ U3/U4/U5/U6 before U7; U7 before U8.
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u2-n8n-managed-app`
 - Git branch: `codex/thnk-50-u2-n8n-managed-app`
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2694
+- Merge commit: `f751fa509c14452f402171d02eda06f37ac003ec`
 - Objective: add a real package-owned `n8nAdapter`, register it in the
   deployment-runner managed-app registry, define conservative desired-config
   inputs/defaults, and add runner/API tests for plan/apply summaries and
   greenfield plan job creation without publishing the final catalog manifest.
-- Status: PR opened; waiting for CI.
+- Status: merged.
 - Local implementation summary:
   - Added package-owned `n8nAdapter` under `plugins/n8n/src/deployment/` with
     queue-mode plan variables, required secret/public URL inputs, destroy data
@@ -115,6 +116,63 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - `pnpm --filter @thinkwork/plugin-catalog test -- plugin-registry` passed.
   - `prettier --check <touched files>` passed via the lockfile-resolved
     Prettier 3.8.2 CLI.
+
+### U3: n8n Terraform Runtime Module
+
+- Branch/worktree:
+  `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u3-n8n-terraform`
+- Git branch: `codex/thnk-50-u3-n8n-terraform`
+- Objective: add the package-owned n8n Terraform runtime module, wire it
+  through the composite ThinkWork module, greenfield example, DNS module, and
+  structural fixture tests, while preserving retained-substrate parking
+  semantics and queue-mode defaults.
+- Additional user-requested tweak folded into this unit: rename catalog entries
+  `Resend Channel` -> `Resend Email` and `SendGrid` -> `SendGrid Email`, and
+  sort plugin catalog rows alphabetically by display name.
+- Status: in progress.
+- Local implementation summary:
+  - Added the package-owned `plugins/n8n/terraform/n8n` module with an HTTPS ALB,
+    Fargate main/worker services, managed Valkey queue substrate, S3 artifact
+    bucket support, CloudWatch logs, IAM, security groups, Aurora ingress, and
+    queue-mode n8n runtime defaults.
+  - Wired n8n into the composite ThinkWork Terraform module, greenfield example,
+    Cloudflare DNS module, and structural CLI fixture tests.
+  - Preserved OSS-safe storage defaults (`database` execution/binary data modes)
+    while documenting the enterprise-gated S3 binary-data path.
+  - Validated pinned n8n package specs at the Terraform boundary and derived the
+    package-name allow list used by `NODE_FUNCTION_ALLOW_EXTERNAL`.
+  - Updated Resend/SendGrid catalog naming and sorted catalog/web plugin rows by
+    display name.
+- Verification:
+  - `terraform fmt plugins/n8n/terraform/n8n terraform/modules/thinkwork terraform/modules/app/www-dns terraform/examples/greenfield`
+    passed.
+  - `terraform fmt -check plugins/n8n/terraform/n8n terraform/modules/thinkwork terraform/modules/app/www-dns terraform/examples/greenfield`
+    passed.
+  - `terraform -chdir=plugins/n8n/terraform/n8n init -backend=false && terraform -chdir=plugins/n8n/terraform/n8n validate`
+    passed.
+  - `terraform -chdir=terraform/examples/greenfield init -backend=false && terraform -chdir=terraform/examples/greenfield validate`
+    passed.
+  - `pnpm --filter @thinkwork/plugin-n8n test && pnpm --filter @thinkwork/plugin-n8n typecheck && pnpm --filter @thinkwork/plugin-n8n build`
+    passed.
+  - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog test -- catalog` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog test -- plugin-registry contracts`
+    passed.
+  - `pnpm --filter @thinkwork/plugin-catalog typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-catalog check:plugins` passed.
+  - `pnpm --filter @thinkwork/web test -- PluginsPage` passed.
+  - `pnpm --filter @thinkwork/web test -- PluginDetail` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/plugin-email-channel test -- manifest` passed.
+  - `pnpm --filter @thinkwork/plugin-sendgrid test -- manifest` passed.
+  - `pnpm --filter @thinkwork/plugin-email-channel typecheck && pnpm --filter @thinkwork/plugin-sendgrid typecheck`
+    passed.
+  - `node scripts/verify-plugin-source-boundary.mjs` passed.
+  - `node --test scripts/__tests__/verify-plugin-source-boundary.test.mjs`
+    passed.
+  - `prettier --check <touched non-HCL files>` passed via the
+    lockfile-resolved Prettier 3.8.2 CLI.
+  - `git diff --check` passed.
 
 ## Blockers
 
