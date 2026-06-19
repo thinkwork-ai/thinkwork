@@ -11,11 +11,11 @@ status: in_progress
 - Plan: `docs/plans/2026-06-19-001-feat-space-webhook-thread-start-plan.md`.
 - Origin requirements: `docs/brainstorms/2026-06-19-space-webhook-thread-start-requirements.md`.
 - Target branch: `main`.
-- Current implementation unit: U6 - Expose degraded delivery warnings to operators and update docs.
-- Current branch: `codex/space-webhook-u6`.
-- Current worktree: `.Codex/worktrees/space-webhook-u6`.
-- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 [#2679](https://github.com/thinkwork-ai/thinkwork/pull/2679) merged as `5e51e4e5c`; U3 [#2680](https://github.com/thinkwork-ai/thinkwork/pull/2680) merged as `5796d706e`; U4 [#2683](https://github.com/thinkwork-ai/thinkwork/pull/2683) merged as `43ebf575d`; U5 [#2684](https://github.com/thinkwork-ai/thinkwork/pull/2684) merged as `1df736fa1`; U6 pending.
-- Status: U6 implementation in progress.
+- Current implementation unit: complete.
+- Current branch: none.
+- Current worktree: none.
+- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 [#2679](https://github.com/thinkwork-ai/thinkwork/pull/2679) merged as `5e51e4e5c`; U3 [#2680](https://github.com/thinkwork-ai/thinkwork/pull/2680) merged as `5796d706e`; U4 [#2683](https://github.com/thinkwork-ai/thinkwork/pull/2683) merged as `43ebf575d`; U5 [#2684](https://github.com/thinkwork-ai/thinkwork/pull/2684) merged as `1df736fa1`; U6 [#2687](https://github.com/thinkwork-ai/thinkwork/pull/2687) merged as `cb22a6066`.
+- Status: U1 through U6 completed and merged. Space webhooks now create durable Space threads, start configured thread workflows, pass explicit private-Space service authority into wakeups, avoid duplicate visible webhook transcript messages, and expose accepted-with-warning delivery outcomes to operators.
 - Notes:
   - Created isolated U1 worktree from `origin/main` at `5ea2a8321`.
   - Copied the Space webhook requirements and plan docs into the U1 worktree because they were still untracked in the main checkout when autopilot started.
@@ -37,6 +37,7 @@ status: in_progress
   - Created isolated U6 worktree from `origin/main` at `1df736fa1`.
   - Added accepted-with-warning presentation for webhook delivery rows and detail sheets when a Space webhook created a thread, returned a 2xx status, and recorded workflow warning details.
   - Updated webhook and Space trigger docs to describe fresh Space thread creation, seeded system trigger messages, automatic thread-start workflows, and accepted-with-warning delivery semantics.
+  - U6 PR #2687 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`) after rebasing twice as `main` moved during CI, and was squash merged to `main`.
 - Local verification:
   - `pnpm install` completed; local Node 25 logged the known optional `canvas@2.11.2` native fallback build warning because `pkg-config` / `pixman-1` are not installed.
   - `pnpm exec vitest run src/lib/spaces/space-webhook-thread-start.test.ts` from `packages/api` passed: 6 tests.
@@ -65,6 +66,7 @@ status: in_progress
   - U6 `pnpm lint` passed; `pnpm --filter @thinkwork/web lint` reported no `lint` script for the selected package.
   - U6 `git diff --check` passed.
 - Blockers: none.
+- Next action: Space webhook thread-start implementation complete; no remaining planned implementation units.
 
 ## THNK-15 Company Brain Premium Plugin - 2026-06-13
 
