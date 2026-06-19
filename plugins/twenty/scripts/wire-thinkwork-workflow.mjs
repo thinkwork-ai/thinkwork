@@ -18,6 +18,7 @@ function parseArgs(argv) {
     createDraft: process.env.TWENTY_THINKWORK_CREATE_DRAFT_FROM_ACTIVE === "1",
     allowActiveUpdate:
       process.env.TWENTY_THINKWORK_ALLOW_ACTIVE_UPDATE === "1",
+    workspaceId: process.env.TWENTY_WORKSPACE_ID,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -40,6 +41,8 @@ function parseArgs(argv) {
       args.event = requireValue(argv, ++index, arg);
     } else if (arg === "--workflow-key") {
       args.workflowKey = requireValue(argv, ++index, arg);
+    } else if (arg === "--workspace-id") {
+      args.workspaceId = requireValue(argv, ++index, arg);
     } else if (arg === "--create-draft-from-active") {
       args.createDraft = true;
     } else if (arg === "--allow-active-update") {
@@ -75,6 +78,22 @@ function validateUrl(url) {
     throw new Error(`Twenty URL must be HTTPS or localhost, got ${url}.`);
   }
   return parsed.toString().replace(/\/$/, "");
+}
+
+function validateWorkspaceId(workspaceId) {
+  if (!workspaceId) return undefined;
+  const value = workspaceId.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    throw new Error(
+      `Twenty workspace id must be a UUID when provided, got ${workspaceId}.`,
+    );
+  }
+  return value;
+}
+
+function buildTwentyRecordUrl({ url, objectName, recordId, workspaceId }) {
+  const fragment = workspaceId ? `#${workspaceId}` : "";
+  return `${url}/object/${objectName}/${recordId}${fragment}`;
 }
 
 function uuid() {
@@ -460,6 +479,12 @@ function selectStep(workflowVersion, stepId) {
 function buildThinkWorkStep({ existingStep, logicFunction, args }) {
   const opportunityId = "{{trigger.properties.after.id}}";
   const opportunityUpdatedAt = "{{trigger.properties.after.updatedAt}}";
+  const opportunityUrl = buildTwentyRecordUrl({
+    url: args.url,
+    objectName: "opportunity",
+    recordId: opportunityId,
+    workspaceId: args.workspaceId,
+  });
 
   return compactObject({
     id: existingStep.id || uuid(),
@@ -490,7 +515,7 @@ function buildThinkWorkStep({ existingStep, logicFunction, args }) {
           workflowKey: args.workflowKey,
           updatedAt: opportunityUpdatedAt,
           occurredAt: opportunityUpdatedAt,
-          opportunityUrl: `${args.url}/objects/opportunities/${opportunityId}`,
+          opportunityUrl,
           idempotencyKey: `twenty-app:${args.workflowKey}:${opportunityId}:${args.triggerStage}:${opportunityUpdatedAt}`,
         },
       },
@@ -570,6 +595,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const url = validateUrl(args.url);
   args.url = url;
+  args.workspaceId = validateWorkspaceId(args.workspaceId);
   if (!args.apiKey) {
     throw new Error("Set TWENTY_APP_SYNC_API_KEY or pass --api-key.");
   }

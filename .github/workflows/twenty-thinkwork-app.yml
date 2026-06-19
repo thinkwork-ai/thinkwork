@@ -104,6 +104,7 @@ jobs:
         if: inputs.operation != 'validate-package'
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_WORKSPACE_ID: ${{ vars.TWENTY_WORKSPACE_ID || '' }}
           TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
         run: |
           set -euo pipefail
@@ -120,6 +121,7 @@ jobs:
         if: inputs.operation == 'sync-app' || inputs.operation == 'sync-and-wire'
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_WORKSPACE_ID: ${{ vars.TWENTY_WORKSPACE_ID || '' }}
           TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
           TWENTY_THINKWORK_APP_SYNC_DRY_RUN: ${{ inputs.sync_dry_run && '1' || '0' }}
         run: |
@@ -134,6 +136,7 @@ jobs:
         if: inputs.operation == 'wire-workflow' || inputs.operation == 'sync-and-wire'
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_WORKSPACE_ID: ${{ vars.TWENTY_WORKSPACE_ID || '' }}
           TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
           WIRE_DRY_RUN: ${{ inputs.wire_dry_run && '1' || '0' }}
           WIRE_WORKFLOW_ID: ${{ inputs.twenty_workflow_id || '' }}

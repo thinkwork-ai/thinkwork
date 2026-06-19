@@ -168,6 +168,7 @@ describe("twenty plugin manifest", () => {
     expect(deployWorkflow).toContain("sync_twenty_thinkwork_app");
     expect(deployWorkflow).toContain("TWENTY_DEPLOY_API_KEY");
     expect(deployWorkflow).toContain("TWENTY_APP_SYNC_API_KEY");
+    expect(deployWorkflow).toContain("TWENTY_WORKSPACE_ID");
     expect(deployWorkflow).toContain("sync-thinkwork-app.mjs");
     expect(deployWorkflow).toContain("wire-thinkwork-workflow.mjs");
     expect(operationsWorkflow).toContain("Twenty ThinkWork App Operations");
@@ -177,6 +178,7 @@ describe("twenty plugin manifest", () => {
       "YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install",
     );
     expect(operationsWorkflow).toContain("TWENTY_DEPLOY_API_KEY");
+    expect(operationsWorkflow).toContain("TWENTY_WORKSPACE_ID");
     expect(operationsWorkflow).toContain("sync-thinkwork-app.mjs");
     expect(operationsWorkflow).toContain("wire-thinkwork-workflow.mjs");
     expect(operationsWorkflow).toContain("twenty_allow_active_update");
@@ -195,6 +197,10 @@ describe("twenty plugin manifest", () => {
     expect(wireScript).toContain("findThinkWorkLogicFunction(metadataClient)");
     expect(wireScript).toContain("findWorkflowVersionsForWorkflow");
     expect(wireScript).toContain("--allow-active-update");
+    expect(wireScript).toContain("--workspace-id");
+    expect(wireScript).toContain("/object/${objectName}/");
+    expect(wireScript).toContain('objectName: "opportunity"');
+    expect(wireScript).not.toContain("/objects/opportunities/");
     expect(wireScript).toContain("{{trigger.properties.after.id}}");
     expect(wireScript).toContain("{{trigger.properties.after.name}}");
     expect(wireScript).toContain("{{trigger.properties.after.companyId}}");

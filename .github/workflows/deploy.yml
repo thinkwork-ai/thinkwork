@@ -1527,6 +1527,7 @@ jobs:
       - name: Deploy and install native ThinkWork app package
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_WORKSPACE_ID: ${{ vars.TWENTY_WORKSPACE_ID || '' }}
           TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
           TWENTY_THINKWORK_APP_SYNC_DRY_RUN: ${{ inputs.sync_twenty_thinkwork_app_dry_run && '1' || '0' }}
         run: |
@@ -1562,6 +1563,7 @@ jobs:
       - name: Wire workflow to native ThinkWork app action
         env:
           TWENTY_PUBLIC_URL: ${{ vars.TWENTY_PUBLIC_URL || '' }}
+          TWENTY_WORKSPACE_ID: ${{ vars.TWENTY_WORKSPACE_ID || '' }}
           TWENTY_APP_SYNC_API_KEY: ${{ secrets.TWENTY_DEPLOY_API_KEY || secrets.TWENTY_APP_SYNC_API_KEY }}
           WIRE_DRY_RUN: ${{ inputs.wire_twenty_thinkwork_workflow_dry_run && '1' || '0' }}
           WIRE_WORKFLOW_ID: ${{ inputs.twenty_thinkwork_workflow_id || '' }}
