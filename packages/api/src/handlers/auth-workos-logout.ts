@@ -157,10 +157,7 @@ async function getWorkosApiKey(): Promise<string> {
   if (direct.trim()) return direct.trim();
   if (cachedApiKey) return cachedApiKey;
 
-  const secretArn =
-    process.env.WORKOS_API_KEY_SECRET_ARN ||
-    getConfig("WORKOS_API_KEY_SECRET_ARN") ||
-    "";
+  const secretArn = getConfig("WORKOS_API_KEY_SECRET_ARN") || "";
   if (!secretArn) {
     throw new Error("WORKOS_API_KEY or WORKOS_API_KEY_SECRET_ARN is required");
   }
