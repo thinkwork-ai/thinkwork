@@ -170,6 +170,7 @@ export interface StartCustomerOnboardingWorkflowInput {
   spaceId?: string | null;
   source: CustomerOnboardingStartSource;
   opportunity: CustomerOnboardingSourceInput;
+  preparedThread?: CustomerOnboardingThreadRef | null;
   startedBy?: {
     type: "user" | "system";
     id?: string | null;
@@ -253,6 +254,16 @@ export interface CreateCustomerOnboardingCaseInput {
   metadata: Record<string, unknown>;
 }
 
+export interface InitializePreparedCustomerOnboardingCaseInput {
+  tenantId: string;
+  space: CustomerOnboardingWorkflowSpace;
+  thread: CustomerOnboardingThreadRef;
+  title: string;
+  kickoffMessage: string;
+  humanInput: CustomerOnboardingHumanInputRequest | null;
+  metadata: Record<string, unknown>;
+}
+
 export interface CreateCustomerOnboardingLinkedTaskInput {
   tenantId: string;
   spaceId: string;
@@ -295,6 +306,9 @@ export interface CustomerOnboardingWorkflowRepository {
   }): Promise<CustomerOnboardingThreadRef | null>;
   createCase(
     input: CreateCustomerOnboardingCaseInput,
+  ): Promise<CustomerOnboardingThreadRef>;
+  initializePreparedCase?(
+    input: InitializePreparedCustomerOnboardingCaseInput,
   ): Promise<CustomerOnboardingThreadRef>;
   ensureGoal?(input: EnsureCustomerOnboardingGoalInput): Promise<void>;
   createLinkedTask(
@@ -386,31 +400,6 @@ export async function startCustomerOnboardingWorkflow(
     );
   }
 
-  const existing = await repository.findExistingThread({
-    tenantId: input.tenantId,
-    spaceId: space.id,
-    opportunityId: normalized.opportunityId,
-  });
-  if (existing) {
-    await repository.ensureGoal?.({
-      tenantId: input.tenantId,
-      spaceId: space.id,
-      thread: existing,
-      normalized,
-      startedBy: input.startedBy ?? null,
-    });
-    await progressReporter?.refresh({
-      tenantId: input.tenantId,
-      threadId: existing.id,
-    });
-    return {
-      thread: existing,
-      idempotent: true,
-      linkedTasks: [],
-      missingFields: normalized.missingFields,
-    };
-  }
-
   const title = buildThreadTitle(normalized);
   const humanInput = buildHumanInputRequest(normalized);
   const metadata = buildWorkflowMetadata(
@@ -419,17 +408,64 @@ export async function startCustomerOnboardingWorkflow(
     space,
     humanInput,
   );
-  const thread = await repository.createCase({
-    tenantId: input.tenantId,
-    space,
-    title,
-    channel: input.source === "webhook" ? "webhook" : "manual",
-    createdByType: input.startedBy?.type ?? "system",
-    createdById: input.startedBy?.id ?? null,
-    kickoffMessage: buildKickoffMessage(normalized),
-    humanInput,
-    metadata,
-  });
+
+  let thread: CustomerOnboardingThreadRef;
+  let idempotent = false;
+  const kickoffMessage = buildKickoffMessage(normalized);
+  if (input.preparedThread) {
+    thread = repository.initializePreparedCase
+      ? await repository.initializePreparedCase({
+          tenantId: input.tenantId,
+          space,
+          thread: input.preparedThread,
+          title,
+          kickoffMessage,
+          humanInput,
+          metadata,
+        })
+      : {
+          ...input.preparedThread,
+          title,
+          metadata,
+        };
+  } else {
+    const existing = await repository.findExistingThread({
+      tenantId: input.tenantId,
+      spaceId: space.id,
+      opportunityId: normalized.opportunityId,
+    });
+    if (existing) {
+      await repository.ensureGoal?.({
+        tenantId: input.tenantId,
+        spaceId: space.id,
+        thread: existing,
+        normalized,
+        startedBy: input.startedBy ?? null,
+      });
+      await progressReporter?.refresh({
+        tenantId: input.tenantId,
+        threadId: existing.id,
+      });
+      return {
+        thread: existing,
+        idempotent: true,
+        linkedTasks: [],
+        missingFields: normalized.missingFields,
+      };
+    }
+
+    thread = await repository.createCase({
+      tenantId: input.tenantId,
+      space,
+      title,
+      channel: input.source === "webhook" ? "webhook" : "manual",
+      createdByType: input.startedBy?.type ?? "system",
+      createdById: input.startedBy?.id ?? null,
+      kickoffMessage,
+      humanInput,
+      metadata,
+    });
+  }
   await repository.ensureGoal?.({
     tenantId: input.tenantId,
     spaceId: space.id,
@@ -483,7 +519,7 @@ export async function startCustomerOnboardingWorkflow(
 
   return {
     thread,
-    idempotent: false,
+    idempotent,
     linkedTasks: linkedTaskResults,
     missingFields: normalized.missingFields,
   };
@@ -1259,6 +1295,56 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
         metadata: {
           kind: "customer_onboarding_kickoff",
           workflow: "customer_onboarding",
+          humanInputRequest: input.humanInput ?? undefined,
+        },
+      });
+
+      return { thread };
+    });
+
+    return toThreadRef(thread);
+  }
+
+  async initializePreparedCase(
+    input: InitializePreparedCustomerOnboardingCaseInput,
+  ): Promise<CustomerOnboardingThreadRef> {
+    const { thread } = await this.db.transaction(async (tx) => {
+      const [thread] = await tx
+        .update(threads)
+        .set({
+          title: input.title,
+          metadata: input.metadata,
+          updated_at: new Date(),
+        })
+        .where(
+          and(
+            eq(threads.tenant_id, input.tenantId),
+            eq(threads.id, input.thread.id),
+            eq(threads.space_id, input.space.id),
+          ),
+        )
+        .returning();
+      if (!thread) {
+        throw new CustomerOnboardingWorkflowError(
+          "Prepared Customer Onboarding Thread not found",
+          404,
+          "CUSTOMER_ONBOARDING_THREAD_NOT_FOUND",
+        );
+      }
+
+      await tx.insert(messages).values({
+        thread_id: thread.id,
+        tenant_id: input.tenantId,
+        role: "system",
+        content: input.kickoffMessage,
+        sender_type: "system",
+        tool_results: input.humanInput
+          ? [input.humanInput.questionCard]
+          : undefined,
+        metadata: {
+          kind: "customer_onboarding_kickoff",
+          workflow: "customer_onboarding",
+          source: "prepared_thread",
           humanInputRequest: input.humanInput ?? undefined,
         },
       });

@@ -11,19 +11,26 @@ status: in_progress
 - Plan: `docs/plans/2026-06-19-001-feat-space-webhook-thread-start-plan.md`.
 - Origin requirements: `docs/brainstorms/2026-06-19-space-webhook-thread-start-requirements.md`.
 - Target branch: `main`.
-- Current implementation unit: U1 - Create a Space webhook thread-start service.
-- Current branch: `codex/space-webhook-u1`.
-- Current worktree: `.Codex/worktrees/space-webhook-u1`.
-- Pull request: [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676).
-- Status: U1 PR opened; monitoring required CI.
+- Current implementation unit: U2 - Start configured Space workflows from webhook-created threads.
+- Current branch: `codex/space-webhook-u2`.
+- Current worktree: `.Codex/worktrees/space-webhook-u2`.
+- Pull request: U1 [#2676](https://github.com/thinkwork-ai/thinkwork/pull/2676) merged as `f5ccf3b44`; U2 pending.
+- Status: U2 implementation in progress.
 - Notes:
   - Created isolated U1 worktree from `origin/main` at `5ea2a8321`.
   - Copied the Space webhook requirements and plan docs into the U1 worktree because they were still untracked in the main checkout when autopilot started.
   - Added a durable Space webhook thread-start service that creates a fresh webhook thread, inserts a readable system-trigger opening message before wakeup dispatch, returns agent context with the full structured webhook payload, and keeps transcript summaries bounded.
+  - U1 PR #2676 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`) on the rebased head and was squash merged to `main`.
+  - Created isolated U2 worktree from `origin/main` at `f5ccf3b44`.
+  - Added prepared-thread initialization to Customer Onboarding so webhook-created threads can receive onboarding metadata, kickoff artifacts, goals, linked tasks, progress refresh, and coordinator wakeup without creating or deduping to a second thread.
+  - Added Space workflow detection to the webhook thread starter for Customer Onboarding Spaces and accepted-with-warning behavior for unsupported or failed workflow starts.
 - Local verification:
   - `pnpm install` completed; local Node 25 logged the known optional `canvas@2.11.2` native fallback build warning because `pkg-config` / `pixman-1` are not installed.
   - `pnpm exec vitest run src/lib/spaces/space-webhook-thread-start.test.ts` from `packages/api` passed: 6 tests.
   - `pnpm --filter @thinkwork/api typecheck` passed.
+  - U2 `pnpm install` completed with the same optional `canvas@2.11.2` native fallback build warning.
+  - U2 `pnpm exec vitest run src/lib/spaces/space-webhook-thread-start.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts` from `packages/api` passed: 20 tests.
+  - U2 `pnpm --filter @thinkwork/api typecheck` passed.
 - Blockers: none.
 
 ## THNK-15 Company Brain Premium Plugin - 2026-06-13
