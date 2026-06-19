@@ -17,8 +17,8 @@ branch: codex/thnk-43-u2-workos-auth-endpoints
   away from Cognito Hosted UI for WorkOS SSO.
 - Branch: `codex/thnk-43-u2-workos-auth-endpoints` from `origin/main`
   `4daf4bcd5`.
-- PR: not opened yet.
-- CI: local targeted verification passing; remote CI not started yet.
+- PR: <https://github.com/thinkwork-ai/thinkwork/pull/2672>
+- CI: local targeted verification passing; remote CI pending.
 
 ## Completed
 
