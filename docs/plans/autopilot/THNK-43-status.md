@@ -1,23 +1,26 @@
 ---
 linear: THNK-43
-title: WorkOS Auth plugin upstream of Cognito
+title: WorkOS primary auth with Cognito token bridge
 status: in-progress
-updated: 2026-06-18
-branch: codex/thnk-43-u1-google-proof
+updated: 2026-06-19
+branch: codex/thnk-43-u1-workos-primary-spike
 ---
 
 # THNK-43 Autopilot Status
 
 ## Current Pass
 
-- Dispatcher marker: `dispatcher:THNK-43:Ready to Work:Codex`
-- Pass type: U1 live-evidence recovery after a WorkOS staging account became
-  available.
-- Scope: U1 only, WorkOS-to-Cognito OIDC compatibility spike.
-- Branch: `codex/thnk-43-u1-google-proof` from `origin/main`
-  `d0de3991558c9df8e9c7c00aabda3460676d6361`.
+- Dispatcher marker: `dispatcher:THNK-43:Implementation:Codex`
+- Pass type: Autopilot implementation of
+  `docs/plans/2026-06-19-001-feat-workos-primary-auth-bridge-plan.md`.
+- Scope: U1 only, WorkOS-primary auth spike and Cognito custom-auth bridge
+  decision.
+- Branch: `codex/thnk-43-u1-workos-primary-spike` from `origin/main`
+  `f15fbbbe1`.
 
 ## Completed
+
+### Prior hosted-bridge pass
 
 - Read THNK-43 issue, Linear comments, Linear plan document, and Linear
   brainstorm document.
@@ -39,6 +42,8 @@ branch: codex/thnk-43-u1-google-proof
   Cognito token endpoint.
 
 ## U1 Result
+
+### Prior hosted-bridge result
 
 Live Google-backed Cognito token proof is complete for the single SSO fallback.
 
@@ -72,10 +77,29 @@ This is no longer a `Needs Credentials` blocker for the single SSO fallback.
 It remains a product/claim-design constraint for provider-specific buttons and
 U6 linking enforcement.
 
+### Current WorkOS-primary pass
+
+- Add a private spike harness for direct WorkOS authorization-code exchange,
+  WorkOS `sid` extraction, WorkOS logout URL construction, Cognito custom-auth
+  command shaping, and Cognito bridge claim validation.
+- Add
+  `docs/solutions/spikes/2026-06-19-workos-primary-cognito-custom-auth-spike.md`
+  to record the bridge decision and the remaining live-proof dependency.
+
+### U1 WorkOS-Primary Decision
+
+The correct implementation direction is WorkOS-primary browser auth plus a
+Cognito custom-auth token bridge. The old Cognito Hosted UI -> WorkOS upstream
+IdP route remains useful evidence but is not the logout solution because
+ThinkWork cannot access the WorkOS access-token `sid` from that nested flow.
+
+U1 live browser proof is deferred until U2/U3 land deployable server-owned
+WorkOS endpoints and Cognito custom-auth trigger wiring through the normal
+merge/deploy pipeline. Forcing a live proof in U1 would require ad hoc Cognito
+trigger mutations outside the normal pipeline, which autopilot guardrails
+forbid.
+
 ## Next Action
 
-Land this evidence update through PR, then update Linear with the PR URL,
-merged state, and U1 conclusion. Remove the `Needs Credentials` label only if
-Linear still has it. Continue THNK-43 from U2/U3 only for the single
-WorkOS-backed SSO fallback; keep provider-specific Google/Microsoft buttons out
-of scope until claim mapping and clean Microsoft proof are complete.
+Open and merge the U1 spike PR after CI passes, then sync `origin/main` and
+continue automatically to U2: server-owned WorkOS auth endpoints.
