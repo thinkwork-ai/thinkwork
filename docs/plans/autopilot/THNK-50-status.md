@@ -658,13 +658,36 @@ U3/U4/U5/U6 before U7; U7 before U8.
       still fail-close.
     - If state is present but missing either route field, remove only that
       Terraform state address and continue to import the live AWS route.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2714
+    - Merge commit: `2cb830be1d9d9388a29fe308396e014d4666dc45`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+- Post-PR #2714 deploy:
+  - Main deploy workflow run `27851084870` failed in Terraform Apply.
+  - The workflow removed the malformed WorkOS route state and attempted the
+    import path, but the post-import `terraform state show` parser still treated
+    the route as missing `api_id` or `route_key` because Terraform aligns
+    attributes with variable whitespace.
+- WorkOS route state parser branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-workos-state-parser`
+  - Git branch: `codex/fix-workos-state-parser`
+  - Objective: make the route-state guard parse Terraform `state show` output
+    with variable key alignment while preserving spaces inside route keys.
+  - Started: 2026-06-19 22:31 UTC.
+  - Implementation summary:
+    - Changed `api_id` parsing to split on `=` and trim whitespace/quotes from
+      the value.
+    - Changed `route_key` parsing to split on `=` and trim only leading/trailing
+      whitespace/quotes so route keys like `POST /api/auth/workos/logout`
+      remain intact.
 
 ## Blockers
 
-- Active fix in progress: the n8n runner fix PR and first two deploy repair PRs
-  are merged, but the main deploy is now blocked by a malformed WorkOS logout
-  route Terraform state entry. The branch
-  `codex/fix-workos-route-state-reimport` removes and re-imports only that exact
-  malformed route state before apply. After this repair PR merges and the main
-  deploy is green, retry the n8n plugin install through the deployed ThinkWork
+- Active fix in progress: the n8n runner fix PR and the deploy repair PRs
+  through #2714 are merged, but the main deploy is now blocked by the
+  whitespace-sensitive WorkOS route state parser. The branch
+  `codex/fix-workos-state-parser` makes the parser tolerant of Terraform's
+  aligned `state show` output. After this repair PR merges and the main deploy
+  is green, retry the n8n plugin install through the deployed ThinkWork
   managed-application path.

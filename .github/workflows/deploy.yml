@@ -1405,8 +1405,8 @@ jobs:
             local state_api_id
             local state_route_key
 
-            state_api_id=$(awk -F' = ' '$1 ~ /^[[:space:]]*api_id$/ { gsub(/"/, "", $2); print $2; exit }' <<< "$state")
-            state_route_key=$(awk -F' = ' '$1 ~ /^[[:space:]]*route_key$/ { gsub(/"/, "", $2); print $2; exit }' <<< "$state")
+            state_api_id=$(awk -F= '$1 ~ /^[[:space:]]*api_id[[:space:]]*$/ { gsub(/[[:space:]"]/, "", $2); print $2; exit }' <<< "$state")
+            state_route_key=$(awk -F= '$1 ~ /^[[:space:]]*route_key[[:space:]]*$/ { gsub(/^[[:space:]"]+|[[:space:]"]+$/, "", $2); print $2; exit }' <<< "$state")
             if [ "$state_api_id" = "$expected_api_id" ] && [ "$state_route_key" = "$route_key" ]; then
               return 0
             fi
