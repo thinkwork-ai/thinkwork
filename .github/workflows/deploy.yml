@@ -1326,6 +1326,142 @@ jobs:
           if [ -f "$LAMBDA_DIR/cognito-custom-auth.zip" ]; then
             COGNITO_CUSTOM_AUTH_ZIP="$LAMBDA_DIR/cognito-custom-auth.zip"
           fi
+          export TF_VAR_db_password="${{ secrets.DB_PASSWORD }}"
+          export TF_VAR_api_auth_secret="${{ secrets.API_AUTH_SECRET }}"
+          export TF_VAR_google_oauth_client_secret="${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}"
+          export TF_VAR_mapbox_public_token="${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}"
+
+          TF_VAR_ARGS=(
+            -var "stage=${{ env.STAGE }}"
+            -var "region=${{ env.AWS_REGION }}"
+            -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}"
+            -var "database_engine=aurora-serverless"
+            -var "enable_hindsight=true"
+            -var "enable_cognee=$COGNEE_ENABLED"
+            -var "cognee_image_uri=$COGNEE_IMAGE_URI"
+            -var "cognee_db_username=$COGNEE_DB_USERNAME"
+            -var "cognee_db_name=$COGNEE_DB_NAME"
+            -var "cognee_db_password_secret_arn=$COGNEE_DB_PASSWORD_SECRET_ARN"
+            -var "cognee_backend_mode=$COGNEE_BACKEND_MODE"
+            -var "cognee_desired_count=$COGNEE_DESIRED_COUNT"
+            -var "cognee_llm_provider=$COGNEE_LLM_PROVIDER"
+            -var "cognee_embedding_provider=$COGNEE_EMBEDDING_PROVIDER"
+            -var "cognee_bedrock_model_resource_arns=$COGNEE_BEDROCK_MODEL_RESOURCE_ARNS"
+            -var "twenty_provisioned=$TWENTY_PROVISIONED"
+            -var "twenty_runtime_enabled=$TWENTY_RUNTIME_ENABLED"
+            -var "twenty_image_uri=$TWENTY_IMAGE_URI"
+            -var "twenty_db_username=$TWENTY_DB_USERNAME"
+            -var "twenty_db_name=$TWENTY_DB_NAME"
+            -var "twenty_db_url_secret_arn=$TWENTY_DB_URL_SECRET_ARN"
+            -var "twenty_encryption_key_secret_arn=$TWENTY_ENCRYPTION_KEY_SECRET_ARN"
+            -var "twenty_public_url=$TWENTY_PUBLIC_URL"
+            -var "twenty_certificate_arn=$TWENTY_CERTIFICATE_ARN"
+            -var "plane_provisioned=$PLANE_PROVISIONED"
+            -var "plane_runtime_enabled=$PLANE_RUNTIME_ENABLED"
+            -var "plane_image_uri=$PLANE_IMAGE_URI"
+            -var "plane_mcp_image_uri=$PLANE_MCP_IMAGE_URI"
+            -var "plane_db_username=$PLANE_DB_USERNAME"
+            -var "plane_db_name=$PLANE_DB_NAME"
+            -var "plane_db_url_secret_arn=$PLANE_DB_URL_SECRET_ARN"
+            -var "plane_secret_key_secret_arn=$PLANE_SECRET_KEY_SECRET_ARN"
+            -var "plane_live_server_secret_key_secret_arn=$PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN"
+            -var "plane_aes_secret_key_secret_arn=$PLANE_AES_SECRET_KEY_SECRET_ARN"
+            -var "plane_s3_access_key_id_secret_arn=$PLANE_S3_ACCESS_KEY_ID_SECRET_ARN"
+            -var "plane_s3_secret_access_key_secret_arn=$PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN"
+            -var "plane_s3_bucket_name=$PLANE_S3_BUCKET_NAME"
+            -var "plane_domain=$PLANE_DOMAIN"
+            -var "plane_public_url=$PLANE_PUBLIC_URL"
+            -var "plane_certificate_arn=$PLANE_CERTIFICATE_ARN"
+            -var "plane_web_container_port=$PLANE_WEB_CONTAINER_PORT"
+            -var "enable_workspace_orchestration=true"
+            -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}"
+            -var "lambda_zips_dir=$LAMBDA_DIR"
+            -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP"
+            -var "cognito_custom_auth_lambda_zip=$COGNITO_CUSTOM_AUTH_ZIP"
+            -var "platform_operator_emails=$THINKWORK_PLATFORM_OPERATOR_EMAILS"
+            -var "www_domain=${{ vars.WWW_DOMAIN }}"
+            -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}"
+            -var "ses_inbound_domain=agents.thinkwork.ai"
+            -var "ses_parent_domain=thinkwork.ai"
+            -var 'tenant_slugs=["academic-bobcat-897","sleek-squirrel-230"]'
+            -var "stripe_price_ids_json=${{ vars.STRIPE_PRICE_IDS_JSON || '{}' }}"
+            -var "agentcore_code_interpreter_id=${{ vars.AGENTCORE_CODE_INTERPRETER_ID || '' }}"
+            -var "agentcore_memory_id=${{ vars.AGENTCORE_MEMORY_ID || '' }}"
+            -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}"
+            -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
+          )
+
+          resolve_existing_api_id() {
+            aws apigatewayv2 get-apis \
+              --query "Items[?Name=='thinkwork-${STAGE}-api'].ApiId | [0]" \
+              --output text
+          }
+
+          assert_route_state_matches() {
+            local route_key="$1"
+            local address="$2"
+            local expected_api_id="$3"
+            local state="$4"
+            local state_api_id
+            local state_route_key
+
+            state_api_id=$(awk -F' = ' '$1 ~ /^[[:space:]]*api_id$/ { gsub(/"/, "", $2); print $2; exit }' <<< "$state")
+            state_route_key=$(awk -F' = ' '$1 ~ /^[[:space:]]*route_key$/ { gsub(/"/, "", $2); print $2; exit }' <<< "$state")
+            if [ "$state_api_id" = "$expected_api_id" ] && [ "$state_route_key" = "$route_key" ]; then
+              return 0
+            fi
+
+            echo "::error::Terraform state for ${address} is ${state_api_id:-unknown}/${state_route_key:-unknown}, expected ${expected_api_id}/${route_key}."
+            echo "::error::Repair the stale API Gateway route state before retrying deploy."
+            exit 1
+          }
+
+          import_existing_api_route() {
+            local route_key="$1"
+            local address="$2"
+            local api_id
+            local state
+
+            api_id=$(resolve_existing_api_id)
+            if [ -z "$api_id" ] || [ "$api_id" = "None" ]; then
+              if state=$(terraform state show "$address" 2>/dev/null); then
+                echo "::error::Terraform state tracks ${route_key}, but no live thinkwork-${STAGE}-api API was found."
+                echo "::error::Repair the stale API Gateway route state before retrying deploy."
+                exit 1
+              fi
+              echo "No existing API Gateway API found for ${STAGE}; skipping ${route_key} import."
+              return 0
+            fi
+
+            if state=$(terraform state show "$address" 2>/dev/null); then
+              assert_route_state_matches "$route_key" "$address" "$api_id" "$state"
+              echo "Terraform state already tracks ${route_key}; skipping import."
+              return 0
+            fi
+
+            local route_id
+            route_id=$(aws apigatewayv2 get-routes \
+              --api-id "$api_id" \
+              --query "Items[?RouteKey=='${route_key}'].RouteId | [0]" \
+              --output text)
+            if [ -z "$route_id" ] || [ "$route_id" = "None" ]; then
+              echo "No existing API Gateway route ${route_key}; Terraform apply will create it."
+              return 0
+            fi
+
+            echo "Importing existing API Gateway route ${route_key} (${api_id}/${route_id})."
+            terraform import -input=false -lock-timeout=10m "${TF_VAR_ARGS[@]}" "$address" "${api_id}/${route_id}"
+            state=$(terraform state show "$address")
+            assert_route_state_matches "$route_key" "$address" "$api_id" "$state"
+          }
+
+          import_existing_api_route \
+            "POST /api/auth/workos/logout" \
+            'module.thinkwork.module.api.aws_apigatewayv2_route.handler["POST /api/auth/workos/logout"]'
+          import_existing_api_route \
+            "OPTIONS /api/auth/workos/logout" \
+            'module.thinkwork.module.api.aws_apigatewayv2_route.handler["OPTIONS /api/auth/workos/logout"]'
+
           TF_TARGET_ARGS=()
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ needs.detect-changes.outputs.terraform }}" != "true" ]; then
             echo "No Terraform source changes detected; targeting API Lambda handlers and API IAM recovery resources."
@@ -1340,68 +1476,7 @@ jobs:
           # nightly drift-check job in .github/workflows/verify.yml, which
           # runs `terraform plan -refresh=true` and surfaces any diff to
           # $GITHUB_STEP_SUMMARY without failing the workflow.
-          terraform apply -auto-approve -refresh=false -lock-timeout=10m "${TF_TARGET_ARGS[@]}" \
-            -var "stage=${{ env.STAGE }}" \
-            -var "region=${{ env.AWS_REGION }}" \
-            -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}" \
-            -var "db_password=${{ secrets.DB_PASSWORD }}" \
-            -var "database_engine=aurora-serverless" \
-            -var "enable_hindsight=true" \
-            -var "enable_cognee=$COGNEE_ENABLED" \
-            -var "cognee_image_uri=$COGNEE_IMAGE_URI" \
-            -var "cognee_db_username=$COGNEE_DB_USERNAME" \
-            -var "cognee_db_name=$COGNEE_DB_NAME" \
-            -var "cognee_db_password_secret_arn=$COGNEE_DB_PASSWORD_SECRET_ARN" \
-            -var "cognee_backend_mode=$COGNEE_BACKEND_MODE" \
-            -var "cognee_desired_count=$COGNEE_DESIRED_COUNT" \
-            -var "cognee_llm_provider=$COGNEE_LLM_PROVIDER" \
-            -var "cognee_embedding_provider=$COGNEE_EMBEDDING_PROVIDER" \
-            -var "cognee_bedrock_model_resource_arns=$COGNEE_BEDROCK_MODEL_RESOURCE_ARNS" \
-            -var "twenty_provisioned=$TWENTY_PROVISIONED" \
-            -var "twenty_runtime_enabled=$TWENTY_RUNTIME_ENABLED" \
-            -var "twenty_image_uri=$TWENTY_IMAGE_URI" \
-            -var "twenty_db_username=$TWENTY_DB_USERNAME" \
-            -var "twenty_db_name=$TWENTY_DB_NAME" \
-            -var "twenty_db_url_secret_arn=$TWENTY_DB_URL_SECRET_ARN" \
-            -var "twenty_encryption_key_secret_arn=$TWENTY_ENCRYPTION_KEY_SECRET_ARN" \
-            -var "twenty_public_url=$TWENTY_PUBLIC_URL" \
-            -var "twenty_certificate_arn=$TWENTY_CERTIFICATE_ARN" \
-            -var "plane_provisioned=$PLANE_PROVISIONED" \
-            -var "plane_runtime_enabled=$PLANE_RUNTIME_ENABLED" \
-            -var "plane_image_uri=$PLANE_IMAGE_URI" \
-            -var "plane_mcp_image_uri=$PLANE_MCP_IMAGE_URI" \
-            -var "plane_db_username=$PLANE_DB_USERNAME" \
-            -var "plane_db_name=$PLANE_DB_NAME" \
-            -var "plane_db_url_secret_arn=$PLANE_DB_URL_SECRET_ARN" \
-            -var "plane_secret_key_secret_arn=$PLANE_SECRET_KEY_SECRET_ARN" \
-            -var "plane_live_server_secret_key_secret_arn=$PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN" \
-            -var "plane_aes_secret_key_secret_arn=$PLANE_AES_SECRET_KEY_SECRET_ARN" \
-            -var "plane_s3_access_key_id_secret_arn=$PLANE_S3_ACCESS_KEY_ID_SECRET_ARN" \
-            -var "plane_s3_secret_access_key_secret_arn=$PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN" \
-            -var "plane_s3_bucket_name=$PLANE_S3_BUCKET_NAME" \
-            -var "plane_domain=$PLANE_DOMAIN" \
-            -var "plane_public_url=$PLANE_PUBLIC_URL" \
-            -var "plane_certificate_arn=$PLANE_CERTIFICATE_ARN" \
-            -var "plane_web_container_port=$PLANE_WEB_CONTAINER_PORT" \
-            -var "enable_workspace_orchestration=true" \
-            -var "api_auth_secret=${{ secrets.API_AUTH_SECRET }}" \
-            -var "mapbox_public_token=${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}" \
-            -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}" \
-            -var "google_oauth_client_secret=${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}" \
-            -var "lambda_zips_dir=$LAMBDA_DIR" \
-            -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP" \
-            -var "cognito_custom_auth_lambda_zip=$COGNITO_CUSTOM_AUTH_ZIP" \
-            -var "platform_operator_emails=$THINKWORK_PLATFORM_OPERATOR_EMAILS" \
-            -var "www_domain=${{ vars.WWW_DOMAIN }}" \
-            -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}" \
-            -var "ses_inbound_domain=agents.thinkwork.ai" \
-            -var "ses_parent_domain=thinkwork.ai" \
-            -var 'tenant_slugs=["academic-bobcat-897","sleek-squirrel-230"]' \
-            -var "stripe_price_ids_json=${{ vars.STRIPE_PRICE_IDS_JSON || '{}' }}" \
-            -var "agentcore_code_interpreter_id=${{ vars.AGENTCORE_CODE_INTERPRETER_ID || '' }}" \
-            -var "agentcore_memory_id=${{ vars.AGENTCORE_MEMORY_ID || '' }}" \
-            -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}" \
-            -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
+          terraform apply -auto-approve -refresh=false -lock-timeout=10m "${TF_TARGET_ARGS[@]}" "${TF_VAR_ARGS[@]}"
 
       - name: Restart Twenty CRM runtime after database prep
         working-directory: terraform/examples/greenfield
