@@ -626,6 +626,184 @@ describe("handleInvocation — happy path", () => {
     });
   });
 
+  it.each([
+    "Email eric@Research.com the notes",
+    "Send eric@thinkwork.ai the current source list",
+  ])(
+    "does not automatically delegate email-address tasks to Research: %s",
+    async (message) => {
+      const calls: Array<{ modelId: unknown; message: unknown }> = [];
+      const result = await handleInvocation({
+        payload: VALID_PAYLOAD({
+          message,
+          model: "anthropic/claude-sonnet-4-5",
+          approved_model_ids: [
+            "anthropic/claude-sonnet-4-5",
+            "anthropic/claude-haiku-4-5",
+          ],
+          web_search_config: { provider: "exa", apiKey: "exa-key" },
+          agent_profiles: [
+            {
+              id: "profile-research",
+              slug: "research",
+              name: "Research",
+              modelId: "anthropic/claude-haiku-4-5",
+              builtInKey: "research",
+              instructions: "Research with sources.",
+              builtInTools: ["read", "web-search"],
+              executionControls: { maxRuntimeMs: 10_000 },
+            },
+          ],
+        }),
+        deps: makeDeps({
+          runAgentLoop: async ({ modelId, message }) => {
+            calls.push({ modelId, message });
+            return {
+              content: "Parent answer without profile delegation",
+              modelId: String(modelId),
+              toolsCalled: [],
+              toolInvocations: [],
+            };
+          },
+        }),
+      });
+
+      expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+      expect(calls).toEqual([
+        {
+          modelId: "anthropic/claude-sonnet-4-5",
+          message,
+        },
+      ]);
+      const body = result.body as Record<string, unknown>;
+      expect(body.agent_profile_runs).toEqual([]);
+      expect(body.tool_invocations).toEqual([]);
+      expect(body.response).toMatchObject({
+        content: "Parent answer without profile delegation",
+      });
+    },
+  );
+
+  it("still automatically delegates source-backed research about an email address", async () => {
+    let childMessage: unknown;
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        message: "What current sources mention eric@thinkwork.ai?",
+        model: "anthropic/claude-sonnet-4-5",
+        approved_model_ids: [
+          "anthropic/claude-sonnet-4-5",
+          "anthropic/claude-haiku-4-5",
+        ],
+        web_search_config: { provider: "exa", apiKey: "exa-key" },
+        agent_profiles: [
+          {
+            id: "profile-research",
+            slug: "research",
+            name: "Research",
+            modelId: "anthropic/claude-haiku-4-5",
+            builtInKey: "research",
+            instructions: "Research with sources.",
+            builtInTools: ["read", "web-search"],
+            executionControls: { maxRuntimeMs: 10_000 },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({ modelId, message }) => {
+          if (modelId === "anthropic/claude-sonnet-4-5") {
+            return {
+              content: "Parent final answer from automatic Research",
+              modelId: String(modelId),
+              toolsCalled: [],
+              toolInvocations: [],
+            };
+          }
+          childMessage = message;
+          return {
+            content: "Research handoff",
+            modelId: String(modelId),
+            toolsCalled: [],
+            toolInvocations: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+    expect(childMessage).toBe("What current sources mention eric@thinkwork.ai?");
+    const body = result.body as Record<string, unknown>;
+    expect(body.agent_profile_runs).toEqual([
+      expect.objectContaining({
+        profileSlug: "research",
+        model: "anthropic/claude-haiku-4-5",
+      }),
+    ]);
+  });
+
+  it("keeps guarded @Research shortcuts as explicit profile delegation", async () => {
+    let childMessage: unknown;
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        message: "Please @Research find current sources",
+        model: "anthropic/claude-sonnet-4-5",
+        approved_model_ids: [
+          "anthropic/claude-sonnet-4-5",
+          "anthropic/claude-haiku-4-5",
+        ],
+        web_search_config: { provider: "exa", apiKey: "exa-key" },
+        agent_profiles: [
+          {
+            id: "profile-research",
+            slug: "research",
+            name: "Research",
+            modelId: "anthropic/claude-haiku-4-5",
+            builtInKey: "research",
+            instructions: "Research with sources.",
+            builtInTools: ["read", "web-search"],
+            executionControls: { maxRuntimeMs: 10_000 },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({
+          modelId,
+          message,
+          builtinToolNames,
+          extensionToolNames,
+        }) => {
+          if (modelId === "anthropic/claude-sonnet-4-5") {
+            return {
+              content: "Parent final answer from explicit Research",
+              modelId: String(modelId),
+              toolsCalled: [],
+              toolInvocations: [],
+            };
+          }
+          childMessage = message;
+          expect(builtinToolNames).toEqual(["read"]);
+          expect(extensionToolNames).toEqual(["web_search"]);
+          return {
+            content: "Research handoff",
+            modelId: String(modelId),
+            toolsCalled: [],
+            toolInvocations: [],
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+    expect(String(childMessage)).not.toContain("@Research");
+    expect(String(childMessage)).toContain("find current sources");
+    const body = result.body as Record<string, unknown>;
+    expect(body.agent_profile_runs).toEqual([
+      expect.objectContaining({
+        profileSlug: "research",
+        model: "anthropic/claude-haiku-4-5",
+      }),
+    ]);
+  });
+
   it("retries the specialist once when Reviewer requests revision", async () => {
     const calls: Array<{ modelId: unknown; message: string }> = [];
     let researchCalls = 0;
