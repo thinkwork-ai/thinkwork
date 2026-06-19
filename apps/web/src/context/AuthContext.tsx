@@ -193,9 +193,7 @@ export function AuthProvider({
       });
       return;
     }
-    // `auth.signOut()` redirects through Cognito's hosted-UI `/logout` so the
-    // Cognito session cookie is cleared on its way back to `/sign-in`.
-    auth.signOut();
+    void auth.signOut();
   }, [desktopBridge, tokenStorage]);
 
   const getToken = useCallback(() => auth.getIdToken(), []);

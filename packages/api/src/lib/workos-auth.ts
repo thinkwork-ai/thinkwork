@@ -97,6 +97,7 @@ export interface WorkosBridgeRecordInput {
   bridgeCodeDigest: string;
   workosUserId: string;
   workosSessionId: string;
+  workosSessionExpiresAt: Date | null;
   workosEmail: string;
   workosEmailVerified: boolean;
   workosProfile: Record<string, unknown>;
@@ -213,7 +214,7 @@ export async function completeWorkosCallback(args: {
     userAgent: args.userAgent,
   });
   const profile = requireVerifiedWorkosProfile(auth);
-  const sessionId = extractWorkosSessionId(auth.access_token);
+  const session = extractWorkosSessionClaims(auth.access_token);
   const bridgeCode = deps.randomToken(32);
 
   await deps.persistBridge({
@@ -222,7 +223,8 @@ export async function completeWorkosCallback(args: {
     authProviderResourceId: state.authProviderResourceId,
     bridgeCodeDigest: digestBridgeCode(bridgeCode),
     workosUserId: profile.id,
-    workosSessionId: sessionId,
+    workosSessionId: session.sessionId,
+    workosSessionExpiresAt: session.expiresAt,
     workosEmail: profile.email,
     workosEmailVerified: true,
     workosProfile: sanitizeWorkosProfile(auth.user),
@@ -341,12 +343,26 @@ export function digestBridgeCode(code: string): string {
 }
 
 export function extractWorkosSessionId(accessToken: string): string {
+  return extractWorkosSessionClaims(accessToken).sessionId;
+}
+
+export function extractWorkosSessionClaims(accessToken: string): {
+  sessionId: string;
+  expiresAt: Date | null;
+} {
   const payload = decodeJwtPayload(accessToken);
   const sid = payload.sid;
   if (typeof sid !== "string" || !sid) {
     throw new WorkosAuthError("WorkOS access token did not include sid", 502);
   }
-  return sid;
+  const exp = payload.exp;
+  return {
+    sessionId: sid,
+    expiresAt:
+      typeof exp === "number" && Number.isFinite(exp) && exp > 0
+        ? new Date(exp * 1000)
+        : null,
+  };
 }
 
 export function parseClientSecret(secretValue: string | null): string | null {
@@ -470,6 +486,7 @@ async function persistWorkosBridge(
     bridge_code_digest: record.bridgeCodeDigest,
     workos_user_id: record.workosUserId,
     workos_session_id: record.workosSessionId,
+    workos_session_expires_at: record.workosSessionExpiresAt,
     workos_email: record.workosEmail,
     workos_email_verified: record.workosEmailVerified,
     workos_profile: record.workosProfile,

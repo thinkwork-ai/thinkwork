@@ -9,6 +9,7 @@ import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
 import { users, workosAuthBridges } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "./db.js";
 import { digestBridgeCode } from "./workos-auth.js";
+import { recordWorkosAuthSession } from "./workos-auth-session.js";
 import { signObject, verifyObject } from "./mcp-oauth/state.js";
 
 type DbLike = typeof defaultDb;
@@ -23,6 +24,7 @@ export interface WorkosBridgeRecord {
   authProviderResourceId: string;
   workosUserId: string;
   workosSessionId: string;
+  workosSessionExpiresAt: Date | null;
   workosEmail: string;
   workosEmailVerified: boolean;
   returnTo: string;
@@ -63,9 +65,23 @@ export interface WorkosCognitoBridgeDeps {
     signedChallenge: string;
     answer: string;
   }): Promise<CognitoTokenSet>;
+  recordWorkosSession(args: WorkosAuthSessionInput): Promise<void>;
   signingSecret(): string;
   now(): Date;
   randomToken(bytes?: number): string;
+}
+
+export interface WorkosAuthSessionInput {
+  tenantId: string;
+  userId: string;
+  tenantReferenceId: string;
+  authProviderResourceId: string;
+  cognitoPrincipalId: string;
+  cognitoUsername: string;
+  workosUserId: string;
+  workosSessionId: string;
+  workosEmail: string;
+  expiresAt: Date | null;
 }
 
 export function createDefaultWorkosCognitoBridgeDeps(
@@ -76,6 +92,7 @@ export function createDefaultWorkosCognitoBridgeDeps(
     consumePendingBridge: (args) => consumePendingBridge(args, db),
     resolveBridgeUser: (bridge) => resolveBridgeUser(bridge, db),
     startCognitoCustomAuth: (args) => startCognitoCustomAuth(args, cognito),
+    recordWorkosSession: (args) => recordWorkosAuthSession(args, db),
     signingSecret: () => getApiAuthSecret(),
     now: () => new Date(),
     randomToken: (bytes = 32) => randomBytes(bytes).toString("base64url"),
@@ -125,11 +142,25 @@ export async function exchangeWorkosBridgeForCognitoTokens(args: {
     deps.signingSecret(),
   );
 
-  return deps.startCognitoCustomAuth({
+  const tokens = await deps.startCognitoCustomAuth({
     username: user.email,
     signedChallenge,
     answer,
   });
+  const cognitoClaims = parseCognitoBridgeTokenClaims(tokens.id_token);
+  await deps.recordWorkosSession({
+    tenantId: user.tenantId,
+    userId: user.id,
+    tenantReferenceId: bridge.tenantReferenceId,
+    authProviderResourceId: bridge.authProviderResourceId,
+    cognitoPrincipalId: cognitoClaims.sub,
+    cognitoUsername: cognitoClaims.username,
+    workosUserId: bridge.workosUserId,
+    workosSessionId: bridge.workosSessionId,
+    workosEmail: bridge.workosEmail.toLowerCase(),
+    expiresAt: bridge.workosSessionExpiresAt ?? cognitoClaims.expiresAt,
+  });
+  return tokens;
 }
 
 export function signWorkosCognitoChallenge(
@@ -235,6 +266,7 @@ async function consumePendingBridge(
       authProviderResourceId: workosAuthBridges.auth_provider_resource_id,
       workosUserId: workosAuthBridges.workos_user_id,
       workosSessionId: workosAuthBridges.workos_session_id,
+      workosSessionExpiresAt: workosAuthBridges.workos_session_expires_at,
       workosEmail: workosAuthBridges.workos_email,
       workosEmailVerified: workosAuthBridges.workos_email_verified,
       returnTo: workosAuthBridges.return_to,
@@ -394,4 +426,47 @@ function verifyAuthChallenge(
 
 function digestAnswer(answer: string): string {
   return createHash("sha256").update(answer).digest("base64url");
+}
+
+function parseCognitoBridgeTokenClaims(token: string): {
+  sub: string;
+  username: string;
+  expiresAt: Date | null;
+} {
+  const payload = decodeJwtPayload(token);
+  const sub = payload.sub;
+  if (typeof sub !== "string" || !sub) {
+    throw new WorkosBridgeError("Cognito bridge token missing sub", 502);
+  }
+  const username =
+    typeof payload["cognito:username"] === "string" &&
+    payload["cognito:username"]
+      ? payload["cognito:username"]
+      : sub;
+  const exp = payload.exp;
+  return {
+    sub,
+    username,
+    expiresAt:
+      typeof exp === "number" && Number.isFinite(exp) && exp > 0
+        ? new Date(exp * 1000)
+        : null,
+  };
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const [, payload] = token.split(".");
+  if (!payload) {
+    throw new WorkosBridgeError("Cognito bridge returned invalid token", 502);
+  }
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    throw new WorkosBridgeError("Cognito bridge returned invalid token", 502);
+  }
 }

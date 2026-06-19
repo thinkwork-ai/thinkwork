@@ -122,7 +122,7 @@ describe("signOut", () => {
     const { signOut } = await import("./auth");
     const { navigations } = stubLocation("https://app.example");
 
-    signOut();
+    await signOut();
 
     expect(navigations).toHaveLength(1);
     const target = new URL(navigations[0]);
@@ -131,6 +131,53 @@ describe("signOut", () => {
     // Cognito LogoutURLs allowlist contains bare origins; the `_authed` route
     // guard bounces the unauthenticated user to /sign-in once they land.
     expect(target.searchParams.get("logout_uri")).toBe("https://app.example");
+  });
+
+  it("redirects through WorkOS logout when the API returns a WorkOS session URL", async () => {
+    vi.stubEnv("VITE_API_URL", "https://api.example.com/");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        logout_url:
+          "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example%2Fsign-in",
+      }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const { signOut, storeTokensInCognitoStorage } = await import("./auth");
+    const { navigations } = stubLocation("https://app.example");
+    const idToken = makeIdToken({
+      sub: "cognito-sub-123",
+      "cognito:username": "cognito-user-123",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    storeTokensInCognitoStorage(
+      {
+        id_token: idToken,
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+      },
+      "workos",
+    );
+
+    await signOut();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.com/api/auth/workos/logout",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          return_to: "https://app.example/sign-in",
+        }),
+      },
+    );
+    expect(navigations).toEqual([
+      "https://api.workos.com/user_management/sessions/logout?session_id=session_123&return_to=https%3A%2F%2Fapp.example%2Fsign-in",
+    ]);
   });
 });
 

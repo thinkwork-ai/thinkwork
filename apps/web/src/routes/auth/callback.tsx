@@ -63,7 +63,7 @@ export function AuthCallback() {
 
     exchange
       .then((tokens) => {
-        storeTokensInCognitoStorage(tokens);
+        storeTokensInCognitoStorage(tokens, workos_bridge ? "workos" : "cognito");
         const nextTarget = consumePostAuthRedirect(safeCallbackNext(next));
         // If opened as popup, notify parent and close
         if (window.opener) {

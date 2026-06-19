@@ -168,6 +168,15 @@ export const WORKOS_AUTH_BRIDGE_STATUSES = [
 export type WorkosAuthBridgeStatus =
   (typeof WORKOS_AUTH_BRIDGE_STATUSES)[number];
 
+export const WORKOS_AUTH_SESSION_STATUSES = [
+  "active",
+  "logged_out",
+  "expired",
+] as const;
+
+export type WorkosAuthSessionStatus =
+  (typeof WORKOS_AUTH_SESSION_STATUSES)[number];
+
 // ---------------------------------------------------------------------------
 // Premium plugin entitlements and one-time install keys
 // ---------------------------------------------------------------------------
@@ -580,6 +589,9 @@ export const workosAuthBridges = pgTable(
     bridge_code_digest: text("bridge_code_digest").notNull(),
     workos_user_id: text("workos_user_id").notNull(),
     workos_session_id: text("workos_session_id").notNull(),
+    workos_session_expires_at: timestamp("workos_session_expires_at", {
+      withTimezone: true,
+    }),
     workos_email: text("workos_email").notNull(),
     workos_email_verified: boolean("workos_email_verified")
       .notNull()
@@ -616,6 +628,65 @@ export const workosAuthBridges = pgTable(
     check(
       "workos_auth_bridges_status_allowed",
       sql`${table.status} IN ('pending', 'consumed', 'expired')`,
+    ),
+  ],
+);
+
+export const workosAuthSessions = pgTable(
+  "workos_auth_sessions",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tenant_auth_provider_reference_id: uuid(
+      "tenant_auth_provider_reference_id",
+    )
+      .notNull()
+      .references(() => tenantAuthProviderReferences.id, {
+        onDelete: "cascade",
+      }),
+    auth_provider_resource_id: uuid("auth_provider_resource_id")
+      .notNull()
+      .references(() => authProviderResources.id, { onDelete: "cascade" }),
+    cognito_principal_id: text("cognito_principal_id").notNull(),
+    cognito_username: text("cognito_username").notNull(),
+    workos_user_id: text("workos_user_id").notNull(),
+    workos_session_id: text("workos_session_id").notNull(),
+    workos_email: text("workos_email").notNull(),
+    status: text("status").notNull().default("active"),
+    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    logged_out_at: timestamp("logged_out_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("idx_workos_auth_sessions_cognito_active").on(
+      table.cognito_principal_id,
+      table.status,
+      table.expires_at,
+    ),
+    index("idx_workos_auth_sessions_user_active").on(
+      table.tenant_id,
+      table.user_id,
+      table.status,
+      table.expires_at,
+    ),
+    index("idx_workos_auth_sessions_workos_session").on(
+      table.workos_session_id,
+    ),
+    check(
+      "workos_auth_sessions_status_allowed",
+      sql`${table.status} IN ('active', 'logged_out', 'expired')`,
     ),
   ],
 );
@@ -822,6 +893,28 @@ export const workosAuthBridgesRelations = relations(
     }),
     resource: one(authProviderResources, {
       fields: [workosAuthBridges.auth_provider_resource_id],
+      references: [authProviderResources.id],
+    }),
+  }),
+);
+
+export const workosAuthSessionsRelations = relations(
+  workosAuthSessions,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [workosAuthSessions.tenant_id],
+      references: [tenants.id],
+    }),
+    user: one(users, {
+      fields: [workosAuthSessions.user_id],
+      references: [users.id],
+    }),
+    tenantReference: one(tenantAuthProviderReferences, {
+      fields: [workosAuthSessions.tenant_auth_provider_reference_id],
+      references: [tenantAuthProviderReferences.id],
+    }),
+    resource: one(authProviderResources, {
+      fields: [workosAuthSessions.auth_provider_resource_id],
       references: [authProviderResources.id],
     }),
   }),

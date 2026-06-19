@@ -3,7 +3,7 @@ linear: THNK-43
 title: WorkOS primary auth with Cognito token bridge
 status: in-progress
 updated: 2026-06-19
-branch: codex/thnk-43-u3-cognito-bridge
+branch: codex/thnk-43-u4-workos-logout
 ---
 
 # THNK-43 Autopilot Status
@@ -13,10 +13,10 @@ branch: codex/thnk-43-u3-cognito-bridge
 - Dispatcher marker: `dispatcher:THNK-43:Implementation:Codex`
 - Pass type: Autopilot implementation of
   `docs/plans/2026-06-19-001-feat-workos-primary-auth-bridge-plan.md`.
-- Scope: U3 only, Cognito custom-auth bridge for the server-owned WorkOS
+- Scope: U4, correct WorkOS browser-session logout after WorkOS-primary
   callback.
-- Branch: `codex/thnk-43-u3-cognito-bridge` from `origin/main`
-  `53691e2d1`.
+- Branch: `codex/thnk-43-u4-workos-logout` from `origin/main`
+  `5ea2a8321`.
 - PR: pending.
 - CI: pending PR.
 
@@ -48,6 +48,19 @@ branch: codex/thnk-43-u3-cognito-bridge
   reported all declared objects present.
 - Squash-merged, deleted the remote feature branch, removed the U2 worktree,
   and recorded PR-open and merged evidence in Linear.
+
+### U3 Cognito custom-auth bridge
+
+- Created and merged PR #2673:
+  <https://github.com/thinkwork-ai/thinkwork/pull/2673>.
+- Merge commit: `5ea2a83218fe98d8938dc08ab968b98e10a104ad`.
+- Required checks passed before merge: CLA, lint, supply-chain verify, test,
+  and typecheck.
+- CI `test` initially failed because `workos-cognito-bridge.ts` read
+  `process.env.COGNITO_USER_POOL_ID` and `process.env.ADMIN_CLIENT_ID`
+  directly. Fixed by using `@thinkwork/runtime-config` and re-pushed.
+- The branch was then rebased onto current `main`, force-pushed with lease,
+  rechecked, squash-merged, and recorded in Linear.
 
 ### Prior hosted-bridge pass
 
@@ -180,7 +193,7 @@ Remote CI recovery:
   `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0174_workos_auth_bridges.sql`;
   all declared objects are now present.
 
-## U3 Current Implementation
+## U3 Completed Implementation
 
 U3 is preserving the existing Cognito-token contract after direct WorkOS auth:
 
@@ -205,6 +218,7 @@ Local verification:
 - `pnpm --dir packages/api test -- workos-cognito-bridge.test.ts workos-auth.test.ts`
   - 20 tests passed across bridge logic, WorkOS auth library, and handler.
 - `pnpm --dir apps/web test -- src/lib/auth.test.ts src/routes/auth/callback.test.tsx`
+- `pnpm --dir apps/web test -- src/components/SpacesSidebar.test.tsx src/lib/auth.test.ts src/routes/auth/callback.test.tsx`
   - 12 tests passed, including callback coverage proving `workos_bridge`
     stores returned Cognito tokens only after a successful server bridge
     exchange.
@@ -217,7 +231,58 @@ Local verification:
 - CI `test` initially failed on PR #2673 because
   `packages/api/src/lib/workos-cognito-bridge.ts` read
   `process.env.COGNITO_USER_POOL_ID` and `process.env.ADMIN_CLIENT_ID`
-  directly, violating the runtime-config fixture guardrail.
+  directly, violating the runtime-config fixture guardrail. The fix was pushed,
+  checks passed, and PR #2673 was merged.
+
+## U4 Current Implementation
+
+U4 makes WorkOS-primary logout end the upstream WorkOS browser session instead
+of only clearing ThinkWork's local Cognito tokens:
+
+- Added `workos_auth_sessions` plus
+  `workos_auth_bridges.workos_session_expires_at` in migration
+  `0175_workos_auth_sessions.sql`.
+- Captured the WorkOS `sid` and token expiry during the WorkOS callback without
+  storing raw WorkOS access or refresh tokens.
+- Recorded a durable WorkOS session after the server-side Cognito custom-auth
+  exchange returns an ID token, keyed by Cognito `sub` and ThinkWork user.
+- Added `POST /api/auth/workos/logout`, authenticated by Cognito ID token, to
+  mark the latest active WorkOS session logged out and return the WorkOS
+  session logout URL.
+- Updated web WorkOS callback storage to mark WorkOS-sourced sessions and web
+  logout to redirect through WorkOS logout before falling back to Cognito
+  Hosted UI logout for non-WorkOS sessions.
+- Added the API Gateway route wiring for `/api/auth/workos/logout`.
+
+Local verification:
+
+- `pnpm install --store-dir .pnpm-store`
+  - Install succeeded. The optional `canvas` native build still emitted the
+    known Node 25/pkg-config warning during postinstall, but pnpm exited 0.
+- `pnpm --dir packages/database-pg test -- migration-0175-workos-auth-sessions.test.ts`
+- `pnpm --dir packages/api test -- workos-cognito-bridge.test.ts workos-auth.test.ts`
+- `pnpm --dir apps/web test -- src/lib/auth.test.ts src/routes/auth/callback.test.tsx`
+- `pnpm --dir packages/api typecheck`
+- `pnpm --dir packages/database-pg typecheck`
+- `pnpm --dir apps/web typecheck`
+- `pnpm --dir apps/cli typecheck`
+- `pnpm --dir apps/cli test -- terraform-enterprise-artifact-fixture.test.ts terraform-cognito-identity-provider-fixture.test.ts no-required-options.test.ts`
+- `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf`
+- `git diff --check`
+
+Remote CI recovery:
+
+- `Migration Drift Precheck (dev)` initially failed on PR #2674 because the
+  new hand-rolled `0175_workos_auth_sessions.sql` migration was not yet
+  applied to dev.
+- Applied only `packages/database-pg/drizzle/0175_workos_auth_sessions.sql` to
+  the dev database and verified the scoped drift reporter found all declared
+  U4 objects present.
+- CI `test` then failed because `SpacesSidebar.test.tsx` still expected an
+  immediate TanStack Router navigation to `/sign-in` after logout. U4 moved
+  redirect ownership into `auth.signOut()` so WorkOS-sourced sessions can
+  leave the app through WorkOS logout. Updated the test to assert no local
+  navigation races the sign-out redirect.
 - Recovery: switched those reads to `getConfig(...)` from
   `@thinkwork/runtime-config`.
 - Recovery verification:

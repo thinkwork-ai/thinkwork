@@ -16,6 +16,7 @@ import type { PublicOAuthOption } from "./auth-options";
 let _userPool: CognitoUserPool | null = null;
 let tokenStorage: TokenStorage = new LocalStorageTokenStorage();
 const TOKEN_REFRESH_SKEW_MS = 30_000;
+const AUTH_SOURCE_STORAGE_KEY = "thinkwork:auth-source";
 
 export function configureTokenStorage(storage: TokenStorage): void {
   if (tokenStorage === storage) return;
@@ -182,12 +183,25 @@ export function confirmForgotPassword(
 // ---------------------------------------------------------------------------
 // Sign out
 // ---------------------------------------------------------------------------
-// Clears local Cognito tokens AND the Cognito hosted-UI session cookie by
-// redirecting through `/logout`. Without the hosted-UI logout, a subsequent
-// "Continue with Google" silently re-uses the existing Cognito session and
-// never reaches Google's account chooser.
-export function signOut(): void {
+// Clears local Cognito tokens and ends the upstream browser session. WorkOS
+// primary sessions must redirect through WorkOS' session logout URL; legacy
+// Cognito Hosted UI sessions keep using Cognito `/logout`.
+export async function signOut(): Promise<void> {
+  const idToken = await getIdToken().catch(() => getStoredIdToken());
+  const authSource = tokenStorage.getItem(AUTH_SOURCE_STORAGE_KEY);
+  const workosLogoutUrl = idToken && authSource === "workos"
+    ? await requestWorkosLogoutUrl(idToken).catch((error) => {
+        console.error("[auth] WorkOS logout failed", error);
+        return null;
+      })
+    : null;
+
   clearLocalAuthSession();
+
+  if (workosLogoutUrl) {
+    window.location.href = workosLogoutUrl;
+    return;
+  }
 
   const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
   if (!clientId) {
@@ -209,6 +223,7 @@ export function signOut(): void {
 export function clearLocalAuthSession(): void {
   const pool = getUserPool();
   pool?.getCurrentUser()?.signOut();
+  tokenStorage.removeItem(AUTH_SOURCE_STORAGE_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -571,7 +586,10 @@ export async function exchangeWorkosBridgeForSession(
   };
 }
 
-export function storeTokensInCognitoStorage(tokens: OAuthTokens): void {
+export function storeTokensInCognitoStorage(
+  tokens: OAuthTokens,
+  authSource: "cognito" | "workos" = "cognito",
+): void {
   // Decode the id token to extract the username (sub claim)
   const payload = JSON.parse(atob(tokens.id_token.split(".")[1]));
   const username = payload["cognito:username"] || payload["sub"];
@@ -588,4 +606,27 @@ export function storeTokensInCognitoStorage(tokens: OAuthTokens): void {
     tokens.refresh_token,
   );
   tokenStorage.setItem(`${prefix}.LastAuthUser`, username);
+  tokenStorage.setItem(AUTH_SOURCE_STORAGE_KEY, authSource);
+}
+
+async function requestWorkosLogoutUrl(
+  idToken: string,
+): Promise<string | null> {
+  const res = await fetch(`${apiBaseUrl()}/api/auth/workos/logout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      return_to: `${window.location.origin}/sign-in`,
+    }),
+  });
+  if (!res.ok) return null;
+
+  const raw = (await res.json()) as Record<string, unknown>;
+  return typeof raw.logout_url === "string" && raw.logout_url
+    ? raw.logout_url
+    : null;
 }

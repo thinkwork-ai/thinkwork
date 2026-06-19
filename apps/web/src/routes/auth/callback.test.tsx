@@ -82,7 +82,10 @@ describe("AuthCallback WorkOS bridge", () => {
     render(<AuthCallback />);
 
     await waitFor(() =>
-      expect(authMocks.storeTokensInCognitoStorage).toHaveBeenCalledWith(tokens),
+      expect(authMocks.storeTokensInCognitoStorage).toHaveBeenCalledWith(
+        tokens,
+        "workos",
+      ),
     );
     expect(authMocks.exchangeWorkosBridgeForSession).toHaveBeenCalledWith(
       "one-time-bridge",
