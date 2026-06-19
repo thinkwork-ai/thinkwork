@@ -53,10 +53,11 @@ U3/U4/U5/U6 before U7; U7 before U8.
 - Branch/worktree:
   `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/thnk-50-u1-n8n-scaffold`
 - Git branch: `codex/thnk-50-u1-n8n-scaffold`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2691
 - Objective: add `plugins/n8n/` package metadata, draft manifest constants,
   package descriptor, README, package-local tests, and source-boundary
   registration without publishing a final catalog-visible n8n manifest.
-- Status: locally verified; preparing PR.
+- Status: PR opened; waiting for CI.
 - Verification:
   - `pnpm --filter @thinkwork/plugin-n8n test` passed.
   - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
