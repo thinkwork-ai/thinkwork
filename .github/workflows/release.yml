@@ -255,7 +255,8 @@ jobs:
       - name: Compute release manifest digest
         id: manifest_digest
         run: |
-          sha256="$(pnpm exec tsx scripts/release/manifest-sha256.ts dist/release/thinkwork-release.json)"
+          # Deployment preflight validates the exact downloaded bytes from GitHub.
+          sha256="$(shasum -a 256 dist/release/thinkwork-release.json | awk '{print $1}')"
           echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
       - name: Upload deployable release assets
