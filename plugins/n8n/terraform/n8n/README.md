@@ -50,6 +50,11 @@ starts. The runtime secret must contain these JSON fields:
 }
 ```
 
+The ECS task environment enables PostgreSQL SSL and sets
+`DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED=false`. This keeps the Aurora connection
+encrypted while avoiding n8n startup failures when the container trust store does
+not include the AWS RDS CA bundle.
+
 Destroy must run the inverse managed-app pre-destroy step to inventory storage,
 terminate sessions, and drop the dedicated database and role after Terraform
 parks or removes the services.

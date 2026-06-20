@@ -137,6 +137,11 @@ async function markApplySucceeded(args: {
   evidence: Record<string, unknown>;
   codebuildBuildId: string | null;
 }): Promise<DeploymentJob> {
+  const terraformOutputs = await readTerraformOutputs(args.evidence);
+  const desiredConfigPatch = desiredConfigPatchFromTerraformOutputs(
+    args.job.app_key,
+    terraformOutputs,
+  );
   const [updated] = await args.db
     .update(managedApplicationDeploymentJobs)
     .set({
@@ -149,10 +154,23 @@ async function markApplySucceeded(args: {
     .returning();
 
   if (args.job.application_id) {
+    const desiredConfigUpdate =
+      Object.keys(desiredConfigPatch).length > 0
+        ? {
+            desired_config: {
+              ...(await readManagedApplicationDesiredConfig(
+                args.db,
+                args.job.application_id,
+              )),
+              ...desiredConfigPatch,
+            },
+          }
+        : {};
     await args.db
       .update(managedApplications)
       .set({
         current_status: currentStatusForOperation(args.job.operation),
+        ...desiredConfigUpdate,
         updated_at: new Date(),
       })
       .where(eq(managedApplications.id, args.job.application_id))
@@ -172,6 +190,106 @@ async function markApplySucceeded(args: {
   });
 
   return updated ?? args.job;
+}
+
+async function readTerraformOutputs(
+  evidence: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const outputArtifactUri = nestedString(evidence, [
+    "terraform",
+    "outputs",
+    "s3Uri",
+  ]);
+  if (outputArtifactUri) {
+    const location = parseS3Uri(outputArtifactUri);
+    if (location) {
+      return (await readEvidenceJson(location.bucket, location.key)) ?? {};
+    }
+  }
+  return nestedRecord(evidence, ["terraform", "outputs"]);
+}
+
+async function readManagedApplicationDesiredConfig(
+  db: DbLike,
+  applicationId: string,
+): Promise<Record<string, unknown>> {
+  const [row] = (await db
+    .select({ desired_config: managedApplications.desired_config })
+    .from(managedApplications)
+    .where(eq(managedApplications.id, applicationId))
+    .limit(1)) as { desired_config: unknown }[];
+  return row?.desired_config &&
+    typeof row.desired_config === "object" &&
+    !Array.isArray(row.desired_config)
+    ? (row.desired_config as Record<string, unknown>)
+    : {};
+}
+
+function desiredConfigPatchFromTerraformOutputs(
+  appKey: string,
+  outputs: Record<string, unknown>,
+): Record<string, unknown> {
+  if (appKey !== "n8n") return {};
+  const publicUrl = stringOutputValue(outputs, "n8n_url");
+  return compactRecord({
+    databaseName: stringOutputValue(outputs, "n8n_database_name"),
+    databaseUrlSecretArn: stringOutputValue(outputs, "n8n_database_secret_arn"),
+    serviceCredentialSecretArn: stringOutputValue(
+      outputs,
+      "n8n_service_credential_secret_arn",
+    ),
+    storageBucketName: stringOutputValue(outputs, "n8n_storage_bucket_name"),
+    storagePrefix: stringOutputValue(outputs, "n8n_storage_prefix"),
+    packageConfigDigest: stringOutputValue(
+      outputs,
+      "n8n_package_config_digest",
+    ),
+    publicUrl,
+    domain: hostFromPublicUrl(publicUrl),
+  });
+}
+
+function compactRecord(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => {
+      if (entry === undefined || entry === null || entry === "") return false;
+      return true;
+    }),
+  );
+}
+
+function stringOutputValue(
+  outputs: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const output = outputs[key];
+  if (!output || typeof output !== "object" || Array.isArray(output)) {
+    return undefined;
+  }
+  const value = (output as Record<string, unknown>).value;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function hostFromPublicUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value).host;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseS3Uri(value: string): { bucket: string; key: string } | null {
+  if (!value.startsWith("s3://")) return null;
+  const withoutScheme = value.slice("s3://".length);
+  const separator = withoutScheme.indexOf("/");
+  if (separator <= 0 || separator === withoutScheme.length - 1) return null;
+  return {
+    bucket: withoutScheme.slice(0, separator),
+    key: withoutScheme.slice(separator + 1),
+  };
 }
 
 async function markJobFailed(args: {
@@ -230,7 +348,9 @@ async function readEvidenceJson(
   key: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const response = await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    );
     const body = JSON.parse(await bodyToString(response.Body)) as unknown;
     return body && typeof body === "object" && !Array.isArray(body)
       ? (body as Record<string, unknown>)

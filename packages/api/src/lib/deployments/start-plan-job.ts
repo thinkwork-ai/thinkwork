@@ -386,24 +386,51 @@ function withControllerManagedAppDefaults(args: {
   customerDomain?: string | null;
   appCertificateArn?: string | null;
 }): Record<string, unknown> {
-  if (args.appKey !== "twenty") return args.desiredConfig;
   const defaults: Record<string, unknown> = {};
+  if (args.appKey === "twenty") {
+    const customerDomain = args.customerDomain?.trim();
+    if (customerDomain) {
+      const domain = customerDomain.startsWith("crm.")
+        ? customerDomain
+        : `crm.${customerDomain}`;
+      defaults.domain = domain;
+      defaults.publicUrl = `https://${domain}`;
+    }
+    if (process.env.THINKWORK_TWENTY_DOMAIN?.trim()) {
+      defaults.domain = process.env.THINKWORK_TWENTY_DOMAIN.trim();
+    }
+    if (process.env.THINKWORK_TWENTY_PUBLIC_URL?.trim()) {
+      defaults.publicUrl = process.env.THINKWORK_TWENTY_PUBLIC_URL.trim();
+    }
+    const certificateArn =
+      process.env.THINKWORK_TWENTY_CERTIFICATE_ARN?.trim() ||
+      args.appCertificateArn?.trim();
+    if (certificateArn) {
+      defaults.certificateArn = certificateArn;
+    }
+    return {
+      ...defaults,
+      ...args.desiredConfig,
+    };
+  }
+  if (args.appKey !== "n8n") return args.desiredConfig;
+
   const customerDomain = args.customerDomain?.trim();
   if (customerDomain) {
-    const domain = customerDomain.startsWith("crm.")
+    const domain = customerDomain.startsWith("n8n.")
       ? customerDomain
-      : `crm.${customerDomain}`;
+      : `n8n.${customerDomain}`;
     defaults.domain = domain;
     defaults.publicUrl = `https://${domain}`;
   }
-  if (process.env.THINKWORK_TWENTY_DOMAIN?.trim()) {
-    defaults.domain = process.env.THINKWORK_TWENTY_DOMAIN.trim();
+  if (process.env.THINKWORK_N8N_DOMAIN?.trim()) {
+    defaults.domain = process.env.THINKWORK_N8N_DOMAIN.trim();
   }
-  if (process.env.THINKWORK_TWENTY_PUBLIC_URL?.trim()) {
-    defaults.publicUrl = process.env.THINKWORK_TWENTY_PUBLIC_URL.trim();
+  if (process.env.THINKWORK_N8N_PUBLIC_URL?.trim()) {
+    defaults.publicUrl = process.env.THINKWORK_N8N_PUBLIC_URL.trim();
   }
   const certificateArn =
-    process.env.THINKWORK_TWENTY_CERTIFICATE_ARN?.trim() ||
+    process.env.THINKWORK_N8N_CERTIFICATE_ARN?.trim() ||
     args.appCertificateArn?.trim();
   if (certificateArn) {
     defaults.certificateArn = certificateArn;

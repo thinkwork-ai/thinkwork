@@ -129,6 +129,7 @@ locals {
       { name = "DB_POSTGRESDB_DATABASE", value = var.database_name },
       { name = "DB_POSTGRESDB_USER", value = var.database_username },
       { name = "DB_POSTGRESDB_SSL_ENABLED", value = "true" },
+      { name = "DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED", value = "false" },
       { name = "EXECUTIONS_MODE", value = var.queue_mode ? "queue" : "regular" },
       { name = "QUEUE_BULL_REDIS_HOST", value = aws_elasticache_replication_group.n8n.primary_endpoint_address },
       { name = "QUEUE_BULL_REDIS_PORT", value = tostring(var.cache_port) },

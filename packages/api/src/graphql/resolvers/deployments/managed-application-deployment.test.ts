@@ -370,7 +370,9 @@ describe("managed application deployment evidence reconciliation", () => {
       },
     ]);
     selectQueue.push([planningJob]);
-    selectQueue.push([{ id: "event-1", event_type: "plan_evidence_reconciled" }]);
+    selectQueue.push([
+      { id: "event-1", event_type: "plan_evidence_reconciled" },
+    ]);
 
     const result = await queryMod.managedApplicationDeployment(
       null,
@@ -433,7 +435,9 @@ describe("managed application deployment evidence reconciliation", () => {
     ]);
     returningQueue.push([{ id: "app-1", current_status: "enabled" }]);
     selectQueue.push([applyingJob]);
-    selectQueue.push([{ id: "event-1", event_type: "apply_evidence_reconciled" }]);
+    selectQueue.push([
+      { id: "event-1", event_type: "apply_evidence_reconciled" },
+    ]);
 
     const result = await queryMod.managedApplicationDeployment(
       null,
@@ -450,6 +454,124 @@ describe("managed application deployment evidence reconciliation", () => {
       expect.arrayContaining([
         expect.objectContaining({ status: "succeeded" }),
         expect.objectContaining({ current_status: "enabled" }),
+      ]),
+    );
+  });
+
+  it("merges n8n Terraform outputs into desired_config for plugin MCP provisioning", async () => {
+    const applyingJob = {
+      ...destructiveJob,
+      id: "job-n8n-apply",
+      app_key: "n8n",
+      operation: "ENABLE",
+      status: "applying",
+      application_id: "app-n8n",
+      evidence_bucket: "evidence-bucket",
+      evidence_prefix: "tenant-1/n8n/job-n8n-apply/plan",
+    };
+    mockS3Send.mockImplementation(async (command) => {
+      const key = command.input.Key as string;
+      if (key.endsWith("/deployment-evidence.json")) {
+        return {
+          Body: {
+            transformToString: async () =>
+              JSON.stringify({
+                status: "succeeded",
+                terraformExitCode: 0,
+                codebuildBuildId: "build-n8n",
+                terraform: {
+                  outputs: {
+                    fileName: "terraform-outputs.json",
+                    s3Uri:
+                      "s3://evidence-bucket/tenant-1/n8n/job-n8n-apply/apply/terraform-outputs.json",
+                    sha256: "a".repeat(64),
+                  },
+                },
+              }),
+          },
+        };
+      }
+      return {
+        Body: {
+          transformToString: async () =>
+            JSON.stringify({
+              n8n_url: {
+                value: "https://n8n.tei.thinkwork.ai",
+              },
+              n8n_database_name: {
+                value: "thinkwork_n8n",
+              },
+              n8n_database_secret_arn: {
+                value:
+                  "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/database-url",
+              },
+              n8n_service_credential_secret_arn: {
+                value:
+                  "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/service-credential",
+              },
+              n8n_storage_bucket_name: {
+                value: "thinkwork-dev-n8n",
+              },
+              n8n_storage_prefix: {
+                value: "managed-apps/n8n",
+              },
+              n8n_package_config_digest: {
+                value: "",
+              },
+            }),
+        },
+      };
+    });
+    returningQueue.push([
+      {
+        ...applyingJob,
+        status: "succeeded",
+        codebuild_build_arn: "build-n8n",
+      },
+    ]);
+    selectQueue.push([applyingJob]);
+    selectQueue.push([
+      {
+        desired_config: {
+          customPackageSpecs: ["lodash@4.17.21"],
+          storagePrefix: "operator-prefix",
+        },
+      },
+    ]);
+    returningQueue.push([{ id: "app-n8n", current_status: "enabled" }]);
+    selectQueue.push([
+      { id: "event-1", event_type: "apply_evidence_reconciled" },
+    ]);
+
+    const result = await queryMod.managedApplicationDeployment(
+      null,
+      { jobId: "job-n8n-apply" },
+      {} as any,
+    );
+
+    expect(mockS3Send.mock.calls.map((call) => call[0].input.Key)).toEqual([
+      "tenant-1/n8n/job-n8n-apply/apply/deployment-evidence.json",
+      "tenant-1/n8n/job-n8n-apply/apply/terraform-outputs.json",
+    ]);
+    expect(result.status).toBe("succeeded");
+    expect(updateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: "succeeded" }),
+        expect.objectContaining({
+          current_status: "enabled",
+          desired_config: {
+            customPackageSpecs: ["lodash@4.17.21"],
+            storagePrefix: "managed-apps/n8n",
+            databaseName: "thinkwork_n8n",
+            databaseUrlSecretArn:
+              "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/database-url",
+            serviceCredentialSecretArn:
+              "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/service-credential",
+            storageBucketName: "thinkwork-dev-n8n",
+            publicUrl: "https://n8n.tei.thinkwork.ai",
+            domain: "n8n.tei.thinkwork.ai",
+          },
+        }),
       ]),
     );
   });
