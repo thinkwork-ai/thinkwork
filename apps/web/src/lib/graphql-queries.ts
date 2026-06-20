@@ -208,6 +208,259 @@ export const SpacesQuery = gql`
   }
 `;
 
+export const SettingsWorkflowsQuery = gql`
+  query SettingsWorkflows(
+    $tenantId: ID!
+    $lifecycleStatus: WorkflowLifecycleStatus
+    $readinessState: WorkflowReadinessState
+    $limit: Int
+    $cursor: String
+  ) {
+    workflows(
+      tenantId: $tenantId
+      lifecycleStatus: $lifecycleStatus
+      readinessState: $readinessState
+      limit: $limit
+      cursor: $cursor
+    ) {
+      id
+      tenantId
+      name
+      slug
+      description
+      lifecycleStatus
+      visibility
+      primaryTriggerFamily
+      currentVersionNumber
+      capabilityFlags
+      readinessState
+      readinessReasons
+      lastRunAt
+      bindings {
+        id
+        bindingType
+        bindingStatus
+        readinessState
+        readinessReasons
+        externalWorkflowId
+        externalWorkflowName
+        routineId
+      }
+      triggers {
+        id
+        triggerFamily
+        sourceSystem
+        enabled
+        readinessState
+      }
+      lastRun {
+        id
+        status
+        triggerFamily
+        triggerSource
+        startedAt
+        finishedAt
+        lastEventAt
+        errorCode
+        errorMessage
+      }
+      updatedAt
+    }
+  }
+`;
+
+export const SettingsWorkflowQuery = gql`
+  query SettingsWorkflow($id: ID!, $runLimit: Int) {
+    workflow(id: $id) {
+      id
+      tenantId
+      name
+      slug
+      description
+      lifecycleStatus
+      visibility
+      ownerUserId
+      ownerAgentId
+      primaryTriggerFamily
+      currentVersionNumber
+      capabilityFlags
+      readinessState
+      readinessReasons
+      currentVersion {
+        id
+        versionNumber
+        versionStatus
+        sourceKind
+        sourceMetadata
+        definitionSnapshot
+        capabilitySnapshot
+        routineAslVersionId
+        publishedAt
+        createdAt
+      }
+      triggers {
+        id
+        triggerFamily
+        sourceSystem
+        enabled
+        idempotencyRequired
+        triggerConfig
+        actorContract
+        readinessState
+        readinessReasons
+      }
+      bindings {
+        id
+        bindingType
+        bindingStatus
+        routineId
+        routineAslVersionId
+        pluginInstallId
+        managedApplicationId
+        externalWorkflowId
+        externalWorkflowName
+        externalVersionId
+        connectionRef
+        capabilityFlags
+        readinessState
+        readinessReasons
+      }
+      runs(limit: $runLimit) {
+        id
+        status
+        triggerFamily
+        triggerSource
+        actorType
+        actorId
+        correlationId
+        backendExecutionId
+        startedAt
+        finishedAt
+        lastEventAt
+        errorCode
+        errorMessage
+        totalCostUsdCents
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const SettingsWorkflowRunsQuery = gql`
+  query SettingsWorkflowRuns(
+    $tenantId: ID!
+    $workflowId: ID
+    $status: WorkflowRunStatus
+    $limit: Int
+    $cursor: String
+  ) {
+    workflowRuns(
+      tenantId: $tenantId
+      workflowId: $workflowId
+      status: $status
+      limit: $limit
+      cursor: $cursor
+    ) {
+      id
+      workflowId
+      workflow {
+        id
+        name
+        slug
+        primaryTriggerFamily
+      }
+      status
+      triggerFamily
+      triggerSource
+      actorType
+      correlationId
+      backendExecutionId
+      startedAt
+      finishedAt
+      lastEventAt
+      errorCode
+      errorMessage
+      totalCostUsdCents
+      createdAt
+    }
+  }
+`;
+
+export const SettingsWorkflowRunQuery = gql`
+  query SettingsWorkflowRun($id: ID!) {
+    workflowRun(id: $id) {
+      id
+      tenantId
+      workflowId
+      workflow {
+        id
+        name
+        slug
+      }
+      workflowVersion {
+        id
+        versionNumber
+        versionStatus
+        sourceKind
+        routineAslVersionId
+      }
+      engineBinding {
+        id
+        bindingType
+        bindingStatus
+        routineId
+        externalWorkflowId
+        externalWorkflowName
+        readinessState
+        readinessReasons
+      }
+      status
+      triggerFamily
+      triggerSource
+      actorType
+      actorId
+      idempotencyKey
+      correlationId
+      backendExecutionId
+      backendExecutionRef
+      capabilitySnapshot
+      readinessSnapshot
+      inputSummary
+      outputSummary
+      startedAt
+      finishedAt
+      lastEventAt
+      errorCode
+      errorMessage
+      totalCostUsdCents
+      events {
+        id
+        eventType
+        eventStatus
+        provenance
+        occurredAt
+        message
+        payloadSummary
+        evidenceRef
+      }
+      evidence {
+        id
+        evidenceType
+        sourceSystem
+        sourceId
+        uri
+        summary
+        redactionState
+        sensitivity
+        retentionExpiresAt
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
 export const NewThreadMentionTargetsQuery = gql`
   query NewThreadMentionTargets($tenantId: ID!) {
     tenantMentionTargets(tenantId: $tenantId) {

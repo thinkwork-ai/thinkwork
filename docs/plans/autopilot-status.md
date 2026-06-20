@@ -150,19 +150,21 @@ status: in_progress
   `docs/brainstorms/2026-06-20-first-class-workflow-control-plane-requirements.md`.
 - Linear: THNK-59.
 - Target branch: `main`.
-- Current implementation unit: U1 - Workflow schema and compatibility model.
-- Current branch: `codex/thnk-59-u1-workflow-schema`.
-- Current worktree: `.Codex/worktrees/thnk-59-u1-workflow-schema`.
+- Current implementation unit: U2 - GraphQL workflow API and codegen contract.
+- Current branch: `codex/thnk-59-u2-workflow-graphql`.
+- Current worktree: `.Codex/worktrees/thnk-59-u2-workflow-graphql`.
 - Pull request:
-  U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754) opened.
-- Status: U1 PR open; CI pending.
+  U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
+  merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2 pending.
+- Status: U1 complete and merged. U2 implementation started from
+  `origin/main` at `19f1f0478`.
 - Notes:
   - Started autopilot execution from `origin/main`.
   - Created isolated U1 worktree from `origin/main` at `080513f00`.
   - Copied the workflow plan, requirements, and ideation docs into the U1
     worktree because they were still untracked in the main checkout when
     autopilot started.
-  - U1 will add the workflow control-plane schema, `0177` migration/rollback,
+  - U1 added the workflow control-plane schema, `0177` migration/rollback,
     schema export coverage, and migration marker tests.
   - Added narrow plugin-source-boundary allowlist entries for the shared
     `workflow-control-plane` migration/test filenames so the existing Plane
@@ -217,7 +219,36 @@ status: in_progress
   - Scoped dev drift reporter passed after applying the migration:
     `bash scripts/db-migrate-manual.sh
     packages/database-pg/drizzle/0177_workflow_control_plane.sql`.
-- CI: pending.
+  - U1 PR #2754 passed required CI (`cla`, `lint`, `verify`, `typecheck`,
+    `test`, and migration drift precheck) and was squash merged to `main`.
+  - Created isolated U2 worktree from `origin/main` at `19f1f0478`.
+  - U2 added the workflow SDL, tenant-scoped workflow/run query resolvers,
+    type resolvers for versions, triggers, bindings, runs, events, and
+    evidence, web query documents, generated GraphQL clients, and focused
+    resolver/schema tests.
+  - U2 `pnpm schema:build` passed.
+  - U2 codegen passed for `thinkwork-cli`, `@thinkwork/web`, and
+    `@thinkwork/mobile`.
+  - U2 focused API workflow resolver tests passed: `pnpm --filter
+    @thinkwork/api exec vitest run
+    src/graphql/resolvers/workflows/workflows.query.test.ts
+    src/graphql/resolvers/workflows/workflowRun.query.test.ts` (2 files, 7
+    tests).
+  - U2 web schema contract test passed: `pnpm --filter @thinkwork/web test --
+    src/lib/graphql-queries.schema.test.ts` (13 tests).
+  - U2 `pnpm --filter @thinkwork/api typecheck`, `pnpm --filter @thinkwork/web
+    typecheck`, `pnpm --filter thinkwork-cli typecheck`, and root `pnpm
+    typecheck` passed. `@thinkwork/mobile` has no package typecheck script.
+  - U2 `pnpm lint` and `git diff --check` passed.
+  - U2 root `pnpm test` first failed in `apps/desktop` because parallel
+    workers hit the existing Electron install race; focused
+    `pnpm --filter @thinkwork/desktop test` passed (15 files, 105 tests).
+  - U2 root `pnpm test` second run progressed through the suite but failed in
+    unrelated `src/handlers/chat-agent-invoke.runtime-routing.test.ts` with the
+    same parallel-suite timing/leakage symptoms seen in U1; focused rerun
+    `pnpm --filter @thinkwork/api exec vitest run
+    src/handlers/chat-agent-invoke.runtime-routing.test.ts` passed (11 tests).
+- CI: U1 passed and merged; U2 local verification complete, PR pending.
 
 ## Space Webhook Thread Starts - 2026-06-19
 

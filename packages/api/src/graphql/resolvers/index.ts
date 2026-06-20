@@ -69,6 +69,16 @@ import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { routineMutations, routineQueries } from "./routines/index.js";
 import {
+  workflowQueries,
+  workflowEngineBindingTypeResolvers,
+  workflowEvidenceTypeResolvers,
+  workflowRunEventTypeResolvers,
+  workflowRunTypeResolvers,
+  workflowTriggerTypeResolvers,
+  workflowTypeResolvers,
+  workflowVersionTypeResolvers,
+} from "./workflows/index.js";
+import {
   tenantCredentialMutations,
   tenantCredentialQueries,
 } from "./tenant-credentials/index.js";
@@ -132,6 +142,7 @@ export const queryResolvers: Record<string, any> = {
   ...runtimeQueries,
   ...workspaceQueries,
   ...routineQueries,
+  ...workflowQueries,
   ...tenantCredentialQueries,
   ...deploymentQueries,
   ...pluginQueries,
@@ -213,6 +224,13 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   SkillEvalScore: skillEvalScoreTypeResolvers,
   WikiPage: wikiPageTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
+  Workflow: workflowTypeResolvers,
+  WorkflowVersion: workflowVersionTypeResolvers,
+  WorkflowTrigger: workflowTriggerTypeResolvers,
+  WorkflowEngineBinding: workflowEngineBindingTypeResolvers,
+  WorkflowRun: workflowRunTypeResolvers,
+  WorkflowRunEvent: workflowRunEventTypeResolvers,
+  WorkflowEvidence: workflowEvidenceTypeResolvers,
   Space: spaceTypeResolvers,
   SpaceMember: spaceMemberTypeResolvers,
   SpaceChecklistTemplate: spaceChecklistTemplateTypeResolvers,
