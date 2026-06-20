@@ -457,6 +457,46 @@ export async function handler(
       return mcpSetApiKey(tenantSlug, mcpSetKeyMatch[1], event);
     }
 
+    // GET /api/skills/mcp-servers/:id/service-credential-status — whether a
+    // plugin-managed service credential has its secret value configured.
+    const mcpServiceCredentialStatusMatch = path.match(
+      /^\/api\/skills\/mcp-servers\/([^/]+)\/service-credential-status$/,
+    );
+    if (mcpServiceCredentialStatusMatch && method === "GET") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      {
+        const _v = await requireTenantMembership(event, tenantSlug, {
+          requiredRoles: ["owner", "admin"],
+        });
+        if (!_v.ok) return error(_v.reason, _v.status);
+      }
+      return mcpServiceCredentialStatus(
+        tenantSlug,
+        mcpServiceCredentialStatusMatch[1],
+      );
+    }
+
+    // PUT /api/skills/mcp-servers/:id/service-credential — set or rotate a
+    // service credential secret value for plugin-managed MCP servers such as
+    // n8n. The DB row keeps only secretRef + header binding metadata.
+    const mcpSetServiceCredentialMatch = path.match(
+      /^\/api\/skills\/mcp-servers\/([^/]+)\/service-credential$/,
+    );
+    if (mcpSetServiceCredentialMatch && method === "PUT") {
+      if (!tenantSlug) return error("x-tenant-slug header required", 400);
+      {
+        const _v = await requireTenantMembership(event, tenantSlug, {
+          requiredRoles: ["owner", "admin"],
+        });
+        if (!_v.ok) return error(_v.reason, _v.status);
+      }
+      return mcpSetServiceCredential(
+        tenantSlug,
+        mcpSetServiceCredentialMatch[1],
+        event,
+      );
+    }
+
     // POST /api/skills/mcp-servers/:id/test — test connection + cache tools
     const mcpTestMatch = path.match(
       /^\/api\/skills\/mcp-servers\/([^/]+)\/test$/,
@@ -1650,6 +1690,370 @@ async function mcpSetApiKey(
     lastFour: rawToken.slice(-4),
     minted: body.mintNew === true,
   });
+}
+
+/**
+ * GET /api/skills/mcp-servers/:id/service-credential-status
+ *
+ * Returns admin-safe service credential state for plugin-managed MCP servers.
+ * Secret refs and raw token values stay server-side; only a configured flag and
+ * last-4 preview are returned so operators can tell whether a token was saved.
+ */
+async function mcpServiceCredentialStatus(
+  tenantSlug: string,
+  serverId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const resolved = await resolveServiceCredentialServer(tenantSlug, serverId);
+  if (!resolved.ok) return resolved.response;
+  const server = resolved.server;
+
+  const binding = primaryServiceCredentialBinding(server.authConfig);
+  const credentialKind =
+    typeof server.authConfig.credentialKind === "string"
+      ? server.authConfig.credentialKind
+      : null;
+  const secretRefConfigured = Boolean(server.secretRef);
+  let rawToken: string | null = null;
+  if (server.secretRef && binding) {
+    try {
+      const secret = await sm.send(
+        new GetSecretValueCommand({ SecretId: server.secretRef }),
+      );
+      rawToken =
+        serviceCredentialSecretField(
+          parseServiceCredentialSecret(secret.SecretString),
+          binding.secretJsonKey,
+        ) ?? null;
+    } catch (err: unknown) {
+      if (!(err instanceof ResourceNotFoundException)) throw err;
+    }
+  }
+
+  return json({
+    authType: server.authType,
+    credentialKind,
+    hasCredential: Boolean(rawToken),
+    lastFour: rawToken ? rawToken.slice(-4) : null,
+    secretRefConfigured,
+    headerName: binding?.name ?? null,
+    secretJsonKey: binding?.secretJsonKey ?? null,
+  });
+}
+
+/**
+ * PUT /api/skills/mcp-servers/:id/service-credential
+ *
+ * Stores a caller-supplied service access token in the preconfigured Secrets
+ * Manager secret. This intentionally does not write the token into
+ * tenant_mcp_servers.auth_config; auth_config only declares which secret/key
+ * and header binding runtime dispatch should resolve.
+ */
+async function mcpSetServiceCredential(
+  tenantSlug: string,
+  serverId: string,
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const resolved = await resolveServiceCredentialServer(tenantSlug, serverId);
+  if (!resolved.ok) return resolved.response;
+  const server = resolved.server;
+
+  const binding = primaryServiceCredentialBinding(server.authConfig);
+  if (!binding) {
+    return error(
+      "Service credential auth_config is missing a header binding.",
+      400,
+    );
+  }
+  if (!server.secretRef) {
+    return error(
+      "Service credential auth_config is missing its secretRef. Retry the plugin install after the managed application deployment is configured.",
+      400,
+    );
+  }
+
+  let body: { token?: unknown };
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return error("Invalid JSON body", 400);
+  }
+  const rawToken = normalizeServiceCredentialToken(body.token);
+  if (!rawToken.ok) return error(rawToken.error, 400);
+
+  const existingSecret = await readExistingServiceCredentialSecret(
+    server.secretRef,
+  );
+  if (!existingSecret.ok) return error(existingSecret.error, 500);
+  const nextSecret = {
+    ...existingSecret.value,
+    type: "mcpServiceCredential",
+    credentialKind: server.authConfig.credentialKind ?? "service_credential",
+    [binding.secretJsonKey]: rawToken.value,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const written = await writeServiceCredentialSecret(
+    server.secretRef,
+    nextSecret,
+  );
+  if (!written.ok) return error(written.error, 500);
+
+  await db
+    .update(tenantMcpServers)
+    .set({ updated_at: new Date() })
+    .where(eq(tenantMcpServers.id, serverId));
+
+  return json({
+    ok: true,
+    lastFour: rawToken.value.slice(-4),
+    headerName: binding.name,
+    secretJsonKey: binding.secretJsonKey,
+  });
+}
+
+type ServiceCredentialServer = {
+  id: string;
+  slug: string;
+  url: string;
+  authType: string;
+  authConfig: Record<string, unknown>;
+  secretRef: string | null;
+};
+
+type ServiceCredentialServerResult =
+  | { ok: true; server: ServiceCredentialServer }
+  | { ok: false; response: APIGatewayProxyStructuredResultV2 };
+
+async function resolveServiceCredentialServer(
+  tenantSlug: string,
+  serverId: string,
+): Promise<ServiceCredentialServerResult> {
+  const badUuid = requireUuid(serverId);
+  if (badUuid) return { ok: false, response: badUuid };
+  const tenantId = await resolveTenantId(tenantSlug);
+  if (!tenantId) return { ok: false, response: error("Tenant not found", 404) };
+
+  const [server] = await db
+    .select({
+      id: tenantMcpServers.id,
+      slug: tenantMcpServers.slug,
+      url: tenantMcpServers.url,
+      auth_type: tenantMcpServers.auth_type,
+      auth_config: tenantMcpServers.auth_config,
+    })
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.id, serverId),
+        eq(tenantMcpServers.tenant_id, tenantId),
+      ),
+    )
+    .limit(1);
+
+  if (!server) {
+    return { ok: false, response: notFound("MCP server not found") };
+  }
+  if (server.auth_type !== "service_credential") {
+    return {
+      ok: false,
+      response: error(
+        `Server auth_type is "${server.auth_type}", not "service_credential". Service credential management only applies to service_credential servers.`,
+        400,
+      ),
+    };
+  }
+
+  const authConfig =
+    typeof server.auth_config === "object" &&
+    server.auth_config !== null &&
+    !Array.isArray(server.auth_config)
+      ? (server.auth_config as Record<string, unknown>)
+      : {};
+  const secretRef =
+    typeof authConfig.secretRef === "string" && authConfig.secretRef.trim()
+      ? authConfig.secretRef.trim()
+      : null;
+
+  return {
+    ok: true,
+    server: {
+      id: server.id,
+      slug: server.slug,
+      url: server.url,
+      authType: server.auth_type,
+      authConfig,
+      secretRef,
+    },
+  };
+}
+
+interface ServiceCredentialHeaderBinding {
+  name: string;
+  secretJsonKey: string;
+  valuePrefix?: string;
+}
+
+function primaryServiceCredentialBinding(
+  authConfig: Record<string, unknown>,
+): ServiceCredentialHeaderBinding | null {
+  const headers = authConfig.headers;
+  if (!Array.isArray(headers)) return null;
+  const bindings = headers.flatMap(
+    (entry): ServiceCredentialHeaderBinding[] => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        return [];
+      }
+      const header = entry as Record<string, unknown>;
+      if (
+        typeof header.name !== "string" ||
+        !header.name.trim() ||
+        typeof header.secretJsonKey !== "string" ||
+        !header.secretJsonKey.trim()
+      ) {
+        return [];
+      }
+      return [
+        {
+          name: header.name.trim(),
+          secretJsonKey: header.secretJsonKey.trim(),
+          ...(typeof header.valuePrefix === "string"
+            ? { valuePrefix: header.valuePrefix }
+            : {}),
+        },
+      ];
+    },
+  );
+  return (
+    bindings.find(
+      (binding) => binding.name.toLowerCase() === "authorization",
+    ) ??
+    bindings[0] ??
+    null
+  );
+}
+
+function normalizeServiceCredentialToken(
+  value: unknown,
+): { ok: true; value: string } | { ok: false; error: string } {
+  if (typeof value !== "string") {
+    return { ok: false, error: "token must be a non-empty string" };
+  }
+  const token = value
+    .trim()
+    .replace(/^Bearer\s+/i, "")
+    .trim();
+  if (!token) return { ok: false, error: "token must be a non-empty string" };
+  if (/[\r\n\0]/.test(token)) {
+    return {
+      ok: false,
+      error: "token must not contain newline or null characters",
+    };
+  }
+  return { ok: true, value: token };
+}
+
+type ServiceCredentialSecretValue = Record<string, unknown> | string | null;
+
+function parseServiceCredentialSecret(
+  secretString?: string,
+): ServiceCredentialSecretValue {
+  if (!secretString) return null;
+  try {
+    const parsed = JSON.parse(secretString) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return secretString.trim() ? secretString.trim() : null;
+  }
+}
+
+function serviceCredentialSecretField(
+  secretValue: ServiceCredentialSecretValue,
+  key: string,
+): string | undefined {
+  if (typeof secretValue === "string") {
+    return key === "token" && secretValue.trim()
+      ? secretValue.trim()
+      : undefined;
+  }
+  if (!secretValue) return undefined;
+  const value = secretValue[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+async function readExistingServiceCredentialSecret(
+  secretRef: string,
+): Promise<
+  { ok: true; value: Record<string, unknown> } | { ok: false; error: string }
+> {
+  try {
+    const secret = await sm.send(
+      new GetSecretValueCommand({ SecretId: secretRef }),
+    );
+    const parsed = parseServiceCredentialSecret(secret.SecretString);
+    if (parsed && typeof parsed === "object") {
+      return { ok: true, value: parsed };
+    }
+    return { ok: true, value: {} };
+  } catch (err: unknown) {
+    if (err instanceof ResourceNotFoundException) {
+      return { ok: true, value: {} };
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      error: `Failed to read service credential secret: ${message}`,
+    };
+  }
+}
+
+async function writeServiceCredentialSecret(
+  secretRef: string,
+  value: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const secretString = JSON.stringify(value);
+  try {
+    await sm.send(
+      new UpdateSecretCommand({
+        SecretId: secretRef,
+        SecretString: secretString,
+      }),
+    );
+    return { ok: true };
+  } catch (err: unknown) {
+    if (!(err instanceof ResourceNotFoundException)) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: `Failed to update service credential secret: ${message}`,
+      };
+    }
+    if (secretRef.startsWith("arn:")) {
+      return {
+        ok: false,
+        error:
+          "Service credential secret ARN was not found. Redeploy the managed application so Terraform creates the configured secret.",
+      };
+    }
+    try {
+      await sm.send(
+        new CreateSecretCommand({
+          Name: secretRef,
+          SecretString: secretString,
+        }),
+      );
+      return { ok: true };
+    } catch (createErr: unknown) {
+      const message =
+        createErr instanceof Error ? createErr.message : String(createErr);
+      return {
+        ok: false,
+        error: `Failed to create service credential secret: ${message}`,
+      };
+    }
+  }
 }
 
 async function mcpTestConnection(

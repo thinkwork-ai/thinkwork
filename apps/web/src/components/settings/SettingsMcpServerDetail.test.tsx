@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   callRuntimeMcpTool: vi.fn(),
   deleteMcpServer: vi.fn(),
   setMcpServerEnabled: vi.fn(),
+  getMcpServiceCredentialStatus: vi.fn(),
+  saveMcpServiceCredential: vi.fn(),
   clearUserMcpToken: vi.fn(),
   buildMcpOAuthAuthorizeUrl: vi.fn(),
 }));
@@ -52,6 +54,8 @@ vi.mock("@/lib/mcp-api", async (importOriginal) => {
     callRuntimeMcpTool: mocks.callRuntimeMcpTool,
     deleteMcpServer: mocks.deleteMcpServer,
     setMcpServerEnabled: mocks.setMcpServerEnabled,
+    getMcpServiceCredentialStatus: mocks.getMcpServiceCredentialStatus,
+    saveMcpServiceCredential: mocks.saveMcpServiceCredential,
     clearUserMcpToken: mocks.clearUserMcpToken,
     buildMcpOAuthAuthorizeUrl: mocks.buildMcpOAuthAuthorizeUrl,
   };
@@ -69,11 +73,28 @@ beforeEach(() => {
   mocks.callRuntimeMcpTool.mockReset();
   mocks.deleteMcpServer.mockReset();
   mocks.setMcpServerEnabled.mockReset();
+  mocks.getMcpServiceCredentialStatus.mockReset();
+  mocks.saveMcpServiceCredential.mockReset();
   mocks.clearUserMcpToken.mockReset();
   mocks.buildMcpOAuthAuthorizeUrl.mockReset();
   mocks.useQuery.mockReturnValue([{ data: { agent: { id: "agent-1" } } }]);
   mocks.listRuntimeMcpTools.mockResolvedValue({ tools: [] });
   mocks.callRuntimeMcpTool.mockResolvedValue({ content: [] });
+  mocks.getMcpServiceCredentialStatus.mockResolvedValue({
+    authType: "service_credential",
+    credentialKind: "n8n-mcp-access-token",
+    hasCredential: false,
+    lastFour: null,
+    secretRefConfigured: true,
+    headerName: "Authorization",
+    secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+  });
+  mocks.saveMcpServiceCredential.mockResolvedValue({
+    ok: true,
+    lastFour: "9876",
+    headerName: "Authorization",
+    secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+  });
   window.history.replaceState({}, "", "/settings/mcp-servers/server-1");
 });
 
@@ -198,6 +219,38 @@ describe("SettingsMcpServerDetail", () => {
 
     expect(screen.getByText("find_many_opportunities")).toBeTruthy();
     expect(screen.queryByText("find_many_companies")).toBeNull();
+  });
+
+  it("lets admins save a plugin service credential access token", async () => {
+    mockServerState("not_connected", {
+      name: "n8n workflow management",
+      slug: "n8n--workflow-management",
+      url: "https://n8n.thinkwork.ai/mcp-server/http",
+      authType: "service_credential",
+      managementSource: "plugin",
+      managedApplicationKey: null,
+    });
+
+    render(<SettingsMcpServerDetail />);
+
+    expect(await screen.findByText("n8n workflow management")).toBeTruthy();
+    expect(screen.getByText("Plugin-managed")).toBeTruthy();
+    expect(await screen.findByText("N8N_MCP_SERVICE_CREDENTIAL")).toBeTruthy();
+    expect(screen.getByText("Not configured")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Service credential access token"), {
+      target: { value: "n8n_mcp_token_saved9876" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save token/i }));
+
+    await waitFor(() => {
+      expect(mocks.saveMcpServiceCredential).toHaveBeenCalledWith(
+        "thinkwork",
+        "server-1",
+        "n8n_mcp_token_saved9876",
+      );
+    });
+    expect(await screen.findByText("Service credential saved.")).toBeTruthy();
   });
 });
 

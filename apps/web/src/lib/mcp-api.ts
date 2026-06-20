@@ -23,6 +23,16 @@ export type McpServer = {
   runtimeEnabled?: boolean;
 };
 
+export type McpServiceCredentialStatus = {
+  authType: string;
+  credentialKind?: string | null;
+  hasCredential: boolean;
+  lastFour?: string | null;
+  secretRefConfigured: boolean;
+  headerName?: string | null;
+  secretJsonKey?: string | null;
+};
+
 export type RuntimeMcpTool = {
   name: string;
   server: string;
@@ -100,6 +110,33 @@ export function deleteMcpServer(
   return request(`/api/skills/mcp-servers/${serverId}`, {
     method: "DELETE",
     tenantSlug,
+  });
+}
+
+export function getMcpServiceCredentialStatus(
+  tenantSlug: string,
+  serverId: string,
+): Promise<McpServiceCredentialStatus> {
+  return request(
+    `/api/skills/mcp-servers/${serverId}/service-credential-status`,
+    { tenantSlug },
+  );
+}
+
+export function saveMcpServiceCredential(
+  tenantSlug: string,
+  serverId: string,
+  token: string,
+): Promise<{
+  ok: boolean;
+  lastFour?: string | null;
+  headerName?: string | null;
+  secretJsonKey?: string | null;
+}> {
+  return request(`/api/skills/mcp-servers/${serverId}/service-credential`, {
+    method: "PUT",
+    tenantSlug,
+    body: JSON.stringify({ token }),
   });
 }
 

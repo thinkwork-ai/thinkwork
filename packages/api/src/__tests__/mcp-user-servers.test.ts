@@ -39,7 +39,7 @@ const {
         role: "member",
       }),
     ),
-    mockSecretsSend: vi.fn(() => Promise.resolve({})),
+    mockSecretsSend: vi.fn(async (_command: any) => ({})),
   };
 });
 
@@ -57,12 +57,14 @@ vi.mock("@thinkwork/database-pg", () => ({
       from: () => ({
         where: (predicate: unknown) => {
           dbState.predicates.push(predicate);
-          return Promise.resolve(dbState.selectQueue.shift() ?? []);
+          const rows = Promise.resolve(dbState.selectQueue.shift() ?? []);
+          return Object.assign(rows, { limit: () => rows });
         },
         innerJoin: () => ({
           where: (predicate: unknown) => {
             dbState.predicates.push(predicate);
-            return Promise.resolve(dbState.selectQueue.shift() ?? []);
+            const rows = Promise.resolve(dbState.selectQueue.shift() ?? []);
+            return Object.assign(rows, { limit: () => rows });
           },
         }),
       }),
@@ -102,6 +104,10 @@ vi.mock("@thinkwork/database-pg/schema", () => {
         "tenant_mcp_servers.managed_application_key",
       ),
       url_hash: col("tenant_mcp_servers.url_hash"),
+    },
+    tenants: {
+      id: col("tenants.id"),
+      slug: col("tenants.slug"),
     },
     tenantMcpContextTools: {},
     tenantMcpAdminKeys: {},
@@ -287,6 +293,91 @@ describe("GET /api/skills/user-mcp-servers", () => {
   });
 });
 
+describe("service credential MCP routes", () => {
+  it("reports whether the configured service credential secret has a token", async () => {
+    dbState.selectQueue.push([{ id: "tenant-1" }], [n8nServiceServerRow()]);
+    mockSecretsSend.mockResolvedValue({
+      SecretString: JSON.stringify({
+        N8N_MCP_SERVICE_CREDENTIAL: "n8n_mcp_token_abc123",
+      }),
+    });
+
+    const response = await handler(serviceCredentialEvent("GET", "status"));
+    const body = JSON.parse(response.body ?? "{}") as {
+      hasCredential: boolean;
+      lastFour: string | null;
+      secretJsonKey: string | null;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body).toMatchObject({
+      hasCredential: true,
+      lastFour: "c123",
+      secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+    });
+    expect(mockSecretsSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: { SecretId: "arn:aws:secretsmanager:secret:n8n-service" },
+      }),
+    );
+  });
+
+  it("stores a pasted n8n access token without writing it to tenant_mcp_servers", async () => {
+    dbState.selectQueue.push([{ id: "tenant-1" }], [n8nServiceServerRow()]);
+    mockSecretsSend.mockImplementation(async (command: any) => {
+      if (command.input?.SecretString) return {};
+      return {
+        SecretString: JSON.stringify({
+          existingMetadata: "keep-me",
+        }),
+      };
+    });
+
+    const response = await handler(
+      serviceCredentialEvent("PUT", "save", {
+        token: "Bearer n8n_mcp_token_saved9876",
+      }),
+    );
+    const body = JSON.parse(response.body ?? "{}") as {
+      ok: boolean;
+      lastFour: string;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body).toMatchObject({ ok: true, lastFour: "9876" });
+    const updateCall = mockSecretsSend.mock.calls.find(
+      ([command]) => command.input?.SecretString,
+    );
+    expect(updateCall).toBeTruthy();
+    const saved = JSON.parse(updateCall![0].input.SecretString);
+    expect(saved).toMatchObject({
+      existingMetadata: "keep-me",
+      type: "mcpServiceCredential",
+      credentialKind: "n8n-mcp-access-token",
+      N8N_MCP_SERVICE_CREDENTIAL: "n8n_mcp_token_saved9876",
+    });
+    expect(JSON.stringify(dbState.predicates)).toContain(
+      "tenant_mcp_servers.id",
+    );
+    expect(JSON.stringify(saved)).not.toContain("Bearer ");
+  });
+
+  it("rejects service credential tokens with header-injection characters", async () => {
+    dbState.selectQueue.push([{ id: "tenant-1" }], [n8nServiceServerRow()]);
+
+    const response = await handler(
+      serviceCredentialEvent("PUT", "save", {
+        token: "n8n_token\nx-evil: yes",
+      }),
+    );
+    const body = JSON.parse(response.body ?? "{}") as { error: string };
+
+    expect(response.statusCode).toBe(400);
+    expect(body.error).toMatch(/newline/);
+    expect(mockSecretsSend).not.toHaveBeenCalled();
+  });
+});
+
 function managedTwentyRow(overrides: Record<string, unknown> = {}) {
   return {
     mcp_server_id: "twenty",
@@ -298,6 +389,28 @@ function managedTwentyRow(overrides: Record<string, unknown> = {}) {
     server_enabled: true,
     management_source: "managed_application",
     managed_application_key: "twenty-crm",
+    ...overrides,
+  };
+}
+
+function n8nServiceServerRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "11111111-1111-1111-1111-111111111111",
+    slug: "n8n--workflow-management",
+    url: "https://n8n.thinkwork.ai/mcp-server/http",
+    auth_type: "service_credential",
+    auth_config: {
+      credentialKind: "n8n-mcp-access-token",
+      secretRef: "arn:aws:secretsmanager:secret:n8n-service",
+      secretRefConfigKey: "serviceCredentialSecretArn",
+      headers: [
+        {
+          name: "Authorization",
+          secretJsonKey: "N8N_MCP_SERVICE_CREDENTIAL",
+          valuePrefix: "Bearer ",
+        },
+      ],
+    },
     ...overrides,
   };
 }
@@ -343,6 +456,24 @@ function event(input: { principalId?: string } = {}): APIGatewayProxyEventV2 {
       "x-tenant-id": "tenant-1",
       "x-principal-id": input.principalId ?? "user-1",
     },
+  } as unknown as APIGatewayProxyEventV2;
+}
+
+function serviceCredentialEvent(
+  method: "GET" | "PUT",
+  kind: "status" | "save",
+  body?: Record<string, unknown>,
+): APIGatewayProxyEventV2 {
+  const suffix =
+    kind === "status" ? "service-credential-status" : "service-credential";
+  return {
+    rawPath: `/api/skills/mcp-servers/11111111-1111-1111-1111-111111111111/${suffix}`,
+    requestContext: { http: { method } },
+    headers: {
+      authorization: "Bearer token",
+      "x-tenant-slug": "thinkwork",
+    },
+    body: body ? JSON.stringify(body) : undefined,
   } as unknown as APIGatewayProxyEventV2;
 }
 
