@@ -181,6 +181,8 @@ describe("n8n Terraform app module", () => {
     expect(source).toMatch(/resource "terraform_data" "database_lifecycle"/);
     expect(source).toMatch(/name = "DATABASE_URL"/);
     expect(source).toMatch(/name = "DB_POSTGRESDB_PASSWORD"/);
+    expect(source).toMatch(/name = "DB_POSTGRESDB_SSL_ENABLED"/);
+    expect(source).toMatch(/name = "DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED"/);
     expect(source).toMatch(/name = "N8N_ENCRYPTION_KEY"/);
     expect(source).toMatch(/name = "N8N_OPERATOR_EMAIL"/);
     expect(source).toMatch(/name = "N8N_OPERATOR_PASSWORD"/);

@@ -1187,15 +1187,113 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - Objective: make generated n8n placeholder secrets reliable under immediate
     install/teardown/reinstall loops by using unique `name_prefix` secret names
     and immediate deletion for generated placeholders.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2732
+    - Merge commit: `9c8b4fed9a3376ccc34d9c74dd711e2905d000c2`
+    - Status: merged after required checks passed.
+  - Main deploy:
+    - GitHub Actions deploy run `27863119433` succeeded.
+  - Canary release:
+    - Tag `v0.1.0-canary.231` was pushed from merge commit
+      `9c8b4fed9a3376ccc34d9c74dd711e2905d000c2`.
+    - Release workflow run `27863400675` succeeded.
+    - Dev status pointer selected manifest URL
+      `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.231/thinkwork-release.json`
+      with canonical digest
+      `d86bcef017e1e6670d244ea72b219737352114767d6b81e432022180659be5fd`
+      and ECR n8n image
+      `487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:v0.1.0-canary.231-n8n-amd64@sha256:966bbfdbe918570d4676fcf9d1399e01f5c6f5794983bf65d58b73dffb32bdfd`.
+  - Reset and fresh deployed install attempt:
+    - Retried teardown for failed install
+      `c11e3e32-4b23-4e6c-ad70-a0dfb859bb40`; destroy job
+      `614713f2-27b6-41d9-a39f-8a94f4b36e38` selected canary `231`,
+      reached `awaiting_approval`, was approved with destructive confirmation
+      `DESTROY`, and applied successfully through Step Functions execution
+      `arn:aws:states:us-east-1:487219502366:execution:thinkwork-dev-deployment-orchestrator:tw-apply-614713f227b641d9a39f8a94f4b36e38`.
+    - Follow-up plugin queries showed no n8n install rows, and AWS
+      `elasticache describe-replication-groups tw-dev-n8n` returned not found.
+    - Fresh install id `c040ec95-15f7-4e72-88fc-4407410b1e45` created
+      runtime deployment job `f31baf85-6051-484e-b245-299e636175ce`.
+    - The job selected canary `231`, hydrated the `n8n-runtime` image from the
+      release manifest, reached `awaiting_approval`, and was approved.
+    - Apply execution
+      `arn:aws:states:us-east-1:487219502366:execution:thinkwork-dev-deployment-orchestrator:tw-apply-f31baf856051484eb245299e636175ce`
+      created the n8n ALB, Valkey cache, ECS task definitions, and suffixed
+      generated Secrets Manager placeholders such as
+      `thinkwork/dev/n8n/operator-20260620072900584600000006-9Fw525`, proving
+      the fixed-name secret collision is resolved.
+    - ECS then repeatedly started and drained the n8n main task. CloudWatch logs
+      for `/thinkwork/dev/n8n/main` showed n8n process startup followed by
+      `There was an error initializing DB` and
+      `unable to get local issuer certificate`.
+    - Root cause: the n8n task enables Postgres SSL for Aurora but the runtime
+      image does not include or configure the AWS RDS CA bundle, while n8n's
+      PostgreSQL SSL verification defaults to rejecting unauthorized
+      certificates.
+    - After evidence reconciliation, the deployment job marked `succeeded`, but
+      the plugin install remained `partially_installed`: the
+      `workflow-management` MCP component failed because the n8n managed
+      application row's `desired_config` had no `publicUrl` value. The shared
+      plan-job default layer derived `publicUrl` for Twenty from the deployment
+      controller customer domain but did not do the same for n8n.
+    - The same live row also lacked `serviceCredentialSecretArn`; Terraform
+      output evidence contained `n8n_service_credential_secret_arn`, but the
+      API reconciler only recorded output artifact metadata and did not merge
+      generated n8n runtime outputs back into the managed application
+      `desired_config` used by plugin MCP provisioning.
+- n8n Aurora DB SSL verification follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-db-ssl`
+  - Objective: keep the n8n Aurora connection encrypted while letting the
+    container start reliably without a bundled RDS CA file, and ensure the
+    plugin MCP component can resolve the n8n endpoint from the managed app row.
+  - Implementation summary:
+    - Added `DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED=false` next to the existing
+      `DB_POSTGRESDB_SSL_ENABLED=true` n8n ECS environment setting.
+    - Extended shared managed-app plan-job defaults to derive
+      `domain: n8n.<customerDomain>` and
+      `publicUrl: https://n8n.<customerDomain>` for n8n, mirroring the existing
+      Twenty `crm.<customerDomain>` defaulting path.
+    - Extended managed-application deployment evidence reconciliation so n8n
+      apply output artifacts merge `n8n_url`, the generated database secret
+      ARN, generated service credential secret ARN, storage bucket, storage
+      prefix, and package digest back into the managed application
+      `desired_config` without replacing operator package settings.
+    - Expanded the structural Terraform fixture test so the SSL env contract is
+      covered.
+    - Expanded the n8n managed-app deployment test so sparse plugin-created
+      plan jobs must persist the derived n8n `publicUrl` in the managed
+      application row and controller payload.
+    - Documented the encrypted-but-unverified Aurora SSL tradeoff in the n8n
+      Terraform module README.
+  - Local verification:
+    - `terraform fmt plugins/n8n/terraform/n8n` passed.
+    - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed.
+    - `pnpm --filter @thinkwork/plugin-n8n test` passed.
+    - `terraform -chdir=plugins/n8n/terraform/n8n init -backend=false && terraform -chdir=plugins/n8n/terraform/n8n validate`
+      passed.
+    - `pnpm --filter thinkwork-cli typecheck` passed.
+    - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
+    - `pnpm --filter @thinkwork/api test -- --run src/graphql/resolvers/deployments/managed-applications.test.ts`
+      passed.
+    - `pnpm --filter @thinkwork/api test -- --run src/graphql/resolvers/deployments/managed-application-deployment.test.ts`
+      passed.
+    - `pnpm --filter @thinkwork/api typecheck` passed.
+    - `pnpm dlx prettier@3.8.2 --check apps/cli/__tests__/terraform-n8n-fixture.test.ts plugins/n8n/terraform/n8n/README.md`
+      passed.
+    - `git diff --check` passed.
   - Status: active.
 
 ## Blockers
 
-- Active blocker: canary `230` now hydrates the n8n image correctly and starts a
-  real apply, but the apply fails when Terraform recreates generated placeholder
-  Secrets Manager secrets with fixed names that are still pending deletion from
-  the previous teardown.
-- Active fix in progress: update the n8n Terraform module so generated
-  placeholder secrets use unique `name_prefix` names and
-  `recovery_window_in_days = 0`, merge/release that fix, then reset/retry the
-  deployed ThinkWork n8n install path until runtime provisioning succeeds.
+- Active blocker: canary `231` now resets cleanly, hydrates the n8n image,
+  creates the n8n substrate, and gets through generated secret creation, but
+  the n8n main container exits during DB initialization with
+  `unable to get local issuer certificate` when connecting to Aurora over
+  Postgres SSL; after reconciliation, the plugin install also remains partial
+  because the n8n managed-app row did not persist the derived `publicUrl` or
+  generated `serviceCredentialSecretArn` needed by the native MCP component.
+- Active fix in progress: merge and release the n8n Aurora DB SSL verification
+  and public URL defaulting fixes, then reset/retry the deployed ThinkWork n8n
+  install path until runtime provisioning succeeds end to end.

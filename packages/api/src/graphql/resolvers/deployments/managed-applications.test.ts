@@ -465,18 +465,43 @@ describe("managed application plan jobs", () => {
         },
       },
       {} as any,
-      { startExecution: mockStartExecution },
+      {
+        startExecution: mockStartExecution,
+        resolveDeploymentControllerConfig: async () => ({
+          stateMachineArn: "arn:sfn:deployments",
+          evidenceBucket: "profile-evidence",
+          customerDomain: "tei.thinkwork.ai",
+          customerDomainDelegated: true,
+          customerDomainLegacyRetired: false,
+          appCertificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
+        }),
+      },
     );
 
     expect(fetch).toHaveBeenCalledWith(manifestUrl);
     expect(insertCalls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          key: "n8n",
+          desired_config: expect.objectContaining({
+            databaseName: "thinkwork_n8n",
+            domain: "n8n.tei.thinkwork.ai",
+            publicUrl: "https://n8n.tei.thinkwork.ai",
+            certificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
+          }),
+        }),
+        expect.objectContaining({
           app_key: "n8n",
           release_version: "v0.1.0-canary.224",
           manifest_digest: manifestDigest,
           plan_summary: expect.objectContaining({
             releaseManifestUrl: manifestUrl,
+            desiredConfig: expect.objectContaining({
+              databaseName: "thinkwork_n8n",
+              domain: "n8n.tei.thinkwork.ai",
+              publicUrl: "https://n8n.tei.thinkwork.ai",
+              certificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
+            }),
             manifestImages: {
               "n8n-runtime": runtimeImage,
             },
@@ -491,6 +516,12 @@ describe("managed application plan jobs", () => {
           releaseVersion: "v0.1.0-canary.224",
           manifestDigest,
           releaseManifestUrl: manifestUrl,
+          desiredConfig: expect.objectContaining({
+            databaseName: "thinkwork_n8n",
+            domain: "n8n.tei.thinkwork.ai",
+            publicUrl: "https://n8n.tei.thinkwork.ai",
+            certificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
+          }),
           manifestImages: {
             "n8n-runtime": runtimeImage,
           },
