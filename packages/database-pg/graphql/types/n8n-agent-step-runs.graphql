@@ -1,0 +1,62 @@
+enum N8nAgentStepRunStatus {
+  ACCEPTED
+  WAITING
+  AWAITING_HUMAN
+  RESUME_PENDING
+  RESUMING
+  RESUMED
+  RESUME_FAILED
+  FAILED
+  EXPIRED
+}
+
+enum N8nAgentStepResumeStatus {
+  NOT_READY
+  PENDING
+  RESUMING
+  RESUMED
+  FAILED
+}
+
+type N8nAgentStepRun {
+  id: ID!
+  tenantId: ID!
+  pluginInstallId: ID
+  managedApplicationId: ID
+  spaceId: ID!
+  agentId: ID
+  threadId: ID
+  threadTurnId: ID
+  openingMessageId: ID
+  status: N8nAgentStepRunStatus!
+  resumeStatus: N8nAgentStepResumeStatus!
+  workflowId: String!
+  workflowName: String
+  executionId: String!
+  stepId: String!
+  correlationId: String!
+  requestId: String
+  idempotencyKey: String!
+  instructionsPreview: String
+  inputPreview: String
+  requestMetadata: AWSJSON!
+  resumeUrlHost: String
+  resumeUrlPath: String
+  timeoutSeconds: Int!
+  expiresAt: AWSDateTime!
+  resultPayload: AWSJSON
+  outputPayload: AWSJSON
+  errorPayload: AWSJSON
+  summary: String
+  links: AWSJSON
+  resumeAttemptCount: Int!
+  nextResumeAttemptAt: AWSDateTime
+  lastResumeAttemptAt: AWSDateTime
+  lastResumeHttpStatus: Int
+  lastResumeError: String
+  resumedAt: AWSDateTime
+  terminalAt: AWSDateTime
+  acceptedAt: AWSDateTime!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
