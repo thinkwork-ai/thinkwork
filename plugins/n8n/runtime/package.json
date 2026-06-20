@@ -1,0 +1,7 @@
+{
+  "name": "thinkwork-n8n-runtime-packages",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Generated dependency context for the ThinkWork n8n runtime wrapper.",
+  "dependencies": {}
+}

@@ -744,7 +744,8 @@ U3/U4/U5/U6 before U7; U7 before U8.
       non-fatal after the real targeted apply succeeds.
   - Supplemental PR:
     - PR: https://github.com/thinkwork-ai/thinkwork/pull/2718
-    - Status: open and rebased on PR #2717.
+    - Merge commit: `f4f9d51d5283d851ebce84afa88b9c830419ad4a`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
     - Objective: keep real targeted managed-app apply failures fatal while
       recording output refresh status in evidence and preserving managed-app job
       success if `terraform output -json` also cannot evaluate the broader root.
@@ -769,11 +770,66 @@ U3/U4/U5/U6 before U7; U7 before U8.
       passed: 77 tests.
     - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
       passed.
+- Post-PR #2718 release/deploy:
+  - Main deploy workflow run `27853161203` passed.
+  - Canary release `v0.1.0-canary.218` published from commit
+    `f4f9d51d5283d851ebce84afa88b9c830419ad4a`.
+  - Release workflow run `27853482541` passed.
+  - Live deployment status pointer recorded active release
+    `v0.1.0-canary.218`, manifest digest
+    `88d1935c340dc956c92a4c3b267c96e5e503cf9d3a8309f975b2bc8519f958c8`,
+    and commit `f4f9d51d5283d851ebce84afa88b9c830419ad4a`.
+- n8n install retry after canary 218 pointer:
+  - Install id: `f5264c0f-613b-473f-b7d3-b409807c17d0`.
+  - Runtime retry job:
+    `f442a3a3-2db2-4dab-9133-dbfe90218b3f`.
+  - The plugin runtime component still selected release
+    `v0.1.0-canary.217` because the existing `managed_applications` row was
+    pinned to that release; retry correctly preserved the operator-selected
+    release instead of defaulting to the newly active release.
+  - The plan failed before approval with
+    `n8n managed app operation is missing required desired-state field: imageUri.`
+  - Root cause found during follow-up: release manifest `218` did not include a
+    baseline `n8n-runtime` image, and the release workflow did not build or
+    publish the ThinkWork n8n wrapper image expected by the approved plan.
+- n8n release manifest/runtime image branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/n8n-release-manifest-fix`
+  - Objective: publish the baseline n8n wrapper runtime image in the release
+    workflow and require `n8n-runtime` in the release manifest so the managed
+    app runner can hydrate `imageUri` from the verified release manifest.
+  - Implementation summary:
+    - Added release workflow output and Docker build step for
+      `ghcr.io/<owner>/thinkwork-n8n:<release>-n8n-amd64`.
+    - Added the release-manifest runtime image entry `n8n-runtime`.
+    - Added n8n to default managed-app release descriptors with its managed-app
+      smoke contract and plugin Terraform module path.
+    - Added deterministic empty package context files for
+      `plugins/n8n/runtime/Dockerfile`, keeping the same Dockerfile usable for
+      both baseline wrapper builds and later custom-package image builds.
+    - Updated the managed-app controller readiness smoke default app list and
+      module-source suffix handling for plugin-owned n8n.
+  - Local verification:
+    - `pnpm exec tsx --test scripts/release/__tests__/build-release-manifest.test.ts`
+      passed: 10 tests.
+    - `pnpm --filter @thinkwork/plugin-n8n test` passed: 14 tests.
+    - `pnpm --filter @thinkwork/plugin-n8n typecheck` passed.
+    - `pnpm test:release` passed: 14 tests.
+    - `node scripts/smoke/managed-app-controller-readiness-smoke.mjs` passed
+      its dry-run readiness contract.
+    - Local Docker build was attempted with `docker buildx build`, but the
+      Docker daemon was not running on this machine:
+      `failed to connect to the docker API at unix:///Users/ericodom/.docker/run/docker.sock`.
+    - Local `pnpm format:check` could not run because the root package references
+      `prettier` but does not expose it as an installed workspace executable in
+      this checkout.
 
 ## Blockers
 
-- Active fix in progress: PR #2718 is open to add managed-app output evidence
-  and state-output fallback on top of merged PR #2717. After PR #2718 merges,
-  wait for the canary release and main deploy to pick up the runner change, then
-  retry the n8n teardown and fresh n8n install through the deployed ThinkWork
-  managed-application path.
+- Active fix in progress: the release workflow must publish a baseline
+  `n8n-runtime` image before the deployed ThinkWork plugin install can produce a
+  valid n8n managed-app plan. After that PR merges, cut a new canary release,
+  update the dev deployment pointer, retry the n8n install through the plugin
+  flow, approve/apply the managed-app job, verify n8n and MCP through ThinkWork,
+  then tear down through the managed plugin flow.

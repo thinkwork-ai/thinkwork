@@ -88,6 +88,14 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
         architecture: "amd64",
       },
       {
+        name: "n8n-runtime",
+        repository: "ghcr.io/thinkwork-ai/thinkwork-n8n",
+        tag: "v1.2.3-n8n-amd64",
+        digest:
+          "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        architecture: "amd64",
+      },
+      {
         name: "plane",
         repository: "makeplane/plane",
         tag: "v1.2.3-plane-amd64",
@@ -147,6 +155,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
       "agentcore-pi-amd64",
       "agentcore-pi-arm64",
       "cognee",
+      "n8n-runtime",
       "plane",
       "plane-mcp-server",
       "twenty",
@@ -163,7 +172,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   );
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "plane", "twenty"],
+    ["cognee", "n8n", "plane", "twenty"],
   );
   assert.deepEqual(
     Object.fromEntries(
@@ -171,6 +180,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     ),
     {
       cognee: ["cognee"],
+      n8n: ["n8n-runtime"],
       plane: ["plane", "plane-mcp-server"],
       twenty: ["twenty"],
     },
@@ -331,7 +341,13 @@ test("CLI build script includes default managed apps when no overrides are passe
   ) as ThinkWorkReleaseManifest;
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "plane", "twenty"],
+    ["cognee", "n8n", "plane", "twenty"],
+  );
+  assert.deepEqual(
+    manifest.managedApps
+      .find((app) => app.id === "n8n")
+      ?.smokeContracts?.map((contract) => contract.command),
+    ["plugins/n8n/smoke/n8n-managed-app-smoke.mjs"],
   );
   assert.deepEqual(
     manifest.managedApps

@@ -14,7 +14,7 @@
  *   SMOKE_DEPLOYMENT_SSM_PREFIX=/thinkwork/tei-e2e/deployment
  *   SMOKE_MANIFEST_URL=https://.../thinkwork-release.json
  *   SMOKE_MANIFEST_SHA256=<sha256>
- *   SMOKE_MANAGED_APP_KEYS=cognee,twenty,plane
+ *   SMOKE_MANAGED_APP_KEYS=cognee,n8n,twenty,plane
  *   SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1
  *   SMOKE_EVIDENCE_FILE=/tmp/managed-app-controller-readiness.json
  */
@@ -36,7 +36,7 @@ const env = {
   ...process.env,
 };
 
-const DEFAULT_APP_KEYS = ["cognee", "twenty", "plane"];
+const DEFAULT_APP_KEYS = ["cognee", "n8n", "twenty", "plane"];
 
 const dryRun = {
   requiredWhenRunning: [
@@ -227,7 +227,7 @@ function assessManagedAppDescriptor({
     };
   }
 
-  const expectedModuleSuffix = `//modules/app/${appKey}`;
+  const expectedModuleSuffix = expectedTerraformModuleSuffix(appKey);
   const moduleSource = app.terraformModule?.source ?? null;
   const moduleVersion = app.terraformModule?.version ?? null;
   if (!moduleSource?.endsWith(expectedModuleSuffix)) {
@@ -321,6 +321,12 @@ function managedAppKeys() {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function expectedTerraformModuleSuffix(appKey) {
+  return appKey === "n8n"
+    ? "//plugins/n8n/terraform/n8n"
+    : `//modules/app/${appKey}`;
 }
 
 function resolveSsmPrefix() {
