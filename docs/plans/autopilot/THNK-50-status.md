@@ -1403,15 +1403,46 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - `pnpm --filter @thinkwork/plugin-n8n test` passed.
     - `pnpm --filter @thinkwork/deployment-runner test` passed.
     - `git diff --check` passed.
-  - Status: PR open; waiting on required checks.
+  - Status: merged in PR #2737 at
+    `bb22456b862121d552ea605556de42ca4fe8253e` after required checks passed.
+  - Released canary `v0.1.0-canary.235`; verified GitHub release assets
+    `thinkwork-release.json` and `platform-artifacts.tar.gz`. Downloaded
+    manifest byte SHA:
+    `ee84908a4a7c7ec4a84f1c75ba6cad74360c8b924d964582639ba7269c6d1559`.
+  - Main deploy run `27869167398` failed while destroying legacy n8n state:
+    Terraform evaluated the new database lifecycle destroy provisioner against
+    an existing `terraform_data.database_lifecycle` object whose stored input
+    did not include the new sync metadata (`sync_script_path`, database host,
+    or port). The run destroyed most n8n infra before failing on unsupported
+    `self.input` attributes.
+- n8n legacy destroy compatibility follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-legacy-destroy-hook`
+  - Objective: unblock the live reset by making the n8n database lifecycle
+    destroy hook backward-compatible with Terraform state created before the
+    sync metadata existed.
+  - Implementation summary:
+    - Changed the destroy `local-exec` to read new metadata through `try(...)`.
+    - If the legacy state object lacks the sync script path, the provisioner
+      logs a skip message instead of failing. Future n8n installs still carry
+      the sync metadata and will run the drop-database/drop-role cleanup.
+    - Updated the n8n Terraform fixture test to assert the compatibility path.
+  - Local verification:
+    - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed.
+    - `terraform fmt -check plugins/n8n/terraform/n8n && terraform -chdir=plugins/n8n/terraform/n8n validate -no-color`
+      passed.
+    - `pnpm dlx prettier@3.8.2 --check apps/cli/__tests__/terraform-n8n-fixture.test.ts`
+      passed.
+    - `git diff --check` passed.
+  - Status: active; preparing PR.
 
 ## Blockers
 
-- Active blocker: none at the repository level. Canary `234` can run the
-  managed-app plan/apply path, but live verification found three runtime
-  reliability defects: stale database role password after reset, doubled worker
-  command through the n8n entrypoint, and missing managed n8n DNS record.
-- Active fix in progress: merge and release the n8n runtime install lifecycle
-  fix, then reset and reinstall through app.thinkwork.ai until the n8n ECS
-  main/worker services, `https://n8n.thinkwork.ai`, and all plugin components
-  verify successfully end to end.
+- Active blocker: main deploy for canary `235` found a legacy Terraform state
+  compatibility bug in the new n8n database lifecycle destroy hook. A
+  follow-up compatibility fix is in progress.
+- Active fix in progress: merge and release the legacy destroy compatibility
+  fix, rerun deploy/reset, then reinstall through app.thinkwork.ai until the
+  n8n ECS main/worker services, `https://n8n.thinkwork.ai`, and all plugin
+  components verify successfully end to end.
