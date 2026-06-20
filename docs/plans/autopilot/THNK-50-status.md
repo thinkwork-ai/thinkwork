@@ -955,15 +955,22 @@ U3/U4/U5/U6 before U7; U7 before U8.
       passed: 10 tests.
   - PR:
     - PR: https://github.com/thinkwork-ai/thinkwork/pull/2725
-    - Status: open; CI pending.
+    - Status: open; CI in progress.
 
 ## Blockers
 
-- Active deployed apply job:
-  `04565dcb-3d9a-4445-b9b2-75de76bb0114` is still applying as of the latest
-  local poll. It is expected to fail or time out because ECS cannot pull the
-  private GHCR n8n image. Do not start the next managed-app apply until this job
-  releases the deployment runner/Terraform lock.
+- Failed deployed apply evidence:
+  - Job `04565dcb-3d9a-4445-b9b2-75de76bb0114` reconciled to `failed` at
+    `2026-06-20T02:24:51.119Z`.
+  - Error: `Deployment apply failed in the runner.`
+  - CodeBuild build:
+    `thinkwork-dev-deployment-runner:31f74675-10fe-4be1-abf0-597291a72989`.
+  - Evidence uploaded to
+    `s3://thinkwork-dev-487219502366-deploy-evidence/0015953e-aa13-4cab-8398-2e70f73dda63/n8n/04565dcb-3d9a-4445-b9b2-75de76bb0114/apply/deployment-evidence.json`.
+  - Runner log root cause: Terraform timed out waiting for
+    `aws_ecs_service.main` to become stable after ECS repeatedly failed to pull
+    `ghcr.io/thinkwork-ai/thinkwork-n8n:v0.1.0-canary.223-n8n-amd64@sha256:6eed6ac741015d48aeaf272a8192834777c8bb7433174a0eb4cf86d5e5cd65cc`
+    with GHCR `401 Unauthorized`.
 - Active fix in progress: after the ECR image + manifest hydration PR merges,
   cut a new canary release, update/retry the n8n plugin install through the
   deployed ThinkWork plugin flow, approve/apply the managed-app job, verify n8n
