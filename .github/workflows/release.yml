@@ -194,7 +194,7 @@ jobs:
             ${{ steps.n8n_runtime_repository.outputs.value }}:${{ env.RELEASE_REF_NAME }}-n8n-amd64
             ${{ steps.n8n_runtime_repository.outputs.value }}:${{ steps.release.outputs.commit }}-n8n-amd64
           build-args: |
-            N8N_BASE_IMAGE=n8nio/n8n:1.98.2@sha256:3cd4d08ff918d53516b32c2e2a6188bdf60efd25a68ca036dbda30de6ef3a281
+            N8N_BASE_IMAGE=n8nio/n8n:2.27.3@sha256:a772d24e6b4f9b3848be5a57c5e45437eed1965bbbcefa2f9a93f4835b6639fa
           cache-from: type=gha,scope=release-n8n-amd64
           cache-to: type=gha,scope=release-n8n-amd64,mode=max
           provenance: false
