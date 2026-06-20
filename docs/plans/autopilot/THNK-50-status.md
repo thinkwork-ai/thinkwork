@@ -824,6 +824,32 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - Local `pnpm format:check` could not run because the root package references
       `prettier` but does not expose it as an installed workspace executable in
       this checkout.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2720
+    - Merge commit: `cd9abff86ec559a26108167cf1f266d4377803a2`
+    - Status: merged after CLA, lint, verify, typecheck, test, and plugin
+      catalog validation passed.
+  - Canary release attempt:
+    - Tag `v0.1.0-canary.220` was pushed from merge commit
+      `cd9abff86ec559a26108167cf1f266d4377803a2`.
+    - Release workflow run `27854608012` failed in build-deploy-artifacts at
+      `Build and push n8n runtime amd64`.
+    - Root cause: the workflow passed
+      `N8N_BASE_IMAGE=${{ env.N8N_BASE_IMAGE_URI }}`, but
+      `N8N_BASE_IMAGE_URI` was scoped only to the later manifest step, so
+      Docker received a blank `N8N_BASE_IMAGE` build arg and failed with
+      `base name (${N8N_BASE_IMAGE}) should not be blank`.
+- n8n release build-arg follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-release-build-arg`
+  - Objective: pass the pinned `n8nio/n8n:1.98.2` base image directly to the
+    n8n runtime Docker build step so the release workflow can publish
+    `n8n-runtime`.
+  - Implementation summary:
+    - Inlined the pinned base image digest in the n8n Docker build step.
+    - Removed the unused step-scoped `N8N_BASE_IMAGE_URI` environment entry from
+      the manifest step.
 
 ## Blockers
 
