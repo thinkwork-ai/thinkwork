@@ -1023,6 +1023,11 @@ def bool_state_output(outputs, name):
     return bool(state_output(outputs, name, False))
 
 
+def has_state_output(outputs, name):
+    value = outputs.get(name)
+    return isinstance(value, dict) and "value" in value
+
+
 def enforce_customer_domain_preservation(current_outputs, vars_json, payload, runner_secrets):
     previous_domain = string_state_output(current_outputs, "customer_domain")
     if not previous_domain:
@@ -1039,8 +1044,10 @@ def enforce_customer_domain_preservation(current_outputs, vars_json, payload, ru
         if allow_removal:
             return
         vars_json["customer_domain"] = previous_domain
-        vars_json["customer_domain_delegated"] = bool_state_output(
-            current_outputs, "customer_domain_delegated"
+        vars_json["customer_domain_delegated"] = (
+            bool_state_output(current_outputs, "customer_domain_delegated")
+            if has_state_output(current_outputs, "customer_domain_delegated")
+            else True
         )
         vars_json["customer_domain_legacy_retired"] = bool_state_output(
             current_outputs, "customer_domain_legacy_retired"
@@ -1055,7 +1062,11 @@ def enforce_customer_domain_preservation(current_outputs, vars_json, payload, ru
             "reviewed domain migration with allowCustomerDomainRemoval=true."
         )
 
-    previous_delegated = bool_state_output(current_outputs, "customer_domain_delegated")
+    previous_delegated = (
+        bool_state_output(current_outputs, "customer_domain_delegated")
+        if has_state_output(current_outputs, "customer_domain_delegated")
+        else True
+    )
     next_delegated = bool(vars_json.get("customer_domain_delegated", False))
     if previous_delegated and not next_delegated and not allow_removal:
         raise RuntimeError(

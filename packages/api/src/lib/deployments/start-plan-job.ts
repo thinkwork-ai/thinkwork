@@ -191,6 +191,11 @@ export async function startManagedApplicationPlanJob(
       manifestImages,
       stateMachineArn,
       evidenceBucket,
+      customerDomain: controllerConfig.customerDomain,
+      customerDomainDelegated: controllerConfig.customerDomainDelegated,
+      customerDomainLegacyRetired:
+        controllerConfig.customerDomainLegacyRetired,
+      appCertificateArn: controllerConfig.appCertificateArn,
       idempotencyKey: `${idempotencyKey}:plan-started`,
       deps,
     });
@@ -242,6 +247,10 @@ async function startPendingPlanExecution(
     manifestImages: planSummary.manifestImages,
     stateMachineArn: controllerConfig.stateMachineArn,
     evidenceBucket,
+    customerDomain: controllerConfig.customerDomain,
+    customerDomainDelegated: controllerConfig.customerDomainDelegated,
+    customerDomainLegacyRetired: controllerConfig.customerDomainLegacyRetired,
+    appCertificateArn: controllerConfig.appCertificateArn,
     idempotencyKey: `${job.id}:plan-started`,
     deps,
   });
@@ -260,6 +269,10 @@ async function startPlanExecution(args: {
   manifestImages: Record<string, string>;
   stateMachineArn: string;
   evidenceBucket: string | null;
+  customerDomain?: string | null;
+  customerDomainDelegated?: boolean | null;
+  customerDomainLegacyRetired?: boolean | null;
+  appCertificateArn?: string | null;
   idempotencyKey: string;
   deps: DeploymentDeps;
 }): Promise<StartedManagedApplicationPlanJob> {
@@ -279,6 +292,10 @@ async function startPlanExecution(args: {
       desiredConfig: args.desiredConfig,
       manifestImages: args.manifestImages,
       evidenceBucket: args.evidenceBucket,
+      customerDomain: args.customerDomain,
+      customerDomainDelegated: args.customerDomainDelegated,
+      customerDomainLegacyRetired: args.customerDomainLegacyRetired,
+      appCertificateArn: args.appCertificateArn,
     }),
   });
   const evidencePrefix = args.evidenceBucket

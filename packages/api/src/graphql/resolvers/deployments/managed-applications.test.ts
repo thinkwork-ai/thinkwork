@@ -180,7 +180,17 @@ describe("managed application plan jobs", () => {
         },
       },
       {} as any,
-      { startExecution: mockStartExecution },
+      {
+        startExecution: mockStartExecution,
+        resolveDeploymentControllerConfig: async () => ({
+          stateMachineArn: "arn:sfn:deployments",
+          evidenceBucket: "evidence-bucket",
+          customerDomain: "tei.thinkwork.ai",
+          customerDomainDelegated: true,
+          customerDomainLegacyRetired: false,
+          appCertificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
+        }),
+      },
     );
 
     expect(mockRequireTenantAdmin.mock.invocationCallOrder[0]).toBeLessThan(
@@ -203,6 +213,10 @@ describe("managed application plan jobs", () => {
           }),
           releaseManifestUrl:
             "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
+          customerDomain: "tei.thinkwork.ai",
+          customerDomainDelegated: true,
+          customerDomainLegacyRetired: false,
+          appCertificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
           evidence: expect.objectContaining({
             bucket: "evidence-bucket",
             prefix: "tenant-1/cognee/job-1/plan",

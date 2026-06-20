@@ -184,7 +184,17 @@ describe("managed application deployment approval", () => {
         },
       },
       {} as any,
-      { startExecution: mockStartExecution },
+      {
+        startExecution: mockStartExecution,
+        resolveDeploymentControllerConfig: async () => ({
+          stateMachineArn: "arn:sfn:deployments",
+          evidenceBucket: "evidence-bucket",
+          customerDomain: "tei.thinkwork.ai",
+          customerDomainDelegated: true,
+          customerDomainLegacyRetired: false,
+          appCertificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
+        }),
+      },
     );
 
     expect(mockStartExecution).toHaveBeenCalledWith(
@@ -202,6 +212,10 @@ describe("managed application deployment approval", () => {
           }),
           releaseManifestUrl:
             "https://github.com/thinkwork-ai/thinkwork/releases/download/v1.2.3/thinkwork-release.json",
+          customerDomain: "tei.thinkwork.ai",
+          customerDomainDelegated: true,
+          customerDomainLegacyRetired: false,
+          appCertificateArn: "arn:aws:acm:us-east-1:123:certificate/app",
           desiredConfig: { retainedDataSnapshot: "snap-1" },
           manifestImages: {
             twenty: `public.ecr.aws/thinkwork/twenty@sha256:${"1".repeat(64)}`,

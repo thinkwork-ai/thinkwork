@@ -2046,6 +2046,33 @@ def test_write_runner_files_preserves_existing_customer_domain_from_state_output
     assert vars_json["customer_domain_legacy_retired"] is False
 
 
+def test_write_runner_files_defaults_existing_customer_domain_to_delegated_when_legacy_output_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {"outputs": {"customer_domain": {"value": "tei.thinkwork.ai"}}},
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {},
+    )
+
+    assert vars_json["customer_domain"] == "tei.thinkwork.ai"
+    assert vars_json["customer_domain_delegated"] is True
+    assert vars_json["customer_domain_legacy_retired"] is False
+
+
 def test_write_runner_files_refuses_to_disable_existing_customer_domain_delegation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -71,6 +71,10 @@ let cachedDeploymentStatusPointer: DeploymentProfileConfig | null = null;
 export interface DeploymentControllerConfig {
   stateMachineArn: string | null;
   evidenceBucket: string | null;
+  customerDomain?: string | null;
+  customerDomainDelegated?: boolean | null;
+  customerDomainLegacyRetired?: boolean | null;
+  appCertificateArn?: string | null;
 }
 
 export interface DeploymentProfileConfig extends DeploymentControllerConfig {
@@ -329,22 +333,13 @@ export async function resolveDeploymentControllerConfig(): Promise<DeploymentCon
     return cachedDeploymentControllerConfig;
   }
 
-  const stateMachineArn = deploymentStateMachineArn();
   const evidenceBucket = deploymentEvidenceBucket();
-  if (stateMachineArn) {
-    cachedDeploymentControllerConfig = { stateMachineArn, evidenceBucket };
-    return cachedDeploymentControllerConfig;
-  }
-
   const profile = mergeDeploymentProfileConfig(
     await resolveDeploymentProfileConfig(),
     deploymentProfileConfigFromEnv(),
   );
   if (profile.stateMachineArn) {
-    cachedDeploymentControllerConfig = {
-      stateMachineArn: profile.stateMachineArn,
-      evidenceBucket: profile.evidenceBucket,
-    };
+    cachedDeploymentControllerConfig = controllerConfigFromProfile(profile);
     return cachedDeploymentControllerConfig;
   }
 
@@ -355,11 +350,25 @@ export async function resolveDeploymentControllerConfig(): Promise<DeploymentCon
     cachedDeploymentControllerConfig = {
       stateMachineArn: pointer.stateMachineArn,
       evidenceBucket: pointer.evidenceBucket ?? profile.evidenceBucket,
+      customerDomain: pointer.customerDomain ?? profile.customerDomain,
+      customerDomainDelegated:
+        pointer.customerDomainDelegated ?? profile.customerDomainDelegated,
+      customerDomainLegacyRetired:
+        pointer.customerDomainLegacyRetired ??
+        profile.customerDomainLegacyRetired,
+      appCertificateArn: pointer.appCertificateArn ?? profile.appCertificateArn,
     };
     return cachedDeploymentControllerConfig;
   }
 
-  return { stateMachineArn: null, evidenceBucket: profile.evidenceBucket };
+  return {
+    stateMachineArn: null,
+    evidenceBucket: profile.evidenceBucket,
+    customerDomain: profile.customerDomain,
+    customerDomainDelegated: profile.customerDomainDelegated,
+    customerDomainLegacyRetired: profile.customerDomainLegacyRetired,
+    appCertificateArn: profile.appCertificateArn,
+  };
 }
 
 export async function resolveDeploymentProfileConfig(): Promise<DeploymentProfileConfig> {
@@ -373,6 +382,10 @@ export async function resolveDeploymentProfileConfig(): Promise<DeploymentProfil
     stateMachineArn: null,
     evidenceBucket: deploymentEvidenceBucket(),
     runnerProjectName: null,
+    customerDomain: null,
+    customerDomainDelegated: null,
+    customerDomainLegacyRetired: null,
+    appCertificateArn: null,
   };
   if (cachedDeploymentProfile) {
     return cachedDeploymentProfile;
@@ -418,6 +431,18 @@ export async function resolveDeploymentProfileConfig(): Promise<DeploymentProfil
       stateMachineArn: stringField(controller, "stateMachineArn"),
       evidenceBucket: stringField(controller, "evidenceBucketName"),
       runnerProjectName: stringField(controller, "codebuildProjectName"),
+      customerDomain:
+        stringField(profile, "customerDomain") ??
+        stringField(controller, "customerDomain"),
+      customerDomainDelegated:
+        booleanField(profile, "customerDomainDelegated") ??
+        booleanField(controller, "customerDomainDelegated"),
+      customerDomainLegacyRetired:
+        booleanField(profile, "customerDomainLegacyRetired") ??
+        booleanField(controller, "customerDomainLegacyRetired"),
+      appCertificateArn:
+        stringField(profile, "appCertificateArn") ??
+        stringField(controller, "appCertificateArn"),
     };
     return cachedDeploymentProfile;
   } catch (error) {
@@ -443,6 +468,10 @@ export async function resolveDeploymentStatusPointerConfig(
     stateMachineArn: null,
     evidenceBucket,
     runnerProjectName: null,
+    customerDomain: null,
+    customerDomainDelegated: null,
+    customerDomainLegacyRetired: null,
+    appCertificateArn: null,
   };
   if (!evidenceBucket) {
     cachedDeploymentStatusPointer = emptyProfile;
@@ -487,6 +516,16 @@ export async function resolveDeploymentStatusPointerConfig(
       stateMachineArn: stringField(controller, "stateMachineArn"),
       evidenceBucket,
       runnerProjectName: stringField(controller, "codebuildProjectName"),
+      customerDomain: stringField(controller, "customerDomain"),
+      customerDomainDelegated: booleanField(
+        controller,
+        "customerDomainDelegated",
+      ),
+      customerDomainLegacyRetired: booleanField(
+        controller,
+        "customerDomainLegacyRetired",
+      ),
+      appCertificateArn: stringField(controller, "appCertificateArn"),
     };
     return cachedDeploymentStatusPointer;
   } catch (error) {
@@ -547,11 +586,32 @@ export function deploymentProfileConfigFromEnv(): DeploymentProfileConfig {
       process.env.THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME ||
         process.env.VITE_DEPLOYMENT_RUNNER_PROJECT_NAME,
     ),
+    customerDomain: stringEnv(
+      process.env.THINKWORK_CUSTOMER_DOMAIN ||
+        process.env.VITE_CUSTOMER_DOMAIN,
+    ),
+    customerDomainDelegated: booleanEnv(
+      process.env.THINKWORK_CUSTOMER_DOMAIN_DELEGATED ||
+        process.env.VITE_CUSTOMER_DOMAIN_DELEGATED,
+    ),
+    customerDomainLegacyRetired: booleanEnv(
+      process.env.THINKWORK_CUSTOMER_DOMAIN_LEGACY_RETIRED ||
+        process.env.VITE_CUSTOMER_DOMAIN_LEGACY_RETIRED,
+    ),
+    appCertificateArn: stringEnv(
+      process.env.THINKWORK_APP_CERTIFICATE_ARN ||
+        process.env.VITE_APP_CERTIFICATE_ARN,
+    ),
   };
 }
 
 function stringEnv(value: string | undefined): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function booleanEnv(value: string | undefined): boolean | null {
+  if (value === undefined || !value.trim()) return null;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
 export function mergeDeploymentProfileConfig(
@@ -575,6 +635,26 @@ export function mergeDeploymentProfileConfig(
     stateMachineArn: primary.stateMachineArn ?? fallback.stateMachineArn,
     evidenceBucket: primary.evidenceBucket ?? fallback.evidenceBucket,
     runnerProjectName: primary.runnerProjectName ?? fallback.runnerProjectName,
+    customerDomain: primary.customerDomain ?? fallback.customerDomain,
+    customerDomainDelegated:
+      primary.customerDomainDelegated ?? fallback.customerDomainDelegated,
+    customerDomainLegacyRetired:
+      primary.customerDomainLegacyRetired ??
+      fallback.customerDomainLegacyRetired,
+    appCertificateArn: primary.appCertificateArn ?? fallback.appCertificateArn,
+  };
+}
+
+function controllerConfigFromProfile(
+  profile: DeploymentProfileConfig,
+): DeploymentControllerConfig {
+  return {
+    stateMachineArn: profile.stateMachineArn,
+    evidenceBucket: profile.evidenceBucket,
+    customerDomain: profile.customerDomain,
+    customerDomainDelegated: profile.customerDomainDelegated,
+    customerDomainLegacyRetired: profile.customerDomainLegacyRetired,
+    appCertificateArn: profile.appCertificateArn,
   };
 }
 
@@ -584,6 +664,14 @@ function stringField(
 ): string | null {
   const value = record[key];
   return typeof value === "string" && value ? value : null;
+}
+
+function booleanField(
+  record: Record<string, unknown>,
+  key: string,
+): boolean | null {
+  const value = record[key];
+  return typeof value === "boolean" ? value : null;
 }
 
 async function bodyToString(body: unknown): Promise<string> {
@@ -713,6 +801,10 @@ export function buildManagedAppControllerPayload(args: {
   manifestImages?: Record<string, string>;
   planDigest?: string | null;
   evidenceBucket?: string | null;
+  customerDomain?: string | null;
+  customerDomainDelegated?: boolean | null;
+  customerDomainLegacyRetired?: boolean | null;
+  appCertificateArn?: string | null;
 }): Record<string, unknown> {
   const evidencePrefix = managedAppEvidencePrefix({
     tenantId: args.tenantId,
@@ -745,6 +837,18 @@ export function buildManagedAppControllerPayload(args: {
     desiredConfig: args.desiredConfig,
     manifestImages: args.manifestImages,
     planDigest: args.planDigest,
+    ...(args.customerDomain ? { customerDomain: args.customerDomain } : {}),
+    ...(args.customerDomainDelegated !== null &&
+    args.customerDomainDelegated !== undefined
+      ? { customerDomainDelegated: args.customerDomainDelegated }
+      : {}),
+    ...(args.customerDomainLegacyRetired !== null &&
+    args.customerDomainLegacyRetired !== undefined
+      ? { customerDomainLegacyRetired: args.customerDomainLegacyRetired }
+      : {}),
+    ...(args.appCertificateArn
+      ? { appCertificateArn: args.appCertificateArn }
+      : {}),
     evidenceBucket: args.evidenceBucket,
     evidence: {
       bucket: args.evidenceBucket,
