@@ -1191,6 +1191,12 @@ def config_value(desired_config, manifest_images, key, env_name, image_names=Non
     return os.environ.get(env_name, default)
 
 
+def n8n_binary_data_mode(value):
+    if isinstance(value, str) and value.strip() == "database":
+        return "default"
+    return value
+
+
 def config_bool(desired_config, key, env_name, default=False):
     value = desired_config.get(key)
     if isinstance(value, bool):
@@ -1644,12 +1650,14 @@ def n8n_terraform_overrides(
             "THINKWORK_N8N_EXECUTION_DATA_STORAGE_MODE",
             default=n8n_guardrails.get("n8n_execution_data_storage_mode", "database"),
         ),
-        "n8n_binary_data_mode": config_value(
-            desired_config,
-            manifest_images,
-            "binaryDataMode",
-            "THINKWORK_N8N_BINARY_DATA_MODE",
-            default=n8n_guardrails.get("n8n_binary_data_mode", "default"),
+        "n8n_binary_data_mode": n8n_binary_data_mode(
+            config_value(
+                desired_config,
+                manifest_images,
+                "binaryDataMode",
+                "THINKWORK_N8N_BINARY_DATA_MODE",
+                default=n8n_guardrails.get("n8n_binary_data_mode", "default"),
+            )
         ),
         "n8n_cache_engine": config_value(
             desired_config,
@@ -2041,7 +2049,9 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             "n8n_execution_data_storage_mode",
             "database",
         ),
-        "n8n_binary_data_mode": n8n_guardrails.get("n8n_binary_data_mode", "default"),
+        "n8n_binary_data_mode": n8n_binary_data_mode(
+            n8n_guardrails.get("n8n_binary_data_mode", "default")
+        ),
         "n8n_cache_engine": n8n_guardrails.get("n8n_cache_engine", "valkey"),
         "n8n_cache_engine_version": n8n_guardrails.get("n8n_cache_engine_version", "8.0"),
         "n8n_cache_parameter_group_family": n8n_guardrails.get(
