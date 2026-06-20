@@ -1628,13 +1628,58 @@ public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all datab
       writing Terraform variables.
     - Regression test covers an n8n DESTROY preserving legacy binary-mode
       guardrails while keeping execution data storage mode as `database`.
-  - Status: active; preparing PR.
+  - Local verification:
+    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k 'n8n_destroy_normalizes_legacy_binary_database_guardrail or n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
+      passed.
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed.
+    - `pnpm dlx prettier@3.8.2 --check docs/plans/autopilot/THNK-50-status.md`
+      passed.
+    - `git diff --check` passed.
+  - Status: merged in PR #2743 at
+    `9a09890426bc49740fbd6efc5c42743cae6c18a5`.
+  - Released canary `v0.1.0-canary.241`; verified deployed
+    `deploymentStatus.releaseVersion = v0.1.0-canary.241` with manifest SHA
+    `ceec40c56e5f805228999be377438d5a6579c0a2c57fe5f5bdd099816b51e2cc`.
+  - Main deploy run `27874553991` succeeded.
+  - Live reset verification:
+    - Re-drove app-managed uninstall for stuck n8n install
+      `4ce18b35-25c2-48c3-a9e0-f0259b391ba0`; DESTROY job
+      `2e95c857-2270-4ffd-bead-ea8f8907be3d` selected canary `241`,
+      planned successfully with digest
+      `f76595f54fd666b6ef5eeabd1e180d543e08b665e982b00275e58cd7120470a5`,
+      was approved with destructive confirmation `DESTROY`, and applied
+      successfully.
+    - Verified n8n managed app status became disabled/unprovisioned and the
+      stale n8n plugin install row was removed.
+    - Started a fresh app-managed n8n install
+      `7f9705f7-2558-4879-85db-0ce2d4ade214`; ENABLE job
+      `3c689e02-268d-424d-a7d5-07d1535de449` selected canary `241`,
+      planned successfully with 46 creates and no destructive impact, was
+      approved, and applied successfully in runner build
+      `thinkwork-dev-deployment-runner:8c00c20a-61d5-45a7-92d7-53d250ecc417`.
+    - Verified plugin state `installed`; runtime, workflow-management MCP,
+      workflow-operator-instructions skill, and package-settings UI components
+      are all `provisioned`; managed app status is `running`, `enabled`,
+      `provisioned`, and `runtimeEnabled` with
+      `https://n8n.thinkwork.ai`.
+    - Verified ECS services `thinkwork-dev-n8n-main` and
+      `thinkwork-dev-n8n-worker` are ACTIVE and steady with desired/running
+      `1/1`.
+    - Verified ALB `tw-dev-n8n` is active, DNS resolves to the ALB, TLS serves
+      an Amazon-issued certificate for SAN `DNS:n8n.thinkwork.ai`, target
+      health is `healthy`, `https://n8n.thinkwork.ai/healthz` returns
+      `HTTP/2 200` with `{"status":"ok"}`, and `/` returns the n8n UI HTML.
+    - Verified main logs show `n8n ready on ::, port 5678`, `Version: 1.98.2`,
+      and `Editor is now accessible via: https://n8n.thinkwork.ai`; worker logs
+      show `n8n worker is now ready`, `Version: 1.98.2`, `Concurrency: 10`, and
+      `n8n worker server listening on port 5678`.
 
 ## Blockers
 
-- Active blocker: live app-managed n8n DESTROY planning now reaches the runner
-  but fails because preserved legacy guardrails still contain invalid
-  `n8n_binary_data_mode = "database"`.
-- Active fix in progress: merge and release the binary-mode normalization
-  guard, rerun the app-managed n8n teardown/reinstall, and verify trusted
-  HTTPS, ECS/log health, and plugin components end to end.
+- No active blockers for the n8n app-managed install path. Live teardown and
+  fresh install both succeeded from `app.thinkwork.ai`/GraphQL managed plugin
+  flow, and the provisioned runtime passed endpoint, TLS, ECS, ALB target
+  health, and log checks.
