@@ -2013,7 +2013,7 @@ def test_write_runner_files_customer_domain_prefers_secrets_and_coerces_booleans
     assert vars_json["customer_domain_legacy_retired"] is False
 
 
-def test_write_runner_files_refuses_to_clear_existing_customer_domain(
+def test_write_runner_files_preserves_existing_customer_domain_from_state_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     runner = load_runner()
@@ -2025,21 +2025,25 @@ def test_write_runner_files_refuses_to_clear_existing_customer_domain(
             "outputs": {
                 "customer_domain": {"value": "tei.thinkwork.ai"},
                 "customer_domain_delegated": {"value": True},
+                "customer_domain_legacy_retired": {"value": False},
             }
         },
     )
 
-    with pytest.raises(RuntimeError, match="Refusing to clear customer_domain"):
-        runner.write_runner_files(
-            {
-                "stage": "tei-e2e",
-                "awsRegion": "us-east-1",
-                "awsAccountId": "637423202447",
-                "dbPassword": "db-secret",
-                "apiAuthSecret": "api-secret",
-            },
-            {},
-        )
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {},
+    )
+
+    assert vars_json["customer_domain"] == "tei.thinkwork.ai"
+    assert vars_json["customer_domain_delegated"] is True
+    assert vars_json["customer_domain_legacy_retired"] is False
 
 
 def test_write_runner_files_refuses_to_disable_existing_customer_domain_delegation(
