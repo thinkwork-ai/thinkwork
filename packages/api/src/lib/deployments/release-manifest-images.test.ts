@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  releaseManifestSha256,
   type ThinkWorkReleaseManifest,
 } from "@thinkwork/release-manifest";
 import { resolveManifestImagesForManagedApp } from "./release-manifest-images.js";
@@ -12,19 +12,20 @@ afterEach(() => {
 describe("resolveManifestImagesForManagedApp", () => {
   it("hydrates required n8n runtime images from the release manifest", async () => {
     const manifest = releaseManifest();
+    const bytes = releaseManifestBytes(manifest);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        json: async () => manifest,
+        arrayBuffer: async () => bytes,
       })),
     );
 
     await expect(
       resolveManifestImagesForManagedApp({
         appKey: "n8n",
-        manifestDigest: releaseManifestSha256(manifest),
+        manifestDigest: sha256Hex(bytes),
         releaseManifestUrl:
           "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.224/thinkwork-release.json",
         manifestImages: {},
@@ -38,12 +39,13 @@ describe("resolveManifestImagesForManagedApp", () => {
 
   it("rejects a manifest that does not match the selected digest", async () => {
     const manifest = releaseManifest();
+    const bytes = releaseManifestBytes(manifest);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
         ok: true,
         status: 200,
-        json: async () => manifest,
+        arrayBuffer: async () => bytes,
       })),
     );
 
@@ -82,6 +84,14 @@ describe("resolveManifestImagesForManagedApp", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+function releaseManifestBytes(manifest: ThinkWorkReleaseManifest): Buffer {
+  return Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
+function sha256Hex(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
 
 function releaseManifest(): ThinkWorkReleaseManifest {
   return {
