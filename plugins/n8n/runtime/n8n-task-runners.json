@@ -1,0 +1,14 @@
+{
+  "task-runners": [
+    {
+      "runner-type": "javascript",
+      "env-overrides": {
+        "NODE_FUNCTION_ALLOW_EXTERNAL": ""
+      }
+    },
+    {
+      "runner-type": "python",
+      "env-overrides": {}
+    }
+  ]
+}
