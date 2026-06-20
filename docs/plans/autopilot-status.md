@@ -155,9 +155,10 @@ status: in_progress
 - Current worktree: `.Codex/worktrees/thnk-59-u2-workflow-graphql`.
 - Pull request:
   U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
-  merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2 pending.
-- Status: U1 complete and merged. U2 implementation started from
-  `origin/main` at `19f1f0478`.
+  merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
+  [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) opened.
+- Status: U1 complete and merged. U2 implementation complete and PR opened
+  from `origin/main` at `19f1f0478`.
 - Notes:
   - Started autopilot execution from `origin/main`.
   - Created isolated U1 worktree from `origin/main` at `080513f00`.
@@ -248,7 +249,7 @@ status: in_progress
     same parallel-suite timing/leakage symptoms seen in U1; focused rerun
     `pnpm --filter @thinkwork/api exec vitest run
     src/handlers/chat-agent-invoke.runtime-routing.test.ts` passed (11 tests).
-- CI: U1 passed and merged; U2 local verification complete, PR pending.
+- CI: U1 passed and merged; U2 PR #2759 checks pending.
 
 ## Space Webhook Thread Starts - 2026-06-19
 
