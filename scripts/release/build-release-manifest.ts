@@ -735,6 +735,22 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
       ],
     },
     {
+      id: "n8n",
+      displayName: "n8n",
+      terraformModule: {
+        source: `${TERRAFORM_MODULE_SOURCE}//plugins/n8n/terraform/n8n`,
+        version,
+      },
+      requiredImages: ["n8n-runtime"],
+      smokeContracts: [
+        {
+          id: "n8n-runtime-health",
+          command: "plugins/n8n/smoke/n8n-managed-app-smoke.mjs",
+          required: true,
+        },
+      ],
+    },
+    {
       id: "plane",
       displayName: "Plane",
       terraformModule: {
