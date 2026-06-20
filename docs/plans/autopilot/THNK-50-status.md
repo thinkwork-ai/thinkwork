@@ -1017,15 +1017,54 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - `pnpm exec prettier --check <touched files>` could not run because
       `prettier` is not installed as a workspace executable in this checkout.
   - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2728
+    - Merge commit: `a91fc936cfcd39d8d269df51ba2437f389b12276`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+  - Canary release:
+    - Tag `v0.1.0-canary.228` was pushed from merge commit
+      `a91fc936cfcd39d8d269df51ba2437f389b12276`.
+    - Release workflow run `27859246632` succeeded.
+    - Dev status pointer now records canonical manifest digest
+      `1a2d9d0e9d11c867fdb581acac910c809cca17079aa2e82cf2602817cfc312db`;
+      the raw release asset hash is
+      `37d5f4498bd68409ece9ecc841be73ed959cdd3170e0eea247e31fc6327f2b0b`,
+      proving the pointer writes the API verifier digest.
+    - The manifest includes ECR n8n image
+      `487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:v0.1.0-canary.228-n8n-amd64@sha256:966bbfdbe918570d4676fcf9d1399e01f5c6f5794983bf65d58b73dffb32bdfd`.
+  - Reset attempt:
+    - Retried `uninstallPlugin` for install
+      `b936aea0-4be4-4041-9915-3f579cb78db4`.
+    - Destroy job `0be43527-ee3f-4044-bb76-d56718d0959c` used canary `228`
+      and the correct canonical manifest digest, but failed during runner plan
+      evidence with
+      `Release manifest digest mismatch: expected 1a2d9d0e9d11c867fdb581acac910c809cca17079aa2e82cf2602817cfc312db, got 37d5f4498bd68409ece9ecc841be73ed959cdd3170e0eea247e31fc6327f2b0b`.
+    - Root cause: the API and release pointer use the canonical manifest
+      digest, but the deployment runner still verifies downloaded manifest
+      files with the raw file hash before parsing the manifest.
+- n8n deployment runner canonical digest follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-runner-canonical-manifest-digest`
+  - Objective: make the deployment runner verify release manifests using the
+    same canonical digest as the API and release workflow.
+  - Local verification:
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k "ensure_release_manifest_available or sync_release_artifacts"`
+      passed: 8 tests.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed: 82 tests.
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed.
+    - `git diff --check` passed.
+  - PR:
     - Status: preparing.
 
 ## Blockers
 
-- Active blocker: the current dev deployment status pointer for canary `226`
-  contains the raw release-manifest file hash, but the managed-app verifier
-  expects the canonical release-manifest hash. This blocks clean teardown of the
-  failed install and any reliable fresh install attempt.
-- Active fix in progress: merge the canonical digest release-workflow PR, cut a
-  new canary from the merge commit, confirm the pointer digest equals
-  `releaseManifestSha256`, then tear down and reinstall n8n through the
-  deployed ThinkWork plugin flow until runtime provisioning succeeds.
+- Active blocker: the deployment runner still verifies downloaded release
+  manifests with the raw file hash, while the release workflow and API now use
+  the canonical release-manifest hash. This blocks clean teardown of the failed
+  n8n install and any reliable fresh install attempt.
+- Active fix in progress: merge the deployment-runner canonical digest PR,
+  redeploy main so the runner bundle is updated, cut a new canary if required,
+  then tear down and reinstall n8n through the deployed ThinkWork plugin flow
+  until runtime provisioning succeeds.
