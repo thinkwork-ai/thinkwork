@@ -1135,15 +1135,67 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - Local verification:
     - `pnpm exec tsx --test scripts/release/__tests__/write-deployment-status.test.ts`
       passed: 2 tests.
+    - `pnpm exec tsx --test scripts/release/__tests__/write-deployment-status.test.ts scripts/release/__tests__/manifest-sha256.test.ts`
+      passed before PR.
+    - `git diff --check` passed before PR.
+    - `pnpm dlx prettier@3.8.2 --check scripts/release/__tests__/write-deployment-status.test.ts docs/plans/autopilot/THNK-50-status.md`
+      passed before PR.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2731
+    - Merge commit: `b0eed18a67e20db1cd643fd45c401d568558f83c`
+    - Status: merged after required checks passed.
+  - Main deploy:
+    - GitHub Actions deploy run `27861759511` succeeded.
+  - Canary release:
+    - Tag `v0.1.0-canary.230` was pushed from merge commit
+      `b0eed18a67e20db1cd643fd45c401d568558f83c`.
+    - Release workflow run `27862061021` succeeded.
+    - Dev status pointer selected manifest URL
+      `https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.230/thinkwork-release.json`
+      with canonical digest
+      `c02194a50dca372bcee73a2be3bc65246c43424f8f1a1195d6b1cb2f3f559166`
+      and ECR n8n image
+      `487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:v0.1.0-canary.230-n8n-amd64@sha256:966bbfdbe918570d4676fcf9d1399e01f5c6f5794983bf65d58b73dffb32bdfd`.
+  - Reset and fresh deployed install attempt:
+    - Retried teardown for failed install
+      `60b7d5c3-8b3d-45f0-8c31-04e71caaaa4e`; destroy job
+      `e561ce96-84ef-436b-92b6-3268ed302f30` selected canary `230`, reached
+      `awaiting_approval`, was approved with destructive confirmation
+      `DESTROY`, and applied successfully through Step Functions execution
+      `arn:aws:states:us-east-1:487219502366:execution:thinkwork-dev-deployment-orchestrator:tw-apply-e561ce9684ef436b92b63268ed302f30`.
+    - A final `uninstallPlugin` re-drive returned `Plugin install not found`;
+      follow-up plugin query showed no n8n install rows.
+    - Fresh install id `c11e3e32-4b23-4e6c-ad70-a0dfb859bb40` created
+      runtime deployment job `3f987250-9676-4af6-a647-3f9e2f585881`.
+    - The job selected canary `230`, hydrated the `n8n-runtime` image from the
+      release manifest, reached `awaiting_approval`, and was approved.
+    - Apply execution
+      `arn:aws:states:us-east-1:487219502366:execution:thinkwork-dev-deployment-orchestrator:tw-apply-3f98725096764af6a6473f9e2f585881`
+      failed in CodeBuild build
+      `thinkwork-dev-deployment-runner:ae8759a7-0054-4a3d-91d6-49fa9519afcb`.
+    - CodeBuild logs showed Terraform had created real n8n substrate resources
+      including ALB
+      `arn:aws:elasticloadbalancing:us-east-1:487219502366:loadbalancer/app/tw-dev-n8n/6e959075e69b9ab4`
+      and ElastiCache replication group `tw-dev-n8n`, then failed creating
+      placeholder Secrets Manager secrets because the fixed names
+      `thinkwork/dev/n8n/{database-url,encryption-key,service-credential,operator}`
+      were still scheduled for deletion from the prior teardown.
+- n8n placeholder secret reinstall follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-secret-reinstall`
+  - Objective: make generated n8n placeholder secrets reliable under immediate
+    install/teardown/reinstall loops by using unique `name_prefix` secret names
+    and immediate deletion for generated placeholders.
+  - Status: active.
 
 ## Blockers
 
-- Active blocker: the current deployment status pointer has incomplete
-  `activeRelease` metadata after the source deploy, and fallback release
-  metadata sources are stale/incoherent. That blocks both n8n teardown and
-  fresh install because the API verifies a manifest URL against a digest from
-  another release.
-- Active fix in progress: merge and deploy the pointer-preservation fix, run a
-  fresh canary release so `deployment/status/current.json` contains a complete
-  canonical release triple again, then teardown/reinstall n8n through the
-  deployed ThinkWork plugin flow until runtime provisioning succeeds.
+- Active blocker: canary `230` now hydrates the n8n image correctly and starts a
+  real apply, but the apply fails when Terraform recreates generated placeholder
+  Secrets Manager secrets with fixed names that are still pending deletion from
+  the previous teardown.
+- Active fix in progress: update the n8n Terraform module so generated
+  placeholder secrets use unique `name_prefix` names and
+  `recovery_window_in_days = 0`, merge/release that fix, then reset/retry the
+  deployed ThinkWork n8n install path until runtime provisioning succeeds.

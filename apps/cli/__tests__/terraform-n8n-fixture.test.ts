@@ -187,6 +187,20 @@ describe("n8n Terraform app module", () => {
     expect(source).toMatch(/name = "N8N_MCP_SERVICE_CREDENTIAL"/);
   });
 
+  it("makes generated n8n placeholders safe for immediate reinstall", () => {
+    const source = read(N8N_MAIN);
+    const placeholderSecret = firstNestedBlock(
+      source,
+      'resource "aws_secretsmanager_secret" "n8n"',
+    );
+
+    expect(placeholderSecret).toMatch(
+      /name_prefix\s*=\s*"\$\{each\.value\.name\}-"/,
+    );
+    expect(placeholderSecret).toMatch(/recovery_window_in_days\s*=\s*0/);
+    expect(placeholderSecret).not.toMatch(/\n\s*name\s*=/);
+  });
+
   it("exposes outputs matching the deployment-runner n8n adapter", () => {
     const outputs = read(N8N_OUTPUTS);
 

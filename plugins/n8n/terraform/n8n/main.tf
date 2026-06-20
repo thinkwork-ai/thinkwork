@@ -187,8 +187,12 @@ resource "random_password" "service_credential" {
 resource "aws_secretsmanager_secret" "n8n" {
   for_each = local.managed_secrets
 
-  name        = each.value.name
-  description = each.value.description
+  # Placeholder secrets must survive repeated app-plugin install, teardown, and
+  # reinstall verification loops. Fixed names collide with Secrets Manager
+  # secrets that are still pending deletion after a failed or recent destroy.
+  name_prefix             = "${each.value.name}-"
+  description             = each.value.description
+  recovery_window_in_days = 0
 
   tags = {
     Name = each.value.name

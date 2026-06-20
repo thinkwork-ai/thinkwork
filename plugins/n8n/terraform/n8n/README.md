@@ -65,7 +65,10 @@ Required runtime secrets:
 
 `create_secret_placeholders = true` can create generated placeholders for
 fixtures or bootstrap flows. Production installs should pass real secret ARNs
-prepared by the managed-application workflow.
+prepared by the managed-application workflow. Generated placeholder secrets use
+the documented name as an AWS `name_prefix` and force-delete on destroy so a
+failed or recently torn-down install can be recreated immediately without
+colliding with Secrets Manager pending-deletion tombstones.
 
 ## Custom Packages
 
