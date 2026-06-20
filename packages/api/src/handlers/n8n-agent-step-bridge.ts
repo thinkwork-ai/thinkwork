@@ -15,6 +15,7 @@ import {
   N8nAgentStepAuthError,
 } from "../lib/n8n-agent-step/auth.js";
 import {
+  assertN8nAgentStepResumeUrlPolicy,
   N8nAgentStepPayloadError,
   parseN8nAgentStepStartPayload,
 } from "../lib/n8n-agent-step/payload.js";
@@ -50,6 +51,10 @@ export async function handler(
     );
     const headers = lowerCaseHeaders(event.headers ?? {});
     const parsedPayload = parseN8nAgentStepStartPayload(body);
+    assertN8nAgentStepResumeUrlPolicy(
+      parsedPayload.resumeUrl,
+      auth.n8nPublicUrl,
+    );
     const payload = {
       ...parsedPayload,
       requestId:

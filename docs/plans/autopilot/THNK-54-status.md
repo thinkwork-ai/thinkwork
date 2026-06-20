@@ -213,6 +213,34 @@ prettier@latest --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports
 - Opened U2 PR: https://github.com/thinkwork-ai/thinkwork/pull/2752
 - Moved Linear issue `THNK-54` to `Verification` and posted the PR/status
   comment with marker `dispatcher:THNK-54:Review:Codex`.
+- U2 verification failed and Linear was moved back to `In Progress` with marker
+  `dispatcher:THNK-54:Verification:Codex`. Verified failure evidence:
+  - `resumeUrl` accepted arbitrary HTTPS origins and paths such as
+    `https://attacker.example.test/not-n8n-waiting?token=leak` instead of
+    requiring the authenticated managed n8n public origin and
+    `/webhook-waiting` path.
+  - an accepted bridge-run row could poison idempotent retries when a side
+    effect failed after ledger insert but before resume-secret storage, visible
+    thread creation, opening message persistence, wakeup queueing, or status
+    update.
+- U2 focused fix pass implemented on the existing PR branch:
+  - bridge auth now carries the managed n8n `publicUrl` from the tenant's
+    managed application desired config;
+  - handler/start validation rejects resume URLs unless they match the managed
+    n8n HTTPS origin and n8n waiting-webhook path before any bridge run work is
+    started;
+  - start/replay now treats incomplete existing runs as recoverable instead of
+    final replay responses, verifies existing resume URL host/path consistency,
+    stores the resume URL secret idempotently, creates or recovers the visible
+    thread, persists the opening message, requires/creates wakeup evidence, and
+    only then marks the run `waiting`.
+- U2 focused fix verification passed:
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/auth.test.ts src/lib/n8n-agent-step/start.test.ts src/handlers/n8n-agent-step-bridge.test.ts src/graphql/resolvers/plugins/n8n-settings.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts src/lib/plugins/handlers/infra.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `bash scripts/build-lambdas.sh n8n-agent-step-bridge`
+  - `pnpm lint:plugin-source`
+  - `git diff --check`
+  - `pnpm dlx prettier@latest --write` on focused U2 touched files
 
 ## Blockers
 

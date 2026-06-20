@@ -40,6 +40,7 @@ const AUTH_CONTEXT = {
   pluginInstallId: "22222222-2222-4222-8222-222222222222",
   managedApplicationId: "33333333-3333-4333-8333-333333333333",
   bridgeCredentialSecretRef: "arn:secret",
+  n8nPublicUrl: "https://n8n.example.test",
 };
 
 const VALID_BODY = {
@@ -140,6 +141,38 @@ describe("n8n agent-step bridge handler", () => {
 
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body ?? "{}").error).toMatch(/https/);
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  it("rejects resume URLs outside the managed n8n waiting webhook origin", async () => {
+    const res = await handler(
+      event({
+        body: {
+          ...VALID_BODY,
+          resumeUrl: "https://attacker.example.test/not-n8n-waiting?token=leak",
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body ?? "{}").error).toMatch(
+      /managed n8n public origin/,
+    );
+    expect(mockStart).not.toHaveBeenCalled();
+  });
+
+  it("rejects managed-origin resume URLs outside n8n waiting webhooks", async () => {
+    const res = await handler(
+      event({
+        body: {
+          ...VALID_BODY,
+          resumeUrl: "https://n8n.example.test/not-n8n-waiting?token=leak",
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body ?? "{}").error).toMatch(/waiting webhook path/);
     expect(mockStart).not.toHaveBeenCalled();
   });
 

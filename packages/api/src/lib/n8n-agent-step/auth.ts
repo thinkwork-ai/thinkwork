@@ -29,6 +29,7 @@ export interface N8nAgentStepAuthContext {
   pluginInstallId: string;
   managedApplicationId: string;
   bridgeCredentialSecretRef: string;
+  n8nPublicUrl: string | null;
 }
 
 export interface AuthenticateN8nAgentStepBridgeDeps {
@@ -93,6 +94,7 @@ export async function authenticateN8nAgentStepBridgeRequest(
   const secretRef = stringValue(
     desiredConfig.agentStepBridgeCredentialSecretArn,
   );
+  const n8nPublicUrl = stringValue(desiredConfig.publicUrl);
   if (!app || app.desiredStatus === "disabled" || !secretRef) {
     throw new N8nAgentStepAuthError();
   }
@@ -110,6 +112,7 @@ export async function authenticateN8nAgentStepBridgeRequest(
     pluginInstallId: install.id,
     managedApplicationId: app.id,
     bridgeCredentialSecretRef: secretRef,
+    n8nPublicUrl,
   };
 }
 

@@ -10,6 +10,8 @@ export class N8nAgentStepPayloadError extends Error {
 export interface ParsedN8nAgentStepResumeUrl {
   href: string;
   host: string;
+  origin: string;
+  pathname: string;
   path: string;
 }
 
@@ -67,6 +69,29 @@ export function parseN8nAgentStepStartPayload(
     timeoutSeconds: optionalTimeoutSeconds(input.timeoutSeconds),
     resumeUrl: parseResumeUrl(input.resumeUrl),
   };
+}
+
+export function assertN8nAgentStepResumeUrlPolicy(
+  resumeUrl: ParsedN8nAgentStepResumeUrl | null,
+  managedN8nPublicUrl: string | null,
+) {
+  if (!resumeUrl) return;
+  const managedOrigin = managedN8nOrigin(managedN8nPublicUrl);
+  if (!managedOrigin) {
+    throw new N8nAgentStepPayloadError(
+      "resumeUrl cannot be accepted until the managed n8n public URL is configured",
+    );
+  }
+  if (resumeUrl.origin !== managedOrigin) {
+    throw new N8nAgentStepPayloadError(
+      "resumeUrl must use the managed n8n public origin",
+    );
+  }
+  if (!isWaitingWebhookPath(resumeUrl.pathname)) {
+    throw new N8nAgentStepPayloadError(
+      "resumeUrl must use n8n's waiting webhook path",
+    );
+  }
 }
 
 function requiredString(
@@ -139,8 +164,30 @@ function parseResumeUrl(value: unknown): ParsedN8nAgentStepResumeUrl | null {
   return {
     href: parsed.href,
     host: parsed.host,
+    origin: parsed.origin,
+    pathname: parsed.pathname,
     path: `${parsed.pathname}${parsed.search}`,
   };
+}
+
+function managedN8nOrigin(value: string | null): string | null {
+  if (!value?.trim()) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    return null;
+  }
+  return parsed.origin;
+}
+
+function isWaitingWebhookPath(pathname: string): boolean {
+  return (
+    pathname === "/webhook-waiting" || pathname.startsWith("/webhook-waiting/")
+  );
 }
 
 function optionalRecord(

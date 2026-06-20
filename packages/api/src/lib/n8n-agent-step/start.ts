@@ -6,6 +6,7 @@ import {
   messages,
   n8nAgentStepRuns,
   spaces,
+  threads,
 } from "@thinkwork/database-pg/schema";
 import { ensureThreadForWork } from "../thread-helpers.js";
 import { db as defaultDb } from "../db.js";
@@ -14,7 +15,10 @@ import {
   type PluginSecretsClient,
 } from "../plugins/secrets.js";
 import type { N8nAgentStepAuthContext } from "./auth.js";
-import type { ParsedN8nAgentStepStartPayload } from "./payload.js";
+import {
+  assertN8nAgentStepResumeUrlPolicy,
+  type ParsedN8nAgentStepStartPayload,
+} from "./payload.js";
 import {
   buildN8nAgentStepIdempotencyKey,
   normalizeN8nAgentStepTimeout,
@@ -25,6 +29,12 @@ import {
 type DbLike = typeof defaultDb;
 type EnsureThreadForWork = typeof ensureThreadForWork;
 type RunRow = typeof n8nAgentStepRuns.$inferSelect;
+type WakeupRow = { id: string };
+type ThreadRow = {
+  threadId: string;
+  identifier: string | null;
+  number: number;
+};
 
 export class N8nAgentStepStartError extends Error {
   constructor(
@@ -62,6 +72,7 @@ export async function startN8nAgentStepRun(
   deps: StartN8nAgentStepRunDeps = {},
 ): Promise<StartN8nAgentStepRunResult> {
   const db = deps.db ?? defaultDb;
+  assertN8nAgentStepResumeUrlPolicy(payload.resumeUrl, auth.n8nPublicUrl);
   const now = deps.now?.() ?? new Date();
   const timeout = normalizeN8nAgentStepTimeout({
     timeoutSeconds: payload.timeoutSeconds,
@@ -83,7 +94,35 @@ export async function startN8nAgentStepRun(
     tenantId: auth.tenantId,
     idempotencyKey,
   });
-  if (existing) return replayResult(existing);
+  if (existing) {
+    assertResumeUrlMatchesExistingRun(existing, payload);
+    const wakeup = await findWakeupByIdempotencyKey({
+      db,
+      tenantId: auth.tenantId,
+      agentId: payload.agentId,
+      idempotencyKey,
+    });
+    if (!shouldRecoverRunStart(existing, wakeup)) {
+      return replayResult(existing, wakeup);
+    }
+    await assertAgentAndSpaceExist({
+      db,
+      tenantId: auth.tenantId,
+      agentId: payload.agentId,
+      spaceId: payload.spaceId,
+    });
+    return completeRunStart({
+      db,
+      run: existing,
+      auth,
+      payload,
+      idempotencyKey,
+      now,
+      ensureThread: deps.ensureThread ?? ensureThreadForWork,
+      secrets: deps.secrets,
+      existingWakeup: wakeup,
+    });
+  }
 
   await assertAgentAndSpaceExist({
     db,
@@ -143,12 +182,48 @@ export async function startN8nAgentStepRun(
   if (!run) {
     throw new N8nAgentStepStartError("Bridge run could not be created", 500);
   }
-  if (!insertedRun) return replayResult(run);
+  const existingWakeup = insertedRun
+    ? null
+    : await findWakeupByIdempotencyKey({
+        db,
+        tenantId: auth.tenantId,
+        agentId: payload.agentId,
+        idempotencyKey,
+      });
+  if (!insertedRun && !shouldRecoverRunStart(run, existingWakeup)) {
+    return replayResult(run, existingWakeup);
+  }
 
-  if (payload.resumeUrl && resumeSecretRef) {
-    const secrets = deps.secrets ?? createSecretsManagerPluginSecrets();
+  return completeRunStart({
+    db,
+    run,
+    auth,
+    payload,
+    idempotencyKey,
+    now,
+    ensureThread: deps.ensureThread ?? ensureThreadForWork,
+    secrets: deps.secrets,
+    existingWakeup,
+  });
+}
+
+async function completeRunStart(input: {
+  db: DbLike;
+  run: RunRow;
+  auth: N8nAgentStepAuthContext;
+  payload: ParsedN8nAgentStepStartPayload;
+  idempotencyKey: string;
+  now: Date;
+  ensureThread: EnsureThreadForWork;
+  secrets: PluginSecretsClient | undefined;
+  existingWakeup: WakeupRow | null;
+}): Promise<StartN8nAgentStepRunResult> {
+  const { db, run, auth, payload, idempotencyKey, now } = input;
+
+  if (payload.resumeUrl && run.resume_url_secret_ref) {
+    const secrets = input.secrets ?? createSecretsManagerPluginSecrets();
     await secrets.putSecret(
-      resumeSecretRef,
+      run.resume_url_secret_ref,
       JSON.stringify({
         resumeUrl: payload.resumeUrl.href,
         tenantId: auth.tenantId,
@@ -160,90 +235,63 @@ export async function startN8nAgentStepRun(
     );
   }
 
-  const ensureThread = deps.ensureThread ?? ensureThreadForWork;
-  const threadTitle = threadTitleForPayload(payload);
-  const thread = await ensureThread({
-    tenantId: auth.tenantId,
-    agentId: payload.agentId,
-    spaceId: payload.spaceId,
-    title: threadTitle,
-    channel: "webhook",
+  const thread = await ensureRunThread({
+    db,
+    run,
+    auth,
+    payload,
+    now,
+    ensureThread: input.ensureThread,
   });
   const openingContent = openingMessageForPayload(payload);
-  const [openingMessage] = await db
-    .insert(messages)
-    .values({
-      tenant_id: auth.tenantId,
-      thread_id: thread.threadId,
-      role: "system",
-      content: openingContent,
-      sender_type: "system",
-      metadata: {
-        source: "n8n_agent_step",
-        runId: run.id,
-        workflowId: payload.workflowId,
-        workflowName: payload.workflowName,
-        executionId: payload.executionId,
-        stepId: payload.stepId,
-        correlationId: payload.correlationId,
-        requestId: payload.requestId,
-        hasResumeUrl: Boolean(payload.resumeUrl),
-      },
-      created_at: now,
-    })
-    .returning({ id: messages.id });
-  if (!openingMessage?.id) {
-    throw new N8nAgentStepStartError(
-      "Bridge opening message could not be created",
-      500,
-    );
+  const openingMessageId =
+    run.opening_message_id ??
+    (await createOpeningMessage({
+      db,
+      run,
+      auth,
+      payload,
+      thread,
+      openingContent,
+      now,
+    }));
+  if (!run.opening_message_id) {
+    await db
+      .update(n8nAgentStepRuns)
+      .set({
+        opening_message_id: openingMessageId,
+        updated_at: now,
+      })
+      .where(eq(n8nAgentStepRuns.id, run.id))
+      .returning();
   }
 
-  const [wakeup] = await db
-    .insert(agentWakeupRequests)
-    .values({
-      tenant_id: auth.tenantId,
-      agent_id: payload.agentId,
-      source: "webhook",
-      trigger_detail: `n8n-agent-step:${run.id}`,
-      reason: `n8n workflow step: ${payload.workflowName ?? payload.workflowId}`,
-      payload: {
-        n8nAgentStepRunId: run.id,
-        threadId: thread.threadId,
-        threadIdentifier: thread.identifier,
-        threadNumber: thread.number,
-        openingMessageId: openingMessage.id,
-        openingMessageAlreadyPersisted: true,
-        openingMessageContent: openingContent,
-        message: payload.instructions,
-        workflowId: payload.workflowId,
-        workflowName: payload.workflowName,
-        executionId: payload.executionId,
-        stepId: payload.stepId,
-        correlationId: payload.correlationId,
-        requestId: payload.requestId,
-        webhookPayload: {
-          input: payload.input,
-          metadata: sanitizeN8nAgentStepMetadata(payload.metadata),
-        },
-        spaceId: payload.spaceId,
-      },
-      requested_by_actor_type: "system",
-      idempotency_key: idempotencyKey,
-      requested_at: now,
-      created_at: now,
-    })
-    .returning({ id: agentWakeupRequests.id });
-  if (!wakeup?.id) {
-    throw new N8nAgentStepStartError("Agent wakeup could not be queued", 500);
-  }
+  const wakeup =
+    input.existingWakeup ??
+    (await findWakeupByIdempotencyKey({
+      db,
+      tenantId: auth.tenantId,
+      agentId: payload.agentId,
+      idempotencyKey,
+    })) ??
+    (await createAgentWakeup({
+      db,
+      run,
+      auth,
+      payload,
+      thread,
+      openingMessageId,
+      openingContent,
+      idempotencyKey,
+      now,
+    }));
 
   const [updatedRun] = await db
     .update(n8nAgentStepRuns)
     .set({
       status: "waiting",
       thread_id: thread.threadId,
-      opening_message_id: openingMessage.id,
+      opening_message_id: openingMessageId,
       updated_at: now,
     })
     .where(eq(n8nAgentStepRuns.id, run.id))
@@ -257,9 +305,153 @@ export async function startN8nAgentStepRun(
     threadId: thread.threadId,
     threadIdentifier: thread.identifier,
     threadNumber: thread.number,
-    openingMessageId: openingMessage.id,
-    expiresAt: timeout.expiresAt.toISOString(),
+    openingMessageId,
+    expiresAt: (updatedRun?.expires_at ?? run.expires_at).toISOString(),
   };
+}
+
+async function ensureRunThread(input: {
+  db: DbLike;
+  run: RunRow;
+  auth: N8nAgentStepAuthContext;
+  payload: ParsedN8nAgentStepStartPayload;
+  now: Date;
+  ensureThread: EnsureThreadForWork;
+}): Promise<ThreadRow> {
+  if (input.run.thread_id) {
+    const [thread] = await input.db
+      .select({
+        threadId: threads.id,
+        identifier: threads.identifier,
+        number: threads.number,
+      })
+      .from(threads)
+      .where(
+        and(
+          eq(threads.tenant_id, input.auth.tenantId),
+          eq(threads.id, input.run.thread_id),
+        ),
+      )
+      .limit(1);
+    if (!thread) {
+      throw new N8nAgentStepStartError(
+        "Bridge thread could not be recovered",
+        500,
+      );
+    }
+    return thread;
+  }
+
+  const thread = await input.ensureThread({
+    tenantId: input.auth.tenantId,
+    agentId: input.payload.agentId,
+    spaceId: input.payload.spaceId,
+    title: threadTitleForPayload(input.payload),
+    channel: "webhook",
+  });
+  await input.db
+    .update(n8nAgentStepRuns)
+    .set({
+      thread_id: thread.threadId,
+      updated_at: input.now,
+    })
+    .where(eq(n8nAgentStepRuns.id, input.run.id))
+    .returning();
+  return thread;
+}
+
+async function createOpeningMessage(input: {
+  db: DbLike;
+  run: RunRow;
+  auth: N8nAgentStepAuthContext;
+  payload: ParsedN8nAgentStepStartPayload;
+  thread: ThreadRow;
+  openingContent: string;
+  now: Date;
+}): Promise<string> {
+  const [openingMessage] = await input.db
+    .insert(messages)
+    .values({
+      tenant_id: input.auth.tenantId,
+      thread_id: input.thread.threadId,
+      role: "system",
+      content: input.openingContent,
+      sender_type: "system",
+      metadata: {
+        source: "n8n_agent_step",
+        runId: input.run.id,
+        workflowId: input.payload.workflowId,
+        workflowName: input.payload.workflowName,
+        executionId: input.payload.executionId,
+        stepId: input.payload.stepId,
+        correlationId: input.payload.correlationId,
+        requestId: input.payload.requestId,
+        hasResumeUrl: Boolean(input.payload.resumeUrl),
+      },
+      created_at: input.now,
+    })
+    .returning({ id: messages.id });
+  if (!openingMessage?.id) {
+    throw new N8nAgentStepStartError(
+      "Bridge opening message could not be created",
+      500,
+    );
+  }
+  return openingMessage.id;
+}
+
+async function createAgentWakeup(input: {
+  db: DbLike;
+  run: RunRow;
+  auth: N8nAgentStepAuthContext;
+  payload: ParsedN8nAgentStepStartPayload;
+  thread: ThreadRow;
+  openingMessageId: string;
+  openingContent: string;
+  idempotencyKey: string;
+  now: Date;
+}): Promise<WakeupRow> {
+  const [wakeup] = await input.db
+    .insert(agentWakeupRequests)
+    .values({
+      tenant_id: input.auth.tenantId,
+      agent_id: input.payload.agentId,
+      source: "webhook",
+      trigger_detail: `n8n-agent-step:${input.run.id}`,
+      reason: `n8n workflow step: ${
+        input.payload.workflowName ?? input.payload.workflowId
+      }`,
+      payload: {
+        n8nAgentStepRunId: input.run.id,
+        threadId: input.thread.threadId,
+        threadIdentifier: input.thread.identifier,
+        threadNumber: input.thread.number,
+        openingMessageId: input.openingMessageId,
+        openingMessageAlreadyPersisted: true,
+        openingMessageContent: input.openingContent,
+        message: input.payload.instructions,
+        workflowId: input.payload.workflowId,
+        workflowName: input.payload.workflowName,
+        executionId: input.payload.executionId,
+        stepId: input.payload.stepId,
+        correlationId: input.payload.correlationId,
+        requestId: input.payload.requestId,
+        webhookPayload: {
+          input: input.payload.input,
+          metadata: sanitizeN8nAgentStepMetadata(input.payload.metadata),
+        },
+        spaceId: input.payload.spaceId,
+      },
+      requested_by_actor_type: "system",
+      idempotency_key: input.idempotencyKey,
+      requested_at: input.now,
+      created_at: input.now,
+    })
+    .returning({ id: agentWakeupRequests.id });
+  if (!wakeup?.id) {
+    throw new N8nAgentStepStartError("Agent wakeup could not be queued", 500);
+  }
+  return wakeup;
 }
 
 async function assertAgentAndSpaceExist(input: {
@@ -312,18 +504,77 @@ async function findRunByIdempotencyKey(input: {
   return run ?? null;
 }
 
-function replayResult(run: RunRow): StartN8nAgentStepRunResult {
+async function findWakeupByIdempotencyKey(input: {
+  db: DbLike;
+  tenantId: string;
+  agentId: string;
+  idempotencyKey: string;
+}): Promise<WakeupRow | null> {
+  const [wakeup] = await input.db
+    .select({ id: agentWakeupRequests.id })
+    .from(agentWakeupRequests)
+    .where(
+      and(
+        eq(agentWakeupRequests.tenant_id, input.tenantId),
+        eq(agentWakeupRequests.agent_id, input.agentId),
+        eq(agentWakeupRequests.idempotency_key, input.idempotencyKey),
+      ),
+    )
+    .limit(1);
+  return wakeup ?? null;
+}
+
+function shouldRecoverRunStart(run: RunRow, wakeup: WakeupRow | null): boolean {
+  if (run.status === "accepted") return true;
+  if (run.status !== "waiting") return false;
+  return !run.thread_id || !run.opening_message_id || !wakeup?.id;
+}
+
+function replayResult(
+  run: RunRow,
+  wakeup: WakeupRow | null,
+): StartN8nAgentStepRunResult {
   return {
     runId: run.id,
     status: run.status,
     replayed: true,
-    wakeupRequestId: null,
+    wakeupRequestId: wakeup?.id ?? null,
     threadId: run.thread_id,
     threadIdentifier: null,
     threadNumber: null,
     openingMessageId: run.opening_message_id,
     expiresAt: run.expires_at.toISOString(),
   };
+}
+
+function assertResumeUrlMatchesExistingRun(
+  run: RunRow,
+  payload: ParsedN8nAgentStepStartPayload,
+) {
+  if (!payload.resumeUrl) {
+    if (run.resume_url_secret_ref) {
+      throw new N8nAgentStepStartError(
+        "resumeUrl is required to recover this bridge run",
+        409,
+      );
+    }
+    return;
+  }
+  if (!run.resume_url_secret_ref) {
+    throw new N8nAgentStepStartError(
+      "resumeUrl does not match the original bridge run",
+      409,
+    );
+  }
+  if (
+    run.resume_url_host !== payload.resumeUrl.host ||
+    run.resume_url_path !== payload.resumeUrl.path
+  ) {
+    throw new N8nAgentStepStartError(
+      "resumeUrl does not match the original bridge run",
+      409,
+    );
+  }
 }
 
 function requestMetadata(input: {
