@@ -36,6 +36,7 @@ RELEASE_EVIDENCE = {}
 CONTROLLER_EVIDENCE = {}
 TERRAFORM_EVIDENCE = {}
 FIRST_ADMIN_EVIDENCE = {}
+MANAGED_APP_EVIDENCE = {}
 RELEASE_MANIFEST_TRUST_POLICIES = {
     "allow_unsigned_canary",
     "require_signature",
@@ -4104,6 +4105,7 @@ output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
 output "cognee_enabled" {{ value = module.thinkwork.cognee_enabled }}
 output "twenty_provisioned" {{ value = module.thinkwork.twenty_provisioned }}
 output "twenty_runtime_enabled" {{ value = module.thinkwork.twenty_runtime_enabled }}
+output "twenty_url" {{ value = module.thinkwork.twenty_url }}
 output "n8n_provisioned" {{ value = module.thinkwork.n8n_provisioned }}
 output "n8n_runtime_enabled" {{ value = module.thinkwork.n8n_runtime_enabled }}
 output "n8n_url" {{ value = module.thinkwork.n8n_url }}
@@ -4215,6 +4217,112 @@ def sync_release_artifacts(artifact_types=None, artifact_names=None):
         "artifacts": artifact_evidence,
     }
     return static_files
+
+
+def managed_app_operation(payload):
+    return str(payload.get("operation") or "").strip().upper()
+
+
+def is_twenty_thinkwork_app_sync_operation(payload):
+    app_key = str(payload.get("appKey") or "").strip().lower()
+    return app_key == "twenty" and managed_app_operation(payload) in {"ENABLE", "UPGRADE"}
+
+
+def stage_managed_app_release_artifacts(action, payload):
+    if action not in {"deploy", "update"}:
+        return {}
+    if not is_twenty_thinkwork_app_sync_operation(payload):
+        return {}
+    return sync_release_artifacts(
+        artifact_types={"seed"},
+        artifact_names={"twenty-thinkwork-app"},
+    )
+
+
+def twenty_app_sync_api_key(runner_secrets, payload):
+    return first_non_empty_string(
+        runner_secrets.get("twentyAppSyncApiKey", ""),
+        runner_secrets.get("twentyDeployApiKey", ""),
+        payload.get("twentyAppSyncApiKey", ""),
+        payload.get("twentyDeployApiKey", ""),
+        os.environ.get("TWENTY_APP_SYNC_API_KEY", ""),
+        os.environ.get("TWENTY_DEPLOY_API_KEY", ""),
+    )
+
+
+def sync_twenty_thinkwork_app(outputs_path, vars_json, payload, runner_secrets, artifacts):
+    global MANAGED_APP_EVIDENCE
+    if not is_twenty_thinkwork_app_sync_operation(payload):
+        return
+
+    outputs = {}
+    if outputs_path.is_file():
+        outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
+
+    runtime_enabled = bool_state_output(outputs, "twenty_runtime_enabled") or bool(
+        vars_json.get("twenty_runtime_enabled", False)
+    )
+    if not runtime_enabled:
+        MANAGED_APP_EVIDENCE["twentyThinkWorkApp"] = {
+            "status": "skipped",
+            "reason": "twenty-runtime-disabled",
+        }
+        return
+
+    public_url = first_non_empty_string(
+        string_state_output(outputs, "twenty_url"),
+        vars_json.get("twenty_public_url", ""),
+        payload.get("desiredConfig", {}).get("publicUrl", "")
+        if isinstance(payload.get("desiredConfig"), dict)
+        else "",
+    )
+    if not public_url:
+        raise RuntimeError(
+            "Twenty ThinkWork native app sync requires twenty_url from Terraform outputs "
+            "or twenty_public_url from runner variables."
+        )
+
+    api_key = twenty_app_sync_api_key(runner_secrets, payload)
+    if not api_key:
+        raise RuntimeError(
+            "Twenty managed app ENABLE/UPGRADE requires twentyAppSyncApiKey or "
+            "twentyDeployApiKey in the deployment runner secret."
+        )
+
+    archive = artifacts.get("twenty-thinkwork-app")
+    if not archive or not archive.is_file():
+        raise RuntimeError(
+            "Twenty managed app ENABLE/UPGRADE requires release artifact "
+            "twenty-thinkwork-app."
+        )
+
+    target = RELEASE / "extract-twenty-thinkwork-app"
+    safe_extract_tar_file(archive, target)
+    script = target / "plugins/twenty/scripts/sync-thinkwork-app.mjs"
+    app_dir = target / "plugins/twenty/twenty-app"
+    if not script.is_file() or not app_dir.is_dir():
+        raise RuntimeError(
+            "Twenty ThinkWork app artifact must contain "
+            "plugins/twenty/scripts/sync-thinkwork-app.mjs and "
+            "plugins/twenty/twenty-app."
+        )
+
+    env = dict(os.environ)
+    env.update(
+        {
+            "TWENTY_PUBLIC_URL": public_url,
+            "TWENTY_APP_SYNC_API_KEY": api_key,
+            "TWENTY_THINKWORK_APP_SYNC_DRY_RUN": "0",
+            "TWENTY_THINKWORK_APP_DIR": str(app_dir),
+        }
+    )
+    run(["node", str(script), "--apply"], cwd=target, env=env)
+    MANAGED_APP_EVIDENCE["twentyThinkWorkApp"] = {
+        "status": "installed",
+        "artifact": "twenty-thinkwork-app",
+        "publicUrl": public_url,
+        "operation": managed_app_operation(payload),
+    }
 
 
 def write_current_outputs_from_state(stage, outputs_path):
@@ -4679,6 +4787,8 @@ def write_evidence(status, vars_json=None, terraform_exit_code=None, error=None)
         evidence["controller"] = CONTROLLER_EVIDENCE
     if TERRAFORM_EVIDENCE:
         evidence["terraform"] = TERRAFORM_EVIDENCE
+    if MANAGED_APP_EVIDENCE:
+        evidence["managedAppPostInstall"] = MANAGED_APP_EVIDENCE
     Path("deployment-evidence.json").write_text(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -4737,6 +4847,7 @@ def main():
             artifact_types={"static-site"} if web_only else None,
             artifact_names={"web"} if web_only else None,
         )
+    managed_app_artifacts = stage_managed_app_release_artifacts(action, payload)
     vars_json = write_runner_files(payload, runner_secrets)
     controller_summary = controller_input_summary(payload)
     CONTROLLER_EVIDENCE = {
@@ -4822,7 +4933,15 @@ def main():
     outputs_path = TF / "outputs.json"
     if result.returncode == 0 and action in {"deploy", "update"}:
         write_outputs_after_apply(payload, vars_json, outputs_path)
-        if not is_managed_app_operation(payload):
+        if is_managed_app_operation(payload):
+            sync_twenty_thinkwork_app(
+                outputs_path,
+                vars_json,
+                payload,
+                runner_secrets,
+                managed_app_artifacts,
+            )
+        else:
             push_database_schema(outputs_path, vars_json)
             ensure_first_admin(outputs_path, vars_json, payload, runner_secrets)
             write_outputs_to_ssm(outputs_path, vars_json)

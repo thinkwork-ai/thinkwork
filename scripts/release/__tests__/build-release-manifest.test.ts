@@ -39,6 +39,10 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   await mkdir(staticDir, { recursive: true });
   await writeFile(path.join(lambdaDir, "graphql-http.zip"), "lambda-bytes");
   await writeFile(path.join(staticDir, "web.tar.gz"), "web-bytes");
+  await writeFile(
+    path.join(root, "twenty-thinkwork-app.tar.gz"),
+    "twenty-app-bytes",
+  );
   await writeFile(path.join(root, "platform-artifacts.tar.gz"), "bundle");
 
   const manifest = await buildReleaseManifest({
@@ -56,6 +60,11 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
       },
     ],
     artifacts: [
+      {
+        name: "twenty-thinkwork-app",
+        type: "seed",
+        path: path.join(root, "twenty-thinkwork-app.tar.gz"),
+      },
       {
         name: "web",
         type: "static-site",
@@ -137,11 +146,16 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     manifest.artifacts.map(
       (artifact) => `${artifact.type}:${artifact.name}:${artifact.fileName}`,
     ),
-    ["lambda:graphql-http:graphql-http.zip", "static-site:web:web.tar.gz"],
+    [
+      "lambda:graphql-http:graphql-http.zip",
+      "seed:twenty-thinkwork-app:twenty-thinkwork-app.tar.gz",
+      "static-site:web:web.tar.gz",
+    ],
   );
   assert.equal(manifest.artifacts[0]?.url, null);
   assert.deepEqual(manifest.artifactBundles?.[0]?.contains, [
     "graphql-http",
+    "twenty-thinkwork-app",
     "web",
   ]);
   assert.equal(
@@ -185,6 +199,10 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
       twenty: ["twenty"],
     },
   );
+  assert.deepEqual(
+    manifest.managedApps.find((app) => app.id === "twenty")?.requiredArtifacts,
+    ["twenty-thinkwork-app"],
+  );
 });
 
 test("signing helpers can verify the generated manifest", async () => {
@@ -201,14 +219,16 @@ test("signing helpers can verify the generated manifest", async () => {
     type: "pkcs8",
   }) as string;
   const root = await makeTempReleaseRoot();
-  const artifactPath = path.join(root, "seed.tar.gz");
+  const artifactPath = path.join(root, "twenty-thinkwork-app.tar.gz");
   await writeFile(artifactPath, "seed");
 
   const manifest = await buildReleaseManifest({
     version: "1.2.3",
     gitSha: "abc123",
     artifactRoot: root,
-    artifacts: [{ name: "seed", type: "seed", path: artifactPath }],
+    artifacts: [
+      { name: "twenty-thinkwork-app", type: "seed", path: artifactPath },
+    ],
     acceptedKeyIds: [trustedKey.keyId],
     createdAt: "2026-06-06T00:00:00.000Z",
   });
@@ -235,6 +255,8 @@ test("buildReleaseManifest can keep artifact URLs when bundleArtifactUrls is req
   const lambdaDir = path.join(root, "lambdas");
   await mkdir(lambdaDir, { recursive: true });
   await writeFile(path.join(lambdaDir, "graphql-http.zip"), "lambda-bytes");
+  const twentyAppPath = path.join(root, "twenty-thinkwork-app.tar.gz");
+  await writeFile(twentyAppPath, "twenty-app-bytes");
   await writeFile(path.join(root, "platform-artifacts.tar.gz"), "bundle");
 
   const manifest = await buildReleaseManifest({
@@ -248,6 +270,13 @@ test("buildReleaseManifest can keep artifact URLs when bundleArtifactUrls is req
       {
         name: "platform",
         path: path.join(root, "platform-artifacts.tar.gz"),
+      },
+    ],
+    artifacts: [
+      {
+        name: "twenty-thinkwork-app",
+        type: "seed",
+        path: twentyAppPath,
       },
     ],
     bundleArtifactUrls: true,
@@ -316,7 +345,7 @@ test("buildReleaseManifest accepts managed app and signing metadata overrides", 
 
 test("CLI build script includes default managed apps when no overrides are passed", async () => {
   const root = await makeTempReleaseRoot();
-  const artifactPath = path.join(root, "seed.tar.gz");
+  const artifactPath = path.join(root, "twenty-thinkwork-app.tar.gz");
   const outputPath = path.join(root, "thinkwork-release.json");
   await writeFile(artifactPath, "seed");
 
@@ -329,7 +358,7 @@ test("CLI build script includes default managed apps when no overrides are passe
     "--artifact-root",
     root,
     "--artifact",
-    `name=seed,type=seed,path=${artifactPath}`,
+    `name=twenty-thinkwork-app,type=seed,path=${artifactPath}`,
     "--output",
     outputPath,
     "--created-at",
@@ -361,6 +390,10 @@ test("CLI build script includes default managed apps when no overrides are passe
       ?.smokeContracts?.map((contract) => contract.command),
     ["plugins/twenty/smoke/twenty-managed-app-smoke.mjs"],
   );
+  assert.deepEqual(
+    manifest.managedApps.find((app) => app.id === "twenty")?.requiredArtifacts,
+    ["twenty-thinkwork-app"],
+  );
 });
 
 test("buildReleaseManifest fails when a required artifact is missing", async () => {
@@ -386,7 +419,7 @@ test("buildReleaseManifest fails when a required artifact is missing", async () 
 
 test("buildReleaseManifest requires staged deployment runner script metadata", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "thinkwork-release-"));
-  const artifactPath = path.join(root, "seed.tar.gz");
+  const artifactPath = path.join(root, "twenty-thinkwork-app.tar.gz");
   await writeFile(artifactPath, "seed");
 
   await assert.rejects(
@@ -395,7 +428,9 @@ test("buildReleaseManifest requires staged deployment runner script metadata", a
         version: "1.2.3",
         gitSha: "abc123",
         artifactRoot: root,
-        artifacts: [{ name: "seed", type: "seed", path: artifactPath }],
+        artifacts: [
+          { name: "twenty-thinkwork-app", type: "seed", path: artifactPath },
+        ],
       }),
     /Deployment runner script is missing/,
   );
@@ -423,7 +458,7 @@ test("buildReleaseManifest rejects duplicate logical artifact names", async () =
 
 test("buildReleaseManifest rejects missing managed app runtime images", async () => {
   const root = await makeTempReleaseRoot();
-  const artifactPath = path.join(root, "seed.tar.gz");
+  const artifactPath = path.join(root, "twenty-thinkwork-app.tar.gz");
   await writeFile(artifactPath, "seed");
 
   await assert.rejects(
@@ -432,7 +467,9 @@ test("buildReleaseManifest rejects missing managed app runtime images", async ()
         version: "1.2.3",
         gitSha: "abc123",
         artifactRoot: root,
-        artifacts: [{ name: "seed", type: "seed", path: artifactPath }],
+        artifacts: [
+          { name: "twenty-thinkwork-app", type: "seed", path: artifactPath },
+        ],
         runtimeImages: [
           {
             name: "agentcore-pi-amd64",

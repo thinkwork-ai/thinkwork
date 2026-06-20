@@ -86,6 +86,13 @@ jobs:
           mkdir -p dist/release/runner
           cp terraform/modules/app/deployment-control-plane/runner.py dist/release/runner/thinkwork-runner.py
 
+      - name: Stage Twenty ThinkWork app package
+        run: |
+          mkdir -p dist/release/managed-apps
+          tar -czf dist/release/managed-apps/twenty-thinkwork-app.tar.gz \
+            plugins/twenty/twenty-app \
+            plugins/twenty/scripts/sync-thinkwork-app.mjs
+
       - name: Bundle platform artifacts
         run: bash scripts/release/package-platform-artifacts.sh dist/release
 
@@ -228,6 +235,7 @@ jobs:
             --deployment-runner-script dist/release/runner/thinkwork-runner.py \
             --artifact "name=web,type=static-site,path=dist/release/static/web.tar.gz" \
             --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
+            --artifact "name=twenty-thinkwork-app,type=seed,path=dist/release/managed-apps/twenty-thinkwork-app.tar.gz" \
             --artifact-bundle "name=platform,path=dist/release/platform-artifacts.tar.gz" \
             --image "name=agentcore-pi-amd64,repository=${AGENTCORE_REPOSITORY},tag=${RELEASE_REF_NAME}-pi-amd64,digest=${{ steps.pi-amd64.outputs.digest }},architecture=amd64" \
             --image "name=agentcore-pi-arm64,repository=${AGENTCORE_REPOSITORY},tag=${RELEASE_REF_NAME}-pi-arm64,digest=${{ steps.pi-arm64.outputs.digest }},architecture=arm64" \
