@@ -125,6 +125,7 @@ import {
   pendingQuestionAnswersFromPayload,
   toRuntimePendingUserQuestions,
 } from "../lib/user-questions/runtime-payload.js";
+import { linkN8nAgentStepRunTurn } from "../lib/n8n-agent-step/link-turn.js";
 
 // Config-class values are read at call time via getConfig (env-wins merge
 // over the SSM document) — never captured at module load (R3): the SSM
@@ -1351,6 +1352,26 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       turn_number: turnNumber || undefined,
     })
     .returning();
+
+  const n8nAgentStepRunId =
+    typeof payload?.n8nAgentStepRunId === "string"
+      ? payload.n8nAgentStepRunId
+      : null;
+  if (run?.id && n8nAgentStepRunId) {
+    try {
+      await linkN8nAgentStepRunTurn({
+        tenantId: wakeup.tenant_id,
+        runId: n8nAgentStepRunId,
+        threadTurnId: run.id,
+        now,
+      });
+    } catch (err) {
+      console.error(
+        `[wakeup-processor] failed to link n8n bridge run ${n8nAgentStepRunId} to turn ${run.id}:`,
+        err,
+      );
+    }
+  }
 
   // Link run back to wakeup
   await db

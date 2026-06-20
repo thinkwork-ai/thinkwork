@@ -55,6 +55,7 @@ import {
   buildWorkspaceProjectionReconcileSummary,
   mergeWorkspaceProjectionReconcileSummary,
 } from "../workspace-projection-snapshot.js";
+import { finalizeN8nAgentStepRun } from "../n8n-agent-step/finalize.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
   GENERIC_AGENT_ERROR_MESSAGE,
@@ -235,6 +236,14 @@ export async function processFinalize(
     });
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
+    await finalizeN8nAgentStepRunSafely({
+      tenantId,
+      threadId,
+      threadTurnId: turnId,
+      resolution: "turn_failed",
+      error: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
+      summary: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
+    });
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -500,6 +509,14 @@ export async function processFinalize(
     console.warn(`[chat-finalize] Empty response from AgentCore`);
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
+    await finalizeN8nAgentStepRunSafely({
+      tenantId,
+      threadId,
+      threadTurnId: turnId,
+      resolution: "turn_completed",
+      summary: "ThinkWork agent step completed.",
+      output: { response: "" },
+    });
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -509,6 +526,14 @@ export async function processFinalize(
     );
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
+    await finalizeN8nAgentStepRunSafely({
+      tenantId,
+      threadId,
+      threadTurnId: turnId,
+      resolution: "turn_completed",
+      summary: responseText,
+      output: { response: responseText },
+    });
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -667,6 +692,14 @@ export async function processFinalize(
   // only flips status 'deferred'→'queued' — the wakeup-processor's
   // 1-minute poll picks the queued row up and runs it.
   await promoteDeferredWakeupSafely(tenantId, threadId);
+  await finalizeN8nAgentStepRunSafely({
+    tenantId,
+    threadId,
+    threadTurnId: turnId,
+    resolution: "turn_completed",
+    summary: responseText,
+    output: { response: responseText },
+  });
 
   return {
     finalized: true,
@@ -688,6 +721,16 @@ async function promoteDeferredWakeupSafely(
   try {
     await promoteNextDeferredWakeup(tenantId, threadId);
   } catch {}
+}
+
+async function finalizeN8nAgentStepRunSafely(
+  input: Parameters<typeof finalizeN8nAgentStepRun>[0],
+): Promise<void> {
+  try {
+    await finalizeN8nAgentStepRun(input);
+  } catch (err) {
+    console.error("[chat-finalize] n8n bridge finalization failed:", err);
+  }
 }
 
 /** Tool name the ask-user-question Pi extension registers (U5). */

@@ -47,6 +47,7 @@ import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { shouldDeferWakeup } from "../../../lib/wakeup-defer.js";
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
+import { finalizeN8nAgentStepRun } from "../../../lib/n8n-agent-step/finalize.js";
 import { notifyThreadUpdate } from "../../notify.js";
 import { userQuestionToGraphql } from "./user-question.shared.js";
 
@@ -290,6 +291,19 @@ export const answerUserQuestion = async (
   } catch (err) {
     console.error(
       `[answerUserQuestion] notifyThreadUpdate failed for thread=${question.thread_id} question=${question.id}:`,
+      err,
+    );
+  }
+
+  try {
+    await finalizeN8nAgentStepRun({
+      tenantId: question.tenant_id,
+      threadId: question.thread_id,
+      resolution: "human_input_resolved",
+    });
+  } catch (err) {
+    console.error(
+      `[answerUserQuestion] n8n bridge finalization failed for thread=${question.thread_id} question=${question.id}:`,
       err,
     );
   }
