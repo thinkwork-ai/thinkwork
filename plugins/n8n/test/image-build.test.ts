@@ -110,6 +110,7 @@ describe("n8n package image build contract", () => {
     expect(dockerfile).toContain(
       "/usr/local/lib/node_modules/n8n/node_modules",
     );
+    expect(dockerfile).toContain("if [ -d node_modules ]");
     expect(taskRunnerConfig).toContain("NODE_FUNCTION_ALLOW_EXTERNAL");
     expect(taskRunnerTemplate).toContain("NODE_FUNCTION_ALLOW_EXTERNAL");
     expect(taskRunnerTemplate).toContain("{{NODE_FUNCTION_ALLOW_EXTERNAL}}");

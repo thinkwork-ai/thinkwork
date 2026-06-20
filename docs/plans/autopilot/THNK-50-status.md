@@ -883,12 +883,38 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - Local Docker build was attempted, but the Docker daemon was not running on
       this machine:
       `failed to connect to the docker API at unix:///Users/ericodom/.docker/run/docker.sock`.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2723
+    - Merge commit: `498e9b4914ed135e6ba362e9ce62e4282f52869d`
+    - Status: merged after CLA, lint, verify, typecheck, test, and plugin
+      catalog validation passed.
+  - Canary release attempt:
+    - Tag `v0.1.0-canary.222` was pushed from merge commit
+      `498e9b4914ed135e6ba362e9ce62e4282f52869d`.
+    - Release workflow run `27855739574` failed in build-deploy-artifacts at
+      `Build and push n8n runtime amd64`.
+    - Root cause: the baseline release package context contains zero custom
+      packages, so `npm ci` succeeds without creating `node_modules`; the
+      Dockerfile then failed with
+      `cp: can't stat 'node_modules/.': No such file or directory`.
+- n8n runtime empty package context follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-runtime-empty-package-context`
+  - Objective: let the baseline n8n runtime image build when no custom packages
+    are configured while preserving node module injection for custom package
+    image builds.
+  - Implementation summary:
+    - Guarded the runtime Dockerfile package-copy step with
+      `if [ -d node_modules ]` so empty package contexts still build.
+    - Updated the image-build unit test to assert the zero-package guard remains
+      in the shipped Dockerfile.
 
 ## Blockers
 
 - Active fix in progress: the release workflow must publish a baseline
   `n8n-runtime` image before the deployed ThinkWork plugin install can produce a
-  valid n8n managed-app plan. After the task-runner config PR merges, cut a new
-  canary release, update the dev deployment pointer, retry the n8n install
+  valid n8n managed-app plan. After the empty package context PR merges, cut a
+  new canary release, update the dev deployment pointer, retry the n8n install
   through the plugin flow, approve/apply the managed-app job, verify n8n and MCP
   through ThinkWork, then tear down through the managed plugin flow.
