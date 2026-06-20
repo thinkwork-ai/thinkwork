@@ -226,8 +226,10 @@ describe("n8n Terraform app module", () => {
     expect(databaseLifecycle).toMatch(/triggers_replace\s*=\s*\{/);
     expect(databaseLifecycle).toMatch(/sync-database\.py up/);
     expect(databaseLifecycle).toMatch(/when\s*=\s*destroy/);
+    expect(databaseLifecycle).toMatch(/N8N_DATABASE_SYNC_SCRIPT_PATH/);
+    expect(databaseLifecycle).toMatch(/without sync metadata/);
     expect(databaseLifecycle).toMatch(
-      /self\.input\.sync_script_path\} destroy/,
+      /try\(self\.input\.sync_script_path, ""\)/,
     );
     expect(databaseLifecycle).toMatch(/database_url_version_id/);
     expect(databaseLifecycle).toMatch(/aws_secretsmanager_secret_version\.n8n/);

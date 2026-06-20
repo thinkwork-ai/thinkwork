@@ -255,15 +255,22 @@ resource "terraform_data" "database_lifecycle" {
 
   provisioner "local-exec" {
     when    = destroy
-    command = "python3 ${self.input.sync_script_path} destroy"
+    command = <<-EOT
+      if [ -n "$N8N_DATABASE_SYNC_SCRIPT_PATH" ]; then
+        python3 "$N8N_DATABASE_SYNC_SCRIPT_PATH" destroy
+      else
+        echo "Skipping n8n database lifecycle destroy for legacy state without sync metadata."
+      fi
+    EOT
 
     environment = {
-      N8N_DATABASE_NAME             = self.input.database_name
-      N8N_DATABASE_USERNAME         = self.input.database_username
-      N8N_DATABASE_ADMIN_SECRET_ARN = self.input.database_admin_secret_arn
-      N8N_DATABASE_URL_SECRET_ARN   = self.input.database_url_secret_arn
-      N8N_DATABASE_HOST             = self.input.database_host
-      N8N_DATABASE_PORT             = self.input.database_port
+      N8N_DATABASE_NAME             = try(self.input.database_name, "")
+      N8N_DATABASE_USERNAME         = try(self.input.database_username, "")
+      N8N_DATABASE_ADMIN_SECRET_ARN = try(self.input.database_admin_secret_arn, "")
+      N8N_DATABASE_URL_SECRET_ARN   = try(self.input.database_url_secret_arn, "")
+      N8N_DATABASE_HOST             = try(self.input.database_host, "")
+      N8N_DATABASE_PORT             = try(self.input.database_port, "")
+      N8N_DATABASE_SYNC_SCRIPT_PATH = try(self.input.sync_script_path, "")
     }
   }
 
