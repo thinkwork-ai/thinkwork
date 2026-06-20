@@ -953,6 +953,9 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - `pnpm --filter @thinkwork/api typecheck` passed.
     - `pnpm exec tsx --test scripts/release/__tests__/build-release-manifest.test.ts`
       passed: 10 tests.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2725
+    - Status: open; CI pending.
 
 ## Blockers
 
