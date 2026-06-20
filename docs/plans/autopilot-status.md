@@ -19,8 +19,10 @@ status: in_progress
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
   merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
   [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) merged as
-  `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`; U8 not opened yet.
-- Status: U1 and U2 complete and merged. U8 implementation in progress from
+  `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`; U8
+  [#2758](https://github.com/thinkwork-ai/thinkwork/pull/2758) opened.
+- Status: U1 and U2 complete and merged. U8 implementation complete and PR
+  opened from
   `origin/main` at `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
@@ -137,7 +139,7 @@ status: in_progress
   - U2 PR #2756 was squash merged to `main` as
     `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`.
 - Blockers: none.
-- Next action: monitor U8 PR #2758 CI, fix any failures, then squash merge when
+- Next action: monitor U8 PR #2758 CI, fix any failures, and squash merge when
   green.
 
 ## First-Class Workflow Control Plane - 2026-06-20
