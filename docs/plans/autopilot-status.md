@@ -128,8 +128,9 @@ status: in_progress
 - Current implementation unit: U1 - Workflow schema and compatibility model.
 - Current branch: `codex/thnk-59-u1-workflow-schema`.
 - Current worktree: `.Codex/worktrees/thnk-59-u1-workflow-schema`.
-- Pull request: pending.
-- Status: U1 implemented locally; PR pending.
+- Pull request:
+  U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754) opened.
+- Status: U1 PR open; CI pending.
 - Notes:
   - Started autopilot execution from `origin/main`.
   - Created isolated U1 worktree from `origin/main` at `080513f00`.
