@@ -200,3 +200,6 @@ The important implementation boundary was:
 - Requirements: `docs/brainstorms/2026-06-14-list-view-and-view-configuration-requirements.md`
 - Status evidence: `docs/plans/autopilot/THNK-22-status.md`
 - Related learning: `docs/solutions/design-patterns/audit-existing-ui-and-data-model-before-parallel-build-2026-04-28.md`
+- Related learning: `docs/solutions/architecture-patterns/analytics-display-portable-contract-cross-surface-2026-06-20.md`
+  — the analytical-display cousin of this adapter split: one shared payload
+  contract, with dashboard and Thread hosts owning density and renderer mapping.
