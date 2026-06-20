@@ -559,12 +559,24 @@ describe("provisionPluginInfraComponent", () => {
   it("n8n existing disabled rows preserve operator desired config over defaults", async () => {
     vi.stubEnv("THINKWORK_N8N_DATABASE_NAME", "thinkwork_n8n");
     vi.stubEnv("THINKWORK_N8N_DOMAIN", "apps.example.com");
+    vi.stubEnv(
+      "THINKWORK_N8N_DATABASE_URL_SECRET_ARN",
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:old-env-db-url",
+    );
     const deps = fakeDeps();
     deps.managedApps.set(`${TENANT}:n8n`, {
       id: "app-n8n",
       desiredConfig: {
         publicUrl: "https://automation.example.com",
         workerDesiredCount: 4,
+        databaseUrlSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:deleted-db-url",
+        encryptionKeySecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:deleted-key",
+        operatorSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:deleted-operator",
+        serviceCredentialSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:deleted-service",
       },
       currentStatus: "disabled",
       selectedReleaseVersion: "v1.2.3",
@@ -600,6 +612,18 @@ describe("provisionPluginInfraComponent", () => {
         workerDesiredCount: 4,
       },
     });
+    expect(deps.startCalls[0].desiredConfig).not.toHaveProperty(
+      "databaseUrlSecretArn",
+    );
+    expect(deps.startCalls[0].desiredConfig).not.toHaveProperty(
+      "encryptionKeySecretArn",
+    );
+    expect(deps.startCalls[0].desiredConfig).not.toHaveProperty(
+      "operatorSecretArn",
+    );
+    expect(deps.startCalls[0].desiredConfig).not.toHaveProperty(
+      "serviceCredentialSecretArn",
+    );
   });
 
   it("Company Brain adopts existing Cognee directly when release metadata is unresolved", async () => {

@@ -1403,6 +1403,36 @@ def test_n8n_managed_app_overrides_complete_sparse_live_install_payload(
         "resources": [
             {
                 "type": "terraform_data",
+                "name": "n8n_configuration_guardrails",
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "n8n_database_url_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:deleted-n8n-db-url"
+                                    ),
+                                    "n8n_encryption_key_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:deleted-n8n-key"
+                                    ),
+                                    "n8n_operator_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:deleted-n8n-operator"
+                                    ),
+                                    "n8n_service_credential_secret_arn": (
+                                        "arn:aws:secretsmanager:us-east-1:"
+                                        "487219502366:secret:deleted-n8n-service"
+                                    ),
+                                }
+                            }
+                        }
+                    }
+                ],
+            },
+            {
+                "type": "terraform_data",
                 "name": "twenty_configuration_guardrails",
                 "instances": [
                     {
