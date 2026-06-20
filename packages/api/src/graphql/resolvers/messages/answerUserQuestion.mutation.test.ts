@@ -51,6 +51,7 @@ const mocks = vi.hoisted(() => ({
   shouldDeferWakeup: vi.fn(),
   consumePendingQuestions: vi.fn(),
   notifyThreadUpdate: vi.fn(),
+  finalizeN8nAgentStepRun: vi.fn(),
   visiblePredicate: vi.fn(() => ({ __visiblePredicate: true })),
 }));
 
@@ -125,6 +126,10 @@ vi.mock("../../notify.js", () => ({
   notifyThreadUpdate: mocks.notifyThreadUpdate,
 }));
 
+vi.mock("../../../lib/n8n-agent-step/finalize.js", () => ({
+  finalizeN8nAgentStepRun: mocks.finalizeN8nAgentStepRun,
+}));
+
 import { answerUserQuestion } from "./answerUserQuestion.mutation.js";
 
 const ctx = { auth: { authType: "cognito" } } as never;
@@ -179,6 +184,12 @@ beforeEach(() => {
     answeredRow(input.answers as Record<string, unknown>),
   ]);
   mocks.notifyThreadUpdate.mockResolvedValue(undefined);
+  mocks.finalizeN8nAgentStepRun.mockReset();
+  mocks.finalizeN8nAgentStepRun.mockResolvedValue({
+    action: "no_run",
+    runId: null,
+    status: null,
+  });
 });
 
 async function expectGraphQLError(
@@ -246,6 +257,11 @@ describe("answerUserQuestion — happy path (card route)", () => {
     expect(mocks.notifyThreadUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ threadId: THREAD_ID, tenantId: TENANT_ID }),
     );
+    expect(mocks.finalizeN8nAgentStepRun).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      resolution: "human_input_resolved",
+    });
   });
 
   it("inserts status 'deferred' when a turn is running (shouldDeferWakeup)", async () => {

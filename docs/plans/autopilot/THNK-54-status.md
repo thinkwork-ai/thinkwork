@@ -75,32 +75,28 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
 - 2026-06-20: moved `THNK-54` from `In Progress` back to `Verification` after
   U2 PR opened. The team has no exact `Review` status, so `Verification` is the
   closest review-state equivalent.
+- 2026-06-20: moved `THNK-54` from `Verification` back to `In Progress` when
+  U3 implementation began after U2 merged.
 
 ## Active Unit
 
-### U2 - Implement bridge credentialing and the start endpoint
+### U3 - Wire finalization and human-hold behavior
 
-Objective: let stock n8n HTTP Request nodes start or replay an agent-step run
-through a tenant-scoped bridge credential, creating or reusing the bridge-run
-row and dispatching the corresponding ThinkWork agent turn.
+Objective: convert ThinkWork agent/thread outcomes into n8n bridge terminal,
+resume-pending, waiting, or human-hold states without bypassing existing human
+review mechanics.
 
-Branch: `codex/thnk-54-u2-n8n-start-endpoint`
+Branch: `codex/thnk-54-u3-n8n-finalization`
 
 Planned files:
 
-- `plugins/n8n/src/manifest.ts`
-- `plugins/n8n/src/deployment/managed-app.ts`
-- `plugins/n8n/test/manifest.test.ts`
-- `packages/api/src/graphql/resolvers/plugins/n8n-settings.ts`
-- `packages/api/src/graphql/resolvers/plugins/n8n-settings.test.ts`
-- `apps/web/src/components/settings/plugins/n8n/N8nSettings.tsx`
-- `packages/api/src/handlers/n8n-agent-step-bridge.ts`
-- `packages/api/src/lib/n8n-agent-step/auth.ts`
-- `packages/api/src/lib/n8n-agent-step/start.ts`
-- `packages/api/src/lib/n8n-agent-step/payload.ts`
-- `packages/api/src/handlers/n8n-agent-step-bridge.test.ts`
-- `scripts/build-lambdas.sh`
-- `terraform/modules/app/lambda-api/handlers.tf`
+- `packages/api/src/lib/n8n-agent-step/finalize.ts`
+- `packages/api/src/lib/n8n-agent-step/link-turn.ts`
+- `packages/api/src/lib/chat-finalize/process-finalize.ts`
+- `packages/api/src/graphql/resolvers/messages/answerUserQuestion.mutation.ts`
+- `packages/api/src/graphql/resolvers/threads/updateThread.mutation.ts`
+- `packages/api/src/handlers/wakeup-processor.ts`
+- related focused tests
 
 ## Progress Log
 
@@ -241,6 +237,55 @@ prettier@latest --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports
   - `pnpm lint:plugin-source`
   - `git diff --check`
   - `pnpm dlx prettier@latest --write` on focused U2 touched files
+- U2 remote checks passed on PR #2752 head `817183e2c`:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+  - `Validate signed catalog build`
+- U2 PR #2752 squash-merged to `main` at 2026-06-20T21:52:11Z:
+  https://github.com/thinkwork-ai/thinkwork/pull/2752
+- U2 squash merge commit: `8c7648cf718600cf91d526d307fdfecf74007a17`
+- The `gh pr merge --delete-branch` command returned a local cleanup error
+  because another worktree owns the local `main` branch, but GitHub completed
+  the merge. The remote branch was deleted by the PR merge flow; local U2 branch
+  was deleted after switching away.
+- Synced from `origin/main` at merge commit `8c7648cf` and created U3 branch
+  `codex/thnk-54-u3-n8n-finalization`.
+- U3 objective: wire finalization and human-hold behavior so ThinkWork
+  agent/thread outcomes update n8n bridge-run rows to terminal, resume-pending,
+  or awaiting-human states without bypassing existing human review mechanics.
+- Implemented U3 finalization and human-hold wiring:
+  - added `finalizeN8nAgentStepRun` to load bridge runs by thread/turn, hold on
+    pending questions or review/block states, restore waiting state after human
+    answers, and move successful/failed outcomes to `resume_pending` with
+    structured payloads and thread/trace links;
+  - added `linkN8nAgentStepRunTurn` and wired the wakeup processor to link n8n
+    agent-step wakeups to created thread turns before dispatch;
+  - added best-effort bridge finalizer calls from normal chat finalize,
+    failed-turn finalize, `answerUserQuestion`, and thread status updates.
+  - added a guard for answered-mid-turn human input so a promoted
+    `question_answer` wakeup keeps the bridge in `waiting` until the resumed
+    agent turn finishes, rather than resuming n8n from the asking turn.
+- U3 local verification passed:
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/finalize.test.ts src/lib/chat-finalize/process-finalize.test.ts src/graphql/resolvers/messages/answerUserQuestion.mutation.test.ts src/graphql/resolvers/threads/updateThread.mutation.test.ts src/handlers/wakeup-processor.dispatch-parity.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/api test` (529 test files passed; 5042 tests
+    passed; 3 files / 9 tests skipped by existing live-integration guards)
+  - `bash scripts/build-lambdas.sh wakeup-processor`
+  - `pnpm lint`
+  - `pnpm lint:plugin-source`
+  - `pnpm dlx prettier@latest --check` on U3-touched files
+  - `git diff --check`
+- Note: an attempted broad API test command with Jest-style
+  `--runInBand` failed because Vitest does not support that option. The suite
+  was rerun successfully with the package's actual API test script:
+  `pnpm --filter @thinkwork/api test`.
+- Rebased U3 branch onto `origin/main` at `10d712c16` after main advanced.
+  Post-rebase verification passed:
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/finalize.test.ts src/lib/chat-finalize/process-finalize.test.ts src/graphql/resolvers/messages/answerUserQuestion.mutation.test.ts src/graphql/resolvers/threads/updateThread.mutation.test.ts src/handlers/wakeup-processor.dispatch-parity.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
 
 ## Blockers
 
