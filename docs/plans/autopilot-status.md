@@ -117,6 +117,73 @@ status: in_progress
 - Blockers: none.
 - Next action: monitor U2 PR #2756 CI, fix any failures, then squash merge when
   green.
+## First-Class Workflow Control Plane - 2026-06-20
+
+- Plan:
+  `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`.
+- Origin requirements:
+  `docs/brainstorms/2026-06-20-first-class-workflow-control-plane-requirements.md`.
+- Linear: THNK-59.
+- Target branch: `main`.
+- Current implementation unit: U1 - Workflow schema and compatibility model.
+- Current branch: `codex/thnk-59-u1-workflow-schema`.
+- Current worktree: `.Codex/worktrees/thnk-59-u1-workflow-schema`.
+- Pull request: pending.
+- Status: U1 implemented locally; PR pending.
+- Notes:
+  - Started autopilot execution from `origin/main`.
+  - Created isolated U1 worktree from `origin/main` at `080513f00`.
+  - Copied the workflow plan, requirements, and ideation docs into the U1
+    worktree because they were still untracked in the main checkout when
+    autopilot started.
+  - U1 will add the workflow control-plane schema, `0177` migration/rollback,
+    schema export coverage, and migration marker tests.
+  - Added narrow plugin-source-boundary allowlist entries for the shared
+    `workflow-control-plane` migration/test filenames so the existing Plane
+    plugin heuristic does not treat shared control-plane database files as
+    Plane plugin source.
+- Local verification:
+  - `pnpm install` completed; local Node 25 logged the known optional
+    `canvas@2.11.2` native fallback build warning because `pkg-config` /
+    `pixman-1` are not installed.
+  - `pnpm --filter @thinkwork/database-pg exec vitest run
+    __tests__/workflow-control-plane-schema.test.ts
+    __tests__/migration-0177-workflow-control-plane.test.ts` passed: 2 files,
+    9 tests.
+  - `pnpm --filter @thinkwork/database-pg test` passed: 38 files, 276 tests.
+  - `pnpm --filter @thinkwork/database-pg typecheck` passed.
+  - `pnpm typecheck` passed.
+  - Workflow source/docs/migration Prettier check passed via `pnpm dlx
+    prettier@3.8.2 --check --ignore-unknown ...`; the historical
+    `docs/plans/autopilot-status.md` ledger has pre-existing formatting drift,
+    so this update keeps it minimally patched.
+  - `git diff --check` passed.
+  - `pnpm lint` initially failed because the shared
+    `workflow-control-plane` filenames matched the existing Plane plugin
+    boundary heuristic; after adding narrow allowlist entries, `pnpm lint`
+    passed.
+  - `pnpm --filter @thinkwork/desktop test` passed: 15 files, 105 tests. This
+    was rerun after the first full root test hit an Electron install race.
+  - `pnpm test` first failed in `apps/desktop` while two parallel Vitest
+    workers tried to finish the Electron binary install; the focused desktop
+    package rerun passed.
+  - `pnpm test` second run failed in two API files with parallel-suite
+    leakage/timing symptoms:
+    `src/__tests__/applets-resolvers.test.ts` and
+    `src/handlers/chat-agent-invoke.runtime-routing.test.ts`.
+  - Focused rerun passed:
+    `pnpm exec vitest run src/__tests__/applets-resolvers.test.ts` from
+    `packages/api`: 15 tests.
+  - Focused rerun passed:
+    `pnpm exec vitest run src/handlers/chat-agent-invoke.runtime-routing.test.ts`
+    from `packages/api`: 11 tests.
+  - Root `pnpm format:check` failed because the root script invokes
+    `prettier`, which is not installed in the workspace. The equivalent
+    root-wide `pnpm dlx prettier@3.8.2 --check
+    "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` found pre-existing formatting
+    drift across unrelated files; workflow source/docs/migration files are
+    clean.
+- CI: pending.
 
 ## Space Webhook Thread Starts - 2026-06-19
 
