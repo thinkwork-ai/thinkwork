@@ -1926,6 +1926,26 @@ export const SettingsN8nPluginSettingsQuery = graphql(`
       lastJobError
       lastEvidenceBucket
       lastEvidencePrefix
+      recentAgentStepRuns {
+        id
+        status
+        resumeStatus
+        workflowId
+        workflowName
+        executionId
+        correlationId
+        instructionsPreview
+        inputPreview
+        outputPreview
+        errorMessage
+        summary
+        links
+        resumeAttemptCount
+        lastResumeHttpStatus
+        lastResumeError
+        expiresAt
+        updatedAt
+      }
     }
   }
 `);
@@ -1962,6 +1982,26 @@ export const SettingsUpdateN8nPluginPackageSettingsMutation = graphql(`
         lastJobError
         lastEvidenceBucket
         lastEvidencePrefix
+        recentAgentStepRuns {
+          id
+          status
+          resumeStatus
+          workflowId
+          workflowName
+          executionId
+          correlationId
+          instructionsPreview
+          inputPreview
+          outputPreview
+          errorMessage
+          summary
+          links
+          resumeAttemptCount
+          lastResumeHttpStatus
+          lastResumeError
+          expiresAt
+          updatedAt
+        }
       }
       deploymentJob {
         id

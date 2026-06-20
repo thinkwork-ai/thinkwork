@@ -4474,6 +4474,50 @@ export enum N8nAgentStepRunStatus {
   Waiting = 'WAITING'
 }
 
+/**
+ * Redacted operator-visible telemetry for n8n agent-step bridge runs.
+ *
+ * This intentionally excludes tenant IDs, idempotency keys, request metadata,
+ * resume URL host/path, secret refs, and raw result/output/error payloads.
+ */
+export type N8nAgentStepRunTelemetry = {
+  __typename?: 'N8nAgentStepRunTelemetry';
+  acceptedAt: Scalars['AWSDateTime']['output'];
+  agentId?: Maybe<Scalars['ID']['output']>;
+  correlationId: Scalars['String']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  executionId: Scalars['String']['output'];
+  expiresAt: Scalars['AWSDateTime']['output'];
+  id: Scalars['ID']['output'];
+  inputPreview?: Maybe<Scalars['String']['output']>;
+  instructionsPreview?: Maybe<Scalars['String']['output']>;
+  lastResumeAttemptAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastResumeError?: Maybe<Scalars['String']['output']>;
+  lastResumeHttpStatus?: Maybe<Scalars['Int']['output']>;
+  links?: Maybe<Scalars['AWSJSON']['output']>;
+  managedApplicationId?: Maybe<Scalars['ID']['output']>;
+  nextResumeAttemptAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  openingMessageId?: Maybe<Scalars['ID']['output']>;
+  outputPreview?: Maybe<Scalars['String']['output']>;
+  pluginInstallId?: Maybe<Scalars['ID']['output']>;
+  requestId?: Maybe<Scalars['String']['output']>;
+  resumeAttemptCount: Scalars['Int']['output'];
+  resumeStatus: N8nAgentStepResumeStatus;
+  resumedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  spaceId: Scalars['ID']['output'];
+  status: N8nAgentStepRunStatus;
+  stepId: Scalars['String']['output'];
+  summary?: Maybe<Scalars['String']['output']>;
+  terminalAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  threadId?: Maybe<Scalars['ID']['output']>;
+  threadTurnId?: Maybe<Scalars['ID']['output']>;
+  timeoutSeconds: Scalars['Int']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  workflowId: Scalars['String']['output'];
+  workflowName?: Maybe<Scalars['String']['output']>;
+};
+
 export type N8nPackage = {
   __typename?: 'N8nPackage';
   name: Scalars['String']['output'];
@@ -4510,6 +4554,7 @@ export type N8nPluginSettings = {
   packageImageConfigDigest?: Maybe<Scalars['String']['output']>;
   packageImageUri?: Maybe<Scalars['String']['output']>;
   pluginInstallId: Scalars['ID']['output'];
+  recentAgentStepRuns: Array<N8nAgentStepRunTelemetry>;
 };
 
 export type NewMessageEvent = {
@@ -5163,6 +5208,7 @@ export type Query = {
   /** The caller's plugin activations across the tenant's installs. */
   myPluginActivations: Array<UserPluginActivation>;
   mySlackLinks: Array<SlackUserLink>;
+  n8nAgentStepRuns: Array<N8nAgentStepRunTelemetry>;
   /** Operator settings for the installed n8n plugin package image config. */
   n8nPluginSettings?: Maybe<N8nPluginSettings>;
   ontologyChangeSets: Array<OntologyChangeSet>;
@@ -5777,6 +5823,12 @@ export type QueryMobileWikiSearchArgs = {
 
 export type QueryMySlackLinksArgs = {
   tenantId: Scalars['ID']['input'];
+};
+
+
+export type QueryN8nAgentStepRunsArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 

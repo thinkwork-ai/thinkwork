@@ -331,6 +331,51 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.getByText("Working…")).toBeTruthy();
   });
 
+  it("renders n8n bridge telemetry in the thread info drawer", () => {
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Bridge thread",
+        status: "OPEN",
+        messages: { edges: [] },
+      },
+      n8nAgentStepRuns: [
+        {
+          id: "run-1",
+          status: "resume_failed",
+          resumeStatus: "failed",
+          workflowId: "workflow-1",
+          workflowName: "Fulfillment check",
+          executionId: "exec-1",
+          correlationId: "corr-1",
+          instructionsPreview: null,
+          inputPreview: null,
+          outputPreview: null,
+          errorMessage: "n8n callback returned 410 Gone",
+          summary: null,
+          links: {},
+          resumeAttemptCount: 1,
+          lastResumeHttpStatus: 410,
+          lastResumeError: null,
+          expiresAt: "2026-06-20T12:30:00.000Z",
+          updatedAt: "2026-06-20T12:00:00.000Z",
+        },
+      ],
+    };
+    taskData = { computerTasks: [] };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+    renderHeaderAction();
+    fireEvent.click(screen.getByRole("button", { name: "Open thread info" }));
+
+    expect(screen.getByText("n8n agent steps")).toBeTruthy();
+    expect(screen.getByText("Fulfillment check")).toBeTruthy();
+    expect(screen.getAllByText("resume failed").length).toBeGreaterThan(0);
+    expect(screen.getByText("n8n callback returned 410 Gone")).toBeTruthy();
+    expect(screen.queryByText(/webhook-waiting/i)).toBeNull();
+  });
+
   it("derives thread artifacts in message order and deduplicates repeated ids", () => {
     const artifacts = deriveThreadArtifacts({
       id: "thread-1",

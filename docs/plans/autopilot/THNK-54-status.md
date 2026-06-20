@@ -85,24 +85,33 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
 - 2026-06-20: moved `THNK-54` from `In Progress` back to `Verification` after
   U4 PR opened. The team has no exact `Review` status, so `Verification` is the
   closest review-state equivalent.
+- 2026-06-20: kept `THNK-54` in `Verification` while U4 PR checks passed,
+  required rebases completed, and the PR merged.
+- 2026-06-20: moved `THNK-54` from `Verification` back to `In Progress` when
+  U5 implementation began after U4 merged.
 
 ## Active Unit
 
-### U4 - Deliver n8n resume callbacks with retry and expiry
+### U5 - Expose bridge telemetry in API and web surfaces
 
-Objective: call n8n's Wait-node resume URL exactly when bridge runs reach
-terminal state or expiry, with bounded retry and visible failure state.
+Objective: make bridge state visible to operators and reviewers without
+requiring database access or thread scraping.
 
-Branch: `codex/thnk-54-u4-n8n-resume-expiry`
+Branch: `codex/thnk-54-u5-n8n-telemetry`
 
 Planned files:
 
-- `packages/api/src/lib/n8n-agent-step/resume.ts`
-- `packages/api/src/lib/n8n-agent-step/resume.test.ts`
-- `packages/api/src/handlers/n8n-agent-step-expirer.ts`
-- `packages/api/src/handlers/n8n-agent-step-expirer.test.ts`
-- `scripts/build-lambdas.sh`
-- `terraform/modules/app/lambda-api/handlers.tf`
+- `packages/database-pg/graphql/types/n8n-agent-step-runs.graphql`
+- `packages/api/src/graphql/resolvers/n8n-agent-step-runs/index.ts`
+- `packages/api/src/graphql/resolvers/n8n-agent-step-runs/n8nAgentStepRuns.query.ts`
+- `packages/api/src/graphql/resolvers/n8n-agent-step-runs/n8n-agent-step-runs.test.ts`
+- `packages/api/src/graphql/resolvers/plugins/n8n-settings.ts`
+- `packages/api/src/graphql/resolvers/plugins/n8n-settings.test.ts`
+- `apps/web/src/lib/settings-queries.ts`
+- `apps/web/src/routes/_authed/_shell/threads.$id.tsx`
+- `apps/web/src/routes/_authed/_shell/activity.$threadId.tsx`
+- `apps/web/src/components/settings/plugins/n8n/N8nSettings.tsx`
+- `apps/web/src/components/settings/plugins/n8n/N8nSettings.test.tsx`
 
 ## Progress Log
 
@@ -363,6 +372,71 @@ prettier@latest --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports
     `@thinkwork/genui` workspace package from `origin/main`
   - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/resume.test.ts src/handlers/n8n-agent-step-expirer.test.ts`
   - `pnpm --filter @thinkwork/api typecheck`
+- Added malformed resume-secret coverage on the PR branch to keep a
+  TypeScript test commit at the branch tip after rebasing; this also pinned the
+  malformed-secret failure path already implemented in U4.
+- U4 PR #2757 required multiple clean rebases because `main` advanced while the
+  long `test` check was running. Final remote checks passed on head
+  `9ff13e10e`:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+- U4 PR #2757 squash-merged to `main` at 2026-06-20T23:11:24Z:
+  https://github.com/thinkwork-ai/thinkwork/pull/2757
+- U4 squash merge commit: `aa69fa8f637b502a03d2883deab4f7c764e020a4`
+- Local U4 branch was deleted. The remote U4 branch had already been deleted by
+  the merge flow.
+- Synced from `origin/main` at merge commit `aa69fa8f` and created U5 branch
+  `codex/thnk-54-u5-n8n-telemetry`.
+- Moved Linear issue `THNK-54` to `In Progress` and posted the U5 start comment
+  with marker `dispatcher:THNK-54:InProgress:Codex`.
+- U5 objective: expose bridge run telemetry in tenant-scoped API and web
+  surfaces while keeping resume URLs, secret refs, and raw payloads redacted.
+- U5 implementation progress:
+  - added redacted `N8nAgentStepRunTelemetry` GraphQL type and
+    `n8nAgentStepRuns(threadId:, limit:)` tenant-scoped query;
+  - added `recentAgentStepRuns` to `N8nPluginSettings` for operator n8n
+    plugin settings evidence;
+  - implemented API telemetry mapping that excludes tenant IDs, idempotency
+    keys, request metadata, resume URL host/path, secret refs, and raw
+    result/output/error payloads;
+  - rendered compact bridge evidence in n8n plugin settings, Activity thread
+    properties, and the workbench thread info drawer;
+  - regenerated web, CLI, and mobile GraphQL artifacts after the schema edit.
+- U5 focused verification passed so far:
+  - `pnpm schema:build`
+  - `pnpm --filter @thinkwork/web codegen`
+  - `pnpm --filter thinkwork-cli codegen`
+  - `pnpm --filter @thinkwork/mobile codegen`
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/n8n-agent-step-runs/n8n-agent-step-runs.test.ts src/graphql/resolvers/plugins/n8n-settings.test.ts`
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginDetail.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `pnpm lint:plugin-source`
+  - `pnpm lint`
+  - `pnpm dlx prettier@latest --check` on U5 hand-authored TypeScript,
+    JavaScript, GraphQL, and Markdown files
+  - `git diff --check`
+- Note: `pnpm --filter @thinkwork/api codegen` was attempted per repo
+  GraphQL-edit guidance, but this checkout has no `codegen` script for the API
+  package, so pnpm reported that none of the selected packages had a matching
+  script.
+- Note: `pnpm format:check` was attempted but failed immediately because this
+  worktree has no local `prettier` binary on PATH. The touched hand-authored
+  files were checked with `pnpm dlx prettier@latest --check` instead. Generated
+  GraphQL artifacts were left in codegen-native format to avoid unrelated
+  generated-file reformat churn.
+- U5 commit created, then branch was cleanly rebased onto current `origin/main`
+  after main advanced by one commit.
+- Post-rebase U5 verification passed:
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/n8n-agent-step-runs/n8n-agent-step-runs.test.ts src/graphql/resolvers/plugins/n8n-settings.test.ts`
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginDetail.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `pnpm lint`
+  - `git diff --check`
 
 ## Blockers
 

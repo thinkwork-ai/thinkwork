@@ -21,6 +21,7 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { ManagedApplicationPlanDialog } from "@/components/settings/managed-applications/ManagedApplicationPlanDialog";
+import { BridgeRunTelemetryPanel } from "@/components/workbench/BridgeRunTelemetryPanel";
 
 const TERMINAL_JOB_STATUSES = new Set([
   "succeeded",
@@ -233,6 +234,24 @@ export function N8nSettings({
             </Button>
           </div>
         </div>
+      </SettingsRow>
+
+      <SettingsRow
+        label="Recent agent steps"
+        description="Redacted bridge-run evidence from n8n workflow steps that delegated work to ThinkWork agents."
+        layout="stacked"
+      >
+        <BridgeRunTelemetryPanel
+          runs={settings?.recentAgentStepRuns ?? []}
+          title="Recent bridge runs"
+          compact
+          className="w-full"
+        />
+        {settings?.recentAgentStepRuns?.length ? null : (
+          <p className="text-sm text-muted-foreground">
+            No n8n agent-step bridge runs yet.
+          </p>
+        )}
       </SettingsRow>
 
       <SettingsRow

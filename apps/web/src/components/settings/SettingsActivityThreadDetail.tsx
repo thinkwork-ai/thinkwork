@@ -14,6 +14,10 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { SystemPromptSheet } from "@/components/SystemPromptSheet";
 import { ThreadWorkspaceView } from "@/components/workbench/ThreadWorkspaceView";
 import {
+  BridgeRunTelemetryPanel,
+  type BridgeRunTelemetry,
+} from "@/components/workbench/BridgeRunTelemetryPanel";
+import {
   InlineShortcutText,
   shortcutDisplayText,
 } from "@/components/workbench/InlineShortcutText";
@@ -51,6 +55,7 @@ interface SettingsActivityThreadDetailProps {
 
 interface ThreadDetailResult {
   thread?: ActivityThread | null;
+  n8nAgentStepRuns?: BridgeRunTelemetry[] | null;
 }
 
 interface ActivityThread {
@@ -240,6 +245,7 @@ export function SettingsActivityThreadDetail({
   }, [threadId]);
 
   const thread = threadData?.thread ?? null;
+  const bridgeRuns = threadData?.n8nAgentStepRuns ?? [];
   const turns = useMemo(
     () => [...(turnsData?.threadTurns ?? [])].sort(compareTurns),
     [turnsData?.threadTurns],
@@ -420,6 +426,7 @@ export function SettingsActivityThreadDetail({
           <aside className="md:pt-8">
             <ThreadProperties
               thread={thread}
+              bridgeRuns={bridgeRuns}
               latestSystemPrompt={latestSystemPrompt}
               onViewSystemPrompt={() => setSystemPromptOpen(true)}
             />
@@ -441,50 +448,55 @@ export function SettingsActivityThreadDetail({
 
 function ThreadProperties({
   thread,
+  bridgeRuns,
   latestSystemPrompt,
   onViewSystemPrompt,
 }: {
   thread: ActivityThread;
+  bridgeRuns: BridgeRunTelemetry[];
   latestSystemPrompt: string | null;
   onViewSystemPrompt: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <h2 className="mb-5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        Properties
-      </h2>
-      <div className="space-y-4">
-        <PropertyRow label="Status">
-          <StatusBadge status={normalizeStatus(thread.status)} size="sm" />
-        </PropertyRow>
-        <PropertyRow label="Trigger">
-          {triggerLabel(thread.channel)}
-        </PropertyRow>
-        <PropertyRow label="Space">
-          <Badge variant="outline" className="max-w-36 truncate">
-            {spaceDisplayName(thread)}
-          </Badge>
-        </PropertyRow>
-        <PropertyRow label="System prompt">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2"
-            onClick={onViewSystemPrompt}
-            disabled={!latestSystemPrompt}
-          >
-            <FileText className="h-3.5 w-3.5" />
-            View
-          </Button>
-        </PropertyRow>
-        <PropertyRow label="Created">
-          {thread.createdAt ? formatDateTime(thread.createdAt) : "--"}
-        </PropertyRow>
-        <PropertyRow label="Updated">
-          {thread.updatedAt ? relativeTime(thread.updatedAt) : "--"}
-        </PropertyRow>
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h2 className="mb-5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Properties
+        </h2>
+        <div className="space-y-4">
+          <PropertyRow label="Status">
+            <StatusBadge status={normalizeStatus(thread.status)} size="sm" />
+          </PropertyRow>
+          <PropertyRow label="Trigger">
+            {triggerLabel(thread.channel)}
+          </PropertyRow>
+          <PropertyRow label="Space">
+            <Badge variant="outline" className="max-w-36 truncate">
+              {spaceDisplayName(thread)}
+            </Badge>
+          </PropertyRow>
+          <PropertyRow label="System prompt">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2"
+              onClick={onViewSystemPrompt}
+              disabled={!latestSystemPrompt}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              View
+            </Button>
+          </PropertyRow>
+          <PropertyRow label="Created">
+            {thread.createdAt ? formatDateTime(thread.createdAt) : "--"}
+          </PropertyRow>
+          <PropertyRow label="Updated">
+            {thread.updatedAt ? relativeTime(thread.updatedAt) : "--"}
+          </PropertyRow>
+        </div>
       </div>
+      <BridgeRunTelemetryPanel runs={bridgeRuns} compact />
     </div>
   );
 }
