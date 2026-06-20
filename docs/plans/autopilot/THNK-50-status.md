@@ -955,23 +955,77 @@ U3/U4/U5/U6 before U7; U7 before U8.
       passed: 10 tests.
   - PR:
     - PR: https://github.com/thinkwork-ai/thinkwork/pull/2725
-    - Status: open; CI in progress.
+    - Merge commit: `21cac2c3c8be85f8e5757c08746c2235463ce828`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+  - Canary release:
+    - Tag `v0.1.0-canary.225` was pushed from merge commit
+      `21cac2c3c8be85f8e5757c08746c2235463ce828`.
+    - Release workflow run `27857603374` succeeded and published an ECR-backed
+      `n8n-runtime` image:
+      `487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:v0.1.0-canary.225-n8n-amd64@sha256:e7e87c4410ce9662f9f03b5a85e0a43e1c0b366c4463c5cbfb8a5e8b44e3c4d8`.
+  - Deployed install verification attempt:
+    - Failed install row `f5264c0f-613b-473f-b7d3-b409807c17d0` was destroyed
+      through the managed plugin flow. Destroy job
+      `d15fec9c-7c5a-4d09-b8ac-a0e0de5d9755` applied successfully, and ECS
+      n8n services were left inactive with desired/running/pending counts at 0.
+    - Fresh plugin install id `b936aea0-4be4-4041-9915-3f579cb78db4` still
+      failed at plan time with
+      `n8n managed app operation is missing required desired-state field: imageUri.`
+    - Root cause: the API GraphQL Lambda cached the S3
+      `deployment/status/current.json` pointer for the warm container lifetime,
+      so one resolver instance kept selecting `v0.1.0-canary.224` with an empty
+      manifest image map after canary `225` was active.
+- n8n deployment status pointer cache follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-release-pointer-cache`
+  - Objective: make managed-app plan jobs refresh the active deployment status
+    pointer between reads so fresh canary release pointers are not hidden by a
+    warm Lambda container.
+  - Local verification:
+    - `pnpm --filter @thinkwork/api test -- --run src/graphql/resolvers/core/general-reads-authz.test.ts src/graphql/resolvers/deployments/managed-applications.test.ts src/lib/deployments/release-manifest-images.test.ts`
+      passed: 29 tests.
+    - `pnpm --filter @thinkwork/api typecheck` passed.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2726
+    - Merge commit: `42c97ac512a450f6ad70a1ed0aeeca32dea58418`
+    - Status: merged after required checks passed.
+  - Canary release:
+    - Tag `v0.1.0-canary.226` was pushed from merge commit
+      `42c97ac512a450f6ad70a1ed0aeeca32dea58418`.
+    - Release workflow run `27858476911` succeeded and updated the dev status
+      pointer to `v0.1.0-canary.226`.
+  - Reset attempt:
+    - Retrying the failed install teardown through `uninstallPlugin` failed with
+      `Release manifest digest mismatch for n8n: expected 1e9a6065e89e8b5f49291afbc4d53951e038176606a80bc718edc27cb2429ce4, got a8fd43ade8267c8976d1d91a7b90b57b15e9bf1426eed1bffb7b4fc9e2d4a0be.`
+    - Root cause: the release workflow wrote the raw
+      `thinkwork-release.json` file hash into the deployment status pointer,
+      while the API verifier compares against the canonical
+      `releaseManifestSha256(validateReleaseManifest(manifest))` digest.
+- n8n release pointer canonical digest follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-release-pointer-canonical-digest`
+  - Objective: make the release workflow publish the canonical manifest digest
+    consumed by the API verifier so managed-app teardown and install use the
+    same integrity contract.
+  - Local verification:
+    - `pnpm exec tsx --test scripts/release/__tests__/manifest-sha256.test.ts scripts/release/__tests__/build-release-manifest.test.ts scripts/release/__tests__/write-deployment-status.test.ts`
+      passed: 12 tests.
+    - `pnpm test:release` passed: 15 tests.
+    - `git diff --check` passed.
+    - `pnpm exec prettier --check <touched files>` could not run because
+      `prettier` is not installed as a workspace executable in this checkout.
+  - PR:
+    - Status: preparing.
 
 ## Blockers
 
-- Failed deployed apply evidence:
-  - Job `04565dcb-3d9a-4445-b9b2-75de76bb0114` reconciled to `failed` at
-    `2026-06-20T02:24:51.119Z`.
-  - Error: `Deployment apply failed in the runner.`
-  - CodeBuild build:
-    `thinkwork-dev-deployment-runner:31f74675-10fe-4be1-abf0-597291a72989`.
-  - Evidence uploaded to
-    `s3://thinkwork-dev-487219502366-deploy-evidence/0015953e-aa13-4cab-8398-2e70f73dda63/n8n/04565dcb-3d9a-4445-b9b2-75de76bb0114/apply/deployment-evidence.json`.
-  - Runner log root cause: Terraform timed out waiting for
-    `aws_ecs_service.main` to become stable after ECS repeatedly failed to pull
-    `ghcr.io/thinkwork-ai/thinkwork-n8n:v0.1.0-canary.223-n8n-amd64@sha256:6eed6ac741015d48aeaf272a8192834777c8bb7433174a0eb4cf86d5e5cd65cc`
-    with GHCR `401 Unauthorized`.
-- Active fix in progress: after the ECR image + manifest hydration PR merges,
-  cut a new canary release, update/retry the n8n plugin install through the
-  deployed ThinkWork plugin flow, approve/apply the managed-app job, verify n8n
-  and MCP through ThinkWork, then tear down through the managed plugin flow.
+- Active blocker: the current dev deployment status pointer for canary `226`
+  contains the raw release-manifest file hash, but the managed-app verifier
+  expects the canonical release-manifest hash. This blocks clean teardown of the
+  failed install and any reliable fresh install attempt.
+- Active fix in progress: merge the canonical digest release-workflow PR, cut a
+  new canary from the merge commit, confirm the pointer digest equals
+  `releaseManifestSha256`, then tear down and reinstall n8n through the
+  deployed ThinkWork plugin flow until runtime provisioning succeeds.
