@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import type { ManagedAppKey } from "@thinkwork/deployment-runner/apps/registry";
 import {
-  releaseManifestSha256,
   validateReleaseManifest,
   type ThinkWorkReleaseManifest,
 } from "@thinkwork/release-manifest";
@@ -19,8 +19,8 @@ export async function resolveManifestImagesForManagedApp(args: {
     return args.manifestImages;
   }
 
-  const manifest = await loadReleaseManifest(releaseManifestUrl);
-  const actualDigest = releaseManifestSha256(manifest);
+  const { manifest, digest: actualDigest } =
+    await loadReleaseManifest(releaseManifestUrl);
   if (actualDigest !== args.manifestDigest) {
     throw new Error(
       `Release manifest digest mismatch for ${args.appKey}: expected ${args.manifestDigest}, got ${actualDigest}.`,
@@ -52,12 +52,16 @@ export async function resolveManifestImagesForManagedApp(args: {
 
 async function loadReleaseManifest(
   releaseManifestUrl: string,
-): Promise<ThinkWorkReleaseManifest> {
+): Promise<{ digest: string; manifest: ThinkWorkReleaseManifest }> {
   const response = await fetch(releaseManifestUrl);
   if (!response.ok) {
     throw new Error(
       `Failed to fetch release manifest ${releaseManifestUrl}: HTTP ${response.status}.`,
     );
   }
-  return validateReleaseManifest(await response.json());
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return {
+    digest: createHash("sha256").update(bytes).digest("hex"),
+    manifest: validateReleaseManifest(JSON.parse(bytes.toString("utf8"))),
+  };
 }

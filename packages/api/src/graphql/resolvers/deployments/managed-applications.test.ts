@@ -1,6 +1,6 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  releaseManifestSha256,
   type ThinkWorkReleaseManifest,
 } from "@thinkwork/release-manifest";
 
@@ -403,7 +403,8 @@ describe("managed application plan jobs", () => {
 
   it("hydrates n8n runtime images when an adopted app supplies a release pin without a manifest URL", async () => {
     const manifest = n8nReleaseManifest();
-    const manifestDigest = releaseManifestSha256(manifest);
+    const manifestBytes = releaseManifestBytes(manifest);
+    const manifestDigest = sha256Hex(manifestBytes);
     const manifestUrl =
       "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.224/thinkwork-release.json";
     const runtimeImage =
@@ -412,7 +413,7 @@ describe("managed application plan jobs", () => {
     const fetch = vi.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => manifest,
+      arrayBuffer: async () => manifestBytes,
     }));
 
     vi.stubGlobal("fetch", fetch);
@@ -842,6 +843,14 @@ describe("managed application plan jobs", () => {
     expect(insertCalls).toHaveLength(0);
   });
 });
+
+function releaseManifestBytes(manifest: ThinkWorkReleaseManifest): Buffer {
+  return Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+}
+
+function sha256Hex(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
 
 function n8nReleaseManifest(): ThinkWorkReleaseManifest {
   return {
