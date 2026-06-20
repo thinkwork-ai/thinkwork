@@ -185,13 +185,13 @@ END $$;
         capture=True,
     )
     if exists != "1":
-        psql(admin, admin["maintenance_db"], f"CREATE DATABASE {db_ident} OWNER {role_ident};")
+        psql(admin, admin["maintenance_db"], f"CREATE DATABASE {db_ident};")
 
     psql(
         admin,
         admin["maintenance_db"],
         f"""
-ALTER DATABASE {db_ident} OWNER TO {role_ident};
+GRANT CONNECT, TEMPORARY ON DATABASE {db_ident} TO {role_ident};
 GRANT ALL PRIVILEGES ON DATABASE {db_ident} TO {role_ident};
 """,
     )
@@ -200,11 +200,13 @@ GRANT ALL PRIVILEGES ON DATABASE {db_ident} TO {role_ident};
         database_name,
         f"""
 CREATE SCHEMA IF NOT EXISTS public;
-ALTER SCHEMA public OWNER TO {role_ident};
-GRANT ALL ON SCHEMA public TO {role_ident};
+GRANT USAGE, CREATE ON SCHEMA public TO {role_ident};
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {role_ident};
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {role_ident};
 GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO {role_ident};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO {role_ident};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO {role_ident};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON FUNCTIONS TO {role_ident};
 """,
     )
     print(f"[n8n-db] synchronized database {database_name} and role {database_username}")

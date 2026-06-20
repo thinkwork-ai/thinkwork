@@ -1493,13 +1493,55 @@ U3/U4/U5/U6 before U7; U7 before U8.
       passed.
     - `git diff --check` passed.
   - Status: active; preparing PR.
+- 2026-06-20 follow-up update:
+  - PR #2739 merged at `eaa3e76a90e4264328ab4675305a6ea52cb5cbff`.
+  - Released canary `v0.1.0-canary.237`; verified GitHub release assets and
+    live `deploymentStatus.releaseVersion = v0.1.0-canary.237` with manifest
+    SHA `a9d1583bfb0dcbbe2ae9da4d95f740b6249e0080592ace9753ea20343d62701d`.
+  - Main deploy run `27870833075` succeeded.
+  - Re-drove uninstall for failed install
+    `138db5b7-0e47-4480-87b2-2117e2087587`; destroy job
+    `b0fed7b0-1822-49d9-b6c2-e07dcf15f5b5` selected canary `237`, was
+    approved with destructive confirmation `DESTROY`, and applied
+    successfully.
+  - Verified the empty stale n8n plugin row was removed before reinstall.
+  - Fresh deployed n8n install `058522da-c0c4-46f8-b713-d3cb03f31d69`
+    created runtime job `60ef9094-1110-4db2-8289-5b6d361108a8`. The ENABLE
+    plan selected canary `237`, no longer contained stale generated secret
+    ARNs, and created fresh placeholder secrets.
+  - Fresh install apply reached `sync-database.py up` with fresh secrets, then
+    failed during database bootstrap with PostgreSQL error:
+    `ERROR: must be member of role "thinkwork_n8n"`. Root cause: n8n copied
+    the earlier unsafe `CREATE DATABASE ... OWNER thinkwork_n8n` pattern. On
+    Aurora, the executing admin role is not a member of the app runtime role,
+    so database creation/ownership transfer must not target the runtime role.
+- n8n admin-owned database bootstrap follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-db-bootstrap-admin-owned`
+  - Objective: make n8n database bootstrap compatible with Aurora admin role
+    constraints by creating the dedicated database under the admin owner and
+    granting the runtime role full database/schema privileges.
+  - Implementation summary: - `sync-database.py up` now creates the missing n8n database without
+    `OWNER thinkwork_n8n`. - Removed `ALTER DATABASE ... OWNER TO thinkwork_n8n` and `ALTER SCHEMA
+public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all database privileges plus
+    public schema usage/create and object/default privileges. - Added a focused pytest for the generated bootstrap SQL so the unsafe
+    owner-transfer pattern does not regress.
+  - Local verification:
+    - `python3 -m py_compile plugins/n8n/terraform/n8n/scripts/sync-database.py plugins/n8n/terraform/n8n/scripts/test_sync_database.py`
+      passed.
+    - `uv run --with pytest pytest plugins/n8n/terraform/n8n/scripts/test_sync_database.py`
+      passed.
+  - Status: active; preparing PR.
 
 ## Blockers
 
-- Active blocker: fresh n8n install after a successful destroy reused deleted
-  generated n8n secret ARNs from prior desired config/guardrails. A follow-up
-  reinstall secret-refresh fix is in progress.
-- Active fix in progress: merge and release the reinstall secret-refresh fix,
-  clean up the failed partial install, then reinstall through app.thinkwork.ai
-  until the n8n ECS main/worker services, `https://n8n.thinkwork.ai`, and all
-  plugin components verify successfully end to end.
+- Active blocker: fresh n8n install now reaches fresh generated secrets but
+  fails database bootstrap because Aurora rejects
+  `CREATE DATABASE ... OWNER thinkwork_n8n` unless the executing admin is a
+  member of that runtime role.
+- Active fix in progress: merge and release the admin-owned database bootstrap
+  fix, clean up the failed partial install, then reinstall through
+  app.thinkwork.ai until the n8n ECS main/worker services,
+  `https://n8n.thinkwork.ai`, and all plugin components verify successfully
+  end to end.
