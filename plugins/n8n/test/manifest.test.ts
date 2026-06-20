@@ -11,6 +11,9 @@ import {
 } from "@thinkwork/plugin-catalog/contracts";
 
 import {
+  N8N_AGENT_STEP_BRIDGE_CREDENTIAL_KIND,
+  N8N_AGENT_STEP_BRIDGE_CREDENTIAL_SECRET_JSON_KEY,
+  N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH,
   N8N_MCP_ENDPOINT_PATH,
   N8N_PLUGIN_VERSION,
   N8N_SERVICE_CREDENTIAL_KIND,
@@ -79,6 +82,7 @@ describe("n8n plugin manifest", () => {
       "encryptionKeySecretArn",
       "operatorSecretArn",
       "serviceCredentialSecretArn",
+      "agentStepBridgeCredentialSecretArn",
       "storageBucketName",
       "publicUrl",
       "certificateArn",
@@ -110,7 +114,17 @@ describe("n8n plugin manifest", () => {
       },
     });
     expect(mcp.toolNotes?.join("\n")).toContain("enable instance-level MCP");
+    expect(mcp.toolNotes?.join("\n")).toContain("separate inbound tenant");
     expect(mcp.toolNotes?.join("\n")).toContain("production activation");
+    expect(N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH).toBe(
+      "/api/integrations/n8n/agent-steps",
+    );
+    expect(N8N_AGENT_STEP_BRIDGE_CREDENTIAL_KIND).toBe(
+      "n8n-agent-step-bridge-token",
+    );
+    expect(N8N_AGENT_STEP_BRIDGE_CREDENTIAL_SECRET_JSON_KEY).toBe(
+      "THINKWORK_N8N_AGENT_STEP_BRIDGE_TOKEN",
+    );
   });
 
   it("declares Plugin Detail custom package settings and operator instructions", async () => {

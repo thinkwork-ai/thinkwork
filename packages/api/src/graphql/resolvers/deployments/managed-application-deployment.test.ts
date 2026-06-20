@@ -509,6 +509,10 @@ describe("managed application deployment evidence reconciliation", () => {
                 value:
                   "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/service-credential",
               },
+              n8n_agent_step_bridge_credential_secret_arn: {
+                value:
+                  "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/agent-step-bridge-credential",
+              },
               n8n_storage_bucket_name: {
                 value: "thinkwork-dev-n8n",
               },
@@ -567,6 +571,8 @@ describe("managed application deployment evidence reconciliation", () => {
               "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/database-url",
             serviceCredentialSecretArn:
               "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/service-credential",
+            agentStepBridgeCredentialSecretArn:
+              "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n/agent-step-bridge-credential",
             storageBucketName: "thinkwork-dev-n8n",
             publicUrl: "https://n8n.tei.thinkwork.ai",
             domain: "n8n.tei.thinkwork.ai",

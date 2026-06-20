@@ -73,6 +73,8 @@ describe("n8nPluginSettings", () => {
             packageConfigDigest: current.digest,
             publicUrl: "https://n8n.example.test",
             serviceCredentialSecretArn: "arn:aws:secretsmanager:secret",
+            agentStepBridgeCredentialSecretArn:
+              "arn:aws:secretsmanager:bridge-secret",
           },
         }),
         latestJob: jobRow({ id: "job-last", status: "succeeded" }),
@@ -87,7 +89,32 @@ describe("n8nPluginSettings", () => {
     });
     expect(result.desiredConfig.publicUrl).toBe("https://n8n.example.test");
     expect(result.desiredConfig.serviceCredentialSecretArn).toBeUndefined();
+    expect(
+      result.desiredConfig.agentStepBridgeCredentialSecretArn,
+    ).toBeUndefined();
+    expect(result.agentStepBridgeEndpointPath).toBe(
+      "/api/integrations/n8n/agent-steps",
+    );
+    expect(result.agentStepBridgeCredentialConfigured).toBe(true);
     expect(result.lastJobStatus).toBe("succeeded");
+  });
+
+  it("reports a missing bridge credential without leaking secret fields", async () => {
+    const result = (await n8nPluginSettings(null, { installId }, CTX, {
+      db: fakeDb({
+        app: appRow({
+          desired_config: {
+            publicUrl: "https://n8n.example.test",
+          },
+        }),
+      }),
+      pluginDeps: pluginDeps(),
+    })) as Record<string, any>;
+
+    expect(result.desiredConfig).toEqual({
+      publicUrl: "https://n8n.example.test",
+    });
+    expect(result.agentStepBridgeCredentialConfigured).toBe(false);
   });
 });
 

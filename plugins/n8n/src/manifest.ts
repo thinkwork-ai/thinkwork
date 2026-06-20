@@ -9,9 +9,15 @@ import type {
 export const N8N_PLUGIN_KEY = "n8n";
 export const N8N_PLUGIN_VERSION = "0.1.0";
 export const N8N_MCP_ENDPOINT_PATH = "/mcp-server/http";
+export const N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH =
+  "/api/integrations/n8n/agent-steps";
 export const N8N_SERVICE_CREDENTIAL_KIND = "n8n-mcp-access-token";
 export const N8N_SERVICE_CREDENTIAL_SECRET_JSON_KEY =
   "N8N_MCP_SERVICE_CREDENTIAL";
+export const N8N_AGENT_STEP_BRIDGE_CREDENTIAL_KIND =
+  "n8n-agent-step-bridge-token";
+export const N8N_AGENT_STEP_BRIDGE_CREDENTIAL_SECRET_JSON_KEY =
+  "THINKWORK_N8N_AGENT_STEP_BRIDGE_TOKEN";
 export const N8N_WORKFLOW_OPERATOR_SKILL_SLUG = "n8n--workflow-operator";
 
 export const N8N_WORKFLOW_OPERATOR_SKILL_MD = `---
@@ -107,6 +113,11 @@ const N8N_INFRA_COMPONENT: InfrastructureComponent = {
         "Secrets Manager ARN containing the tenant service credential used by the native n8n MCP integration.",
       type: "string",
     },
+    agentStepBridgeCredentialSecretArn: {
+      description:
+        "Secrets Manager ARN containing the inbound credential used by n8n workflows to call the ThinkWork agent-step bridge.",
+      type: "string",
+    },
     storageBucketName: {
       description: "S3 bucket name used for n8n binary data and runtime files.",
       type: "string",
@@ -147,6 +158,7 @@ const N8N_MCP_COMPONENT: McpServerComponent = {
   },
   toolNotes: [
     "n8n v1 uses one tenant service credential and a shared native n8n operator account; it does not support per-user n8n activation.",
+    "The n8n agent-step bridge uses a separate inbound tenant credential for workflow HTTP Request nodes; do not reuse the MCP service credential for bridge calls.",
     "Operators must enable instance-level MCP in n8n and enable MCP access on the workflow, project, or folder before agents can inspect it.",
     "Agents may inspect, draft, and test low-risk workflows, but production activation, publish, and unpublish stay in the native n8n UI.",
   ],

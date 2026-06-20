@@ -3,7 +3,14 @@ import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { normalizeN8nPackageConfig } from "@thinkwork/plugin-n8n/package-config";
 import { Badge, Button, Input, Label } from "@thinkwork/ui";
-import { PackagePlus, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  Copy,
+  KeyRound,
+  PackagePlus,
+  Plus,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import {
   SettingsManagedApplicationDeploymentQuery,
   SettingsN8nPluginSettingsQuery,
@@ -177,11 +184,57 @@ export function N8nSettings({
     }
   }
 
+  async function copyBridgeEndpoint() {
+    const endpoint = settings?.agentStepBridgeEndpointPath;
+    if (!endpoint) return;
+    await navigator.clipboard.writeText(endpoint);
+    toast.success("n8n bridge endpoint copied.");
+  }
+
   const firstError = local.error ?? serverError;
   const packageSpecs = local.config?.packageSpecs ?? [];
 
   return (
     <SettingsSection label="n8n Settings">
+      <SettingsRow
+        label="Agent-step bridge"
+        description="Tenant-scoped HTTP entrypoint for n8n workflows that delegate one workflow step to a ThinkWork agent."
+      >
+        <div className="w-full space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant={
+                settings?.agentStepBridgeCredentialConfigured
+                  ? "default"
+                  : "outline"
+              }
+            >
+              <KeyRound className="size-3.5" />
+              {settings?.agentStepBridgeCredentialConfigured
+                ? "Credential configured"
+                : "Credential missing"}
+            </Badge>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <code className="min-h-9 rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-sm text-foreground">
+              {settings?.agentStepBridgeEndpointPath ??
+                "/api/integrations/n8n/agent-steps"}
+            </code>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              aria-label="Copy n8n bridge endpoint"
+              title="Copy endpoint"
+              disabled={!settings?.agentStepBridgeEndpointPath}
+              onClick={() => void copyBridgeEndpoint()}
+            >
+              <Copy className="size-4" />
+            </Button>
+          </div>
+        </div>
+      </SettingsRow>
+
       <SettingsRow
         label="Custom packages"
         description="Pinned public npm packages injected into the n8n image and allow-listed for Code nodes."

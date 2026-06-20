@@ -1904,6 +1904,8 @@ export const SettingsN8nPluginSettingsQuery = graphql(`
       desiredStatus
       currentStatus
       desiredConfig
+      agentStepBridgeEndpointPath
+      agentStepBridgeCredentialConfigured
       currentPackageConfig {
         schemaVersion
         packageSpecs

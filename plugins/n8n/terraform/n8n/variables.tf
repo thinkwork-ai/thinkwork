@@ -199,6 +199,12 @@ variable "service_credential_secret_arn" {
   default     = ""
 }
 
+variable "agent_step_bridge_credential_secret_arn" {
+  description = "Secrets Manager ARN containing the inbound credential used by n8n workflows to call the ThinkWork agent-step bridge."
+  type        = string
+  default     = ""
+}
+
 variable "create_secret_placeholders" {
   description = "Create operator-owned Secrets Manager placeholder containers for missing n8n secrets. Placeholder values are generated once and ignored after creation so rotation survives Terraform applies."
   type        = bool
