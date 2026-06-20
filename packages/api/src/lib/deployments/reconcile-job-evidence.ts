@@ -5,6 +5,10 @@ import {
   managedApplicationDeploymentJobs,
   managedApplications,
 } from "@thinkwork/database-pg/schema";
+import {
+  getManagedAppAdapter,
+  type ManagedAppKey,
+} from "@thinkwork/deployment-runner/apps/registry";
 import { db as defaultDb } from "../../graphql/utils.js";
 
 type DbLike = typeof defaultDb;
@@ -169,7 +173,11 @@ async function markApplySucceeded(args: {
     await args.db
       .update(managedApplications)
       .set({
-        current_status: currentStatusForOperation(args.job.operation),
+        current_status: currentStatusFromTerraformOutputs(
+          args.job.app_key,
+          args.job.operation,
+          terraformOutputs,
+        ),
         ...desiredConfigUpdate,
         updated_at: new Date(),
       })
@@ -408,6 +416,45 @@ function phaseAwarePrefix(
     return prefix.replace(/\/(plan|apply)$/, `/${phase}`);
   }
   return `${prefix.replace(/\/$/, "")}/${phase}`;
+}
+
+function currentStatusFromTerraformOutputs(
+  appKey: string,
+  operation: string,
+  outputs: Record<string, unknown>,
+): string {
+  if (isManagedAppKey(appKey) && hasManagedAppStatusIndicator(appKey, outputs)) {
+    try {
+      return getManagedAppAdapter(appKey).extractStatus(outputs).status;
+    } catch (error) {
+      console.warn(
+        `[deployments] failed to extract managed app status for ${appKey}: ${
+          (error as Error).message
+        }`,
+      );
+    }
+  }
+  return currentStatusForOperation(operation);
+}
+
+function isManagedAppKey(value: string): value is ManagedAppKey {
+  return (
+    value === "cognee" ||
+    value === "n8n" ||
+    value === "plane" ||
+    value === "twenty"
+  );
+}
+
+function hasManagedAppStatusIndicator(
+  appKey: ManagedAppKey,
+  outputs: Record<string, unknown>,
+): boolean {
+  const keys =
+    appKey === "cognee"
+      ? ["cognee_enabled"]
+      : [`${appKey}_provisioned`, `${appKey}_runtime_enabled`];
+  return keys.some((key) => Object.prototype.hasOwnProperty.call(outputs, key));
 }
 
 function currentStatusForOperation(operation: string): string {

@@ -116,6 +116,9 @@ describe("release update preflight", () => {
               customerDomainDelegated: true,
               customerDomainLegacyRetired: false,
               googleOauthClientIdConfigured: true,
+              optionalApps: expect.objectContaining({
+                n8n: true,
+              }),
             }),
           }),
         }),
@@ -359,6 +362,7 @@ async function runPreflight(options: {
                   cognito_reply_to_email_address: "support@tei.thinkwork.ai",
                   platform_operator_emails: "ops@tei.thinkwork.ai",
                   google_oauth_client_id: "google-client",
+                  n8n_provisioned: true,
                 }),
               );
         }

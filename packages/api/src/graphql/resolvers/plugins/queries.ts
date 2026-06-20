@@ -158,6 +158,7 @@ async function applicationHasLaunchableRuntime(
 ): Promise<boolean> {
   if (applicationIsDeployed(row.current_status)) return true;
   if (handlerRef.adoptedRunningInfra === true) return true;
+  if (row.current_status && row.current_status !== "unknown") return false;
   const [job] = await db
     .select({ operation: managedApplicationDeploymentJobs.operation })
     .from(managedApplicationDeploymentJobs)
