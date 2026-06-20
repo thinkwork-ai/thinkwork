@@ -32,6 +32,7 @@ Options:
   --github-ref <ref>
   --github-workflow <workflow>
   --github-actor <actor>
+  --previous-status-file <path>          read prior current.json for dry-run/tests
   --dry-run                              print JSON instead of uploading to S3
 EOF
 }
@@ -53,6 +54,7 @@ github_run_attempt="${GITHUB_RUN_ATTEMPT:-}"
 github_ref="${GITHUB_REF:-}"
 github_workflow="${GITHUB_WORKFLOW:-}"
 github_actor="${GITHUB_ACTOR:-}"
+previous_status_file=""
 dry_run=false
 
 while [[ $# -gt 0 ]]; do
@@ -74,6 +76,7 @@ while [[ $# -gt 0 ]]; do
     --github-ref) github_ref="${2:-}"; shift 2 ;;
     --github-workflow) github_workflow="${2:-}"; shift 2 ;;
     --github-actor) github_actor="${2:-}"; shift 2 ;;
+    --previous-status-file) previous_status_file="${2:-}"; shift 2 ;;
     --dry-run) dry_run=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 64 ;;
@@ -102,6 +105,28 @@ history_key="deployment/status/history/${safe_updated_at}-${run_key}.json"
 current_key="deployment/status/current.json"
 tmp_file="$(mktemp)"
 trap 'rm -f "$tmp_file"' EXIT
+
+previous_status_json=""
+if [[ -n "$previous_status_file" && -f "$previous_status_file" ]]; then
+  previous_status_json="$(cat "$previous_status_file")"
+elif [[ "$dry_run" != "true" && -n "$bucket" && ( -z "$manifest_url" || -z "$manifest_sha256" ) ]]; then
+  previous_status_json="$(aws s3 cp "s3://${bucket}/${current_key}" - 2>/dev/null || true)"
+fi
+
+if [[ -n "$previous_status_json" && ( -z "$manifest_url" || -z "$manifest_sha256" ) ]]; then
+  previous_release="$(jq -c '.activeRelease // {}' <<<"$previous_status_json" 2>/dev/null || echo '{}')"
+  previous_version="$(jq -r '.version // ""' <<<"$previous_release")"
+  previous_manifest_url="$(jq -r '.manifestUrl // ""' <<<"$previous_release")"
+  previous_manifest_sha256="$(jq -r '.manifestSha256 // ""' <<<"$previous_release")"
+  previous_commit_sha="$(jq -r '.commitSha // ""' <<<"$previous_release")"
+  if [[ -n "$previous_version" && -n "$previous_manifest_url" && -n "$previous_manifest_sha256" ]]; then
+    echo "Preserving active release metadata from previous deployment status; current update did not include a complete manifest URL/SHA pair." >&2
+    release_version="$previous_version"
+    manifest_url="$previous_manifest_url"
+    manifest_sha256="$previous_manifest_sha256"
+    commit_sha="$previous_commit_sha"
+  fi
+fi
 
 jq -n \
   --arg schemaVersion "1" \

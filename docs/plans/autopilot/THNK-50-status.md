@@ -1105,12 +1105,45 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - `pnpm --filter @thinkwork/api test -- --run src/graphql/resolvers/deployments/managed-applications.test.ts src/lib/deployments/release-manifest-images.test.ts src/lib/plugins/handlers/infra.test.ts`
       passed: 39 tests.
     - `pnpm --filter @thinkwork/api typecheck` passed.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2730
+    - Merge commit: `6313bb7875f0eff8b9a00743ae7c220edaa4e283`
+    - Status: merged after CLA, lint, verify, test, and typecheck passed.
+  - Main deploy:
+    - GitHub Actions deploy run `27861025602` succeeded.
+  - Reset attempt:
+    - `retryPluginComponent` for install
+      `60b7d5c3-8b3d-45f0-8c31-04e71caaaa4e` returned the old failed runtime
+      handler ref, so the stale component could not be repaired in place.
+    - `uninstallPlugin` with confirmation `n8n` failed before creating a
+      destroy job with
+      `Release manifest digest mismatch for n8n: expected 5933a29e35f80de68a1c1447790f4d2231153f5442e7f695ce53b6294d465ea4, got 1fe34f28bea9a03c99dacd9ea7467c1400720b70783978dd3503e692e48e226b.`
+    - Root cause: the #2730 main deploy overwrote
+      `deployment/status/current.json` with an `activeRelease` containing only
+      `version: v0.1.0-canary.229+1` and `commitSha`, no manifest URL or
+      manifest SHA. Release default selection then mixed that partial pointer
+      with stale SSM profile metadata (`v0.1.0-canary.189`) and stale selected
+      release metadata (`v0.1.0-canary.203`), producing mismatched release
+      URL/digest pairs.
+- deployment status pointer preservation follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-deploy-status-preserve-release`
+  - Objective: prevent source deploys from erasing complete active release
+    metadata when no release manifest URL/SHA is available, so managed-app
+    install/teardown defaults keep selecting a coherent release triple.
+  - Local verification:
+    - `pnpm exec tsx --test scripts/release/__tests__/write-deployment-status.test.ts`
+      passed: 2 tests.
 
 ## Blockers
 
-- Active blocker: deployed API still starts adopted n8n plan jobs without a
-  release manifest URL/image map, causing the runner to fail with missing
-  `imageUri`.
-- Active fix in progress: merge the adopted-release hydration PR, wait for the
-  main deploy, retry/reset n8n through the deployed ThinkWork plugin flow, and
-  keep tearing down/reinstalling until runtime provisioning succeeds end to end.
+- Active blocker: the current deployment status pointer has incomplete
+  `activeRelease` metadata after the source deploy, and fallback release
+  metadata sources are stale/incoherent. That blocks both n8n teardown and
+  fresh install because the API verifies a manifest URL against a digest from
+  another release.
+- Active fix in progress: merge and deploy the pointer-preservation fix, run a
+  fresh canary release so `deployment/status/current.json` contains a complete
+  canonical release triple again, then teardown/reinstall n8n through the
+  deployed ThinkWork plugin flow until runtime provisioning succeeds.
