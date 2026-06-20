@@ -452,6 +452,7 @@ resource "aws_lambda_function" "handler" {
     "routine-task-weather-email",
     "webhooks",
     "n8n-agent-step-bridge",
+    "n8n-agent-step-expirer",
     "webhooks-admin",
     "webhook-deliveries-cleanup",
     "skill-runs-reconciler",
@@ -1315,6 +1316,28 @@ resource "aws_scheduler_schedule" "wakeup_processor" {
 
   target {
     arn      = aws_lambda_function.handler["wakeup-processor"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# n8n agent-step expirer — resumes waiting n8n executions on timeout/retry
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "n8n_agent_step_expirer" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-n8n-agent-step-expirer"
+  group_name          = "default"
+  schedule_expression = "rate(1 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["n8n-agent-step-expirer"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

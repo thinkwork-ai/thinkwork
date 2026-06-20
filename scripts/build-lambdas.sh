@@ -447,6 +447,9 @@ build_handler "webhooks" \
 build_handler "n8n-agent-step-bridge" \
   "$REPO_ROOT/packages/api/src/handlers/n8n-agent-step-bridge.ts"
 
+build_handler "n8n-agent-step-expirer" \
+  "$REPO_ROOT/packages/api/src/handlers/n8n-agent-step-expirer.ts"
+
 build_handler "webhooks-admin" \
   "$REPO_ROOT/packages/api/src/handlers/webhooks-admin.ts"
 
