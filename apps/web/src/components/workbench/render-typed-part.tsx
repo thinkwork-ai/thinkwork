@@ -38,10 +38,9 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
-import { AnalyticsDisplayPart } from "@/components/workbench/genui/components/AnalyticsDisplayPart";
+import { GenUIRenderer } from "@/components/workbench/genui/GenUIRenderer";
 import { UserQuestionCard } from "@/components/workbench/UserQuestionCard";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
-import type { GenUIData } from "@/lib/ui-message-types";
 import type {
   RunbookConfirmationData,
   UserQuestionData,
@@ -60,11 +59,13 @@ export interface RenderTypedPartOptions {
    * state always derives from this row.
    */
   userQuestion?: UserQuestionRecord | null;
+  /** True while rendering a live stream before the assistant message persists. */
+  live?: boolean;
 }
 
 export function renderTypedPart(
   part: AccumulatedPart,
-  { keyPrefix, index, userQuestion }: RenderTypedPartOptions,
+  { keyPrefix, index, userQuestion, live = false }: RenderTypedPartOptions,
 ): ReactNode {
   const key = `${keyPrefix}::${index}`;
 
@@ -184,7 +185,14 @@ export function renderTypedPart(
       );
     }
     if (part.type === "data-genui") {
-      return <AnalyticsDisplayPart key={key} data={part.data as GenUIData} />;
+      return (
+        <GenUIRenderer
+          key={key}
+          data={part.data}
+          live={live}
+          partId={part.id}
+        />
+      );
     }
     if (part.type === "data-runbook-queue" || part.type === "data-task-queue") {
       // Queue data is projected into the prompt composer by TaskThreadView.
@@ -218,7 +226,11 @@ function recordData(value: unknown): Record<string, unknown> {
  */
 export function renderTypedParts(
   parts: AccumulatedPart[],
-  options: { keyPrefix: string; userQuestion?: UserQuestionRecord | null },
+  options: {
+    keyPrefix: string;
+    userQuestion?: UserQuestionRecord | null;
+    live?: boolean;
+  },
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
   let toolBuffer: Array<Extract<AccumulatedPart, { type: `tool-${string}` }>> =
@@ -248,6 +260,7 @@ export function renderTypedParts(
         keyPrefix: options.keyPrefix,
         index,
         userQuestion: options.userQuestion,
+        live: options.live,
       }),
     );
   });

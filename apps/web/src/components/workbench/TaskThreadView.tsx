@@ -1641,6 +1641,7 @@ function TranscriptSegment({
             <article aria-label="Streaming assistant response">
               {renderTypedParts(streamState!.parts, {
                 keyPrefix: `${message.id}::stream`,
+                live: true,
               })}
               {streamState!.status === "streaming" ? (
                 <span

@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import { serializeEditor } from "./SkillTokenInput";
 
 // The follow-up composer is a contenteditable token field, not a <textarea>:
@@ -157,6 +158,29 @@ describe("TaskThreadView", () => {
     // authoritative turn-level row.
     expect(screen.queryByText("Thinking")).toBeNull();
     expect(screen.queryByText("Computer planned the response.")).toBeNull();
+  });
+
+  it("renders persisted data-genui parts through the shared Thread renderer", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Generated UI reload",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "",
+              parts: [createTaskReviewGenUIFixture()],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("genui-task-review")).toBeTruthy();
+    expect(screen.getByText("Review onboarding task")).toBeTruthy();
   });
 
   it("passes the selected approved model through follow-up submit", async () => {

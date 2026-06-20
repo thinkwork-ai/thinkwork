@@ -10,7 +10,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAnalyticsDisplayFixture } from "@thinkwork/analytics-display";
-import { createAnalyticsDisplayGenUIPart } from "@thinkwork/genui";
+import {
+  createAnalyticsDisplayGenUIPart,
+  createTaskReviewGenUIFixture,
+} from "@thinkwork/genui";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
 
 vi.mock("@/applets/mount", () => ({
@@ -176,6 +179,45 @@ describe("renderTypedPart", () => {
 
     expect(screen.getByTestId("analytics-display-part")).toBeTruthy();
     expect(screen.getByText("Support Volume")).toBeTruthy();
+  });
+
+  it("routes native data-genui parts to the Thread GenUI renderer", () => {
+    const part = createTaskReviewGenUIFixture() as AccumulatedPart;
+
+    render(<>{renderTypedPart(part, rk())}</>);
+
+    expect(screen.getByTestId("genui-task-review")).toBeTruthy();
+    expect(screen.getByText("Review onboarding task")).toBeTruthy();
+  });
+
+  it("renders invalid data-genui parts as compact fallbacks", () => {
+    const part: AccumulatedPart = {
+      type: "data-genui",
+      id: "genui:bad",
+      data: {
+        schemaVersion: "thread-genui/v1",
+        catalogVersion: "thread-genui-catalog/v1",
+        status: "ready",
+        spec: {
+          root: "bad",
+          elements: {
+            bad: {
+              component: "unknown.panel",
+              props: { title: "Unsupported" },
+            },
+          },
+        },
+        mobileFallback: {
+          title: "Unsupported generated UI",
+          summary: "This panel is not in the catalog.",
+        },
+      },
+    };
+
+    render(<>{renderTypedPart(part, rk())}</>);
+
+    expect(screen.getByTestId("genui-fallback")).toBeTruthy();
+    expect(screen.getByText("unknown.panel")).toBeTruthy();
   });
 
   it("renders a source-url part as an anchor", () => {
