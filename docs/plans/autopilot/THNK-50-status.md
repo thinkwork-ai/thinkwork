@@ -1524,24 +1524,70 @@ U3/U4/U5/U6 before U7; U7 before U8.
     granting the runtime role full database/schema privileges.
   - Implementation summary: - `sync-database.py up` now creates the missing n8n database without
     `OWNER thinkwork_n8n`. - Removed `ALTER DATABASE ... OWNER TO thinkwork_n8n` and `ALTER SCHEMA
-public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all database privileges plus
-    public schema usage/create and object/default privileges. - Added a focused pytest for the generated bootstrap SQL so the unsafe
+public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all database privileges plus public
+    schema usage/create and object/default privileges. - Added a focused pytest for the generated bootstrap SQL so the unsafe
     owner-transfer pattern does not regress.
   - Local verification:
     - `python3 -m py_compile plugins/n8n/terraform/n8n/scripts/sync-database.py plugins/n8n/terraform/n8n/scripts/test_sync_database.py`
       passed.
     - `uv run --with pytest pytest plugins/n8n/terraform/n8n/scripts/test_sync_database.py`
       passed.
+  - Status: merged in PR #2740 at
+    `d7c88913e2a982a6c9bb7625dee57f04e931a6de` after required checks passed.
+  - Released canary `v0.1.0-canary.238`; verified live
+    `deploymentStatus.releaseVersion = v0.1.0-canary.238` with manifest SHA
+    `8bc9f9ef012fbbe586d306ef5ccfc1e1c60d4c8c13172f248e1ef9333223bbe9`.
+  - Main deploy run `27871846342` succeeded.
+  - Re-drove uninstall for failed install
+    `058522da-c0c4-46f8-b713-d3cb03f31d69`; destroy job
+    `5962bdd6-9906-4eee-a89d-a51243dfcc88` selected canary `238`, was
+    approved with destructive confirmation `DESTROY`, and applied
+    successfully.
+  - Fresh deployed n8n install `4ce18b35-25c2-48c3-a9e0-f0259b391ba0`
+    created runtime job `998b4d8d-37d8-438d-894a-788d6c2cd477`. The ENABLE
+    plan selected canary `238`, was approved, and applied successfully.
+  - Verified plugin state `installed`; all n8n plugin components are
+    `provisioned`; managed app status is `running`; ECS main and worker
+    services are ACTIVE and steady with desired/running `1/1`; logs show
+    n8n migrations completed, the editor is accessible, and worker is ready.
+  - Remaining live hardening issue: `curl https://n8n.thinkwork.ai/healthz`
+    fails TLS validation because the ALB listener is using the
+    `crm.thinkwork.ai` ACM certificate
+    (`arn:aws:acm:us-east-1:487219502366:certificate/c51771a5-5e34-490f-8ad9-cc9fa97b36bd`).
+    n8n also logs that `N8N_DEFAULT_BINARY_DATA_MODE=database` is invalid and
+    falls back to n8n's default mode.
+- n8n dedicated certificate and binary-mode follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-cert-and-binary-mode`
+  - Objective: make the installed n8n endpoint HTTPS-valid and remove the
+    invalid n8n binary data mode warning.
+  - Implementation summary:
+    - Deployment runner no longer falls back from n8n to Twenty/Plane
+      certificate guardrails.
+    - Generated managed-app Terraform now creates and DNS-validates a
+      dedicated ACM certificate for `n8n.thinkwork.ai` when no explicit n8n
+      cert ARN is supplied, passes that cert into the ThinkWork module, and
+      includes the ACM resources in n8n targeted apply scope/safety allowlist.
+    - n8n binary data mode default/validation now uses n8n's accepted
+      `default` mode instead of invalid `database`.
+  - Local verification:
+    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`
+      passed.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k 'n8n_dns or n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
+      passed.
+    - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed.
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed.
+    - `terraform fmt -check plugins/n8n/terraform/n8n terraform/modules/thinkwork`
+      passed.
+    - `git diff --check` passed.
   - Status: active; preparing PR.
 
 ## Blockers
 
-- Active blocker: fresh n8n install now reaches fresh generated secrets but
-  fails database bootstrap because Aurora rejects
-  `CREATE DATABASE ... OWNER thinkwork_n8n` unless the executing admin is a
-  member of that runtime role.
-- Active fix in progress: merge and release the admin-owned database bootstrap
-  fix, clean up the failed partial install, then reinstall through
-  app.thinkwork.ai until the n8n ECS main/worker services,
-  `https://n8n.thinkwork.ai`, and all plugin components verify successfully
-  end to end.
+- Active blocker: n8n installs and runs, but the public HTTPS endpoint presents
+  the CRM certificate instead of an `n8n.thinkwork.ai` certificate.
+- Active fix in progress: merge and release the dedicated n8n certificate and
+  binary-mode fix, apply/upgrade n8n through app.thinkwork.ai, then verify
+  trusted HTTPS, ECS/log health, and plugin components end to end.
