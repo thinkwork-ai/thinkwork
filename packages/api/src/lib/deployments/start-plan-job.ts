@@ -89,7 +89,8 @@ export async function startManagedApplicationPlanJob(
     args.releaseVersion === null ||
     args.releaseVersion === undefined ||
     args.manifestDigest === null ||
-    args.manifestDigest === undefined
+    args.manifestDigest === undefined ||
+    !args.releaseManifestUrl?.trim()
       ? await resolveDefaultReleaseMetadata()
       : {
           releaseVersion: null,
@@ -205,8 +206,7 @@ export async function startManagedApplicationPlanJob(
       evidenceBucket,
       customerDomain: controllerConfig.customerDomain,
       customerDomainDelegated: controllerConfig.customerDomainDelegated,
-      customerDomainLegacyRetired:
-        controllerConfig.customerDomainLegacyRetired,
+      customerDomainLegacyRetired: controllerConfig.customerDomainLegacyRetired,
       appCertificateArn: controllerConfig.appCertificateArn,
       idempotencyKey: `${idempotencyKey}:plan-started`,
       deps,

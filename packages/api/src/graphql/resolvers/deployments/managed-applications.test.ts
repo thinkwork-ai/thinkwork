@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  releaseManifestSha256,
+  type ThinkWorkReleaseManifest,
+} from "@thinkwork/release-manifest";
 
 const {
   selectQueue,
@@ -103,6 +107,7 @@ let sharedMod: typeof import("./shared.js");
 beforeEach(async () => {
   vi.resetModules();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.stubEnv("STAGE", "");
   vi.stubEnv("THINKWORK_STAGE", "");
   selectQueue.length = 0;
@@ -391,6 +396,104 @@ describe("managed application plan jobs", () => {
           manifestDigest: "b".repeat(64),
           releaseManifestUrl:
             "https://example.com/releases/2.0.0/manifest.json",
+        }),
+      }),
+    );
+  });
+
+  it("hydrates n8n runtime images when an adopted app supplies a release pin without a manifest URL", async () => {
+    const manifest = n8nReleaseManifest();
+    const manifestDigest = releaseManifestSha256(manifest);
+    const manifestUrl =
+      "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.224/thinkwork-release.json";
+    const runtimeImage =
+      "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:v0.1.0-canary.224-n8n-amd64@sha256:" +
+      "1".repeat(64);
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => manifest,
+    }));
+
+    vi.stubGlobal("fetch", fetch);
+    vi.stubEnv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:sfn:deployments");
+    vi.stubEnv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.224");
+    vi.stubEnv("THINKWORK_RELEASE_MANIFEST_SHA256", manifestDigest);
+    vi.stubEnv("THINKWORK_RELEASE_MANIFEST_URL", manifestUrl);
+    selectQueue.push([]); // idempotency lookup
+    selectQueue.push([]); // managed application lookup
+    returningQueue.push([{ id: "app-1" }]);
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        app_key: "n8n",
+        operation: "ENABLE",
+        status: "planning",
+        release_version: "v0.1.0-canary.224",
+        manifest_digest: manifestDigest,
+      },
+    ]);
+    mockStartExecution.mockResolvedValue({
+      executionArn: "arn:sfn:execution:plan",
+      stateMachineArn: "arn:sfn:deployments",
+    });
+    returningQueue.push([
+      {
+        id: "job-1",
+        tenant_id: "tenant-1",
+        app_key: "n8n",
+        operation: "ENABLE",
+        status: "planning",
+        release_version: "v0.1.0-canary.224",
+        manifest_digest: manifestDigest,
+        plan_execution_arn: "arn:sfn:execution:plan",
+      },
+    ]);
+    selectQueue.push([{ id: "event-1", event_type: "plan_requested" }]);
+
+    await startMod.startManagedApplicationPlan(
+      null,
+      {
+        input: {
+          key: "n8n",
+          operation: "ENABLE",
+          releaseVersion: "v0.1.0-canary.224",
+          manifestDigest,
+          desiredConfig: '{"databaseName":"thinkwork_n8n"}',
+          idempotencyKey: "idem-adopted-n8n",
+        },
+      },
+      {} as any,
+      { startExecution: mockStartExecution },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(manifestUrl);
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          app_key: "n8n",
+          release_version: "v0.1.0-canary.224",
+          manifest_digest: manifestDigest,
+          plan_summary: expect.objectContaining({
+            releaseManifestUrl: manifestUrl,
+            manifestImages: {
+              "n8n-runtime": runtimeImage,
+            },
+          }),
+        }),
+      ]),
+    );
+    expect(mockStartExecution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          appKey: "n8n",
+          releaseVersion: "v0.1.0-canary.224",
+          manifestDigest,
+          releaseManifestUrl: manifestUrl,
+          manifestImages: {
+            "n8n-runtime": runtimeImage,
+          },
         }),
       }),
     );
@@ -708,3 +811,63 @@ describe("managed application plan jobs", () => {
     expect(insertCalls).toHaveLength(0);
   });
 });
+
+function n8nReleaseManifest(): ThinkWorkReleaseManifest {
+  return {
+    schemaVersion: 1,
+    release: {
+      version: "0.1.0-canary.224",
+      gitSha: "abc123",
+      createdAt: "2026-06-20T00:00:00.000Z",
+    },
+    compatibility: {
+      minCliVersion: "0.0.0",
+      minRunnerVersion: "0.0.0",
+      profileSchemaVersion: 1,
+    },
+    components: {
+      cli: { version: "0.1.0-canary.224" },
+      terraform: {
+        source: "thinkwork-ai/thinkwork/aws",
+        version: "0.1.0-canary.224",
+      },
+      deploymentRunner: {
+        version: "0.1.0-canary.224",
+        image: null,
+        script: {
+          fileName: "thinkwork-runner.py",
+          relativePath: "runner/thinkwork-runner.py",
+          url: null,
+          sha256: "3".repeat(64),
+          sizeBytes: 42,
+        },
+      },
+      customerOverlay: { schemaVersion: 1 },
+    },
+    artifacts: [],
+    runtimeImages: [
+      {
+        name: "n8n-runtime",
+        repository:
+          "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore",
+        tag: "v0.1.0-canary.224-n8n-amd64",
+        digest: `sha256:${"1".repeat(64)}`,
+        architecture: "amd64",
+        uri:
+          "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:v0.1.0-canary.224-n8n-amd64@sha256:" +
+          "1".repeat(64),
+      },
+    ],
+    managedApps: [
+      {
+        id: "n8n",
+        displayName: "n8n",
+        requiredImages: ["n8n-runtime"],
+      },
+    ],
+    signing: {
+      acceptedKeyIds: [],
+      revokedKeyIds: [],
+    },
+  };
+}

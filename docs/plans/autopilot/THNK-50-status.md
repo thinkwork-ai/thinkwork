@@ -1056,15 +1056,61 @@ U3/U4/U5/U6 before U7; U7 before U8.
       passed.
     - `git diff --check` passed.
   - PR:
-    - Status: preparing.
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2729
+    - Merge commit: `b1816404ca1b35503c21bd2eeb123e629a7b042f`
+    - Status: merged after required checks passed.
+  - Main deploy:
+    - GitHub Actions deploy run `27859960496` succeeded.
+  - Canary release:
+    - Tag `v0.1.0-canary.229` was pushed from merge commit
+      `b1816404ca1b35503c21bd2eeb123e629a7b042f`.
+    - Release workflow run `27860218109` succeeded.
+    - Dev status pointer selected canonical manifest digest
+      `684bf9ea55241f256017efcc57709e10a37258fad42a623a5012cf4099ed2773`
+      with ECR-backed n8n image
+      `487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:v0.1.0-canary.229-n8n-amd64@sha256:966bbfdbe918570d4676fcf9d1399e01f5c6f5794983bf65d58b73dffb32bdfd`.
+  - Reset attempt:
+    - Retried teardown for failed install
+      `b936aea0-4be4-4041-9915-3f579cb78db4`.
+    - Destroy job `947a0cfc-0ae0-4f82-be2c-c49333bd27f7` reached
+      `awaiting_approval`, was approved with destructive confirmation
+      `DESTROY`, and applied successfully through Step Functions execution
+      `arn:aws:states:us-east-1:487219502366:execution:thinkwork-dev-deployment-orchestrator:tw-apply-947a0cfc0ae04f82be2cc49333bd27f7`.
+    - A final `uninstallPlugin` re-drive returned `Plugin install not found`;
+      follow-up plugin query showed no n8n install rows. ECS showed the n8n
+      main service inactive with desired/running/pending counts at 0.
+  - Fresh deployed install attempt:
+    - Fresh plugin install id `60b7d5c3-8b3d-45f0-8c31-04e71caaaa4e`
+      created runtime deployment job
+      `58b2fdb0-6331-4fb8-963f-bbad8f6f0c35`.
+    - The plan selected canary `229` and the correct canonical digest, but
+      failed before approval with
+      `n8n managed app operation is missing required desired-state field: imageUri.`
+    - Job plan summary had `releaseManifestUrl: ""` and `manifestImages: {}`
+      even though the selected release manifest contains `n8n-runtime`.
+    - Root cause: the fresh plugin install adopted an existing
+      `managed_applications` row with `selected_release_version` and
+      `selected_manifest_digest` populated but no stored manifest URL/image
+      map. `startManagedApplicationPlanJob` skipped default release lookup
+      whenever version and digest were present, so the n8n image hydration
+      helper never received a release manifest URL.
+- n8n adopted release manifest hydration follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-adopted-release-hydration`
+  - Objective: let plugin-created plan jobs for adopted managed-app rows keep
+    their pinned release version/digest while hydrating the missing release
+    manifest URL and `n8n-runtime` image from the active deployment defaults.
+  - Local verification:
+    - `pnpm --filter @thinkwork/api test -- --run src/graphql/resolvers/deployments/managed-applications.test.ts src/lib/deployments/release-manifest-images.test.ts src/lib/plugins/handlers/infra.test.ts`
+      passed: 39 tests.
+    - `pnpm --filter @thinkwork/api typecheck` passed.
 
 ## Blockers
 
-- Active blocker: the deployment runner still verifies downloaded release
-  manifests with the raw file hash, while the release workflow and API now use
-  the canonical release-manifest hash. This blocks clean teardown of the failed
-  n8n install and any reliable fresh install attempt.
-- Active fix in progress: merge the deployment-runner canonical digest PR,
-  redeploy main so the runner bundle is updated, cut a new canary if required,
-  then tear down and reinstall n8n through the deployed ThinkWork plugin flow
-  until runtime provisioning succeeds.
+- Active blocker: deployed API still starts adopted n8n plan jobs without a
+  release manifest URL/image map, causing the runner to fail with missing
+  `imageUri`.
+- Active fix in progress: merge the adopted-release hydration PR, wait for the
+  main deploy, retry/reset n8n through the deployed ThinkWork plugin flow, and
+  keep tearing down/reinstalling until runtime provisioning succeeds end to end.
