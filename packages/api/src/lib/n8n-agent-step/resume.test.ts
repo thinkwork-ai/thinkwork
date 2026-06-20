@@ -176,6 +176,34 @@ describe("resumeN8nAgentStepRun", () => {
     });
   });
 
+  it("fails loudly when the stored resume URL secret is malformed", async () => {
+    const db = queuedDb({
+      updateRows: [[BASE_RUN], []],
+    });
+    const fetchMock = vi.fn();
+
+    const result = await resumeN8nAgentStepRun(
+      { tenantId: TENANT_ID, runId: RUN_ID },
+      fixedDeps(db, {
+        fetch: fetchMock as never,
+        secrets: { getSecret: vi.fn(async () => "not-json") },
+      }),
+    );
+
+    expect(result).toMatchObject({
+      runId: RUN_ID,
+      action: "resume_failed",
+      httpStatus: null,
+      error: "Bridge run resume URL secret is malformed",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.updateSets[1]).toMatchObject({
+      status: "resume_failed",
+      resume_status: "failed",
+      terminal_at: NOW,
+    });
+  });
+
   it("does not post when another worker already claimed the run", async () => {
     const db = queuedDb({ updateRows: [[]] });
     const fetchMock = vi.fn();
