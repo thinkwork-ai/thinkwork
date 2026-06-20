@@ -184,6 +184,19 @@ def release_manifest_sha256(manifest):
     return hashlib.sha256(stable_json_bytes(manifest)).hexdigest()
 
 
+def read_release_manifest(path=MANIFEST):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def verify_release_manifest_digest(path, expected_sha256):
+    manifest = read_release_manifest(path)
+    actual = release_manifest_sha256(manifest)
+    expected = (expected_sha256 or "").lower()
+    if expected and actual != expected:
+        raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
+    return manifest
+
+
 def release_manifest_trust_policy():
     policy = os.environ.get(
         "THINKWORK_RELEASE_MANIFEST_TRUST_POLICY",
@@ -2314,13 +2327,11 @@ def release_git_sha():
 
 
 def ensure_release_manifest_available(manifest_url, manifest_sha256):
-    if MANIFEST.exists() or not manifest_url:
+    if not manifest_url and not MANIFEST.exists():
         return
-    download(manifest_url, MANIFEST)
-    actual = sha256_file(MANIFEST)
-    expected = (manifest_sha256 or "").lower()
-    if expected and actual != expected:
-        raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
+    if not MANIFEST.exists():
+        download(manifest_url, MANIFEST)
+    verify_release_manifest_digest(MANIFEST, manifest_sha256)
 
 
 def source_repo_and_ref(module_source, release_version):
@@ -4171,11 +4182,7 @@ def sync_release_artifacts(artifact_types=None, artifact_names=None):
     if not manifest_url:
         raise RuntimeError("THINKWORK_RELEASE_MANIFEST_URL is required")
     download(manifest_url, MANIFEST)
-    actual = sha256_file(MANIFEST)
-    if expected and actual != expected:
-        raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
-
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    manifest = verify_release_manifest_digest(MANIFEST, expected)
     canonical_digest = release_manifest_sha256(manifest)
     trust_evidence = enforce_release_manifest_trust(manifest, canonical_digest, manifest_url)
     bundled_paths, bundle_evidence = download_and_extract_artifact_bundles(manifest)
@@ -4210,7 +4217,7 @@ def sync_release_artifacts(artifact_types=None, artifact_names=None):
         else:
             static_files[artifact.get("name")] = destination
     RELEASE_EVIDENCE = {
-        "manifestSha256": actual,
+        "manifestSha256": canonical_digest,
         "manifestCanonicalSha256": canonical_digest,
         "trust": trust_evidence,
         "bundles": bundle_evidence,

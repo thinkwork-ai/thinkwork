@@ -37,10 +37,20 @@ def digest(data: bytes) -> str:
     return sha256(data).hexdigest()
 
 
-def write_manifest(path: Path, manifest: dict) -> str:
-    encoded = json.dumps(manifest, sort_keys=True).encode()
-    path.write_bytes(encoded)
+def canonical_manifest_digest(manifest: dict) -> str:
+    encoded = json.dumps(
+        manifest,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
     return digest(encoded)
+
+
+def write_manifest(path: Path, manifest: dict) -> str:
+    encoded = json.dumps(manifest, indent=2).encode()
+    path.write_bytes(encoded)
+    return canonical_manifest_digest(manifest)
 
 
 def release_manifest(
@@ -156,6 +166,30 @@ def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     }
     assert runner.RELEASE_EVIDENCE["bundles"][0]["contains"] == ["graphql-http", "web"]
     assert {artifact["source"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]} == {"bundle"}
+
+
+def test_ensure_release_manifest_available_accepts_canonical_manifest_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    manifest_path = tmp_path / "thinkwork-release.json"
+    downloaded_path = tmp_path / "downloaded-release.json"
+    bundle_path = tmp_path / "platform-artifacts.tar.gz"
+    write_tar(bundle_path, {})
+    manifest = release_manifest(bundle_path, runner.sha256_file(bundle_path), [])
+    manifest_sha = write_manifest(manifest_path, manifest)
+
+    assert digest(manifest_path.read_bytes()) != manifest_sha
+
+    monkeypatch.setattr(runner, "MANIFEST", downloaded_path)
+
+    runner.ensure_release_manifest_available(file_url(manifest_path), manifest_sha)
+
+    assert downloaded_path.exists()
+    assert (
+        runner.release_manifest_sha256(json.loads(downloaded_path.read_text()))
+        == manifest_sha
+    )
 
 
 def test_sync_release_artifacts_can_materialize_only_web_static_bundle(
@@ -1600,7 +1634,22 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
     }
 
     overrides = runner.managed_app_terraform_overrides(
-        {"appKey": "twenty", "operation": "UPGRADE"},
+        {
+            "appKey": "twenty",
+            "operation": "UPGRADE",
+            "desiredConfig": {
+                "certificateArn": (
+                    "arn:aws:acm:us-east-1:"
+                    "487219502366:certificate/twenty"
+                ),
+                "publicUrl": "https://twenty.thinkwork.ai",
+            },
+            "manifestImages": {
+                "twenty": "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork/twenty"
+                "@sha256:"
+                "5555555555555555555555555555555555555555555555555555555555555555"
+            },
+        },
         "dev",
         "487219502366",
         {
