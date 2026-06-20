@@ -6,6 +6,84 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-34 Thread GenUI with json-render - 2026-06-20
+
+- Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
+- Linear issue: `THNK-34`.
+- Target branch: `main`.
+- Current implementation unit: U1 Validate json-render adoption gates.
+- Current branch: `codex/thnk-34-u1-json-render-spike`.
+- Current worktree:
+  `.Codex/worktrees/thnk-34-u1-json-render-spike`.
+- Pull request: not opened yet.
+- Status: U1 implementation complete locally and ready for PR. The U1
+  worktree was created from `origin/main` at `c667da8a9`.
+- Notes:
+  - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
+    and U7 in dependency order.
+  - THNK-57 has already shipped the shared `@thinkwork/analytics-display`
+    foundation consumed by U8.
+  - U1 is a characterization spike; the final PR should either pin the chosen
+    minimal json-render dependency state or record the host-owned fallback
+    decision and leave the lockfile without rejected packages.
+  - U1 verdict: keep the minimal `@json-render/core@0.19.0` and
+    `@json-render/react@0.19.0` substrate as a dev-only candidate for web Thread
+    GenUI, keep U2's envelope host-owned, and exclude `@json-render/shadcn` from
+    v1.
+  - U1 keeps the existing web React ranges and lockfile resolution unchanged.
+    `@json-render/react@0.19.0` publishes a `react@^19.2.3` peer while the
+    current lock resolves React 19.1.0, so U3 must re-check this before
+    user-facing production adapter rollout. A local React 19.2 alignment attempt
+    caused workspace-wide peer graph churn and was intentionally removed from
+    this U1 slice.
+  - The json-render packages are devDependencies in U1; production runtime
+    adoption remains deferred until U3 resolves the peer gate or chooses the
+    host-owned fallback.
+  - Added an executable Vite/jsdom verifier so the static json-render renderer
+    path is built, scanned, size-checked, and executed outside the test runner.
+- Local verification:
+  - `pnpm install` completed for all workspace projects. Local Node 25 logged a
+    `canvas@2.11.2` native fallback warning about missing `pkg-config` /
+    `pixman-1`, but the install command exited successfully.
+  - `pnpm --filter @thinkwork/web test -- src/components/workbench/genui/json-render-smoke.test.tsx`
+    passed: 4 tests.
+  - `JSON_RENDER_SMOKE_ENTRY=baseline pnpm --filter @thinkwork/web build:json-render-smoke`
+    passed. Baseline output: 186.85 KB raw, 58.64 KB gzip.
+  - `JSON_RENDER_SMOKE_ENTRY=renderer pnpm --filter @thinkwork/web build:json-render-smoke`
+    passed. Renderer output: 311.44 KB raw, 94.69 KB gzip.
+  - The minimal static json-render renderer path adds about 124.59 KB raw and
+    36.05 KB gzip over the React baseline bundle.
+  - Grepping the emitted renderer bundle found no `fetch(`, `eval(`,
+    `new Function`, `XMLHttpRequest`, dynamic `import(`, `useUIStream`, or
+    `useChatUI` usage.
+  - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed and enforced
+    the bundle scan, size thresholds, and jsdom runtime render assertion.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/web build` passed with existing route, sourcemap,
+    and large chunk warnings.
+  - `pnpm audit --prod --audit-level high` and
+    `pnpm audit --audit-level high` report existing workspace advisories, but
+    JSON audit output did not reference `@json-render`.
+  - `pnpm lint` passed.
+  - `git diff --check` passed.
+- Compound review:
+  - Correctness review flagged unrelated upstream MCP changes when diffing
+    against the moving `origin/main`; the U1 branch will be rebased before PR so
+    the PR diff is scoped to U1 only.
+  - Correctness review flagged untracked U1 proof files; all U1 proof files will
+    be staged in the U1 commit.
+  - Testing review flagged production dependency adoption despite the React peer
+    mismatch; fixed by moving `@json-render/*` to web devDependencies and
+    recording production adoption as deferred to U3.
+  - Testing review flagged manual-only bundle evidence; fixed by adding
+    `pnpm --filter @thinkwork/web verify:json-render-smoke`, which builds,
+    scans, size-checks, and executes the renderer bundle under jsdom.
+- CI log:
+  - Pending.
+- Blockers: none.
+- Next action: commit U1, rebase on current `origin/main`, open the U1 PR, and
+  monitor CI.
+
 ## Space Webhook Thread Starts - 2026-06-19
 
 - Plan: `docs/plans/2026-06-19-001-feat-space-webhook-thread-start-plan.md`.

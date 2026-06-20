@@ -8,6 +8,8 @@
     "prebuild": "pnpm --filter @thinkwork/deployment-profile build",
     "build": "vite build",
     "build:iframe-shell": "vite build --config vite.iframe-shell.config.ts",
+    "build:json-render-smoke": "vite build --config vite.json-render-smoke.config.ts",
+    "verify:json-render-smoke": "node scripts/verify-json-render-smoke.mjs",
     "dev:iframe-shell": "VITE_ALLOWED_PARENT_ORIGINS=\"${VITE_ALLOWED_PARENT_ORIGINS:-http://localhost:5180,http://127.0.0.1:5180,http://localhost:5174,http://127.0.0.1:5174,thinkwork://app,thinkwork-dev://app}\" pnpm build:iframe-shell && npx --yes http-server dist/iframe-shell -p 5175 --cors -s",
     "preview": "vite preview",
     "test": "vitest run",
@@ -88,6 +90,8 @@
   "devDependencies": {
     "@graphql-codegen/cli": "^5.0.6",
     "@graphql-codegen/client-preset": "^4.8.2",
+    "@json-render/core": "0.19.0",
+    "@json-render/react": "0.19.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.0.7",
     "@testing-library/react": "^16.1.0",
