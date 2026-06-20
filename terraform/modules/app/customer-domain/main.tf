@@ -275,6 +275,8 @@ resource "aws_route53_record" "app_alias_a" {
   name    = var.customer_domain
   type    = "A"
 
+  allow_overwrite = true
+
   alias {
     name                   = var.app_distribution_domain_name
     zone_id                = local.cloudfront_hosted_zone_id
@@ -288,6 +290,8 @@ resource "aws_route53_record" "app_alias_aaaa" {
   zone_id = aws_route53_zone.customer[0].zone_id
   name    = var.customer_domain
   type    = "AAAA"
+
+  allow_overwrite = true
 
   alias {
     name                   = var.app_distribution_domain_name

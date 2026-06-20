@@ -70,13 +70,11 @@ export async function approveManagedApplicationDeployment(
     );
   }
 
-  const controllerConfig = job.state_machine_arn
-    ? null
-    : await (
-        deps.resolveDeploymentControllerConfig ?? resolveDeploymentControllerConfig
-      )();
+  const controllerConfig = await (
+    deps.resolveDeploymentControllerConfig ?? resolveDeploymentControllerConfig
+  )();
   const stateMachineArn =
-    job.state_machine_arn || controllerConfig?.stateMachineArn;
+    job.state_machine_arn || controllerConfig.stateMachineArn;
   if (!stateMachineArn) {
     throw new GraphQLError("Deployment state machine ARN is not configured", {
       extensions: { code: "FAILED_PRECONDITION" },
@@ -122,7 +120,12 @@ export async function approveManagedApplicationDeployment(
         desiredConfig: planSummary.desiredConfig,
         manifestImages: planSummary.manifestImages,
         planDigest: job.plan_digest,
-        evidenceBucket: job.evidence_bucket ?? controllerConfig?.evidenceBucket,
+        evidenceBucket: job.evidence_bucket ?? controllerConfig.evidenceBucket,
+        customerDomain: controllerConfig.customerDomain,
+        customerDomainDelegated: controllerConfig.customerDomainDelegated,
+        customerDomainLegacyRetired:
+          controllerConfig.customerDomainLegacyRetired,
+        appCertificateArn: controllerConfig.appCertificateArn,
       }),
     });
     const [updated] = await db

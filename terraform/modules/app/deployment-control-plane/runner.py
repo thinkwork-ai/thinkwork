@@ -123,6 +123,53 @@ provider_installation {{
     os.environ["TF_CLI_CONFIG_FILE"] = str(terraformrc)
 
 
+def patch_downloaded_customer_domain_module():
+    module_path = (
+        TF
+        / ".terraform"
+        / "modules"
+        / "thinkwork"
+        / "terraform"
+        / "modules"
+        / "app"
+        / "customer-domain"
+        / "main.tf"
+    )
+    if not module_path.exists():
+        return
+    text = module_path.read_text()
+    if 'resource "aws_route53_record" "app_alias_a"' not in text:
+        return
+
+    def ensure_allow_overwrite(resource_name, record_type, source):
+        marker = f'resource "aws_route53_record" "{resource_name}" {{'
+        start = source.find(marker)
+        if start == -1:
+            return source
+        next_resource = source.find('\nresource "', start + len(marker))
+        end = next_resource if next_resource != -1 else len(source)
+        block = source[start:end]
+        if "allow_overwrite" in block:
+            return source
+        insert_after = block.find(f'type    = "{record_type}"')
+        if insert_after == -1:
+            return source
+        line_end = block.find("\n", insert_after)
+        if line_end == -1:
+            return source
+        patched_block = (
+            block[: line_end + 1]
+            + "  allow_overwrite = true\n"
+            + block[line_end + 1 :]
+        )
+        return source[:start] + patched_block + source[end:]
+
+    patched = ensure_allow_overwrite("app_alias_a", "A", text)
+    patched = ensure_allow_overwrite("app_alias_aaaa", "AAAA", patched)
+    if patched != text:
+        module_path.write_text(patched)
+
+
 def stable_json_bytes(value):
     return json.dumps(
         value,
@@ -1023,6 +1070,11 @@ def bool_state_output(outputs, name):
     return bool(state_output(outputs, name, False))
 
 
+def has_state_output(outputs, name):
+    value = outputs.get(name)
+    return isinstance(value, dict) and "value" in value
+
+
 def enforce_customer_domain_preservation(current_outputs, vars_json, payload, runner_secrets):
     previous_domain = string_state_output(current_outputs, "customer_domain")
     if not previous_domain:
@@ -1039,8 +1091,10 @@ def enforce_customer_domain_preservation(current_outputs, vars_json, payload, ru
         if allow_removal:
             return
         vars_json["customer_domain"] = previous_domain
-        vars_json["customer_domain_delegated"] = bool_state_output(
-            current_outputs, "customer_domain_delegated"
+        vars_json["customer_domain_delegated"] = (
+            bool_state_output(current_outputs, "customer_domain_delegated")
+            if has_state_output(current_outputs, "customer_domain_delegated")
+            else True
         )
         vars_json["customer_domain_legacy_retired"] = bool_state_output(
             current_outputs, "customer_domain_legacy_retired"
@@ -1055,7 +1109,11 @@ def enforce_customer_domain_preservation(current_outputs, vars_json, payload, ru
             "reviewed domain migration with allowCustomerDomainRemoval=true."
         )
 
-    previous_delegated = bool_state_output(current_outputs, "customer_domain_delegated")
+    previous_delegated = (
+        bool_state_output(current_outputs, "customer_domain_delegated")
+        if has_state_output(current_outputs, "customer_domain_delegated")
+        else True
+    )
     next_delegated = bool(vars_json.get("customer_domain_delegated", False))
     if previous_delegated and not next_delegated and not allow_removal:
         raise RuntimeError(
@@ -1157,14 +1215,25 @@ def required_config_value(
     label,
     image_names=None,
     default="",
+    app_label="n8n",
 ):
     value = config_value(desired_config, manifest_images, key, env_name, image_names, default)
     if isinstance(value, str) and value:
         return value
     raise RuntimeError(
-        "n8n managed app operation is missing required desired-state field: "
+        f"{app_label} managed app operation is missing required desired-state field: "
         f"{label}."
     )
+
+
+def twenty_public_url_from_domain(domain):
+    if not isinstance(domain, str) or not domain.strip():
+        return ""
+    value = domain.strip()
+    if value.startswith("http://") or value.startswith("https://"):
+        return value.rstrip("/")
+    hostname = value if value.startswith("crm.") else f"crm.{value}"
+    return f"https://{hostname}".rstrip("/")
 
 
 def n8n_public_url_from_domain(domain):
@@ -1601,6 +1670,128 @@ def n8n_terraform_overrides(
     }
 
 
+def twenty_terraform_overrides(
+    operation,
+    desired_config,
+    manifest_images,
+    current_outputs=None,
+    twenty_guardrails=None,
+    payload=None,
+):
+    current_outputs = current_outputs or {}
+    twenty_guardrails = twenty_guardrails or {}
+    payload = payload or {}
+    provisioned = operation != "DESTROY"
+    runtime_enabled = provisioned and operation != "PARK"
+    if not provisioned:
+        return {
+            "twenty_provisioned": False,
+            "twenty_runtime_enabled": False,
+        }
+
+    release_image_uri = first_non_empty_string(
+        release_runtime_image("twenty"),
+        release_runtime_image("twenty-crm"),
+        release_runtime_image("managed-app-twenty"),
+        twenty_guardrails.get("twenty_image_uri", ""),
+    )
+    image_uri = required_config_value(
+        desired_config,
+        manifest_images,
+        "imageUri",
+        "THINKWORK_TWENTY_IMAGE_URI",
+        "imageUri",
+        ["twenty", "twenty-crm", "managed-app-twenty"],
+        default=release_image_uri,
+        app_label="twenty",
+    )
+    inferred_domain = first_non_empty_string(
+        desired_config.get("domain", ""),
+        os.environ.get("THINKWORK_TWENTY_DOMAIN", ""),
+        os.environ.get("THINKWORK_DOMAIN", ""),
+        payload.get("customerDomain", ""),
+        sibling_app_base_domain(state_output(current_outputs, "app_url", "")),
+    )
+    public_url = config_value(
+        desired_config,
+        manifest_images,
+        "publicUrl",
+        "THINKWORK_TWENTY_PUBLIC_URL",
+        default=first_non_empty_string(
+            twenty_guardrails.get("twenty_public_url", ""),
+            state_output(current_outputs, "twenty_url", ""),
+            twenty_public_url_from_domain(inferred_domain),
+        ),
+    )
+    certificate_arn = required_config_value(
+        desired_config,
+        manifest_images,
+        "certificateArn",
+        "THINKWORK_TWENTY_CERTIFICATE_ARN",
+        "certificateArn",
+        default=first_non_empty_string(
+            twenty_guardrails.get("twenty_certificate_arn", ""),
+            payload.get("appCertificateArn", ""),
+        ),
+        app_label="twenty",
+    )
+    db_url_secret_arn = config_value(
+        desired_config,
+        manifest_images,
+        "dbUrlSecretArn",
+        "THINKWORK_TWENTY_DB_URL_SECRET_ARN",
+        default=twenty_guardrails.get("twenty_db_url_secret_arn", ""),
+    )
+    encryption_key_secret_arn = config_value(
+        desired_config,
+        manifest_images,
+        "encryptionKeySecretArn",
+        "THINKWORK_TWENTY_ENCRYPTION_KEY_SECRET_ARN",
+        default=twenty_guardrails.get("twenty_encryption_key_secret_arn", ""),
+    )
+
+    return {
+        "twenty_provisioned": True,
+        "twenty_runtime_enabled": runtime_enabled,
+        "twenty_image_uri": image_uri,
+        "twenty_db_username": config_value(
+            desired_config,
+            manifest_images,
+            "dbUsername",
+            "THINKWORK_TWENTY_DB_USERNAME",
+            default=twenty_guardrails.get("twenty_db_username", "thinkwork_twenty"),
+        ),
+        "twenty_db_name": config_value(
+            desired_config,
+            manifest_images,
+            "dbName",
+            "THINKWORK_TWENTY_DB_NAME",
+            default=twenty_guardrails.get("twenty_db_name", "thinkwork_twenty"),
+        ),
+        "twenty_db_url_secret_arn": db_url_secret_arn,
+        "twenty_encryption_key_secret_arn": encryption_key_secret_arn,
+        "twenty_email_from_address": config_value(
+            desired_config,
+            manifest_images,
+            "emailFromAddress",
+            "THINKWORK_TWENTY_EMAIL_FROM_ADDRESS",
+            default=twenty_guardrails.get("twenty_email_from_address", ""),
+        ),
+        "twenty_email_from_name": config_value(
+            desired_config,
+            manifest_images,
+            "emailFromName",
+            "THINKWORK_TWENTY_EMAIL_FROM_NAME",
+            default=twenty_guardrails.get("twenty_email_from_name", "ThinkWork CRM"),
+        ),
+        "twenty_public_url": public_url,
+        "twenty_certificate_arn": certificate_arn,
+        "deployment_control_plane_create_secret_placeholders": (
+            not db_url_secret_arn or not encryption_key_secret_arn
+        ),
+    }
+
+
 def validate_managed_app_desired_state(payload, desired_config, manifest_images):
     app_key = payload.get("appKey")
     if not app_key:
@@ -1892,6 +2083,19 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
                 n8n_guardrails,
                 twenty_guardrails,
                 plane_guardrails,
+            )
+        )
+        return overrides
+
+    if app_key == "twenty":
+        overrides.update(
+            twenty_terraform_overrides(
+                operation,
+                desired_config,
+                manifest_images,
+                current_outputs,
+                twenty_guardrails,
+                payload,
             )
         )
         return overrides
@@ -4572,6 +4776,7 @@ def main():
     configure_cloudflare_provider_auth(vars_json["stage"])
     configure_terraform_provider_mirror()
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
+    patch_downloaded_customer_domain_module()
     workspace = terraform_workspace_name(vars_json["stage"], payload)
     if workspace != "default":
         selected = subprocess.run(

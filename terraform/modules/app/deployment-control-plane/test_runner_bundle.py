@@ -1621,6 +1621,48 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
     assert overrides["n8n_custom_package_specs"] == ["luxon@3.7.2"]
 
 
+def test_twenty_managed_app_overrides_enable_sparse_payload_from_customer_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    twenty_image_uri = (
+        "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork/twenty"
+        "@sha256:"
+        "5555555555555555555555555555555555555555555555555555555555555555"
+    )
+    monkeypatch.setattr(
+        runner,
+        "release_runtime_image",
+        lambda name: twenty_image_uri if name == "twenty-crm" else "",
+    )
+
+    overrides = runner.managed_app_terraform_overrides(
+        {
+            "appKey": "twenty",
+            "operation": "ENABLE",
+            "desiredConfig": {},
+            "customerDomain": "tei.thinkwork.ai",
+            "appCertificateArn": (
+                "arn:aws:acm:us-east-1:487219502366:certificate/crm"
+            ),
+        },
+        "dev",
+        "487219502366",
+        {},
+        {"resources": []},
+    )
+
+    assert overrides["twenty_provisioned"] is True
+    assert overrides["twenty_runtime_enabled"] is True
+    assert overrides["twenty_image_uri"] == twenty_image_uri
+    assert overrides["twenty_public_url"] == "https://crm.tei.thinkwork.ai"
+    assert (
+        overrides["twenty_certificate_arn"]
+        == "arn:aws:acm:us-east-1:487219502366:certificate/crm"
+    )
+    assert overrides["deployment_control_plane_create_secret_placeholders"] is True
+
+
 def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = load_runner()
     calls: list[list[str]] = []
@@ -2028,6 +2070,33 @@ def test_write_runner_files_preserves_existing_customer_domain_from_state_output
                 "customer_domain_legacy_retired": {"value": False},
             }
         },
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {},
+    )
+
+    assert vars_json["customer_domain"] == "tei.thinkwork.ai"
+    assert vars_json["customer_domain_delegated"] is True
+    assert vars_json["customer_domain_legacy_retired"] is False
+
+
+def test_write_runner_files_defaults_existing_customer_domain_to_delegated_when_legacy_output_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {"outputs": {"customer_domain": {"value": "tei.thinkwork.ai"}}},
     )
 
     vars_json = runner.write_runner_files(

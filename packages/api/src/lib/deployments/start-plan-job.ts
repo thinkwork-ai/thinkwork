@@ -105,9 +105,16 @@ export async function startManagedApplicationPlanJob(
         args.releaseManifestUrl ?? releaseDefaults.releaseManifestUrl,
     });
   const desiredConfigVersion = args.desiredConfigVersion || "v1";
-  const desiredConfig = args.desiredConfig ?? {};
+  let desiredConfig = args.desiredConfig ?? {};
   const manifestImages = args.manifestImages ?? {};
 
+  const controllerConfig = await resolveControllerConfig(deps);
+  desiredConfig = withControllerManagedAppDefaults({
+    appKey,
+    desiredConfig,
+    customerDomain: controllerConfig.customerDomain,
+    appCertificateArn: controllerConfig.appCertificateArn,
+  });
   const application = await ensureManagedApplication({
     tenantId,
     key: appKey,
@@ -116,7 +123,6 @@ export async function startManagedApplicationPlanJob(
     releaseVersion,
     manifestDigest,
   });
-  const controllerConfig = await resolveControllerConfig(deps);
   const stateMachineArn = controllerConfig.stateMachineArn;
   const evidenceBucket = controllerConfig.evidenceBucket;
   const jobId = randomUUID();
@@ -191,6 +197,11 @@ export async function startManagedApplicationPlanJob(
       manifestImages,
       stateMachineArn,
       evidenceBucket,
+      customerDomain: controllerConfig.customerDomain,
+      customerDomainDelegated: controllerConfig.customerDomainDelegated,
+      customerDomainLegacyRetired:
+        controllerConfig.customerDomainLegacyRetired,
+      appCertificateArn: controllerConfig.appCertificateArn,
       idempotencyKey: `${idempotencyKey}:plan-started`,
       deps,
     });
@@ -228,6 +239,12 @@ async function startPendingPlanExecution(
   const operation = job.operation as DeploymentOperation;
   const desiredConfigVersion = job.desired_config_version || "v1";
   const evidenceBucket = job.evidence_bucket ?? controllerConfig.evidenceBucket;
+  const desiredConfig = withControllerManagedAppDefaults({
+    appKey,
+    desiredConfig: planSummary.desiredConfig,
+    customerDomain: controllerConfig.customerDomain,
+    appCertificateArn: controllerConfig.appCertificateArn,
+  });
 
   return startPlanExecution({
     job,
@@ -238,10 +255,14 @@ async function startPendingPlanExecution(
     manifestDigest: job.manifest_digest,
     releaseManifestUrl: planSummary.releaseManifestUrl,
     desiredConfigVersion,
-    desiredConfig: planSummary.desiredConfig,
+    desiredConfig,
     manifestImages: planSummary.manifestImages,
     stateMachineArn: controllerConfig.stateMachineArn,
     evidenceBucket,
+    customerDomain: controllerConfig.customerDomain,
+    customerDomainDelegated: controllerConfig.customerDomainDelegated,
+    customerDomainLegacyRetired: controllerConfig.customerDomainLegacyRetired,
+    appCertificateArn: controllerConfig.appCertificateArn,
     idempotencyKey: `${job.id}:plan-started`,
     deps,
   });
@@ -260,6 +281,10 @@ async function startPlanExecution(args: {
   manifestImages: Record<string, string>;
   stateMachineArn: string;
   evidenceBucket: string | null;
+  customerDomain?: string | null;
+  customerDomainDelegated?: boolean | null;
+  customerDomainLegacyRetired?: boolean | null;
+  appCertificateArn?: string | null;
   idempotencyKey: string;
   deps: DeploymentDeps;
 }): Promise<StartedManagedApplicationPlanJob> {
@@ -279,6 +304,10 @@ async function startPlanExecution(args: {
       desiredConfig: args.desiredConfig,
       manifestImages: args.manifestImages,
       evidenceBucket: args.evidenceBucket,
+      customerDomain: args.customerDomain,
+      customerDomainDelegated: args.customerDomainDelegated,
+      customerDomainLegacyRetired: args.customerDomainLegacyRetired,
+      appCertificateArn: args.appCertificateArn,
     }),
   });
   const evidencePrefix = args.evidenceBucket
@@ -343,6 +372,40 @@ function stringRecordField(value: unknown): Record<string, string> {
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   );
+}
+
+function withControllerManagedAppDefaults(args: {
+  appKey: ManagedAppKey;
+  desiredConfig: Record<string, unknown>;
+  customerDomain?: string | null;
+  appCertificateArn?: string | null;
+}): Record<string, unknown> {
+  if (args.appKey !== "twenty") return args.desiredConfig;
+  const defaults: Record<string, unknown> = {};
+  const customerDomain = args.customerDomain?.trim();
+  if (customerDomain) {
+    const domain = customerDomain.startsWith("crm.")
+      ? customerDomain
+      : `crm.${customerDomain}`;
+    defaults.domain = domain;
+    defaults.publicUrl = `https://${domain}`;
+  }
+  if (process.env.THINKWORK_TWENTY_DOMAIN?.trim()) {
+    defaults.domain = process.env.THINKWORK_TWENTY_DOMAIN.trim();
+  }
+  if (process.env.THINKWORK_TWENTY_PUBLIC_URL?.trim()) {
+    defaults.publicUrl = process.env.THINKWORK_TWENTY_PUBLIC_URL.trim();
+  }
+  const certificateArn =
+    process.env.THINKWORK_TWENTY_CERTIFICATE_ARN?.trim() ||
+    args.appCertificateArn?.trim();
+  if (certificateArn) {
+    defaults.certificateArn = certificateArn;
+  }
+  return {
+    ...defaults,
+    ...args.desiredConfig,
+  };
 }
 
 function resolveControllerConfig(deps: DeploymentDeps) {
