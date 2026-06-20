@@ -484,6 +484,10 @@ describe("provisionPluginInfraComponent", () => {
       "THINKWORK_N8N_SERVICE_CREDENTIAL_SECRET_ARN",
       "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
     );
+    vi.stubEnv(
+      "THINKWORK_N8N_AGENT_STEP_BRIDGE_CREDENTIAL_SECRET_ARN",
+      "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-bridge",
+    );
     vi.stubEnv("THINKWORK_N8N_STORAGE_BUCKET_NAME", "thinkwork-dev-n8n");
     vi.stubEnv("THINKWORK_N8N_DOMAIN", "apps.example.com");
     vi.stubEnv(
@@ -542,6 +546,8 @@ describe("provisionPluginInfraComponent", () => {
           "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-operator",
         serviceCredentialSecretArn:
           "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+        agentStepBridgeCredentialSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-bridge",
         storageBucketName: "thinkwork-dev-n8n",
         storagePrefix: "managed-apps/n8n",
         publicUrl: "https://n8n.apps.example.com",
@@ -577,6 +583,8 @@ describe("provisionPluginInfraComponent", () => {
           "arn:aws:secretsmanager:us-east-1:123456789012:secret:deleted-operator",
         serviceCredentialSecretArn:
           "arn:aws:secretsmanager:us-east-1:123456789012:secret:deleted-service",
+        agentStepBridgeCredentialSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:deleted-bridge",
       },
       currentStatus: "disabled",
       selectedReleaseVersion: "v1.2.3",
@@ -623,6 +631,9 @@ describe("provisionPluginInfraComponent", () => {
     );
     expect(deps.startCalls[0].desiredConfig).not.toHaveProperty(
       "serviceCredentialSecretArn",
+    );
+    expect(deps.startCalls[0].desiredConfig).not.toHaveProperty(
+      "agentStepBridgeCredentialSecretArn",
     );
   });
 

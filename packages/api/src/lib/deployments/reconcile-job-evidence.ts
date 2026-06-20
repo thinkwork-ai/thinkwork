@@ -238,6 +238,10 @@ function desiredConfigPatchFromTerraformOutputs(
       outputs,
       "n8n_service_credential_secret_arn",
     ),
+    agentStepBridgeCredentialSecretArn: stringOutputValue(
+      outputs,
+      "n8n_agent_step_bridge_credential_secret_arn",
+    ),
     storageBucketName: stringOutputValue(outputs, "n8n_storage_bucket_name"),
     storagePrefix: stringOutputValue(outputs, "n8n_storage_prefix"),
     packageConfigDigest: stringOutputValue(

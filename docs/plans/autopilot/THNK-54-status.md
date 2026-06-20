@@ -68,25 +68,39 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
 - 2026-06-20: moved `THNK-54` from `In Progress` to `Verification` after U1
   PR opened. The team has no exact `Review` status, so `Verification` is the
   closest review-state equivalent.
+- 2026-06-20: kept `THNK-54` in `Verification` while U1 PR checks ran and
+  auto-merge completed.
+- 2026-06-20: moved `THNK-54` from `Verification` back to `In Progress` when
+  U2 implementation began.
+- 2026-06-20: moved `THNK-54` from `In Progress` back to `Verification` after
+  U2 PR opened. The team has no exact `Review` status, so `Verification` is the
+  closest review-state equivalent.
 
 ## Active Unit
 
-### U1 - Add bridge-run data model and contract types
+### U2 - Implement bridge credentialing and the start endpoint
 
-Objective: create the durable bridge-run ledger and shared contract helpers for
-n8n agent-step runs, including timeout bounds, idempotency key derivation, and
-safe audit metadata redaction.
+Objective: let stock n8n HTTP Request nodes start or replay an agent-step run
+through a tenant-scoped bridge credential, creating or reusing the bridge-run
+row and dispatching the corresponding ThinkWork agent turn.
 
-Branch: `codex/thnk-54-u1-n8n-agent-step-contract`
+Branch: `codex/thnk-54-u2-n8n-start-endpoint`
 
 Planned files:
 
-- `packages/database-pg/src/schema/n8n-agent-step-runs.ts`
-- `packages/database-pg/src/schema/index.ts`
-- `packages/database-pg/drizzle/NNNN_n8n_agent_step_runs.sql`
-- `packages/database-pg/graphql/types/n8n-agent-step-runs.graphql`
-- `packages/api/src/lib/n8n-agent-step/types.ts`
-- `packages/api/src/lib/n8n-agent-step/contract.test.ts`
+- `plugins/n8n/src/manifest.ts`
+- `plugins/n8n/src/deployment/managed-app.ts`
+- `plugins/n8n/test/manifest.test.ts`
+- `packages/api/src/graphql/resolvers/plugins/n8n-settings.ts`
+- `packages/api/src/graphql/resolvers/plugins/n8n-settings.test.ts`
+- `apps/web/src/components/settings/plugins/n8n/N8nSettings.tsx`
+- `packages/api/src/handlers/n8n-agent-step-bridge.ts`
+- `packages/api/src/lib/n8n-agent-step/auth.ts`
+- `packages/api/src/lib/n8n-agent-step/start.ts`
+- `packages/api/src/lib/n8n-agent-step/payload.ts`
+- `packages/api/src/handlers/n8n-agent-step-bridge.test.ts`
+- `scripts/build-lambdas.sh`
+- `terraform/modules/app/lambda-api/handlers.tf`
 
 ## Progress Log
 
@@ -131,20 +145,116 @@ Planned files:
   files and verified:
   - `pnpm lint:plugin-source`
   - `pnpm lint`
+- Pushed CI fix commit `fix(n8n): document shared bridge contract paths`.
+- CI rerun passed all required checks:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+  - `Migration Drift Precheck (dev)`
+- U1 PR auto-merged at 2026-06-20T21:03:01Z:
+  https://github.com/thinkwork-ai/thinkwork/pull/2750
+- Dispatcher sent a CI follow-up after observing the transient
+  `Migration Drift Precheck (dev)` failure. Rechecked PR #2750 after merge,
+  confirmed GitHub shows the migration precheck rerun succeeded, and posted a
+  `dispatcher:THNK-54:CI:Codex` Linear closure comment with the exact
+  failure/fix/status.
+- Removed local U1 branch. The remote branch had already been deleted by the
+  merge flow.
+- Synced from `origin/main` at merge commit `c667da8a9` and created U2 branch
+  `codex/thnk-54-u2-n8n-start-endpoint`.
+- Implemented U2 bridge credentialing and start/replay endpoint:
+  - added a separate n8n agent-step bridge credential secret ref through the
+    n8n manifest, managed-app adapter, Terraform module, apply-evidence
+    reconciliation, and infra handler defaults;
+  - exposed non-secret bridge endpoint/status metadata in n8n plugin settings
+    and the Plugin Detail settings UI while continuing to redact raw secret and
+    credential fields;
+  - added `POST /api/integrations/n8n/agent-steps` and `OPTIONS` routes backed
+    by the new `n8n-agent-step-bridge` Lambda handler;
+  - added bridge auth, payload validation, resume URL validation, secret
+    reference storage, idempotent ledger start/replay behavior, visible Space
+    thread creation, opening system message persistence, and normal agent
+    wakeup queue dispatch.
+- U2 local verification passed:
+  - `pnpm schema:build`
+  - `pnpm --filter @thinkwork/web codegen`
+  - `pnpm --filter thinkwork-cli codegen`
+  - `pnpm --filter @thinkwork/mobile codegen`
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/auth.test.ts src/lib/n8n-agent-step/start.test.ts src/handlers/n8n-agent-step-bridge.test.ts src/graphql/resolvers/plugins/n8n-settings.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts src/lib/plugins/handlers/infra.test.ts`
+  - `pnpm --filter @thinkwork/plugin-n8n test -- manifest.test.ts`
+  - `pnpm --filter @thinkwork/deployment-runner exec vitest run test/deployment-runner-managed-apps.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck`
+  - `pnpm --filter @thinkwork/web typecheck`
+  - `pnpm --filter thinkwork-cli typecheck`
+  - `pnpm --filter @thinkwork/deployment-runner typecheck`
+  - `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginDetail.test.tsx`
+  - `bash scripts/build-lambdas.sh n8n-agent-step-bridge`
+  - `pnpm lint:plugin-source`
+  - `pnpm lint`
+  - `pnpm dlx prettier@latest --check` on U2-touched parseable files
+  - `git diff --check`
+- U2 lint initially flagged the new shared API handler files as n8n-specific
+  source. Added exact source-boundary allowlist entries for
+  `packages/api/src/handlers/n8n-agent-step-bridge.ts` and its test, then
+  reran `pnpm lint:plugin-source` and `pnpm lint` successfully.
+- `pnpm format:check` could not run because the root `prettier` binary is not
+  installed in this worktree. The equivalent repo-wide `pnpm dlx
+prettier@latest --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports
+  hundreds of pre-existing unrelated formatting warnings; U2-touched parseable
+  files passed a targeted Prettier check.
+- `pnpm --filter @thinkwork/mobile exec tsc --noEmit` was attempted after
+  mobile codegen but failed on existing unrelated mobile TypeScript errors
+  such as missing `@react-navigation/native` typings and stale component prop
+  usages. Mobile has no package `typecheck` script; generated mobile GraphQL
+  artifacts were regenerated as required.
+- Opened U2 PR: https://github.com/thinkwork-ai/thinkwork/pull/2752
+- Moved Linear issue `THNK-54` to `Verification` and posted the PR/status
+  comment with marker `dispatcher:THNK-54:Review:Codex`.
+- U2 verification failed and Linear was moved back to `In Progress` with marker
+  `dispatcher:THNK-54:Verification:Codex`. Verified failure evidence:
+  - `resumeUrl` accepted arbitrary HTTPS origins and paths such as
+    `https://attacker.example.test/not-n8n-waiting?token=leak` instead of
+    requiring the authenticated managed n8n public origin and
+    `/webhook-waiting` path.
+  - an accepted bridge-run row could poison idempotent retries when a side
+    effect failed after ledger insert but before resume-secret storage, visible
+    thread creation, opening message persistence, wakeup queueing, or status
+    update.
+- U2 focused fix pass implemented on the existing PR branch:
+  - bridge auth now carries the managed n8n `publicUrl` from the tenant's
+    managed application desired config;
+  - handler/start validation rejects resume URLs unless they match the managed
+    n8n HTTPS origin and n8n waiting-webhook path before any bridge run work is
+    started;
+  - start/replay now treats incomplete existing runs as recoverable instead of
+    final replay responses, verifies existing resume URL host/path consistency,
+    stores the resume URL secret idempotently, creates or recovers the visible
+    thread, persists the opening message, requires/creates wakeup evidence, and
+    only then marks the run `waiting`.
+- U2 focused fix verification passed:
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/auth.test.ts src/lib/n8n-agent-step/start.test.ts src/handlers/n8n-agent-step-bridge.test.ts src/graphql/resolvers/plugins/n8n-settings.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts src/lib/plugins/handlers/infra.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `bash scripts/build-lambdas.sh n8n-agent-step-bridge`
+  - `pnpm lint:plugin-source`
+  - `git diff --check`
+  - `pnpm dlx prettier@latest --write` on focused U2 touched files
 
 ## Blockers
 
-### 2026-06-20 - U1 PR blocked by dev manual migration gate
+### 2026-06-20 - U1 PR dev manual migration gate (resolved)
 
 PR: https://github.com/thinkwork-ai/thinkwork/pull/2750
 
 Current branch: `codex/thnk-54-u1-n8n-agent-step-contract`
 
 GitHub ruleset `Protected` requires `lint`, `typecheck`, `test`, `verify`, and
-`cla`. Auto-merge is enabled for the PR, but merge remains blocked because
-`Migration Precheck` failed for the new hand-rolled migration. The failing job
-scopes the drift reporter to `packages/database-pg/drizzle/0176_n8n_agent_step_runs.sql`
-and reports every declared object missing in dev:
+`cla`. The first CI run blocked merge because `Migration Precheck` failed for
+the new hand-rolled migration. The failing job scoped the drift reporter to
+`packages/database-pg/drizzle/0176_n8n_agent_step_runs.sql` and reported every
+declared object missing in dev:
 
 - `public.n8n_agent_step_runs`
 - `public.n8n_agent_step_runs_tenant_idempotency_uidx`
@@ -167,9 +277,7 @@ Attempted commands:
 - `gh run view 27883565537 --log-failed` confirmed the dev migration gate
   failure.
 
-Next recommended action: apply
-`packages/database-pg/drizzle/0176_n8n_agent_step_runs.sql` to the dev database
-through an authorized migration path, then rerun `Migration Precheck` on PR 2750. I did not run the manual database mutation because the autopilot contract
-forbids manual production/deployment mutations outside the normal pipeline, and
-the repo's drift gate is explicitly requiring a dev database state change before
-merge.
+Resolution: after the CI-fix push, the rerun of `Migration Drift Precheck (dev)`
+passed. The successful log showed all declared `0176_n8n_agent_step_runs.sql`
+objects present in dev. No manual database mutation was run from this autopilot
+thread.

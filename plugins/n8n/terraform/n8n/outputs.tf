@@ -83,6 +83,11 @@ output "n8n_service_credential_secret_arn" {
   value       = local.effective_service_credential_secret_arn
 }
 
+output "n8n_agent_step_bridge_credential_secret_arn" {
+  description = "Secrets Manager ARN used for the inbound n8n agent-step bridge credential."
+  value       = local.effective_agent_step_bridge_credential_secret_arn
+}
+
 output "n8n_valkey_replication_group_id" {
   description = "ElastiCache replication group ID for the n8n queue."
   value       = aws_elasticache_replication_group.n8n.id

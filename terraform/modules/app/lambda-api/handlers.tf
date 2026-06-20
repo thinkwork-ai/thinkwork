@@ -451,6 +451,7 @@ resource "aws_lambda_function" "handler" {
     "job-trigger",
     "routine-task-weather-email",
     "webhooks",
+    "n8n-agent-step-bridge",
     "webhooks-admin",
     "webhook-deliveries-cleanup",
     "skill-runs-reconciler",
@@ -1067,6 +1068,11 @@ locals {
 
       # Webhooks (public trigger) — legacy PRD-19 tokenized webhooks.
       "POST /webhooks/{proxy+}" = "webhooks"
+
+      # n8n agent-step bridge — public tenant-scoped credential endpoint for
+      # stock n8n HTTP Request nodes.
+      "POST /api/integrations/n8n/agent-steps"    = "n8n-agent-step-bridge"
+      "OPTIONS /api/integrations/n8n/agent-steps" = "n8n-agent-step-bridge"
 
       # Webhooks admin
       "ANY /api/webhooks/{proxy+}" = "webhooks-admin"

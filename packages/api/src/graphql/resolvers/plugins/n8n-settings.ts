@@ -8,6 +8,7 @@ import {
   normalizeN8nPackageConfig,
   type NormalizedN8nPackageConfig,
 } from "@thinkwork/plugin-n8n/package-config";
+import { N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH } from "@thinkwork/plugin-n8n/manifest";
 import type { GraphQLContext } from "../../context.js";
 import { db as defaultDb } from "../../utils.js";
 import {
@@ -225,6 +226,10 @@ function settingsPayload(args: {
     desiredStatus: args.app?.desired_status ?? null,
     currentStatus: args.app?.current_status ?? null,
     desiredConfig: publicDesiredConfig(desiredConfig),
+    agentStepBridgeEndpointPath: N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH,
+    agentStepBridgeCredentialConfigured: Boolean(
+      stringValue(desiredConfig.agentStepBridgeCredentialSecretArn),
+    ),
     currentPackageConfig: packageConfigPayload(packageConfig),
     packageImageUri: stringValue(desiredConfig.packageImageUri),
     packageImageConfigDigest: stringValue(

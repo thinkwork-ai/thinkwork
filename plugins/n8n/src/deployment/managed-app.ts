@@ -47,6 +47,7 @@ const statusOutputs = [
   "n8n_image_digest",
   "n8n_package_config_digest",
   "n8n_service_credential_secret_arn",
+  "n8n_agent_step_bridge_credential_secret_arn",
 ] as const;
 
 const DEFAULT_DATABASE_NAME = "thinkwork_n8n";
@@ -90,6 +91,13 @@ const provisionRequiredInputs: RequiredManagedAppInput[] = [
     description:
       "Secrets Manager ARN containing the tenant service credential used by the native n8n MCP integration.",
     terraformVariable: "n8n_service_credential_secret_arn",
+    secret: true,
+  },
+  {
+    key: "agentStepBridgeCredentialSecretArn",
+    description:
+      "Secrets Manager ARN containing the inbound credential used by n8n workflows to call the ThinkWork agent-step bridge.",
+    terraformVariable: "n8n_agent_step_bridge_credential_secret_arn",
     secret: true,
   },
   {
@@ -195,6 +203,11 @@ export const n8nAdapter: ManagedAppAdapter = {
         desiredConfig,
         "serviceCredentialSecretArn",
         "n8n serviceCredentialSecretArn",
+      ),
+      n8n_agent_step_bridge_credential_secret_arn: requireStringInput(
+        desiredConfig,
+        "agentStepBridgeCredentialSecretArn",
+        "n8n agentStepBridgeCredentialSecretArn",
       ),
       n8n_storage_bucket_name: requireStringInput(
         desiredConfig,
@@ -380,6 +393,10 @@ export const n8nAdapter: ManagedAppAdapter = {
         serviceCredentialSecretArn: stringOutput(
           terraformOutputs,
           "n8n_service_credential_secret_arn",
+        ),
+        agentStepBridgeCredentialSecretArn: stringOutput(
+          terraformOutputs,
+          "n8n_agent_step_bridge_credential_secret_arn",
         ),
       },
     };

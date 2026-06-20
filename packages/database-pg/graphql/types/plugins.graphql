@@ -259,6 +259,8 @@ type N8nPluginSettings {
   desiredStatus: String
   currentStatus: String
   desiredConfig: AWSJSON!
+  agentStepBridgeEndpointPath: String!
+  agentStepBridgeCredentialConfigured: Boolean!
   currentPackageConfig: N8nPackageConfig!
   packageImageUri: String
   packageImageConfigDigest: String
