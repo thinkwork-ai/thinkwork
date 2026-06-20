@@ -43,6 +43,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      manifest_sha256: ${{ steps.manifest_digest.outputs.sha256 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -249,6 +251,12 @@ jobs:
           RELEASE_MANIFEST_KEY_ID: ${{ secrets.RELEASE_MANIFEST_KEY_ID }}
           RELEASE_MANIFEST_PRIVATE_KEY: ${{ secrets.RELEASE_MANIFEST_PRIVATE_KEY }}
           TWENTY_IMAGE_URI: ${{ vars.TWENTY_IMAGE_URI || '' }}
+
+      - name: Compute release manifest digest
+        id: manifest_digest
+        run: |
+          sha256="$(pnpm exec tsx scripts/release/manifest-sha256.ts dist/release/thinkwork-release.json)"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
 
       - name: Upload deployable release assets
         uses: actions/upload-artifact@v4
@@ -490,8 +498,11 @@ jobs:
 
           state_machine_arn="$(tf_output_raw deployment_state_machine_arn 2>/dev/null || echo "")"
           runner_project_name="$(tf_output_raw deployment_runner_project_name 2>/dev/null || echo "")"
-          manifest_path="../../../dist/release/thinkwork-release.json"
-          manifest_sha256="$(shasum -a 256 "$manifest_path" | awk '{print $1}')"
+          manifest_sha256="${{ needs.build-deploy-artifacts.outputs.manifest_sha256 }}"
+          if [ -z "$manifest_sha256" ]; then
+            echo "::error::Build job did not expose a release manifest digest."
+            exit 1
+          fi
           manifest_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_REF_NAME}/thinkwork-release.json"
           release_commit="$(git rev-parse "${RELEASE_REF_NAME}^{commit}")"
 
