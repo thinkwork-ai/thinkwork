@@ -11,19 +11,19 @@ status: in_progress
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
 - Linear issue: `THNK-34`.
 - Target branch: `main`.
-- Current implementation unit: U8 Adapt THNK-14 analytical specs for Thread
-  GenUI.
-- Current branch: `codex/thnk-34-u8-analytics-adapter`.
-- Current worktree:
-  `.Codex/worktrees/thnk-34-u8-analytics-adapter`.
+- Current implementation unit: U3 Render web Thread GenUI with compact
+  fallbacks.
+- Current branch: `codex/thnk-34-u3-web-renderer`.
+- Current worktree: `.Codex/worktrees/thnk-34-u3-web-renderer`.
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
   merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
   [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) merged as
   `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`; U8
-  [#2758](https://github.com/thinkwork-ai/thinkwork/pull/2758) opened.
-- Status: U1 and U2 complete and merged. U8 implementation complete and PR
-  opened from
-  `origin/main` at `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`.
+  [#2758](https://github.com/thinkwork-ai/thinkwork/pull/2758) merged as
+  `4d105e50543937dedd95378dcd71d9e3e98efa5e`; U3
+  [#2760](https://github.com/thinkwork-ai/thinkwork/pull/2760) opened.
+- Status: U1, U2, and U8 complete and merged. U3 implementation in progress
+  from `origin/main` at `a1e42c646636`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
     and U7 in dependency order.
@@ -98,6 +98,24 @@ status: in_progress
   - U8 `pnpm --filter @thinkwork/web test -- src/lib/ui-message-chunk-parser.test.ts src/components/workbench/render-typed-part.test.tsx src/components/workbench/genui/components/AnalyticsDisplayPart.test.tsx`
     passed: 50 tests after Compound review fixes.
   - U8 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U3 `pnpm install` completed with the known optional `canvas@2.11.2` native
+    fallback warning under local Node 25 because `pkg-config` / `pixman-1` are
+    unavailable.
+  - U3 `pnpm --filter @thinkwork/web test -- src/components/workbench/genui/GenUIRenderer.test.tsx src/components/workbench/genui/GenUIFallback.test.tsx src/components/workbench/render-typed-part.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/spaces/ThreadConversation.test.tsx`
+    passed: 5 files, 132 tests after Compound review fixes.
+  - U3 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U3 `pnpm --filter @thinkwork/web test` passed: 175 files, 1326 tests
+    after Compound review fixes.
+  - U3 `pnpm lint` passed.
+  - U3 `pnpm dlx prettier --check <changed web files>` passed. Including
+    `docs/plans/autopilot-status.md` still reports existing ledger markdown
+    formatting drift, so the ledger was kept minimally edited.
+  - U3 `git diff --check` passed.
+  - U3 `pnpm --filter @thinkwork/web build` passed with existing route-file,
+    sourcemap, and large-chunk warnings.
+  - U3 rebased cleanly onto `origin/main` at `a1e42c646636`; post-rebase
+    focused web tests, web typecheck, and `git diff --check origin/main..HEAD`
+    passed.
 - Compound review:
   - Correctness review flagged unrelated upstream MCP changes when diffing
     against the moving `origin/main`; the U1 branch will be rebased before PR so
@@ -128,6 +146,15 @@ status: in_progress
   - U8 correctness review flagged that `AnalyticsDisplayPart` was not wired into
     `render-typed-part`. Fixed by routing `data-genui` parts to
     `AnalyticsDisplayPart` and adding typed-part renderer coverage.
+  - U3 correctness review flagged that malformed persisted `data-genui` input
+    could still crash the invalid fallback path. Fixed by making
+    `GenUIRenderer` accept unknown input, safely extracting fallback metadata,
+    and adding a null-data fail-closed regression.
+  - U3 correctness review flagged that renderer errors stayed stuck even after
+    a later valid payload arrived. Fixed by resetting the GenUI error boundary
+    when the fallback payload changes and adding recovery coverage.
+  - U3 review flagged duplicate key risks in fallback/list rendering. Fixed by
+    including list indexes in fallback and preview keys.
 - CI log:
   - U1 PR #2753 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) twice: once on the initial PR head and again after rebasing because
@@ -138,8 +165,12 @@ status: in_progress
     `test`) after rebasing once because `main` moved.
   - U2 PR #2756 was squash merged to `main` as
     `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`.
+  - U8 PR #2758 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) after rebasing once because `main` moved.
+  - U8 PR #2758 was squash merged to `main` as
+    `4d105e50543937dedd95378dcd71d9e3e98efa5e`.
 - Blockers: none.
-- Next action: monitor U8 PR #2758 CI, fix any failures, and squash merge when
+- Next action: monitor U3 PR #2760 CI, fix any failures, and squash merge when
   green.
 
 ## First-Class Workflow Control Plane - 2026-06-20

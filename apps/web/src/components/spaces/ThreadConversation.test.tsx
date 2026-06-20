@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import { ThreadConversation } from "./ThreadConversation";
 
 afterEach(cleanup);
@@ -95,5 +96,26 @@ describe("ThreadConversation", () => {
     expect(chip).toBeTruthy();
     fireEvent.click(chip);
     expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
+  });
+
+  it("renders persisted data-genui parts through the shared Thread renderer", () => {
+    const part = createTaskReviewGenUIFixture();
+
+    render(
+      <ThreadConversation
+        messages={[
+          {
+            id: "m1",
+            role: "ASSISTANT",
+            content: "",
+            parts: [part],
+            sender: { type: "agent", id: "a1", displayName: "Coordinator" },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("genui-task-review")).toBeTruthy();
+    expect(screen.getByText("Review onboarding task")).toBeTruthy();
   });
 });
