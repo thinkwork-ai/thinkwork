@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import { Badge, Button, Input, Switch } from "@thinkwork/ui";
-import { Loader2, LogIn, LogOut, RefreshCw } from "lucide-react";
+import {
+  KeyRound,
+  Loader2,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  Save,
+} from "lucide-react";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -10,12 +17,15 @@ import {
   callRuntimeMcpTool,
   clearUserMcpToken,
   deleteMcpServer,
-  isManagedMcpServer,
+  getMcpServiceCredentialStatus,
+  isPluginInstalledMcpServer,
   listMcpServers,
   listRuntimeMcpTools,
   listUserMcpServers,
+  saveMcpServiceCredential,
   setMcpServerEnabled,
   type McpServer,
+  type McpServiceCredentialStatus,
   type RuntimeMcpTool,
 } from "@/lib/mcp-api";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
@@ -58,6 +68,14 @@ export function SettingsMcpServerDetail() {
   const [runtimeTools, setRuntimeTools] = useState<DisplayTool[] | null>(null);
   const [toolsLoading, setToolsLoading] = useState(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
+  const [serviceCredentialStatus, setServiceCredentialStatus] =
+    useState<McpServiceCredentialStatus | null>(null);
+  const [serviceCredentialToken, setServiceCredentialToken] = useState("");
+  const [serviceCredentialLoading, setServiceCredentialLoading] =
+    useState(false);
+  const [serviceCredentialError, setServiceCredentialError] = useState<
+    string | null
+  >(null);
 
   const [{ data: agentData }] = useQuery({
     query: SettingsTenantAgentQuery,
@@ -165,12 +183,38 @@ export function SettingsMcpServerDetail() {
     }
   }, [runtimeAgentId, server]);
 
+  const loadServiceCredentialStatus = useCallback(async () => {
+    if (!tenantSlug || !server || server.authType !== "service_credential") {
+      setServiceCredentialStatus(null);
+      setServiceCredentialError(null);
+      return;
+    }
+    setServiceCredentialLoading(true);
+    setServiceCredentialError(null);
+    try {
+      const status = await getMcpServiceCredentialStatus(tenantSlug, server.id);
+      setServiceCredentialStatus(status);
+    } catch (e) {
+      setServiceCredentialError(
+        e instanceof Error
+          ? e.message
+          : "Failed to load service credential status",
+      );
+    } finally {
+      setServiceCredentialLoading(false);
+    }
+  }, [server, tenantSlug]);
+
   useEffect(() => {
     setRuntimeTools(null);
     setToolsError(null);
     setToolLimit(TOOL_PAGE_SIZE);
     setToolSearch("");
   }, [server?.id]);
+
+  useEffect(() => {
+    void loadServiceCredentialStatus();
+  }, [loadServiceCredentialStatus]);
 
   useEffect(() => {
     const canImport =
@@ -260,6 +304,41 @@ export function SettingsMcpServerDetail() {
     }
   }
 
+  async function saveServiceCredential() {
+    if (!tenantSlug || !server || server.authType !== "service_credential") {
+      return;
+    }
+    setPending(true);
+    setNotice(null);
+    setServiceCredentialError(null);
+    try {
+      const result = await saveMcpServiceCredential(
+        tenantSlug,
+        server.id,
+        serviceCredentialToken,
+      );
+      setServiceCredentialToken("");
+      setServiceCredentialStatus((current) => ({
+        authType: current?.authType ?? "service_credential",
+        credentialKind: current?.credentialKind ?? null,
+        hasCredential: true,
+        lastFour: result.lastFour ?? current?.lastFour ?? null,
+        secretRefConfigured: current?.secretRefConfigured ?? true,
+        headerName: result.headerName ?? current?.headerName ?? null,
+        secretJsonKey: result.secretJsonKey ?? current?.secretJsonKey ?? null,
+      }));
+      setNotice("Service credential saved.");
+      await loadServiceCredentialStatus();
+      if (runtimeAgentId) void loadRuntimeTools();
+    } catch (e) {
+      setServiceCredentialError(
+        e instanceof Error ? e.message : "Failed to save service credential",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
+
   if (!servers && !error) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -294,7 +373,11 @@ export function SettingsMcpServerDetail() {
   });
   const visibleTools = filteredTools.slice(0, toolLimit);
   const hasMoreTools = filteredTools.length > visibleTools.length;
-  const managed = isManagedMcpServer(server);
+  const managed = isPluginInstalledMcpServer(server);
+  const managedDescription =
+    server.managementSource === "plugin"
+      ? "Lifecycle changes are controlled from the plugin settings page."
+      : "Lifecycle changes are controlled from the managed application settings page.";
 
   const statusBadge =
     server.status && server.status !== "approved" ? (
@@ -324,10 +407,18 @@ export function SettingsMcpServerDetail() {
           <SettingsRow label="Status">{statusBadge}</SettingsRow>
           {managed ? (
             <SettingsRow
-              label="Managed application"
-              description="Lifecycle changes are controlled from the managed application settings page."
+              label={
+                server.managementSource === "plugin"
+                  ? "Plugin"
+                  : "Managed application"
+              }
+              description={managedDescription}
             >
-              <Badge variant="outline">System-managed</Badge>
+              <Badge variant="outline">
+                {server.managementSource === "plugin"
+                  ? "Plugin-managed"
+                  : "System-managed"}
+              </Badge>
             </SettingsRow>
           ) : null}
           <SettingsRow
@@ -389,6 +480,90 @@ export function SettingsMcpServerDetail() {
                   Clear
                 </Button>
               ) : null}
+            </SettingsRow>
+          </SettingsSection>
+        ) : null}
+
+        {server.authType === "service_credential" ? (
+          <SettingsSection label="Service credential">
+            <SettingsRow
+              label="Access token"
+              description="Stored server-side and sent as the Authorization header for this MCP server."
+              layout="stacked"
+            >
+              <div className="w-full space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant={
+                      serviceCredentialStatus?.hasCredential
+                        ? "outline"
+                        : "secondary"
+                    }
+                    className={
+                      serviceCredentialStatus?.hasCredential
+                        ? "border-emerald-500/40 text-emerald-400"
+                        : undefined
+                    }
+                  >
+                    {serviceCredentialLoading
+                      ? "Checking"
+                      : serviceCredentialStatus?.hasCredential
+                        ? "Configured"
+                        : "Not configured"}
+                  </Badge>
+                  {serviceCredentialStatus?.lastFour ? (
+                    <span className="font-mono text-xs text-muted-foreground">
+                      ends in {serviceCredentialStatus.lastFour}
+                    </span>
+                  ) : null}
+                  {serviceCredentialStatus?.secretJsonKey ? (
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {serviceCredentialStatus.secretJsonKey}
+                    </span>
+                  ) : null}
+                </div>
+                {serviceCredentialError ? (
+                  <p className="text-sm text-destructive">
+                    {serviceCredentialError}
+                  </p>
+                ) : null}
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <Input
+                    aria-label="Service credential access token"
+                    type="password"
+                    autoComplete="off"
+                    value={serviceCredentialToken}
+                    placeholder={
+                      serviceCredentialStatus?.hasCredential
+                        ? "Paste replacement access token"
+                        : "Paste access token"
+                    }
+                    disabled={pending || serviceCredentialLoading}
+                    onChange={(event) =>
+                      setServiceCredentialToken(event.currentTarget.value)
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={
+                      pending ||
+                      serviceCredentialLoading ||
+                      !serviceCredentialToken.trim()
+                    }
+                    onClick={() => void saveServiceCredential()}
+                  >
+                    {pending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : serviceCredentialStatus?.hasCredential ? (
+                      <Save className="h-4 w-4" />
+                    ) : (
+                      <KeyRound className="h-4 w-4" />
+                    )}
+                    Save token
+                  </Button>
+                </div>
+              </div>
             </SettingsRow>
           </SettingsSection>
         ) : null}
@@ -483,8 +658,9 @@ export function SettingsMcpServerDetail() {
 
         {managed ? (
           <p className="text-right text-sm text-muted-foreground">
-            Use the managed application settings to park or destroy this
-            connector.
+            {server.managementSource === "plugin"
+              ? "Use the plugin settings to uninstall this connector."
+              : "Use the managed application settings to park or destroy this connector."}
           </p>
         ) : (
           <div className="flex justify-end">
