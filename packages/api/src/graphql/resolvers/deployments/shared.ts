@@ -66,7 +66,6 @@ const s3 = new S3Client({});
 const ssm = new SSMClient({});
 let cachedDeploymentControllerConfig: DeploymentControllerConfig | null = null;
 let cachedDeploymentProfile: DeploymentProfileConfig | null = null;
-let cachedDeploymentStatusPointer: DeploymentProfileConfig | null = null;
 
 export interface DeploymentControllerConfig {
   stateMachineArn: string | null;
@@ -474,11 +473,7 @@ export async function resolveDeploymentStatusPointerConfig(
     appCertificateArn: null,
   };
   if (!evidenceBucket) {
-    cachedDeploymentStatusPointer = emptyProfile;
-    return cachedDeploymentStatusPointer;
-  }
-  if (cachedDeploymentStatusPointer?.evidenceBucket === evidenceBucket) {
-    return cachedDeploymentStatusPointer;
+    return emptyProfile;
   }
 
   try {
@@ -500,7 +495,7 @@ export async function resolveDeploymentStatusPointerConfig(
       status.controller && typeof status.controller === "object"
         ? (status.controller as Record<string, unknown>)
         : {};
-    cachedDeploymentStatusPointer = {
+    return {
       releaseVersion: stringField(activeRelease, "version"),
       releaseManifestUrl: stringField(activeRelease, "manifestUrl"),
       releaseManifestSha256: stringField(activeRelease, "manifestSha256"),
@@ -527,26 +522,22 @@ export async function resolveDeploymentStatusPointerConfig(
       ),
       appCertificateArn: stringField(controller, "appCertificateArn"),
     };
-    return cachedDeploymentStatusPointer;
   } catch (error) {
     if (isMissingS3ObjectError(error)) {
-      cachedDeploymentStatusPointer = emptyProfile;
-      return cachedDeploymentStatusPointer;
+      return emptyProfile;
     }
     console.warn(
       `[deployments] deployment status pointer lookup failed: ${
         (error as Error)?.name
       }: ${(error as Error)?.message}`,
     );
-    cachedDeploymentStatusPointer = emptyProfile;
-    return cachedDeploymentStatusPointer;
+    return emptyProfile;
   }
 }
 
 export function resetDeploymentProfileCacheForTests() {
   cachedDeploymentControllerConfig = null;
   cachedDeploymentProfile = null;
-  cachedDeploymentStatusPointer = null;
 }
 
 export function deploymentProfileConfigFromEnv(): DeploymentProfileConfig {

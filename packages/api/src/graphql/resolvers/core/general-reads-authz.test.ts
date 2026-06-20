@@ -259,6 +259,85 @@ describe("deploymentStatus authz", () => {
     });
   });
 
+  it("refreshes the S3 deployment status pointer between reads", async () => {
+    mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
+    vi.stubEnv("STAGE", "tei-e2e");
+    mockSsmSend.mockResolvedValueOnce({
+      Parameter: {
+        Value: JSON.stringify({
+          releaseVersion: "v0.1.0-canary.223",
+          releaseManifestUrl:
+            "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.223/thinkwork-release.json",
+          releaseManifestSha256: "c".repeat(64),
+          controller: {
+            stateMachineArn:
+              "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+            codebuildProjectName: "thinkwork-tei-e2e-deployment-runner",
+            evidenceBucketName:
+              "thinkwork-tei-e2e-637423202447-deploy-evidence",
+          },
+        }),
+      },
+    });
+    mockS3Send
+      .mockResolvedValueOnce({
+        Body: {
+          transformToString: async () =>
+            JSON.stringify({
+              activeRelease: {
+                version: "v0.1.0-canary.224",
+                manifestUrl:
+                  "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.224/thinkwork-release.json",
+                manifestSha256: "d".repeat(64),
+              },
+              controller: {
+                stateMachineArn:
+                  "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+                codebuildProjectName: "thinkwork-tei-e2e-deployment-runner",
+              },
+            }),
+        },
+      })
+      .mockResolvedValueOnce({
+        Body: {
+          transformToString: async () =>
+            JSON.stringify({
+              activeRelease: {
+                version: "v0.1.0-canary.225",
+                manifestUrl:
+                  "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.225/thinkwork-release.json",
+                manifestSha256: "e".repeat(64),
+              },
+              controller: {
+                stateMachineArn:
+                  "arn:aws:states:us-east-1:637423202447:stateMachine:thinkwork-tei-e2e-deployment-orchestrator",
+                codebuildProjectName: "thinkwork-tei-e2e-deployment-runner",
+              },
+            }),
+        },
+      });
+
+    const first = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
+    const second = await deploymentStatusMod.deploymentStatus(
+      null,
+      {},
+      service,
+    );
+
+    expect(first.releaseVersion).toBe("v0.1.0-canary.224");
+    expect(second).toMatchObject({
+      releaseVersion: "v0.1.0-canary.225",
+      releaseManifestUrl:
+        "https://github.com/thinkwork-ai/thinkwork/releases/download/v0.1.0-canary.225/thinkwork-release.json",
+      releaseManifestSha256: "e".repeat(64),
+    });
+    expect(mockS3Send).toHaveBeenCalledTimes(2);
+  });
+
   it("derives Cognee enabled state from deployed Cognee details", async () => {
     mockRequireAdminOrServiceCaller.mockResolvedValue(undefined);
 
