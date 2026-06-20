@@ -351,13 +351,13 @@ resource "terraform_data" "twenty_configuration_guardrails" {
     }
 
     precondition {
-      condition     = var.twenty_db_url_secret_arn != ""
-      error_message = "twenty_provisioned requires twenty_db_url_secret_arn for a dedicated Twenty database URL."
+      condition     = var.twenty_db_url_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
+      error_message = "twenty_provisioned requires twenty_db_url_secret_arn or deployment_control_plane_create_secret_placeholders = true."
     }
 
     precondition {
-      condition     = var.twenty_encryption_key_secret_arn != ""
-      error_message = "twenty_provisioned requires twenty_encryption_key_secret_arn for Twenty ENCRYPTION_KEY."
+      condition     = var.twenty_encryption_key_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
+      error_message = "twenty_provisioned requires twenty_encryption_key_secret_arn or deployment_control_plane_create_secret_placeholders = true."
     }
 
     precondition {

@@ -452,6 +452,10 @@ describe("managed application plan jobs", () => {
         resolveDeploymentControllerConfig: async () => ({
           stateMachineArn: "arn:sfn:from-profile",
           evidenceBucket: "profile-evidence",
+          customerDomain: "tei.thinkwork.ai",
+          customerDomainDelegated: true,
+          customerDomainLegacyRetired: false,
+          appCertificateArn: "arn:aws:acm:us-east-1:123:certificate/crm",
         }),
       },
     );
@@ -464,8 +468,22 @@ describe("managed application plan jobs", () => {
             bucket: "profile-evidence",
             prefix: "tenant-1/twenty/job-1/plan",
           }),
+          desiredConfig: expect.objectContaining({
+            domain: "crm.tei.thinkwork.ai",
+            publicUrl: "https://crm.tei.thinkwork.ai",
+            certificateArn: "arn:aws:acm:us-east-1:123:certificate/crm",
+          }),
         }),
       }),
+    );
+    expect(insertCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          desired_config: expect.objectContaining({
+            publicUrl: "https://crm.tei.thinkwork.ai",
+          }),
+        }),
+      ]),
     );
     expect(updateCalls).toEqual(
       expect.arrayContaining([
