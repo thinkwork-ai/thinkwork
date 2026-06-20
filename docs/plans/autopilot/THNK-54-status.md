@@ -80,26 +80,29 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
 - 2026-06-20: moved `THNK-54` from `In Progress` back to `Verification` after
   U3 PR opened. The team has no exact `Review` status, so `Verification` is the
   closest review-state equivalent.
+- 2026-06-20: moved `THNK-54` from `Verification` back to `In Progress` when
+  U4 implementation began after U3 merged.
+- 2026-06-20: moved `THNK-54` from `In Progress` back to `Verification` after
+  U4 PR opened. The team has no exact `Review` status, so `Verification` is the
+  closest review-state equivalent.
 
 ## Active Unit
 
-### U3 - Wire finalization and human-hold behavior
+### U4 - Deliver n8n resume callbacks with retry and expiry
 
-Objective: convert ThinkWork agent/thread outcomes into n8n bridge terminal,
-resume-pending, waiting, or human-hold states without bypassing existing human
-review mechanics.
+Objective: call n8n's Wait-node resume URL exactly when bridge runs reach
+terminal state or expiry, with bounded retry and visible failure state.
 
-Branch: `codex/thnk-54-u3-n8n-finalization`
+Branch: `codex/thnk-54-u4-n8n-resume-expiry`
 
 Planned files:
 
-- `packages/api/src/lib/n8n-agent-step/finalize.ts`
-- `packages/api/src/lib/n8n-agent-step/link-turn.ts`
-- `packages/api/src/lib/chat-finalize/process-finalize.ts`
-- `packages/api/src/graphql/resolvers/messages/answerUserQuestion.mutation.ts`
-- `packages/api/src/graphql/resolvers/threads/updateThread.mutation.ts`
-- `packages/api/src/handlers/wakeup-processor.ts`
-- related focused tests
+- `packages/api/src/lib/n8n-agent-step/resume.ts`
+- `packages/api/src/lib/n8n-agent-step/resume.test.ts`
+- `packages/api/src/handlers/n8n-agent-step-expirer.ts`
+- `packages/api/src/handlers/n8n-agent-step-expirer.test.ts`
+- `scripts/build-lambdas.sh`
+- `terraform/modules/app/lambda-api/handlers.tf`
 
 ## Progress Log
 
@@ -292,6 +295,74 @@ prettier@latest --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports
 - Opened U3 PR: https://github.com/thinkwork-ai/thinkwork/pull/2755
 - Moved Linear issue `THNK-54` to `Verification` and posted the PR/status
   comment with marker `dispatcher:THNK-54:Review:Codex`.
+- U3 remote checks passed on PR #2755 head `7f01e72f`:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+- U3 PR #2755 squash-merged to `main` at 2026-06-20T22:19:43Z:
+  https://github.com/thinkwork-ai/thinkwork/pull/2755
+- U3 squash merge commit: `2b8f4f4c09d75116c3f5a7d9e2b28f303ebc3cb5`
+- The `gh pr merge --delete-branch` command returned the same local cleanup
+  error because another worktree owns the local `main` branch, but GitHub
+  completed the merge. The remote branch was gone after `git fetch --prune`;
+  local U3 branch was deleted after switching away.
+- Synced from `origin/main` at merge commit `2b8f4f4c` and created U4 branch
+  `codex/thnk-54-u4-n8n-resume-expiry`.
+- Moved Linear issue `THNK-54` to `In Progress` and posted the U4 start comment
+  with marker `dispatcher:THNK-54:InProgress:Codex`.
+- U4 objective: deliver n8n Wait-node resume callbacks with idempotent
+  claim/update behavior, retry/failure metadata, and expiry handling through
+  the bridge ledger.
+- Implemented U4 resume delivery and expiry:
+  - added `resumeN8nAgentStepRun` to conditionally claim `resume_pending`
+    bridge runs, load the stored resume URL secret, post structured results to
+    n8n with a bounded callback timeout, record 2xx success as `resumed`, and
+    persist retryable 5xx/network failure metadata with backoff;
+  - added terminal `resume_failed` handling for 4xx responses and missing or
+    malformed resume URL secrets;
+  - added `sweepN8nAgentStepRuns` and a scheduled `n8n-agent-step-expirer`
+    Lambda to queue expired active runs with an `expired` payload and route
+    due callbacks through the same resume helper;
+  - registered the expirer in the Lambda build script, Terraform handler list,
+    and EventBridge Scheduler at a one-minute cadence;
+  - documented the new shared n8n bridge files in the plugin source boundary
+    allowlist.
+- U4 local verification passed:
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/resume.test.ts src/handlers/n8n-agent-step-expirer.test.ts`
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/resume.test.ts src/handlers/n8n-agent-step-expirer.test.ts src/lib/n8n-agent-step/finalize.test.ts src/handlers/n8n-agent-step-bridge.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `bash scripts/build-lambdas.sh n8n-agent-step-expirer`
+  - `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf`
+  - `pnpm lint:plugin-source`
+  - `pnpm lint`
+  - `pnpm --filter @thinkwork/api test` (531 files passed; 5050 tests passed;
+    3 files / 9 tests skipped by existing live-integration guards)
+  - `pnpm dlx prettier@latest --check` on U4-touched TypeScript, JavaScript,
+    and Markdown files
+  - `git diff --check`
+- Note: an attempted focused Prettier write including
+  `scripts/build-lambdas.sh` and `terraform/modules/app/lambda-api/handlers.tf`
+  formatted parseable files but exited nonzero because Prettier cannot infer
+  parsers for shell or Terraform files. Those files were verified through
+  `terraform fmt -check` and the relevant repo checks instead.
+- Opened U4 PR: https://github.com/thinkwork-ai/thinkwork/pull/2757
+- Moved Linear issue `THNK-54` to `Verification` and posted the PR/status
+  comment with marker `dispatcher:THNK-54:Review:Codex`.
+- U4 remote checks passed on PR #2757 head `0175ef17a`:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+- GitHub then reported PR #2757 as behind `main`. Rebased U4 onto
+  `origin/main` at `6d91bb9bd`. The rebase was clean.
+- Post-rebase verification passed:
+  - `pnpm install --frozen-lockfile` to link the new upstream
+    `@thinkwork/genui` workspace package from `origin/main`
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/resume.test.ts src/handlers/n8n-agent-step-expirer.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
 
 ## Blockers
 

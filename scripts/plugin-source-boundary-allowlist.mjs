@@ -119,6 +119,16 @@ export const sharedPluginTermAllowlist = [
       "shared platform HTTP bridge endpoint coverage for n8n workflow-to-agent starts.",
   },
   {
+    path: "packages/api/src/handlers/n8n-agent-step-expirer.ts",
+    reason:
+      "shared platform scheduled bridge expirer for n8n workflow-to-agent callbacks.",
+  },
+  {
+    path: "packages/api/src/handlers/n8n-agent-step-expirer.test.ts",
+    reason:
+      "shared platform scheduled bridge expirer coverage for n8n workflow-to-agent callbacks.",
+  },
+  {
     path: "packages/database-pg/__tests__/migration-0176-n8n-agent-step-runs.test.ts",
     reason:
       "shared platform database contract coverage for n8n agent-step bridge run state.",
