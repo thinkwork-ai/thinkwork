@@ -77,6 +77,9 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
   closest review-state equivalent.
 - 2026-06-20: moved `THNK-54` from `Verification` back to `In Progress` when
   U3 implementation began after U2 merged.
+- 2026-06-20: moved `THNK-54` from `In Progress` back to `Verification` after
+  U3 PR opened. The team has no exact `Review` status, so `Verification` is the
+  closest review-state equivalent.
 
 ## Active Unit
 
@@ -286,6 +289,9 @@ prettier@latest --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports
   Post-rebase verification passed:
   - `pnpm --filter @thinkwork/api exec vitest run src/lib/n8n-agent-step/finalize.test.ts src/lib/chat-finalize/process-finalize.test.ts src/graphql/resolvers/messages/answerUserQuestion.mutation.test.ts src/graphql/resolvers/threads/updateThread.mutation.test.ts src/handlers/wakeup-processor.dispatch-parity.test.ts`
   - `pnpm --filter @thinkwork/api typecheck`
+- Opened U3 PR: https://github.com/thinkwork-ai/thinkwork/pull/2755
+- Moved Linear issue `THNK-54` to `Verification` and posted the PR/status
+  comment with marker `dispatcher:THNK-54:Review:Codex`.
 
 ## Blockers
 
