@@ -402,10 +402,17 @@ function desiredConfigForPlanJob(args: {
     };
   }
   if (args.appKey === "n8n") {
-    return {
+    const desiredConfig = {
       ...n8nDefaultDesiredConfig(),
       ...existingConfig,
     };
+    if (args.existing && !isRunningManagedApplication(args.existing)) {
+      delete desiredConfig.databaseUrlSecretArn;
+      delete desiredConfig.encryptionKeySecretArn;
+      delete desiredConfig.operatorSecretArn;
+      delete desiredConfig.serviceCredentialSecretArn;
+    }
+    return desiredConfig;
   }
   if (args.existing || !isCompanyBrainSubstrate(args)) {
     return existingConfig;

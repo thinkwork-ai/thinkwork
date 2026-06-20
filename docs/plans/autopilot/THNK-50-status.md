@@ -1435,14 +1435,71 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - `pnpm dlx prettier@3.8.2 --check apps/cli/__tests__/terraform-n8n-fixture.test.ts`
       passed.
     - `git diff --check` passed.
+  - Status: merged in PR #2738 at
+    `f0ddbbf91732113d37d528aab3acdecfb5bf7806` after required checks passed.
+  - Released canary `v0.1.0-canary.236`; verified GitHub release assets
+    `thinkwork-release.json` and `platform-artifacts.tar.gz`. Downloaded
+    manifest byte SHA:
+    `eb36b815bebe3a160e9e694c271ea6c50f8683ebbdce29a5ea0ab48f7d63a4f0`.
+  - Main deploy run `27869825424` succeeded. The failed legacy n8n destroy
+    state was reconciled.
+  - Re-drove deployed n8n uninstall for install
+    `dfb2b0d7-65c4-4df8-8d31-3bff061344d8`; destroy job
+    `5fcb46b5-db96-4675-8e13-0c0a77319a3d` selected canary `236`, reached
+    `awaiting_approval`, was approved with destructive confirmation
+    `DESTROY`, and applied successfully.
+  - Verified stale n8n plugin row deletion after re-driving uninstall; ECS
+    services remained inactive and the n8n ALB was absent before reinstall.
+  - Fresh deployed n8n install `138db5b7-0e47-4480-87b2-2117e2087587`
+    created runtime job `2bfcfc11-324d-470f-a143-0cf949546e14`. The plan
+    selected canary `236`, reached `awaiting_approval`, and was approved.
+  - Fresh install apply failed in CodeBuild build
+    `thinkwork-dev-deployment-runner:278a8e1a-f2c4-4f0d-8dfa-effe6d12c2ba`.
+    Root cause: the new install reused an old generated
+    `databaseUrlSecretArn` from the surviving n8n managed-application desired
+    config/guardrails. That secret had been deleted during teardown, so
+    `sync-database.py up` failed with `ResourceNotFoundException` while reading
+    the stale database URL secret.
+- n8n reinstall generated-secret refresh follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-reinstall-secret-refresh`
+  - Objective: make a fresh n8n plugin install after managed uninstall
+    regenerate Terraform-owned runtime secrets instead of reusing deleted
+    generated secret ARNs from prior desired config or Terraform guardrail
+    state.
+  - Implementation summary:
+    - API infra provisioning drops n8n generated runtime secret refs
+      (`databaseUrlSecretArn`, `encryptionKeySecretArn`, `operatorSecretArn`,
+      `serviceCredentialSecretArn`) when enabling an existing disabled n8n
+      managed application row, while preserving operator-facing config such as
+      URL, counts, storage, and package settings.
+    - Deployment runner ignores generated n8n secret refs from guardrail state
+      on ENABLE so Terraform can recreate placeholder secrets; UPGRADE retains
+      the guardrail fallback behavior.
+    - Added API and runner tests for stale generated secret refs during n8n
+      reinstall.
+  - Local verification:
+    - `pnpm --filter @thinkwork/api test -- handlers/infra.test.ts` passed.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k 'n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
+      passed.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed: 84 tests.
+    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`
+      passed.
+    - `pnpm dlx prettier@3.8.2 --check packages/api/src/lib/plugins/handlers/infra.ts packages/api/src/lib/plugins/handlers/infra.test.ts`
+      passed.
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed.
+    - `git diff --check` passed.
   - Status: active; preparing PR.
 
 ## Blockers
 
-- Active blocker: main deploy for canary `235` found a legacy Terraform state
-  compatibility bug in the new n8n database lifecycle destroy hook. A
-  follow-up compatibility fix is in progress.
-- Active fix in progress: merge and release the legacy destroy compatibility
-  fix, rerun deploy/reset, then reinstall through app.thinkwork.ai until the
-  n8n ECS main/worker services, `https://n8n.thinkwork.ai`, and all plugin
-  components verify successfully end to end.
+- Active blocker: fresh n8n install after a successful destroy reused deleted
+  generated n8n secret ARNs from prior desired config/guardrails. A follow-up
+  reinstall secret-refresh fix is in progress.
+- Active fix in progress: merge and release the reinstall secret-refresh fix,
+  clean up the failed partial install, then reinstall through app.thinkwork.ai
+  until the n8n ECS main/worker services, `https://n8n.thinkwork.ai`, and all
+  plugin components verify successfully end to end.

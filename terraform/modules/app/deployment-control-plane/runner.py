@@ -1484,33 +1484,50 @@ def n8n_terraform_overrides(
             "n8n managed app operation is missing required desired-state field: "
             "databaseAdminSecretArn."
         )
+    generated_secret_guardrail_default = "" if operation == "ENABLE" else None
     database_url_secret_arn = config_value(
         desired_config,
         manifest_images,
         "databaseUrlSecretArn",
         "THINKWORK_N8N_DATABASE_URL_SECRET_ARN",
-        default=n8n_guardrails.get("n8n_database_url_secret_arn", ""),
+        default=(
+            generated_secret_guardrail_default
+            if generated_secret_guardrail_default is not None
+            else n8n_guardrails.get("n8n_database_url_secret_arn", "")
+        ),
     )
     encryption_key_secret_arn = config_value(
         desired_config,
         manifest_images,
         "encryptionKeySecretArn",
         "THINKWORK_N8N_ENCRYPTION_KEY_SECRET_ARN",
-        default=n8n_guardrails.get("n8n_encryption_key_secret_arn", ""),
+        default=(
+            generated_secret_guardrail_default
+            if generated_secret_guardrail_default is not None
+            else n8n_guardrails.get("n8n_encryption_key_secret_arn", "")
+        ),
     )
     operator_secret_arn = config_value(
         desired_config,
         manifest_images,
         "operatorSecretArn",
         "THINKWORK_N8N_OPERATOR_SECRET_ARN",
-        default=n8n_guardrails.get("n8n_operator_secret_arn", ""),
+        default=(
+            generated_secret_guardrail_default
+            if generated_secret_guardrail_default is not None
+            else n8n_guardrails.get("n8n_operator_secret_arn", "")
+        ),
     )
     service_credential_secret_arn = config_value(
         desired_config,
         manifest_images,
         "serviceCredentialSecretArn",
         "THINKWORK_N8N_SERVICE_CREDENTIAL_SECRET_ARN",
-        default=n8n_guardrails.get("n8n_service_credential_secret_arn", ""),
+        default=(
+            generated_secret_guardrail_default
+            if generated_secret_guardrail_default is not None
+            else n8n_guardrails.get("n8n_service_credential_secret_arn", "")
+        ),
     )
     certificate_arn = required_config_value(
         desired_config,
