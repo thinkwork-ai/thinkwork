@@ -7,6 +7,11 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  THREAD_GENUI_PART_TYPE,
+  createTaskReviewGenUIFixture,
+  createThreadGenUISpecHash,
+} from "@thinkwork/genui";
+import {
   __PROTOCOL_TYPE_SETS,
   parseChunkPayload,
 } from "./ui-message-chunk-parser";
@@ -122,6 +127,17 @@ describe("parseChunkPayload", () => {
         data: { percent: 42 },
       });
       expect(result.kind).toBe("protocol");
+    });
+
+    it("parses a valid data-genui part using the shared contract", () => {
+      const result = parseChunkPayload(createTaskReviewGenUIFixture());
+      expect(result.kind).toBe("protocol");
+      if (result.kind === "protocol") {
+        expect(result.chunk).toMatchObject({
+          type: THREAD_GENUI_PART_TYPE,
+          id: "genui:task-review:123",
+        });
+      }
     });
 
     it("parses runbook confirmation and queue data parts", () => {
@@ -298,6 +314,31 @@ describe("parseChunkPayload", () => {
     it("drops error chunk missing errorText", () => {
       const result = parseChunkPayload({ type: "error" });
       expect(result.kind).toBe("drop");
+    });
+
+    it("drops malformed data-genui before merge", () => {
+      const result = parseChunkPayload({
+        type: THREAD_GENUI_PART_TYPE,
+        id: "genui:bad",
+        data: { status: "ready" },
+      });
+      expect(result.kind).toBe("drop");
+      if (result.kind === "drop") {
+        expect(result.reason).toBe("MALFORMED_PROTOCOL_FIELDS");
+      }
+    });
+
+    it("drops data-genui payloads that fail canonical validation", () => {
+      const fixture = createTaskReviewGenUIFixture();
+      fixture.data.spec.elements.review.component = "UnapprovedChart3D";
+      fixture.data.specHash = createThreadGenUISpecHash(fixture.data.spec);
+
+      const result = parseChunkPayload(fixture);
+
+      expect(result.kind).toBe("drop");
+      if (result.kind === "drop") {
+        expect(result.reason).toBe("MALFORMED_PROTOCOL_FIELDS");
+      }
     });
   });
 

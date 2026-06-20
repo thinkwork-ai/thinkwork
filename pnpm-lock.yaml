@@ -172,6 +172,9 @@ importers:
       '@thinkwork/deployment-profile':
         specifier: workspace:*
         version: link:../../packages/deployment-profile
+      '@thinkwork/genui':
+        specifier: workspace:*
+        version: link:../../packages/genui
       '@thinkwork/pricing-config':
         specifier: workspace:*
         version: link:../../packages/pricing-config
@@ -443,6 +446,9 @@ importers:
       '@thinkwork/desktop-ipc':
         specifier: workspace:*
         version: link:../../packages/desktop-ipc
+      '@thinkwork/genui':
+        specifier: workspace:*
+        version: link:../../packages/genui
       '@thinkwork/graph':
         specifier: workspace:*
         version: link:../../packages/graph
@@ -678,6 +684,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
+      '@thinkwork/genui':
+        specifier: workspace:*
+        version: link:../genui
       '@thinkwork/pi-aws':
         specifier: workspace:*
         version: link:../pi-aws
@@ -793,6 +802,9 @@ importers:
       '@thinkwork/evals-core':
         specifier: workspace:*
         version: link:../evals-core
+      '@thinkwork/genui':
+        specifier: workspace:*
+        version: link:../genui
       '@thinkwork/lambda':
         specifier: workspace:*
         version: link:../lambda
@@ -1128,6 +1140,15 @@ importers:
         specifier: ^3.2.1
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
 
+  packages/genui:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+
   packages/graph:
     dependencies:
       d3-force:
@@ -1357,6 +1378,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: 0.76.0
         version: 0.76.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+      '@thinkwork/genui':
+        specifier: workspace:*
+        version: link:../genui
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
