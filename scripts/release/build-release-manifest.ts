@@ -773,6 +773,7 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
         source: `${TERRAFORM_MODULE_SOURCE}//modules/app/twenty`,
         version,
       },
+      requiredArtifacts: ["twenty-thinkwork-app"],
       requiredImages: ["twenty"],
       smokeContracts: [
         {

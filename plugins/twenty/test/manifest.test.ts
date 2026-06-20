@@ -134,9 +134,7 @@ describe("twenty plugin manifest", () => {
     expect(applicationConfig).toContain("THINKWORK_TRIGGER_STAGE");
     expect(applicationConfig).toContain('value: "Customer"');
     expect(applicationConfig).toContain("TWENTY_WORKSPACE_ID");
-    expect(applicationConfig).toContain(
-      "014f32a0-5868-402a-8152-225e54c4cf29",
-    );
+    expect(applicationConfig).toContain("014f32a0-5868-402a-8152-225e54c4cf29");
     expect(settingsComponent).toContain("defineFrontComponent");
     expect(settingsComponent).toContain(
       "THINKWORK_SETTINGS_FRONT_COMPONENT_UNIVERSAL_IDENTIFIER",
@@ -161,10 +159,17 @@ describe("twenty plugin manifest", () => {
     expect(workflowAction).not.toContain("opportunity.won");
   });
 
-  it("documents the guarded deployment sync path for installing the native app", () => {
+  it("documents native app release packaging and guarded sync paths", () => {
+    const releaseWorkflow = readRepo(".github/workflows/release.yml");
     const deployWorkflow = readRepo(".github/workflows/deploy.yml");
     const operationsWorkflow = readRepo(
       ".github/workflows/twenty-thinkwork-app.yml",
+    );
+    const manifestBuilder = readRepo(
+      "scripts/release/build-release-manifest.ts",
+    );
+    const runner = readRepo(
+      "terraform/modules/app/deployment-control-plane/runner.py",
     );
     const syncScript = readRepo(
       "plugins/twenty/scripts/sync-thinkwork-app.mjs",
@@ -173,6 +178,16 @@ describe("twenty plugin manifest", () => {
       "plugins/twenty/scripts/wire-thinkwork-workflow.mjs",
     );
 
+    expect(releaseWorkflow).toContain("Stage Twenty ThinkWork app package");
+    expect(releaseWorkflow).toContain("twenty-thinkwork-app.tar.gz");
+    expect(releaseWorkflow).toContain("name=twenty-thinkwork-app,type=seed");
+    expect(manifestBuilder).toContain(
+      'requiredArtifacts: ["twenty-thinkwork-app"]',
+    );
+    expect(runner).toContain("stage_managed_app_release_artifacts");
+    expect(runner).toContain("sync_twenty_thinkwork_app");
+    expect(runner).toContain("twentyAppSyncApiKey");
+    expect(runner).toContain("managedAppPostInstall");
     expect(deployWorkflow).toContain("sync_twenty_thinkwork_app");
     expect(deployWorkflow).toContain("TWENTY_DEPLOY_API_KEY");
     expect(deployWorkflow).toContain("TWENTY_APP_SYNC_API_KEY");
@@ -213,7 +228,9 @@ describe("twenty plugin manifest", () => {
     expect(wireScript).toContain("{{trigger.properties.after.name}}");
     expect(wireScript).toContain("{{trigger.properties.after.companyId}}");
     expect(wireScript).toContain("{{trigger.properties.after.updatedAt}}");
-    expect(wireScript).toContain("{{trigger.properties.after.amount.amountMicros}}");
+    expect(wireScript).toContain(
+      "{{trigger.properties.after.amount.amountMicros}}",
+    );
     expect(wireScript).not.toContain("{{trigger.object.");
     expect(wireScript).not.toContain("AWS_LAMBDA");
   });

@@ -36,6 +36,15 @@ if ! compgen -G "$RELEASE_DIR/static/*.tar.gz" >/dev/null; then
   exit 66
 fi
 
+bundle_members=(lambdas static runner)
+if [[ -d "$RELEASE_DIR/managed-apps" ]]; then
+  if ! compgen -G "$RELEASE_DIR/managed-apps/*.tar.gz" >/dev/null; then
+    echo "Managed app package directory has no tarballs: $RELEASE_DIR/managed-apps" >&2
+    exit 66
+  fi
+  bundle_members+=(managed-apps)
+fi
+
 rm -f "$BUNDLE_PATH"
-tar -C "$RELEASE_DIR" -czf "$BUNDLE_PATH" lambdas static runner
+tar -C "$RELEASE_DIR" -czf "$BUNDLE_PATH" "${bundle_members[@]}"
 echo "Wrote platform release artifact bundle: $BUNDLE_PATH"

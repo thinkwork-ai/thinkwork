@@ -1663,6 +1663,95 @@ def test_twenty_managed_app_overrides_enable_sparse_payload_from_customer_domain
     assert overrides["deployment_control_plane_create_secret_placeholders"] is True
 
 
+def test_twenty_managed_app_stages_native_app_seed_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    calls: list[dict] = []
+
+    def fake_sync_release_artifacts(**kwargs):
+        calls.append(kwargs)
+        return {"twenty-thinkwork-app": Path("/tmp/twenty-thinkwork-app.tar.gz")}
+
+    monkeypatch.setattr(runner, "sync_release_artifacts", fake_sync_release_artifacts)
+
+    artifacts = runner.stage_managed_app_release_artifacts(
+        "update",
+        {"appKey": "twenty", "operation": "ENABLE"},
+    )
+
+    assert artifacts == {"twenty-thinkwork-app": Path("/tmp/twenty-thinkwork-app.tar.gz")}
+    assert calls == [
+        {
+            "artifact_types": {"seed"},
+            "artifact_names": {"twenty-thinkwork-app"},
+        }
+    ]
+    assert runner.stage_managed_app_release_artifacts(
+        "update",
+        {"appKey": "twenty", "operation": "PARK"},
+    ) == {}
+    assert runner.stage_managed_app_release_artifacts(
+        "plan",
+        {"appKey": "twenty", "operation": "ENABLE"},
+    ) == {}
+
+
+def test_twenty_post_install_sync_uses_release_artifact_and_secret_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    release_dir = tmp_path / "release"
+    archive_path = tmp_path / "twenty-thinkwork-app.tar.gz"
+    write_tar(
+        archive_path,
+        {
+            "plugins/twenty/scripts/sync-thinkwork-app.mjs": b"console.log('sync');\n",
+            "plugins/twenty/twenty-app/package.json": b"{}",
+        },
+    )
+    outputs_path = tmp_path / "outputs.json"
+    outputs_path.write_text(
+        json.dumps(
+            {
+                "twenty_runtime_enabled": {"value": True},
+                "twenty_url": {"value": "https://crm.tei.thinkwork.ai"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[dict] = []
+
+    def fake_run(args, **kwargs):
+        calls.append({"args": args, **kwargs})
+
+    monkeypatch.setattr(runner, "RELEASE", release_dir)
+    monkeypatch.setattr(runner, "MANAGED_APP_EVIDENCE", {})
+    monkeypatch.setattr(runner, "run", fake_run)
+
+    runner.sync_twenty_thinkwork_app(
+        outputs_path,
+        {"twenty_public_url": "https://crm-fallback.tei.thinkwork.ai"},
+        {"appKey": "twenty", "operation": "ENABLE"},
+        {"twentyAppSyncApiKey": "secret-api-key"},
+        {"twenty-thinkwork-app": archive_path},
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["args"][0] == "node"
+    assert "secret-api-key" not in " ".join(str(part) for part in calls[0]["args"])
+    assert calls[0]["env"]["TWENTY_APP_SYNC_API_KEY"] == "secret-api-key"
+    assert calls[0]["env"]["TWENTY_PUBLIC_URL"] == "https://crm.tei.thinkwork.ai"
+    assert calls[0]["env"]["TWENTY_THINKWORK_APP_SYNC_DRY_RUN"] == "0"
+    assert runner.MANAGED_APP_EVIDENCE["twentyThinkWorkApp"] == {
+        "status": "installed",
+        "artifact": "twenty-thinkwork-app",
+        "publicUrl": "https://crm.tei.thinkwork.ai",
+        "operation": "ENABLE",
+    }
+
+
 def test_managed_app_success_refreshes_root_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = load_runner()
     calls: list[list[str]] = []

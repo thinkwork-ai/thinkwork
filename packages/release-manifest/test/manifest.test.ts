@@ -70,6 +70,16 @@ function manifest(overrides: Partial<ThinkWorkReleaseManifest> = {}) {
           "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
         sizeBytes: 5,
       },
+      {
+        name: "twenty-thinkwork-app",
+        type: "seed",
+        fileName: "twenty-thinkwork-app.tar.gz",
+        relativePath: "managed-apps/twenty-thinkwork-app.tar.gz",
+        url: "https://example.test/twenty-thinkwork-app.tar.gz",
+        sha256:
+          "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+        sizeBytes: 4,
+      },
     ],
     runtimeImages: [
       {
@@ -106,7 +116,7 @@ function manifest(overrides: Partial<ThinkWorkReleaseManifest> = {}) {
           source: "thinkwork-ai/thinkwork/aws//modules/app/plane",
           version: "1.2.3",
         },
-        requiredArtifacts: [],
+        requiredArtifacts: ["twenty-thinkwork-app"],
         smokeContracts: [
           {
             id: "plane-runtime-health",
@@ -165,7 +175,7 @@ describe("release manifest contract", () => {
             sha256:
               "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
             sizeBytes: 4,
-            contains: ["graphql-http"],
+            contains: ["graphql-http", "twenty-thinkwork-app"],
           },
         ],
         artifacts: [
@@ -173,11 +183,18 @@ describe("release manifest contract", () => {
             ...manifest().artifacts[0]!,
             url: null,
           },
+          {
+            ...manifest().artifacts[1]!,
+            url: null,
+          },
         ],
       }),
     );
 
-    expect(parsed.artifactBundles?.[0]?.contains).toEqual(["graphql-http"]);
+    expect(parsed.artifactBundles?.[0]?.contains).toEqual([
+      "graphql-http",
+      "twenty-thinkwork-app",
+    ]);
     expect(parsed.artifacts[0]?.url).toBeNull();
   });
 
