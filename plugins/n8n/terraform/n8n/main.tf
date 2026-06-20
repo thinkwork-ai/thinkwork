@@ -222,6 +222,49 @@ resource "terraform_data" "database_lifecycle" {
     database_username         = var.database_username
     database_admin_secret_arn = var.database_admin_secret_arn
     database_url_secret_arn   = local.effective_database_url_secret_arn
+    database_host             = var.database_host
+    database_port             = tostring(var.database_port)
+    sync_script_path          = abspath("${path.module}/scripts/sync-database.py")
+    sync_script_sha256        = filesha256("${path.module}/scripts/sync-database.py")
+    database_url_version_id   = try(aws_secretsmanager_secret_version.n8n["database_url"].version_id, "")
+  }
+
+  triggers_replace = {
+    database_name             = var.database_name
+    database_username         = var.database_username
+    database_admin_secret_arn = var.database_admin_secret_arn
+    database_url_secret_arn   = local.effective_database_url_secret_arn
+    database_host             = var.database_host
+    database_port             = tostring(var.database_port)
+    sync_script_sha256        = filesha256("${path.module}/scripts/sync-database.py")
+    database_url_version_id   = try(aws_secretsmanager_secret_version.n8n["database_url"].version_id, "")
+  }
+
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/scripts/sync-database.py up"
+
+    environment = {
+      N8N_DATABASE_NAME             = var.database_name
+      N8N_DATABASE_USERNAME         = var.database_username
+      N8N_DATABASE_ADMIN_SECRET_ARN = var.database_admin_secret_arn
+      N8N_DATABASE_URL_SECRET_ARN   = local.effective_database_url_secret_arn
+      N8N_DATABASE_HOST             = var.database_host
+      N8N_DATABASE_PORT             = tostring(var.database_port)
+    }
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "python3 ${self.input.sync_script_path} destroy"
+
+    environment = {
+      N8N_DATABASE_NAME             = self.input.database_name
+      N8N_DATABASE_USERNAME         = self.input.database_username
+      N8N_DATABASE_ADMIN_SECRET_ARN = self.input.database_admin_secret_arn
+      N8N_DATABASE_URL_SECRET_ARN   = self.input.database_url_secret_arn
+      N8N_DATABASE_HOST             = self.input.database_host
+      N8N_DATABASE_PORT             = self.input.database_port
+    }
   }
 
   lifecycle {
@@ -235,6 +278,10 @@ resource "terraform_data" "database_lifecycle" {
       error_message = "n8n requires database_url_secret_arn or create_secret_placeholders = true."
     }
   }
+
+  depends_on = [
+    aws_secretsmanager_secret_version.n8n,
+  ]
 }
 
 resource "terraform_data" "configuration_guardrails" {
@@ -757,7 +804,7 @@ resource "aws_ecs_task_definition" "worker" {
     name      = "n8n-worker"
     image     = var.image_uri
     essential = true
-    command   = ["n8n", "worker", "--concurrency=${var.worker_concurrency}"]
+    command   = ["worker", "--concurrency=${var.worker_concurrency}"]
 
     environment = local.base_environment
     secrets     = local.container_secrets

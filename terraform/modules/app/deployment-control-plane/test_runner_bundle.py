@@ -1306,7 +1306,81 @@ def test_plane_managed_app_runner_writes_dns_record_and_target(
     assert "-target=cloudflare_record.plane" in runner.managed_app_terraform_target_args(
         {"appKey": "plane"}
     )
+    assert "-target=cloudflare_record.n8n" in runner.managed_app_terraform_target_args(
+        {"appKey": "n8n"}
+    )
     assert "-target=module.thinkwork.module.n8n" in runner.managed_app_terraform_target_args(
+        {"appKey": "n8n"}
+    )
+
+
+def test_n8n_managed_app_runner_writes_dns_record_and_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        runner,
+        "current_terraform_state",
+        lambda _stage: {
+            "outputs": {
+                "db_secret_arn": {
+                    "value": (
+                        "arn:aws:secretsmanager:us-east-1:"
+                        "637423202447:secret:thinkwork-dev-db-credentials"
+                    )
+                },
+                "deployment_control_plane_enabled": {"value": True},
+                "n8n_provisioned": {"value": False},
+                "n8n_runtime_enabled": {"value": False},
+            },
+            "resources": [
+                {
+                    "type": "cloudflare_record",
+                    "name": "app",
+                    "instances": [{"attributes": {"zone_id": "zone_123"}}],
+                }
+            ],
+        },
+    )
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "appKey": "n8n",
+            "operation": "UPGRADE",
+            "desiredConfig": {
+                "databaseName": "thinkwork_n8n",
+                "storagePrefix": "managed-apps/n8n",
+                "publicUrl": "https://n8n.thinkwork.ai",
+                "certificateArn": "arn:aws:acm:us-east-1:637423202447:certificate/test",
+            },
+            "manifestImages": {
+                "n8n-runtime": (
+                    "637423202447.dkr.ecr.us-east-1.amazonaws.com/thinkwork/n8n"
+                    "@sha256:"
+                    "2222222222222222222222222222222222222222222222222222222222222222"
+                ),
+            },
+        },
+        {},
+    )
+
+    tfvars = json.loads((tf_dir / "terraform.auto.tfvars.json").read_text(encoding="utf-8"))
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+
+    assert vars_json["cloudflare_zone_id"] == "zone_123"
+    assert vars_json["n8n_dns_name"] == "n8n.thinkwork.ai"
+    assert vars_json["n8n_dns_enabled"] is True
+    assert tfvars["cloudflare_zone_id"] == "zone_123"
+    assert tfvars["n8n_dns_enabled"] is True
+    assert 'resource "cloudflare_record" "n8n"' in main_tf
+    assert "content = module.thinkwork.n8n_alb_dns_name" in main_tf
+    assert "-target=cloudflare_record.n8n" in runner.managed_app_terraform_target_args(
         {"appKey": "n8n"}
     )
 
@@ -1931,6 +2005,22 @@ def test_validate_managed_app_plan_scope_allows_plane_dns_record() -> None:
             "resource_changes": [
                 {
                     "address": "cloudflare_record.plane[0]",
+                    "change": {"actions": ["create"]},
+                }
+            ]
+        },
+    )
+
+
+def test_validate_managed_app_plan_scope_allows_n8n_dns_record() -> None:
+    runner = load_runner()
+
+    runner.validate_managed_app_plan_scope(
+        {"appKey": "n8n"},
+        {
+            "resource_changes": [
+                {
+                    "address": "cloudflare_record.n8n[0]",
                     "change": {"actions": ["create"]},
                 }
             ]
