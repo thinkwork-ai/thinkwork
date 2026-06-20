@@ -1341,13 +1341,77 @@ U3/U4/U5/U6 before U7; U7 before U8.
       passed.
     - `git diff --check` passed.
   - Status: active.
+- Deployment runner release-manifest byte digest follow-up branch result:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2736
+  - Merge commit: `6087a6e768fbdf52ed0b11ca7e373e06e5078229`
+  - Status: merged after required checks passed.
+  - Released canary `v0.1.0-canary.234`.
+  - Verified active dev release pointer selected manifest byte SHA
+    `63d2ddf08051b6369e521e3230d4a675986889504ed155ac8a1fa71fd016c6c5`,
+    matching the downloaded GitHub release manifest bytes.
+  - Retried deployed n8n teardown for partial install
+    `c040ec95-15f7-4e72-88fc-4407410b1e45`; destroy job
+    `1fba892a-bcd4-499c-9c58-c3f422c9325e` selected canary `234`, reached
+    `awaiting_approval`, was approved with destructive confirmation
+    `DESTROY`, and applied successfully.
+  - Fresh deployed install id `dfb2b0d7-65c4-4df8-8d31-3bff061344d8`
+    created runtime deployment job `5c30be1b-f0c6-4a27-8330-008ff041eddf`.
+    The job selected canary `234`, reached `awaiting_approval`, was approved,
+    and the Terraform apply completed successfully.
+  - Live ECS verification after the apply showed the plugin row marked
+    `installed`, but the n8n runtime was not healthy:
+    `thinkwork-dev-n8n-main` desired count `1` with `0` running tasks and
+    CloudWatch `/thinkwork/dev/n8n/main` reporting
+    `password authentication failed for user "thinkwork_n8n"`.
+  - Worker task logs showed `Error: command n8n not found`, traced to the ECS
+    command overriding the n8n base-image entrypoint with
+    `["n8n", "worker", ...]` instead of passing `["worker", ...]`.
+  - `curl https://n8n.thinkwork.ai/healthz` failed DNS resolution while the
+    public n8n ALB existed, proving the targeted managed-app n8n apply did not
+    create the Cloudflare `n8n.thinkwork.ai` CNAME.
+- n8n runtime install lifecycle follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-install-runtime`
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2737
+  - Objective: make the deployed app.thinkwork.ai n8n install path reliably
+    produce a healthy runtime by fixing the remaining install-time runtime
+    blockers found during canary `234` verification.
+  - Implementation summary:
+    - Added an idempotent n8n database lifecycle hook to the package Terraform
+      module. The hook reads the generated/runtime database secret, creates the
+      dedicated database/role when missing, and always rotates
+      `thinkwork_n8n` to the runtime secret password before ECS task
+      definitions are created.
+    - Added the inverse destroy hook so uninstall terminates n8n sessions and
+      drops the dedicated n8n database/role after services are removed.
+    - Fixed the worker ECS command to pass `worker --concurrency=...` through
+      the n8n base image entrypoint instead of invoking `n8n n8n worker`.
+    - Added n8n Cloudflare DNS wiring to the generated managed-app runner root,
+      including `cloudflare_record.n8n` target args and plan-scope allowlist.
+    - Updated n8n Terraform documentation and structural/runner tests for the
+      database lifecycle, worker command, and managed DNS resource.
+  - Local verification:
+    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py plugins/n8n/terraform/n8n/scripts/sync-database.py`
+      passed.
+    - `terraform fmt plugins/n8n/terraform/n8n` passed.
+    - `terraform -chdir=plugins/n8n/terraform/n8n init -backend=false && terraform -chdir=plugins/n8n/terraform/n8n validate -no-color`
+      passed.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed: 84 tests.
+    - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed.
+    - `pnpm --filter @thinkwork/plugin-n8n test` passed.
+    - `pnpm --filter @thinkwork/deployment-runner test` passed.
+    - `git diff --check` passed.
+  - Status: PR open; waiting on required checks.
 
 ## Blockers
 
-- Active blocker: canary `233` fixed the release pointer and API-side manifest
-  byte-digest validation, but the CodeBuild deployment runner still validates
-  selected release manifests with the old canonical JSON digest. This blocks
-  normal managed-app teardown before Terraform can reset the partial n8n install.
-- Active fix in progress: merge and release the runner byte-digest validation
-  fix, then retry the deployed ThinkWork n8n uninstall/install flow until the
-  n8n runtime and all plugin components provision successfully end to end.
+- Active blocker: none at the repository level. Canary `234` can run the
+  managed-app plan/apply path, but live verification found three runtime
+  reliability defects: stale database role password after reset, doubled worker
+  command through the n8n entrypoint, and missing managed n8n DNS record.
+- Active fix in progress: merge and release the n8n runtime install lifecycle
+  fix, then reset and reinstall through app.thinkwork.ai until the n8n ECS
+  main/worker services, `https://n8n.thinkwork.ai`, and all plugin components
+  verify successfully end to end.

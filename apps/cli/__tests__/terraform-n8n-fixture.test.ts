@@ -19,6 +19,10 @@ const N8N_MAIN = resolve(REPO_ROOT, "plugins/n8n/terraform/n8n/main.tf");
 const N8N_VARS = resolve(REPO_ROOT, "plugins/n8n/terraform/n8n/variables.tf");
 const N8N_OUTPUTS = resolve(REPO_ROOT, "plugins/n8n/terraform/n8n/outputs.tf");
 const N8N_README = resolve(REPO_ROOT, "plugins/n8n/terraform/n8n/README.md");
+const N8N_DB_SCRIPT = resolve(
+  REPO_ROOT,
+  "plugins/n8n/terraform/n8n/scripts/sync-database.py",
+);
 const THINKWORK_MAIN = resolve(
   REPO_ROOT,
   "terraform/modules/thinkwork/main.tf",
@@ -109,7 +113,7 @@ describe("n8n Terraform app module", () => {
     expect(source).toMatch(/resource "aws_ecs_task_definition" "worker"/);
     expect(source).toMatch(/name\s*=\s*"n8n-main"/);
     expect(source).toMatch(/name\s*=\s*"n8n-worker"/);
-    expect(source).toMatch(/command\s*=\s*\["n8n", "worker"/);
+    expect(source).toMatch(/command\s*=\s*\["worker", "--concurrency=/);
     expect(source).toMatch(/name = "EXECUTIONS_MODE"/);
     expect(source).toMatch(/value = var\.queue_mode \? "queue" : "regular"/);
     expect(mainService).toMatch(
@@ -201,6 +205,38 @@ describe("n8n Terraform app module", () => {
     );
     expect(placeholderSecret).toMatch(/recovery_window_in_days\s*=\s*0/);
     expect(placeholderSecret).not.toMatch(/\n\s*name\s*=/);
+  });
+
+  it("synchronizes the dedicated n8n database role before ECS starts", () => {
+    const source = read(N8N_MAIN);
+    const script = read(N8N_DB_SCRIPT);
+    const databaseLifecycle = firstNestedBlock(
+      source,
+      'resource "terraform_data" "database_lifecycle"',
+    );
+    const mainTaskDefinition = firstNestedBlock(
+      source,
+      'resource "aws_ecs_task_definition" "main"',
+    );
+    const workerTaskDefinition = firstNestedBlock(
+      source,
+      'resource "aws_ecs_task_definition" "worker"',
+    );
+
+    expect(databaseLifecycle).toMatch(/triggers_replace\s*=\s*\{/);
+    expect(databaseLifecycle).toMatch(/sync-database\.py up/);
+    expect(databaseLifecycle).toMatch(/when\s*=\s*destroy/);
+    expect(databaseLifecycle).toMatch(
+      /self\.input\.sync_script_path\} destroy/,
+    );
+    expect(databaseLifecycle).toMatch(/database_url_version_id/);
+    expect(databaseLifecycle).toMatch(/aws_secretsmanager_secret_version\.n8n/);
+    expect(mainTaskDefinition).toMatch(/terraform_data\.database_lifecycle/);
+    expect(workerTaskDefinition).toMatch(/terraform_data\.database_lifecycle/);
+    expect(script).toMatch(/CREATE DATABASE/);
+    expect(script).toMatch(/ALTER ROLE %I WITH LOGIN PASSWORD %L/);
+    expect(script).toMatch(/args\.append\("-tA"\)/);
+    expect(script).toMatch(/DROP DATABASE IF EXISTS/);
   });
 
   it("exposes outputs matching the deployment-runner n8n adapter", () => {

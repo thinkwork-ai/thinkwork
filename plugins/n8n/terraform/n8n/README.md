@@ -38,10 +38,11 @@ license/edition decision.
 
 ## Database Lifecycle
 
-Terraform does not create the `thinkwork_n8n` database directly. The
-managed-application setup step must use `database_admin_secret_arn` to create the
-dedicated database/role and write `database_url_secret_arn` before runtime
-starts. The runtime secret must contain these JSON fields:
+The module runs an idempotent managed-app database lifecycle hook before ECS task
+definitions are created. The hook uses `database_admin_secret_arn` to create the
+dedicated database/role when missing and to rotate the role password so it always
+matches `database_url_secret_arn` before runtime starts. The runtime secret must
+contain these JSON fields:
 
 ```json
 {
@@ -55,9 +56,10 @@ The ECS task environment enables PostgreSQL SSL and sets
 encrypted while avoiding n8n startup failures when the container trust store does
 not include the AWS RDS CA bundle.
 
-Destroy must run the inverse managed-app pre-destroy step to inventory storage,
-terminate sessions, and drop the dedicated database and role after Terraform
-parks or removes the services.
+Destroy runs the inverse hook after Terraform parks or removes the services:
+active n8n sessions are terminated, then the dedicated database and role are
+dropped. This keeps uninstall/reinstall verification loops from reusing stale
+database credentials.
 
 ## Secrets
 

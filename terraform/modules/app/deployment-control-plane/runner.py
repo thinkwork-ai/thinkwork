@@ -663,6 +663,7 @@ def managed_app_terraform_target_args(payload):
         return [
             "-target=module.thinkwork.terraform_data.n8n_configuration_guardrails",
             "-target=module.thinkwork.module.n8n",
+            "-target=cloudflare_record.n8n",
         ]
     return []
 
@@ -818,6 +819,7 @@ def validate_managed_app_plan_scope(payload, plan_json):
             "module.thinkwork.module.n8n",
             "module.thinkwork.terraform_data.n8n_configuration_guardrails",
             "module.thinkwork.terraform_data.n8n_runtime_state_guardrails",
+            "cloudflare_record.n8n",
         ],
         "plane": [
             "module.thinkwork.module.plane",
@@ -2041,6 +2043,8 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             ["0.0.0.0/0"],
         ),
         "n8n_kms_key_arns": n8n_guardrails.get("n8n_kms_key_arns", []),
+        "n8n_dns_enabled": False,
+        "n8n_dns_name": "",
         "plane_dns_enabled": False,
         "plane_dns_name": "",
         "plane_provisioned": bool(state_output(current_outputs, "plane_provisioned", False)),
@@ -2086,6 +2090,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
     }
 
     if app_key == "n8n":
+        provisioned = operation != "DESTROY"
         overrides.update(
             n8n_terraform_overrides(
                 stage,
@@ -2098,6 +2103,14 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
                 twenty_guardrails,
                 plane_guardrails,
             )
+        )
+        n8n_dns_name = overrides["n8n_domain"] or url_hostname(overrides["n8n_public_url"])
+        overrides["cloudflare_zone_id"] = overrides[
+            "cloudflare_zone_id"
+        ] or cloudflare_zone_id_for_hostname(stage, n8n_dns_name)
+        overrides["n8n_dns_name"] = n8n_dns_name
+        overrides["n8n_dns_enabled"] = (
+            provisioned and bool(overrides["cloudflare_zone_id"]) and bool(n8n_dns_name)
         )
         return overrides
 
@@ -3925,6 +3938,14 @@ variable "cloudflare_zone_id" {{
   type = string
 }}
 
+variable "n8n_dns_enabled" {{
+  type = bool
+}}
+
+variable "n8n_dns_name" {{
+  type = string
+}}
+
 variable "plane_dns_enabled" {{
   type = bool
 }}
@@ -4090,6 +4111,18 @@ resource "cloudflare_record" "plane" {{
   ttl     = 300
   proxied = false
   comment = "thinkwork-${{var.stage}} plane → Plane public ALB"
+}}
+
+resource "cloudflare_record" "n8n" {{
+  count = var.n8n_dns_enabled ? 1 : 0
+
+  zone_id = var.cloudflare_zone_id
+  name    = var.n8n_dns_name
+  content = module.thinkwork.n8n_alb_dns_name
+  type    = "CNAME"
+  ttl     = 300
+  proxied = false
+  comment = "thinkwork-${{var.stage}} n8n -> n8n public ALB"
 }}
 
 output "app_url" {{ value = module.thinkwork.app_url }}
