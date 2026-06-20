@@ -256,10 +256,10 @@ resource "terraform_data" "database_lifecycle" {
   provisioner "local-exec" {
     when    = destroy
     command = <<-EOT
-      if [ -n "$N8N_DATABASE_SYNC_SCRIPT_PATH" ]; then
+      if [ -n "$N8N_DATABASE_SYNC_SCRIPT_PATH" ] && [ -f "$N8N_DATABASE_SYNC_SCRIPT_PATH" ]; then
         python3 "$N8N_DATABASE_SYNC_SCRIPT_PATH" destroy
       else
-        echo "Skipping n8n database lifecycle destroy for legacy state without sync metadata."
+        echo "Skipping n8n database lifecycle destroy for legacy state without sync metadata or sync script."
       fi
     EOT
 

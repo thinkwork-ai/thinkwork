@@ -1582,12 +1582,33 @@ public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all datab
     - `terraform fmt -check plugins/n8n/terraform/n8n terraform/modules/thinkwork`
       passed.
     - `git diff --check` passed.
+  - Status: merged in PR #2741 at
+    `1c9168c361c30047273c6e1f6e78b2af2ac12f1d`.
+  - Released canary `v0.1.0-canary.239`.
+  - Main deploy run `27873114039` failed during Terraform Apply while tearing
+    down the existing n8n stack. The apply removed the n8n ECS services, ALB,
+    bucket, cache, and security groups, then failed in the legacy
+    `terraform_data.database_lifecycle` destroy provisioner because the stored
+    `N8N_DATABASE_SYNC_SCRIPT_PATH` pointed at a module checkout that no longer
+    contained `scripts/sync-database.py`.
+- n8n legacy destroy-script follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-legacy-destroy-script`
+  - Objective: let the main deployment finish resetting stale n8n Terraform
+    state after the partially completed teardown.
+  - Implementation summary:
+    - The n8n database lifecycle destroy provisioner now calls the persisted
+      sync script only when the script path is present and still exists.
+    - Legacy destroy state with a stale or missing sync script path now logs a
+      skip message and allows Terraform to continue.
   - Status: active; preparing PR.
 
 ## Blockers
 
-- Active blocker: n8n installs and runs, but the public HTTPS endpoint presents
-  the CRM certificate instead of an `n8n.thinkwork.ai` certificate.
-- Active fix in progress: merge and release the dedicated n8n certificate and
-  binary-mode fix, apply/upgrade n8n through app.thinkwork.ai, then verify
-  trusted HTTPS, ECS/log health, and plugin components end to end.
+- Active blocker: main deploy for the dedicated n8n certificate fix failed
+  while cleaning up stale n8n Terraform state because the legacy database
+  destroy provisioner tried to execute a missing sync script path.
+- Active fix in progress: merge and release the legacy destroy-script guard,
+  let main deploy finish the reset, reinstall n8n through app.thinkwork.ai, and
+  verify trusted HTTPS, ECS/log health, and plugin components end to end.
