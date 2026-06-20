@@ -69,8 +69,8 @@ than extract if **all three** of the following are true:
    `skill_runs` dedup partial unique index is the forcing function —
    if any of the three implementations diverges, concurrent runs
    produce duplicate rows and an integration test detects it
-   immediately. The contract is not enforced *by code sharing*; it's
-   enforced *by the database schema the code feeds into*, plus tests
+   immediately. The contract is not enforced _by code sharing_; it's
+   enforced _by the database schema the code feeds into_, plus tests
    on each side.
 
 If any of those is false — the helper is big, extraction is cheap,
@@ -134,7 +134,9 @@ function canonicalizeForHash(value: unknown): string {
 }
 
 function hashResolvedInputs(resolvedInputs: Record<string, unknown>): string {
-  return createHash("sha256").update(canonicalizeForHash(resolvedInputs)).digest("hex");
+  return createHash("sha256")
+    .update(canonicalizeForHash(resolvedInputs))
+    .digest("hex");
 }
 ```
 
@@ -172,8 +174,11 @@ cost.
 - `docs/solutions/best-practices/defer-integration-tests-until-shared-harness-2026-04-21.md`
   — related "defer the shared infrastructure until it earns itself"
   instinct applied to test harnesses.
+- `docs/solutions/architecture-patterns/analytics-display-portable-contract-cross-surface-2026-06-20.md`
+  — counterexample where extraction is justified because duplicated analytics
+  schemas would drift across dashboard, Thread GenUI, runtime, mobile, and future
+  persistence surfaces.
 - auto memory `project_automations_eb_provisioning` — the
-  `scheduled_jobs → job-schedule-manager → AWS Scheduler →
-  job-trigger → wakeups` flow is what routes the `skill_run` trigger
-  type through `packages/lambda/job-trigger.ts`, one of the three
-  inlining sites.
+  `scheduled_jobs → job-schedule-manager → AWS Scheduler → job-trigger → wakeups`
+  flow is what routes the `skill_run` trigger type through
+  `packages/lambda/job-trigger.ts`, one of the three inlining sites.
