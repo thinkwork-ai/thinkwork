@@ -16,6 +16,12 @@ web-first, catalog-constrained, and persisted in `Message.parts` for
 conversation reloads, but not promoted into durable artifacts by default; users
 deliberately promote useful inline UI into durable artifacts.
 
+For analytical charts, graphs, metrics, and tables, THNK-34 consumes the shared
+THNK-14 analytical display/spec foundation instead of defining a parallel
+json-render chart catalog. The Thread GenUI layer owns transport, validation,
+actions, fallbacks, and inline rendering; THNK-14 owns the canonical analytical
+component/spec contract used by durable dashboards and inline Thread adapters.
+
 The preferred render substrate is `@json-render/core` + `@json-render/react`,
 but production adoption is gated by an explicit spike because the current npm
 release has peer and bundle questions against `apps/web`. If the spike fails,
@@ -36,6 +42,13 @@ browser code. The origin requirements define the product shape and explicitly
 defer the technical choices around json-render validation, catalog scope,
 update semantics, action routing, persisted payload shape, fallbacks, promotion,
 and mobile compatibility (see origin: `docs/brainstorms/2026-06-16-generative-ui-json-render-requirements.md`).
+
+The related THNK-14 Analytics plan clarifies one important catalog boundary:
+analytical UI is shared platform surface, not GenUI-only surface. THNK-34 should
+make it possible for an agent to return a ThinkWork-styled chart/graph inline in
+a Thread, but it should do that by wrapping the shared analytics-display spec in
+`data-genui` and mapping it to the same host-owned components used by durable
+Analytics dashboards.
 
 ---
 
@@ -60,6 +73,12 @@ and mobile compatibility (see origin: `docs/brainstorms/2026-06-16-generative-ui
 - R8. If json-render fails, preserve the JSON/catalog product contract with a
   smaller host-owned renderer instead of returning to agent-authored TSX.
 - R10. ThinkWork owns the catalog; agents compose only approved entries.
+- R23. Analytical charts, graphs, metrics, tables, filters, freshness,
+  provenance, and data-display safety come from THNK-14's shared analytical
+  display/spec foundation, not a separate GenUI chart/table catalog.
+- R24. The GenUI catalog provides an adapter for analytical specs once that
+  THNK-14 slice exists; non-analytics GenUI components remain independently
+  shippable.
 
 ### Rendering & Fallbacks
 
@@ -124,6 +143,9 @@ artifact snapshot, AE6 mobile fallback plus existing mobile GenUI continuity.
   small useful subset.
 - V1 does not make json-render a platform-wide dependency until U1 passes the
   adoption gates.
+- V1 does not own the canonical analytical chart/table/metric spec. It consumes
+  THNK-14's `packages/analytics-display` contract when rendering analytical
+  GenUI parts.
 
 ### Deferred to Follow-Up Work
 
@@ -134,6 +156,9 @@ artifact snapshot, AE6 mobile fallback plus existing mobile GenUI continuity.
 - Catalog marketplace, tenant-authored components, or runtime-installed catalog
   entries.
 - Migration of durable applets/artifacts onto the `data-genui` renderer.
+- Analytics dashboard persistence, refresh leases, sharing, and LastMile demo
+  flows. Those remain THNK-14 scope; THNK-34 only renders shared analytical
+  specs inline when present in a Thread.
 
 ---
 
@@ -173,6 +198,9 @@ artifact snapshot, AE6 mobile fallback plus existing mobile GenUI continuity.
   existing durable artifact/applet persistence references.
 - `apps/mobile/lib/genui-registry.ts` is the current mobile `_type`/```genui
   registry precedent; it is not the canonical web contract.
+- THNK-14 now owns the planned `packages/analytics-display` contract and
+  `docs/specs/analytics-display-contract-v1.md`, which GenUI should adapt for
+  inline analytical charts/graphs instead of duplicating chart/table schemas.
 
 ### Institutional Learnings
 
@@ -194,6 +222,11 @@ artifact snapshot, AE6 mobile fallback plus existing mobile GenUI continuity.
   paths.
 - `docs/solutions/architecture-patterns/inert-first-seam-swap-multi-pr-pattern-2026-05-08.md`
   supports landing parser/schema/fallback safely before live runtime emission.
+- `docs/solutions/design-patterns/screen-owned-list-display-adapters-2026-06-14.md`
+  supports keeping reusable primitives generic while screen/domain adapters own
+  semantics. Apply the same split here: `packages/genui` owns Thread transport
+  and adapter registration, while `packages/analytics-display` owns analytics
+  semantics.
 
 ### External References
 
@@ -221,6 +254,7 @@ artifact snapshot, AE6 mobile fallback plus existing mobile GenUI continuity.
 | Actions route through Thread state                             | UI actions become normal host-validated Thread messages or command/wakeup events so the work stays auditable in the conversation.                                                        |
 | Promotion snapshots the current spec                           | A durable artifact captures the current spec and provenance. Later inline updates are conversation state only and do not mutate saved outputs.                                           |
 | Mobile v1 fallback is explicit                                 | Mobile must not blank or crash on `data-genui`; it can render a readable summary/fallback while shared catalog parity is planned later.                                                  |
+| Analytical UI is adapted from THNK-14                          | Thread charts/graphs reuse `packages/analytics-display`; THNK-34 owns the `data-genui` adapter, not a second analytics component/spec system.                                           |
 
 ---
 
@@ -239,6 +273,10 @@ artifact snapshot, AE6 mobile fallback plus existing mobile GenUI continuity.
   specs render a compact `GenUIFallback`, not the generic unknown-data strip.
 - **Promotion semantics:** Use an explicit user gesture that snapshots the
   current spec and source message provenance into the existing artifact path.
+- **THNK-14 relationship:** Use THNK-14's shared analytical display/spec
+  foundation for chart/graph/table/metric specs. GenUI can stream those specs
+  inline, but durable dashboard persistence, refresh, sharing, and demo flows
+  stay in Analytics.
 
 ### Deferred to Implementation
 
@@ -252,6 +290,9 @@ artifact snapshot, AE6 mobile fallback plus existing mobile GenUI continuity.
 - Exact display route for promoted `data-genui` snapshots. Planning chooses
   `ArtifactType.DATA_VIEW` with `metadata.kind = "genui_snapshot"` to avoid an
   enum/schema migration in v1; implementation owns the viewer details.
+- Exact adapter field mapping between `packages/analytics-display` and
+  json-render after THNK-14's U9 contract lands. THNK-34 should not invent the
+  mapping before that contract exists.
 
 ---
 
@@ -266,6 +307,7 @@ sequenceDiagram
   participant Stream as "ThreadTurnStepEvent stream"
   participant Web as "apps/web Thread renderer"
   participant Catalog as "GenUI catalog + validator"
+  participant Analytics as "analytics-display adapter"
   participant Thread as "Message.parts"
   participant Artifact as "Artifact promotion"
 
@@ -276,6 +318,9 @@ sequenceDiagram
     Stream->>Web: deliver chunk
     Web->>Web: replace same type+id part in place
     Web->>Catalog: validate before render
+    opt analytical spec
+      Catalog->>Analytics: adapt shared analytics-display spec
+    end
     Catalog-->>Web: renderable host components
   else invalid spec
     API->>Stream: publish diagnostic data-genui fallback payload
@@ -297,7 +342,10 @@ json-render dependency or live runtime emission should merge until U1 passes.
 ```mermaid
 flowchart TB
   U1["U1 package spike"] --> U2["U2 contract + catalog"]
+  U9A["THNK-14 U9 analytics-display"] --> U8["U8 analytics adapter"]
   U2 --> U3["U3 web render + fallback"]
+  U2 --> U8
+  U8 -. analytics parts only .-> U3
   U2 --> U4["U4 runtime emit + persistence"]
   U3 --> U5["U5 actions"]
   U4 --> U5
@@ -374,14 +422,19 @@ gate fails; the final PR should leave the lockfile in the chosen state.
 - U2. **Define the `data-genui` contract and v1 catalog**
 
 **Goal:** Create the durable contract, TypeScript types, validation schema, and
-small v1 host catalog that all emitters/renderers/promoters use.
+small v1 host catalog that all emitters/renderers/promoters use, with a generic
+adapter registration point that THNK-34 U8 later uses for THNK-14 analytical
+specs.
 
 **Requirements:** R1, R2, R3, R9, R10, R11, R13, R14, R15, R16, R20, R22; AE1,
 AE2, AE3, AE4, AE6.
 
 **Dependencies:** U1 only for the renderer-adapter verdict. The
-substrate-agnostic envelope, shared validation package, and catalog contract can
-start before U1 finishes because they must survive either verdict.
+substrate-agnostic envelope, shared validation package, catalog contract, and
+adapter registration interface can start before U1 finishes because they must
+survive either verdict. The concrete analytics adapter implementation is U8 and
+depends on THNK-14 U9 (`packages/analytics-display`); non-analytics catalog
+work must not import or wait on that package.
 
 **Files:**
 
@@ -392,6 +445,7 @@ start before U1 finishes because they must survive either verdict.
 - Create: `packages/genui/src/spec.ts`
 - Create: `packages/genui/src/validation.ts`
 - Create: `packages/genui/src/actions.ts`
+- Create: `packages/genui/src/adapter-registry.ts`
 - Create: `packages/genui/src/diagnostics.ts`
 - Create: `packages/genui/src/hash.ts`
 - Modify: `packages/api/package.json`
@@ -420,14 +474,23 @@ start before U1 finishes because they must survive either verdict.
 - Include canonicalization and spec-hash helpers in `packages/genui`; action
   submissions and promotion requests must bind to the exact spec revision the
   user saw, not only the stable part id.
-- Keep v1 catalog deliberately small: a task/decision card, metric summary,
-  compact table/list, and simple form/action component are enough to satisfy
-  the requirements without inventing a component marketplace.
+- Keep v1 catalog deliberately small: a task/decision card, workflow status
+  summary, key-value/list preview, and simple form/action component are enough
+  to satisfy the requirements without inventing a component marketplace. These
+  are workflow UI primitives only; dataset-backed analytical metrics, tables,
+  charts, graphs, filters, freshness, and provenance must use U8's
+  `analytics.display` adapter over `packages/analytics-display`.
+- Treat analytical chart/table/metric support as an adapter registration, not
+  native GenUI component ownership. U2 creates only the generic registration
+  interface and fail-closed behavior when an adapter is absent. U8 owns the
+  `packages/analytics-display` import, validation bridge, and concrete
+  `analytics.display` catalog entry.
 - Name the first v1 workflow as **task review and approval**: a Thread agent can
   present a task review card, update its status in place, accept one approved
-  action, and let the user promote the resulting review snapshot. Metric,
-  table/list, and form components should support that workflow first; broader
-  dashboard-style catalog coverage is follow-up unless needed for the workflow.
+  action, and let the user promote the resulting review snapshot. Status
+  summary, key-value/list preview, and form components should support that
+  workflow first; broader dashboard-style or dataset-backed catalog coverage is
+  follow-up unless routed through U8.
 - Validate component names, props, action ids, mobile fallback summaries,
   catalog version compatibility, payload size/depth, table row/chart point
   limits, URL/media fields, strict unknown-key rejection, and disallowed
@@ -458,6 +521,9 @@ start before U1 finishes because they must survive either verdict.
 - Covers AE3. Unknown component `UnapprovedChart3D` fails validation and
   produces a diagnostic payload.
 - Covers AE4. Unknown action id or invalid action params fail closed.
+- Before U8 is registered, analytical chart/table/metric payloads and bespoke
+  GenUI chart schemas fail closed with diagnostics that point to the future
+  `analytics.display` adapter instead of validating as native GenUI components.
 - Edge case: missing `schemaVersion`, missing `spec.root`, missing `elements`,
   non-object props, and oversized payloads fail validation.
 - Edge case: catalog version mismatch either renders through a compatible
@@ -480,6 +546,116 @@ start before U1 finishes because they must survive either verdict.
 - API/runtime/web/mobile import the same `packages/genui` contract in tests.
 - Type/parser/merge tests pass without GraphQL or database schema changes.
 
+- U8. **Adapt THNK-14 analytical specs for Thread GenUI**
+
+**Goal:** Let agents stream ThinkWork-styled charts/graphs/tables inline in
+Threads by wrapping THNK-14 analytics-display specs in `data-genui`, without
+duplicating the Analytics chart/table catalog.
+
+**Requirements:** R3, R5, R10, R13, R15, R16, R20, R21, R23, R24; AE3, AE5,
+AE6.
+
+**Dependencies:** U2, THNK-14 U9 (`packages/analytics-display`). U8 is required
+only for analytical inline UI; the rest of THNK-34 can ship task/decision/form
+GenUI without waiting on Analytics dashboards.
+
+**Files:**
+
+- Create: `packages/genui/src/analytics-adapter.ts`
+- Modify: `packages/genui/src/catalog.ts`
+- Modify: `apps/web/src/components/workbench/genui/GenUIRenderer.tsx`
+- Create: `apps/web/src/components/workbench/genui/components/AnalyticsDisplayPart.tsx`
+- Test: `packages/genui/src/analytics-adapter.test.ts`
+- Test: `apps/web/src/components/workbench/genui/components/AnalyticsDisplayPart.test.tsx`
+
+**Approach:**
+
+- Register an `analytics.display` catalog entry that accepts a
+  schema-versioned analytics-display render payload by value inside the
+  `data-genui` payload. V1 inline analytical parts must be portable: validated
+  display spec, `analyticsDisplayVersion`, bounded inline render data or safe
+  summaries, freshness, provenance, diagnostics, and sensitivity metadata. Do
+  not accept dashboard IDs, dataset IDs, or unresolved Analytics object
+  references in Thread GenUI; future reference-based flows must resolve
+  server-side into this portable payload before streaming or persistence.
+- Validate through `packages/analytics-display` first, then through GenUI's
+  envelope/action/promotion checks. The adapter must not accept raw Recharts
+  config, raw tables, arbitrary colors, remote fetches, or custom chart
+  components.
+- Render through the same ThinkWork-styled analytical components used by durable
+  dashboards, but in Thread density: compact chrome, constrained height,
+  readable fallback summary, and no nested dashboard shell.
+- Define the Thread-density layout contract in this unit, not ad hoc during
+  component implementation: per-kind max height, table preview row limit,
+  chart point/legend/tick behavior, horizontal overflow versus stacking,
+  truncation rules, expand/open affordance if needed, and exact compact fallback
+  summary fields.
+- Define the inline filter posture explicitly. V1 Thread analytics filters are
+  summary-first unless U8 deliberately adds inline controls: applied filters
+  show as compact removable chips, no-match rows render the shared empty state,
+  clearing/changing filters preserves chart state, keyboard/touch behavior is
+  covered by tests, and mobile fallback shows the applied-filter summary even
+  when native controls are unavailable.
+- Render freshness and provenance in a compact, consistent location for valid,
+  empty, error, and mobile fallback states. Source/as-of fields survive
+  promotion snapshots and include accessible text, so copied analytical snippets
+  do not lose their age/source context.
+- Minimize embedded analytical data. The adapter embeds only display-limited
+  aggregate values by default, rejects or redacts configured sensitive/PII
+  fields, caps row/field counts through analytics-display limits, carries
+  provenance/data-source sensitivity metadata, and requires server-side
+  resolution into the portable payload when raw snapshot rows would otherwise
+  be needed. Persisted or streamed Thread payloads must not carry unresolved
+  references.
+- Derive the final `mobileFallback` for analytical parts in U8 from the
+  validated analytics-display payload, formatters, limits, freshness, and
+  provenance. Agent-supplied fallback text can be treated as an optional hint,
+  never as authority, so mobile summaries cannot drift from the rendered chart
+  or table.
+- Keep dashboard persistence separate. If a user promotes an inline analytical
+  GenUI part, the artifact is a snapshot of the current inline spec/provenance;
+  it does not create or mutate an Analytics dashboard unless a future explicit
+  handoff flow is planned.
+
+**Patterns to follow:**
+
+- THNK-14 U9 `packages/analytics-display` contract and renderer adapters.
+- `packages/api/src/lib/applets/source-policy.ts` chart palette/safety policy.
+- `docs/solutions/design-patterns/screen-owned-list-display-adapters-2026-06-14.md`.
+
+**Test scenarios:**
+
+- Valid analytics-display metric/chart/table specs render inline through GenUI
+  using the same display safety rules as dashboards.
+- Dashboard ID, dataset ID, unresolved object-reference, and by-reference
+  analytical payloads are rejected in v1 unless the server has already resolved
+  them into the portable analytics-display render payload.
+- Older persisted analytical `data-genui` payloads with
+  `analyticsDisplayVersion` render through compatible validators or fail into a
+  controlled fallback.
+- A GenUI payload that tries to define a bespoke chart/table schema is rejected
+  with a diagnostic pointing to the analytics-display contract.
+- Snapshot values containing HTML metacharacters render safely in Thread chart
+  labels, tooltips, legends, filter summaries, and table cells.
+- Applied filters render as compact summaries/chips, no-match filters render the
+  shared empty state, and mobile fallback preserves filter summaries.
+- Freshness/provenance render in valid, empty, error, and mobile fallback states
+  and survive promotion snapshots.
+- Oversized or sensitive row/field payloads are capped, redacted, rejected, or
+  converted to safe references according to analytics-display limits.
+- Mobile fallback summary for analytical GenUI is readable and does not require
+  native chart rendering; chart, metric, and table fallback summaries are
+  derived by the U8 adapter from the validated analytics-display payload.
+- Promoting an inline analytical GenUI part creates a GenUI snapshot artifact,
+  not a durable Analytics dashboard.
+
+**Verification:**
+
+- Adapter tests prove GenUI consumes `packages/analytics-display` rather than
+  duplicating analytical spec types.
+- Web smoke renders one inline analytical chart part and one invalid analytical
+  part fallback.
+
 - U3. **Render web Thread GenUI with compact fallbacks**
 
 **Goal:** Render valid `data-genui` parts inline in web Threads and replace the
@@ -489,7 +665,8 @@ unsupported generated UI.
 **Requirements:** R1, R3, R4, R5, R10, R13, R14, R15, R16, R21, R22; AE1,
 AE2, AE3.
 
-**Dependencies:** U1, U2.
+**Dependencies:** U1, U2. Analytical chart/table rendering additionally depends
+on U8, but non-analytics GenUI rendering can ship without U8.
 
 **Files:**
 
@@ -497,8 +674,8 @@ AE2, AE3.
 - Create: `apps/web/src/components/workbench/genui/GenUIFallback.tsx`
 - Create: `apps/web/src/components/workbench/genui/components/TaskReviewCard.tsx`
 - Create: `apps/web/src/components/workbench/genui/components/DecisionPanel.tsx`
-- Create: `apps/web/src/components/workbench/genui/components/MetricSummary.tsx`
-- Create: `apps/web/src/components/workbench/genui/components/CompactTable.tsx`
+- Create: `apps/web/src/components/workbench/genui/components/TaskStatusSummary.tsx`
+- Create: `apps/web/src/components/workbench/genui/components/WorkflowListPreview.tsx`
 - Create: `apps/web/src/components/workbench/genui/components/ActionForm.tsx`
 - Modify: `apps/web/src/components/workbench/render-typed-part.tsx`
 - Modify: `apps/web/src/components/workbench/TaskThreadView.tsx`
@@ -514,6 +691,13 @@ AE2, AE3.
 - Add a `data-genui` branch in `render-typed-part.tsx` that validates before
   rendering. Invalid specs render `GenUIFallback` and preserve surrounding text
   and message layout.
+- For analytical parts, delegate to the U8 adapter so Thread charts/tables use
+  the shared Analytics display contract and component safety rules.
+- While a live-streamed part has not finalized into a persisted assistant
+  message, render actions and promotion affordances disabled with a compact
+  pending state. U5 may add an explicit ephemeral run/seq validation path later,
+  but v1 must not submit actions that require a source message before that
+  source message exists.
 - Track last-good live render state for same-id updates during an active stream:
   an invalid update shows a compact "update rejected" warning beside the
   previous-good UI instead of blanking the card. Persisted final invalid specs
@@ -549,8 +733,13 @@ AE2, AE3.
   no arbitrary code execution.
 - Error path: invalid props render fallback while text before/after the part
   remains visible.
+- Error path: analytical chart/table payloads without a valid analytics-display
+  spec render fallback rather than falling back to a bespoke GenUI chart.
 - Error path: thrown renderer error is caught and converted to fallback.
 - Edge case: empty table/list states render stable empty states.
+- Edge case: actions on a live-but-not-finalized GenUI part are disabled until
+  the assistant message finalizes and the source message/part/spec hash can be
+  verified.
 - Accessibility: action controls have accessible names, keyboard focus, and do
   not trap focus inside a message.
 
@@ -793,6 +982,11 @@ spec with provenance into the existing durable artifact system.
   thread/tenant, source part id existence, and spec-hash equality against the
   server-side persisted/current part before writing the artifact. Client-sent
   provenance is a request, not trusted proof.
+- Promoted artifacts default to promoter-private or inherit the source thread's
+  effective access, whichever is narrower. Promotion never broadens visibility
+  implicitly; explicit sharing is a separate user action. Preserve
+  provenance/sensitivity metadata so analytical snapshots remain auditable
+  outside the original Thread.
 - Specify the promotion UX end to end: the affordance sits inside the valid
   `data-genui` renderer actions area, click enters an in-flight disabled state,
   success shows an inline artifact link with an option to open in the existing
@@ -802,6 +996,9 @@ spec with provenance into the existing durable artifact system.
   `metadata.kind = "genui_snapshot"` and a canonical JSON/S3 payload. Later
   same-id inline replacements do not update the artifact unless a separate
   artifact update flow is explicitly invoked.
+- If the promoted part is analytical, preserve the embedded analytics-display
+  spec as a GenUI snapshot. Do not silently create an Analytics dashboard,
+  dataset, or refresh lease from promotion; that remains THNK-14 scope.
 - Avoid a new artifact enum in v1. If implementation proves `DATA_VIEW` cannot
   represent the snapshot honestly, pause and update this plan before adding a
   schema/codegen migration.
@@ -830,6 +1027,9 @@ spec with provenance into the existing durable artifact system.
   inline GenUI unchanged.
 - Error path: spoofed source message id, missing part id, or mismatched spec hash
   is rejected server-side and does not create an artifact.
+- Error path: a user without source-thread access cannot fetch the promoted
+  artifact or its payload; promotion does not widen access beyond the source
+  Thread by default.
 - Error path: nil/empty source message, source-not-found, part-missing,
   invalid-part, hash-mismatch, and stale repeated-click requests all return
   recoverable UI states without writing artifacts.
@@ -938,6 +1138,8 @@ while the web `data-genui` contract rolls out.
 | Runtime capability lands in direct chat but not wakeup/resume | Medium     | High   | U4 includes parity tests and cites the existing parity learning.                                                               |
 | Promotion accidentally links to mutable inline state          | Medium     | High   | Snapshot spec payload and provenance; test later inline update does not mutate artifact.                                       |
 | Mobile opens a Thread with unsupported web GenUI              | High       | Medium | U7 fallback renders readable summary and preserves existing mobile cards.                                                      |
+| GenUI creates a parallel analytics catalog                    | Medium     | High   | U8 consumes THNK-14 `packages/analytics-display`; bespoke GenUI chart/table schemas are rejected.                              |
+| Analytics adapter blocked on full THNK-14 dashboard delivery  | Medium     | Medium | U8 depends only on THNK-14 U9 shared foundation, not dashboard persistence, refresh, sharing, or LastMile demo units.          |
 
 ---
 
@@ -952,6 +1154,9 @@ while the web `data-genui` contract rolls out.
 - Live rollout should start with a small internal catalog and a fixture/dev
   agent prompt that can produce two cards, one same-id update, one valid action,
   and one invalid-component fallback.
+- Analytical GenUI rollout should wait only for THNK-14 U9. It should not wait
+  for durable dashboard persistence unless the scenario explicitly needs a saved
+  `/analytics` dashboard.
 - Monitor client render errors and validation diagnostics after live emission.
   Unknown `data-genui` failures should be visible but not break the transcript.
 
@@ -965,6 +1170,9 @@ dev environment:
 
 - A web Thread streams at least two valid `data-genui` parts from an agent turn,
   and both render as host-owned inline UI rather than markdown or debug strips.
+- A web Thread streams one analytical chart/graph/table part that uses the
+  THNK-14 analytics-display adapter and does not define a parallel chart/table
+  schema.
 - A same-id update replaces the existing rendered UI in place, and reloading the
   Thread shows the final card exactly once from persisted `Message.parts`.
 - An invalid spec, such as an unapproved component, renders `GenUIFallback`
@@ -989,6 +1197,8 @@ dev environment:
 
 - **Origin document:** [docs/brainstorms/2026-06-16-generative-ui-json-render-requirements.md](../brainstorms/2026-06-16-generative-ui-json-render-requirements.md)
 - **Linear issue:** THNK-34 Generative UI
+- **Related Linear issue:** THNK-14 ThinkWork Analytics, which owns the shared
+  analytical display/spec foundation consumed by U8.
 - **Requirements PR:** https://github.com/thinkwork-ai/thinkwork/pull/2565
 - **Requirements merge commit:** `a3af4a1f59ef4dd55ae0d9ac05ee542f260baf2a`
 - **json-render docs:** https://json-render.dev/docs
@@ -1009,6 +1219,8 @@ dev environment:
 - Related code: `packages/agentcore-pi/agent-container/src/server.ts`
 - Related code: `apps/mobile/lib/graphql-queries.ts`
 - Related code: `apps/mobile/lib/genui-registry.ts`
+- Related future package: `packages/analytics-display` (THNK-14 U9 shared
+  analytical display/spec foundation)
 - Related learning: `docs/plans/2026-05-13-006-feat-computer-inline-genui-fragment-lifecycle-plan.md`
 - Related learning: `docs/solutions/architecture-patterns/recipe-catalog-llm-dsl-validator-feedback-loop-2026-05-01.md`
 - Related learning: `docs/solutions/architecture-patterns/inert-first-seam-swap-multi-pr-pattern-2026-05-08.md`
