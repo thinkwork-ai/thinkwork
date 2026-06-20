@@ -663,6 +663,9 @@ def managed_app_terraform_target_args(payload):
         return [
             "-target=module.thinkwork.terraform_data.n8n_configuration_guardrails",
             "-target=module.thinkwork.module.n8n",
+            "-target=aws_acm_certificate.n8n",
+            "-target=cloudflare_record.n8n_acm_validation",
+            "-target=aws_acm_certificate_validation.n8n",
             "-target=cloudflare_record.n8n",
         ]
     return []
@@ -819,6 +822,9 @@ def validate_managed_app_plan_scope(payload, plan_json):
             "module.thinkwork.module.n8n",
             "module.thinkwork.terraform_data.n8n_configuration_guardrails",
             "module.thinkwork.terraform_data.n8n_runtime_state_guardrails",
+            "aws_acm_certificate.n8n",
+            "cloudflare_record.n8n_acm_validation",
+            "aws_acm_certificate_validation.n8n",
             "cloudflare_record.n8n",
         ],
         "plane": [
@@ -1529,17 +1535,12 @@ def n8n_terraform_overrides(
             else n8n_guardrails.get("n8n_service_credential_secret_arn", "")
         ),
     )
-    certificate_arn = required_config_value(
+    certificate_arn = config_value(
         desired_config,
         manifest_images,
         "certificateArn",
         "THINKWORK_N8N_CERTIFICATE_ARN",
-        "certificateArn",
-        default=first_non_empty_string(
-            n8n_guardrails.get("n8n_certificate_arn", ""),
-            twenty_guardrails.get("twenty_certificate_arn", ""),
-            plane_guardrails.get("plane_certificate_arn", ""),
-        ),
+        default="",
     )
     create_secret_placeholders = any(
         not value
@@ -1648,7 +1649,7 @@ def n8n_terraform_overrides(
             manifest_images,
             "binaryDataMode",
             "THINKWORK_N8N_BINARY_DATA_MODE",
-            default=n8n_guardrails.get("n8n_binary_data_mode", "database"),
+            default=n8n_guardrails.get("n8n_binary_data_mode", "default"),
         ),
         "n8n_cache_engine": config_value(
             desired_config,
@@ -2040,7 +2041,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
             "n8n_execution_data_storage_mode",
             "database",
         ),
-        "n8n_binary_data_mode": n8n_guardrails.get("n8n_binary_data_mode", "database"),
+        "n8n_binary_data_mode": n8n_guardrails.get("n8n_binary_data_mode", "default"),
         "n8n_cache_engine": n8n_guardrails.get("n8n_cache_engine", "valkey"),
         "n8n_cache_engine_version": n8n_guardrails.get("n8n_cache_engine_version", "8.0"),
         "n8n_cache_parameter_group_family": n8n_guardrails.get(
@@ -3971,6 +3972,65 @@ variable "plane_dns_name" {{
   type = string
 }}
 
+locals {{
+  n8n_managed_certificate_enabled = (
+    var.n8n_provisioned &&
+    var.n8n_certificate_arn == "" &&
+    var.n8n_domain != "" &&
+    var.cloudflare_zone_id != ""
+  )
+  n8n_effective_certificate_arn = (
+    var.n8n_certificate_arn != ""
+    ? var.n8n_certificate_arn
+    : (
+      local.n8n_managed_certificate_enabled
+      ? aws_acm_certificate_validation.n8n[0].certificate_arn
+      : ""
+    )
+  )
+}}
+
+resource "aws_acm_certificate" "n8n" {{
+  count = local.n8n_managed_certificate_enabled ? 1 : 0
+
+  domain_name       = var.n8n_domain
+  validation_method = "DNS"
+
+  lifecycle {{
+    create_before_destroy = true
+  }}
+
+  tags = {{
+    Name = "thinkwork-${{var.stage}}-n8n"
+  }}
+}}
+
+resource "cloudflare_record" "n8n_acm_validation" {{
+  for_each = local.n8n_managed_certificate_enabled ? {{
+    for cert in aws_acm_certificate.n8n :
+    cert.domain_name => tolist(cert.domain_validation_options)[0]
+  }} : {{}}
+
+  zone_id = var.cloudflare_zone_id
+  name    = trimsuffix(each.value.resource_record_name, ".")
+  content = trimsuffix(each.value.resource_record_value, ".")
+  type    = each.value.resource_record_type
+  ttl     = 60
+  proxied = false
+  comment = "ACM DNS validation for ${{each.key}}"
+
+  allow_overwrite = true
+}}
+
+resource "aws_acm_certificate_validation" "n8n" {{
+  count = local.n8n_managed_certificate_enabled ? 1 : 0
+
+  certificate_arn = aws_acm_certificate.n8n[0].arn
+  validation_record_fqdns = [
+    for record in cloudflare_record.n8n_acm_validation : record.hostname
+  ]
+}}
+
 module "thinkwork" {{
   source  = {hcl_string(terraform_module_source)}
 {module_version_line}
@@ -4060,7 +4120,7 @@ module "thinkwork" {{
   n8n_storage_prefix               = var.n8n_storage_prefix
   n8n_domain                       = var.n8n_domain
   n8n_public_url                   = var.n8n_public_url
-  n8n_certificate_arn              = var.n8n_certificate_arn
+  n8n_certificate_arn              = local.n8n_effective_certificate_arn
   n8n_main_desired_count           = var.n8n_main_desired_count
   n8n_worker_desired_count         = var.n8n_worker_desired_count
   n8n_worker_concurrency           = var.n8n_worker_concurrency

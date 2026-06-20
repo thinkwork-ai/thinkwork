@@ -28,7 +28,7 @@ storage is enterprise-gated. The default therefore stays honest:
 
 ```hcl
 execution_data_storage_mode = "database"
-binary_data_mode            = "database"
+binary_data_mode            = "default"
 ```
 
 The module still provisions S3 because ThinkWork needs retained package,

@@ -994,13 +994,13 @@ variable "n8n_execution_data_storage_mode" {
 }
 
 variable "n8n_binary_data_mode" {
-  description = "n8n binary data mode. OSS queue-mode defaults to database; s3 is reserved for a licensed enterprise deployment."
+  description = "n8n binary data mode. OSS queue-mode defaults to n8n's built-in default; s3 is reserved for a licensed enterprise deployment."
   type        = string
-  default     = "database"
+  default     = "default"
 
   validation {
-    condition     = contains(["database", "s3"], var.n8n_binary_data_mode)
-    error_message = "n8n_binary_data_mode must be database or s3."
+    condition     = contains(["default", "filesystem", "s3"], var.n8n_binary_data_mode)
+    error_message = "n8n_binary_data_mode must be default, filesystem, or s3."
   }
 }
 

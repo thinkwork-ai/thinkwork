@@ -1378,11 +1378,17 @@ def test_n8n_managed_app_runner_writes_dns_record_and_target(
     assert vars_json["n8n_dns_enabled"] is True
     assert tfvars["cloudflare_zone_id"] == "zone_123"
     assert tfvars["n8n_dns_enabled"] is True
+    assert 'resource "aws_acm_certificate" "n8n"' in main_tf
+    assert 'resource "cloudflare_record" "n8n_acm_validation"' in main_tf
+    assert 'resource "aws_acm_certificate_validation" "n8n"' in main_tf
+    assert "n8n_certificate_arn              = local.n8n_effective_certificate_arn" in main_tf
     assert 'resource "cloudflare_record" "n8n"' in main_tf
     assert "content = module.thinkwork.n8n_alb_dns_name" in main_tf
-    assert "-target=cloudflare_record.n8n" in runner.managed_app_terraform_target_args(
-        {"appKey": "n8n"}
-    )
+    target_args = runner.managed_app_terraform_target_args({"appKey": "n8n"})
+    assert "-target=aws_acm_certificate.n8n" in target_args
+    assert "-target=cloudflare_record.n8n_acm_validation" in target_args
+    assert "-target=aws_acm_certificate_validation.n8n" in target_args
+    assert "-target=cloudflare_record.n8n" in target_args
 
 
 def test_n8n_managed_app_overrides_complete_sparse_live_install_payload(
@@ -1542,7 +1548,8 @@ def test_n8n_managed_app_overrides_complete_sparse_live_install_payload(
     assert overrides["deployment_control_plane_create_secret_placeholders"] is True
     assert overrides["n8n_public_url"] == "https://n8n.thinkwork.ai"
     assert overrides["n8n_domain"] == "n8n.thinkwork.ai"
-    assert overrides["n8n_certificate_arn"].endswith(":certificate/www")
+    assert overrides["n8n_certificate_arn"] == ""
+    assert overrides["n8n_binary_data_mode"] == "default"
     assert overrides["n8n_storage_bucket_name"] == "thinkwork-dev-487219502366-n8n"
     assert overrides["n8n_storage_prefix"] == "managed-apps/n8n"
     assert overrides["n8n_custom_package_specs"] == []
