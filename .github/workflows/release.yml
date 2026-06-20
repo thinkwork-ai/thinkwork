@@ -96,6 +96,27 @@ jobs:
       - name: Login to GHCR
         run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - name: Resolve n8n runtime repository
+        id: n8n_runtime_repository
+        run: |
+          if [[ -n "${N8N_RUNTIME_IMAGE_REPOSITORY:-}" ]]; then
+            echo "value=${N8N_RUNTIME_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${ECR_REGISTRY}/thinkwork-dev-agentcore" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          N8N_RUNTIME_IMAGE_REPOSITORY: ${{ vars.N8N_RUNTIME_IMAGE_REPOSITORY || '' }}
+
       - name: Compute build timestamp
         id: build_time
         run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -161,6 +182,8 @@ jobs:
           tags: |
             ${{ steps.release.outputs.n8n_repository }}:${{ env.RELEASE_REF_NAME }}-n8n-amd64
             ${{ steps.release.outputs.n8n_repository }}:${{ steps.release.outputs.commit }}-n8n-amd64
+            ${{ steps.n8n_runtime_repository.outputs.value }}:${{ env.RELEASE_REF_NAME }}-n8n-amd64
+            ${{ steps.n8n_runtime_repository.outputs.value }}:${{ steps.release.outputs.commit }}-n8n-amd64
           build-args: |
             N8N_BASE_IMAGE=n8nio/n8n:1.98.2@sha256:3cd4d08ff918d53516b32c2e2a6188bdf60efd25a68ca036dbda30de6ef3a281
           cache-from: type=gha,scope=release-n8n-amd64
@@ -171,7 +194,7 @@ jobs:
         run: |
           AGENTCORE_REPOSITORY="${{ steps.release.outputs.agentcore_repository }}"
           COGNEE_REPOSITORY="${{ steps.release.outputs.cognee_repository }}"
-          N8N_REPOSITORY="${{ steps.release.outputs.n8n_repository }}"
+          N8N_REPOSITORY="${{ steps.n8n_runtime_repository.outputs.value }}"
           SIGN_ARGS=()
           if [[ -n "${RELEASE_MANIFEST_PRIVATE_KEY:-}" && -n "${RELEASE_MANIFEST_KEY_ID:-}" ]]; then
             install -m 700 -d dist/release/signing

@@ -19,6 +19,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import type { ManagedAppKey } from "@thinkwork/deployment-runner/apps/registry";
 import { db } from "../../graphql/utils.js";
+import { resolveManifestImagesForManagedApp } from "./release-manifest-images.js";
 import {
   appendJobEvent,
   assertResolvedRelease,
@@ -106,7 +107,12 @@ export async function startManagedApplicationPlanJob(
     });
   const desiredConfigVersion = args.desiredConfigVersion || "v1";
   let desiredConfig = args.desiredConfig ?? {};
-  const manifestImages = args.manifestImages ?? {};
+  const manifestImages = await resolveManifestImagesForManagedApp({
+    appKey,
+    manifestDigest,
+    releaseManifestUrl,
+    manifestImages: args.manifestImages ?? {},
+  });
 
   const controllerConfig = await resolveControllerConfig(deps);
   desiredConfig = withControllerManagedAppDefaults({

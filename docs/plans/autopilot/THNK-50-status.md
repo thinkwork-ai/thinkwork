@@ -909,12 +909,59 @@ U3/U4/U5/U6 before U7; U7 before U8.
       `if [ -d node_modules ]` so empty package contexts still build.
     - Updated the image-build unit test to assert the zero-package guard remains
       in the shipped Dockerfile.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2724
+    - Merge commit: `31cd5a0148515005335c22e0a32d9cb2eba3f38a`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+  - Canary release attempt:
+    - Tag `v0.1.0-canary.223` was pushed from merge commit
+      `31cd5a0148515005335c22e0a32d9cb2eba3f38a`.
+    - Release workflow run `27856317407` succeeded and published
+      `thinkwork-release.json` with SHA-256
+      `64d7a2a69edcb63080d7dfdaa1596d6af198b4a56fdc746d175d8c21024291b6`.
+    - The manifest included `n8n-runtime` at
+      `ghcr.io/thinkwork-ai/thinkwork-n8n:v0.1.0-canary.223-n8n-amd64@sha256:6eed6ac741015d48aeaf272a8192834777c8bb7433174a0eb4cf86d5e5cd65cc`.
+  - Deployed install verification attempt:
+    - The normal plugin retry path still selected stale release
+      `v0.1.0-canary.217` and failed with
+      `n8n managed app operation is missing required desired-state field: imageUri.`
+    - A direct managed-app plan was started for canary `223` with the release
+      manifest URL, digest, and `n8n-runtime` image map. The plan reached
+      `awaiting_approval`, was approved, and started Step Function execution
+      `arn:aws:states:us-east-1:487219502366:execution:thinkwork-dev-deployment-orchestrator:tw-apply-04565dcb3d9a4445b9b2-75de76bb0114`.
+    - ECS task startup then failed pulling the GHCR image with
+      `CannotPullContainerError` / `failed to authorize ... ghcr.io/token ... 401 Unauthorized`.
+- n8n release ECR image and manifest hydration follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-release-ecr-image`
+  - Objective: make the release-manifest n8n image URI pullable by ECS and make
+    plugin-created deployment jobs hydrate `manifestImages` from the selected
+    release manifest instead of starting the runner with an empty image map.
+  - Implementation summary:
+    - Added AWS/ECR login to the release deployable-artifacts job.
+    - Added ECR tags for the n8n runtime image while preserving the GHCR tags.
+    - Changed the `n8n-runtime` release-manifest image repository to the
+      configured `N8N_RUNTIME_IMAGE_REPOSITORY` repo, defaulting to the dev ECR
+      agentcore repository that ECS can pull.
+    - Added API-side release-manifest image hydration so n8n managed-app plan
+      jobs fill `n8n-runtime` from the verified release manifest when
+      `manifestImages` is omitted.
+  - Local verification:
+    - `pnpm --filter @thinkwork/api test -- --run src/lib/deployments/release-manifest-images.test.ts src/graphql/resolvers/deployments/managed-applications.test.ts src/lib/plugins/handlers/infra.test.ts`
+      passed: 38 tests.
+    - `pnpm --filter @thinkwork/api typecheck` passed.
+    - `pnpm exec tsx --test scripts/release/__tests__/build-release-manifest.test.ts`
+      passed: 10 tests.
 
 ## Blockers
 
-- Active fix in progress: the release workflow must publish a baseline
-  `n8n-runtime` image before the deployed ThinkWork plugin install can produce a
-  valid n8n managed-app plan. After the empty package context PR merges, cut a
-  new canary release, update the dev deployment pointer, retry the n8n install
-  through the plugin flow, approve/apply the managed-app job, verify n8n and MCP
-  through ThinkWork, then tear down through the managed plugin flow.
+- Active deployed apply job:
+  `04565dcb-3d9a-4445-b9b2-75de76bb0114` is still applying as of the latest
+  local poll. It is expected to fail or time out because ECS cannot pull the
+  private GHCR n8n image. Do not start the next managed-app apply until this job
+  releases the deployment runner/Terraform lock.
+- Active fix in progress: after the ECR image + manifest hydration PR merges,
+  cut a new canary release, update/retry the n8n plugin install through the
+  deployed ThinkWork plugin flow, approve/apply the managed-app job, verify n8n
+  and MCP through ThinkWork, then tear down through the managed plugin flow.
