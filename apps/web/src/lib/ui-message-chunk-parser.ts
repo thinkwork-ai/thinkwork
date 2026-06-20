@@ -26,6 +26,7 @@ import type {
 } from "./ui-message-types";
 import {
   THREAD_GENUI_PART_TYPE,
+  createAnalyticsDisplayGenUIValidationContext,
   validateThreadGenUIPart,
 } from "@thinkwork/genui";
 
@@ -123,7 +124,13 @@ export function parseChunkPayload(raw: unknown): ParsedChunk {
     return { kind: "drop", reason: "UNKNOWN_TYPE", raw };
   }
 
-  if (type === THREAD_GENUI_PART_TYPE && !validateThreadGenUIPart(obj).ok) {
+  if (
+    type === THREAD_GENUI_PART_TYPE &&
+    !validateThreadGenUIPart(
+      obj,
+      createAnalyticsDisplayGenUIValidationContext(),
+    ).ok
+  ) {
     return { kind: "drop", reason: "MALFORMED_PROTOCOL_FIELDS", raw };
   }
 

@@ -12,6 +12,7 @@ export const THREAD_GENUI_NATIVE_COMPONENTS = [
 export const THREAD_GENUI_RESERVED_ADAPTER_COMPONENTS = [
   "analytics.display",
 ] as const;
+export const THREAD_GENUI_ANALYTICS_COMPONENT = "analytics.display" as const;
 
 export const THREAD_GENUI_STATUS_VALUES = [
   "ready",

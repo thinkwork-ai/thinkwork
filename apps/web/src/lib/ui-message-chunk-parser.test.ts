@@ -6,8 +6,10 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { createAnalyticsDisplayFixture } from "@thinkwork/analytics-display";
 import {
   THREAD_GENUI_PART_TYPE,
+  createAnalyticsDisplayGenUIPart,
   createTaskReviewGenUIFixture,
   createThreadGenUISpecHash,
 } from "@thinkwork/genui";
@@ -136,6 +138,23 @@ describe("parseChunkPayload", () => {
         expect(result.chunk).toMatchObject({
           type: THREAD_GENUI_PART_TYPE,
           id: "genui:task-review:123",
+        });
+      }
+    });
+
+    it("parses analytics.display data-genui parts with the registered adapter", () => {
+      const result = parseChunkPayload(
+        createAnalyticsDisplayGenUIPart({
+          id: "genui:analytics:support-volume",
+          payload: createAnalyticsDisplayFixture(),
+        }),
+      );
+
+      expect(result.kind).toBe("protocol");
+      if (result.kind === "protocol") {
+        expect(result.chunk).toMatchObject({
+          type: THREAD_GENUI_PART_TYPE,
+          id: "genui:analytics:support-volume",
         });
       }
     });

@@ -13,6 +13,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@thinkwork/analytics-display": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.7.0",
     "vitest": "3.2.4"

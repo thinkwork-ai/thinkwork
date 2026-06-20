@@ -9,6 +9,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAnalyticsDisplayFixture } from "@thinkwork/analytics-display";
+import { createAnalyticsDisplayGenUIPart } from "@thinkwork/genui";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
 
 vi.mock("@/applets/mount", () => ({
@@ -162,6 +164,18 @@ describe("renderTypedPart", () => {
     };
     const { container } = render(<>{renderTypedPart(part, rk())}</>);
     expect(container.textContent).toBe("");
+  });
+
+  it("routes analytics data-genui parts to the inline analytics renderer", () => {
+    const part = createAnalyticsDisplayGenUIPart({
+      id: "genui:analytics:support-volume",
+      payload: createAnalyticsDisplayFixture(),
+    }) as AccumulatedPart;
+
+    render(<>{renderTypedPart(part, rk())}</>);
+
+    expect(screen.getByTestId("analytics-display-part")).toBeTruthy();
+    expect(screen.getByText("Support Volume")).toBeTruthy();
   });
 
   it("renders a source-url part as an anchor", () => {

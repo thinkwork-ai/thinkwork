@@ -1,5 +1,6 @@
 export * from "./actions.js";
 export * from "./adapter-registry.js";
+export * from "./analytics-adapter.js";
 export * from "./catalog.js";
 export * from "./diagnostics.js";
 export * from "./hash.js";

@@ -145,13 +145,24 @@ not create an Analytics dashboard and does not reference mutable external render
 state. Analytical GenUI promotion preserves the embedded analytics-display
 payload once U8 registers `analytics.display`.
 
-## U8 Analytics Boundary
+## Analytics Adapter
 
-U2 defines only the adapter registration point. U8 will:
+U2 defines the generic adapter registration point. U8 registers
+`analytics.display` for Thread-density analytical parts:
 
-- Import and validate `@thinkwork/analytics-display` payloads.
-- Register `analytics.display`.
-- Map analytics diagnostics, freshness, provenance, sensitivity, and summaries
-  into the Thread GenUI fallback/promotion shape.
+- The `analytics.display` element `props` is the by-value
+  `@thinkwork/analytics-display` render payload.
+- The adapter validates the analytical payload through
+  `validateAnalyticsDisplayPayload` before GenUI rendering.
+- Dashboard IDs, dataset IDs, unresolved references, raw chart/table schemas,
+  raw renderer/style fields, unsafe labels, unbounded rows, and unredacted
+  sensitive values fail closed.
+- Mobile fallback text is derived from analytics-display safe summaries,
+  freshness, provenance, and applied filters. Agent-supplied analytical fallback
+  text is not authoritative.
+- Thread density uses compact render-model limits from
+  `@thinkwork/analytics-display/react`; durable dashboard persistence, refresh,
+  sharing, and dashboard creation remain outside Thread GenUI.
 
-Before U8, analytical payloads fail with `GENUI_ANALYTICS_ADAPTER_MISSING`.
+If `analytics.display` is not registered in a host context, analytical payloads
+fail with `GENUI_ANALYTICS_ADAPTER_MISSING`.

@@ -42,6 +42,7 @@
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/router-devtools": "^1.154.14",
     "@tanstack/router-plugin": "^1.154.14",
+    "@thinkwork/analytics-display": "workspace:*",
     "@thinkwork/computer-stdlib": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/deployment-profile": "workspace:*",
