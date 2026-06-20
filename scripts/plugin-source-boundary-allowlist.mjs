@@ -17,6 +17,11 @@ export const sharedPluginTermAllowlist = [
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
   },
   {
+    path: "scripts/release/__tests__/n8n-runtime-base-image.test.ts",
+    reason:
+      "release infrastructure invariant keeps the n8n runtime Dockerfile and release workflow on an MCP-capable base image.",
+  },
+  {
     path: "apps/cli/__tests__/terraform-twenty-fixture.test.ts",
     reason:
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",

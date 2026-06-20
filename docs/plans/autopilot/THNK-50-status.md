@@ -1676,10 +1676,38 @@ public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all datab
       and `Editor is now accessible via: https://n8n.thinkwork.ai`; worker logs
       show `n8n worker is now ready`, `Version: 1.98.2`, `Concurrency: 10`, and
       `n8n worker server listening on port 5678`.
+- n8n MCP-capable runtime version correction branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `fix/n8n-runtime-2x-base`
+  - Objective: replace the n8n runtime base image pin that shipped
+    `n8nio/n8n:1.98.2` with an MCP-capable n8n 2.x image before rolling the
+    release to customer environments.
+  - Release/deployment correction:
+    - Cut `v0.1.0-canary.242` and `desktop-v0.1.0-canary.242` from current
+      `main`; Release, Release Desktop, and desktop-dispatched Release runs
+      succeeded, and dev moved to canary `242`.
+    - Aborted TEI execution
+      `tw-tei-e2e-update-v242-20260620T165206Z` and McPherson execution
+      `tw-mcpherson-update-v242-20260620T165206Z` while they were still running
+      because canary `242` retained the old n8n `1.98.2` base image.
+  - Implementation summary:
+    - Updated the n8n runtime Dockerfile default and release workflow build arg
+      to `n8nio/n8n:2.27.3@sha256:a772d24e6b4f9b3848be5a57c5e45437eed1965bbbcefa2f9a93f4835b6639fa`.
+    - Added a release regression test that requires the Dockerfile and release
+      workflow to share the same pinned n8n base image and enforces n8n
+      `>= 2.18.5`.
+  - Local verification:
+    - Docker Hub inspection confirmed `2.27.3` is the newest semver n8n image
+      observed on 2026-06-20 and resolves to manifest digest
+      `sha256:a772d24e6b4f9b3848be5a57c5e45437eed1965bbbcefa2f9a93f4835b6639fa`.
+    - `pnpm test:release` passed.
+    - `pnpm typecheck` passed.
+    - Local Docker daemon was unavailable, so the actual n8n runtime image
+      build/push is deferred to the GitHub Release workflow.
 
 ## Blockers
 
-- No active blockers for the n8n app-managed install path. Live teardown and
-  fresh install both succeeded from `app.thinkwork.ai`/GraphQL managed plugin
-  flow, and the provisioned runtime passed endpoint, TLS, ECS, ALB target
-  health, and log checks.
+- Active correction in progress: canary `242` proved the web/desktop release
+  path, but it must be superseded by a new canary built from the n8n 2.x base
+  image before TEI/McPherson rollout and final n8n MCP verification.
