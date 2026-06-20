@@ -15,7 +15,7 @@ status: in_progress
 - Current branch: `codex/thnk-34-u1-json-render-spike`.
 - Current worktree:
   `.Codex/worktrees/thnk-34-u1-json-render-spike`.
-- Pull request: not opened yet.
+- Pull request: [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753).
 - Status: U1 implementation complete locally and ready for PR. The U1
   worktree was created from `origin/main` at `c667da8a9`.
 - Notes:
@@ -79,7 +79,7 @@ status: in_progress
     `pnpm --filter @thinkwork/web verify:json-render-smoke`, which builds,
     scans, size-checks, and executes the renderer bundle under jsdom.
 - CI log:
-  - Pending.
+  - PR #2753 opened; checks pending.
 - Blockers: none.
 - Next action: commit U1, rebase on current `origin/main`, open the U1 PR, and
   monitor CI.
