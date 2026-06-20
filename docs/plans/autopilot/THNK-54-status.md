@@ -89,29 +89,24 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
   required rebases completed, and the PR merged.
 - 2026-06-20: moved `THNK-54` from `Verification` back to `In Progress` when
   U5 implementation began after U4 merged.
+- 2026-06-20: moved `THNK-54` from `Verification` back to `In Progress` after
+  U5 verification found that `outputPreview` could expose raw object payloads
+  through the supposedly redacted telemetry contract.
 
 ## Active Unit
 
-### U5 - Expose bridge telemetry in API and web surfaces
+### U5 focused fix - Redact telemetry output previews
 
-Objective: make bridge state visible to operators and reviewers without
-requiring database access or thread scraping.
+Objective: repair the U5 redaction contract so operator telemetry never derives
+`outputPreview` by JSON-stringifying arbitrary raw output or result payloads.
 
-Branch: `codex/thnk-54-u5-n8n-telemetry`
+Branch: `codex/thnk-54-u5-redaction-fix`
 
 Planned files:
 
-- `packages/database-pg/graphql/types/n8n-agent-step-runs.graphql`
-- `packages/api/src/graphql/resolvers/n8n-agent-step-runs/index.ts`
-- `packages/api/src/graphql/resolvers/n8n-agent-step-runs/n8nAgentStepRuns.query.ts`
 - `packages/api/src/graphql/resolvers/n8n-agent-step-runs/n8n-agent-step-runs.test.ts`
-- `packages/api/src/graphql/resolvers/plugins/n8n-settings.ts`
+- `packages/api/src/graphql/resolvers/n8n-agent-step-runs/telemetry.ts`
 - `packages/api/src/graphql/resolvers/plugins/n8n-settings.test.ts`
-- `apps/web/src/lib/settings-queries.ts`
-- `apps/web/src/routes/_authed/_shell/threads.$id.tsx`
-- `apps/web/src/routes/_authed/_shell/activity.$threadId.tsx`
-- `apps/web/src/components/settings/plugins/n8n/N8nSettings.tsx`
-- `apps/web/src/components/settings/plugins/n8n/N8nSettings.test.tsx`
 
 ## Progress Log
 
@@ -440,6 +435,49 @@ prettier@latest --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports
 - Opened U5 PR: https://github.com/thinkwork-ai/thinkwork/pull/2761
 - Moved Linear issue `THNK-54` to `Verification` and posted the PR/status
   comment with marker `dispatcher:THNK-54:Review:Codex`.
+- U5 remote checks passed on PR #2761 head `238498b1f`:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+- U5 PR #2761 squash-merged to `main`:
+  https://github.com/thinkwork-ai/thinkwork/pull/2761
+- U5 squash merge commit: `a1e42c646636e1a5e035e271d6e75f93f9f66dcc`
+- Remote branch `codex/thnk-54-u5-n8n-telemetry` was deleted by the merge
+  flow. Local U5 branch was force-deleted after switching away because squash
+  ancestry is not visible to `git branch -d`.
+- Started U6 branch `codex/thnk-54-u6-n8n-docs` from `origin/main` at
+  `a1e42c646`, then paused U6 before edits after a newer U5 verification
+  failure arrived in Linear.
+- U5 verification failure recorded at
+  `dispatcher:THNK-54:Verification:Codex` on 2026-06-20T23:43:40Z:
+  `payloadPreview(row.output_payload ?? row.result_payload)` could expose raw
+  object output by falling back to `JSON.stringify(value)`. The proof row with
+  `output_payload: { secret: "raw output should not leak", nested: { token:
+"nested raw token" } }` returned both raw strings in `outputPreview`.
+- Created focused fix branch `codex/thnk-54-u5-redaction-fix` from current
+  `origin/main` and left `THNK-54` in `In Progress`.
+- Implemented the U5 focused redaction fix:
+  - added a regression test proving arbitrary raw output/result object fields
+    do not appear in `N8nAgentStepRunTelemetry`;
+  - added an n8n settings resolver assertion for the same product-reachable
+    telemetry path;
+  - changed the telemetry mapper so `outputPreview` comes only from the
+    persisted safe `summary` or a summary-like field on the structured result,
+    never from raw `output_payload`, raw `result_payload.output`, or arbitrary
+    JSON stringification.
+- U5 focused fix verification passed:
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/n8n-agent-step-runs/n8n-agent-step-runs.test.ts`
+    failed before the implementation fix with `outputPreview: "raw output
+should not leak"`, confirming the regression.
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/n8n-agent-step-runs/n8n-agent-step-runs.test.ts src/graphql/resolvers/plugins/n8n-settings.test.ts`
+  - `pnpm --filter @thinkwork/api typecheck`
+  - `pnpm lint:plugin-source`
+  - `pnpm lint`
+  - `pnpm dlx prettier@latest --check` on the focused fix files and this
+    status doc
+  - `git diff --check`
 
 ## Blockers
 

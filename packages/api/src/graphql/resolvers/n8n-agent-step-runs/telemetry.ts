@@ -90,7 +90,7 @@ export function toN8nAgentStepRunTelemetry(row: RunRow) {
     requestId: row.request_id,
     instructionsPreview: row.instructions_preview,
     inputPreview: row.input_preview,
-    outputPreview: payloadPreview(row.output_payload ?? row.result_payload),
+    outputPreview: outputPreview(row),
     errorMessage: errorMessage(row.error_payload ?? row.result_payload),
     summary: bounded(row.summary),
     links: row.links,
@@ -119,22 +119,21 @@ function normalizeLimit(limit: number | null | undefined) {
   return Math.min(limit, MAX_LIMIT);
 }
 
-function payloadPreview(value: unknown): string | null {
-  if (value == null) return null;
-  if (typeof value === "string") return bounded(value);
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (typeof value === "object") {
+function outputPreview(row: RunRow): string | null {
+  return bounded(row.summary) ?? resultSummaryPreview(row.result_payload);
+}
+
+function resultSummaryPreview(value: unknown): string | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
-    for (const key of ["summary", "text", "message", "output", "result"]) {
+    for (const key of ["summary", "preview"]) {
       const candidate = record[key];
       if (typeof candidate === "string" && candidate.trim()) {
         return bounded(candidate);
       }
     }
   }
-  return bounded(JSON.stringify(value));
+  return null;
 }
 
 function errorMessage(value: unknown): string | null {
