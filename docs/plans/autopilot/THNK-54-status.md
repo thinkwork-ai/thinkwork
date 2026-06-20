@@ -478,6 +478,13 @@ should not leak"`, confirming the regression.
   - `pnpm dlx prettier@latest --check` on the focused fix files and this
     status doc
   - `git diff --check`
+- Opened U5 focused fix PR:
+  https://github.com/thinkwork-ai/thinkwork/pull/2763
+- PR #2763 branch: `codex/thnk-54-u5-redaction-fix`
+- PR #2763 code fix commit: `5b5d08bcd`
+  (`fix(n8n): redact bridge telemetry previews`)
+- Moving `THNK-54` back to `Verification` for the focused redaction
+  verification pass while remote PR checks start.
 
 ## Blockers
 
