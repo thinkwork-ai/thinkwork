@@ -184,6 +184,14 @@ status: in_progress
     "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` found pre-existing formatting
     drift across unrelated files; workflow source/docs/migration files are
     clean.
+  - PR CI `Migration Drift Precheck (dev)` initially failed because the new
+    manual `0177_workflow_control_plane.sql` objects were not yet applied to
+    dev.
+  - Applied `packages/database-pg/drizzle/0177_workflow_control_plane.sql` to
+    the ThinkWork dev database on 2026-06-20.
+  - Scoped dev drift reporter passed after applying the migration:
+    `bash scripts/db-migrate-manual.sh
+    packages/database-pg/drizzle/0177_workflow_control_plane.sql`.
 - CI: pending.
 
 ## Space Webhook Thread Starts - 2026-06-19
