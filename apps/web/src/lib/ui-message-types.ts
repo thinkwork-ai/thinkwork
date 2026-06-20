@@ -17,6 +17,7 @@ import type {
   UIMessagePart as AiUIMessagePart,
   UITools,
 } from "ai";
+import type { ThreadGenUIData, ThreadGenUIPart } from "@thinkwork/genui";
 
 /**
  * Default Computer-thread `UIMessage` shape. Computer threads do not lock the
@@ -246,3 +247,6 @@ export interface TaskQueueData {
   groups?: TaskQueueGroup[];
   items?: TaskQueueItem[];
 }
+
+export type GenUIData = ThreadGenUIData;
+export type GenUIPart = ThreadGenUIPart;

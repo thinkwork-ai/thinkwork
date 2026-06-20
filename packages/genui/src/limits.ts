@@ -1,0 +1,15 @@
+export const threadGenUILimits = {
+  maxSerializedPartBytes: 50_000,
+  maxElements: 20,
+  maxElementDepth: 6,
+  maxActions: 8,
+  maxActionParams: 12,
+  maxListItems: 20,
+  maxWorkflowSteps: 12,
+  maxFormFields: 8,
+  maxFieldOptions: 12,
+  maxLabelLength: 120,
+  maxSummaryLength: 500,
+  maxFallbackLines: 6,
+  maxTextValueLength: 1_000,
+} as const;

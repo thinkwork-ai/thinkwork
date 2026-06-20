@@ -46,6 +46,7 @@
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/deployment-profile": "workspace:*",
     "@thinkwork/desktop-ipc": "workspace:*",
+    "@thinkwork/genui": "workspace:*",
     "@thinkwork/graph": "workspace:*",
     "@thinkwork/pricing-config": "workspace:*",
     "@thinkwork/plugin-n8n": "workspace:*",

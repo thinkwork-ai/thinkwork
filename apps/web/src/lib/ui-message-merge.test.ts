@@ -17,6 +17,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  createTaskReviewGenUIFixture,
+  createThreadGenUISpecHash,
+} from "@thinkwork/genui";
+import {
   emptyState,
   mergeUIMessageChunk,
   mergeUIMessageChunks,
@@ -255,6 +259,36 @@ describe("mergeUIMessageChunk — data-${name} parts", () => {
     const dataParts = out.parts.filter((p) => p.type === "data-runbook-queue");
     expect(dataParts).toHaveLength(1);
     expect((dataParts[0] as any).data).toEqual({ status: "running" });
+  });
+
+  it("data-genui parts with the same id replace the whole spec", () => {
+    const first = createTaskReviewGenUIFixture();
+    const second = createTaskReviewGenUIFixture();
+    second.data.spec.elements.review.props.status = "approved";
+    second.data.mobileFallback.lines = ["Status: approved"];
+    second.data.specHash = createThreadGenUISpecHash(second.data.spec);
+
+    const out = mergeUIMessageChunks([first, second]);
+    const dataParts = out.parts.filter((p) => p.type === "data-genui");
+
+    expect(dataParts).toHaveLength(1);
+    expect((dataParts[0] as any).id).toBe("genui:task-review:123");
+    expect((dataParts[0] as any).data.spec.elements.review.props.status).toBe(
+      "approved",
+    );
+  });
+
+  it("data-genui with same id does not corrupt a different data part type", () => {
+    const fixture = createTaskReviewGenUIFixture();
+    const out = mergeUIMessageChunks([
+      { type: "data-progress", id: fixture.id, data: { percent: 0.5 } },
+      fixture,
+    ]);
+
+    expect(out.parts.map((part) => part.type)).toEqual([
+      "data-progress",
+      "data-genui",
+    ]);
   });
 });
 

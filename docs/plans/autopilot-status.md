@@ -11,13 +11,15 @@ status: in_progress
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
 - Linear issue: `THNK-34`.
 - Target branch: `main`.
-- Current implementation unit: U1 Validate json-render adoption gates.
-- Current branch: `codex/thnk-34-u1-json-render-spike`.
+- Current implementation unit: U2 Define the `data-genui` contract and v1
+  catalog.
+- Current branch: `codex/thnk-34-u2-genui-envelope`.
 - Current worktree:
-  `.Codex/worktrees/thnk-34-u1-json-render-spike`.
-- Pull request: [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753).
-- Status: U1 implementation complete locally and ready for PR. The U1
-  worktree was created from `origin/main` at `c667da8a9`.
+  `.Codex/worktrees/thnk-34-u2-genui-envelope`.
+- Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
+  merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2 not opened yet.
+- Status: U1 complete and merged. U2 implementation complete locally from
+  `origin/main` at `10d712c163fdbd748daa67de4640be3b6785a2ba`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
     and U7 in dependency order.
@@ -66,6 +68,22 @@ status: in_progress
     JSON audit output did not reference `@json-render`.
   - `pnpm lint` passed.
   - `git diff --check` passed.
+  - U2 `pnpm --filter @thinkwork/genui test` passed: 13 tests after Compound
+    review fixes.
+  - U2 `pnpm --filter @thinkwork/genui typecheck` passed.
+  - U2 `pnpm --filter @thinkwork/web test -- src/lib/ui-message-chunk-parser.test.ts src/lib/ui-message-merge.test.ts`
+    passed: 50 tests after Compound review fixes.
+  - U2 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U2 consumer import smoke tests passed in `@thinkwork/api`,
+    `@thinkwork/pi-runtime-core`, `@thinkwork/agentcore-pi`, and
+    `@thinkwork/mobile`.
+  - U2 `@thinkwork/api`, `@thinkwork/pi-runtime-core`, and
+    `@thinkwork/agentcore-pi` targeted typechecks passed.
+  - U2 `pnpm lint` and `git diff --check` passed.
+  - U2 `pnpm format:check` could not run because the repo script calls an
+    undeclared local `prettier` binary. `pnpm dlx prettier --check` confirmed
+    substantial pre-existing repository-wide formatting drift; changed U2-owned
+    files were formatted with `pnpm dlx prettier --write`.
 - Compound review:
   - Correctness review flagged unrelated upstream MCP changes when diffing
     against the moving `origin/main`; the U1 branch will be rebased before PR so
@@ -78,11 +96,24 @@ status: in_progress
   - Testing review flagged manual-only bundle evidence; fixed by adding
     `pnpm --filter @thinkwork/web verify:json-render-smoke`, which builds,
     scans, size-checks, and executes the renderer bundle under jsdom.
+  - U2 correctness/testing review flagged that the web parser admitted
+    `data-genui` payloads after a shallow envelope check instead of the
+    canonical validator. Fixed by validating `data-genui` chunks with
+    `validateThreadGenUIPart` before merge and adding a validator-invalid parser
+    regression.
+  - U2 testing review flagged missing registered-adapter rejection coverage.
+    Fixed by adding an adapter diagnostic propagation test.
+  - U2 testing review flagged partial native catalog branch coverage. Fixed by
+    adding valid/invalid coverage for `workflow.status`, `keyValue.list`, and
+    `form.action`.
 - CI log:
-  - PR #2753 opened; checks pending.
+  - U1 PR #2753 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) twice: once on the initial PR head and again after rebasing because
+    `main` moved.
+  - U1 PR #2753 was squash merged to `main` as
+    `10d712c163fdbd748daa67de4640be3b6785a2ba`.
 - Blockers: none.
-- Next action: commit U1, rebase on current `origin/main`, open the U1 PR, and
-  monitor CI.
+- Next action: commit U2, open the U2 PR, and monitor CI.
 
 ## Space Webhook Thread Starts - 2026-06-19
 

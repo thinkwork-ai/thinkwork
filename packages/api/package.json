@@ -41,6 +41,7 @@
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/deployment-runner": "workspace:*",
     "@thinkwork/evals-core": "workspace:*",
+    "@thinkwork/genui": "workspace:*",
     "@thinkwork/lambda": "workspace:*",
     "@thinkwork/namespace-registry": "workspace:*",
     "@thinkwork/pi-runtime-core": "workspace:*",
