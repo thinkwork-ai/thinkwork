@@ -42,6 +42,7 @@ import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { error, json, unauthorized } from "../lib/response.js";
+import { recordRoutineWorkflowStepEvent } from "../lib/workflows/routine-adapter.js";
 
 const { routineStepEvents, routineExecutions } = schema;
 
@@ -194,6 +195,7 @@ export async function handler(
     if (inserted.length === 0) {
       return json({ id: null, deduped: true }, 200);
     }
+    await recordRoutineWorkflowStepEvent(db, shaped, inserted[0].id);
     return json({ id: inserted[0].id, deduped: false }, 201);
   } catch (err) {
     console.error("[routine-step-callback] INSERT failed:", err);

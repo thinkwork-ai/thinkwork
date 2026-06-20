@@ -20,6 +20,10 @@ import type { GraphQLContext } from "../../context.js";
 import { db, snakeToCamel } from "../../utils.js";
 import { requireAdminOrApiKeyCaller } from "../core/authz.js";
 import {
+  createRoutineWorkflowRun,
+  ensureRoutineWorkflow,
+} from "../../../lib/workflows/routine-adapter.js";
+import {
   StartExecutionCommand,
   getSfnClient,
 } from "../../../lib/routines/sfn-client.js";
@@ -74,6 +78,11 @@ export async function triggerRoutineRun(
   }
 
   await assertRoutineExecutionAslVersionColumn();
+  const workflowProjection = await ensureRoutineWorkflow(db, {
+    routine,
+    aslVersion,
+    triggerFamily: "manual",
+  });
 
   // Start the execution against the captured version ARN so the row we persist
   // cannot drift if the live alias flips between lookup and StartExecution.
@@ -110,6 +119,19 @@ export async function triggerRoutineRun(
       started_at: startResp.startDate ?? new Date(),
     })
     .returning();
+  await createRoutineWorkflowRun(db, {
+    routine,
+    aslVersion,
+    projection: workflowProjection,
+    executionArn: startResp.executionArn,
+    stateMachineArn: routine.state_machine_arn!,
+    aliasArn: routine.state_machine_alias_arn,
+    routineExecutionId: execRow.id,
+    triggerFamily: "manual",
+    triggerSource: "manual",
+    inputSummary: args.input ?? {},
+    startedAt: startResp.startDate ?? new Date(),
+  });
   return snakeToCamel(execRow);
 }
 

@@ -181,15 +181,18 @@ status: in_progress
   `docs/brainstorms/2026-06-20-first-class-workflow-control-plane-requirements.md`.
 - Linear: THNK-59.
 - Target branch: `main`.
-- Current implementation unit: U2 - GraphQL workflow API and codegen contract.
-- Current branch: `codex/thnk-59-u2-workflow-graphql`.
-- Current worktree: `.Codex/worktrees/thnk-59-u2-workflow-graphql`.
+- Current implementation unit: U3 - Routine adapter and scheduled version
+  pinning.
+- Current branch: `codex/thnk-59-u3-routine-adapter`.
+- Current worktree: `.Codex/worktrees/thnk-59-u3-routine-adapter`.
 - Pull request:
   U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
-  [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) opened.
-- Status: U1 complete and merged. U2 implementation complete and PR opened
-  from `origin/main` at `19f1f0478`.
+  [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
+  `228c9bafd9964297b75c6d6f3e5d80f689b78932`; U3
+  [#2764](https://github.com/thinkwork-ai/thinkwork/pull/2764) open.
+- Status: U1 and U2 complete and merged. U3 implementation complete locally;
+  broader verification and PR are next.
 - Notes:
   - Started autopilot execution from `origin/main`.
   - Created isolated U1 worktree from `origin/main` at `080513f00`.
@@ -280,7 +283,61 @@ status: in_progress
     same parallel-suite timing/leakage symptoms seen in U1; focused rerun
     `pnpm --filter @thinkwork/api exec vitest run
     src/handlers/chat-agent-invoke.runtime-routing.test.ts` passed (11 tests).
-- CI: U1 passed and merged; U2 PR #2759 checks pending.
+  - U2 PR #2759 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) after rebasing and an empty `chore: retrigger workflow checks`
+    commit nudged the pull_request workflows. It was squash merged to `main` as
+    `228c9bafd9964297b75c6d6f3e5d80f689b78932`; GitHub already deleted the
+    remote U2 branch, and the local U2 worktree/branch were removed.
+  - Created isolated U3 worktree from `origin/main` at `228c9baf`.
+  - U3 will add the Step Functions Routine-to-Workflow adapter, correlate
+    manual and scheduled Routine starts to canonical WorkflowRun rows, and
+    close the scheduled-run ASL version capture gap.
+  - U3 implementation adds `packages/api/src/lib/workflows/routine-adapter.ts`,
+    wires manual Routine triggers and Routine execution/step callbacks to
+    WorkflowRun records/events/evidence, and updates scheduled Routine starts
+    in `packages/lambda/job-trigger.ts` to resolve and start the pinned
+    `routine_asl_versions.version_arn`.
+  - U3 `pnpm install` completed, with the known local Node 25 optional
+    `canvas@2.11.2` native build warning because `pkg-config` / `pixman-1` are
+    unavailable.
+  - U3 focused API tests passed: `pnpm --filter @thinkwork/api exec vitest run
+    src/lib/workflows/routine-adapter.test.ts
+    src/__tests__/routines-publish-flow.test.ts
+    src/handlers/routine-execution-callback.test.ts
+    src/handlers/routine-step-callback.test.ts` (4 files, 62 tests).
+  - U3 focused Lambda tests passed: `pnpm --filter @thinkwork/lambda exec
+    vitest run __tests__/job-trigger.skill-run.test.ts` (24 tests).
+  - U3 `pnpm --filter @thinkwork/api typecheck` and `pnpm --filter
+    @thinkwork/lambda typecheck` passed.
+  - U3 touched files were formatted with `pnpm dlx prettier@3.4.2 --write ...`
+    because the root workspace does not expose a local `prettier` binary.
+  - U3 source/test Prettier check passed with `pnpm dlx prettier@3.4.2
+    --check ...`; `docs/plans/autopilot-status.md` is intentionally excluded
+    from the scoped check because the historical ledger has broad pre-existing
+    formatting drift and this update keeps it minimally patched.
+  - U3 `git diff --check`, `pnpm typecheck`, and `pnpm lint` passed.
+  - U3 first root `pnpm test` run failed in `apps/desktop` while parallel
+    workers completed the Electron binary install (`Electron failed to install
+    correctly` / `EEXIST` symlink race). Focused rerun
+    `pnpm --filter @thinkwork/desktop test` passed (15 files, 105 tests).
+  - U3 second root `pnpm test` run passed end-to-end after the desktop retry,
+    including `test:release` and `test:plugin-source-boundary`.
+  - U3 in-thread code review found stale workflow binding/trigger metadata
+    when an existing Routine projection advanced to a new ASL version. Fixed
+    both manual/API and scheduled/Lambda projection paths to refresh the
+    binding and trigger rows, then added regression coverage.
+  - U3 post-review focused API tests passed: `pnpm --filter @thinkwork/api exec
+    vitest run src/lib/workflows/routine-adapter.test.ts
+    src/__tests__/routines-publish-flow.test.ts
+    src/handlers/routine-execution-callback.test.ts
+    src/handlers/routine-step-callback.test.ts` (4 files, 63 tests).
+  - U3 post-review focused Lambda tests passed: `pnpm --filter
+    @thinkwork/lambda exec vitest run __tests__/job-trigger.skill-run.test.ts`
+    (25 tests).
+  - U3 post-review `pnpm --filter @thinkwork/api typecheck`,
+    `pnpm --filter @thinkwork/lambda typecheck`, and `git diff --check`
+    passed.
+- CI: U1 and U2 passed and merged; U3 PR #2764 opened and checks pending.
 
 ## Space Webhook Thread Starts - 2026-06-19
 

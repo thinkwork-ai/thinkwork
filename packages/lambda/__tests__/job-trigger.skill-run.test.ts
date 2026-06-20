@@ -109,6 +109,46 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     created_at: "cost_events.created_at",
   },
   evalRuns: { id: "eval_runs.id" },
+  routineAslVersions: {
+    id: "routine_asl_versions.id",
+    tenant_id: "routine_asl_versions.tenant_id",
+    routine_id: "routine_asl_versions.routine_id",
+    version_number: "routine_asl_versions.version_number",
+    state_machine_arn: "routine_asl_versions.state_machine_arn",
+    version_arn: "routine_asl_versions.version_arn",
+    asl_json: "routine_asl_versions.asl_json",
+    markdown_summary: "routine_asl_versions.markdown_summary",
+    step_manifest_json: "routine_asl_versions.step_manifest_json",
+    published_by_actor_type: "routine_asl_versions.published_by_actor_type",
+    published_by_actor_id: "routine_asl_versions.published_by_actor_id",
+    created_at: "routine_asl_versions.created_at",
+  },
+  routineExecutions: {
+    id: "routine_executions.id",
+    tenant_id: "routine_executions.tenant_id",
+    routine_id: "routine_executions.routine_id",
+    state_machine_arn: "routine_executions.state_machine_arn",
+    alias_arn: "routine_executions.alias_arn",
+    version_arn: "routine_executions.version_arn",
+    routine_asl_version_id: "routine_executions.routine_asl_version_id",
+    sfn_execution_arn: "routine_executions.sfn_execution_arn",
+    trigger_id: "routine_executions.trigger_id",
+    trigger_source: "routine_executions.trigger_source",
+  },
+  routines: {
+    id: "routines.id",
+    tenant_id: "routines.tenant_id",
+    name: "routines.name",
+    description: "routines.description",
+    engine: "routines.engine",
+    status: "routines.status",
+    visibility: "routines.visibility",
+    agent_id: "routines.agent_id",
+    owning_agent_id: "routines.owning_agent_id",
+    state_machine_arn: "routines.state_machine_arn",
+    state_machine_alias_arn: "routines.state_machine_alias_arn",
+    current_version: "routines.current_version",
+  },
   computers: {
     id: "computers.id",
     tenant_id: "computers.tenant_id",
@@ -169,6 +209,37 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     id: "thread_idle_learning_runs.id",
   },
   threadTurns: { id: "thread_turns.id" },
+  workflowEngineBindings: {
+    id: "workflow_engine_bindings.id",
+    tenant_id: "workflow_engine_bindings.tenant_id",
+    workflow_id: "workflow_engine_bindings.workflow_id",
+    workflow_version_id: "workflow_engine_bindings.workflow_version_id",
+    routine_id: "workflow_engine_bindings.routine_id",
+    routine_asl_version_id: "workflow_engine_bindings.routine_asl_version_id",
+  },
+  workflowEvidence: {
+    id: "workflow_evidence.id",
+  },
+  workflowRuns: {
+    id: "workflow_runs.id",
+    tenant_id: "workflow_runs.tenant_id",
+    workflow_id: "workflow_runs.workflow_id",
+    workflow_version_id: "workflow_runs.workflow_version_id",
+    engine_binding_id: "workflow_runs.engine_binding_id",
+  },
+  workflowTriggers: {
+    id: "workflow_triggers.id",
+    workflow_id: "workflow_triggers.workflow_id",
+    trigger_family: "workflow_triggers.trigger_family",
+  },
+  workflowVersions: {
+    id: "workflow_versions.id",
+    workflow_id: "workflow_versions.workflow_id",
+    version_number: "workflow_versions.version_number",
+  },
+  workflows: {
+    id: "workflows.id",
+  },
   users: {
     id: "users.id",
     tenant_id: "users.tenant_id",
@@ -317,6 +388,204 @@ describe("buildRoutineExecutionInput", () => {
 
     expect(input.agentId).toBeNull();
     expect(input.spaceId).toBeNull();
+  });
+});
+
+describe("job-trigger routine_schedule", () => {
+  it("starts the captured ASL version ARN and records workflow run correlation", async () => {
+    const startDate = new Date("2026-06-20T16:00:00Z");
+    mockSelect
+      .mockReturnValueOnce([
+        {
+          enabled: true,
+          budget_paused: false,
+          name: "Daily routine",
+          agent_id: "agent-1",
+          space_id: "space-1",
+          config: {},
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "routine-1",
+          tenant_id: "tenant-1",
+          name: "Daily email digest",
+          description: "Send a digest",
+          engine: "step_functions",
+          status: "active",
+          visibility: "tenant_shared",
+          agent_id: "agent-1",
+          owning_agent_id: null,
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1:live",
+          current_version: 7,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-version-7",
+          version_number: 7,
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1",
+          version_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1:7",
+          asl_json: { StartAt: "A", States: { A: { Type: "Succeed" } } },
+          markdown_summary: "A",
+          step_manifest_json: [],
+          published_by_actor_type: "user",
+          published_by_actor_id: "user-1",
+          created_at: startDate,
+        },
+      ])
+      .mockReturnValueOnce([]) // existing workflow binding
+      .mockReturnValueOnce([]) // existing workflow version
+      .mockReturnValueOnce([]); // existing schedule trigger
+    mockInsert
+      .mockReturnValueOnce([{ id: "workflow-1" }])
+      .mockReturnValueOnce([{ id: "workflow-version-7" }])
+      .mockReturnValueOnce([{ id: "binding-1" }])
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([{ id: "routine-execution-1" }])
+      .mockReturnValueOnce([{ id: "workflow-run-1" }])
+      .mockReturnValueOnce([]);
+    mockSfnSend.mockResolvedValueOnce({
+      executionArn:
+        "arn:aws:states:us-east-1:123456789012:execution:routine-1:exec-1",
+      startDate,
+    });
+
+    await handler({
+      triggerId: "job-1",
+      triggerType: "routine_schedule",
+      tenantId: "tenant-1",
+      routineId: "routine-1",
+      scheduleName: "daily-routine",
+    } as never);
+
+    const startCall = mockSfnSend.mock.calls[0]![0] as {
+      input: { stateMachineArn: string; input: string };
+    };
+    expect(startCall.input.stateMachineArn).toBe(
+      "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1:7",
+    );
+    expect(JSON.parse(startCall.input.input)).toMatchObject({
+      tenantId: "tenant-1",
+      routineId: "routine-1",
+      triggerSource: "schedule",
+      scheduleName: "daily-routine",
+    });
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version_arn:
+          "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1:7",
+        routine_asl_version_id: "asl-version-7",
+      }),
+    );
+    expect(mockInsertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflow_id: "workflow-1",
+        workflow_version_id: "workflow-version-7",
+        engine_binding_id: "binding-1",
+        backend_execution_id:
+          "arn:aws:states:us-east-1:123456789012:execution:routine-1:exec-1",
+      }),
+    );
+  });
+
+  it("refreshes existing workflow binding and trigger rows when the routine version advances", async () => {
+    const startDate = new Date("2026-06-20T17:00:00Z");
+    mockSelect
+      .mockReturnValueOnce([
+        {
+          enabled: true,
+          budget_paused: false,
+          name: "Daily routine",
+          agent_id: "agent-1",
+          space_id: "space-1",
+          config: {},
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "routine-1",
+          tenant_id: "tenant-1",
+          name: "Daily email digest",
+          description: "Send a digest",
+          engine: "step_functions",
+          status: "active",
+          visibility: "tenant_shared",
+          agent_id: "agent-1",
+          owning_agent_id: null,
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1",
+          state_machine_alias_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1:live",
+          current_version: 8,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "asl-version-8",
+          version_number: 8,
+          state_machine_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1",
+          version_arn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1:8",
+          asl_json: { StartAt: "A", States: { A: { Type: "Succeed" } } },
+          markdown_summary: "A",
+          step_manifest_json: [],
+          published_by_actor_type: "user",
+          published_by_actor_id: "user-1",
+          created_at: startDate,
+        },
+      ])
+      .mockReturnValueOnce([
+        {
+          id: "binding-1",
+          workflow_id: "workflow-1",
+          workflow_version_id: "workflow-version-7",
+        },
+      ])
+      .mockReturnValueOnce([{ id: "workflow-version-8" }])
+      .mockReturnValueOnce([{ id: "trigger-1" }]);
+    mockInsert
+      .mockReturnValueOnce([{ id: "routine-execution-8" }])
+      .mockReturnValueOnce([{ id: "workflow-run-8" }])
+      .mockReturnValueOnce([]);
+    mockSfnSend.mockResolvedValueOnce({
+      executionArn:
+        "arn:aws:states:us-east-1:123456789012:execution:routine-1:exec-8",
+      startDate,
+    });
+
+    await handler({
+      triggerId: "job-1",
+      triggerType: "routine_schedule",
+      tenantId: "tenant-1",
+      routineId: "routine-1",
+      scheduleName: "daily-routine",
+    } as never);
+
+    expect(mockUpdateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflow_version_id: "workflow-version-8",
+        routine_asl_version_id: "asl-version-8",
+        external_version_id: "8",
+        connection_ref: expect.objectContaining({
+          aliasArn:
+            "arn:aws:states:us-east-1:123456789012:stateMachine:routine-1:live",
+        }),
+      }),
+    );
+    expect(mockUpdateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workflow_version_id: "workflow-version-8",
+        enabled: true,
+        trigger_config: { routineId: "routine-1" },
+      }),
+    );
   });
 });
 

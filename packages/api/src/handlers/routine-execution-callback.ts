@@ -34,6 +34,7 @@ import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { error, json, unauthorized } from "../lib/response.js";
+import { updateRoutineWorkflowRunFromExecution } from "../lib/workflows/routine-adapter.js";
 
 const { routineExecutions } = schema;
 
@@ -256,6 +257,7 @@ async function updateRoutineExecution(
       );
       return { updated: true, reason: "idempotent" };
     }
+    await updateRoutineWorkflowRunFromExecution(db, row);
     return { updated: true };
   } catch (err) {
     console.error("[routine-execution-callback] UPDATE failed:", err);
