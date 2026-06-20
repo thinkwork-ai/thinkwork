@@ -65,6 +65,9 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
 
 - 2026-06-20: moved `THNK-54` from `Ready to Work` to `In Progress` when U1
   implementation began.
+- 2026-06-20: moved `THNK-54` from `In Progress` to `Verification` after U1
+  PR opened. The team has no exact `Review` status, so `Verification` is the
+  closest review-state equivalent.
 
 ## Active Unit
 
@@ -119,3 +122,6 @@ Planned files:
 - Browser testing reviewed via `ce-test-browser` scope. U1 changes only
   backend schema, GraphQL contract definitions, migration SQL, and API contract
   helpers, so no web route or browser-testable surface changed in this unit.
+- Opened U1 PR: https://github.com/thinkwork-ai/thinkwork/pull/2750
+- Moved Linear issue `THNK-54` to `Verification` and posted the PR/status
+  comment with marker `dispatcher:THNK-54:Review:Codex`.
