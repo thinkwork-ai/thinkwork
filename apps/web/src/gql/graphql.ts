@@ -5304,7 +5304,11 @@ export type Query = {
    * ts_rank + alias-hit boost.
    */
   wikiSearch: Array<WikiSearchResult>;
+  workflow?: Maybe<Workflow>;
   workflowCatalog: Array<WorkflowCatalogItem>;
+  workflowRun?: Maybe<WorkflowRun>;
+  workflowRuns: Array<WorkflowRun>;
+  workflows: Array<Workflow>;
 };
 
 
@@ -6245,6 +6249,34 @@ export type QueryWikiSearchArgs = {
   query: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
   userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryWorkflowArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryWorkflowRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QueryWorkflowRunsArgs = {
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<WorkflowRunStatus>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  workflowId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryWorkflowsArgs = {
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  lifecycleStatus?: InputMaybe<WorkflowLifecycleStatus>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  readinessState?: InputMaybe<WorkflowReadinessState>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 export enum QuickActionScope {
@@ -8876,6 +8908,41 @@ export type WikiSearchResult = {
   score: Scalars['Float']['output'];
 };
 
+export type Workflow = {
+  __typename?: 'Workflow';
+  bindings: Array<WorkflowEngineBinding>;
+  capabilityFlags: Scalars['AWSJSON']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  currentVersion?: Maybe<WorkflowVersion>;
+  currentVersionId?: Maybe<Scalars['ID']['output']>;
+  currentVersionNumber?: Maybe<Scalars['Int']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  lastRun?: Maybe<WorkflowRun>;
+  lastRunAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastRunId?: Maybe<Scalars['ID']['output']>;
+  lifecycleStatus: WorkflowLifecycleStatus;
+  name: Scalars['String']['output'];
+  ownerAgentId?: Maybe<Scalars['ID']['output']>;
+  ownerUserId?: Maybe<Scalars['ID']['output']>;
+  primaryTriggerFamily: WorkflowTriggerFamily;
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  runs: Array<WorkflowRun>;
+  slug: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  triggers: Array<WorkflowTrigger>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  visibility: WorkflowVisibility;
+};
+
+
+export type WorkflowRunsArgs = {
+  cursor?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<WorkflowRunStatus>;
+};
+
 export type WorkflowBinding = {
   __typename?: 'WorkflowBinding';
   agentId: Scalars['ID']['output'];
@@ -8886,6 +8953,23 @@ export type WorkflowBinding = {
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
 };
+
+export enum WorkflowBindingStatus {
+  Archived = 'archived',
+  BlockedNotReady = 'blocked_not_ready',
+  Configured = 'configured',
+  Disabled = 'disabled',
+  Ready = 'ready'
+}
+
+export enum WorkflowBindingType {
+  ConnectedApp = 'connected_app',
+  N8nBridge = 'n8n_bridge',
+  N8nImport = 'n8n_import',
+  Native = 'native',
+  StepFunctionsRoutine = 'step_functions_routine',
+  TwentyCrm = 'twenty_crm'
+}
 
 export type WorkflowCatalogItem = {
   __typename?: 'WorkflowCatalogItem';
@@ -8900,6 +8984,205 @@ export type WorkflowCatalogItem = {
   status: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
 };
+
+export type WorkflowEngineBinding = {
+  __typename?: 'WorkflowEngineBinding';
+  bindingStatus: WorkflowBindingStatus;
+  bindingType: WorkflowBindingType;
+  capabilityFlags: Scalars['AWSJSON']['output'];
+  connectionRef: Scalars['AWSJSON']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  externalVersionId?: Maybe<Scalars['String']['output']>;
+  externalWorkflowId?: Maybe<Scalars['String']['output']>;
+  externalWorkflowName?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  managedApplicationId?: Maybe<Scalars['ID']['output']>;
+  pluginInstallId?: Maybe<Scalars['ID']['output']>;
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  routine?: Maybe<Routine>;
+  routineAslVersion?: Maybe<RoutineAslVersion>;
+  routineAslVersionId?: Maybe<Scalars['ID']['output']>;
+  routineId?: Maybe<Scalars['ID']['output']>;
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+  workflow?: Maybe<Workflow>;
+  workflowId: Scalars['ID']['output'];
+  workflowVersion?: Maybe<WorkflowVersion>;
+  workflowVersionId?: Maybe<Scalars['ID']['output']>;
+};
+
+export enum WorkflowEventProvenance {
+  AppCallback = 'app_callback',
+  EngineHistory = 'engine_history',
+  NativeEvent = 'native_event',
+  OperatorDecision = 'operator_decision',
+  OutputInferred = 'output_inferred'
+}
+
+export type WorkflowEvidence = {
+  __typename?: 'WorkflowEvidence';
+  createdAt: Scalars['AWSDateTime']['output'];
+  evidenceType: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  redactionState: WorkflowEvidenceRedactionState;
+  retentionExpiresAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  sensitivity?: Maybe<Scalars['String']['output']>;
+  sourceId?: Maybe<Scalars['String']['output']>;
+  sourceSystem: Scalars['String']['output'];
+  summary: Scalars['AWSJSON']['output'];
+  tenantId: Scalars['ID']['output'];
+  uri?: Maybe<Scalars['String']['output']>;
+  workflow?: Maybe<Workflow>;
+  workflowId: Scalars['ID']['output'];
+  workflowRun?: Maybe<WorkflowRun>;
+  workflowRunId?: Maybe<Scalars['ID']['output']>;
+};
+
+export enum WorkflowEvidenceRedactionState {
+  Offloaded = 'offloaded',
+  RawAllowed = 'raw_allowed',
+  Redacted = 'redacted',
+  SummaryOnly = 'summary_only'
+}
+
+export enum WorkflowLifecycleStatus {
+  Active = 'active',
+  Archived = 'archived',
+  Deprecated = 'deprecated',
+  Draft = 'draft'
+}
+
+export enum WorkflowReadinessState {
+  BlockedNotReady = 'blocked_not_ready',
+  Disabled = 'disabled',
+  Ready = 'ready',
+  Unknown = 'unknown'
+}
+
+export type WorkflowRun = {
+  __typename?: 'WorkflowRun';
+  actorId?: Maybe<Scalars['ID']['output']>;
+  actorType?: Maybe<Scalars['String']['output']>;
+  backendExecutionId?: Maybe<Scalars['String']['output']>;
+  backendExecutionRef: Scalars['AWSJSON']['output'];
+  capabilitySnapshot: Scalars['AWSJSON']['output'];
+  correlationId?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  engineBinding?: Maybe<WorkflowEngineBinding>;
+  engineBindingId?: Maybe<Scalars['ID']['output']>;
+  errorCode?: Maybe<Scalars['String']['output']>;
+  errorMessage?: Maybe<Scalars['String']['output']>;
+  events: Array<WorkflowRunEvent>;
+  evidence: Array<WorkflowEvidence>;
+  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  id: Scalars['ID']['output'];
+  idempotencyKey?: Maybe<Scalars['String']['output']>;
+  inputSummary?: Maybe<Scalars['AWSJSON']['output']>;
+  lastEventAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  outputSummary?: Maybe<Scalars['AWSJSON']['output']>;
+  readinessSnapshot: Scalars['AWSJSON']['output'];
+  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  status: WorkflowRunStatus;
+  tenantId: Scalars['ID']['output'];
+  totalCostUsdCents?: Maybe<Scalars['Int']['output']>;
+  triggerFamily: WorkflowTriggerFamily;
+  triggerSource?: Maybe<Scalars['String']['output']>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  workflow?: Maybe<Workflow>;
+  workflowId: Scalars['ID']['output'];
+  workflowVersion?: Maybe<WorkflowVersion>;
+  workflowVersionId?: Maybe<Scalars['ID']['output']>;
+};
+
+export type WorkflowRunEvent = {
+  __typename?: 'WorkflowRunEvent';
+  createdAt: Scalars['AWSDateTime']['output'];
+  eventStatus?: Maybe<Scalars['String']['output']>;
+  eventType: Scalars['String']['output'];
+  evidenceRef: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  message?: Maybe<Scalars['String']['output']>;
+  occurredAt: Scalars['AWSDateTime']['output'];
+  payloadSummary: Scalars['AWSJSON']['output'];
+  provenance: WorkflowEventProvenance;
+  tenantId: Scalars['ID']['output'];
+  workflowRun?: Maybe<WorkflowRun>;
+  workflowRunId: Scalars['ID']['output'];
+};
+
+export enum WorkflowRunStatus {
+  BlockedNotReady = 'blocked_not_ready',
+  Canceled = 'canceled',
+  Failed = 'failed',
+  Queued = 'queued',
+  Running = 'running',
+  Succeeded = 'succeeded',
+  TimedOut = 'timed_out'
+}
+
+export type WorkflowTrigger = {
+  __typename?: 'WorkflowTrigger';
+  actorContract: Scalars['AWSJSON']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  idempotencyRequired: Scalars['Boolean']['output'];
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  sourceSystem?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  triggerConfig: Scalars['AWSJSON']['output'];
+  triggerFamily: WorkflowTriggerFamily;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  workflow?: Maybe<Workflow>;
+  workflowId: Scalars['ID']['output'];
+  workflowVersion?: Maybe<WorkflowVersion>;
+  workflowVersionId?: Maybe<Scalars['ID']['output']>;
+};
+
+export enum WorkflowTriggerFamily {
+  Agent = 'agent',
+  Api = 'api',
+  ChildWorkflow = 'child_workflow',
+  Crm = 'crm',
+  Manual = 'manual',
+  N8n = 'n8n',
+  Schedule = 'schedule',
+  Webhook = 'webhook'
+}
+
+export type WorkflowVersion = {
+  __typename?: 'WorkflowVersion';
+  capabilitySnapshot: Scalars['AWSJSON']['output'];
+  createdAt: Scalars['AWSDateTime']['output'];
+  createdByActorId?: Maybe<Scalars['ID']['output']>;
+  createdByActorType?: Maybe<Scalars['String']['output']>;
+  definitionSnapshot: Scalars['AWSJSON']['output'];
+  id: Scalars['ID']['output'];
+  publishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  routineAslVersion?: Maybe<RoutineAslVersion>;
+  routineAslVersionId?: Maybe<Scalars['ID']['output']>;
+  sourceKind: Scalars['String']['output'];
+  sourceMetadata: Scalars['AWSJSON']['output'];
+  tenantId: Scalars['ID']['output'];
+  versionNumber: Scalars['Int']['output'];
+  versionStatus: WorkflowVersionStatus;
+  workflow?: Maybe<Workflow>;
+  workflowId: Scalars['ID']['output'];
+};
+
+export enum WorkflowVersionStatus {
+  Active = 'active',
+  Archived = 'archived',
+  Draft = 'draft',
+  Superseded = 'superseded'
+}
+
+export enum WorkflowVisibility {
+  AgentPrivate = 'agent_private',
+  TenantShared = 'tenant_shared'
+}
 
 export type WorkspaceAccessRevokedEvent = {
   __typename?: 'WorkspaceAccessRevokedEvent';

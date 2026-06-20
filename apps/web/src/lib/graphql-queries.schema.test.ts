@@ -13,6 +13,10 @@ import { buildSchema, validate, type DocumentNode } from "graphql";
 import { describe, expect, it } from "vitest";
 import {
   NewThreadMentionTargetsQuery,
+  SettingsWorkflowQuery,
+  SettingsWorkflowRunQuery,
+  SettingsWorkflowRunsQuery,
+  SettingsWorkflowsQuery,
   ThreadMentionTargetsQuery,
 } from "./graphql-queries";
 import {
@@ -83,6 +87,20 @@ describe("spaces settings deployment queries vs canonical schema", () => {
       "SettingsRejectManagedApplicationDeploymentMutation",
       SettingsRejectManagedApplicationDeploymentMutation,
     ],
+  ] as const)("%s validates against the schema", (_name, doc) => {
+    const errors = validate(schema, doc as DocumentNode);
+    expect(errors.map((e) => e.message)).toEqual([]);
+  });
+});
+
+describe("workflow settings queries vs canonical schema", () => {
+  const schema = loadCanonicalSchema();
+
+  it.each([
+    ["SettingsWorkflowsQuery", SettingsWorkflowsQuery],
+    ["SettingsWorkflowQuery", SettingsWorkflowQuery],
+    ["SettingsWorkflowRunsQuery", SettingsWorkflowRunsQuery],
+    ["SettingsWorkflowRunQuery", SettingsWorkflowRunQuery],
   ] as const)("%s validates against the schema", (_name, doc) => {
     const errors = validate(schema, doc as DocumentNode);
     expect(errors.map((e) => e.message)).toEqual([]);

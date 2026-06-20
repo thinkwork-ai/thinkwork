@@ -1,0 +1,261 @@
+# First-class workflow control-plane API.
+#
+# The Workflow types are the product-facing inventory and run ledger. Existing
+# Routine types remain available as Step Functions engine evidence and
+# compatibility detail.
+
+enum WorkflowLifecycleStatus {
+  draft
+  active
+  deprecated
+  archived
+}
+
+enum WorkflowVisibility {
+  agent_private
+  tenant_shared
+}
+
+enum WorkflowTriggerFamily {
+  manual
+  schedule
+  webhook
+  crm
+  n8n
+  api
+  agent
+  child_workflow
+}
+
+enum WorkflowReadinessState {
+  unknown
+  ready
+  blocked_not_ready
+  disabled
+}
+
+enum WorkflowVersionStatus {
+  draft
+  active
+  superseded
+  archived
+}
+
+enum WorkflowBindingType {
+  step_functions_routine
+  n8n_bridge
+  n8n_import
+  twenty_crm
+  connected_app
+  native
+}
+
+enum WorkflowBindingStatus {
+  configured
+  ready
+  blocked_not_ready
+  disabled
+  archived
+}
+
+enum WorkflowRunStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+  timed_out
+  blocked_not_ready
+}
+
+enum WorkflowEventProvenance {
+  native_event
+  app_callback
+  engine_history
+  output_inferred
+  operator_decision
+}
+
+enum WorkflowEvidenceRedactionState {
+  summary_only
+  redacted
+  offloaded
+  raw_allowed
+}
+
+type Workflow {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String!
+  description: String
+  lifecycleStatus: WorkflowLifecycleStatus!
+  visibility: WorkflowVisibility!
+  ownerUserId: ID
+  ownerAgentId: ID
+  primaryTriggerFamily: WorkflowTriggerFamily!
+  currentVersionId: ID
+  currentVersionNumber: Int
+  currentVersion: WorkflowVersion
+  capabilityFlags: AWSJSON!
+  readinessState: WorkflowReadinessState!
+  readinessReasons: AWSJSON!
+  triggers: [WorkflowTrigger!]!
+  bindings: [WorkflowEngineBinding!]!
+  lastRunId: ID
+  lastRun: WorkflowRun
+  lastRunAt: AWSDateTime
+  runs(limit: Int, cursor: String, status: WorkflowRunStatus): [WorkflowRun!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type WorkflowVersion {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  workflow: Workflow
+  versionNumber: Int!
+  versionStatus: WorkflowVersionStatus!
+  sourceKind: String!
+  sourceMetadata: AWSJSON!
+  definitionSnapshot: AWSJSON!
+  capabilitySnapshot: AWSJSON!
+  routineAslVersionId: ID
+  routineAslVersion: RoutineAslVersion
+  createdByActorType: String
+  createdByActorId: ID
+  publishedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type WorkflowTrigger {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  workflow: Workflow
+  workflowVersionId: ID
+  workflowVersion: WorkflowVersion
+  triggerFamily: WorkflowTriggerFamily!
+  sourceSystem: String
+  enabled: Boolean!
+  idempotencyRequired: Boolean!
+  triggerConfig: AWSJSON!
+  actorContract: AWSJSON!
+  readinessState: WorkflowReadinessState!
+  readinessReasons: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type WorkflowEngineBinding {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  workflow: Workflow
+  workflowVersionId: ID
+  workflowVersion: WorkflowVersion
+  bindingType: WorkflowBindingType!
+  bindingStatus: WorkflowBindingStatus!
+  routineId: ID
+  routine: Routine
+  routineAslVersionId: ID
+  routineAslVersion: RoutineAslVersion
+  pluginInstallId: ID
+  managedApplicationId: ID
+  externalWorkflowId: String
+  externalWorkflowName: String
+  externalVersionId: String
+  connectionRef: AWSJSON!
+  capabilityFlags: AWSJSON!
+  readinessState: WorkflowReadinessState!
+  readinessReasons: AWSJSON!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type WorkflowRun {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  workflow: Workflow
+  workflowVersionId: ID
+  workflowVersion: WorkflowVersion
+  engineBindingId: ID
+  engineBinding: WorkflowEngineBinding
+  status: WorkflowRunStatus!
+  triggerFamily: WorkflowTriggerFamily!
+  triggerSource: String
+  actorType: String
+  actorId: ID
+  idempotencyKey: String
+  correlationId: String
+  backendExecutionId: String
+  backendExecutionRef: AWSJSON!
+  capabilitySnapshot: AWSJSON!
+  readinessSnapshot: AWSJSON!
+  inputSummary: AWSJSON
+  outputSummary: AWSJSON
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  lastEventAt: AWSDateTime
+  errorCode: String
+  errorMessage: String
+  totalCostUsdCents: Int
+  events: [WorkflowRunEvent!]!
+  evidence: [WorkflowEvidence!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type WorkflowRunEvent {
+  id: ID!
+  tenantId: ID!
+  workflowRunId: ID!
+  workflowRun: WorkflowRun
+  eventType: String!
+  eventStatus: String
+  provenance: WorkflowEventProvenance!
+  occurredAt: AWSDateTime!
+  message: String
+  payloadSummary: AWSJSON!
+  evidenceRef: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
+type WorkflowEvidence {
+  id: ID!
+  tenantId: ID!
+  workflowId: ID!
+  workflow: Workflow
+  workflowRunId: ID
+  workflowRun: WorkflowRun
+  evidenceType: String!
+  sourceSystem: String!
+  sourceId: String
+  uri: String
+  summary: AWSJSON!
+  redactionState: WorkflowEvidenceRedactionState!
+  sensitivity: String
+  retentionExpiresAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+extend type Query {
+  workflows(
+    tenantId: ID
+    lifecycleStatus: WorkflowLifecycleStatus
+    readinessState: WorkflowReadinessState
+    limit: Int
+    cursor: String
+  ): [Workflow!]!
+  workflow(id: ID!): Workflow
+  workflowRuns(
+    tenantId: ID
+    workflowId: ID
+    status: WorkflowRunStatus
+    limit: Int
+    cursor: String
+  ): [WorkflowRun!]!
+  workflowRun(id: ID!): WorkflowRun
+}
