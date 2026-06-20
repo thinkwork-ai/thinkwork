@@ -103,4 +103,29 @@ export const sharedPluginTermAllowlist = [
     reason:
       "shared Plugin Detail UI shell for n8n package settings; package-specific validation is imported from plugins/n8n.",
   },
+  {
+    pathPrefix: "packages/api/src/lib/n8n-agent-step/",
+    reason:
+      "shared platform bridge contract for n8n workflows invoking ThinkWork agent steps; managed app runtime source remains package-owned under plugins/n8n.",
+  },
+  {
+    path: "packages/database-pg/__tests__/migration-0176-n8n-agent-step-runs.test.ts",
+    reason:
+      "shared platform database contract coverage for n8n agent-step bridge run state.",
+  },
+  {
+    path: "packages/database-pg/drizzle/0176_n8n_agent_step_runs.sql",
+    reason:
+      "shared platform database migration for n8n agent-step bridge run state.",
+  },
+  {
+    path: "packages/database-pg/graphql/types/n8n-agent-step-runs.graphql",
+    reason:
+      "shared platform GraphQL contract for n8n agent-step bridge run state.",
+  },
+  {
+    path: "packages/database-pg/src/schema/n8n-agent-step-runs.ts",
+    reason:
+      "shared platform Drizzle schema for n8n agent-step bridge run state.",
+  },
 ];

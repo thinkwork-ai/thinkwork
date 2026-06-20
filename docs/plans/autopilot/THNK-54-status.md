@@ -125,3 +125,51 @@ Planned files:
 - Opened U1 PR: https://github.com/thinkwork-ai/thinkwork/pull/2750
 - Moved Linear issue `THNK-54` to `Verification` and posted the PR/status
   comment with marker `dispatcher:THNK-54:Review:Codex`.
+- CI reported `lint` failure because the plugin-source-boundary guard treats
+  paths containing `n8n` as plugin-specific unless they are documented shared
+  surfaces. Added exact shared-contract allowlist entries for the U1 bridge
+  files and verified:
+  - `pnpm lint:plugin-source`
+  - `pnpm lint`
+
+## Blockers
+
+### 2026-06-20 - U1 PR blocked by dev manual migration gate
+
+PR: https://github.com/thinkwork-ai/thinkwork/pull/2750
+
+Current branch: `codex/thnk-54-u1-n8n-agent-step-contract`
+
+GitHub ruleset `Protected` requires `lint`, `typecheck`, `test`, `verify`, and
+`cla`. Auto-merge is enabled for the PR, but merge remains blocked because
+`Migration Precheck` failed for the new hand-rolled migration. The failing job
+scopes the drift reporter to `packages/database-pg/drizzle/0176_n8n_agent_step_runs.sql`
+and reports every declared object missing in dev:
+
+- `public.n8n_agent_step_runs`
+- `public.n8n_agent_step_runs_tenant_idempotency_uidx`
+- `public.n8n_agent_step_runs_tenant_status_idx`
+- `public.n8n_agent_step_runs_thread_idx`
+- `public.n8n_agent_step_runs_n8n_execution_idx`
+- `public.n8n_agent_step_runs_due_expiry_idx`
+- `public.n8n_agent_step_runs_resume_pending_idx`
+- `constraint public.n8n_agent_step_runs.n8n_agent_step_runs_status_check`
+- `constraint public.n8n_agent_step_runs.n8n_agent_step_runs_resume_status_check`
+- `constraint public.n8n_agent_step_runs.n8n_agent_step_runs_timeout_bounds_check`
+- `constraint public.n8n_agent_step_runs.n8n_agent_step_runs_terminal_state_check`
+
+Attempted commands:
+
+- `gh pr merge 2750 --squash --delete-branch --subject ... --body ...`
+  returned `base branch policy prohibits the merge`.
+- `gh pr merge 2750 --squash --delete-branch --auto --subject ... --body ...`
+  succeeded in enabling auto-merge.
+- `gh run view 27883565537 --log-failed` confirmed the dev migration gate
+  failure.
+
+Next recommended action: apply
+`packages/database-pg/drizzle/0176_n8n_agent_step_runs.sql` to the dev database
+through an authorized migration path, then rerun `Migration Precheck` on PR 2750. I did not run the manual database mutation because the autopilot contract
+forbids manual production/deployment mutations outside the normal pipeline, and
+the repo's drift gate is explicitly requiring a dev database state change before
+merge.
