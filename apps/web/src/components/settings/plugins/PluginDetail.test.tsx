@@ -506,7 +506,9 @@ describe("PluginDetail", () => {
     fireEvent.change(screen.getByPlaceholderText("lastmile"), {
       target: { value: "lastmile" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^uninstall plugin$/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^uninstall plugin$/i }),
+    );
 
     await waitFor(() => {
       expect(mocks.uninstall).toHaveBeenCalledWith({
@@ -924,6 +926,48 @@ describe("PluginDetail", () => {
     expect(screen.queryByText("n8n Settings")).toBeNull();
   });
 
+  it("renders recent redacted n8n agent-step bridge evidence", () => {
+    paramsState.pluginKey = "n8n";
+    mockQueries({
+      install: n8nInstall,
+      catalog: [n8nEntry],
+      activations: [],
+      n8nSettings: {
+        ...n8nPluginSettings,
+        recentAgentStepRuns: [
+          {
+            __typename: "N8nAgentStepRunTelemetry" as const,
+            id: "run-1",
+            status: "resume_failed",
+            resumeStatus: "failed",
+            workflowId: "workflow-1",
+            workflowName: "Order triage",
+            executionId: "exec-1",
+            correlationId: "corr-1",
+            instructionsPreview: "Investigate order 123",
+            inputPreview: null,
+            outputPreview: null,
+            errorMessage: "n8n callback returned 410 Gone",
+            summary: null,
+            links: { threadUrl: "/threads/thread-1" },
+            resumeAttemptCount: 2,
+            lastResumeHttpStatus: 410,
+            lastResumeError: null,
+            expiresAt: "2026-06-20T12:30:00.000Z",
+            updatedAt: "2026-06-20T12:00:00.000Z",
+          },
+        ],
+      },
+    });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("Recent bridge runs")).toBeTruthy();
+    expect(screen.getByText("Order triage")).toBeTruthy();
+    expect(screen.getAllByText("resume failed").length).toBeGreaterThan(0);
+    expect(screen.getByText("n8n callback returned 410 Gone")).toBeTruthy();
+    expect(screen.queryByText(/webhook-waiting/i)).toBeNull();
+  });
+
   it("creates an n8n package plan from normalized custom package specs", async () => {
     paramsState.pluginKey = "n8n";
     mockQueries({ install: n8nInstall, catalog: [n8nEntry], activations: [] });
@@ -1186,6 +1230,7 @@ const n8nPluginSettings = {
   lastJobError: null,
   lastEvidenceBucket: null,
   lastEvidencePrefix: null,
+  recentAgentStepRuns: [],
 };
 
 const workosInstall = {

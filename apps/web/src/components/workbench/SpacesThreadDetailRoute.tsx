@@ -25,6 +25,7 @@ import type { GeneratedArtifact } from "@/components/workbench/GeneratedArtifact
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
 import { FlagThreadForEvalDialog } from "@/components/workbench/FlagThreadForEvalDialog";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
+import type { BridgeRunTelemetry } from "@/components/workbench/BridgeRunTelemetryPanel";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import type { UserQuestionRecord } from "@/lib/ui-message-types";
 import { toUserQuestionStatus } from "@/lib/user-question-record";
@@ -199,6 +200,7 @@ interface ThreadResult {
       createdAt?: string | null;
     }> | null;
   } | null;
+  n8nAgentStepRuns?: BridgeRunTelemetry[] | null;
 }
 
 interface ThreadTasksResult {
@@ -1273,6 +1275,7 @@ export function SpacesThreadDetailRoute({
       startedBy: resolveStartedBy(routeThread),
       agents: resolveAgentsInvolved(routeThread),
       attachments: routeThread?.attachments ?? [],
+      bridgeRuns: data?.n8nAgentStepRuns ?? [],
       onDownloadAttachment: (attachmentId: string) =>
         downloadThreadAttachment(threadId, attachmentId),
       goal:
@@ -1341,6 +1344,7 @@ export function SpacesThreadDetailRoute({
       goalReadiness.readyForReview,
       handleRefreshThread,
       handleReviewGoal,
+      data?.n8nAgentStepRuns,
       routeThread,
       infoPanelChecklistTasks,
       linkedTasksError?.message,

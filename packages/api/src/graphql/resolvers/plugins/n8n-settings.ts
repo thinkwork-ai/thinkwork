@@ -25,6 +25,7 @@ import {
 } from "../deployments/shared.js";
 import { requirePluginTenantAdmin } from "./shared.js";
 import type { PluginInstallRow } from "../../../lib/plugins/store.js";
+import { loadN8nAgentStepRunTelemetry } from "../n8n-agent-step-runs/telemetry.js";
 
 type DbLike = typeof defaultDb;
 
@@ -52,7 +53,14 @@ export async function n8nPluginSettings(
   const db = deps.db ?? defaultDb;
   const app = await findN8nManagedApplication(tenantId, db);
   const latestJob = await findLatestN8nDeploymentJob(tenantId, db);
-  return settingsPayload({ install, app, latestJob });
+  const recentAgentStepRuns = await loadN8nAgentStepRunTelemetry({
+    tenantId,
+    pluginInstallId: install.id,
+    managedApplicationId: app?.id ?? null,
+    limit: 5,
+    db,
+  });
+  return settingsPayload({ install, app, latestJob, recentAgentStepRuns });
 }
 
 export async function updateN8nPluginPackageSettings(
@@ -155,6 +163,7 @@ export async function updateN8nPluginPackageSettings(
       install,
       app: updatedApp,
       latestJob: started.job,
+      recentAgentStepRuns: [],
     }),
     deploymentJob: toDeploymentPayload(started.job, started.events),
   };
@@ -216,6 +225,7 @@ function settingsPayload(args: {
   install: PluginInstallRow;
   app: ManagedApplicationRow | null;
   latestJob: ManagedApplicationDeploymentJobRow | null;
+  recentAgentStepRuns?: unknown[];
 }) {
   const desiredConfig = recordValue(args.app?.desired_config);
   const packageConfig = normalizeN8nPackageConfig(desiredConfig);
@@ -241,6 +251,7 @@ function settingsPayload(args: {
     lastJobError: args.latestJob?.error_message ?? null,
     lastEvidenceBucket: args.latestJob?.evidence_bucket ?? null,
     lastEvidencePrefix: args.latestJob?.evidence_prefix ?? null,
+    recentAgentStepRuns: args.recentAgentStepRuns ?? [],
   };
 }
 

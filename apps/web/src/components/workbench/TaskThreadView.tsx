@@ -131,6 +131,10 @@ import {
   selectLatestProjection,
   type LatestProjectionRef,
 } from "@/components/workbench/workspace-projection";
+import {
+  BridgeRunTelemetryPanel,
+  type BridgeRunTelemetry,
+} from "@/components/workbench/BridgeRunTelemetryPanel";
 
 const DEFAULT_COMPOSER_BOTTOM_INSET_PX = 220;
 const COMPOSER_TRANSCRIPT_GAP_PX = 32;
@@ -270,6 +274,7 @@ export interface TaskThreadInfoPanelState {
   startedBy?: string | null;
   agents: string[];
   attachments: ThreadInfoAttachment[];
+  bridgeRuns?: BridgeRunTelemetry[] | null;
   onDownloadAttachment: (attachmentId: string) => void | Promise<void>;
   goal?: ThreadInfoGoalState | null;
   checklist?: ThreadInfoChecklistState | null;
@@ -756,6 +761,17 @@ function ThreadInfoPanelBody({
                 ))}
               </div>
             </section>
+          ) : null}
+
+          {state.bridgeRuns?.length ? (
+            <div className="border-t border-white/10 pt-4">
+              <BridgeRunTelemetryPanel
+                runs={state.bridgeRuns}
+                title="n8n agent steps"
+                compact
+                className="border-white/10 bg-white/5"
+              />
+            </div>
           ) : null}
 
           {state.goal ? (
@@ -4059,11 +4075,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-      stringValue(payload.profileSlug) ||
-      stringValue(payload.profile_name) ||
-      stringValue(payload.profileName) ||
-      stringValue(payload.profile_run_id) ||
-      stringValue(payload.profileRunId),
+    stringValue(payload.profileSlug) ||
+    stringValue(payload.profile_name) ||
+    stringValue(payload.profileName) ||
+    stringValue(payload.profile_run_id) ||
+    stringValue(payload.profileRunId),
   );
 }
 

@@ -60,3 +60,50 @@ type N8nAgentStepRun {
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
 }
+
+"""
+Redacted operator-visible telemetry for n8n agent-step bridge runs.
+
+This intentionally excludes tenant IDs, idempotency keys, request metadata,
+resume URL host/path, secret refs, and raw result/output/error payloads.
+"""
+type N8nAgentStepRunTelemetry {
+  id: ID!
+  pluginInstallId: ID
+  managedApplicationId: ID
+  spaceId: ID!
+  agentId: ID
+  threadId: ID
+  threadTurnId: ID
+  openingMessageId: ID
+  status: N8nAgentStepRunStatus!
+  resumeStatus: N8nAgentStepResumeStatus!
+  workflowId: String!
+  workflowName: String
+  executionId: String!
+  stepId: String!
+  correlationId: String!
+  requestId: String
+  instructionsPreview: String
+  inputPreview: String
+  outputPreview: String
+  errorMessage: String
+  summary: String
+  links: AWSJSON
+  timeoutSeconds: Int!
+  expiresAt: AWSDateTime!
+  resumeAttemptCount: Int!
+  nextResumeAttemptAt: AWSDateTime
+  lastResumeAttemptAt: AWSDateTime
+  lastResumeHttpStatus: Int
+  lastResumeError: String
+  resumedAt: AWSDateTime
+  terminalAt: AWSDateTime
+  acceptedAt: AWSDateTime!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+extend type Query {
+  n8nAgentStepRuns(threadId: ID, limit: Int): [N8nAgentStepRunTelemetry!]!
+}

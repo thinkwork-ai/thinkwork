@@ -912,6 +912,26 @@ export const ComputerThreadQuery = gql`
         }
       }
     }
+    n8nAgentStepRuns(threadId: $id, limit: 5) {
+      id
+      status
+      resumeStatus
+      workflowId
+      workflowName
+      executionId
+      correlationId
+      instructionsPreview
+      inputPreview
+      outputPreview
+      errorMessage
+      summary
+      links
+      resumeAttemptCount
+      lastResumeHttpStatus
+      lastResumeError
+      expiresAt
+      updatedAt
+    }
   }
 `;
 

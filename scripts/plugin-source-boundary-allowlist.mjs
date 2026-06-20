@@ -109,6 +109,11 @@ export const sharedPluginTermAllowlist = [
       "shared platform bridge contract for n8n workflows invoking ThinkWork agent steps; managed app runtime source remains package-owned under plugins/n8n.",
   },
   {
+    pathPrefix: "packages/api/src/graphql/resolvers/n8n-agent-step-runs/",
+    reason:
+      "shared platform GraphQL telemetry surface for n8n workflow-to-agent bridge runs; managed app runtime source remains package-owned under plugins/n8n.",
+  },
+  {
     path: "packages/api/src/handlers/n8n-agent-step-bridge.ts",
     reason:
       "shared platform HTTP bridge endpoint for n8n workflows invoking ThinkWork agent steps; managed app runtime source remains package-owned under plugins/n8n.",

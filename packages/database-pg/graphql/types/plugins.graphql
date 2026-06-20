@@ -270,6 +270,7 @@ type N8nPluginSettings {
   lastJobError: String
   lastEvidenceBucket: String
   lastEvidencePrefix: String
+  recentAgentStepRuns: [N8nAgentStepRunTelemetry!]!
 }
 
 input InstallPluginInput {
