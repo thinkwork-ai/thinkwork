@@ -17,8 +17,9 @@ status: in_progress
 - Current worktree:
   `.Codex/worktrees/thnk-34-u2-genui-envelope`.
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
-  merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2 not opened yet.
-- Status: U1 complete and merged. U2 implementation complete locally from
+  merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
+  [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) opened.
+- Status: U1 complete and merged. U2 implementation complete and PR opened from
   `origin/main` at `10d712c163fdbd748daa67de4640be3b6785a2ba`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
@@ -112,8 +113,10 @@ status: in_progress
     `main` moved.
   - U1 PR #2753 was squash merged to `main` as
     `10d712c163fdbd748daa67de4640be3b6785a2ba`.
+  - U2 PR #2756 opened; checks pending.
 - Blockers: none.
-- Next action: commit U2, open the U2 PR, and monitor CI.
+- Next action: monitor U2 PR #2756 CI, fix any failures, then squash merge when
+  green.
 
 ## Space Webhook Thread Starts - 2026-06-19
 
