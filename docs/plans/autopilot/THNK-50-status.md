@@ -850,12 +850,45 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - Inlined the pinned base image digest in the n8n Docker build step.
     - Removed the unused step-scoped `N8N_BASE_IMAGE_URI` environment entry from
       the manifest step.
+  - Local verification:
+    - `pnpm exec tsx --test scripts/release/__tests__/build-release-manifest.test.ts`
+      passed: 10 tests.
+  - PR:
+    - PR: https://github.com/thinkwork-ai/thinkwork/pull/2721
+    - Merge commit: `42cb776b8f322d1c84c9a1cabbaf4b456dce4000`
+    - Status: merged after CLA, lint, verify, typecheck, and test passed.
+  - Canary release attempt:
+    - Tag `v0.1.0-canary.221` was pushed from merge commit
+      `42cb776b8f322d1c84c9a1cabbaf4b456dce4000`.
+    - Release workflow run `27855162563` failed in build-deploy-artifacts at
+      `Build and push n8n runtime amd64`.
+    - Root cause: the Dockerfile copied `n8n-task-runners.json`, but the runtime
+      build context only contained `n8n-task-runners.json.template`; Docker
+      failed with `"/n8n-task-runners.json": not found`.
+- n8n runtime task-runner config follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-runtime-task-runner-config`
+  - Objective: ship the concrete baseline task-runner config expected by the n8n
+    runtime Dockerfile while keeping the template available for custom package
+    image builds.
+  - Implementation summary:
+    - Added `plugins/n8n/runtime/n8n-task-runners.json` with an empty
+      JavaScript external package allow-list for the baseline release image.
+    - Updated the image-build unit test to read the concrete config as well as
+      the custom-package template.
+  - Local verification:
+    - `pnpm --filter @thinkwork/plugin-n8n test -- --run image-build.test.ts`
+      passed: 5 tests.
+    - Local Docker build was attempted, but the Docker daemon was not running on
+      this machine:
+      `failed to connect to the docker API at unix:///Users/ericodom/.docker/run/docker.sock`.
 
 ## Blockers
 
 - Active fix in progress: the release workflow must publish a baseline
   `n8n-runtime` image before the deployed ThinkWork plugin install can produce a
-  valid n8n managed-app plan. After that PR merges, cut a new canary release,
-  update the dev deployment pointer, retry the n8n install through the plugin
-  flow, approve/apply the managed-app job, verify n8n and MCP through ThinkWork,
-  then tear down through the managed plugin flow.
+  valid n8n managed-app plan. After the task-runner config PR merges, cut a new
+  canary release, update the dev deployment pointer, retry the n8n install
+  through the plugin flow, approve/apply the managed-app job, verify n8n and MCP
+  through ThinkWork, then tear down through the managed plugin flow.

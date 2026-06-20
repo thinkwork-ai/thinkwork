@@ -98,6 +98,10 @@ describe("n8n package image build contract", () => {
 
   it("ships runtime templates for n8n module resolution and task-runner allow lists", () => {
     const dockerfile = readFileSync("runtime/Dockerfile", "utf8");
+    const taskRunnerConfig = readFileSync(
+      "runtime/n8n-task-runners.json",
+      "utf8",
+    );
     const taskRunnerTemplate = readFileSync(
       "runtime/n8n-task-runners.json.template",
       "utf8",
@@ -106,6 +110,7 @@ describe("n8n package image build contract", () => {
     expect(dockerfile).toContain(
       "/usr/local/lib/node_modules/n8n/node_modules",
     );
+    expect(taskRunnerConfig).toContain("NODE_FUNCTION_ALLOW_EXTERNAL");
     expect(taskRunnerTemplate).toContain("NODE_FUNCTION_ALLOW_EXTERNAL");
     expect(taskRunnerTemplate).toContain("{{NODE_FUNCTION_ALLOW_EXTERNAL}}");
   });
