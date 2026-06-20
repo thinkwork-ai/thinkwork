@@ -1,4 +1,5 @@
 import {
+  THREAD_GENUI_ANALYTICS_COMPONENT,
   THREAD_GENUI_CATALOG_VERSION,
   THREAD_GENUI_NATIVE_COMPONENTS,
   THREAD_GENUI_RESERVED_ADAPTER_COMPONENTS,
@@ -25,7 +26,7 @@ export function isReservedAdapterComponent(component: string): boolean {
 
 export function isAnalyticalComponentName(component: string): boolean {
   return (
-    component === "analytics.display" ||
+    component === THREAD_GENUI_ANALYTICS_COMPONENT ||
     component === "chart" ||
     component === "table" ||
     component === "metric" ||

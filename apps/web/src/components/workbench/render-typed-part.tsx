@@ -38,8 +38,10 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
+import { AnalyticsDisplayPart } from "@/components/workbench/genui/components/AnalyticsDisplayPart";
 import { UserQuestionCard } from "@/components/workbench/UserQuestionCard";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
+import type { GenUIData } from "@/lib/ui-message-types";
 import type {
   RunbookConfirmationData,
   UserQuestionData,
@@ -180,6 +182,9 @@ export function renderTypedPart(
           data={recordData(part.data) as RunbookConfirmationData}
         />
       );
+    }
+    if (part.type === "data-genui") {
+      return <AnalyticsDisplayPart key={key} data={part.data as GenUIData} />;
     }
     if (part.type === "data-runbook-queue" || part.type === "data-task-queue") {
       // Queue data is projected into the prompt composer by TaskThreadView.

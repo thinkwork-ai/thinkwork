@@ -11,16 +11,17 @@ status: in_progress
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
 - Linear issue: `THNK-34`.
 - Target branch: `main`.
-- Current implementation unit: U2 Define the `data-genui` contract and v1
-  catalog.
-- Current branch: `codex/thnk-34-u2-genui-envelope`.
+- Current implementation unit: U8 Adapt THNK-14 analytical specs for Thread
+  GenUI.
+- Current branch: `codex/thnk-34-u8-analytics-adapter`.
 - Current worktree:
-  `.Codex/worktrees/thnk-34-u2-genui-envelope`.
+  `.Codex/worktrees/thnk-34-u8-analytics-adapter`.
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
   merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
-  [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) opened.
-- Status: U1 complete and merged. U2 implementation complete and PR opened from
-  `origin/main` at `10d712c163fdbd748daa67de4640be3b6785a2ba`.
+  [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) merged as
+  `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`; U8 not opened yet.
+- Status: U1 and U2 complete and merged. U8 implementation in progress from
+  `origin/main` at `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
     and U7 in dependency order.
@@ -85,6 +86,16 @@ status: in_progress
     undeclared local `prettier` binary. `pnpm dlx prettier --check` confirmed
     substantial pre-existing repository-wide formatting drift; changed U2-owned
     files were formatted with `pnpm dlx prettier --write`.
+  - U8 `pnpm install` completed with the known optional `canvas@2.11.2` native
+    fallback warning under local Node 25 because `pkg-config` / `pixman-1` are
+    unavailable.
+  - U8 `pnpm --filter @thinkwork/genui test` passed: 19 tests.
+  - U8 `pnpm --filter @thinkwork/genui typecheck` passed.
+  - U8 `pnpm --filter @thinkwork/analytics-display test` passed: 21 tests.
+  - U8 `pnpm --filter @thinkwork/analytics-display typecheck` passed.
+  - U8 `pnpm --filter @thinkwork/web test -- src/lib/ui-message-chunk-parser.test.ts src/components/workbench/render-typed-part.test.tsx src/components/workbench/genui/components/AnalyticsDisplayPart.test.tsx`
+    passed: 50 tests after Compound review fixes.
+  - U8 `pnpm --filter @thinkwork/web typecheck` passed.
 - Compound review:
   - Correctness review flagged unrelated upstream MCP changes when diffing
     against the moving `origin/main`; the U1 branch will be rebased before PR so
@@ -107,16 +118,28 @@ status: in_progress
   - U2 testing review flagged partial native catalog branch coverage. Fixed by
     adding valid/invalid coverage for `workflow.status`, `keyValue.list`, and
     `form.action`.
+  - U8 correctness/testing review flagged that web parser validation did not
+    pass the analytics adapter context, so valid `analytics.display` chunks
+    would be dropped. Fixed by validating `data-genui` parser admission with
+    `createAnalyticsDisplayGenUIValidationContext` and adding a valid
+    analytics parser regression.
+  - U8 correctness review flagged that `AnalyticsDisplayPart` was not wired into
+    `render-typed-part`. Fixed by routing `data-genui` parts to
+    `AnalyticsDisplayPart` and adding typed-part renderer coverage.
 - CI log:
   - U1 PR #2753 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) twice: once on the initial PR head and again after rebasing because
     `main` moved.
   - U1 PR #2753 was squash merged to `main` as
     `10d712c163fdbd748daa67de4640be3b6785a2ba`.
-  - U2 PR #2756 opened; checks pending.
+  - U2 PR #2756 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) after rebasing once because `main` moved.
+  - U2 PR #2756 was squash merged to `main` as
+    `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`.
 - Blockers: none.
-- Next action: monitor U2 PR #2756 CI, fix any failures, then squash merge when
+- Next action: monitor U8 PR #2758 CI, fix any failures, then squash merge when
   green.
+
 ## First-Class Workflow Control Plane - 2026-06-20
 
 - Plan:
