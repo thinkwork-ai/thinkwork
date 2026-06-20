@@ -50,7 +50,7 @@ def canonical_manifest_digest(manifest: dict) -> str:
 def write_manifest(path: Path, manifest: dict) -> str:
     encoded = json.dumps(manifest, indent=2).encode()
     path.write_bytes(encoded)
-    return canonical_manifest_digest(manifest)
+    return digest(encoded)
 
 
 def release_manifest(
@@ -168,7 +168,7 @@ def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     assert {artifact["source"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]} == {"bundle"}
 
 
-def test_ensure_release_manifest_available_accepts_canonical_manifest_digest(
+def test_ensure_release_manifest_available_accepts_manifest_file_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     runner = load_runner()
@@ -178,18 +178,22 @@ def test_ensure_release_manifest_available_accepts_canonical_manifest_digest(
     write_tar(bundle_path, {})
     manifest = release_manifest(bundle_path, runner.sha256_file(bundle_path), [])
     manifest_sha = write_manifest(manifest_path, manifest)
+    canonical_sha = runner.release_manifest_sha256(manifest)
 
-    assert digest(manifest_path.read_bytes()) != manifest_sha
+    assert digest(manifest_path.read_bytes()) == manifest_sha
+    assert canonical_sha != manifest_sha
 
     monkeypatch.setattr(runner, "MANIFEST", downloaded_path)
 
     runner.ensure_release_manifest_available(file_url(manifest_path), manifest_sha)
 
     assert downloaded_path.exists()
-    assert (
-        runner.release_manifest_sha256(json.loads(downloaded_path.read_text()))
-        == manifest_sha
-    )
+    assert digest(downloaded_path.read_bytes()) == manifest_sha
+
+    downloaded_path.unlink()
+
+    with pytest.raises(RuntimeError, match="Release manifest digest mismatch"):
+        runner.ensure_release_manifest_available(file_url(manifest_path), canonical_sha)
 
 
 def test_sync_release_artifacts_can_materialize_only_web_static_bundle(

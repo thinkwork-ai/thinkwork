@@ -1285,15 +1285,69 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - `git diff --check` passed.
   - Status: active.
 
+- n8n Aurora SSL/public URL fix branch:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2733
+  - Merge commit: `19e105b86e13dd58a040902c7a8f3ae146db4534`
+  - Status: merged after required checks passed.
+  - Main deploy run `27865381097` succeeded.
+  - Released canary `v0.1.0-canary.232`.
+  - Post-merge live validation found the release status pointer still stored the
+    canonical manifest digest, while GitHub-hosted release artifact consumers
+    fetch and verify the raw manifest file bytes.
+- Release status manifest digest fix branch:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2734
+  - Merge commit: `980d99bac3587ed06fd13a5fa62d3260d25a0ca8`
+  - Status: merged after required checks passed.
+  - Released canary `v0.1.0-canary.233`.
+  - Verified active dev status pointer manifest SHA
+    `d9ee9e930fc8f0107e997aac79fc195c56927b7b5825d8a541b8738a5aabc920`
+    matches the downloaded GitHub release manifest bytes.
+- API release-manifest image digest fix branch:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2735
+  - Merge commit: `c63091612ce53ee79b69ed5e1bc57e3edd31e55f`
+  - Status: merged after required checks passed.
+  - Main deploy run `27867070210` succeeded.
+  - Retried n8n uninstall for partial install
+    `c040ec95-15f7-4e72-88fc-4407410b1e45`; the API now accepts the active
+    release pointer and created destroy deployment job
+    `7a1532de-4e6e-473f-8a67-994bc694c0d7`.
+  - Destroy job failed inside the deployment runner before Terraform because
+    bundled `runner.py` still compared the selected release manifest SHA against
+    the canonical parsed JSON digest
+    `936d0e357c6e2ce6335a4841aab0f5e30db5be3a7d6e91e4d71d600b4555b3cd`
+    instead of the selected manifest byte digest
+    `d9ee9e930fc8f0107e997aac79fc195c56927b7b5825d8a541b8738a5aabc920`.
+- Deployment runner release-manifest byte digest follow-up branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-runner-manifest-byte-digest`
+  - Objective: make the deployment runner validate the same downloaded
+    manifest byte digest selected by deployment status, while keeping canonical
+    JSON digest verification for signed release manifest trust.
+  - Implementation summary:
+    - `verify_release_manifest_digest` now hashes the manifest file bytes with
+      `sha256_file` before parsing.
+    - Release artifact evidence now records `manifestSha256` as the byte digest
+      and `manifestCanonicalSha256` as the canonical JSON digest.
+    - Runner bundle tests now cover byte-digest acceptance and canonical-digest
+      rejection for release selection, while preserving signature trust against
+      the canonical digest.
+  - Local verification:
+    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`
+      passed.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k 'release_manifest_available or sync_release_artifacts'`
+      passed.
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+      passed.
+    - `git diff --check` passed.
+  - Status: active.
+
 ## Blockers
 
-- Active blocker: canary `231` now resets cleanly, hydrates the n8n image,
-  creates the n8n substrate, and gets through generated secret creation, but
-  the n8n main container exits during DB initialization with
-  `unable to get local issuer certificate` when connecting to Aurora over
-  Postgres SSL; after reconciliation, the plugin install also remains partial
-  because the n8n managed-app row did not persist the derived `publicUrl` or
-  generated `serviceCredentialSecretArn` needed by the native MCP component.
-- Active fix in progress: merge and release the n8n Aurora DB SSL verification
-  and public URL defaulting fixes, then reset/retry the deployed ThinkWork n8n
-  install path until runtime provisioning succeeds end to end.
+- Active blocker: canary `233` fixed the release pointer and API-side manifest
+  byte-digest validation, but the CodeBuild deployment runner still validates
+  selected release manifests with the old canonical JSON digest. This blocks
+  normal managed-app teardown before Terraform can reset the partial n8n install.
+- Active fix in progress: merge and release the runner byte-digest validation
+  fix, then retry the deployed ThinkWork n8n uninstall/install flow until the
+  n8n runtime and all plugin components provision successfully end to end.

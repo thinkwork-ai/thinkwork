@@ -189,11 +189,11 @@ def read_release_manifest(path=MANIFEST):
 
 
 def verify_release_manifest_digest(path, expected_sha256):
-    manifest = read_release_manifest(path)
-    actual = release_manifest_sha256(manifest)
+    actual = sha256_file(path)
     expected = (expected_sha256 or "").lower()
     if expected and actual != expected:
         raise RuntimeError(f"Release manifest digest mismatch: expected {expected}, got {actual}")
+    manifest = read_release_manifest(path)
     return manifest
 
 
@@ -4182,6 +4182,7 @@ def sync_release_artifacts(artifact_types=None, artifact_names=None):
     if not manifest_url:
         raise RuntimeError("THINKWORK_RELEASE_MANIFEST_URL is required")
     download(manifest_url, MANIFEST)
+    manifest_byte_digest = sha256_file(MANIFEST)
     manifest = verify_release_manifest_digest(MANIFEST, expected)
     canonical_digest = release_manifest_sha256(manifest)
     trust_evidence = enforce_release_manifest_trust(manifest, canonical_digest, manifest_url)
@@ -4217,7 +4218,7 @@ def sync_release_artifacts(artifact_types=None, artifact_names=None):
         else:
             static_files[artifact.get("name")] = destination
     RELEASE_EVIDENCE = {
-        "manifestSha256": canonical_digest,
+        "manifestSha256": manifest_byte_digest,
         "manifestCanonicalSha256": canonical_digest,
         "trust": trust_evidence,
         "bundles": bundle_evidence,
