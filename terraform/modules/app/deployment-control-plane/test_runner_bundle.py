@@ -1785,6 +1785,51 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
     assert overrides["n8n_custom_package_specs"] == ["luxon@3.7.2"]
 
 
+def test_n8n_destroy_normalizes_legacy_binary_database_guardrail() -> None:
+    runner = load_runner()
+    state = {
+        "resources": [
+            {
+                "type": "terraform_data",
+                "name": "n8n_configuration_guardrails",
+                "instances": [
+                    {
+                        "attributes": {
+                            "input": {
+                                "value": {
+                                    "n8n_binary_data_mode": "database",
+                                    "n8n_execution_data_storage_mode": "database",
+                                }
+                            }
+                        }
+                    }
+                ],
+            }
+        ]
+    }
+
+    overrides = runner.managed_app_terraform_overrides(
+        {
+            "appKey": "n8n",
+            "operation": "DESTROY",
+            "desiredConfig": {},
+            "manifestImages": {},
+        },
+        "dev",
+        "487219502366",
+        {
+            "n8n_provisioned": {"value": True},
+            "n8n_runtime_enabled": {"value": True},
+        },
+        state,
+    )
+
+    assert overrides["n8n_provisioned"] is False
+    assert overrides["n8n_runtime_enabled"] is False
+    assert overrides["n8n_binary_data_mode"] == "default"
+    assert overrides["n8n_execution_data_storage_mode"] == "database"
+
+
 def test_twenty_managed_app_overrides_enable_sparse_payload_from_customer_domain(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -1602,13 +1602,39 @@ public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all datab
       sync script only when the script path is present and still exists.
     - Legacy destroy state with a stale or missing sync script path now logs a
       skip message and allows Terraform to continue.
+  - Status: merged in PR #2742 at
+    `baa07f3840139b24b9e25d025d7c72ce07fb8ff1`.
+  - Released canary `v0.1.0-canary.240`; verified deployed
+    `deploymentStatus.releaseVersion = v0.1.0-canary.240` with manifest SHA
+    `640eecf674c8c15822c6cf03c9a452269e1d70602dd10110b6057283ed2de873`.
+  - Main deploy run `27873866082` succeeded; the Terraform Apply step that
+    previously failed passed.
+  - Live reset attempt: app-managed uninstall for n8n install
+    `4ce18b35-25c2-48c3-a9e0-f0259b391ba0` created DESTROY job
+    `2d102033-7ab1-4644-a70a-19679068b182`, but plan generation failed in
+    runner build
+    `thinkwork-dev-deployment-runner:9de4b2fc-f215-49a0-a545-97ddc7300604`.
+    Runner logs show Terraform variable validation rejected preserved legacy
+    `n8n_binary_data_mode = "database"`.
+- n8n legacy binary-mode normalization branch:
+  - Branch/worktree:
+    `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/n8n-release-manifest-fix`
+  - Git branch: `codex/fix-n8n-legacy-binary-mode`
+  - Objective: allow app-managed n8n DESTROY/UPGRADE plans to tolerate legacy
+    guardrail state that stored the old invalid binary data mode value.
+  - Implementation summary:
+    - Deployment runner now normalizes preserved n8n
+      `n8n_binary_data_mode = "database"` to n8n's valid `default` mode before
+      writing Terraform variables.
+    - Regression test covers an n8n DESTROY preserving legacy binary-mode
+      guardrails while keeping execution data storage mode as `database`.
   - Status: active; preparing PR.
 
 ## Blockers
 
-- Active blocker: main deploy for the dedicated n8n certificate fix failed
-  while cleaning up stale n8n Terraform state because the legacy database
-  destroy provisioner tried to execute a missing sync script path.
-- Active fix in progress: merge and release the legacy destroy-script guard,
-  let main deploy finish the reset, reinstall n8n through app.thinkwork.ai, and
-  verify trusted HTTPS, ECS/log health, and plugin components end to end.
+- Active blocker: live app-managed n8n DESTROY planning now reaches the runner
+  but fails because preserved legacy guardrails still contain invalid
+  `n8n_binary_data_mode = "database"`.
+- Active fix in progress: merge and release the binary-mode normalization
+  guard, rerun the app-managed n8n teardown/reinstall, and verify trusted
+  HTTPS, ECS/log health, and plugin components end to end.
