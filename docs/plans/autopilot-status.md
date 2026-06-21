@@ -133,7 +133,8 @@ status: in_progress
   compatibility deprecation.
 - Current branch: `codex/thnk-59-u8-reference-cleanup`.
 - Current worktree: `.Codex/worktrees/thnk-59-u8-reference-cleanup`.
-- Current pull request: pending.
+- Current pull request:
+  [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787).
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -148,9 +149,9 @@ status: in_progress
   `157bd8cd4851aababd15d2f438beb9735583f5ba`; U7
   [#2784](https://github.com/thinkwork-ai/thinkwork/pull/2784) merged as
   `20c1fb0078497b81e5b8eaf933424d008cf290d9`.
-- Status: U1-U7 complete and merged. U8 is implemented and locally verified
-  from `origin/main` at `20c1fb0078497b81e5b8eaf933424d008cf290d9`; PR
-  creation is pending.
+- Status: U1-U7 complete and merged. U8 is implemented, locally verified, and
+  open as PR #2787 from `origin/main` at
+  `20c1fb0078497b81e5b8eaf933424d008cf290d9`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
