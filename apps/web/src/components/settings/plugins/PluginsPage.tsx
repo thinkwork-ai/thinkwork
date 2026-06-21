@@ -103,6 +103,11 @@ export function PluginsPage() {
   }
 
   function openPlugin(pluginKey: string) {
+    if (pluginKey === "n8n") {
+      void navigate({ to: "/settings/plugins/n8n/workflows" });
+      return;
+    }
+
     void navigate({
       to: "/settings/plugins/$pluginKey",
       params: { pluginKey },

@@ -26,6 +26,11 @@ describe("N8nPluginHome", () => {
     expect(home).toContain('{ label: "Plugins", href: "/settings/plugins" }');
     expect(home).toContain('{ to: N8N_WORKFLOWS, label: "Workflows" }');
     expect(home).toContain('{ to: N8N_SETTINGS, label: "Settings" }');
+    expect(home).toContain('aria-label="Open n8n UI"');
+    expect(home).toContain(
+      'window.open(launchUrl, "_blank", "noopener,noreferrer")',
+    );
+    expect(home).toContain("<ExternalLink");
     expect(home).not.toContain("TabsList");
   });
 
@@ -38,6 +43,10 @@ describe("N8nPluginHome", () => {
   it("keeps workflow discovery separate from package/runtime settings", () => {
     expect(workflows).toContain("SettingsDiscoverN8nWorkflowsQuery");
     expect(workflows).toContain("SettingsConnectN8nWorkflowMutation");
+    expect(workflows).toContain("<DataTable");
+    expect(workflows).toContain("No n8n workflows have been discovered yet.");
+    expect(home).toContain('activeTab === "workflows"');
+    expect(home).toContain("<N8nPluginWorkflows");
     expect(settings).toContain("<N8nSettings");
   });
 });

@@ -50,11 +50,15 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
       SettingsManagedApplicationDeploymentQuery: Symbol(
         "managedApplicationDeployment",
       ),
+      SettingsCreateTenantCredentialMutation: Symbol("createTenantCredential"),
       SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
       SettingsN8nPluginSettingsQuery: Symbol("n8nPluginSettings"),
       SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
       SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
+      SettingsRotateTenantCredentialMutation: Symbol("rotateTenantCredential"),
       SettingsRetryPluginComponentMutation: Symbol("retryPluginComponent"),
+      SettingsTenantCredentialsQuery: Symbol("tenantCredentials"),
+      SettingsUpdateTenantCredentialMutation: Symbol("updateTenantCredential"),
       SettingsUpdateN8nPluginPackageSettingsMutation: Symbol(
         "updateN8nPluginPackageSettings",
       ),
@@ -204,6 +208,15 @@ function mockQueries({
       return [
         {
           data: { n8nPluginSettings: n8nSettings },
+          fetching: false,
+        },
+        vi.fn(),
+      ];
+    }
+    if (query === queryDocs.SettingsTenantCredentialsQuery) {
+      return [
+        {
+          data: { tenantCredentials: [] },
           fetching: false,
         },
         vi.fn(),
@@ -999,7 +1012,10 @@ describe("PluginDetail", () => {
     mockQueries({ install: n8nInstall, catalog: [n8nEntry], activations: [] });
     render(<PluginDetail />);
 
-    fireEvent.change(screen.getByPlaceholderText("lodash@4.17.21"), {
+    expect(screen.queryByPlaceholderText("Package Name @ Version")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /add package/i }));
+    fireEvent.change(screen.getByPlaceholderText("Package Name @ Version"), {
       target: { value: "zod@3.25.76, lodash@4.17.21, zod@3.25.76" },
     });
 
@@ -1027,7 +1043,8 @@ describe("PluginDetail", () => {
     mockQueries({ install: n8nInstall, catalog: [n8nEntry], activations: [] });
     render(<PluginDetail />);
 
-    fireEvent.change(screen.getByPlaceholderText("lodash@4.17.21"), {
+    fireEvent.click(screen.getByRole("button", { name: /add package/i }));
+    fireEvent.change(screen.getByPlaceholderText("Package Name @ Version"), {
       target: { value: "lodash" },
     });
 

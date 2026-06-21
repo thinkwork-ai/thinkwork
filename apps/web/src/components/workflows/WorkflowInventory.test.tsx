@@ -93,8 +93,11 @@ describe("WorkflowInventory", () => {
 
     expect(screen.getByText("Nightly customer sync")).toBeTruthy();
     expect(screen.getByText("Invoice bridge")).toBeTruthy();
-    expect(screen.getAllByText("Step Functions").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AWS Step").length).toBeGreaterThan(0);
     expect(screen.getAllByText("n8n bridge").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Blocked Not Ready").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Step Functions routine")).toBeNull();
+    expect(screen.queryByText("Version")).toBeNull();
+    expect(screen.queryByText("Last run")).toBeNull();
   });
 });

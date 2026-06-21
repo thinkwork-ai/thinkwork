@@ -261,6 +261,8 @@ type N8nPluginSettings {
   desiredConfig: AWSJSON!
   agentStepBridgeEndpointPath: String!
   agentStepBridgeCredentialConfigured: Boolean!
+  n8nApiCredentialConfigured: Boolean!
+  n8nApiCredentialBaseUrl: String
   currentPackageConfig: N8nPackageConfig!
   packageImageUri: String
   packageImageConfigDigest: String
@@ -351,6 +353,13 @@ input UpdateN8nPluginPackageSettingsInput {
   idempotencyKey: String!
 }
 
+input UpdateN8nPluginApiCredentialInput {
+  installId: ID!
+  apiKey: String!
+  baseUrl: String
+  idempotencyKey: String!
+}
+
 """
 Start of the app-level OAuth activation flow. The caller redirects the user
 to `authorizeUrl`; the callback upserts the activation and its token records
@@ -389,6 +398,10 @@ type RevokePremiumPluginInstallKeyResult {
 type UpdateN8nPluginPackageSettingsResult {
   settings: N8nPluginSettings!
   deploymentJob: ManagedApplicationDeploymentJob!
+}
+
+type UpdateN8nPluginApiCredentialResult {
+  settings: N8nPluginSettings!
 }
 
 """
@@ -495,6 +508,10 @@ extend type Mutation {
   updateN8nPluginPackageSettings(
     input: UpdateN8nPluginPackageSettingsInput!
   ): UpdateN8nPluginPackageSettingsResult!
+  "Store or replace the tenant n8n public API key used for workflow discovery."
+  updateN8nPluginApiCredential(
+    input: UpdateN8nPluginApiCredentialInput!
+  ): UpdateN8nPluginApiCredentialResult!
   """
   One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
   MCP row to plugin ownership (management_source 'plugin' under the

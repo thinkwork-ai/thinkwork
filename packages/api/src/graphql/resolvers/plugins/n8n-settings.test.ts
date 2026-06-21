@@ -40,6 +40,7 @@ import {
 } from "../../../lib/plugins/testing.js";
 import {
   n8nPluginSettings,
+  updateN8nPluginApiCredential,
   updateN8nPluginPackageSettings,
 } from "./n8n-settings.js";
 import type { PluginEngineDeps } from "../../../lib/plugins/engine.js";
@@ -429,6 +430,67 @@ describe("updateN8nPluginPackageSettings", () => {
   });
 });
 
+describe("updateN8nPluginApiCredential", () => {
+  it("stores the n8n API key as the tenant n8n-api credential", async () => {
+    const putTenantCredentialSecret = vi.fn(async () => "secret:n8n-api");
+    const insertedCredential = credentialRow({
+      id: "credential-n8n-api",
+      secret_ref: "secret:n8n-api",
+      metadata_json: { n8nBaseUrl: "https://n8n.example.test" },
+    });
+    const db = mutationDb({
+      selectRows: [
+        [
+          appRow({
+            desired_config: { publicUrl: "https://n8n.example.test" },
+          }),
+        ],
+        [],
+        [jobRow()],
+      ],
+      insertedRows: [[insertedCredential]],
+    });
+
+    const result = (await updateN8nPluginApiCredential(
+      null,
+      {
+        input: {
+          installId,
+          apiKey: "n8n_live_key",
+          idempotencyKey: "n8n-api-key-1",
+        },
+      },
+      CTX,
+      {
+        db: db as never,
+        pluginDeps: pluginDeps(),
+        putTenantCredentialSecret,
+      },
+    )) as Record<string, any>;
+
+    expect(putTenantCredentialSecret).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: { apiKey: "n8n_live_key" },
+      }),
+    );
+    expect(db.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: TENANT_ID,
+        display_name: "n8n API key",
+        slug: "n8n-api",
+        kind: "api_key",
+        status: "active",
+        secret_ref: "secret:n8n-api",
+        metadata_json: { n8nBaseUrl: "https://n8n.example.test" },
+      }),
+    );
+    expect(result.settings.n8nApiCredentialConfigured).toBe(true);
+    expect(result.settings.n8nApiCredentialBaseUrl).toBe(
+      "https://n8n.example.test",
+    );
+  });
+});
+
 function pluginDeps(): PluginEngineDeps {
   return {
     store,
@@ -460,6 +522,52 @@ function fakeDb({
       return chain;
     }),
   } as never;
+}
+
+function mutationDb({
+  selectRows,
+  insertedRows = [],
+  updatedRows = [],
+}: {
+  selectRows: unknown[][];
+  insertedRows?: unknown[][];
+  updatedRows?: unknown[][];
+}) {
+  const selects = [...selectRows];
+  const inserts = [...insertedRows];
+  const updates = [...updatedRows];
+  const insertValues = vi.fn();
+  const updateValues = vi.fn();
+  const db = {
+    insertValues,
+    updateValues,
+    select: vi.fn(() => {
+      const chain: any = {
+        from: vi.fn(() => chain),
+        where: vi.fn(() => chain),
+        orderBy: vi.fn(() => chain),
+        limit: vi.fn(async () => selects.shift() ?? []),
+      };
+      return chain;
+    }),
+    insert: vi.fn(() => ({
+      values: vi.fn((value: Record<string, unknown>) => {
+        insertValues(value);
+        return { returning: vi.fn(async () => inserts.shift() ?? []) };
+      }),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn((value: Record<string, unknown>) => {
+        updateValues(value);
+        return {
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => updates.shift() ?? []),
+          })),
+        };
+      }),
+    })),
+  };
+  return db;
 }
 
 function appRow(overrides: Record<string, unknown> = {}) {
@@ -558,6 +666,29 @@ function runRow(overrides: Record<string, unknown> = {}) {
     resumed_at: null,
     terminal_at: null,
     accepted_at: now,
+    created_at: now,
+    updated_at: now,
+    ...overrides,
+  };
+}
+
+function credentialRow(overrides: Record<string, unknown> = {}) {
+  const now = new Date("2026-06-19T12:00:00.000Z");
+  return {
+    id: "credential-n8n-api",
+    tenant_id: TENANT_ID,
+    display_name: "n8n API key",
+    slug: "n8n-api",
+    kind: "api_key",
+    status: "active",
+    secret_ref: "secret:n8n-api",
+    eventbridge_connection_arn: null,
+    schema_json: {},
+    metadata_json: {},
+    last_used_at: null,
+    last_validated_at: null,
+    created_by_user_id: USER_ID,
+    deleted_at: null,
     created_at: now,
     updated_at: now,
     ...overrides,

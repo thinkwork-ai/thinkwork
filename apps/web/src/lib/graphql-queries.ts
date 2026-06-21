@@ -250,6 +250,7 @@ export const SettingsWorkflowsQuery = gql`
         id
         triggerFamily
         sourceSystem
+        triggerConfig
         enabled
         readinessState
       }

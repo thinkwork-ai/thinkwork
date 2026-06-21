@@ -143,10 +143,12 @@ const refreshActivations = vi.fn();
 function mockQueries({
   catalogError = false,
   catalogFetching = false,
+  catalog = catalogEntries,
   activations = [] as Array<{ pluginKey: string; status: string }>,
 }: {
   catalogError?: boolean;
   catalogFetching?: boolean;
+  catalog?: Array<(typeof catalogEntries)[number]>;
   activations?: Array<{ pluginKey: string; status: string }>;
 } = {}) {
   useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
@@ -160,7 +162,7 @@ function mockQueries({
             }
           : {
               data: {
-                pluginCatalog: catalogEntries,
+                pluginCatalog: catalog,
                 pluginCatalogMetadata: catalogMetadata,
               },
               fetching: catalogFetching,
@@ -393,6 +395,17 @@ describe("PluginsPage", () => {
     expect(navigateMock).toHaveBeenCalledWith({
       to: "/settings/plugins/$pluginKey",
       params: { pluginKey: "company-brain" },
+    });
+  });
+
+  it("opens n8n directly on its workflows tab", () => {
+    mockQueries({ catalog: [...catalogEntries, n8nCatalogEntry] });
+    render(<PluginsPage />);
+
+    fireEvent.click(screen.getByRole("link", { name: "Open n8n" }));
+
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/settings/plugins/n8n/workflows",
     });
   });
 
@@ -635,3 +648,32 @@ const catalogEntries = [
     install: installedPlugins[2],
   },
 ];
+
+const n8nCatalogEntry = {
+  __typename: "PluginCatalogEntry" as const,
+  pluginKey: "n8n",
+  displayName: "n8n",
+  description: "Self-hosted n8n workflow automation runtime.",
+  latestVersion: "0.1.0",
+  launchUrl: null,
+  updateAvailable: false,
+  versions: [
+    {
+      version: "0.1.0",
+      payloadSha256: "sha256:n8n",
+      requiredOauthScopes: [],
+      components: [],
+    },
+  ],
+  install: {
+    __typename: "PluginInstall" as const,
+    id: "install-n8n",
+    pluginKey: "n8n",
+    pinnedVersion: "0.1.0",
+    state: "installed",
+    lastTransitionAt: "2026-06-12T12:00:00Z",
+    lastError: null,
+    activatedUserCount: 0,
+    components: [],
+  },
+};
