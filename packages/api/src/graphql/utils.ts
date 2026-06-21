@@ -109,6 +109,8 @@ import {
   tenantWorkflowCatalog,
   // Skills settings list — per-tenant index of the S3 skill catalog
   skillCatalog,
+  skillDraftEvents,
+  skillDrafts,
   // Eval datasets — derived index of the S3-canonical dataset artifacts
   evalDatasets,
   evalTestCases,
@@ -211,6 +213,8 @@ export {
   tenantBuiltinTools,
   tenantWorkflowCatalog,
   skillCatalog,
+  skillDraftEvents,
+  skillDrafts,
   evalDatasets,
   evalTestCases,
   evalReplayToolAllowlist,

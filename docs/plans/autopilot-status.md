@@ -6,6 +6,57 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-11 Skill Creator Autopilot - 2026-06-21
+
+- Plan: `docs/plans/2026-06-21-003-feat-skill-creator-system-plan.md`.
+- Origin requirements:
+  `docs/brainstorms/2026-06-21-skill-creator-system-requirements.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: In progress.
+- Current unit: U1 Skill Draft Data Model and GraphQL Lifecycle.
+- Current branch: `codex/thnk-11-u1-skill-drafts`.
+- Current worktree: `.Codex/worktrees/thnk-11-u1-skill-drafts`.
+- Current pull request: Pending.
+- Notes:
+  - U1 started from a clean isolated worktree created from `origin/main`.
+  - Planning artifacts were copied into the U1 branch because they were local
+    untracked docs from the THNK-11 planning handoff and not yet durable on
+    `main`.
+  - U1 adds the `skill_drafts` and `skill_draft_events` lifecycle substrate,
+    the `skill-creator.graphql` contract, resolver registration, tenant-scoped
+    draft lifecycle queries/mutations, and focused resolver tests.
+- Local verification:
+  - `pnpm install --frozen-lockfile --offline` completed; local Node 25 logged
+    the existing optional `canvas@2.11.2` native fallback/missing `pkg-config`
+    warning, but pnpm returned success.
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/skill-creator/skillDraft.lifecycle.test.ts src/graphql/resolvers/skill-creator/skillDrafts.query.test.ts`
+    passed: 2 files, 10 tests.
+  - `pnpm --filter @thinkwork/api exec vitest run src/__tests__/graphql-contract.test.ts`
+    passed: 138 tests.
+  - `pnpm --filter @thinkwork/api test` passed: 552 files passed, 3 skipped;
+    5201 tests passed, 9 skipped.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/database-pg typecheck` passed.
+  - `pnpm schema:build` passed and produced no `terraform/schema.graphql` diff.
+  - Codegen passed for web, mobile, and CLI:
+    `pnpm --filter @thinkwork/web codegen`,
+    `pnpm --filter @thinkwork/mobile codegen`, and
+    `pnpm --dir apps/cli codegen`. The documented `@thinkwork/cli` filter did
+    not match this checkout; the actual package name is `thinkwork-cli`.
+  - Compound-style review pass completed before PR. One safe cleanup was
+    applied: removed unrelated formatter churn from `packages/api/src/graphql/utils.ts`.
+  - `git diff --check` passed.
+  - Targeted `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored
+    source plus the THNK-11 plan/requirements docs. Generated GraphQL clients
+    were left in `graphql-codegen` output format because applying Prettier
+    3.8.2 to those files would rewrite tens of thousands of unrelated
+    generated lines.
+- PR / CI:
+  - Pending.
+- Blockers: None.
+
 ## THNK-60 Account Usage Autopilot - 2026-06-21
 
 - Plan: `docs/plans/2026-06-21-002-feat-account-usage-profile-plan.md`.

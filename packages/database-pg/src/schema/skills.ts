@@ -9,11 +9,15 @@ import {
   uuid,
   text,
   timestamp,
+  jsonb,
   index,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import { tenants } from "./core.js";
+import { tenants, users } from "./core.js";
+import { threads } from "./threads.js";
+import { messages } from "./messages.js";
 
 // ---------------------------------------------------------------------------
 // plugin_uploads — LEGACY audit trail for the retired tenant zip-upload
@@ -108,6 +112,124 @@ export const skillCatalog = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// skill_drafts — tenant-scoped generated/imported skill candidates
+// (THNK-11 U1).
+//
+// Source-of-truth draft files live in S3 under
+// `tenants/<tenant-slug>/skill-drafts/<draft-id>/`. These rows are the
+// lifecycle/control-plane index used by authoring, trust, and operator review.
+// The tenant skill catalog remains untouched until the publish transaction in a
+// later unit.
+// ---------------------------------------------------------------------------
+
+export const skillDrafts = pgTable(
+  "skill_drafts",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    requested_by_user_id: uuid("requested_by_user_id")
+      .references(() => users.id)
+      .notNull(),
+    source_thread_id: uuid("source_thread_id").references(() => threads.id, {
+      onDelete: "set null",
+    }),
+    source_message_id: uuid("source_message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    inbox_item_id: uuid("inbox_item_id"),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    display_name: text("display_name"),
+    summary: text("summary"),
+    source_kind: text("source_kind").notNull().default("thread"),
+    status: text("status").notNull().default("draft"),
+    current_content_hash: text("current_content_hash"),
+    draft_s3_prefix: text("draft_s3_prefix").notNull(),
+    failure_message: text("failure_message"),
+    rejected_by_user_id: uuid("rejected_by_user_id").references(
+      () => users.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    rejected_at: timestamp("rejected_at", { withTimezone: true }),
+    published_catalog_slug: text("published_catalog_slug"),
+    published_content_hash: text("published_content_hash"),
+    metadata: jsonb("metadata").notNull().default({}),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    submitted_at: timestamp("submitted_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("idx_skill_drafts_tenant_status_updated").on(
+      table.tenant_id,
+      table.status,
+      table.updated_at,
+    ),
+    index("idx_skill_drafts_tenant_requester").on(
+      table.tenant_id,
+      table.requested_by_user_id,
+      table.updated_at,
+    ),
+    uniqueIndex("uq_skill_drafts_tenant_id").on(table.tenant_id, table.id),
+    check(
+      "skill_drafts_status_check",
+      sql`${table.status} IN ('draft','submitted','rejected','failed')`,
+    ),
+    check(
+      "skill_drafts_source_kind_check",
+      sql`${table.source_kind} IN ('thread','archive','manual','existing_skill')`,
+    ),
+  ],
+);
+
+export const skillDraftEvents = pgTable(
+  "skill_draft_events",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    draft_id: uuid("draft_id")
+      .references(() => skillDrafts.id, { onDelete: "cascade" })
+      .notNull(),
+    actor_user_id: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    event_type: text("event_type").notNull(),
+    message: text("message"),
+    payload: jsonb("payload").notNull().default({}),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("idx_skill_draft_events_draft_created").on(
+      table.draft_id,
+      table.created_at,
+    ),
+    index("idx_skill_draft_events_tenant_type").on(
+      table.tenant_id,
+      table.event_type,
+    ),
+    check(
+      "skill_draft_events_type_check",
+      sql`${table.event_type} IN ('created','updated','submitted','rejected','failed')`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
@@ -124,3 +246,41 @@ export const skillCatalogRelations = relations(skillCatalog, ({ one }) => ({
     references: [tenants.id],
   }),
 }));
+
+export const skillDraftsRelations = relations(skillDrafts, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [skillDrafts.tenant_id],
+    references: [tenants.id],
+  }),
+  requester: one(users, {
+    fields: [skillDrafts.requested_by_user_id],
+    references: [users.id],
+  }),
+  sourceThread: one(threads, {
+    fields: [skillDrafts.source_thread_id],
+    references: [threads.id],
+  }),
+  sourceMessage: one(messages, {
+    fields: [skillDrafts.source_message_id],
+    references: [messages.id],
+  }),
+  events: many(skillDraftEvents),
+}));
+
+export const skillDraftEventsRelations = relations(
+  skillDraftEvents,
+  ({ one }) => ({
+    tenant: one(tenants, {
+      fields: [skillDraftEvents.tenant_id],
+      references: [tenants.id],
+    }),
+    draft: one(skillDrafts, {
+      fields: [skillDraftEvents.draft_id],
+      references: [skillDrafts.id],
+    }),
+    actor: one(users, {
+      fields: [skillDraftEvents.actor_user_id],
+      references: [users.id],
+    }),
+  }),
+);
