@@ -77,6 +77,122 @@ describe("U7 capability extensions", () => {
     });
   });
 
+  it("show_analytics_display normalizes common LLM chart payload variants", async () => {
+    const { api, tools } = makeFakeApi();
+    const extension = createAnalyticsDisplayExtension();
+    await toExtensionFactory(extension, {})(api);
+
+    const result = await getTool(tools, "show_analytics_display").execute(
+      "call-1",
+      {
+        payload: {
+          kind: "analytics.display",
+          analyticsDisplayVersion: "analytics-display/v1",
+          provenance: {
+            sourceLabels: ["Twenty CRM", "Opportunity Export"],
+          },
+          freshness: {
+            takenAt: "2026-06-21T12:50:00Z",
+          },
+          sensitivity: {
+            containsSensitiveFields: false,
+            level: "internal",
+          },
+          spec: {
+            title: "Open Opportunity Value by Owner",
+            columns: [
+              { key: "owner", name: "Owner", type: "string" },
+              {
+                key: "open_value",
+                name: "Open Value",
+                type: "number",
+                format: "currency",
+              },
+              {
+                key: "opportunity_count",
+                name: "Opportunities",
+                type: "number",
+              },
+            ],
+            elements: [
+              {
+                id: "bar-chart-1",
+                type: "chart",
+                chartType: "bar",
+                title: "Open Opportunity Value by Owner",
+                xAxis: { key: "owner", label: "Owner" },
+                yAxis: {
+                  key: "open_value",
+                  label: "Open Value",
+                  format: "currency",
+                },
+              },
+              {
+                id: "table-1",
+                type: "table",
+                compact: true,
+                columns: ["owner", "open_value", "opportunity_count"],
+              },
+            ],
+          },
+          data: {
+            rows: [
+              { owner: "Maya Chen", open_value: 184000, opportunity_count: 7 },
+              {
+                owner: "Owen Brooks",
+                open_value: 139500,
+                opportunity_count: 5,
+              },
+              { owner: "Priya Shah", open_value: 118250, opportunity_count: 4 },
+              {
+                owner: "Luis Romero",
+                open_value: 86500,
+                opportunity_count: 3,
+              },
+            ],
+          },
+        },
+      },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    expect((result.content?.[0] as { text: string }).text).toContain(
+      "Open Opportunity Value by Owner",
+    );
+    const analyticsProps = (result.details as any).threadGenUI.data.spec.elements
+      .analytics.props;
+    expect(analyticsProps.spec.columns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "open_value", label: "Open Value" }),
+      ]),
+    );
+    expect(analyticsProps.spec.elements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "chart",
+          chartKind: "bar",
+          categoryKey: "owner",
+          series: [
+            expect.objectContaining({
+              valueKey: "open_value",
+              palette: "chart-1",
+            }),
+          ],
+        }),
+        expect.objectContaining({
+          type: "table",
+          columns: [
+            { key: "owner", label: "Owner" },
+            { key: "open_value", label: "Open Value" },
+            { key: "opportunity_count", label: "Opportunities" },
+          ],
+        }),
+      ]),
+    );
+  });
+
   it("web_search gates on config and calls the configured provider", async () => {
     const empty = makeFakeApi();
     await toExtensionFactory(createWebSearchExtension({}), {})(empty.api);
