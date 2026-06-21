@@ -206,8 +206,8 @@ function ValidatedGenUIRenderer({
   });
   if (!promotion.canPromote || live) return rendered;
   return (
-    <div className="grid gap-2">
-      <div className="flex justify-end">
+    <div className="group/genui relative min-w-0 w-full">
+      <div className="absolute right-1 top-1 z-10 opacity-0 transition-opacity group-hover/genui:opacity-100 group-focus-within/genui:opacity-100">
         <PromoteGenUIButton
           status={promotion.status}
           onPromote={promotion.promote}
@@ -324,7 +324,7 @@ function mobileFallbackFor(
 function wrapPart(partId: string | undefined, node: ReactNode): ReactNode {
   if (!partId) return node;
   return (
-    <div className="min-w-0" data-genui-part-id={partId}>
+    <div className="min-w-0 w-full" data-genui-part-id={partId}>
       {node}
     </div>
   );

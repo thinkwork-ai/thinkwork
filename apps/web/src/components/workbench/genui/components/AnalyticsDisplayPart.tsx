@@ -76,7 +76,7 @@ export function AnalyticsDisplayPart({ data }: AnalyticsDisplayPartProps) {
   return (
     <section
       aria-label={model.title}
-      className="space-y-3 rounded-md border border-border bg-card p-3 text-sm shadow-sm"
+      className="w-full space-y-3 py-2 text-sm"
       data-testid="analytics-display-part"
     >
       <Header model={model} />
