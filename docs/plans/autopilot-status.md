@@ -125,8 +125,8 @@ status: in_progress
   `304e57a50556a69bd753f40ea7ab7f086c106ea0`; U6
   [#2780](https://github.com/thinkwork-ai/thinkwork/pull/2780) merged as
   `157bd8cd4851aababd15d2f438beb9735583f5ba`.
-- Status: U1-U6 complete and merged. U7 PR is open from
-  `origin/main` at `157bd8cd4851aababd15d2f438beb9735583f5ba`.
+- Status: U1-U6 complete and merged. U7 PR is open and rebased onto
+  `origin/main` at `8ace6cde15e6`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
@@ -247,6 +247,10 @@ rebuild electron` repaired the local install.
     through legacy routine redirects back to the same workflow pages. The
     focused workflow UI tests and `pnpm --filter @thinkwork/web typecheck`
     passed after the polish.
+  - U7 PR #2784 initially passed required CI (`cla`, `lint`, `verify`,
+    `typecheck`, and `test`) but was behind `main`. Rebased cleanly onto
+    `origin/main` at `8ace6cde15e6`; post-rebase focused workflow UI tests and
+    `pnpm --filter @thinkwork/web typecheck` passed before force-push.
 - CI log: U5 PR [#2773](https://github.com/thinkwork-ai/thinkwork/pull/2773)
   passed CLA, lint, typecheck, verify, and test; GitHub auto-merge squash
   merged it after the final up-to-date check.
