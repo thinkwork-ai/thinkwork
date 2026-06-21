@@ -26,7 +26,10 @@ import {
 } from "@aws-sdk/client-s3";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { computeCatalogSkillSha } from "../lib/catalog-skill-sha.js";
-import { renderCatalogSkillArchive } from "../lib/catalog-skill-archive.js";
+import {
+  parseCatalogSkillArchive,
+  renderCatalogSkillArchive,
+} from "../lib/catalog-skill-archive.js";
 
 // ─── Hoisted DB mock ─────────────────────────────────────────────────────────
 
@@ -481,6 +484,13 @@ description: ${description}
 
 # ${name}
 `);
+}
+
+function archiveFileText(
+  files: { path: string; content: Buffer }[],
+  path: string,
+): string | undefined {
+  return files.find((file) => file.path === path)?.content.toString("utf8");
 }
 
 function noSuchKey() {
@@ -2131,6 +2141,307 @@ describe("catalog import-skill action", () => {
       "imported-skill",
       [],
     );
+  });
+});
+
+describe("catalog export-skill action", () => {
+  it("exports a catalog skill as an import-compatible single-skill ZIP", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    const prefix = "tenants/acme/skill-catalog/pdf-processing/";
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: prefix,
+      })
+      .resolves({
+        Contents: [
+          { Key: `${prefix}SKILL.md` },
+          { Key: `${prefix}WIRING.md` },
+          { Key: `${prefix}references/guide.md` },
+          { Key: `${prefix}assets/icon.bin` },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}SKILL.md` })
+      .resolves(body(skillMd("pdf-processing").toString("utf8")));
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}WIRING.md` })
+      .resolves(body("# Wiring suggestions\n"));
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}references/guide.md` })
+      .resolves(body("# Guide\n"));
+    s3Mock.on(GetObjectCommand, { Key: `${prefix}assets/icon.bin` }).resolves({
+      Body: {
+        transformToByteArray: async () => Uint8Array.from([0x00, 0xff, 0x7f]),
+      } as never,
+      ContentType: "application/octet-stream",
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "export-skill",
+          catalog: true,
+          slug: "pdf-processing",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "pdf-processing",
+      filename: "pdf-processing.zip",
+      contentType: "application/zip",
+    });
+    expect(typeof res.body.archiveBase64).toBe("string");
+    const parsed = await parseCatalogSkillArchive(
+      Buffer.from(res.body.archiveBase64, "base64"),
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error("expected exported archive to parse");
+    expect(parsed.slug).toBe("pdf-processing");
+    expect(parsed.generatedWiring).toBe(false);
+    expect(parsed.files.map((file) => file.path).sort()).toEqual([
+      "SKILL.md",
+      "WIRING.md",
+      "assets/icon.bin",
+      "references/guide.md",
+    ]);
+    expect(archiveFileText(parsed.files, "SKILL.md")).toBe(
+      skillMd("pdf-processing").toString("utf8"),
+    );
+    expect(archiveFileText(parsed.files, "WIRING.md")).toBe(
+      "# Wiring suggestions\n",
+    );
+    expect(archiveFileText(parsed.files, "references/guide.md")).toBe(
+      "# Guide\n",
+    );
+    expect(
+      parsed.files
+        .find((file) => file.path === "assets/icon.bin")
+        ?.content.equals(Buffer.from([0x00, 0xff, 0x7f])),
+    ).toBe(true);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("rejects export-skill for non-catalog targets without reading S3", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminAgentTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "export-skill",
+          agentId: AGENT_ID,
+          slug: "pdf-processing",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe("unsupported_target");
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+  });
+
+  it.each([
+    ["missing slug", undefined],
+    ["legacy non-portable slug", "legacy--skill"],
+  ])("returns 400 for %s", async (_name, slug) => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "export-skill",
+          catalog: true,
+          ...(slug ? { slug } : {}),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe("invalid_skill_slug");
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+  });
+
+  it("returns 404 when the catalog skill prefix is empty", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/pdf-processing/",
+      })
+      .resolves({ Contents: [] });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "export-skill",
+          catalog: true,
+          slug: "pdf-processing",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({
+      ok: false,
+      code: "skill_not_found",
+      slug: "pdf-processing",
+    });
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+  });
+
+  it("returns 404 when the catalog prefix is missing SKILL.md", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    const prefix = "tenants/acme/skill-catalog/pdf-processing/";
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: prefix,
+      })
+      .resolves({
+        Contents: [{ Key: `${prefix}references/guide.md` }],
+      });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "export-skill",
+          catalog: true,
+          slug: "pdf-processing",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toMatchObject({
+      ok: false,
+      code: "skill_md_not_found",
+      slug: "pdf-processing",
+    });
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+  });
+
+  it("returns 422 when catalog files are not import-compatible", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    const prefix = "tenants/acme/skill-catalog/pdf-processing/";
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: prefix,
+      })
+      .resolves({
+        Contents: [{ Key: `${prefix}SKILL.md` }],
+      });
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}SKILL.md` })
+      .resolves(body(skillMd("other-skill").toString("utf8")));
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "export-skill",
+          catalog: true,
+          slug: "pdf-processing",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toMatchObject({
+      ok: false,
+      code: "invalid_catalog_skill_archive",
+      slug: "pdf-processing",
+    });
+    expect(res.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "skill_name_mismatch" }),
+      ]),
+    );
+  });
+
+  it("returns 413 before reads when the catalog skill has too many files", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    const prefix = "tenants/acme/skill-catalog/pdf-processing/";
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: prefix,
+      })
+      .resolves({
+        Contents: [
+          { Key: `${prefix}SKILL.md` },
+          ...Array.from({ length: 500 }, (_, index) => ({
+            Key: `${prefix}references/${index}.md`,
+          })),
+        ],
+      });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "export-skill",
+          catalog: true,
+          slug: "pdf-processing",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toMatchObject({
+      ok: false,
+      code: "export_limit_exceeded",
+      slug: "pdf-processing",
+    });
+    expect(s3Mock.commandCalls(GetObjectCommand)).toHaveLength(0);
+  });
+
+  it("returns 413 when catalog skill bytes exceed export response limits", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    const prefix = "tenants/acme/skill-catalog/pdf-processing/";
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: prefix,
+      })
+      .resolves({
+        Contents: [
+          { Key: `${prefix}SKILL.md` },
+          { Key: `${prefix}assets/large.bin` },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}SKILL.md` })
+      .resolves(body(skillMd("pdf-processing").toString("utf8")));
+    s3Mock.on(GetObjectCommand, { Key: `${prefix}assets/large.bin` }).resolves({
+      Body: {
+        transformToByteArray: async () => new Uint8Array(4 * 1024 * 1024 + 1),
+      } as never,
+      ContentType: "application/octet-stream",
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "export-skill",
+          catalog: true,
+          slug: "pdf-processing",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toMatchObject({
+      ok: false,
+      code: "export_limit_exceeded",
+      slug: "pdf-processing",
+    });
   });
 });
 
