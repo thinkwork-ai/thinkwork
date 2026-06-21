@@ -1148,6 +1148,32 @@ export const SettingsTenantAgentQuery = graphql(`
   }
 `);
 
+export const SettingsTenantGoalBudgetQuery = graphql(`
+  query SettingsTenantGoalBudget($id: ID!) {
+    tenant(id: $id) {
+      id
+      settings {
+        id
+        goalDefaultTokenBudget
+        updatedAt
+      }
+    }
+  }
+`);
+
+export const SettingsUpdateTenantGoalBudgetMutation = graphql(`
+  mutation SettingsUpdateTenantGoalBudget(
+    $tenantId: ID!
+    $input: UpdateTenantSettingsInput!
+  ) {
+    updateTenantSettings(tenantId: $tenantId, input: $input) {
+      id
+      goalDefaultTokenBudget
+      updatedAt
+    }
+  }
+`);
+
 export const SettingsTenantSandboxStatusQuery = graphql(`
   query SettingsTenantSandboxStatus($id: ID!) {
     tenant(id: $id) {

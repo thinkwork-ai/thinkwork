@@ -40,6 +40,11 @@ describe("SettingsAgents page", () => {
     expect(agentsSource).toContain('label="Default Agent"');
     expect(agentsSource).toContain("SettingsTenantAgentQuery");
     expect(agentsSource).toContain("SettingsUpdateTenantAgentMutation");
+    expect(agentsSource).toContain("SettingsTenantGoalBudgetQuery");
+    expect(agentsSource).toContain("SettingsUpdateTenantGoalBudgetMutation");
+    expect(agentsSource).toContain('label="Goal token budget"');
+    expect(agentsSource).toContain("goalDefaultTokenBudget");
+    expect(agentsSource).toContain("validGoalTokenBudgetOrEmpty");
     expect(agentsSource).not.toContain("/settings/local-workspace");
     expect(agentsSource).not.toContain("/settings/main-agent");
     expect(agentsSource).not.toContain("Edit AGENTS.md");

@@ -1,5 +1,6 @@
 import type { GraphQLContext } from "../../context.js";
 import { db, eq, tenantSettings, snakeToCamel } from "../../utils.js";
+import { normalizeGoalDefaultTokenBudgetInput } from "../../../lib/goal-budget.js";
 import { requireAdminOrServiceCaller } from "./authz.js";
 
 export const updateTenantSettings = async (
@@ -17,6 +18,11 @@ export const updateTenantSettings = async (
   if (i.defaultModel !== undefined) updates.default_model = i.defaultModel;
   if (i.budgetMonthlyCents !== undefined)
     updates.budget_monthly_cents = i.budgetMonthlyCents;
+  if (i.goalDefaultTokenBudget !== undefined) {
+    updates.goal_default_token_budget = normalizeGoalDefaultTokenBudgetInput(
+      i.goalDefaultTokenBudget,
+    );
+  }
   if (i.autoCloseThreadMinutes !== undefined)
     updates.auto_close_thread_minutes = i.autoCloseThreadMinutes;
   if (i.maxAgents !== undefined) updates.max_agents = i.maxAgents;

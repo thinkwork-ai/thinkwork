@@ -56,6 +56,7 @@ type TenantSettings {
   tenantId: ID!
   defaultModel: String
   budgetMonthlyCents: Int
+  goalDefaultTokenBudget: Int
   autoCloseThreadMinutes: Int
   maxAgents: Int
   features: AWSJSON
@@ -255,6 +256,7 @@ input UpdateTenantInput {
 input UpdateTenantSettingsInput {
   defaultModel: String
   budgetMonthlyCents: Int
+  goalDefaultTokenBudget: Int
   autoCloseThreadMinutes: Int
   maxAgents: Int
   features: AWSJSON

@@ -12640,15 +12640,15 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - Restored plan, requirements, and ideation docs from the backup commit into
     the U1 worktree so the implementation PR has current source artifacts.
 
-| Unit                           | Branch                               | PR                                                           | State                     | Notes                                                                                                  |
-| ------------------------------ | ------------------------------------ | ------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------ |
-| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension` | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | CI passed, ready to merge | Worktree: `.Codex/worktrees/thnk-21-u1-pi-goal-extension`; starting from `origin/main` at `1edba59fb`. |
-| U7 tenant goal budget settings | Pending                              | Pending                                                      | Pending                   | Starts after U1 merges unless runtime package work uncovers a blocker.                                 |
-| U2 metadata contract           | Pending                              | Pending                                                      | Pending                   | Depends on U7 and U1 field names.                                                                      |
-| U3 composer controls           | Pending                              | Pending                                                      | Pending                   | Depends on U2/U7.                                                                                      |
-| U4 runtime translation         | Pending                              | Pending                                                      | Pending                   | Depends on U1/U2/U7.                                                                                   |
-| U5 goal-run status rendering   | Pending                              | Pending                                                      | Pending                   | Depends on U2/U4/U7.                                                                                   |
-| U6 smoke/docs/codegen          | Pending                              | Pending                                                      | Pending                   | Final integration/docs pass.                                                                           |
+| Unit                           | Branch                                  | PR                                                           | State       | Notes                                                                                                                            |
+| ------------------------------ | --------------------------------------- | ------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`    | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete.                                   |
+| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings` | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | PR open     | Worktree: `.Codex/worktrees/thnk-21-u7-goal-budget-settings`; starting from U1 merge `93d47fb8e6188531ace4542d0e69b9bb8972885b`. |
+| U2 metadata contract           | Pending                                 | Pending                                                      | Pending     | Depends on U7 and U1 field names.                                                                                                |
+| U3 composer controls           | Pending                                 | Pending                                                      | Pending     | Depends on U2/U7.                                                                                                                |
+| U4 runtime translation         | Pending                                 | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                                                             |
+| U5 goal-run status rendering   | Pending                                 | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                                                             |
+| U6 smoke/docs/codegen          | Pending                                 | Pending                                                      | Pending     | Final integration/docs pass.                                                                                                     |
 
 ### U1 Progress
 
@@ -12684,3 +12684,56 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   dependency delta with pnpm, and reran the verifier successfully.
 - U1 PR opened: [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816).
   Required CI passed: CLA, lint, verify, typecheck, and test.
+- U1 was rebased onto current `origin/main` after GitHub reported the PR was
+  behind base. Final CI passed again: CLA, lint, verify, typecheck, and test.
+- U1 squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; remote
+  branch deleted, local worktree and branch removed, and main synced.
+
+### U7 Progress
+
+- 2026-06-21 15:54 CDT: Created worktree
+  `.Codex/worktrees/thnk-21-u7-goal-budget-settings` on
+  `codex/thnk-21-u7-goal-budget-settings` from merged `origin/main`.
+  Scope: add tenant Agent goal-run token budget setting in DB, GraphQL, API
+  validation, and Settings -> Agents without exposing budget controls in the
+  composer.
+- 2026-06-21 16:15 CDT: U7 implementation locally verified. Added
+  `tenant_settings.goal_default_token_budget` with a positive/max check,
+  exposed `goalDefaultTokenBudget` through GraphQL/codegen, validated updates in
+  `updateTenantSettings`, and added a simple Settings -> Agents save control.
+  The composer remains free of per-prompt budget configuration.
+- U7 local verification:
+  - `pnpm schema:build` passed.
+  - `pnpm --filter @thinkwork/web codegen` passed.
+  - `pnpm --filter thinkwork-cli codegen` passed.
+  - `pnpm --filter @thinkwork/mobile codegen` passed.
+  - `pnpm --filter @thinkwork/api exec vitest run
+    src/graphql/resolvers/core/updateTenantSettings.mutation.test.ts
+    src/__tests__/graphql-contract.test.ts` passed: 146 tests.
+  - `pnpm --filter @thinkwork/web exec vitest run
+    src/components/settings/SettingsAgents.test.tsx` passed: 10 tests.
+  - `pnpm --filter @thinkwork/api test && pnpm --filter @thinkwork/web test`
+    passed: API suite plus web suite, including 185 web files / 1381 tests.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed across the workspace.
+  - `git diff --check` passed.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
+    files.
+- U7 format caveats: the root `pnpm format:check` script currently fails in
+  this install because `prettier` is not linked at the root, and a whole-repo
+  `pnpm dlx prettier@3.8.2 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`
+  reports 675 pre-existing files. The U7 hand-authored files pass targeted
+  Prettier; generated GraphQL outputs are left in codegen's repository style.
+- U7 PR opened: [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817).
+- U7 CI failure: `Migration Drift Precheck (dev)` failed because the new
+  hand-rolled migration had not yet been applied to dev. Attempted to convert
+  it to an indexed Drizzle migration, but `drizzle-kit generate` hit the repo's
+  existing non-interactive snapshot conflict prompt and wrote no artifacts.
+- U7 drift fix: applied only
+  `packages/database-pg/drizzle/0179_tenant_goal_budget_settings.sql` to the
+  dev database with `psql -v ON_ERROR_STOP=1`, then reran
+  `bash scripts/db-migrate-manual.sh
+  packages/database-pg/drizzle/0179_tenant_goal_budget_settings.sql`
+  successfully. The reporter found both
+  `public.tenant_settings.goal_default_token_budget` and
+  `public.tenant_settings.tenant_settings_goal_default_token_budget_check`.

@@ -7908,6 +7908,7 @@ export type TenantSettings = {
   createdAt: Scalars['AWSDateTime']['output'];
   defaultModel?: Maybe<Scalars['String']['output']>;
   features?: Maybe<Scalars['AWSJSON']['output']>;
+  goalDefaultTokenBudget?: Maybe<Scalars['Int']['output']>;
   id: Scalars['ID']['output'];
   maxAgents?: Maybe<Scalars['Int']['output']>;
   tenantId: Scalars['ID']['output'];
@@ -8733,6 +8734,7 @@ export type UpdateTenantSettingsInput = {
   budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
   defaultModel?: InputMaybe<Scalars['String']['input']>;
   features?: InputMaybe<Scalars['AWSJSON']['input']>;
+  goalDefaultTokenBudget?: InputMaybe<Scalars['Int']['input']>;
   maxAgents?: InputMaybe<Scalars['Int']['input']>;
 };
 

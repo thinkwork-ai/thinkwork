@@ -440,6 +440,18 @@ describe("GraphQL Schema Contract", () => {
       );
     });
 
+    it("exposes tenant goal budget settings", () => {
+      const tenantSettings = schema.getType("TenantSettings") as any;
+      const updateInput = schema.getType("UpdateTenantSettingsInput") as any;
+
+      expect(
+        tenantSettings.getFields().goalDefaultTokenBudget.type.toString(),
+      ).toBe("Int");
+      expect(
+        updateInput.getFields().goalDefaultTokenBudget.type.toString(),
+      ).toBe("Int");
+    });
+
     it("exposes tenant model catalog management contracts", () => {
       const query = schema.getQueryType() as any;
       const mutation = schema.getMutationType() as any;

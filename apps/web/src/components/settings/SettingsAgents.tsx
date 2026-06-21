@@ -40,8 +40,10 @@ import {
   SettingsDeleteAgentProfileMutation,
   SettingsTenantModelCatalogQuery,
   SettingsTenantAgentQuery,
+  SettingsTenantGoalBudgetQuery,
   SettingsUpdateAgentProfileMutation,
   SettingsUpdateTenantAgentMutation,
+  SettingsUpdateTenantGoalBudgetMutation,
 } from "@/lib/settings-queries";
 import {
   SettingsPageTitle,
@@ -54,6 +56,9 @@ const RUNTIME_OPTIONS: { value: AgentRuntime; label: string }[] = [
   // FLUE is the Pi runtime; surfaced as "Pi" per product naming.
   { value: AgentRuntime.Flue, label: "Pi" },
 ];
+
+const DEFAULT_GOAL_TOKEN_BUDGET = 100_000;
+const MAX_GOAL_TOKEN_BUDGET = 2_000_000;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -487,10 +492,19 @@ function AgentConfigSection() {
     variables: { tenantId: tenantId ?? "", includeDisabled: false },
     pause: !tenantId,
   });
+  const [goalBudgetResult] = useQuery({
+    query: SettingsTenantGoalBudgetQuery,
+    variables: { id: tenantId ?? "" },
+    pause: !tenantId,
+  });
   const [saveState, save] = useMutation(SettingsUpdateTenantAgentMutation);
+  const [goalBudgetSaveState, saveGoalBudget] = useMutation(
+    SettingsUpdateTenantGoalBudgetMutation,
+  );
 
   const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
   const [model, setModel] = useState<string | null>(null);
+  const [goalTokenBudget, setGoalTokenBudget] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const agent = agentResult.data?.agent;
@@ -502,8 +516,15 @@ function AgentConfigSection() {
     }
   }, [agent]);
 
+  useEffect(() => {
+    const value =
+      goalBudgetResult.data?.tenant?.settings?.goalDefaultTokenBudget;
+    setGoalTokenBudget(value == null ? "" : String(value));
+  }, [goalBudgetResult.data?.tenant?.settings?.goalDefaultTokenBudget]);
+
   const catalog = catalogResult.data?.tenantModelCatalog ?? [];
   const catalogFailed = !!catalogResult.error;
+  const goalBudgetValid = validGoalTokenBudgetOrEmpty(goalTokenBudget);
 
   async function persist(input: {
     runtime?: AgentRuntime;
@@ -513,6 +534,27 @@ function AgentConfigSection() {
     setErrorMsg(null);
     const result = await save({ tenantId, input });
     if (result.error) setErrorMsg(result.error.message);
+  }
+
+  async function persistGoalBudget() {
+    if (!tenantId) return;
+    if (!validGoalTokenBudgetOrEmpty(goalTokenBudget)) {
+      toast.error("Goal token budget must be a positive whole number");
+      return;
+    }
+    const parsed =
+      goalTokenBudget.trim() === "" ? null : Number(goalTokenBudget);
+    const result = await saveGoalBudget({
+      tenantId,
+      input: { goalDefaultTokenBudget: parsed },
+    });
+    if (result.error) {
+      toast.error("Could not save goal budget", {
+        description: result.error.message,
+      });
+      return;
+    }
+    toast.success("Goal budget saved");
   }
 
   return (
@@ -583,6 +625,38 @@ function AgentConfigSection() {
             </SelectContent>
           </Select>
         )}
+      </SettingsRow>
+
+      <SettingsRow
+        label="Goal token budget"
+        description={`Default token cap for composer Goal mode runs. Blank uses ${formatTokenBudget(DEFAULT_GOAL_TOKEN_BUDGET)}.`}
+      >
+        <div className="flex w-full max-w-80 min-w-0 items-center gap-2">
+          <Input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={MAX_GOAL_TOKEN_BUDGET}
+            step={1}
+            value={goalTokenBudget}
+            placeholder={formatTokenBudget(DEFAULT_GOAL_TOKEN_BUDGET)}
+            onChange={(e) => setGoalTokenBudget(e.target.value)}
+            className="min-w-0 flex-1"
+            aria-label="Goal token budget"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void persistGoalBudget()}
+            disabled={
+              goalBudgetSaveState.fetching ||
+              goalBudgetResult.fetching ||
+              !goalBudgetValid
+            }
+          >
+            Save
+          </Button>
+        </div>
       </SettingsRow>
     </SettingsSection>
   );
@@ -1277,6 +1351,23 @@ function positiveIntegerOrDefault(value: string, fallback: number): number {
 function validPositiveInteger(value: string): boolean {
   const number = Number(value);
   return Number.isSafeInteger(number) && number > 0;
+}
+
+function validGoalTokenBudget(value: string): boolean {
+  const number = Number(value);
+  return (
+    Number.isSafeInteger(number) &&
+    number > 0 &&
+    number <= MAX_GOAL_TOKEN_BUDGET
+  );
+}
+
+function validGoalTokenBudgetOrEmpty(value: string): boolean {
+  return value.trim() === "" || validGoalTokenBudget(value);
+}
+
+function formatTokenBudget(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function asExternalReviewerPolicy(value: unknown): ExternalReviewerPolicy {
