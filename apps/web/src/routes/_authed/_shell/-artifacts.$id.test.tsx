@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import { useMutation, useQuery } from "urql";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -82,6 +83,67 @@ function appletPayload({
   };
 }
 
+function artifactPayload({
+  type = "APPLET",
+  content = null,
+  metadata = { kind: "computer_applet" },
+}: {
+  type?: string;
+  content?: string | null;
+  metadata?: Record<string, unknown>;
+} = {}) {
+  return {
+    id: "33333333-3333-4333-8333-333333333333",
+    tenantId: "11111111-1111-4111-8111-111111111111",
+    threadId: "thread-1",
+    title: type === "APPLET" ? "Hello applet" : "Generated snapshot",
+    type,
+    status: "FINAL",
+    content,
+    summary: "Artifact summary",
+    sourceMessageId: "message-1",
+    metadata,
+    favoritedAt: null,
+    createdAt: "2026-06-21T00:00:00Z",
+    updatedAt: "2026-06-21T00:00:00Z",
+  };
+}
+
+function setRouteQueryMocks({
+  artifact = artifactPayload(),
+  applet = appletPayload(),
+  artifactFetching = false,
+  appletFetching = false,
+}: {
+  artifact?: ReturnType<typeof artifactPayload> | null;
+  applet?: ReturnType<typeof appletPayload> | null;
+  artifactFetching?: boolean;
+  appletFetching?: boolean;
+} = {}) {
+  vi.mocked(useQuery).mockImplementation((options: any) => {
+    if ("id" in (options.variables ?? {})) {
+      return [
+        {
+          data: { artifact },
+          fetching: artifactFetching,
+          stale: false,
+          hasNext: false,
+        },
+        vi.fn(),
+      ] as unknown as ReturnType<typeof useQuery>;
+    }
+    return [
+      {
+        data: { applet },
+        fetching: appletFetching,
+        stale: false,
+        hasNext: false,
+      },
+      reexecuteAppletQuery,
+    ] as unknown as ReturnType<typeof useQuery>;
+  });
+}
+
 const updateAppletSourceMock = vi.fn();
 
 beforeEach(() => {
@@ -94,17 +156,7 @@ beforeEach(() => {
     { fetching: false, stale: false } as ReturnType<typeof useMutation>[0],
     updateAppletSourceMock,
   ] as unknown as ReturnType<typeof useMutation>);
-  vi.mocked(useQuery).mockReturnValue([
-    {
-      data: {
-        applet: appletPayload(),
-      },
-      fetching: false,
-      stale: false,
-      hasNext: false,
-    },
-    reexecuteAppletQuery,
-  ]);
+  setRouteQueryMocks();
 });
 
 afterEach(() => {
@@ -132,21 +184,13 @@ describe("AppletRouteContent", () => {
 
     await screen.findByTestId("applet-iframe-host");
 
-    vi.mocked(useQuery).mockReturnValue([
-      {
-        data: {
-          applet: appletPayload({
-            source:
-              "export default function App() { return <main>Updated</main>; }",
-            version: 2,
-          }),
-        },
-        fetching: false,
-        stale: false,
-        hasNext: false,
-      },
-      reexecuteAppletQuery,
-    ]);
+    setRouteQueryMocks({
+      applet: appletPayload({
+        source:
+          "export default function App() { return <main>Updated</main>; }",
+        version: 2,
+      }),
+    });
 
     rerender(
       <AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />,
@@ -158,15 +202,7 @@ describe("AppletRouteContent", () => {
   });
 
   it("renders not found when the applet query returns null", () => {
-    vi.mocked(useQuery).mockReturnValue([
-      {
-        data: { applet: null },
-        fetching: false,
-        stale: false,
-        hasNext: false,
-      },
-      reexecuteAppletQuery,
-    ]);
+    setRouteQueryMocks({ applet: null });
 
     render(<AppletRouteContent appId="missing" />);
 
@@ -225,19 +261,11 @@ describe("AppletRouteContent", () => {
   });
 
   it("ignores artifact metadata that claims the trusted native runtime", async () => {
-    vi.mocked(useQuery).mockReturnValue([
-      {
-        data: {
-          applet: appletPayload({
-            metadata: { prompt: "hello", runtimeMode: "nativeTrusted" },
-          }),
-        },
-        fetching: false,
-        stale: false,
-        hasNext: false,
-      },
-      reexecuteAppletQuery,
-    ]);
+    setRouteQueryMocks({
+      applet: appletPayload({
+        metadata: { prompt: "hello", runtimeMode: "nativeTrusted" },
+      }),
+    });
 
     render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
 
@@ -249,6 +277,39 @@ describe("AppletRouteContent", () => {
     expect(
       shell.querySelector('[data-runtime-mode="nativeTrusted"]'),
     ).toBeNull();
+  });
+});
+
+describe("data-view GenUI snapshots", () => {
+  it("renders a promoted GenUI snapshot without mounting the applet iframe", () => {
+    const fixture = createTaskReviewGenUIFixture();
+    const snapshot = {
+      schemaVersion: "thread-genui-artifact-snapshot/v1",
+      kind: "genui_snapshot",
+      source: {
+        threadId: "thread-1",
+        sourceMessageId: "message-1",
+        partId: fixture.id,
+        specHash: fixture.data.specHash,
+        promotedAt: "2026-06-21T00:00:00Z",
+        promotedByUserId: "user-1",
+      },
+      genui: fixture,
+    };
+    setRouteQueryMocks({
+      artifact: artifactPayload({
+        type: "DATA_VIEW",
+        content: JSON.stringify(snapshot),
+        metadata: { kind: "genui_snapshot" },
+      }),
+      applet: null,
+    });
+
+    render(<AppletRouteContent appId="33333333-3333-4333-8333-333333333333" />);
+
+    expect(screen.getByText("Data view")).toBeTruthy();
+    expect(screen.getByText("Review onboarding task")).toBeTruthy();
+    expect(screen.queryByTestId("applet-iframe-host")).toBeNull();
   });
 });
 

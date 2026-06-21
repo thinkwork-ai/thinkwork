@@ -104,6 +104,14 @@ input CreateArtifactInput {
   metadata: AWSJSON
 }
 
+input PromoteGenUIArtifactInput {
+  threadId: ID!
+  sourceMessageId: ID!
+  partId: String!
+  specHash: String!
+  idempotencyKey: String!
+}
+
 input UpdateArtifactInput {
   title: String
   type: ArtifactType
@@ -173,6 +181,7 @@ extend type Query {
 
 extend type Mutation {
   createArtifact(input: CreateArtifactInput!): Artifact!
+  promoteGenUIArtifact(input: PromoteGenUIArtifactInput!): Artifact!
   updateArtifact(id: ID!, input: UpdateArtifactInput!): Artifact!
   deleteArtifact(id: ID!): Boolean!
   saveApplet(input: SaveAppletInput!): SaveAppletPayload!
