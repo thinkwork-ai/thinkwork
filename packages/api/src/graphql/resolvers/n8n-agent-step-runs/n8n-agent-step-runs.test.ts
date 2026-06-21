@@ -42,7 +42,13 @@ describe("n8nAgentStepRuns", () => {
   it("returns redacted bridge telemetry for the caller tenant", async () => {
     selectQueue.push([
       runRow({
-        output_payload: { output: "Order has already shipped" },
+        output_payload: { output: "raw output should not leak" },
+        result_payload: {
+          status: "succeeded",
+          output: { secret: "nested raw token" },
+          summary: "Order has already shipped",
+        },
+        summary: "Order has already shipped",
         error_payload: { message: "should prefer explicit error" },
         request_metadata: { authorization: "Bearer secret" },
         resume_url_host: "n8n.example.test",
@@ -66,6 +72,10 @@ describe("n8nAgentStepRuns", () => {
       outputPreview: "Order has already shipped",
       errorMessage: "should prefer explicit error",
     });
+    expect(JSON.stringify(result[0])).not.toContain(
+      "raw output should not leak",
+    );
+    expect(JSON.stringify(result[0])).not.toContain("nested raw token");
     expect(result[0]).not.toHaveProperty("tenantId");
     expect(result[0]).not.toHaveProperty("idempotencyKey");
     expect(result[0]).not.toHaveProperty("requestMetadata");

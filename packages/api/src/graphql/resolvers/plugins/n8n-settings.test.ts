@@ -126,10 +126,14 @@ describe("n8nPluginSettings", () => {
     expect(result.recentAgentStepRuns[0]).toMatchObject({
       status: "resume_failed",
       resumeStatus: "failed",
+      outputPreview: null,
       errorMessage: "n8n callback returned 410 Gone",
       pluginInstallId: installId,
       managedApplicationId: "app-n8n",
     });
+    expect(JSON.stringify(result.recentAgentStepRuns[0])).not.toContain(
+      "raw output should not leak",
+    );
     expect(result.recentAgentStepRuns[0]).not.toHaveProperty("tenantId");
     expect(result.recentAgentStepRuns[0]).not.toHaveProperty("idempotencyKey");
     expect(result.recentAgentStepRuns[0]).not.toHaveProperty("resumeUrlHost");
