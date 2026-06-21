@@ -820,6 +820,73 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.queryByText("UI Message Chunk")).toBeNull();
   });
 
+  it("reconstructs goal-run cards from persisted thread turn evidence", async () => {
+    taskData = { computerTasks: [] };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        title: "Goal thread",
+        lifecycleStatus: "COMPLETED",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "USER",
+                content: "/goal Prepare launch report",
+              },
+            },
+            {
+              node: {
+                id: "message-2",
+                role: "ASSISTANT",
+                content: "Launch report is ready.",
+              },
+            },
+          ],
+        },
+      },
+    };
+    threadTurnsData = {
+      threadTurns: [
+        {
+          id: "turn-goal",
+          threadId: "thread-1",
+          invocationSource: "chat_message",
+          status: "succeeded",
+          startedAt: "2026-06-21T20:00:00.000Z",
+          finishedAt: "2026-06-21T20:01:00.000Z",
+          resultJson: {
+            response: "Launch report is ready.",
+            goal_run: {
+              source: "pi_goal",
+              status: "complete",
+              objective: "Prepare launch report",
+              completion_summary: "Launch report is complete.",
+              tokens_used: 28000,
+              token_budget: 125000,
+            },
+          },
+        },
+      ],
+    };
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Turn activity")).toBeTruthy();
+    });
+    fireEvent.click(
+      within(screen.getByLabelText("Turn activity")).getByRole("button"),
+    );
+
+    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.getAllByText("Prepare launch report").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText("Launch report is complete.")).toBeTruthy();
+  });
+
   it("renders native onboarding Progress in the Info Panel and task clicks prefill the composer", async () => {
     threadData = {
       thread: {

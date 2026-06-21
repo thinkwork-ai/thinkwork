@@ -596,6 +596,66 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.queryByText("completed")).toBeNull();
   });
 
+  it("renders operator goal-run status from persisted turn evidence", () => {
+    const goalTurn = {
+      ...turn,
+      resultJson: JSON.stringify({
+        response: "Paused at budget.",
+        goal_run: {
+          source: "pi_goal",
+          status: "budget_limited",
+          objective: "Prepare launch report",
+          completion_summary: "Drafted two sections.",
+          token_budget: 125000,
+          tokens_used: 125001,
+          budget_limited_reason: "Tenant goal budget reached.",
+          resume_eligible: true,
+        },
+      }),
+    };
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({ turn: goalTurn, traces: [] });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    expect(screen.getByText("Goal runs")).toBeTruthy();
+    expect(screen.getByText("Budget limited")).toBeTruthy();
+    expect(screen.getByText("Prepare launch report")).toBeTruthy();
+    expect(screen.getByText("Drafted two sections.")).toBeTruthy();
+    expect(
+      screen.getByText("Budget: Tenant goal budget reached."),
+    ).toBeTruthy();
+    expect(screen.getByText("Tokens: 125.0K / 125.0K")).toBeTruthy();
+  });
+
+  it("renders malformed goal-run evidence as bounded operator debug status", () => {
+    const malformedTurn = {
+      ...turn,
+      resultJson: JSON.stringify({
+        response: "Done",
+        goal_run: "not-json",
+      }),
+    };
+    vi.mocked(useQuery).mockReset();
+    mockActivityQueries({ turn: malformedTurn, traces: [] });
+
+    render(
+      <SettingsActivityThreadDetail
+        threadId="thread-1"
+        breadcrumbParents={[{ label: "Activity", href: "/settings/activity" }]}
+      />,
+    );
+
+    expect(screen.getByText("Status unavailable")).toBeTruthy();
+    expect(screen.getByText("Malformed goal-run evidence")).toBeTruthy();
+    expect(screen.getByText(/malformed_goal_run/)).toBeTruthy();
+  });
+
   it("renders Agent Profile runs as nested steps with child tools and trace lane metadata", () => {
     const profileTurn = {
       ...turn,

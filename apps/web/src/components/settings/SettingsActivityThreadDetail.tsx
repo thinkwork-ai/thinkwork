@@ -18,6 +18,11 @@ import {
   type BridgeRunTelemetry,
 } from "@/components/workbench/BridgeRunTelemetryPanel";
 import {
+  GoalRunCard,
+  goalRunFromTurnEvidence,
+  type GoalRunEvidence,
+} from "@/components/workbench/GoalRunCard";
+import {
   InlineShortcutText,
   shortcutDisplayText,
 } from "@/components/workbench/InlineShortcutText";
@@ -275,6 +280,17 @@ export function SettingsActivityThreadDetail({
       ?.displayName ?? "User";
   const latestSystemPrompt =
     turns.find((turn) => turn.systemPrompt?.trim())?.systemPrompt ?? null;
+  const goalRuns = useMemo(
+    () =>
+      turns.flatMap((turn) => {
+        const goalRun = goalRunFromTurnEvidence(
+          turn.resultJson,
+          turn.usageJson,
+        );
+        return goalRun ? [{ turn, goalRun }] : [];
+      }),
+    [turns],
+  );
   const storedTitle = thread?.title?.trim() ?? "";
   const firstUserMessageContent =
     messages
@@ -419,6 +435,8 @@ export function SettingsActivityThreadDetail({
             ) : null}
           </section>
 
+          <ThreadGoalRuns goalRuns={goalRuns} />
+
           <ThreadTraces traces={tracesData?.threadTraces ?? []} />
         </main>
 
@@ -443,6 +461,47 @@ export function SettingsActivityThreadDetail({
         emptyMessage="No system prompt available for this thread."
       />
     </div>
+  );
+}
+
+function ThreadGoalRuns({
+  goalRuns,
+}: {
+  goalRuns: Array<{ turn: ThreadTurn; goalRun: GoalRunEvidence }>;
+}) {
+  const [open, setOpen] = useState(goalRuns.length > 0);
+  if (goalRuns.length === 0) return null;
+
+  return (
+    <section className="mb-6 border-t border-border pt-6">
+      <button
+        type="button"
+        className="mb-4 flex items-center gap-2 text-base font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronRight
+          className={cn("h-4 w-4 transition-transform", open && "rotate-90")}
+        />
+        Goal runs
+      </button>
+      {open ? (
+        <div className="grid gap-3">
+          {goalRuns.map(({ turn, goalRun }) => (
+            <div key={`${turn.id}-${goalRun.goalId ?? "goal"}`}>
+              <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {turn.turnNumber ? `Turn ${turn.turnNumber}` : turn.id}
+                </span>
+                {turn.finishedAt ? (
+                  <span>{relativeTime(turn.finishedAt)}</span>
+                ) : null}
+              </div>
+              <GoalRunCard goalRun={goalRun} compact operator />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

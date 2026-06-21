@@ -151,6 +151,8 @@ export interface FinalizePayload {
     }>;
     /** Runtime-specific diagnostics that are safe to persist on the turn. */
     diagnostics?: Record<string, unknown>;
+    /** Pi goal-run evidence extracted by the runtime host. */
+    goal_run?: unknown;
     /** Inline guardrail-block payload (mirrored to top-level too). */
     guardrail_block?: GuardrailBlockPayload;
     /**
@@ -176,11 +178,45 @@ export interface FinalizePayload {
     output_tokens?: number;
     cached_read_tokens?: number;
     diagnostics?: Record<string, unknown>;
+    goal_run?: unknown;
   };
   /** Guardrail id resolved at dispatch time (when set, blocks are recorded). */
   guardrail_id?: string | null;
   /** Optional internal one-winner claim requirements for alternate hosts. */
   claim?: FinalizeClaimRequirements;
+}
+
+export interface FinalizeGoalRunProjection {
+  source: "pi_goal";
+  status:
+    | "active"
+    | "paused"
+    | "budget_limited"
+    | "complete"
+    | "completed"
+    | "cancelled"
+    | "cleared"
+    | "unknown";
+  action?: string;
+  goal_id?: string;
+  objective?: string;
+  summary?: string;
+  completion_summary?: string;
+  completion_notes?: string;
+  verification_notes?: string[];
+  token_budget?: number;
+  tokens_used?: number;
+  iteration?: number;
+  time_used_seconds?: number;
+  budget_limited_reason?: string;
+  continuation_policy?: string;
+  resume_eligible: boolean;
+  started_at?: string;
+  updated_at?: string;
+  debug?: {
+    error: "malformed_goal_run";
+    preview: string;
+  };
 }
 
 export interface GuardrailBlockPayload {

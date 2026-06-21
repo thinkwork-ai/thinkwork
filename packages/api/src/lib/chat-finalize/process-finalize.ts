@@ -69,6 +69,7 @@ import { reconcileChangedFiles, type ReconcileReport } from "./reconcile.js";
 import type {
   AgentLoopEvidence,
   FinalizeAgentProfileRun,
+  FinalizeGoalRunProjection,
   FinalizePayload,
   FinalizeResponse,
 } from "./types.js";
@@ -455,6 +456,7 @@ export async function processFinalize(
     cached_read_tokens: usage.cachedReadTokens,
     cost_usd: parentCostUsd,
   };
+  const goalRun = goalRunProjectionFromFinalizePayload(payload);
   const turnUsage = {
     model: usage.model || agentModel || null,
     duration_ms: durationMs,
@@ -474,6 +476,7 @@ export async function processFinalize(
     tool_invocations: toolInvocations,
     model_routed_tool_calls: modelRoutedToolCalls,
     agent_profile_runs: agentProfileRuns,
+    ...(goalRun ? { goal_run: goalRun } : {}),
   };
 
   try {
@@ -487,6 +490,7 @@ export async function processFinalize(
         result_json: {
           response: responseText.slice(0, 10000),
           runtime: runtimeType || undefined,
+          ...(goalRun ? { goal_run: goalRun } : {}),
         },
         usage_json: turnUsage,
       })
@@ -709,6 +713,15 @@ export async function processFinalize(
   };
 }
 
+export function goalRunProjectionFromFinalizePayload(
+  payload: Pick<FinalizePayload, "response" | "usage">,
+): FinalizeGoalRunProjection | null {
+  const response = payload.response as Record<string, unknown> | undefined;
+  const candidate = response?.goal_run ?? payload.usage?.goal_run;
+  if (candidate == null) return null;
+  return normalizeGoalRunProjection(candidate);
+}
+
 /**
  * Best-effort end-of-turn deferred-wakeup promotion (PRD-09 Batch 4
  * contract, same as the wakeup-processor's call sites). Never throws —
@@ -903,6 +916,160 @@ function optionalNumberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
+}
+
+const GOAL_RUN_TEXT_LIMIT = 600;
+const GOAL_RUN_DEBUG_LIMIT = 1000;
+
+const GOAL_RUN_STATUSES = new Set([
+  "active",
+  "paused",
+  "budget_limited",
+  "complete",
+  "completed",
+  "cancelled",
+  "cleared",
+]);
+
+function normalizeGoalRunProjection(value: unknown): FinalizeGoalRunProjection {
+  const record = readRecord(value);
+  if (Object.keys(record).length === 0) {
+    return malformedGoalRunProjection(value);
+  }
+
+  const rawStatus = stringValue(record.status)?.toLowerCase();
+  const status = GOAL_RUN_STATUSES.has(rawStatus ?? "")
+    ? (rawStatus as FinalizeGoalRunProjection["status"])
+    : "unknown";
+  const tokensUsed = optionalFiniteNumber(
+    record.tokens_used ?? record.tokensUsed ?? record.total_tokens,
+  );
+  const tokenBudget = optionalFiniteNumber(
+    record.token_budget ?? record.tokenBudget,
+  );
+  const completionSummary =
+    boundedString(record.completion_summary ?? record.completionSummary) ??
+    boundedString(readRecord(record.completion).summary);
+  const completionNotes =
+    boundedString(record.completion_notes ?? record.completionNotes) ??
+    boundedString(readRecord(record.completion).notes);
+  const verificationNotes = boundedStringArray(
+    record.verification_notes ?? record.verificationNotes,
+  );
+
+  return {
+    source: "pi_goal",
+    status,
+    ...(boundedString(record.action)
+      ? { action: boundedString(record.action) }
+      : {}),
+    ...(boundedString(record.goal_id ?? record.goalId)
+      ? { goal_id: boundedString(record.goal_id ?? record.goalId) }
+      : {}),
+    ...(boundedString(record.objective)
+      ? { objective: boundedString(record.objective) }
+      : {}),
+    ...(boundedString(record.summary)
+      ? { summary: boundedString(record.summary) }
+      : {}),
+    ...(completionSummary ? { completion_summary: completionSummary } : {}),
+    ...(completionNotes ? { completion_notes: completionNotes } : {}),
+    ...(verificationNotes.length > 0
+      ? { verification_notes: verificationNotes }
+      : {}),
+    ...(tokenBudget !== undefined ? { token_budget: tokenBudget } : {}),
+    ...(tokensUsed !== undefined ? { tokens_used: tokensUsed } : {}),
+    ...(optionalFiniteNumber(record.iteration) !== undefined
+      ? { iteration: optionalFiniteNumber(record.iteration) }
+      : {}),
+    ...(optionalFiniteNumber(
+      record.time_used_seconds ?? record.timeUsedSeconds,
+    ) !== undefined
+      ? {
+          time_used_seconds: optionalFiniteNumber(
+            record.time_used_seconds ?? record.timeUsedSeconds,
+          ),
+        }
+      : {}),
+    ...(boundedString(
+      record.budget_limited_reason ?? record.budgetLimitedReason,
+    )
+      ? {
+          budget_limited_reason: boundedString(
+            record.budget_limited_reason ?? record.budgetLimitedReason,
+          ),
+        }
+      : {}),
+    ...(boundedString(record.continuation_policy ?? record.continuationPolicy)
+      ? {
+          continuation_policy: boundedString(
+            record.continuation_policy ?? record.continuationPolicy,
+          ),
+        }
+      : {}),
+    resume_eligible: status === "budget_limited" || status === "paused",
+    ...(boundedIsoString(record.started_at ?? record.startedAt)
+      ? { started_at: boundedIsoString(record.started_at ?? record.startedAt) }
+      : {}),
+    ...(boundedIsoString(record.updated_at ?? record.updatedAt)
+      ? { updated_at: boundedIsoString(record.updated_at ?? record.updatedAt) }
+      : {}),
+  };
+}
+
+function malformedGoalRunProjection(value: unknown): FinalizeGoalRunProjection {
+  return {
+    source: "pi_goal",
+    status: "unknown",
+    summary: "Malformed goal-run evidence",
+    resume_eligible: false,
+    debug: {
+      error: "malformed_goal_run",
+      preview: boundedJsonPreview(value),
+    },
+  };
+}
+
+function optionalFiniteNumber(value: unknown): number | undefined {
+  const number =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN;
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
+}
+
+function boundedString(value: unknown, limit = GOAL_RUN_TEXT_LIMIT) {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > limit ? `${trimmed.slice(0, limit - 1)}…` : trimmed;
+}
+
+function boundedIsoString(value: unknown) {
+  const text = boundedString(value, 80);
+  if (!text) return undefined;
+  const timestamp = Date.parse(text);
+  return Number.isFinite(timestamp) ? text : undefined;
+}
+
+function boundedStringArray(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : [];
+  return values
+    .flatMap((entry) => {
+      const text = boundedString(entry, 240);
+      return text ? [text] : [];
+    })
+    .slice(0, 5);
+}
+
+function boundedJsonPreview(value: unknown): string {
+  try {
+    return boundedString(JSON.stringify(value), GOAL_RUN_DEBUG_LIMIT) ?? "";
+  } catch {
+    return String(value).slice(0, GOAL_RUN_DEBUG_LIMIT);
+  }
 }
 
 function stringRecord(value: unknown): Record<string, string> {

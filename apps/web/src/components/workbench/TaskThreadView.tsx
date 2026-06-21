@@ -72,6 +72,11 @@ import {
   resolveStartGoalModeSubmission,
   type ComposerGoalModeIntent,
 } from "@/components/workbench/goal-mode";
+import {
+  GoalRunCard,
+  goalRunFromTurnEvidence,
+  type GoalRunEvidence,
+} from "@/components/workbench/GoalRunCard";
 import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -1606,6 +1611,10 @@ function TranscriptSegment({
     content: string,
     files?: File[],
     mentions?: ComposerMention[],
+    agentRequested?: boolean,
+    pinnedSkills?: string[],
+    selectedModelId?: string,
+    goalMode?: ComposerGoalModeIntent,
   ) => Promise<void> | void;
   isSending?: boolean;
   threadAttachments: ThreadInfoAttachment[];
@@ -1642,6 +1651,7 @@ function TranscriptSegment({
           threadId={threadId}
           latestProjection={latestProjection}
           onFlagTurn={onFlagTurn}
+          onSendFollowUp={onSendFollowUp}
         />
       ) : null}
       {isLatestUser ? (
@@ -1706,12 +1716,22 @@ function ThreadTurnActivity({
   threadId,
   latestProjection,
   onFlagTurn,
+  onSendFollowUp,
 }: {
   turn?: TaskThreadTurn;
   message?: TaskThreadMessage;
   threadId?: string;
   latestProjection?: LatestProjectionRef | null;
   onFlagTurn?: (turn: TaskThreadTurn) => void;
+  onSendFollowUp?: (
+    content: string,
+    files?: File[],
+    mentions?: ComposerMention[],
+    agentRequested?: boolean,
+    pinnedSkills?: string[],
+    selectedModelId?: string,
+    goalMode?: ComposerGoalModeIntent,
+  ) => Promise<void> | void;
 }) {
   const status = normalizeStatus(turn?.status);
   const running = isRunningStatus(status);
@@ -1731,6 +1751,7 @@ function ThreadTurnActivity({
 
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage, message);
+  const goalRun = goalRunFromTurnEvidence(turn.resultJson, turn.usageJson);
 
   // Single source of truth for the header label (KTD2): derived from
   // turn.status, never from "assistant message present". skipped → null.
@@ -1783,6 +1804,17 @@ function ThreadTurnActivity({
                 projection,
                 latestProjection ?? null,
               )}
+            />
+          ) : null}
+          {goalRun ? (
+            <GoalRunCard
+              goalRun={goalRun}
+              onResume={
+                goalRun.resumeEligible && onSendFollowUp
+                  ? (resumeGoalRun) =>
+                      resumeGoalRunFromThread(onSendFollowUp, resumeGoalRun)
+                  : undefined
+              }
             />
           ) : null}
           {rows.map((row, index) => (
@@ -2038,6 +2070,21 @@ function hasAssistantAfterLatestUser(messages: TaskThreadMessage[]) {
   return messages
     .slice(latestUserIndex + 1)
     .some((message) => message.role.toUpperCase() === "ASSISTANT");
+}
+
+function resumeGoalRunFromThread(
+  onSendFollowUp: NonNullable<TaskThreadViewProps["onSendFollowUp"]>,
+  goalRun: GoalRunEvidence,
+) {
+  const content = goalRun.objective
+    ? `Resume goal: ${goalRun.objective}`
+    : "Resume goal";
+  return onSendFollowUp(content, [], [], true, undefined, undefined, {
+    enabled: true,
+    action: "resume",
+    ...(goalRun.objective ? { objective: goalRun.objective } : {}),
+    ...(goalRun.goalId ? { goalRunId: goalRun.goalId } : {}),
+  });
 }
 
 // 10 lines x leading-5 (20px) of the user bubble's text rhythm.
