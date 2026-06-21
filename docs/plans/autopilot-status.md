@@ -12645,7 +12645,7 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 | U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`      | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete. |
 | U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
 | U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged      | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
-| U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | Pending                                                      | In progress | Worktree: `.Codex/worktrees/thnk-21-u3-composer-controls`; local verification passed.          |
+| U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | In progress | Worktree: `.Codex/worktrees/thnk-21-u3-composer-controls`; CI pending.                         |
 | U4 runtime translation         | Pending                                   | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                           |
 | U5 goal-run status rendering   | Pending                                   | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                           |
 | U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
@@ -12782,6 +12782,7 @@ src/components/workbench/SpacesThreadDetailRoute.test.tsx` passed: 44 tests.
   - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
     files after formatting.
   - `git diff --check` passed.
+- U3 PR opened: [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820).
 - U2 PR opened: [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818).
 - U2 CI passed: CLA, lint, verify, typecheck, and test.
 - U2 squash merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; remote
