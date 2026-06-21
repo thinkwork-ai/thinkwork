@@ -7,20 +7,24 @@ const {
   mockAuthenticate,
   mockRequireTenantMembership,
   mockSecretsSend,
+  mockMcpListTools,
 } = vi.hoisted(() => {
   type DbState = {
     selectQueue: unknown[][];
     predicates: unknown[];
+    updateSets: unknown[];
   };
   const dbState: DbState = {
     selectQueue: [],
     predicates: [],
+    updateSets: [],
   };
   return {
     dbState,
     resetDbState: () => {
       dbState.selectQueue = [];
       dbState.predicates = [];
+      dbState.updateSets = [];
     },
     mockAuthenticate: vi.fn(() => Promise.resolve({ sub: "principal-1" })),
     mockRequireTenantMembership: vi.fn(() =>
@@ -40,6 +44,11 @@ const {
       }),
     ),
     mockSecretsSend: vi.fn(async (_command: any) => ({})),
+    mockMcpListTools: vi.fn(
+      async (): Promise<
+        Array<{ name: string; description?: string; inputSchema?: unknown }>
+      > => [],
+    ),
   };
 });
 
@@ -72,10 +81,14 @@ vi.mock("@thinkwork/database-pg", () => ({
     insert: () => ({
       values: () => ({
         returning: () => Promise.resolve([{ id: "inserted-id" }]),
+        onConflictDoUpdate: () => Promise.resolve(),
       }),
     }),
     update: () => ({
-      set: () => ({ where: () => Promise.resolve() }),
+      set: (values: unknown) => {
+        dbState.updateSets.push(values);
+        return { where: () => Promise.resolve() };
+      },
     }),
     delete: () => ({ where: () => Promise.resolve() }),
     transaction: (fn: (tx: unknown) => unknown) => fn({}),
@@ -161,6 +174,10 @@ vi.mock("@aws-sdk/client-secrets-manager", () => ({
   DeleteSecretCommand: vi.fn((input) => ({ input })),
   GetSecretValueCommand: vi.fn((input) => ({ input })),
   ResourceNotFoundException: class ResourceNotFoundException extends Error {},
+}));
+
+vi.mock("../lib/mcp-client-call.js", () => ({
+  mcpListTools: mockMcpListTools,
 }));
 
 // eslint-disable-next-line import/first
@@ -376,6 +393,47 @@ describe("service credential MCP routes", () => {
     expect(body.error).toMatch(/newline/);
     expect(mockSecretsSend).not.toHaveBeenCalled();
   });
+
+  it("tests service credential MCP servers with the saved bearer token", async () => {
+    dbState.selectQueue.push([{ id: "tenant-1" }], [n8nServiceServerRow()]);
+    mockSecretsSend.mockResolvedValue({
+      SecretString: JSON.stringify({
+        N8N_MCP_SERVICE_CREDENTIAL: "n8n_mcp_token_OMPc",
+      }),
+    });
+    mockMcpListTools.mockResolvedValue([
+      {
+        name: "search_workflows",
+        description: "Search workflows",
+        inputSchema: { type: "object" },
+      },
+    ]);
+
+    const response = await handler(mcpServerTestEvent());
+    const body = JSON.parse(response.body ?? "{}") as {
+      ok: boolean;
+      tools: Array<{ name: string; description?: string }>;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body).toEqual({
+      ok: true,
+      tools: [{ name: "search_workflows", description: "Search workflows" }],
+    });
+    expect(mockMcpListTools).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://n8n.thinkwork.ai/mcp-server/http",
+        name: "n8n--workflow-management",
+        token: "n8n_mcp_token_OMPc",
+      }),
+      { timeoutMs: 10000 },
+    );
+    expect(dbState.updateSets).toContainEqual(
+      expect.objectContaining({
+        tools: [{ name: "search_workflows", description: "Search workflows" }],
+      }),
+    );
+  });
 });
 
 function managedTwentyRow(overrides: Record<string, unknown> = {}) {
@@ -474,6 +532,19 @@ function serviceCredentialEvent(
       "x-tenant-slug": "thinkwork",
     },
     body: body ? JSON.stringify(body) : undefined,
+  } as unknown as APIGatewayProxyEventV2;
+}
+
+function mcpServerTestEvent(): APIGatewayProxyEventV2 {
+  return {
+    rawPath:
+      "/api/skills/mcp-servers/11111111-1111-1111-1111-111111111111/test",
+    requestContext: { http: { method: "POST" } },
+    headers: {
+      authorization: "Bearer token",
+      "x-tenant-slug": "thinkwork",
+    },
+    body: "{}",
   } as unknown as APIGatewayProxyEventV2;
 }
 

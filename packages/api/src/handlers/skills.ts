@@ -45,6 +45,7 @@ import {
 import { resolveTenantId } from "../lib/tenants.js";
 import { applyMcpServerFieldUpdate } from "../lib/mcp-server-update.js";
 import { computeMcpUrlHash } from "../lib/mcp-server-hash.js";
+import { mcpListTools, type McpServerTarget } from "../lib/mcp-client-call.js";
 import {
   mcpOAuthCompletionUrl,
   normalizeMcpOAuthReturnTo,
@@ -2077,50 +2078,30 @@ async function mcpTestConnection(
 
   if (!row) return notFound("MCP server not found");
 
-  // Build auth headers
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+  const target: McpServerTarget = {
+    url: row.url,
+    name: row.slug || row.name,
   };
   if (row.auth_type === "tenant_api_key") {
     const authCfg = (row.auth_config as Record<string, unknown>) || {};
     const token = await resolveTenantApiKeyToken(authCfg);
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (token) target.token = token;
+  } else if (row.auth_type === "service_credential") {
+    const authCfg = (row.auth_config as Record<string, unknown>) || {};
+    const resolved = await resolveServiceCredentialTestAuth(authCfg);
+    if (!resolved.ok) return json({ ok: false, error: resolved.error }, 502);
+    if (resolved.token) target.token = resolved.token;
+    if (resolved.headers) target.headers = resolved.headers;
   }
 
   try {
-    const response = await fetch(row.url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/list",
-        params: {},
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!response.ok) {
-      return json(
-        { ok: false, error: `MCP server returned ${response.status}` },
-        502,
-      );
-    }
-
-    const result = (await response.json()) as {
-      result?: {
-        tools?: Array<
-          Record<string, unknown> & { name: string; description?: string }
-        >;
-      };
-      error?: unknown;
-    };
-    if (result.error) {
-      return json({ ok: false, error: result.error }, 502);
-    }
-
-    const discoveredTools = result.result?.tools || [];
-    const tools = discoveredTools.map((t) => ({
+    const discoveredTools = await mcpListTools(target, { timeoutMs: 10000 });
+    const discoveredToolRecords = discoveredTools.map((t) => ({
+      name: t.name,
+      ...(t.description !== undefined ? { description: t.description } : {}),
+      ...(t.inputSchema !== undefined ? { inputSchema: t.inputSchema } : {}),
+    }));
+    const tools = discoveredToolRecords.map((t) => ({
       name: t.name,
       description: t.description,
     }));
@@ -2131,12 +2112,76 @@ async function mcpTestConnection(
       .set({ tools, updated_at: new Date() })
       .where(eq(tenantMcpServers.id, serverId));
 
-    await upsertMcpContextToolEligibility(tenantId, serverId, discoveredTools);
+    await upsertMcpContextToolEligibility(
+      tenantId,
+      serverId,
+      discoveredToolRecords,
+    );
 
     return json({ ok: true, tools });
   } catch (err: any) {
     return json({ ok: false, error: err.message || "Connection failed" }, 502);
   }
+}
+
+type ResolvedMcpTestAuth =
+  | { ok: true; token?: string; headers?: Record<string, string> }
+  | { ok: false; error: string };
+
+async function resolveServiceCredentialTestAuth(
+  authConfig: Record<string, unknown>,
+): Promise<ResolvedMcpTestAuth> {
+  if (typeof authConfig.revokedAt === "string" || authConfig.revoked === true) {
+    return { ok: false, error: "Service credential is revoked" };
+  }
+  const secretRef =
+    typeof authConfig.secretRef === "string" && authConfig.secretRef.trim()
+      ? authConfig.secretRef.trim()
+      : null;
+  if (!secretRef) {
+    return { ok: false, error: "Service credential secretRef is missing" };
+  }
+  const binding = primaryServiceCredentialBinding(authConfig);
+  if (!binding) {
+    return {
+      ok: false,
+      error: "Service credential auth_config is missing a header binding",
+    };
+  }
+
+  let secretValue: ServiceCredentialSecretValue | null = null;
+  try {
+    const secret = await sm.send(
+      new GetSecretValueCommand({ SecretId: secretRef }),
+    );
+    secretValue = parseServiceCredentialSecret(secret.SecretString);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      error: `Failed to read service credential secret: ${message}`,
+    };
+  }
+
+  const raw = serviceCredentialSecretField(secretValue, binding.secretJsonKey);
+  if (!raw) {
+    return {
+      ok: false,
+      error: `Service credential secret is missing key ${binding.secretJsonKey}`,
+    };
+  }
+  const headerValue = `${binding.valuePrefix ?? ""}${raw}`;
+  if (binding.name.toLowerCase() === "authorization") {
+    const bearer = headerValue.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+    if (!bearer) {
+      return {
+        ok: false,
+        error: "Service credential Authorization header must use Bearer auth",
+      };
+    }
+    return { ok: true, token: bearer };
+  }
+  return { ok: true, headers: { [binding.name]: headerValue } };
 }
 
 async function mcpListContextTools(
