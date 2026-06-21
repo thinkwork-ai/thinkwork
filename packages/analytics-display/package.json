@@ -3,14 +3,22 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/src/index.js",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./react": "./src/react/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./react": {
+      "types": "./src/react/index.ts",
+      "development": "./src/react/index.ts",
+      "import": "./dist/src/react/index.js"
+    }
   },
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc --build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -466,8 +466,16 @@ describe("validateAnalyticsDisplayPayload", () => {
     expect(packageJson.dependencies ?? {}).toEqual({});
     expect(packageJson.peerDependencies ?? {}).toEqual({});
     expect(packageJson.exports).toMatchObject({
-      ".": "./src/index.ts",
-      "./react": "./src/react/index.ts",
+      ".": {
+        types: "./src/index.ts",
+        development: "./src/index.ts",
+        import: "./dist/src/index.js",
+      },
+      "./react": {
+        types: "./src/react/index.ts",
+        development: "./src/react/index.ts",
+        import: "./dist/src/react/index.js",
+      },
     });
   });
 });
