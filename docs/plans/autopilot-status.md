@@ -18,8 +18,9 @@ status: in_progress
 - Current unit: U2 - Add web query and reusable account usage section.
 - Current branch: `codex/thnk-60-u2-account-usage-section`.
 - Current worktree: `.Codex/worktrees/thnk-60-u2-account-usage-section`.
-- Current pull request: Pending.
-- Base: `origin/main` at `833d512d0`.
+- Current pull request:
+  [#2809](https://github.com/thinkwork-ai/thinkwork/pull/2809).
+- Base: `origin/main` at `d84672f92`.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -77,7 +78,13 @@ status: in_progress
   - U2 formatting check passed:
     `pnpm dlx prettier@3.8.2 --check ...` for touched source/docs.
   - U2 whitespace check passed: `git diff --check`.
-  - U2 PR: Pending.
+  - U2 PR: [#2809](https://github.com/thinkwork-ai/thinkwork/pull/2809).
+  - U2 was rebased onto `origin/main` at `ca8e26aaf`, then again at
+    `d84672f92`, after branch protection reported the head was behind base;
+    focused component tests and web typecheck still passed after each rebase.
+  - U2 CI: Pending.
+  - U2 merge: Pending.
+  - U2 cleanup: Pending.
 - Blockers: None.
 
 ## Skill Library Import / Export Autopilot - 2026-06-21
