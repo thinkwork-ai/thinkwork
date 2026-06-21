@@ -17,7 +17,8 @@ status: in_progress
 - Status: U4 implementation in progress.
 - Current branch: `codex/skill-library-u4-import-ui`.
 - Current worktree: `.Codex/worktrees/skill-library-u4-import-ui`.
-- Current pull request: Pending.
+- Current pull request:
+  [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786).
 - Notes:
   - The user-referenced plan file was absent from the starting checkout and
     from `origin/main`; `origin/main` did contain the matching requirements doc.
@@ -111,14 +112,14 @@ status: in_progress
     (cleared file picker); the test was added and focused verification reran.
 - Unit ledger:
 
-| Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                                |
-| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | -------------------------------------------------------------------- |
-| Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | Merged      | Squash merged as `1f427854fc51b7e7c7b1f9937c6418627088d98d`.         |
-| U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | Merged      | Squash merged as `134907ab08cf5c6bcb81200f7c0f76ed30ec7952`.         |
-| U2 Catalog Import API Action                   | `codex/skill-library-u2-import`          | [#2781](https://github.com/thinkwork-ai/thinkwork/pull/2781) | Merged      | Squash merged as `cf27205f897109586d32ebddff7ecff17c9775f2`.         |
-| U3 Catalog Export API Action                   | `codex/skill-library-u3-export`          | [#2783](https://github.com/thinkwork-ai/thinkwork/pull/2783) | Merged      | Squash merged as `8ace6cde15e61e23c786350b6bbe6053b6f218e2`.         |
-| U4 Skill Library Import UI                     | `codex/skill-library-u4-import-ui`       | Pending                                                      | In progress | Web helper and Settings Skills import flow under local verification. |
-| U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                                |
+| Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                        |
+| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------ |
+| Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | Merged      | Squash merged as `1f427854fc51b7e7c7b1f9937c6418627088d98d`. |
+| U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | Merged      | Squash merged as `134907ab08cf5c6bcb81200f7c0f76ed30ec7952`. |
+| U2 Catalog Import API Action                   | `codex/skill-library-u2-import`          | [#2781](https://github.com/thinkwork-ai/thinkwork/pull/2781) | Merged      | Squash merged as `cf27205f897109586d32ebddff7ecff17c9775f2`. |
+| U3 Catalog Export API Action                   | `codex/skill-library-u3-export`          | [#2783](https://github.com/thinkwork-ai/thinkwork/pull/2783) | Merged      | Squash merged as `8ace6cde15e61e23c786350b6bbe6053b6f218e2`. |
+| U4 Skill Library Import UI                     | `codex/skill-library-u4-import-ui`       | [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786) | In progress | PR open; local verification passed, CI pending.              |
+| U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                        |
 
 ---
 
