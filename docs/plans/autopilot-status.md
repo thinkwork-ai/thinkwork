@@ -12741,8 +12741,8 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 | U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged      | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
 | U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | Merged      | Squash merged as `a69e5799e6d3a2d7bc4e0a23173ca9393f825c11`; worktree/branch cleanup complete. |
 | U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821) | Merged      | Squash merged as `a8f4064a846112b9b479f2b7648101ec51dcd6f3`; worktree/branch cleanup complete. |
-| U5 goal-run status rendering   | `codex/thnk-21-u5-goal-status-rendering`  | [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822) | In progress | CI passed; ready to merge.                                                                     |
-| U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
+| U5 goal-run status rendering   | `codex/thnk-21-u5-goal-status-rendering`  | [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822) | Merged      | Squash merged as `ae21f019cef9e9f8057cc7c253cc548e611348f7`; worktree/branch cleanup complete. |
+| U6 smoke/docs/codegen          | `codex/thnk-21-u6-smoke-docs`             | [#2823](https://github.com/thinkwork-ai/thinkwork/pull/2823) | In progress | PR opened; CI pending.                                                                         |
 
 ### U1 Progress
 
@@ -13010,3 +13010,44 @@ src/components/settings/SettingsActivityThreadDetail.test.tsx` (172 tests).
     workspace.
 - U5 PR opened: [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822).
   Required CI passed: CLA, lint, verify, typecheck, and test.
+- U5 squash merged as `ae21f019cef9e9f8057cc7c253cc548e611348f7`; remote
+  branch deleted, local worktree and branch removed, and main synced.
+
+### U6 Progress
+
+- 2026-06-21 18:17 CDT: Created worktree
+  `.Codex/worktrees/thnk-21-u6-smoke-docs` on
+  `codex/thnk-21-u6-smoke-docs` from merged `origin/main`.
+  Scope: final integration, generated-contract check, Pi goal-mode smoke
+  coverage, and rollout documentation for the pinned imported goal extension.
+- 2026-06-21 18:26 CDT: U6 implementation locally verified. Added explicit
+  `goal` capability coverage to the GraphQL Pi capability smoke, documented the
+  persisted `goal_run` evidence contract and rollout diagnostics, and added the
+  THNK-21 solution note for composer goal mode vs durable `ThreadGoal`.
+- U6 codegen: no schema or generated GraphQL document changes were needed, so
+  codegen was intentionally not run.
+- U6 local verification:
+  - `pnpm install --frozen-lockfile` completed in the worktree; local Node 25
+    logged the existing optional `canvas@2.11.2` native fallback/missing
+    `pkg-config` warning, but pnpm exited successfully.
+  - Focused smoke evaluator test passed:
+    `pnpm --filter @thinkwork/api exec vitest run
+src/__tests__/pi-runtime-capability-smoke.test.ts` (5 tests).
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/api pi:capability-smoke -- --help` passed and
+    lists the explicit `goal` capability.
+  - `pnpm --filter @thinkwork/api test` passed (553 files passed, 3 skipped;
+    5212 tests passed, 9 skipped).
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed across the workspace.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for U6 touched files.
+  - `git diff --check` passed.
+  - `pnpm --filter @thinkwork/docs build` passed; Astro logged existing
+    Starlight/Pagefind/sitemap warnings.
+  - First `pnpm test` run hit the known local Electron extraction race
+    (`EEXIST: ... Electron Framework`). Reinstalling the generated Electron
+    artifact and rerunning `pnpm --filter @thinkwork/desktop test` passed (15
+    files, 105 tests); rerunning full `pnpm test` then passed across the
+    workspace.
+- U6 PR opened: [#2823](https://github.com/thinkwork-ai/thinkwork/pull/2823).
+  Required CI pending.
