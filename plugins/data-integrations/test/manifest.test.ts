@@ -8,15 +8,18 @@ import {
 } from "@thinkwork/plugin-catalog/contracts";
 import { defineFirstPartyPluginPackage } from "@thinkwork/plugin-catalog/plugin-package";
 
-import { lakehousePluginPackage } from "../src";
-import { LAKEHOUSE_SETTINGS_SURFACE, lakehouseManifest } from "../src/manifest";
+import { dataIntegrationsPluginPackage } from "../src";
+import {
+  DATA_INTEGRATIONS_SETTINGS_SURFACE,
+  dataIntegrationsManifest,
+} from "../src/manifest";
 
-describe("LakeHouse plugin manifest", () => {
+describe("Data Integrations plugin manifest", () => {
   it("validates as an inert shell plugin", () => {
-    const validated = validatePluginManifest(lakehouseManifest);
+    const validated = validatePluginManifest(dataIntegrationsManifest);
 
-    expect(validated.pluginKey).toBe("lakehouse");
-    expect(validated.displayName).toBe("LakeHouse");
+    expect(validated.pluginKey).toBe("data-integrations");
+    expect(validated.displayName).toBe("Data Integrations");
     expect(validated.versions[0].version).toBe("0.1.0");
     expect(validated.versions[0].requiredOauthScopes).toEqual([]);
     expect(validated.versions[0].capabilities).toEqual([]);
@@ -24,18 +27,18 @@ describe("LakeHouse plugin manifest", () => {
       {
         type: "ui-surface",
         key: "settings",
-        displayName: "LakeHouse settings",
-        intendedMount: LAKEHOUSE_SETTINGS_SURFACE,
+        displayName: "Data Integrations settings",
+        intendedMount: DATA_INTEGRATIONS_SETTINGS_SURFACE,
       },
     ]);
   });
 
   it("does not declare side-effecting components, OAuth scopes, or secrets", () => {
-    const version = lakehouseManifest.versions[0];
+    const version = dataIntegrationsManifest.versions[0];
     const componentTypes = version.components.map(
       (component) => component.type as PluginComponentType,
     );
-    const serializedManifest = JSON.stringify(lakehouseManifest);
+    const serializedManifest = JSON.stringify(dataIntegrationsManifest);
 
     expect(componentTypes).toEqual(["ui-surface"]);
     expect(componentTypes).not.toContain("infrastructure");
@@ -47,39 +50,43 @@ describe("LakeHouse plugin manifest", () => {
     );
   });
 
-  it("keeps customer-facing copy on the LakeHouse product scope", () => {
+  it("keeps customer-facing copy on the ELT integration scope", () => {
     const customerFacingText = [
-      lakehouseManifest.displayName,
-      lakehouseManifest.description,
-      ...lakehouseManifest.versions[0].components.map(
+      dataIntegrationsManifest.displayName,
+      dataIntegrationsManifest.description,
+      ...dataIntegrationsManifest.versions[0].components.map(
         (component) => component.displayName,
       ),
     ].join("\n");
 
-    expect(customerFacingText).toContain("LakeHouse");
-    expect(customerFacingText).toContain("enterprise data platform planning");
-    expect(customerFacingText).toContain("datalake");
-    expect(customerFacingText).toContain("warehouse");
+    expect(customerFacingText).toContain("Data Integrations");
+    expect(customerFacingText).toContain("tenant-managed ELT integration");
+    expect(customerFacingText).toContain("SaaS apps");
+    expect(customerFacingText).toContain("agent-accessible systems");
+    expect(customerFacingText).toContain("separate plugins");
     expect(customerFacingText).not.toMatch(
-      /\b(deploys?|queries|monitors?|automates?|provisions?|connects? to|operates?)\b/i,
+      /\b(deploys?|provides?|operates?)\s+(analytics|BI|dashboards?|lakehouse query)/i,
     );
   });
 
-  it("defines a first-party package boundary under plugins/lakehouse", () => {
-    const defined = defineFirstPartyPluginPackage(lakehousePluginPackage);
+  it("defines a first-party package boundary under plugins/data-integrations", () => {
+    const defined = defineFirstPartyPluginPackage(
+      dataIntegrationsPluginPackage,
+    );
 
-    expect(defined.packageKey).toBe("lakehouse");
-    expect(defined.sourceRoot).toBe("plugins/lakehouse");
+    expect(defined.packageKey).toBe("data-integrations");
+    expect(defined.sourceRoot).toBe("plugins/data-integrations");
     expect(defined.ownedSources).toContainEqual({
       kind: "manifest",
-      path: "plugins/lakehouse/src/manifest.ts",
+      path: "plugins/data-integrations/src/manifest.ts",
       description:
-        "LakeHouse catalog manifest for the shell-only plugin identity.",
+        "Data Integrations catalog manifest for the shell-only plugin identity.",
     });
     expect(defined.ownedSources).toContainEqual({
       kind: "tests",
-      path: "plugins/lakehouse/test",
-      description: "LakeHouse package-local manifest and shell-boundary tests.",
+      path: "plugins/data-integrations/test",
+      description:
+        "Data Integrations package-local manifest and shell-boundary tests.",
     });
     expect(defined.compatibilityLinks).toEqual([]);
   });
@@ -89,7 +96,10 @@ describe("LakeHouse plugin manifest", () => {
     const readme = readFileSync(readmePath, "utf8");
 
     expect(readme).toContain("intentionally does not deploy");
-    expect(readme).toContain("datalake");
+    expect(readme).toContain("connector runtime");
+    expect(readme).toContain("ELT jobs");
+    expect(readme).toContain("analytics UI");
+    expect(readme).toContain("BI");
     expect(readme).toContain("warehouse");
     expect(readme).toContain("MCP");
     expect(readme).toContain("Terraform-managed resources");

@@ -1,5 +1,5 @@
 {
-  "name": "@thinkwork/plugin-lakehouse",
+  "name": "@thinkwork/plugin-data-integrations",
   "version": "0.0.0",
   "private": true,
   "type": "module",

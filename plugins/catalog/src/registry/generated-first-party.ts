@@ -4,8 +4,8 @@
 
 import { defineFirstPartyPluginPackage } from "../plugin-package";
 import { companyBrainPluginPackage as rawCompanyBrainPluginPackage } from "@thinkwork/plugin-company-brain";
+import { dataIntegrationsPluginPackage as rawDataIntegrationsPluginPackage } from "@thinkwork/plugin-data-integrations";
 import { emailChannelPluginPackage as rawEmailChannelPluginPackage } from "@thinkwork/plugin-email-channel";
-import { lakehousePluginPackage as rawLakehousePluginPackage } from "@thinkwork/plugin-lakehouse";
 import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/plugin-lastmile";
 import { n8nPluginPackage as rawN8nPluginPackage } from "@thinkwork/plugin-n8n";
 import { planePluginPackage as rawPlanePluginPackage } from "@thinkwork/plugin-plane";
@@ -16,11 +16,11 @@ import { workosAuthPluginPackage as rawWorkosAuthPluginPackage } from "@thinkwor
 export const companyBrainPluginPackage = defineFirstPartyPluginPackage(
   rawCompanyBrainPluginPackage,
 );
+export const dataIntegrationsPluginPackage = defineFirstPartyPluginPackage(
+  rawDataIntegrationsPluginPackage,
+);
 export const emailChannelPluginPackage = defineFirstPartyPluginPackage(
   rawEmailChannelPluginPackage,
-);
-export const lakehousePluginPackage = defineFirstPartyPluginPackage(
-  rawLakehousePluginPackage,
 );
 export const lastmilePluginPackage = defineFirstPartyPluginPackage(
   rawLastmilePluginPackage,
@@ -42,8 +42,8 @@ export const workosAuthPluginPackage = defineFirstPartyPluginPackage(
 );
 
 export const companyBrainManifest = companyBrainPluginPackage.manifest;
+export const dataIntegrationsManifest = dataIntegrationsPluginPackage.manifest;
 export const emailChannelManifest = emailChannelPluginPackage.manifest;
-export const lakehouseManifest = lakehousePluginPackage.manifest;
 export const lastmileManifest = lastmilePluginPackage.manifest;
 export const n8nManifest = n8nPluginPackage.manifest;
 export const planeManifest = planePluginPackage.manifest;
@@ -53,8 +53,8 @@ export const workosAuthManifest = workosAuthPluginPackage.manifest;
 
 export const firstPartyPluginPackages = [
   companyBrainPluginPackage,
+  dataIntegrationsPluginPackage,
   emailChannelPluginPackage,
-  lakehousePluginPackage,
   lastmilePluginPackage,
   n8nPluginPackage,
   planePluginPackage,

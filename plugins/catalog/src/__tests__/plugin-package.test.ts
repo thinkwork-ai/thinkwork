@@ -15,8 +15,8 @@ describe("first-party plugin packages", () => {
   it("registers Plane and n8n from their root plugin package boundaries", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
       "company-brain",
+      "data-integrations",
       "email-channel",
-      "lakehouse",
       "lastmile",
       "n8n",
       "plane",
@@ -67,7 +67,7 @@ describe("first-party plugin packages", () => {
   it("publishes every first-party plugin manifest through the catalog aggregate", () => {
     expect(allPluginManifests.map((manifest) => manifest.pluginKey)).toEqual([
       "company-brain",
-      "lakehouse",
+      "data-integrations",
       "lastmile",
       "n8n",
       "plane",

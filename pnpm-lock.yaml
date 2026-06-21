@@ -1653,12 +1653,12 @@ importers:
       '@thinkwork/plugin-company-brain':
         specifier: workspace:*
         version: link:../company-brain
+      '@thinkwork/plugin-data-integrations':
+        specifier: workspace:*
+        version: link:../data-integrations
       '@thinkwork/plugin-email-channel':
         specifier: workspace:*
         version: link:../email-channel
-      '@thinkwork/plugin-lakehouse':
-        specifier: workspace:*
-        version: link:../lakehouse
       '@thinkwork/plugin-lastmile':
         specifier: workspace:*
         version: link:../lastmile
@@ -1716,7 +1716,7 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
 
-  plugins/email-channel:
+  plugins/data-integrations:
     devDependencies:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
@@ -1728,7 +1728,7 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
 
-  plugins/lakehouse:
+  plugins/email-channel:
     devDependencies:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*
