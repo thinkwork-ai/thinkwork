@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
@@ -920,6 +920,17 @@ function CopyablePluginValue({
   label: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const resetCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    return () => {
+      if (resetCopiedTimeoutRef.current) {
+        clearTimeout(resetCopiedTimeoutRef.current);
+      }
+    };
+  }, []);
 
   async function copy() {
     if (!value || !navigator?.clipboard?.writeText) return;
@@ -927,7 +938,13 @@ function CopyablePluginValue({
       await navigator.clipboard.writeText(value);
       setCopied(true);
       toast.success(`${label} copied.`);
-      setTimeout(() => setCopied(false), 1500);
+      if (resetCopiedTimeoutRef.current) {
+        clearTimeout(resetCopiedTimeoutRef.current);
+      }
+      resetCopiedTimeoutRef.current = setTimeout(() => {
+        setCopied(false);
+        resetCopiedTimeoutRef.current = null;
+      }, 1500);
     } catch {
       toast.error(`Could not copy ${label}.`);
     }

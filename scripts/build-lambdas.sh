@@ -114,6 +114,17 @@ FILTER="${1:-}"
 echo "Building Lambda artifacts → $DIST"
 echo ""
 
+# Some workspace packages export production ESM from dist/ while exposing
+# source through the development condition for Vitest/Vite. Lambda bundling
+# runs in a source-only checkout, so emit those production exports before
+# esbuild resolves package entry points.
+echo "Preparing workspace package exports"
+pnpm --dir "$REPO_ROOT" --filter @thinkwork/analytics-display build >/dev/null
+pnpm --dir "$REPO_ROOT" --filter @thinkwork/genui build >/dev/null
+echo "  ✓ analytics-display"
+echo "  ✓ genui"
+echo ""
+
 # ---------------------------------------------------------------------------
 # P0: Critical — sign-up + GraphQL
 # ---------------------------------------------------------------------------
