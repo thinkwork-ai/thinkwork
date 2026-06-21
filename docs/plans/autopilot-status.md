@@ -172,7 +172,8 @@ status: in_progress
   SQL operations runbook.
 - Current branch: `codex/thnk-59-u10-migration-runbook`.
 - Current worktree: `.Codex/worktrees/thnk-59-u10-migration-runbook`.
-- Current pull request: pending.
+- Current pull request:
+  [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792).
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -444,7 +445,9 @@ status: in_progress
   `origin/main`, then squash merged. U9 PR
   [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791) passed required
   CI checks (`cla`, `lint`, `typecheck`, `verify`, and `test`) and was squash
-  merged as `c6bd505a9ac26e652a4ae2ec00216760efaf3809`. U10 PR is pending.
+  merged as `c6bd505a9ac26e652a4ae2ec00216760efaf3809`. U10 PR
+  [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792) opened after
+  local verification passed.
 - Blockers: none.
 
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
