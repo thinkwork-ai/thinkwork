@@ -19,6 +19,48 @@ export type Scalars = {
   AWSURL: { input: any; output: any; }
 };
 
+export type AccountUsage = {
+  __typename?: 'AccountUsage';
+  daily: Array<AccountUsageDay>;
+  models: Array<AccountUsageModel>;
+  periodEnd: Scalars['AWSDateTime']['output'];
+  periodStart: Scalars['AWSDateTime']['output'];
+  summary: AccountUsageSummary;
+};
+
+export type AccountUsageDay = {
+  __typename?: 'AccountUsageDay';
+  computeUsd: Scalars['Float']['output'];
+  day: Scalars['String']['output'];
+  eventCount: Scalars['Int']['output'];
+  inputTokens: Scalars['Int']['output'];
+  llmUsd: Scalars['Float']['output'];
+  outputTokens: Scalars['Int']['output'];
+  toolsUsd: Scalars['Float']['output'];
+  totalUsd: Scalars['Float']['output'];
+};
+
+export type AccountUsageModel = {
+  __typename?: 'AccountUsageModel';
+  displayName: Scalars['String']['output'];
+  inputTokens: Scalars['Int']['output'];
+  model: Scalars['String']['output'];
+  outputTokens: Scalars['Int']['output'];
+  totalUsd: Scalars['Float']['output'];
+  usageShare: Scalars['Float']['output'];
+};
+
+export type AccountUsageSummary = {
+  __typename?: 'AccountUsageSummary';
+  computeUsd: Scalars['Float']['output'];
+  eventCount: Scalars['Int']['output'];
+  inputTokens: Scalars['Int']['output'];
+  llmUsd: Scalars['Float']['output'];
+  outputTokens: Scalars['Int']['output'];
+  toolsUsd: Scalars['Float']['output'];
+  totalUsd: Scalars['Float']['output'];
+};
+
 export type ActivatePluginInput = {
   installId: Scalars['ID']['input'];
   /** Client path to land on after the OAuth callback (validated server-side). */
@@ -5228,6 +5270,7 @@ export type PublishRoutineVersionInput = {
 export type Query = {
   __typename?: 'Query';
   _empty?: Maybe<Scalars['String']['output']>;
+  accountUsage: AccountUsage;
   activityLog: Array<ActivityLogEntry>;
   adminApplet?: Maybe<AppletPayload>;
   adminApplets: AppletConnection;
@@ -5532,6 +5575,13 @@ export type Query = {
   workflowRuns: Array<WorkflowRun>;
   workflowTemplateCatalog: Array<WorkflowTemplateCatalogItem>;
   workflows: Array<Workflow>;
+};
+
+
+export type QueryAccountUsageArgs = {
+  days?: InputMaybe<Scalars['Int']['input']>;
+  tenantId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 

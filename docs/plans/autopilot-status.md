@@ -15,12 +15,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U3 - Mount account usage on profile pages.
-- Current branch: `codex/thnk-60-u3-account-usage-pages`.
-- Current worktree: `.Codex/worktrees/thnk-60-u3-account-usage-pages`.
-- Current pull request:
-  [#2810](https://github.com/thinkwork-ai/thinkwork/pull/2810).
-- Base: `origin/main` at `a4fdc35ac`.
+- Current unit: U4 - Generated artifacts and regression verification.
+- Current branch: `codex/thnk-60-u4-account-usage-regression`.
+- Current worktree: `.Codex/worktrees/thnk-60-u4-account-usage-regression`.
+- Current pull request: Pending.
+- Base: `origin/main` at `efc578cd3`.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -109,9 +108,35 @@ status: in_progress
   - U3 desktop regression passed:
     `pnpm --filter @thinkwork/desktop exec vitest run test/main/protocol.test.ts`
     (8 tests).
-  - U3 CI: Pending.
-  - U3 merge: Pending.
-  - U3 cleanup: Pending.
+  - U3 CI passed after fix: CLA, lint, verify, typecheck, test.
+  - U3 squash merged as `efc578cd3e2b8dcc1493e4812dbe17577a008085`.
+  - U3 cleanup completed: remote branch was deleted by GitHub merge flow; local
+    worktree and branch were removed after syncing `main`.
+  - U4 ran schema/codegen across canonical AppSync schema, web, CLI, and
+    mobile. AppSync/web generated artifacts were already current; CLI and
+    mobile generated GraphQL types needed the new `AccountUsage` schema types.
+  - U4 adds a Settings Analytics source regression asserting tenant-wide
+    Analytics continues to use `costSummary`, `costByUser`, `costByModel`, and
+    `costTimeSeries` while the profile query uses `accountUsage`.
+  - U4 schema/codegen passed: `pnpm schema:build`,
+    `pnpm --filter @thinkwork/web codegen`,
+    `pnpm --filter thinkwork-cli codegen`, and
+    `pnpm --filter @thinkwork/mobile codegen`.
+  - U4 API regression passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/costs/accountUsage.query.test.ts src/__tests__/graphql-contract.test.ts`
+    (143 tests).
+  - U4 web regression passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsAnalytics.test.tsx src/components/profile/AccountUsageSection.test.tsx src/components/profile/SelfProfilePage.test.tsx src/components/settings/SettingsUserDetail.test.tsx`
+    (31 tests).
+  - U4 typecheck passed: `pnpm typecheck`; mobile has no package-level
+    `typecheck` script, so generated mobile validation is by successful codegen
+    plus monorepo typecheck over packages that expose scripts.
+  - U4 lint passed: `pnpm lint`.
+  - U4 formatting check passed:
+    `pnpm dlx prettier@3.8.2 --check ...` for hand-edited source/docs;
+    generated files were left in codegen's emitted format.
+  - U4 whitespace check passed: `git diff --check`.
+  - U4 PR: Pending.
 - Blockers: None.
 
 ## Skill Library Import / Export Autopilot - 2026-06-21
