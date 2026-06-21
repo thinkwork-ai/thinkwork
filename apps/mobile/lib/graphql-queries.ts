@@ -245,6 +245,7 @@ export const MessagesQuery = graphql(`
           }
           toolCalls
           toolResults
+          parts
           metadata
           tokenCount
           durableArtifact {

@@ -74,6 +74,14 @@ agent progress from an on-device runtime.
 
 When the tenant platform agent calls a tool during a turn, the tool call can render inline in the timeline as a collapsible row: tool name, input preview, and output preview. Rich tool output can render through the GenUI registry instead of plain text.
 
+### Thread GenUI fallback
+
+The web Thread surface can render validated `data-genui` parts inline, including analytical `analytics.display` payloads backed by the shared `@thinkwork/analytics-display` contract. Mobile receives the same persisted message `parts`, but v1 does not implement the full web renderer catalog.
+
+Mobile renders each part's required fallback title, summary, and lines. If a `data-genui` part is malformed or omits the fallback, the timeline shows a stable unsupported generated-view state instead of a blank message. Existing mobile `_type` GenUI cards and fenced `genui` message blocks continue to render through the mobile registry.
+
+See [Web — Thread Generative UI](/applications/web/thread-generative-ui/) for the envelope, catalog ownership, action security, and artifact promotion contract.
+
 ## Human-in-the-loop confirmations
 
 When the user opens a thread waiting for review, the thread detail screen shows a confirmation card near the top of the timeline. The card is the handoff point between the agent and the user.

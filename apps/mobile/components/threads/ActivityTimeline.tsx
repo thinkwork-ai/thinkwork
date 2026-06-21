@@ -42,7 +42,10 @@ import { MarkdownMessage } from "@/components/chat/MarkdownMessage";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { COLORS } from "@/lib/theme";
-import { getGenUIComponent } from "@/lib/genui-registry";
+import {
+  getGenUIComponent,
+  type MobileGenUIFallback,
+} from "@/lib/genui-registry";
 import {
   RefreshGenUIMutation,
   ThreadTurnEventsQuery,
@@ -105,6 +108,7 @@ interface Message {
   } | null;
   createdAt: string;
   toolResults?: Array<Record<string, unknown>> | null;
+  genuiFallbacks?: MobileGenUIFallback[] | null;
   metadata?: any;
   durableArtifact?: {
     id: string;
@@ -157,6 +161,16 @@ type TimelineItem =
         id: string;
         toolResult: Record<string, unknown>;
         toolIndex: number;
+        message: Message;
+        createdAt: string;
+      };
+      sortKey: number;
+    }
+  | {
+      kind: "data-genui-fallback";
+      data: {
+        id: string;
+        fallback: MobileGenUIFallback;
         message: Message;
         createdAt: string;
       };
@@ -299,6 +313,21 @@ function mergeTimeline(
             sortKey: new Date(m.createdAt).getTime() + 1,
           });
         }
+      }
+    }
+    if (m.genuiFallbacks) {
+      for (let fi = 0; fi < m.genuiFallbacks.length; fi++) {
+        const fallback = m.genuiFallbacks[fi];
+        items.push({
+          kind: "data-genui-fallback",
+          data: {
+            id: `${m.id}-data-genui-${fallback.id}`,
+            fallback,
+            message: m,
+            createdAt: m.createdAt,
+          },
+          sortKey: new Date(m.createdAt).getTime() + 2 + fi,
+        });
       }
     }
   }
@@ -1074,6 +1103,55 @@ function GenUIContent({
   );
 }
 
+function DataGenUIFallbackContent({
+  fallback,
+  colors,
+}: {
+  fallback: MobileGenUIFallback;
+  colors: (typeof COLORS)["dark"];
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const isUnsupported =
+    fallback.status === "unsupported" || fallback.status === "invalid";
+  const hasDetails = fallback.lines.length > 0 || isUnsupported;
+
+  return (
+    <>
+      <Pressable onPress={() => setExpanded(!expanded)}>
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-1">
+            <Text className="text-base font-medium">{fallback.title}</Text>
+            {expanded ? (
+              <ChevronDown size={14} color={colors.mutedForeground} />
+            ) : (
+              <ChevronRight size={14} color={colors.mutedForeground} />
+            )}
+          </View>
+        </View>
+        <Muted className="text-sm mb-2">{fallback.summary}</Muted>
+      </Pressable>
+      {expanded && hasDetails ? (
+        <View className="rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-2.5">
+          {fallback.lines.length > 0 ? (
+            <View className="gap-1">
+              {fallback.lines.map((line, index) => (
+                <Muted key={`${fallback.id}-line-${index}`} className="text-xs">
+                  {line}
+                </Muted>
+              ))}
+            </View>
+          ) : null}
+          {isUnsupported ? (
+            <Muted className="text-xs">
+              Interactive view available on web.
+            </Muted>
+          ) : null}
+        </View>
+      ) : null}
+    </>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -1112,7 +1190,8 @@ export function ActivityTimeline({
   const lastAgentIndex = useMemo(() => {
     for (let i = timeline.length - 1; i >= 0; i--) {
       const item = timeline[i];
-      if (item.kind === "genui") continue; // skip genui, find the agent message before it
+      if (item.kind === "genui" || item.kind === "data-genui-fallback")
+        continue; // skip generated UI blocks, find the agent message before them
       if (
         item.kind === "message" &&
         (item.data.role || "").toLowerCase() === "assistant"
@@ -1184,6 +1263,9 @@ export function ActivityTimeline({
         const { color } = getTurnStatusStyle(item.data.status, isDark);
         icon = <Brain size={16} color={color} />;
         iconBorder = color;
+      } else if (item.kind === "data-genui-fallback") {
+        icon = <FileText size={16} color={RESPONSE_COLOR} />;
+        iconBorder = RESPONSE_COLOR;
       } else if (item.kind === "genui") {
         const genuiType = String(item.data.toolResult._type || "");
         const { icon: gIcon, color: gColor } = getGenuiIconConfig(genuiType);
@@ -1238,6 +1320,13 @@ export function ActivityTimeline({
             currentUserId={currentUserId}
           />
         );
+      } else if (item.kind === "data-genui-fallback") {
+        content = (
+          <DataGenUIFallbackContent
+            fallback={item.data.fallback}
+            colors={colors}
+          />
+        );
       } else if (item.kind === "message") {
         const isUser =
           (item.data.role || "").toLowerCase() === "user" ||
@@ -1253,10 +1342,13 @@ export function ActivityTimeline({
           );
         else {
           // Collapse agent message by default when it has GenUI tool results (the GenUI block below shows the key content)
-          const hasGenUI = (item.data.toolResults || []).some(
-            (tr: Record<string, unknown>) =>
-              tr && typeof tr._type === "string" && getGenUIComponent(tr._type),
-          );
+          const hasGenUI =
+            (item.data.toolResults || []).some(
+              (tr: Record<string, unknown>) =>
+                tr &&
+                typeof tr._type === "string" &&
+                getGenUIComponent(tr._type),
+            ) || (item.data.genuiFallbacks?.length ?? 0) > 0;
           content = (
             <AgentMessageContent
               item={item.data}

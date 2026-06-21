@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Platform } from "react-native";
 import { loadOrCreateIdentity, signPayload } from "./useDeviceIdentity";
 import type { UiEnvelope } from "@/lib/ui-envelope-types";
+import type { MobileGenUIFallback } from "@/lib/genui-registry";
 
 export interface GatewayChatOptions {
   useDeviceAuth?: boolean;
@@ -47,6 +48,8 @@ export interface ChatMessage {
   uiEnvelope?: UiEnvelope | null;
   /** GenUI: typed JSON objects from MCP tool results (rendered as rich components) */
   toolResults?: Array<Record<string, unknown>> | null;
+  /** Thread GenUI/data-genui parts rendered as mobile-safe fallback summaries. */
+  genuiFallbacks?: MobileGenUIFallback[] | null;
   timestamp: number;
   isStreaming?: boolean;
   isTypingPlaceholder?: boolean;
