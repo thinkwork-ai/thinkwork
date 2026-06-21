@@ -73,8 +73,15 @@ status: in_progress
   - Scoped drift reporter passed for
     `packages/database-pg/drizzle/0180_skill_drafts.sql`; all declared tables,
     indexes, and check constraints were present in dev.
+  - Post-migration GitHub checks passed: CLA, lint, verify, typecheck, test,
+    and Migration Drift Precheck (dev).
+  - Rebasing PR #2819 onto `origin/main` completed cleanly after the green CI
+    run because the branch was behind `main`.
+  - Post-rebase focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/skill-creator/skillDraft.lifecycle.test.ts src/graphql/resolvers/skill-creator/skillDrafts.query.test.ts`
+    and `pnpm --filter @thinkwork/api typecheck`.
 - Blockers:
-  - Migration Drift Precheck (dev) failed because the new hand-rolled migration
+  - Cleared: Migration Drift Precheck (dev) failed because the new hand-rolled migration
     `packages/database-pg/drizzle/0180_skill_drafts.sql` has not been applied
     to the dev database. The reporter checked only this PR's migration and
     found all declared objects missing:
@@ -87,13 +94,9 @@ status: in_progress
     `public.skill_drafts.skill_drafts_status_check`,
     `public.skill_drafts.skill_drafts_source_kind_check`, and
     `public.skill_draft_events.skill_draft_events_type_check`.
-  - Autopilot is stopped because clearing this gate requires applying a
+  - Autopilot was stopped because clearing this gate required applying a
     database migration to a shared environment, which is a manual mutation
-    outside the allowed implementation/fix loop. Next recommended action: an
-    authorized operator should inspect and apply
-    `packages/database-pg/drizzle/0180_skill_drafts.sql` to dev, then rerun the
-    failed PR check. After the gate passes, resume autopilot to merge U1 and
-    continue with U2.
+    outside the allowed implementation/fix loop without explicit authorization.
   - Cleared on 2026-06-21 after explicit operator authorization to apply the
     migration to dev.
 
