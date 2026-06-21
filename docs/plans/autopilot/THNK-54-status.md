@@ -96,25 +96,32 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
   fix PR checks passed and merged.
 - 2026-06-21: moved `THNK-54` from `Verification` back to `In Progress` when
   U6 documentation/example work began after the U5 focused fix merged.
+- 2026-06-21: moved `THNK-54` from `In Progress` back to `Verification` after
+  U6 PR opened. The team has no exact `Review` status, so `Verification` is the
+  closest review-state equivalent.
+- 2026-06-21: kept `THNK-54` in `Verification` while U6 PR checks passed and
+  merged.
+- 2026-06-21: moved `THNK-54` from `Verification` back to `In Progress` when
+  U7 deployed smoke work began after U6 merged.
 
 ## Active Unit
 
-### U6 - Document the n8n workflow recipe and operator runbook
+### U7 - Add end-to-end bridge smoke coverage
 
-Objective: document a working stock-node n8n agent-step bridge recipe and
-operator runbook, including the deployed n8n.thinkwork.ai example/testing path.
+Objective: add opt-in deployed smoke coverage for the n8n -> ThinkWork -> n8n
+agent-step bridge path, with evidence for workflow/execution, bridge run,
+ThinkWork thread, and resume status.
 
-Branch: `codex/thnk-54-u6-n8n-docs`
+Branch: `codex/thnk-54-u7-n8n-smoke`
 
 Planned files:
 
+- `plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs`
+- `plugins/n8n/smoke/README.md`
 - `plugins/n8n/README.md`
-- `plugins/n8n/src/skills/n8n-workflow-operator/SKILL.md`
-- `plugins/n8n/src/manifest.ts`
-- `plugins/n8n/test/manifest.test.ts`
-- `docs/src/content/docs/applications/n8n.mdx`
-- `docs/src/content/docs/applications/n8n-agent-step-bridge.mdx`
-- `docs/astro.config.mjs`
+- `plugins/n8n/src/deployment/managed-app.ts`
+- `packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
+- `.github/workflows/deploy.yml`
 - `docs/plans/autopilot/THNK-54-status.md`
 
 ## Progress Log
@@ -559,6 +566,46 @@ should not leak"`, confirming the regression.
   - `cla`, `lint`, `Validate signed catalog build`, `verify`, `test`, and
     `typecheck` were in progress.
 - Rebasing onto current `origin/main` after PR open was clean.
+- U6 PR #2768 passed final checks on head `def35d0cd`:
+  - `cla`
+  - `lint`
+  - `Validate signed catalog build`
+  - `verify`
+  - `test`
+  - `typecheck`
+- U6 PR #2768 squash-merged to `main` at 2026-06-21T00:58:55Z:
+  https://github.com/thinkwork-ai/thinkwork/pull/2768
+- U6 squash merge commit:
+  `aa60c9921096ffd2b5f37e6e2239f7ff6a8e282c`
+- Remote branch `codex/thnk-54-u6-n8n-docs` was deleted by the merge flow.
+  Local U6 branch was deleted after switching away.
+- Synced from `origin/main` at merge commit `aa60c9921` and created fresh U7
+  branch `codex/thnk-54-u7-n8n-smoke`.
+- U7 objective: add opt-in deployed smoke coverage for the n8n agent-step
+  bridge path.
+- U7 implementation started:
+  - added `plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs`, a dry-run by
+    default and explicitly enabled live smoke harness;
+  - added `plugins/n8n/smoke/README.md`;
+  - registered the bridge smoke as an optional n8n managed-app smoke contract;
+  - added deployment-runner coverage for the optional smoke contract;
+  - added a workflow-dispatch `run_smokes` deploy step that runs the bridge
+    smoke without requiring secrets unless live mode is explicitly enabled.
+- Initial U7 verification passed:
+  - `node --check plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs`
+  - `node plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs`
+  - `pnpm --filter @thinkwork/deployment-runner exec vitest run test/deployment-runner-managed-apps.test.ts`
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck`
+- U7 local verification after formatting passed:
+  - `node --check plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs`
+  - `node plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs`
+  - `pnpm --filter @thinkwork/deployment-runner exec vitest run test/deployment-runner-managed-apps.test.ts`
+  - `pnpm --filter @thinkwork/deployment-runner typecheck`
+  - `pnpm --filter @thinkwork/plugin-n8n test -- manifest.test.ts`
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck`
+  - `pnpm lint`
+  - `pnpm dlx prettier@latest --check .github/workflows/deploy.yml docs/plans/autopilot/THNK-54-status.md plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs plugins/n8n/smoke/README.md plugins/n8n/src/deployment/managed-app.ts packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
+  - `git diff --check`
 
 ## Blockers
 

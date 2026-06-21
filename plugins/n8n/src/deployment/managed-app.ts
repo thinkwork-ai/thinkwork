@@ -26,6 +26,11 @@ const smokeContracts = [
     command: "plugins/n8n/smoke/n8n-managed-app-smoke.mjs",
     required: true,
   },
+  {
+    id: "n8n-agent-step-bridge",
+    command: "plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs",
+    required: false,
+  },
 ] as const;
 
 const statusOutputs = [

@@ -2122,6 +2122,24 @@ jobs:
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }}
 
+      - name: n8n agent-step bridge smoke
+        if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
+        timeout-minutes: 15
+        env:
+          SMOKE_ENABLE_N8N_AGENT_STEP_BRIDGE: ${{ secrets.SMOKE_ENABLE_N8N_AGENT_STEP_BRIDGE }}
+          SMOKE_N8N_URL: ${{ secrets.SMOKE_N8N_URL }}
+          SMOKE_N8N_MCP_URL: ${{ secrets.SMOKE_N8N_MCP_URL }}
+          SMOKE_N8N_MCP_SERVICE_TOKEN: ${{ secrets.SMOKE_N8N_MCP_SERVICE_TOKEN }}
+          SMOKE_N8N_BRIDGE_TRIGGER_URL: ${{ secrets.SMOKE_N8N_BRIDGE_TRIGGER_URL }}
+          SMOKE_N8N_BRIDGE_TRIGGER_HEADERS: ${{ secrets.SMOKE_N8N_BRIDGE_TRIGGER_HEADERS }}
+          SMOKE_N8N_BRIDGE_CORRELATION_ID: deploy-${{ github.run_id }}-${{ github.run_attempt }}
+          SMOKE_GRAPHQL_HTTP_URL: ${{ secrets.SMOKE_GRAPHQL_HTTP_URL }}
+          SMOKE_TENANT_ID: ${{ secrets.SMOKE_TENANT_ID }}
+          API_AUTH_SECRET: ${{ secrets.API_AUTH_SECRET }}
+          GRAPHQL_API_KEY: ${{ secrets.GRAPHQL_API_KEY }}
+          SMOKE_EVIDENCE_FILE: deploy-artifacts/n8n-agent-step-bridge-smoke.json
+        run: node plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs
+
       - name: Record deployment status pointer
         working-directory: terraform/examples/greenfield
         env:
