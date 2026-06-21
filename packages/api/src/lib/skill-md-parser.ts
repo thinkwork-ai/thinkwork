@@ -15,8 +15,9 @@
  *   # documents the skill for humans when scripts/ runs it.
  *
  * Validation rules (plan #007 §U9 Approach):
- *   - `name` required. Must match [a-z0-9-]+, length ≤ 64, must not contain
- *     "anthropic" or "claude" (Anthropic's spec reserves those substrings).
+ *   - `name` required. Must match lowercase alphanumeric words separated by
+ *     single hyphens, length ≤ 64, and must not contain "anthropic" or
+ *     "claude" (Anthropic's spec reserves those substrings).
  *   - `description` required. Length ≤ 1024. Free-form prose.
  *   - `allowed-tools` optional. Captured informationally — the harness's
  *     intersect-narrow at registration (plan §Key Technical Decisions)
@@ -53,7 +54,7 @@ import { parse as parseYaml } from "yaml";
 
 export const MAX_NAME_LEN = 64;
 export const MAX_DESCRIPTION_LEN = 1024;
-export const NAME_PATTERN = /^[a-z0-9-]+$/;
+export const NAME_PATTERN = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,63}$/;
 // Reserved by Anthropic's Agent Skills spec — skill authors MUST NOT ship
 // a name that collides with the vendor. Case-insensitive substring match
 // so no creative capitalisation slips through.

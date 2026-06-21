@@ -17,6 +17,7 @@
  */
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const ARCHIVE_SLUG_RE = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,63}$/;
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 
 export type CatalogRef = {
@@ -60,6 +61,15 @@ function isIsoDateString(value: unknown): value is string {
 
 export function isCatalogSlug(value: unknown): value is string {
   return typeof value === "string" && SLUG_RE.test(value);
+}
+
+/**
+ * Agent Skills archive imports use the public spec's stricter skill-name
+ * grammar. Keep this separate from `isCatalogSlug`: existing ThinkWork catalog
+ * slugs include legacy/plugin namespaces such as `lastmile--crm-basics`.
+ */
+export function isCatalogArchiveSlug(value: unknown): value is string {
+  return typeof value === "string" && ARCHIVE_SLUG_RE.test(value);
 }
 
 export function isSha256Hex(value: unknown): value is string {

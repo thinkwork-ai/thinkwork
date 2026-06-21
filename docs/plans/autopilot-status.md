@@ -14,27 +14,42 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: planning recovery PR opened.
-- Current branch: `codex/skill-library-import-export-plan`.
-- Current worktree: `.Codex/worktrees/skill-library-import-export-plan`.
+- Status: U1 PR opened; monitoring CI.
+- Current branch: `codex/skill-library-u1-archive`.
+- Current worktree: `.Codex/worktrees/skill-library-u1-archive`.
 - Notes:
   - The user-referenced plan file was absent from the starting checkout and
     from `origin/main`; `origin/main` did contain the matching requirements doc.
   - Recovered the missing implementation plan from the requirements doc, current
     codebase patterns, prior skill-catalog autopilot notes, and the Agent
     Skills specification read on 2026-06-21.
-  - First implementation unit after this planning/setup PR is U1, Archive
-    Validation and Packaging Module.
+  - Planning/setup PR [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772)
+    passed CLA, lint, test, typecheck, and verify; squash merged as
+    `1f427854fc51b7e7c7b1f9937c6418627088d98d`.
+  - U1 adds a binary-safe catalog skill archive parser/renderer, strict imported
+    Agent Skills slug validation, generated default wiring, and focused archive
+    tests.
+  - Compound review pass found entry-count, export slug, and test-coverage
+    gaps; fixes are applied before PR.
+- Local verification:
+  - `pnpm install --frozen-lockfile` completed; local Node 25 logged the
+    existing `canvas@2.11.2` native fallback failure for missing `pkg-config`
+    / `pixman-1`, but the install command exited successfully and workspace
+    executables linked.
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/catalog-skill-archive.test.ts src/lib/__tests__/skill-md-parser.test.ts src/types/catalog-skill.test.ts`
+    passed: 58 tests.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/api test` passed: 5,119 tests, 9 skipped.
 - Unit ledger:
 
-| Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                           |
-| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | --------------------------------------------------------------- |
-| Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | In progress | Adds the missing referenced plan and starts this status ledger. |
-| U1 Archive Validation and Packaging Module     | Pending                                  | Pending                                                      | Pending     | Next unit after plan recovery merges.                           |
-| U2 Catalog Import API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                                  |
-| U3 Catalog Export API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                                  |
-| U4 Skill Library Import UI                     | Pending                                  | Pending                                                      | Pending     | Depends on U2.                                                  |
-| U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                           |
+| Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                        |
+| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------ |
+| Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | Merged      | Squash merged as `1f427854fc51b7e7c7b1f9937c6418627088d98d`. |
+| U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | In progress | PR opened; CI monitoring in progress.                        |
+| U2 Catalog Import API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                               |
+| U3 Catalog Export API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                               |
+| U4 Skill Library Import UI                     | Pending                                  | Pending                                                      | Pending     | Depends on U2.                                               |
+| U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                        |
 
 ---
 
