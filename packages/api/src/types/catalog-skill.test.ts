@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  isCatalogArchiveSlug,
   isCatalogRef,
+  isCatalogSlug,
   isCatalogSkillManifest,
   isWiringSuggestion,
   type CatalogRef,
@@ -11,6 +13,14 @@ import {
 const validSha = "a".repeat(64);
 
 describe("catalog skill storage contract", () => {
+  it("keeps imported Agent Skills archive slugs stricter than legacy catalog slugs", () => {
+    expect(isCatalogArchiveSlug("pdf-processing")).toBe(true);
+    expect(isCatalogSlug("lastmile--crm-basics")).toBe(true);
+    expect(isCatalogArchiveSlug("lastmile--crm-basics")).toBe(false);
+    expect(isCatalogArchiveSlug("-bad")).toBe(false);
+    expect(isCatalogArchiveSlug("bad-")).toBe(false);
+  });
+
   it("accepts a valid CatalogRef that round-trips through JSON", () => {
     const ref = {
       slug: "finance-audit-xls",

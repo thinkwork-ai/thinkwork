@@ -209,6 +209,20 @@ describe("parseSkillMd — required-field rejections", () => {
     expect((shapeErr?.details as { field?: string }).field).toBe("name");
   });
 
+  it.each(["-leading", "trailing-", "double--hyphen"])(
+    "rejects Agent Skills names with leading/trailing/consecutive hyphens: %s",
+    (name) => {
+      const r = parseSkillMd(
+        md(`name: ${name}\ndescription: bad shape`),
+        "skills/bad-name/SKILL.md",
+      );
+      if (r.valid) throw new Error("expected invalid");
+      const shapeErr = r.errors.find((e) => e.kind === "SkillMdFieldShape");
+      expect(shapeErr).toBeDefined();
+      expect((shapeErr?.details as { field?: string }).field).toBe("name");
+    },
+  );
+
   it("rejects when 'description' is missing", () => {
     const r = parseSkillMd(md("name: x"), "skills/x/SKILL.md");
     if (r.valid) throw new Error("expected invalid");
