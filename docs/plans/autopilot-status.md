@@ -6,6 +6,100 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-11 Skill Creator Autopilot - 2026-06-21
+
+- Plan: `docs/plans/2026-06-21-003-feat-skill-creator-system-plan.md`.
+- Origin requirements:
+  `docs/brainstorms/2026-06-21-skill-creator-system-requirements.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: In progress.
+- Current unit: U1 Skill Draft Data Model and GraphQL Lifecycle.
+- Current branch: `codex/thnk-11-u1-skill-drafts`.
+- Current worktree: `.Codex/worktrees/thnk-11-u1-skill-drafts`.
+- Current pull request:
+  [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).
+- Notes:
+  - U1 started from a clean isolated worktree created from `origin/main`.
+  - Planning artifacts were copied into the U1 branch because they were local
+    untracked docs from the THNK-11 planning handoff and not yet durable on
+    `main`.
+  - U1 adds the `skill_drafts` and `skill_draft_events` lifecycle substrate,
+    the `skill-creator.graphql` contract, resolver registration, tenant-scoped
+    draft lifecycle queries/mutations, and focused resolver tests.
+- Local verification:
+  - `pnpm install --frozen-lockfile --offline` completed; local Node 25 logged
+    the existing optional `canvas@2.11.2` native fallback/missing `pkg-config`
+    warning, but pnpm returned success.
+  - `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/skill-creator/skillDraft.lifecycle.test.ts src/graphql/resolvers/skill-creator/skillDrafts.query.test.ts`
+    passed: 2 files, 10 tests.
+  - `pnpm --filter @thinkwork/api exec vitest run src/__tests__/graphql-contract.test.ts`
+    passed: 138 tests.
+  - `pnpm --filter @thinkwork/api test` passed: 552 files passed, 3 skipped;
+    5201 tests passed, 9 skipped.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/database-pg typecheck` passed.
+  - `pnpm schema:build` passed and produced no `terraform/schema.graphql` diff.
+  - Codegen passed for web, mobile, and CLI:
+    `pnpm --filter @thinkwork/web codegen`,
+    `pnpm --filter @thinkwork/mobile codegen`, and
+    `pnpm --dir apps/cli codegen`. The documented `@thinkwork/cli` filter did
+    not match this checkout; the actual package name is `thinkwork-cli`.
+  - Compound-style review pass completed before PR. One safe cleanup was
+    applied: removed unrelated formatter churn from `packages/api/src/graphql/utils.ts`.
+  - `git diff --check` passed.
+  - Targeted `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored
+    source plus the THNK-11 plan/requirements docs. Generated GraphQL clients
+    were left in `graphql-codegen` output format because applying Prettier
+    3.8.2 to those files would rewrite tens of thousands of unrelated
+    generated lines.
+- PR / CI:
+  - U1 PR: [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).
+  - CI passed so far: CLA, lint, verify, typecheck.
+  - CI pending at blocker time: test.
+  - CI failed: Migration Drift Precheck (dev).
+  - After the blocker-status commit, GitHub reran checks. CLA, lint, verify,
+    and typecheck passed again; `test` was still pending when the repeated
+    hard blocker was recorded; Migration Drift Precheck (dev) failed again on
+    run `27918499277` / job `82607986527`.
+  - A third continuation check triggered run `27918635318` / job
+    `82608340536`; CLA, lint, verify, and typecheck passed, `test` was still
+    pending when stopped, and Migration Drift Precheck (dev) failed again with
+    the same missing-object report for `0180_skill_drafts.sql`.
+  - After explicit operator authorization ("Apply the migration"), applied
+    `packages/database-pg/drizzle/0180_skill_drafts.sql` to the dev database
+    with `psql -v ON_ERROR_STOP=1`.
+  - Scoped drift reporter passed for
+    `packages/database-pg/drizzle/0180_skill_drafts.sql`; all declared tables,
+    indexes, and check constraints were present in dev.
+  - Post-migration GitHub checks passed: CLA, lint, verify, typecheck, test,
+    and Migration Drift Precheck (dev).
+  - Rebasing PR #2819 onto `origin/main` completed cleanly after the green CI
+    run because the branch was behind `main`.
+  - Post-rebase focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/skill-creator/skillDraft.lifecycle.test.ts src/graphql/resolvers/skill-creator/skillDrafts.query.test.ts`
+    and `pnpm --filter @thinkwork/api typecheck`.
+- Blockers:
+  - Cleared: Migration Drift Precheck (dev) failed because the new hand-rolled migration
+    `packages/database-pg/drizzle/0180_skill_drafts.sql` has not been applied
+    to the dev database. The reporter checked only this PR's migration and
+    found all declared objects missing:
+    `public.skill_drafts`, `public.skill_draft_events`,
+    `public.idx_skill_drafts_tenant_status_updated`,
+    `public.idx_skill_drafts_tenant_requester`,
+    `public.uq_skill_drafts_tenant_id`,
+    `public.idx_skill_draft_events_draft_created`,
+    `public.idx_skill_draft_events_tenant_type`,
+    `public.skill_drafts.skill_drafts_status_check`,
+    `public.skill_drafts.skill_drafts_source_kind_check`, and
+    `public.skill_draft_events.skill_draft_events_type_check`.
+  - Autopilot was stopped because clearing this gate required applying a
+    database migration to a shared environment, which is a manual mutation
+    outside the allowed implementation/fix loop without explicit authorization.
+  - Cleared on 2026-06-21 after explicit operator authorization to apply the
+    migration to dev.
+
 ## THNK-60 Account Usage Autopilot - 2026-06-21
 
 - Plan: `docs/plans/2026-06-21-002-feat-account-usage-profile-plan.md`.

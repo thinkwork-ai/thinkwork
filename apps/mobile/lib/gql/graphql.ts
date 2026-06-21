@@ -1177,6 +1177,15 @@ export type CreateScheduledJobInput = {
   triggerType: Scalars['String']['input'];
 };
 
+export type CreateSkillDraftInput = {
+  currentContentHash?: InputMaybe<Scalars['String']['input']>;
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  slug: Scalars['String']['input'];
+  source?: InputMaybe<SkillDraftSourceInput>;
+  summary?: InputMaybe<Scalars['String']['input']>;
+  title: Scalars['String']['input'];
+};
+
 export type CreateSpaceInput = {
   accessMode?: InputMaybe<SpaceAccessMode>;
   description?: InputMaybe<Scalars['String']['input']>;
@@ -3025,6 +3034,8 @@ export type Mutation = {
   createRecipe: Recipe;
   createRoutine: Routine;
   createScheduledJob: ScheduledJob;
+  /** Create a tenant-scoped skill draft. */
+  createSkillDraft: SkillDraft;
   createSpace: Space;
   createTenant: Tenant;
   createTenantCredential: TenantCredential;
@@ -3138,6 +3149,8 @@ export type Mutation = {
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
   rejectOntologyChangeSet: OntologyChangeSet;
+  /** Tenant-operator rejection with rationale. */
+  rejectSkillDraft: SkillDraft;
   releaseThread: Thread;
   remediateReleaseRunner: ReleaseUpdateJob;
   removeEmailSpaceSenderAllowlist: Scalars['Boolean']['output'];
@@ -3205,6 +3218,8 @@ export type Mutation = {
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
   startTwentyCustomerOnboarding: StartTwentyCustomerOnboardingPayload;
   submitRunFeedback: SkillRun;
+  /** Submit a draft for trust/review. */
+  submitSkillDraft: SkillDraft;
   syncKnowledgeBase: KnowledgeBase;
   /**
    * Inserts a synthetic delivery row for the webhook so an operator can
@@ -3253,6 +3268,8 @@ export type Mutation = {
   updateRoutine: Routine;
   updateRoutineDefinition: RoutineDefinition;
   updateScheduledJob: ScheduledJob;
+  /** Update editable draft metadata and current content hash. */
+  updateSkillDraft: SkillDraft;
   updateSpace: Space;
   updateSpaceEmailTrigger: Space;
   updateTenant: Tenant;
@@ -3533,6 +3550,11 @@ export type MutationCreateRoutineArgs = {
 
 export type MutationCreateScheduledJobArgs = {
   input: CreateScheduledJobInput;
+};
+
+
+export type MutationCreateSkillDraftArgs = {
+  input: CreateSkillDraftInput;
 };
 
 
@@ -3991,6 +4013,11 @@ export type MutationRejectOntologyChangeSetArgs = {
 };
 
 
+export type MutationRejectSkillDraftArgs = {
+  input: RejectSkillDraftInput;
+};
+
+
 export type MutationReleaseThreadArgs = {
   id: Scalars['ID']['input'];
   input: ReleaseThreadInput;
@@ -4301,6 +4328,11 @@ export type MutationSubmitRunFeedbackArgs = {
 };
 
 
+export type MutationSubmitSkillDraftArgs = {
+  input: SubmitSkillDraftInput;
+};
+
+
 export type MutationSyncKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
 };
@@ -4474,6 +4506,11 @@ export type MutationUpdateRoutineDefinitionArgs = {
 export type MutationUpdateScheduledJobArgs = {
   id: Scalars['ID']['input'];
   input: UpdateScheduledJobInput;
+};
+
+
+export type MutationUpdateSkillDraftArgs = {
+  input: UpdateSkillDraftInput;
 };
 
 
@@ -5472,6 +5509,14 @@ export type Query = {
   scheduledJob?: Maybe<ScheduledJob>;
   scheduledJobs: Array<ScheduledJob>;
   singleAgentPerformance?: Maybe<AgentPerformance>;
+  /** Read a single tenant-scoped draft. */
+  skillDraft?: Maybe<SkillDraft>;
+  /**
+   * List skill drafts for the caller tenant. Non-operators receive only drafts
+   * they requested. Operators receive tenant-wide drafts and may optionally
+   * filter by status or requester.
+   */
+  skillDrafts: Array<SkillDraftSummary>;
   skillEvalGate: SkillEvalGate;
   skillEvalScore: SkillEvalScore;
   skillRun?: Maybe<SkillRun>;
@@ -6221,6 +6266,17 @@ export type QuerySingleAgentPerformanceArgs = {
 };
 
 
+export type QuerySkillDraftArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QuerySkillDraftsArgs = {
+  requesterId?: InputMaybe<Scalars['ID']['input']>;
+  status?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type QuerySkillEvalGateArgs = {
   tenantId: Scalars['ID']['input'];
 };
@@ -6633,6 +6689,11 @@ export type RejectOntologyChangeSetInput = {
   changeSetId: Scalars['ID']['input'];
   reason?: InputMaybe<Scalars['String']['input']>;
   tenantId: Scalars['ID']['input'];
+};
+
+export type RejectSkillDraftInput = {
+  id: Scalars['ID']['input'];
+  rationale: Scalars['String']['input'];
 };
 
 export type ReleaseThreadInput = {
@@ -7240,6 +7301,87 @@ export type SkillCatalogRebuildResult = {
   tenantSlug: Scalars['String']['output'];
 };
 
+export type SkillDraft = {
+  __typename?: 'SkillDraft';
+  createdAt: Scalars['AWSDateTime']['output'];
+  currentContentHash?: Maybe<Scalars['String']['output']>;
+  displayName?: Maybe<Scalars['String']['output']>;
+  draftS3Prefix: Scalars['String']['output'];
+  events: Array<SkillDraftEvent>;
+  failureMessage?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  inboxItemId?: Maybe<Scalars['ID']['output']>;
+  publishedCatalogSlug?: Maybe<Scalars['String']['output']>;
+  publishedContentHash?: Maybe<Scalars['String']['output']>;
+  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  requester?: Maybe<SkillDraftRequester>;
+  slug: Scalars['String']['output'];
+  source: SkillDraftSource;
+  status: Scalars['String']['output'];
+  submittedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  summary?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type SkillDraftEvent = {
+  __typename?: 'SkillDraftEvent';
+  actorUserId?: Maybe<Scalars['ID']['output']>;
+  createdAt: Scalars['AWSDateTime']['output'];
+  draftId: Scalars['ID']['output'];
+  eventType: Scalars['String']['output'];
+  id: Scalars['ID']['output'];
+  message?: Maybe<Scalars['String']['output']>;
+  payload: Scalars['AWSJSON']['output'];
+};
+
+/**
+ * Skill Creator draft lifecycle.
+ *
+ * Draft files live in the tenant workspace bucket under
+ * `tenants/<tenant-slug>/skill-drafts/<draft-id>/`. This GraphQL surface exposes
+ * the U1 lifecycle index only; trust evidence and publication readiness are added
+ * by later THNK-11 units.
+ */
+export type SkillDraftRequester = {
+  __typename?: 'SkillDraftRequester';
+  email?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  name?: Maybe<Scalars['String']['output']>;
+};
+
+export type SkillDraftSource = {
+  __typename?: 'SkillDraftSource';
+  kind: Scalars['String']['output'];
+  messageId?: Maybe<Scalars['ID']['output']>;
+  threadId?: Maybe<Scalars['ID']['output']>;
+};
+
+export type SkillDraftSourceInput = {
+  kind?: InputMaybe<Scalars['String']['input']>;
+  messageId?: InputMaybe<Scalars['ID']['input']>;
+  threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+export type SkillDraftSummary = {
+  __typename?: 'SkillDraftSummary';
+  createdAt: Scalars['AWSDateTime']['output'];
+  currentContentHash?: Maybe<Scalars['String']['output']>;
+  displayName?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  inboxItemId?: Maybe<Scalars['ID']['output']>;
+  requester?: Maybe<SkillDraftRequester>;
+  slug: Scalars['String']['output'];
+  source: SkillDraftSource;
+  status: Scalars['String']['output'];
+  submittedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  summary?: Maybe<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
 export type SkillEvalGate = {
   __typename?: 'SkillEvalGate';
   enabled: Scalars['Boolean']['output'];
@@ -7672,6 +7814,10 @@ export type SubmitRunFeedbackInput = {
   note?: InputMaybe<Scalars['String']['input']>;
   runId: Scalars['ID']['input'];
   signal: Scalars['String']['input'];
+};
+
+export type SubmitSkillDraftInput = {
+  id: Scalars['ID']['input'];
 };
 
 export type Subscription = {
@@ -8641,6 +8787,15 @@ export type UpdateScheduledJobInput = {
   scheduleType?: InputMaybe<Scalars['String']['input']>;
   spaceId?: InputMaybe<Scalars['ID']['input']>;
   timezone?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type UpdateSkillDraftInput = {
+  currentContentHash?: InputMaybe<Scalars['String']['input']>;
+  displayName?: InputMaybe<Scalars['String']['input']>;
+  id: Scalars['ID']['input'];
+  slug?: InputMaybe<Scalars['String']['input']>;
+  summary?: InputMaybe<Scalars['String']['input']>;
+  title?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateSpaceEmailTriggerInput = {

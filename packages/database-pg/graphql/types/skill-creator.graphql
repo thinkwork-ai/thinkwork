@@ -1,0 +1,128 @@
+"""
+Skill Creator draft lifecycle.
+
+Draft files live in the tenant workspace bucket under
+`tenants/<tenant-slug>/skill-drafts/<draft-id>/`. This GraphQL surface exposes
+the U1 lifecycle index only; trust evidence and publication readiness are added
+by later THNK-11 units.
+"""
+type SkillDraftRequester {
+  id: ID!
+  name: String
+  email: String
+}
+
+type SkillDraftSource {
+  kind: String!
+  threadId: ID
+  messageId: ID
+}
+
+type SkillDraft {
+  id: ID!
+  tenantId: ID!
+  slug: String!
+  title: String!
+  displayName: String
+  summary: String
+  status: String!
+  source: SkillDraftSource!
+  requester: SkillDraftRequester
+  currentContentHash: String
+  draftS3Prefix: String!
+  inboxItemId: ID
+  failureMessage: String
+  rejectedAt: AWSDateTime
+  publishedCatalogSlug: String
+  publishedContentHash: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  submittedAt: AWSDateTime
+  events: [SkillDraftEvent!]!
+}
+
+type SkillDraftSummary {
+  id: ID!
+  tenantId: ID!
+  slug: String!
+  title: String!
+  displayName: String
+  summary: String
+  status: String!
+  source: SkillDraftSource!
+  requester: SkillDraftRequester
+  currentContentHash: String
+  inboxItemId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  submittedAt: AWSDateTime
+}
+
+type SkillDraftEvent {
+  id: ID!
+  draftId: ID!
+  eventType: String!
+  message: String
+  payload: AWSJSON!
+  actorUserId: ID
+  createdAt: AWSDateTime!
+}
+
+input SkillDraftSourceInput {
+  kind: String = "thread"
+  threadId: ID
+  messageId: ID
+}
+
+input CreateSkillDraftInput {
+  slug: String!
+  title: String!
+  displayName: String
+  summary: String
+  source: SkillDraftSourceInput
+  currentContentHash: String
+}
+
+input UpdateSkillDraftInput {
+  id: ID!
+  slug: String
+  title: String
+  displayName: String
+  summary: String
+  currentContentHash: String
+}
+
+input SubmitSkillDraftInput {
+  id: ID!
+}
+
+input RejectSkillDraftInput {
+  id: ID!
+  rationale: String!
+}
+
+extend type Query {
+  """
+  List skill drafts for the caller tenant. Non-operators receive only drafts
+  they requested. Operators receive tenant-wide drafts and may optionally
+  filter by status or requester.
+  """
+  skillDrafts(status: String, requesterId: ID): [SkillDraftSummary!]!
+
+  "Read a single tenant-scoped draft."
+  skillDraft(id: ID!): SkillDraft
+}
+
+extend type Mutation {
+  "Create a tenant-scoped skill draft."
+  createSkillDraft(input: CreateSkillDraftInput!): SkillDraft!
+
+  "Update editable draft metadata and current content hash."
+  updateSkillDraft(input: UpdateSkillDraftInput!): SkillDraft!
+
+  "Submit a draft for trust/review."
+  submitSkillDraft(input: SubmitSkillDraftInput!): SkillDraft!
+
+  "Tenant-operator rejection with rationale."
+  rejectSkillDraft(input: RejectSkillDraftInput!): SkillDraft!
+}
