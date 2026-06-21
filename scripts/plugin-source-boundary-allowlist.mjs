@@ -104,6 +104,21 @@ export const sharedPluginTermAllowlist = [
       "shared Plugin Detail UI shell for n8n package settings; package-specific validation is imported from plugins/n8n.",
   },
   {
+    pathPrefix: "apps/web/src/routes/_authed/settings.plugins.n8n",
+    reason:
+      "shared route-backed Plugin Detail UI shell for the n8n plugin Workflows and Settings tabs; plugin runtime source remains package-owned under plugins/n8n.",
+  },
+  {
+    pathPrefix: "packages/api/src/graphql/resolvers/workflows/",
+    reason:
+      "shared Workflow control-plane GraphQL API can expose typed n8n workflow discovery, connection, and bridge operations without moving platform workflow ownership into the n8n plugin.",
+  },
+  {
+    pathPrefix: "packages/api/src/lib/workflows/n8n-",
+    reason:
+      "shared Workflow control-plane n8n discovery and bridge contract adapters; managed app runtime source remains package-owned under plugins/n8n.",
+  },
+  {
     pathPrefix: "packages/api/src/lib/n8n-agent-step/",
     reason:
       "shared platform bridge contract for n8n workflows invoking ThinkWork agent steps; managed app runtime source remains package-owned under plugins/n8n.",

@@ -960,6 +960,23 @@ export type ConfigureEmailProviderInput = {
   webhookSecretRef?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type ConnectN8nWorkflowInput = {
+  active?: InputMaybe<Scalars['Boolean']['input']>;
+  externalWorkflowId: Scalars['String']['input'];
+  externalWorkflowName: Scalars['String']['input'];
+  idempotencyKey: Scalars['String']['input'];
+  installId: Scalars['ID']['input'];
+  lastModifiedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  triggerTypes?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+export type ConnectN8nWorkflowResult = {
+  __typename?: 'ConnectN8nWorkflowResult';
+  binding: WorkflowEngineBinding;
+  created: Scalars['Boolean']['output'];
+  workflow: Workflow;
+};
+
 export type CostEvent = {
   __typename?: 'CostEvent';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -1059,6 +1076,11 @@ export type CreateKnowledgeBaseInput = {
   embeddingModel?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+export type CreateN8nWorkflowBridgeInput = {
+  idempotencyKey: Scalars['String']['input'];
+  workflowId: Scalars['ID']['input'];
 };
 
 export type CreateQuickActionInput = {
@@ -2901,6 +2923,7 @@ export type Mutation = {
    */
   compileWikiNow: WikiCompileJob;
   configureEmailProvider: EmailProviderInstall;
+  connectN8nWorkflow: ConnectN8nWorkflowResult;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   /**
@@ -2921,6 +2944,7 @@ export type Mutation = {
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
+  createN8nWorkflowBridge: N8nWorkflowBridgeCredential;
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
   createRoutine: Routine;
@@ -3361,6 +3385,11 @@ export type MutationConfigureEmailProviderArgs = {
 };
 
 
+export type MutationConnectN8nWorkflowArgs = {
+  input: ConnectN8nWorkflowInput;
+};
+
+
 export type MutationCreateAgentProfileArgs = {
   input: AgentProfileInput;
   tenantId: Scalars['ID']['input'];
@@ -3397,6 +3426,11 @@ export type MutationCreateInboxItemArgs = {
 
 export type MutationCreateKnowledgeBaseArgs = {
   input: CreateKnowledgeBaseInput;
+};
+
+
+export type MutationCreateN8nWorkflowBridgeArgs = {
+  input: CreateN8nWorkflowBridgeInput;
 };
 
 
@@ -4540,6 +4574,21 @@ export type N8nAgentStepRunTelemetry = {
   workflowName?: Maybe<Scalars['String']['output']>;
 };
 
+export type N8nDiscoveredWorkflow = {
+  __typename?: 'N8nDiscoveredWorkflow';
+  active?: Maybe<Scalars['Boolean']['output']>;
+  connectedBindingId?: Maybe<Scalars['ID']['output']>;
+  connectedWorkflowId?: Maybe<Scalars['ID']['output']>;
+  externalWorkflowId: Scalars['String']['output'];
+  lastExecutionAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastModifiedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  name: Scalars['String']['output'];
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  triggerTypes: Array<Scalars['String']['output']>;
+  warnings: Array<Scalars['String']['output']>;
+};
+
 export type N8nPackage = {
   __typename?: 'N8nPackage';
   name: Scalars['String']['output'];
@@ -4577,6 +4626,25 @@ export type N8nPluginSettings = {
   packageImageUri?: Maybe<Scalars['String']['output']>;
   pluginInstallId: Scalars['ID']['output'];
   recentAgentStepRuns: Array<N8nAgentStepRunTelemetry>;
+};
+
+export type N8nWorkflowBridgeCredential = {
+  __typename?: 'N8nWorkflowBridgeCredential';
+  bindingId: Scalars['ID']['output'];
+  replayWindowSeconds: Scalars['Int']['output'];
+  secretPreview: Scalars['String']['output'];
+  sharedSecret: Scalars['String']['output'];
+  signingHeader: Scalars['String']['output'];
+  timestampHeader: Scalars['String']['output'];
+  workflowId: Scalars['ID']['output'];
+};
+
+export type N8nWorkflowDiscovery = {
+  __typename?: 'N8nWorkflowDiscovery';
+  installId: Scalars['ID']['output'];
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  workflows: Array<N8nDiscoveredWorkflow>;
 };
 
 export type NewMessageEvent = {
@@ -5171,6 +5239,7 @@ export type Query = {
   deploymentEvidence: DeploymentEvidence;
   deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
+  discoverN8nWorkflows: N8nWorkflowDiscovery;
   emailChannelLedger: Array<EmailLedgerEvent>;
   emailChannelSummary: EmailChannelSummary;
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
@@ -5605,6 +5674,11 @@ export type QueryDeploymentEvidenceArgs = {
 
 export type QueryDeploymentReleasesArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryDiscoverN8nWorkflowsArgs = {
+  installId: Scalars['ID']['input'];
 };
 
 
@@ -10367,6 +10441,20 @@ export type SettingsN8nPluginSettingsQueryVariables = Exact<{
 
 export type SettingsN8nPluginSettingsQuery = { __typename?: 'Query', n8nPluginSettings?: { __typename?: 'N8nPluginSettings', pluginInstallId: string, installState: string, managedApplicationId?: string | null, desiredStatus?: string | null, currentStatus?: string | null, desiredConfig: any, agentStepBridgeEndpointPath: string, agentStepBridgeCredentialConfigured: boolean, packageImageUri?: string | null, packageImageConfigDigest?: string | null, lastJobId?: string | null, lastJobStatus?: string | null, lastJobOperation?: string | null, lastJobError?: string | null, lastEvidenceBucket?: string | null, lastEvidencePrefix?: string | null, currentPackageConfig: { __typename?: 'N8nPackageConfig', schemaVersion: number, packageSpecs: Array<string>, packageNames: Array<string>, allowExternal: string, digest: string, packages: Array<{ __typename?: 'N8nPackage', name: string, version: string, spec: string }> }, recentAgentStepRuns: Array<{ __typename?: 'N8nAgentStepRunTelemetry', id: string, status: N8nAgentStepRunStatus, resumeStatus: N8nAgentStepResumeStatus, workflowId: string, workflowName?: string | null, executionId: string, correlationId: string, instructionsPreview?: string | null, inputPreview?: string | null, outputPreview?: string | null, errorMessage?: string | null, summary?: string | null, links?: any | null, resumeAttemptCount: number, lastResumeHttpStatus?: number | null, lastResumeError?: string | null, expiresAt: any, updatedAt: any }> } | null };
 
+export type SettingsDiscoverN8nWorkflowsQueryVariables = Exact<{
+  installId: Scalars['ID']['input'];
+}>;
+
+
+export type SettingsDiscoverN8nWorkflowsQuery = { __typename?: 'Query', discoverN8nWorkflows: { __typename?: 'N8nWorkflowDiscovery', installId: string, readinessState: WorkflowReadinessState, readinessReasons: any, workflows: Array<{ __typename?: 'N8nDiscoveredWorkflow', externalWorkflowId: string, name: string, active?: boolean | null, triggerTypes: Array<string>, lastModifiedAt?: any | null, lastExecutionAt?: any | null, warnings: Array<string>, connectedWorkflowId?: string | null, connectedBindingId?: string | null, readinessState: WorkflowReadinessState, readinessReasons: any }> } };
+
+export type SettingsConnectN8nWorkflowMutationVariables = Exact<{
+  input: ConnectN8nWorkflowInput;
+}>;
+
+
+export type SettingsConnectN8nWorkflowMutation = { __typename?: 'Mutation', connectN8nWorkflow: { __typename?: 'ConnectN8nWorkflowResult', created: boolean, workflow: { __typename?: 'Workflow', id: string, name: string, readinessState: WorkflowReadinessState }, binding: { __typename?: 'WorkflowEngineBinding', id: string, externalWorkflowId?: string | null, externalWorkflowName?: string | null, readinessState: WorkflowReadinessState } } };
+
 export type SettingsUpdateN8nPluginPackageSettingsMutationVariables = Exact<{
   input: UpdateN8nPluginPackageSettingsInput;
 }>;
@@ -10596,6 +10684,8 @@ export const SettingsPluginCatalogDocument = {"kind":"Document","definitions":[{
 export const SettingsRefreshPluginCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRefreshPluginCatalog"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"refreshPluginCatalog"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"repository"}},{"kind":"Field","name":{"kind":"Name","value":"ref"}},{"kind":"Field","name":{"kind":"Name","value":"commitSha"}},{"kind":"Field","name":{"kind":"Name","value":"releaseTag"}},{"kind":"Field","name":{"kind":"Name","value":"assetName"}},{"kind":"Field","name":{"kind":"Name","value":"catalogSha256"}},{"kind":"Field","name":{"kind":"Name","value":"generatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"fetchedAt"}},{"kind":"Field","name":{"kind":"Name","value":"stale"}},{"kind":"Field","name":{"kind":"Name","value":"lastRefreshStatus"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"rateLimitRemaining"}},{"kind":"Field","name":{"kind":"Name","value":"rateLimitReset"}}]}}]}}]} as unknown as DocumentNode<SettingsRefreshPluginCatalogMutation, SettingsRefreshPluginCatalogMutationVariables>;
 export const SettingsPluginInstallsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsPluginInstalls"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pluginInstalls"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"pinnedVersion"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"lastTransitionAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"activatedUserCount"}},{"kind":"Field","name":{"kind":"Name","value":"components"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"componentKey"}},{"kind":"Field","name":{"kind":"Name","value":"componentType"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"handlerRef"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsPluginInstallsQuery, SettingsPluginInstallsQueryVariables>;
 export const SettingsN8nPluginSettingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsN8nPluginSettings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"installId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"n8nPluginSettings"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"installId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"installId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pluginInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"installState"}},{"kind":"Field","name":{"kind":"Name","value":"managedApplicationId"}},{"kind":"Field","name":{"kind":"Name","value":"desiredStatus"}},{"kind":"Field","name":{"kind":"Name","value":"currentStatus"}},{"kind":"Field","name":{"kind":"Name","value":"desiredConfig"}},{"kind":"Field","name":{"kind":"Name","value":"agentStepBridgeEndpointPath"}},{"kind":"Field","name":{"kind":"Name","value":"agentStepBridgeCredentialConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"currentPackageConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"schemaVersion"}},{"kind":"Field","name":{"kind":"Name","value":"packageSpecs"}},{"kind":"Field","name":{"kind":"Name","value":"packageNames"}},{"kind":"Field","name":{"kind":"Name","value":"allowExternal"}},{"kind":"Field","name":{"kind":"Name","value":"digest"}},{"kind":"Field","name":{"kind":"Name","value":"packages"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"spec"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"packageImageUri"}},{"kind":"Field","name":{"kind":"Name","value":"packageImageConfigDigest"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobId"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobStatus"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobOperation"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobError"}},{"kind":"Field","name":{"kind":"Name","value":"lastEvidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"lastEvidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"recentAgentStepRuns"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"resumeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"workflowId"}},{"kind":"Field","name":{"kind":"Name","value":"workflowName"}},{"kind":"Field","name":{"kind":"Name","value":"executionId"}},{"kind":"Field","name":{"kind":"Name","value":"correlationId"}},{"kind":"Field","name":{"kind":"Name","value":"instructionsPreview"}},{"kind":"Field","name":{"kind":"Name","value":"inputPreview"}},{"kind":"Field","name":{"kind":"Name","value":"outputPreview"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"links"}},{"kind":"Field","name":{"kind":"Name","value":"resumeAttemptCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastResumeHttpStatus"}},{"kind":"Field","name":{"kind":"Name","value":"lastResumeError"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsN8nPluginSettingsQuery, SettingsN8nPluginSettingsQueryVariables>;
+export const SettingsDiscoverN8nWorkflowsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsDiscoverN8nWorkflows"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"installId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"discoverN8nWorkflows"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"installId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"installId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"installId"}},{"kind":"Field","name":{"kind":"Name","value":"readinessState"}},{"kind":"Field","name":{"kind":"Name","value":"readinessReasons"}},{"kind":"Field","name":{"kind":"Name","value":"workflows"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"externalWorkflowId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"active"}},{"kind":"Field","name":{"kind":"Name","value":"triggerTypes"}},{"kind":"Field","name":{"kind":"Name","value":"lastModifiedAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastExecutionAt"}},{"kind":"Field","name":{"kind":"Name","value":"warnings"}},{"kind":"Field","name":{"kind":"Name","value":"connectedWorkflowId"}},{"kind":"Field","name":{"kind":"Name","value":"connectedBindingId"}},{"kind":"Field","name":{"kind":"Name","value":"readinessState"}},{"kind":"Field","name":{"kind":"Name","value":"readinessReasons"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsDiscoverN8nWorkflowsQuery, SettingsDiscoverN8nWorkflowsQueryVariables>;
+export const SettingsConnectN8nWorkflowDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsConnectN8nWorkflow"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ConnectN8nWorkflowInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connectN8nWorkflow"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"created"}},{"kind":"Field","name":{"kind":"Name","value":"workflow"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"readinessState"}}]}},{"kind":"Field","name":{"kind":"Name","value":"binding"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"externalWorkflowId"}},{"kind":"Field","name":{"kind":"Name","value":"externalWorkflowName"}},{"kind":"Field","name":{"kind":"Name","value":"readinessState"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsConnectN8nWorkflowMutation, SettingsConnectN8nWorkflowMutationVariables>;
 export const SettingsUpdateN8nPluginPackageSettingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUpdateN8nPluginPackageSettings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateN8nPluginPackageSettingsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateN8nPluginPackageSettings"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"settings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"pluginInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"installState"}},{"kind":"Field","name":{"kind":"Name","value":"managedApplicationId"}},{"kind":"Field","name":{"kind":"Name","value":"desiredStatus"}},{"kind":"Field","name":{"kind":"Name","value":"currentStatus"}},{"kind":"Field","name":{"kind":"Name","value":"desiredConfig"}},{"kind":"Field","name":{"kind":"Name","value":"currentPackageConfig"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"schemaVersion"}},{"kind":"Field","name":{"kind":"Name","value":"packageSpecs"}},{"kind":"Field","name":{"kind":"Name","value":"packageNames"}},{"kind":"Field","name":{"kind":"Name","value":"allowExternal"}},{"kind":"Field","name":{"kind":"Name","value":"digest"}},{"kind":"Field","name":{"kind":"Name","value":"packages"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"spec"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"packageImageUri"}},{"kind":"Field","name":{"kind":"Name","value":"packageImageConfigDigest"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobId"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobStatus"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobOperation"}},{"kind":"Field","name":{"kind":"Name","value":"lastJobError"}},{"kind":"Field","name":{"kind":"Name","value":"lastEvidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"lastEvidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"recentAgentStepRuns"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"resumeStatus"}},{"kind":"Field","name":{"kind":"Name","value":"workflowId"}},{"kind":"Field","name":{"kind":"Name","value":"workflowName"}},{"kind":"Field","name":{"kind":"Name","value":"executionId"}},{"kind":"Field","name":{"kind":"Name","value":"correlationId"}},{"kind":"Field","name":{"kind":"Name","value":"instructionsPreview"}},{"kind":"Field","name":{"kind":"Name","value":"inputPreview"}},{"kind":"Field","name":{"kind":"Name","value":"outputPreview"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"links"}},{"kind":"Field","name":{"kind":"Name","value":"resumeAttemptCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastResumeHttpStatus"}},{"kind":"Field","name":{"kind":"Name","value":"lastResumeError"}},{"kind":"Field","name":{"kind":"Name","value":"expiresAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"deploymentJob"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"appKey"}},{"kind":"Field","name":{"kind":"Name","value":"operation"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestDigest"}},{"kind":"Field","name":{"kind":"Name","value":"desiredConfigVersion"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"planExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"applyExecutionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"planDigest"}},{"kind":"Field","name":{"kind":"Name","value":"planSummary"}},{"kind":"Field","name":{"kind":"Name","value":"dataImpact"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"approvalRequired"}},{"kind":"Field","name":{"kind":"Name","value":"approvedAt"}},{"kind":"Field","name":{"kind":"Name","value":"rejectedAt"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]}}]} as unknown as DocumentNode<SettingsUpdateN8nPluginPackageSettingsMutation, SettingsUpdateN8nPluginPackageSettingsMutationVariables>;
 export const SettingsMyPluginActivationsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsMyPluginActivations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"myPluginActivations"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedScopes"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsMyPluginActivationsQuery, SettingsMyPluginActivationsQueryVariables>;
 export const SettingsInstallPluginDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsInstallPlugin"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"InstallPluginInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"installPlugin"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"pinnedVersion"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}}]}}]} as unknown as DocumentNode<SettingsInstallPluginMutation, SettingsInstallPluginMutationVariables>;

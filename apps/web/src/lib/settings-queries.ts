@@ -1950,6 +1950,48 @@ export const SettingsN8nPluginSettingsQuery = graphql(`
   }
 `);
 
+export const SettingsDiscoverN8nWorkflowsQuery = graphql(`
+  query SettingsDiscoverN8nWorkflows($installId: ID!) {
+    discoverN8nWorkflows(installId: $installId) {
+      installId
+      readinessState
+      readinessReasons
+      workflows {
+        externalWorkflowId
+        name
+        active
+        triggerTypes
+        lastModifiedAt
+        lastExecutionAt
+        warnings
+        connectedWorkflowId
+        connectedBindingId
+        readinessState
+        readinessReasons
+      }
+    }
+  }
+`);
+
+export const SettingsConnectN8nWorkflowMutation = graphql(`
+  mutation SettingsConnectN8nWorkflow($input: ConnectN8nWorkflowInput!) {
+    connectN8nWorkflow(input: $input) {
+      created
+      workflow {
+        id
+        name
+        readinessState
+      }
+      binding {
+        id
+        externalWorkflowId
+        externalWorkflowName
+        readinessState
+      }
+    }
+  }
+`);
+
 export const SettingsUpdateN8nPluginPackageSettingsMutation = graphql(`
   mutation SettingsUpdateN8nPluginPackageSettings(
     $input: UpdateN8nPluginPackageSettingsInput!

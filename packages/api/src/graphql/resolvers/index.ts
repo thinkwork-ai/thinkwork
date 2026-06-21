@@ -69,9 +69,10 @@ import { runtimeQueries } from "./runtime/index.js";
 import { workspaceQueries, workspaceMutations } from "./workspace/index.js";
 import { routineMutations, routineQueries } from "./routines/index.js";
 import {
-  workflowQueries,
   workflowEngineBindingTypeResolvers,
   workflowEvidenceTypeResolvers,
+  workflowMutations,
+  workflowQueries,
   workflowRunEventTypeResolvers,
   workflowRunTypeResolvers,
   workflowTriggerTypeResolvers,
@@ -188,6 +189,7 @@ export const mutationResolvers: Record<string, any> = {
   ...skillCatalogMutations,
   ...workspaceMutations,
   ...routineMutations,
+  ...workflowMutations,
   ...tenantCredentialMutations,
   ...deploymentMutations,
   ...pluginMutations,

@@ -241,6 +241,58 @@ type WorkflowEvidence {
   createdAt: AWSDateTime!
 }
 
+type N8nWorkflowDiscovery {
+  installId: ID!
+  readinessState: WorkflowReadinessState!
+  readinessReasons: AWSJSON!
+  workflows: [N8nDiscoveredWorkflow!]!
+}
+
+type N8nDiscoveredWorkflow {
+  externalWorkflowId: String!
+  name: String!
+  active: Boolean
+  triggerTypes: [String!]!
+  lastModifiedAt: AWSDateTime
+  lastExecutionAt: AWSDateTime
+  warnings: [String!]!
+  connectedWorkflowId: ID
+  connectedBindingId: ID
+  readinessState: WorkflowReadinessState!
+  readinessReasons: AWSJSON!
+}
+
+input ConnectN8nWorkflowInput {
+  installId: ID!
+  externalWorkflowId: String!
+  externalWorkflowName: String!
+  active: Boolean
+  triggerTypes: [String!]
+  lastModifiedAt: AWSDateTime
+  idempotencyKey: String!
+}
+
+type ConnectN8nWorkflowResult {
+  workflow: Workflow!
+  binding: WorkflowEngineBinding!
+  created: Boolean!
+}
+
+input CreateN8nWorkflowBridgeInput {
+  workflowId: ID!
+  idempotencyKey: String!
+}
+
+type N8nWorkflowBridgeCredential {
+  workflowId: ID!
+  bindingId: ID!
+  sharedSecret: String!
+  secretPreview: String!
+  signingHeader: String!
+  timestampHeader: String!
+  replayWindowSeconds: Int!
+}
+
 extend type Query {
   workflows(
     tenantId: ID
@@ -258,4 +310,12 @@ extend type Query {
     cursor: String
   ): [WorkflowRun!]!
   workflowRun(id: ID!): WorkflowRun
+  discoverN8nWorkflows(installId: ID!): N8nWorkflowDiscovery!
+}
+
+extend type Mutation {
+  connectN8nWorkflow(input: ConnectN8nWorkflowInput!): ConnectN8nWorkflowResult!
+  createN8nWorkflowBridge(
+    input: CreateN8nWorkflowBridgeInput!
+  ): N8nWorkflowBridgeCredential!
 }

@@ -38,6 +38,89 @@ status: in_progress
 
 ---
 
+## THNK-59 First-Class Workflow Control Plane - 2026-06-20
+
+- Plan:
+  `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`.
+- Linear issue: `THNK-59`.
+- Target branch: `main`.
+- Current implementation unit: U5 n8n plugin workflow discovery and stock-node
+  bridge.
+- Current branch: `codex/thnk-59-u5-n8n-workflows`.
+- Current worktree: `.Codex/worktrees/thnk-59-u5-n8n-workflows`.
+- Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
+  merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
+  [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
+  `228c9bafd9964297b75c6d6f3e5d80f689b78932`; U3
+  [#2764](https://github.com/thinkwork-ai/thinkwork/pull/2764) merged as
+  `bf18489960f7bcef2a66b19888138b7529f7f298`; U4
+  [#2767](https://github.com/thinkwork-ai/thinkwork/pull/2767) merged as
+  `6252d8727d5dd1b5caaa601644e347f1fca48930`; U5
+  [#2773](https://github.com/thinkwork-ai/thinkwork/pull/2773) open.
+- Status: U1-U4 complete and merged. U5 implementation is complete, rebased
+  onto current `origin/main`, locally verified, and awaiting final PR checks.
+- Notes:
+  - U5 keeps n8n as a connected workflow source, not the canonical runtime for
+    all workflows.
+  - `/settings/plugins/n8n` becomes the first plugin-owned UI page with
+    route-backed Workflows and Settings tabs. Workflows performs
+    source-specific discovery/connection; aggregate monitoring remains owned by
+    `Settings -> Workflows`.
+  - Discovery pulls through the installed managed n8n plugin connection of
+    record. This slice uses managed-application desired-config discovery
+    snapshots and existing workflow bindings as the first API seam; native n8n
+    MCP/workflow-management listing can attach behind the same resolver without
+    another operator credential.
+  - U5 explicitly chooses the signed stock-node bridge contract/API seam without
+    adding a new public API Gateway/Lambda route. Existing n8n agent-step bridge
+    infrastructure remains separate. If a public n8n workflow bridge endpoint is
+    added later, it should reuse the contract and credential storage from this
+    slice.
+- Local verification:
+  - `pnpm install` completed with the known optional `canvas@2.11.2` native
+    fallback warning under local Node 25.
+  - `pnpm schema:build` passed.
+  - `pnpm --filter @thinkwork/web codegen` passed.
+  - `pnpm --filter thinkwork-cli codegen` passed.
+  - `pnpm --filter @thinkwork/mobile codegen` passed.
+  - `pnpm --filter @thinkwork/web build` passed with existing route-file,
+    sourcemap, and large-chunk warnings.
+  - `pnpm --filter @thinkwork/api exec vitest run src/lib/workflows/n8n-discovery.test.ts src/lib/workflows/n8n-bridge-contract.test.ts`
+    passed: 2 files, 6 tests.
+  - `pnpm --filter @thinkwork/web test -- src/components/settings/plugins/n8n/N8nPluginHome.test.tsx`
+    passed: 1 file, 3 tests.
+  - `pnpm --filter @thinkwork/mobile test` passed: 31 files, 149 tests. An
+    earlier mobile test attempt used Jest-only `--runInBand`; that command was
+    corrected and rerun successfully.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter thinkwork-cli typecheck` passed.
+  - `pnpm lint` passed after documenting U5's shared n8n route/API/contract
+    surfaces in `scripts/plugin-source-boundary-allowlist.mjs`.
+  - `pnpm typecheck` passed workspace-wide.
+  - `git diff --check` passed.
+  - `pnpm dlx prettier@3.8.2 --check --ignore-unknown <U5 changed files>`
+    passed.
+  - The first `pnpm test` run exposed the known local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly` after an `EEXIST`
+    framework symlink extraction warning). The desktop Electron rebuild repaired
+    the local install.
+  - `pnpm --filter @thinkwork/desktop test` passed after the Electron rebuild:
+    15 files, 105 tests.
+  - Rerun `pnpm test` passed workspace-wide after the Electron repair,
+    including `packages/api` (541 files passed, 3 skipped; 5088 tests passed, 9
+    skipped), `apps/web` (176 files, 1337 tests), release tests, and plugin
+    source boundary tests.
+  - After rebasing U5 onto current `origin/main`, rerun
+    `pnpm lint && pnpm typecheck && pnpm test` passed. The post-rebase
+    workspace test pass included `packages/api` (542 files passed, 3 skipped;
+    5095 tests passed, 9 skipped), `apps/web` (178 files, 1342 tests), release
+    tests, and plugin source boundary tests.
+- CI log: U5 PR [#2773](https://github.com/thinkwork-ai/thinkwork/pull/2773)
+  passed CLA, lint, typecheck, verify, and test before the rebase; final
+  post-rebase CI is pending.
+- Blockers: none.
+
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
 
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
