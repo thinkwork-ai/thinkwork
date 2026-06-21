@@ -35,7 +35,7 @@ type CalendarCell = {
   isPadding?: boolean;
 };
 
-const DEFAULT_DAYS = 90;
+const DEFAULT_DAYS = 180;
 const MAX_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -91,59 +91,62 @@ export function AccountUsageSection({
   return (
     <section
       aria-labelledby="account-usage-heading"
-      className="mb-8 space-y-5"
+      className="mb-8"
     >
       <h2
-        className="text-xl font-semibold tracking-tight text-foreground"
+        className="mb-3 text-base font-medium text-foreground"
         id="account-usage-heading"
       >
         Account Usage
       </h2>
 
-      {result.error ? (
-        <p className="text-sm text-destructive">
-          Account usage could not be loaded.
-        </p>
-      ) : null}
-      {hasUsage ? null : (
-        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5">
-          <p className="text-sm font-medium text-foreground">No usage yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Activity will appear here after this account runs agents or tools.
+      <div className="space-y-7">
+        {result.error ? (
+          <p className="text-sm text-destructive">
+            Account usage could not be loaded.
           </p>
+        ) : null}
+        {hasUsage ? null : (
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5">
+            <p className="text-sm font-medium text-foreground">No usage yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Activity will appear here after this account runs agents or
+              tools.
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <UsageMetric
+            icon={<Coins className="size-4" />}
+            label="Total Spend"
+            value={formatUsd(summary?.totalUsd ?? 0)}
+          />
+          <UsageMetric
+            icon={<Hash className="size-4" />}
+            label="Tokens"
+            value={formatTokens(totalTokens)}
+          />
+          <UsageMetric
+            icon={<Activity className="size-4" />}
+            label="Events"
+            value={formatInteger(summary?.eventCount ?? 0)}
+          />
+          <UsageMetric
+            icon={<Cpu className="size-4" />}
+            label="Active Days"
+            value={formatInteger(activeDayCount)}
+          />
         </div>
-      )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <UsageMetric
-          icon={<Coins className="size-4" />}
-          label="Total Spend"
-          value={formatUsd(summary?.totalUsd ?? 0)}
+        <UsageCalendar
+          rows={usage?.daily ?? []}
+          periodEnd={usage?.periodEnd}
+          dayCount={queryDays}
         />
-        <UsageMetric
-          icon={<Hash className="size-4" />}
-          label="Tokens"
-          value={formatTokens(totalTokens)}
-        />
-        <UsageMetric
-          icon={<Activity className="size-4" />}
-          label="Events"
-          value={formatInteger(summary?.eventCount ?? 0)}
-        />
-        <UsageMetric
-          icon={<Cpu className="size-4" />}
-          label="Active Days"
-          value={formatInteger(activeDayCount)}
-        />
+
+        <ModelBreakdown models={usage?.models ?? []} />
       </div>
-
-      <UsageCalendar
-        rows={usage?.daily ?? []}
-        periodEnd={usage?.periodEnd}
-        dayCount={queryDays}
-      />
-
-      <ModelBreakdown models={usage?.models ?? []} />
     </section>
   );
 }
@@ -186,13 +189,15 @@ function UsageCalendar({
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-foreground">Daily activity</h3>
+      <div className="mb-3 flex items-baseline gap-3">
+        <h3 className="text-base font-medium text-foreground">
+          Daily activity
+        </h3>
         <p className="text-xs text-muted-foreground">Last {dayCount} days</p>
       </div>
       <div
         aria-label={`Account usage calendar for the last ${dayCount} days`}
-        className="grid grid-flow-col grid-rows-7 auto-cols-max gap-1 overflow-x-auto pb-1"
+        className="grid grid-flow-col grid-rows-7 auto-cols-max gap-[3px] overflow-x-auto pb-1"
         role="list"
       >
         {cells.map((cell) => {
@@ -232,7 +237,8 @@ function UsageCalendar({
                 />
               </TooltipTrigger>
               <TooltipContent
-                className="pointer-events-none block min-w-36 space-y-1.5 px-3 py-2 text-left"
+                className="pointer-events-none block min-w-36 space-y-1.5 border border-border bg-popover px-3 py-2 text-left text-popover-foreground shadow-md"
+                hideArrow
                 sideOffset={6}
               >
                 <p className="font-medium">{formatDateLabel(cell.day)}</p>
@@ -252,13 +258,13 @@ function UsageCalendar({
           );
         })}
       </div>
-      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
         <span>Less</span>
         {[0, 1, 2, 3, 4].map((level) => (
           <span
             aria-hidden="true"
             className={cn(
-              "size-3 rounded-[3px] border border-border",
+              "size-3 rounded-[3px] border border-border sm:size-3.5",
               intensityClassName(level),
             )}
             key={level}
@@ -273,7 +279,7 @@ function UsageCalendar({
 function TooltipMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4">
-      <span className="text-background/70">{label}</span>
+      <span className="text-muted-foreground">{label}</span>
       <span className="font-medium tabular-nums">{value}</span>
     </div>
   );
@@ -283,7 +289,7 @@ function ModelBreakdown({ models }: { models: UsageModel[] }) {
   const sorted = [...models].sort((a, b) => b.totalUsd - a.totalUsd);
   return (
     <div>
-      <h3 className="mb-2 text-sm font-medium text-foreground">
+      <h3 className="mb-3 text-base font-medium text-foreground">
         Model breakdown
       </h3>
       {sorted.length === 0 ? (
@@ -347,7 +353,9 @@ function buildCalendarCells(
       intensity: getIntensity(row, maxSpend, maxEvents),
     };
   });
-  const leadingPadding = (7 - (days.length % 7)) % 7;
+  const leadingPadding = days[0]
+    ? (parseDateOnly(days[0].day)?.getUTCDay() ?? 0)
+    : 0;
   const padding = Array.from({ length: leadingPadding }, (_, index) => ({
     day: `padding-${index}`,
     intensity: 0,
@@ -375,13 +383,13 @@ function getIntensity(
 function intensityClassName(level: number): string {
   switch (level) {
     case 1:
-      return "bg-blue-200 dark:bg-blue-900";
+      return "bg-[#86acea]";
     case 2:
-      return "bg-blue-300 dark:bg-blue-700";
+      return "bg-[#6394e4]";
     case 3:
-      return "bg-blue-500 dark:bg-blue-600";
+      return "bg-[#407cde]";
     case 4:
-      return "bg-blue-700 dark:bg-blue-500";
+      return "bg-[#2666d0]";
     default:
       return "bg-muted";
   }
@@ -422,11 +430,14 @@ function formatDateLabel(value: string): string {
   const date = parseDateOnly(value);
   if (!date) return value;
   return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",
     timeZone: "UTC",
-  }).format(date);
+  })
+    .format(date)
+    .replace(",", "");
 }
 
 function shortenModelId(modelId: string): string {
