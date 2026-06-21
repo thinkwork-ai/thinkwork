@@ -17,7 +17,8 @@ status: in_progress
 - Status: U3 implementation in progress.
 - Current branch: `codex/skill-library-u3-export`.
 - Current worktree: `.Codex/worktrees/skill-library-u3-export`.
-- Current pull request: Pending.
+- Current pull request:
+  [#2783](https://github.com/thinkwork-ai/thinkwork/pull/2783).
 - Notes:
   - The user-referenced plan file was absent from the starting checkout and
     from `origin/main`; `origin/main` did contain the matching requirements doc.
@@ -95,7 +96,7 @@ status: in_progress
 | Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | Merged      | Squash merged as `1f427854fc51b7e7c7b1f9937c6418627088d98d`. |
 | U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | Merged      | Squash merged as `134907ab08cf5c6bcb81200f7c0f76ed30ec7952`. |
 | U2 Catalog Import API Action                   | `codex/skill-library-u2-import`          | [#2781](https://github.com/thinkwork-ai/thinkwork/pull/2781) | Merged      | Squash merged as `cf27205f897109586d32ebddff7ecff17c9775f2`. |
-| U3 Catalog Export API Action                   | `codex/skill-library-u3-export`          | Pending                                                      | In progress | Full API tests passing after Compound review fixes.          |
+| U3 Catalog Export API Action                   | `codex/skill-library-u3-export`          | [#2783](https://github.com/thinkwork-ai/thinkwork/pull/2783) | In progress | Full API tests passing after Compound review fixes.          |
 | U4 Skill Library Import UI                     | Pending                                  | Pending                                                      | Pending     | Depends on U2.                                               |
 | U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                        |
 
