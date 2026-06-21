@@ -18,7 +18,8 @@ status: in_progress
 - Current unit: U1 Skill Draft Data Model and GraphQL Lifecycle.
 - Current branch: `codex/thnk-11-u1-skill-drafts`.
 - Current worktree: `.Codex/worktrees/thnk-11-u1-skill-drafts`.
-- Current pull request: Pending.
+- Current pull request:
+  [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -54,7 +55,8 @@ status: in_progress
     3.8.2 to those files would rewrite tens of thousands of unrelated
     generated lines.
 - PR / CI:
-  - Pending.
+  - U1 PR: [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).
+  - CI pending.
 - Blockers: None.
 
 ## THNK-60 Account Usage Autopilot - 2026-06-21
