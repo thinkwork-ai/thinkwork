@@ -268,25 +268,35 @@ export const userProfiles = pgTable("user_profiles", {
 // 0.7 — tenant_settings
 // ---------------------------------------------------------------------------
 
-export const tenantSettings = pgTable("tenant_settings", {
-  id: uuid("id")
-    .primaryKey()
-    .default(sql`gen_random_uuid()`),
-  tenant_id: uuid("tenant_id")
-    .references(() => tenants.id)
-    .unique(),
-  default_model: text("default_model"),
-  budget_monthly_cents: integer("budget_monthly_cents"),
-  auto_close_thread_minutes: integer("auto_close_thread_minutes").default(30),
-  max_agents: integer("max_agents"),
-  features: jsonb("features"),
-  created_at: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-  updated_at: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-});
+export const tenantSettings = pgTable(
+  "tenant_settings",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id)
+      .unique(),
+    default_model: text("default_model"),
+    budget_monthly_cents: integer("budget_monthly_cents"),
+    goal_default_token_budget: integer("goal_default_token_budget"),
+    auto_close_thread_minutes: integer("auto_close_thread_minutes").default(30),
+    max_agents: integer("max_agents"),
+    features: jsonb("features"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    check(
+      "tenant_settings_goal_default_token_budget_check",
+      sql`${table.goal_default_token_budget} IS NULL OR (${table.goal_default_token_budget} > 0 AND ${table.goal_default_token_budget} <= 2000000)`,
+    ),
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // 0.8 — tenant_members (Paperclip pattern)
