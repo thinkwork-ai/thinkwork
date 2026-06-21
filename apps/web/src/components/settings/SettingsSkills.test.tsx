@@ -173,6 +173,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsSkills import", () => {
+  it("registers import as a muted header action", async () => {
+    render(<SettingsSkills />);
+    await screen.findByPlaceholderText("Search skills…");
+
+    const action = mocks.setHeader.mock.calls.at(-1)?.[0]?.action;
+    expect(action).toBeTruthy();
+    const { getByRole } = render(<>{action}</>);
+
+    expect(getByRole("button", { name: "Import skill archive" })).toBeTruthy();
+  });
+
   it("imports a ZIP archive, refreshes the list, and opens the imported skill", async () => {
     mocks.importSkillArchive.mockResolvedValue({
       slug: "new-skill",

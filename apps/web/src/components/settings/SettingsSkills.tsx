@@ -27,9 +27,6 @@ import {
   PopoverContent,
   PopoverTrigger,
   Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
 import { ApiError } from "@/lib/api-fetch";
@@ -45,6 +42,7 @@ import {
 } from "@/lib/evaluation-queries";
 import { formatPassRatePct } from "@/lib/skill-eval-format";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
+import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
 
 interface PendingReplace {
   slug: string;
@@ -343,11 +341,32 @@ export function SettingsSkills() {
     [],
   );
 
+  const importAction = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      className={desktopToolbarButtonClassName}
+      aria-label="Import skill archive"
+      title="Import skill archive"
+      disabled={importing}
+      onClick={() => fileInputRef.current?.click()}
+    >
+      {importing ? (
+        <Spinner className="size-4" />
+      ) : (
+        <Upload className="size-4" />
+      )}
+    </Button>
+  );
+
   return (
     <SettingsTablePane
       title="Skill Library"
       description="Browse, install, and manage the skills your agents can use."
       loading={!skills && !error}
+      headerActions={importAction}
+      headerActionKey={`skill-import:${importing ? "importing" : "idle"}`}
       toolbar={
         <div className="flex w-full items-center justify-between gap-3">
           {error ? (
@@ -361,25 +380,6 @@ export function SettingsSkills() {
             />
           )}
           <div className="flex shrink-0 items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  aria-label="Import skill archive"
-                  disabled={importing}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {importing ? (
-                    <Spinner className="size-4" />
-                  ) : (
-                    <Upload className="size-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Import skill archive</TooltipContent>
-            </Tooltip>
             <input
               ref={fileInputRef}
               type="file"

@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { Download } from "lucide-react";
+import { Download, Info } from "lucide-react";
+import { IconFlask } from "@tabler/icons-react";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { toast } from "sonner";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
 import {
   Badge,
   Button,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
   Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
@@ -28,6 +31,12 @@ import {
 } from "@/lib/evaluation-queries";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { formatPassRatePct } from "@/lib/skill-eval-format";
+import {
+  desktopToolbarActiveButtonClassName,
+  desktopToolbarButtonClassName,
+  desktopToolbarGapClassName,
+} from "@/lib/desktop-chrome";
+import { cn } from "@/lib/utils";
 
 // Mirrors packages/api SKILL_DATASET_SLUG_PREFIX / SKILL_CANDIDATE_DATASET_SUFFIX.
 // The live skill dataset is `skill-<slug>`; a HELD candidate update stages its
@@ -47,11 +56,11 @@ function downloadArchive(blob: Blob, filename: string) {
 
 /**
  * Score + regression + on-demand-run surface for one catalog skill (U9), plus
- * the held-update apply/override surface (U6). Rendered above the SKILL.md
- * editor. The whole Skills route is OperatorGuard-wrapped; the mutations
+ * the held-update apply/override surface (U6). Rendered inside the evals side
+ * sheet. The whole Skills route is OperatorGuard-wrapped; the mutations
  * re-check requireTenantAdmin server-side.
  */
-function SkillEvalPanel({ skillSlug }: { skillSlug: string }) {
+function SkillEvalSheetContent({ skillSlug }: { skillSlug: string }) {
   const { tenantId } = useTenant();
   const tid = tenantId ?? "";
   const [overrideBlocked, setOverrideBlocked] = useState<{
@@ -165,7 +174,7 @@ function SkillEvalPanel({ skillSlug }: { skillSlug: string }) {
       : (pct ?? "Not scored yet");
 
   return (
-    <div className="border-b px-4 py-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-6 pt-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex items-baseline gap-2">
@@ -301,11 +310,23 @@ function SkillEvalPanel({ skillSlug }: { skillSlug: string }) {
   );
 }
 
+function SkillInfoSheetContent() {
+  return (
+    <div className="px-6 pb-6 pt-2 text-sm leading-relaxed text-muted-foreground">
+      Catalog edits and imports update the library source only. Installed agent
+      copies keep running their pinned version until an operator applies an
+      update.
+    </div>
+  );
+}
+
 export function SettingsSkillDetail() {
   const { skillSlug } = useParams({
     from: "/_authed/settings/skills/$skillSlug",
   });
   const [exporting, setExporting] = useState(false);
+  const [evalSheetOpen, setEvalSheetOpen] = useState(false);
+  const [infoSheetOpen, setInfoSheetOpen] = useState(false);
 
   async function exportSkill() {
     setExporting(true);
@@ -331,37 +352,80 @@ export function SettingsSkillDetail() {
       { label: skillSlug },
     ],
     action: (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label="Export skill archive"
-            disabled={exporting}
-            onClick={() => void exportSkill()}
-          >
-            {exporting ? (
-              <Spinner className="size-4" />
-            ) : (
-              <Download className="size-4" />
-            )}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Export skill archive</TooltipContent>
-      </Tooltip>
+      <div className={cn("flex items-center", desktopToolbarGapClassName)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className={
+            evalSheetOpen
+              ? desktopToolbarActiveButtonClassName
+              : desktopToolbarButtonClassName
+          }
+          aria-label="Skill evals"
+          title="Skill evals"
+          onClick={() => setEvalSheetOpen(true)}
+        >
+          <IconFlask className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className={
+            infoSheetOpen
+              ? desktopToolbarActiveButtonClassName
+              : desktopToolbarButtonClassName
+          }
+          aria-label="Skill info"
+          title="Skill info"
+          onClick={() => setInfoSheetOpen(true)}
+        >
+          <Info className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className={desktopToolbarButtonClassName}
+          aria-label="Export skill archive"
+          title="Export skill archive"
+          disabled={exporting}
+          onClick={() => void exportSkill()}
+        >
+          {exporting ? (
+            <Spinner className="size-4" />
+          ) : (
+            <Download className="size-4" />
+          )}
+        </Button>
+      </div>
     ),
-    actionKey: `skill-export:${skillSlug}:${exporting ? "exporting" : "idle"}`,
+    actionKey: `skill-actions:${skillSlug}:${exporting ? "exporting" : "idle"}:${evalSheetOpen ? "evals" : "evals-closed"}:${infoSheetOpen ? "info" : "info-closed"}`,
   });
 
   return (
     <div className="flex h-full flex-col">
-      <SkillEvalPanel skillSlug={skillSlug} />
-      <div className="border-b px-4 py-2 text-xs text-muted-foreground">
-        Catalog edits and imports update the library source only. Installed
-        agent copies keep running their pinned version until an operator applies
-        an update.
-      </div>
+      <Sheet open={evalSheetOpen} onOpenChange={setEvalSheetOpen}>
+        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(480px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+          <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+            <SheetTitle>Skill evals</SheetTitle>
+            <SheetDescription>
+              Score, run, and apply held updates for this catalog skill.
+            </SheetDescription>
+          </SheetHeader>
+          <SkillEvalSheetContent skillSlug={skillSlug} />
+        </SheetContent>
+      </Sheet>
+      <Sheet open={infoSheetOpen} onOpenChange={setInfoSheetOpen}>
+        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(480px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+          <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+            <SheetTitle>Skill info</SheetTitle>
+            <SheetDescription>Catalog source behavior</SheetDescription>
+          </SheetHeader>
+          <SkillInfoSheetContent />
+        </SheetContent>
+      </Sheet>
       <div className="min-h-0 flex-1">
         <WorkspaceFileEditor
           target={{ skill: skillSlug }}

@@ -74,6 +74,15 @@ vi.mock("@/lib/workspace-files-api", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils")>();
+  return {
+    ...actual,
+    cn: (...values: Array<string | false | null | undefined>) =>
+      values.filter(Boolean).join(" "),
+  };
+});
+
 vi.mock("sonner", () => ({
   toast: {
     error: mocks.toastError,
@@ -107,6 +116,7 @@ vi.mock("@thinkwork/ui", () => ({
   Button: ({
     asChild,
     children,
+    className: _className,
     size: _size,
     variant: _variant,
     ...props
@@ -122,6 +132,20 @@ vi.mock("@thinkwork/ui", () => ({
         {children}
       </button>
     ),
+  Sheet: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
+    open ? <div role="dialog">{children}</div> : null,
+  SheetContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SheetDescription: ({ children }: { children: React.ReactNode }) => (
+    <p>{children}</p>
+  ),
+  SheetHeader: ({ children }: { children: React.ReactNode }) => (
+    <header>{children}</header>
+  ),
+  SheetTitle: ({ children }: { children: React.ReactNode }) => (
+    <h2>{children}</h2>
+  ),
   Spinner: (props: React.HTMLAttributes<HTMLSpanElement>) => (
     <span {...props}>Loading</span>
   ),
@@ -149,6 +173,18 @@ function renderLatestHeaderAction() {
   const action = mocks.setHeader.mock.calls.at(-1)?.[0]?.action;
   expect(action).toBeTruthy();
   return render(<>{action}</>);
+}
+
+async function openEvalsSheet() {
+  const { getByRole } = renderLatestHeaderAction();
+  fireEvent.click(getByRole("button", { name: "Skill evals" }));
+  await screen.findByRole("dialog");
+}
+
+async function openInfoSheet() {
+  const { getByRole } = renderLatestHeaderAction();
+  fireEvent.click(getByRole("button", { name: "Skill info" }));
+  await screen.findByRole("dialog");
 }
 
 function setupMocks() {
@@ -312,8 +348,10 @@ describe("SettingsSkillDetail eval panel", () => {
     );
   });
 
-  it("renders a scored skill's pass rate and enables 'run evals now'", () => {
+  it("renders a scored skill's pass rate and enables 'run evals now' in the evals sheet", async () => {
     render(<SettingsSkillDetail />);
+    await openEvalsSheet();
+
     expect(screen.getByTestId("skill-eval-score").textContent).toBe("80%");
     expect(
       (screen.getByTestId("skill-run-evals") as HTMLButtonElement).disabled,
@@ -321,7 +359,7 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(screen.queryByTestId("skill-held-update")).toBeNull();
   });
 
-  it("shows a regression badge when the latest run regressed", () => {
+  it("shows a regression badge when the latest run regressed in the evals sheet", async () => {
     scoreData = {
       skillEvalScore: {
         ...(scoreData as { skillEvalScore: Record<string, unknown> })
@@ -331,10 +369,12 @@ describe("SettingsSkillDetail eval panel", () => {
     };
     setupMocks();
     render(<SettingsSkillDetail />);
+    await openEvalsSheet();
+
     expect(screen.getByText("Regression")).toBeTruthy();
   });
 
-  it("renders 'Unrated' and disables the run action for an unrated skill", () => {
+  it("renders 'Unrated' and disables the run action for an unrated skill", async () => {
     scoreData = {
       skillEvalScore: {
         skillSlug: "web-research",
@@ -351,13 +391,15 @@ describe("SettingsSkillDetail eval panel", () => {
     };
     setupMocks();
     render(<SettingsSkillDetail />);
+    await openEvalsSheet();
+
     expect(screen.getByTestId("skill-eval-score").textContent).toBe("Unrated");
     expect(
       (screen.getByTestId("skill-run-evals") as HTMLButtonElement).disabled,
     ).toBe(true);
   });
 
-  it("gates the run for a rated-but-non-evaluable skill and shows the reason", () => {
+  it("gates the run for a rated-but-non-evaluable skill and shows the reason", async () => {
     // A skill with cases but no WIRING.md: can't be materialized for an
     // isolated eval, so "Run evals now" must stay disabled with an explanation
     // (rather than letting the operator hit EvalBaselineMaterializationError).
@@ -377,6 +419,8 @@ describe("SettingsSkillDetail eval panel", () => {
     };
     setupMocks();
     render(<SettingsSkillDetail />);
+    await openEvalsSheet();
+
     expect(
       (screen.getByTestId("skill-run-evals") as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -387,6 +431,8 @@ describe("SettingsSkillDetail eval panel", () => {
 
   it("dispatches an on-demand run against the skill dataset", async () => {
     render(<SettingsSkillDetail />);
+    await openEvalsSheet();
+
     fireEvent.click(screen.getByTestId("skill-run-evals"));
     await waitFor(() => expect(startRunMock).toHaveBeenCalledTimes(1));
     expect(startRunMock).toHaveBeenCalledWith({
@@ -423,13 +469,9 @@ describe("SettingsSkillDetail eval panel", () => {
     });
     setupMocks();
     render(<SettingsSkillDetail />);
+    await openEvalsSheet();
 
     expect(screen.getByTestId("skill-held-update")).toBeTruthy();
-    expect(
-      screen.getByText(
-        /Installed agent copies keep running their pinned version/i,
-      ),
-    ).toBeTruthy();
     fireEvent.click(screen.getByTestId("skill-apply-update"));
 
     await waitFor(() => expect(applyUpdateMock).toHaveBeenCalledTimes(1));
@@ -452,5 +494,19 @@ describe("SettingsSkillDetail eval panel", () => {
       agentId: "agent-1",
       override: true,
     });
+  });
+
+  it("moves catalog source guidance into the info sheet", async () => {
+    render(<SettingsSkillDetail />);
+
+    expect(
+      screen.queryByText(/Installed agent copies keep running/i),
+    ).toBeNull();
+
+    await openInfoSheet();
+
+    expect(
+      screen.getByText(/Installed agent copies keep running/i),
+    ).toBeTruthy();
   });
 });

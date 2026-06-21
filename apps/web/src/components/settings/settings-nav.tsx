@@ -7,14 +7,13 @@ import {
   Cpu,
   History,
   Settings as SettingsIcon,
-  ShieldCheck,
   Sparkles,
   Users,
   Webhook,
   Workflow,
   Wrench,
 } from "lucide-react";
-import { IconPlanet, IconPlug } from "@tabler/icons-react";
+import { IconFlask, IconPlanet, IconPlug } from "@tabler/icons-react";
 import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
@@ -49,7 +48,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   {
     label: "Evaluations",
     to: "/settings/evaluations",
-    icon: ShieldCheck,
+    icon: IconFlask,
     operatorOnly: true,
   },
   {
