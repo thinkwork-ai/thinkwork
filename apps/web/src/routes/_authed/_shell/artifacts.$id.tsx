@@ -23,6 +23,7 @@ import {
 import { AppArtifactSplitShell } from "@/components/apps/AppArtifactSplitShell";
 import { ArtifactDetailActions } from "@/components/artifacts/ArtifactDetailActions";
 import { PinToggleButton } from "@/components/artifacts/PinToggleButton";
+import { GenUIRenderer } from "@/components/workbench/genui/GenUIRenderer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { AdminUpdateAppletSourceMutation } from "@/lib/applet-admin-queries";
@@ -32,7 +33,10 @@ import {
   type AppletPayload,
   type AppletPreviewNode,
 } from "@/lib/app-artifacts";
-import { AppletQuery } from "@/lib/graphql-queries";
+import {
+  AppletQuery,
+  ArtifactDetailForRouteQuery,
+} from "@/lib/graphql-queries";
 import { relativeTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authed/_shell/artifacts/$id")({
@@ -41,6 +45,26 @@ export const Route = createFileRoute("/_authed/_shell/artifacts/$id")({
 
 interface AppletResult {
   applet?: AppletPayload | null;
+}
+
+interface ArtifactDetailResult {
+  artifact?: ArtifactRouteNode | null;
+}
+
+interface ArtifactRouteNode {
+  id: string;
+  tenantId: string;
+  threadId?: string | null;
+  title: string;
+  type: string;
+  status: string;
+  content?: string | null;
+  summary?: string | null;
+  sourceMessageId?: string | null;
+  metadata?: unknown;
+  favoritedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 function AppArtifactPage() {
@@ -64,11 +88,19 @@ export function AppletRouteContent({
    *  root crumb links back via `href`. */
   breadcrumbRoot?: { label: string; href: string };
 }) {
+  const [{ data: artifactData, fetching: artifactFetching, error: artifactError }] =
+    useQuery<ArtifactDetailResult>({
+      query: ArtifactDetailForRouteQuery,
+      variables: { id: appId },
+      requestPolicy: "cache-and-network",
+    });
+  const artifact = artifactData?.artifact ?? null;
   const [{ data, fetching, error }, reexecuteAppletQuery] =
     useQuery<AppletResult>({
       query: AppletQuery,
       variables: { appId },
       requestPolicy: "cache-and-network",
+      pause: artifact?.type !== "APPLET",
     });
   const applet = data?.applet ?? null;
   // Operator-only Source/Config tabs. The detail route itself is NOT
@@ -76,7 +108,7 @@ export function AppletRouteContent({
   // the extra tabs are gated. Server re-enforces requireTenantAdmin on save.
   const { isOperator, roleResolved } = useTenant();
   const operator = roleResolved && isOperator;
-  const title = applet?.applet?.name?.trim() || "Artifact";
+  const title = applet?.applet?.name?.trim() || artifact?.title || "Artifact";
   const source = useMemo(() => appletSource(applet), [applet]);
   const runtimeMode = resolveGeneratedAppRuntimeMode(applet?.metadata);
   const themeCss = appletThemeCss(applet);
@@ -162,6 +194,40 @@ export function AppletRouteContent({
       };
     });
   }, [appId, instanceId, latestVersion, source, themeCss]);
+
+  if (!artifact) {
+    return (
+      <main className="flex h-svh items-center justify-center p-6">
+        {artifactFetching ? (
+          <AppletLoading />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {artifactError?.message || "Artifact not found."}
+          </p>
+        )}
+      </main>
+    );
+  }
+
+  if (artifact.type === "DATA_VIEW") {
+    return (
+      <DataViewArtifactContent
+        artifact={artifact}
+        backHref={backHref}
+        breadcrumbRoot={breadcrumbRoot}
+      />
+    );
+  }
+
+  if (artifact.type !== "APPLET") {
+    return (
+      <main className="flex h-svh items-center justify-center p-6">
+        <p className="text-sm text-muted-foreground">
+          This artifact type cannot be opened here.
+        </p>
+      </main>
+    );
+  }
 
   if (!applet) {
     return (
@@ -274,6 +340,126 @@ export function AppletRouteContent({
       )}
     </AppArtifactSplitShell>
   );
+}
+
+function DataViewArtifactContent({
+  artifact,
+  backHref,
+  breadcrumbRoot,
+}: {
+  artifact: ArtifactRouteNode;
+  backHref: string;
+  breadcrumbRoot?: { label: string; href: string };
+}) {
+  const snapshot = parseGenUISnapshot(artifact.content);
+  const composedHeaderAction = useMemo<ReactNode>(
+    () => (
+      <ArtifactDetailActions
+        artifactId={artifact.id}
+        artifactTitle={artifact.title}
+      />
+    ),
+    [artifact.id, artifact.title],
+  );
+  const titleTrailing = useMemo<ReactNode>(
+    () => (
+      <PinToggleButton
+        artifactId={artifact.id}
+        favoritedAt={artifact.favoritedAt ?? null}
+        testId="artifact-header-pin-toggle"
+      />
+    ),
+    [artifact.favoritedAt, artifact.id],
+  );
+
+  usePageHeaderActions({
+    title: artifact.title,
+    ...(breadcrumbRoot
+      ? { breadcrumbs: [breadcrumbRoot, { label: artifact.title }] }
+      : {}),
+    backHref,
+    backBehavior: "history",
+    action: composedHeaderAction,
+    titleTrailing,
+    actionKey: `artifact-actions:${artifact.id}:${artifact.favoritedAt ?? "_"}`,
+  });
+
+  return (
+    <main className="mx-auto grid w-full max-w-5xl gap-4 p-4 sm:p-6">
+      <section className="grid gap-1">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          Data view
+        </p>
+        {artifact.summary ? (
+          <p className="text-sm text-muted-foreground">{artifact.summary}</p>
+        ) : null}
+      </section>
+      {snapshot ? (
+        <section className="grid gap-3">
+          <div className="rounded-md border border-border/70 bg-card p-3 text-xs text-muted-foreground">
+            <span>Source message </span>
+            <span className="font-mono">
+              {snapshot.source.sourceMessageId}
+            </span>
+            <span> · Part </span>
+            <span className="font-mono">{snapshot.source.partId}</span>
+          </div>
+          <GenUIRenderer data={snapshot.genui.data} partId={snapshot.genui.id} />
+        </section>
+      ) : (
+        <AppletFailure>
+          This data-view artifact does not include a readable GenUI snapshot.
+        </AppletFailure>
+      )}
+    </main>
+  );
+}
+
+interface GenUISnapshotArtifactPayload {
+  schemaVersion: "thread-genui-artifact-snapshot/v1";
+  kind: "genui_snapshot";
+  source: {
+    threadId: string;
+    sourceMessageId: string;
+    partId: string;
+    specHash: string;
+    promotedAt: string;
+    promotedByUserId: string;
+  };
+  genui: { type: "data-genui"; id: string; data: unknown };
+}
+
+function parseGenUISnapshot(
+  content: string | null | undefined,
+): GenUISnapshotArtifactPayload | null {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content) as Partial<GenUISnapshotArtifactPayload>;
+    if (
+      parsed.schemaVersion !== "thread-genui-artifact-snapshot/v1" ||
+      parsed.kind !== "genui_snapshot" ||
+      !isRecord(parsed.source) ||
+      !isRecord(parsed.genui) ||
+      parsed.genui.type !== "data-genui" ||
+      typeof parsed.genui.id !== "string"
+    ) {
+      return null;
+    }
+    const source = parsed.source;
+    if (
+      typeof source.threadId !== "string" ||
+      typeof source.sourceMessageId !== "string" ||
+      typeof source.partId !== "string" ||
+      typeof source.specHash !== "string" ||
+      typeof source.promotedAt !== "string" ||
+      typeof source.promotedByUserId !== "string"
+    ) {
+      return null;
+    }
+    return parsed as GenUISnapshotArtifactPayload;
+  } catch {
+    return null;
+  }
 }
 
 const APPLET_TABS = [
@@ -495,6 +681,10 @@ function formatJson(value: unknown): string {
     }
   }
   return JSON.stringify(value ?? {}, null, 2);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 // Re-export AppletMount for any external consumers that imported it from this

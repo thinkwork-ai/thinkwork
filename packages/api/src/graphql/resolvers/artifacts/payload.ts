@@ -25,6 +25,7 @@ export async function persistArtifactContentPayload(args: {
   content: string;
   type: string;
   revision?: string;
+  contentType?: string;
 }): Promise<string | null> {
   if (!artifactContentBelongsInPayloadStore(args.type)) {
     return null;
@@ -39,7 +40,7 @@ export async function persistArtifactContentPayload(args: {
     tenantId: args.tenantId,
     key,
     body: args.content,
-    contentType: "text/markdown; charset=utf-8",
+    contentType: args.contentType ?? "text/markdown; charset=utf-8",
   });
   return key;
 }

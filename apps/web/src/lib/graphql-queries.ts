@@ -1312,6 +1312,21 @@ export const HandleGenUIActionMutation = gql`
   }
 `;
 
+export const PromoteGenUIArtifactMutation = gql`
+  mutation PromoteGenUIArtifact($input: PromoteGenUIArtifactInput!) {
+    promoteGenUIArtifact(input: $input) {
+      id
+      title
+      type
+      status
+      summary
+      sourceMessageId
+      metadata
+      createdAt
+    }
+  }
+`;
+
 const ComputerApprovalFields = gql`
   fragment ComputerApprovalFields on InboxItem {
     id
@@ -1686,6 +1701,26 @@ export const ThreadArtifactsQuery = gql`
       id
       title
       type
+    }
+  }
+`;
+
+export const ArtifactDetailForRouteQuery = gql`
+  query ArtifactDetailForRoute($id: ID!) {
+    artifact(id: $id) {
+      id
+      tenantId
+      threadId
+      title
+      type
+      status
+      content
+      summary
+      sourceMessageId
+      metadata
+      favoritedAt
+      createdAt
+      updatedAt
     }
   }
 `;

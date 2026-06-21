@@ -43,9 +43,9 @@ status: in_progress
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
 - Linear issue: `THNK-34`.
 - Target branch: `main`.
-- Current implementation unit: U5 Route catalog actions through Thread state.
-- Current branch: `codex/thnk-34-u5-genui-actions`.
-- Current worktree: `.Codex/worktrees/thnk-34-u5-genui-actions`.
+- Current implementation unit: U6 Promote inline GenUI into durable artifacts.
+- Current branch: `codex/thnk-34-u6-durable-artifacts`.
+- Current worktree: `.Codex/worktrees/thnk-34-u6-durable-artifacts`.
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
   merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
   [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) merged as
@@ -56,10 +56,12 @@ status: in_progress
   `9c13dac27c6efc66156058b1af99103fdb44e70a`; U4
   [#2766](https://github.com/thinkwork-ai/thinkwork/pull/2766) merged as
   `14085702dbd0726830efe08c19c19f8a3d897397`; U5
-  [#2771](https://github.com/thinkwork-ai/thinkwork/pull/2771) open.
-- Status: U1, U2, U8, U3, and U4 complete and merged. U5 implementation is
+  [#2771](https://github.com/thinkwork-ai/thinkwork/pull/2771) merged as
+  `77f71c11b7915264c484ebb62aa3f90c7fe3f779`; U6
+  [#2775](https://github.com/thinkwork-ai/thinkwork/pull/2775) open.
+- Status: U1, U2, U8, U3, U4, and U5 complete and merged. U6 implementation is
   locally complete from `origin/main` at
-  `14085702dbd0726830efe08c19c19f8a3d897397`.
+  `77f71c11b7915264c484ebb62aa3f90c7fe3f779`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
     and U7 in dependency order.
@@ -220,6 +222,47 @@ status: in_progress
   - U5 rebased cleanly onto `origin/main` at `45cd57074eda`; post-rebase API
     resolver/GraphQL contract tests, focused web GenUI/Thread tests, and
     `git diff --check origin/main..HEAD` passed.
+  - U6 `pnpm install` completed with the known optional `canvas@2.11.2` native
+    fallback warning under local Node 25 because `pkg-config` / `pixman-1` are
+    unavailable.
+  - U6 `pnpm schema:build`, `pnpm --filter thinkwork-cli codegen`,
+    `pnpm --filter @thinkwork/web codegen`, and
+    `pnpm --filter @thinkwork/mobile codegen` passed.
+  - U6 API coverage passed:
+    `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/artifacts/promoteGenUIArtifact.test.ts src/graphql/resolvers/artifacts/artifact.query.test.ts src/__tests__/artifact-resolvers-payloads.test.ts src/__tests__/graphql-contract.test.ts`
+    passed: 4 files, 148 tests.
+  - U6 web coverage passed:
+    `pnpm --filter @thinkwork/web test -- src/components/workbench/genui/use-promote-genui.test.tsx src/components/workbench/genui/PromoteGenUIButton.test.tsx src/components/workbench/genui/GenUIRenderer.test.tsx src/components/workbench/render-typed-part.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/spaces/ThreadConversation.test.tsx src/routes/_authed/_shell`
+    passed: 10 files, 49 tests.
+  - U6 `pnpm --filter @thinkwork/api typecheck`,
+    `pnpm --filter @thinkwork/web typecheck`, `pnpm typecheck`,
+    `git diff --check`, `pnpm lint`, and `pnpm --filter @thinkwork/web build`
+    passed. The web build emitted the existing route-file, sourcemap, and
+    large-chunk warnings.
+  - U6 first `pnpm test` run exposed the local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly`) after an `EEXIST`
+    symlink warning during the binary install. Rebuilding Electron with
+    `pnpm --filter @thinkwork/desktop rebuild electron` repaired the local
+    install, and `pnpm --filter @thinkwork/desktop test` passed: 15 files, 105
+    tests.
+  - U6 after the review hardening fix reran `git diff --check`,
+    `pnpm typecheck`, `pnpm lint`, and `pnpm test`. Typecheck and lint passed;
+    the first full `pnpm test` retry hit unrelated timeout/leak symptoms in
+    `src/__tests__/applets-resolvers.test.ts`,
+    `src/lib/chat-finalize/reconcile-context.test.ts`, and
+    `src/iframe-shell/__tests__/host-build-define-smoke.test.ts`.
+  - U6 focused reruns for those timeout files passed:
+    `pnpm --filter @thinkwork/api test -- src/__tests__/applets-resolvers.test.ts src/lib/chat-finalize/reconcile-context.test.ts`
+    passed 16 tests, and
+    `pnpm --filter @thinkwork/web test -- src/iframe-shell/__tests__/host-build-define-smoke.test.ts`
+    passed 1 test.
+  - U6 final clean retry `pnpm test` passed workspace-wide, including
+    `apps/web` (179 files, 1345 tests), `packages/api` (542 files passed, 3
+    skipped; 5096 tests passed, 9 skipped), release tests, and plugin source
+    boundary tests.
+  - U6 rebased cleanly onto `origin/main` after PR #2775 opened; post-rebase
+    `git diff --check origin/main..HEAD`, focused API promotion/artifact tests,
+    and focused web promotion/Thread route tests passed.
 - Compound review:
   - Correctness review flagged unrelated upstream MCP changes when diffing
     against the moving `origin/main`; the U1 branch will be rebased before PR so
@@ -273,6 +316,10 @@ status: in_progress
     render path after action hooks landed. Fixed by mocking `urql` in that test
     module so persisted GenUI rendering remains covered without a network
     provider.
+  - U6 review flagged that idempotent duplicate promotion lookup must not happen
+    before source-thread visibility and source-part validation. Fixed by moving
+    duplicate coalescing after server-side validation, so idempotency cannot
+    bypass Thread visibility.
 - CI log:
   - U1 PR #2753 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) twice: once on the initial PR head and again after rebasing because
@@ -295,11 +342,12 @@ status: in_progress
     `test`) after repeated rebases because `main` moved.
   - U4 PR #2766 was squash merged to `main` as
     `14085702dbd0726830efe08c19c19f8a3d897397`.
-  - U5 PR #2771 initially passed required CI (`cla`, `lint`, `verify`, `test`,
-    and `typecheck`), then `main` moved before merge. The branch was rebased
-    onto `origin/main` at `45cd57074eda` and refreshed CI is pending.
+  - U5 PR #2771 passed required CI (`cla`, `lint`, `verify`, `test`, and
+    `typecheck`) after rebasing because `main` moved, and was squash merged as
+    `77f71c11b7915264c484ebb62aa3f90c7fe3f779`.
+  - U6 PR #2775 opened after local verification passed.
 - Blockers: none.
-- Next action: open the U5 PR, monitor CI, fix any failures, and squash merge
+- Next action: open the U6 PR, monitor CI, fix any failures, and squash merge
   when green.
 
 ## First-Class Workflow Control Plane - 2026-06-20

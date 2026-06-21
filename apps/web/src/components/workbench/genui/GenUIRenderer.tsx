@@ -24,7 +24,9 @@ import {
 } from "./components/WorkflowListPreview";
 import { GenUIFallback } from "./GenUIFallback";
 import { canSubmitGenUIAction } from "./actions";
+import { PromoteGenUIButton } from "./PromoteGenUIButton";
 import { useGenUIAction, type GenUIActionStatus } from "./use-genui-action";
+import { usePromoteGenUI } from "./use-promote-genui";
 
 export interface GenUIRendererProps {
   data: unknown;
@@ -164,6 +166,12 @@ function ValidatedGenUIRenderer({
     sourceMessageId,
     threadId,
   });
+  const promotion = usePromoteGenUI({
+    data,
+    partId,
+    sourceMessageId,
+    threadId,
+  });
   const element = data.spec.elements[data.spec.root];
   if (!element) {
     return (
@@ -188,7 +196,7 @@ function ValidatedGenUIRenderer({
       sourceMessageId,
       threadId,
     });
-  return renderElement({
+  const rendered = renderElement({
     element,
     data,
     actions: data.actions ?? [],
@@ -196,6 +204,18 @@ function ValidatedGenUIRenderer({
     onAction: submitAction,
     statusForAction,
   });
+  if (!promotion.canPromote || live) return rendered;
+  return (
+    <div className="grid gap-2">
+      <div className="flex justify-end">
+        <PromoteGenUIButton
+          status={promotion.status}
+          onPromote={promotion.promote}
+        />
+      </div>
+      {rendered}
+    </div>
+  );
 }
 
 function renderElement({
