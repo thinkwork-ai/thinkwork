@@ -59,6 +59,10 @@ status: in_progress
   - CI passed so far: CLA, lint, verify, typecheck.
   - CI pending at blocker time: test.
   - CI failed: Migration Drift Precheck (dev).
+  - After the blocker-status commit, GitHub reran checks. CLA, lint, verify,
+    and typecheck passed again; `test` was still pending when the repeated
+    hard blocker was recorded; Migration Drift Precheck (dev) failed again on
+    run `27918499277` / job `82607986527`.
 - Blockers:
   - Migration Drift Precheck (dev) failed because the new hand-rolled migration
     `packages/database-pg/drizzle/0180_skill_drafts.sql` has not been applied
