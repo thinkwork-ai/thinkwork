@@ -19,7 +19,8 @@ status: in_progress
   resolver.
 - Current branch: `codex/thnk-60-u1-account-usage-api`.
 - Current worktree: `.Codex/worktrees/thnk-60-u1-account-usage-api`.
-- Current pull request: Pending.
+- Current pull request:
+  [#2806](https://github.com/thinkwork-ai/thinkwork/pull/2806).
 - Base: `origin/main` at `c4228d12b`.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
@@ -57,7 +58,7 @@ status: in_progress
   - `pnpm lint` passed.
   - `pnpm typecheck` passed.
 - PR / CI:
-  - U1 PR: Pending.
+  - U1 PR: [#2806](https://github.com/thinkwork-ai/thinkwork/pull/2806).
   - CI: Pending.
   - Merge: Pending.
   - Cleanup: Pending.
