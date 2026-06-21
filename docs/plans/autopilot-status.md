@@ -14,7 +14,7 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: Blocked.
+- Status: In progress.
 - Current unit: U1 Skill Draft Data Model and GraphQL Lifecycle.
 - Current branch: `codex/thnk-11-u1-skill-drafts`.
 - Current worktree: `.Codex/worktrees/thnk-11-u1-skill-drafts`.
@@ -67,6 +67,12 @@ status: in_progress
     `82608340536`; CLA, lint, verify, and typecheck passed, `test` was still
     pending when stopped, and Migration Drift Precheck (dev) failed again with
     the same missing-object report for `0180_skill_drafts.sql`.
+  - After explicit operator authorization ("Apply the migration"), applied
+    `packages/database-pg/drizzle/0180_skill_drafts.sql` to the dev database
+    with `psql -v ON_ERROR_STOP=1`.
+  - Scoped drift reporter passed for
+    `packages/database-pg/drizzle/0180_skill_drafts.sql`; all declared tables,
+    indexes, and check constraints were present in dev.
 - Blockers:
   - Migration Drift Precheck (dev) failed because the new hand-rolled migration
     `packages/database-pg/drizzle/0180_skill_drafts.sql` has not been applied
@@ -88,9 +94,8 @@ status: in_progress
     `packages/database-pg/drizzle/0180_skill_drafts.sql` to dev, then rerun the
     failed PR check. After the gate passes, resume autopilot to merge U1 and
     continue with U2.
-  - The same blocker has now repeated across three consecutive goal turns, so
-    the active autopilot goal is marked blocked until the shared dev database
-    state changes.
+  - Cleared on 2026-06-21 after explicit operator authorization to apply the
+    migration to dev.
 
 ## THNK-60 Account Usage Autopilot - 2026-06-21
 
