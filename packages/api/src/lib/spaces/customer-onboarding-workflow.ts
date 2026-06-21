@@ -35,6 +35,7 @@ import {
   buildCustomerOnboardingChecklistConfig,
 } from "./customer-onboarding-seed.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "./customer-onboarding-goal-md.js";
+import { recordTwentyCrmWorkflowRun } from "../workflows/connected-app-bindings.js";
 
 export const CUSTOMER_ONBOARDING_TEMPLATE_KEY = "customer_onboarding";
 
@@ -184,6 +185,17 @@ export interface CustomerOnboardingWorkflowResult {
   missingFields: string[];
 }
 
+export interface CustomerOnboardingWorkflowRunRecorder {
+  record(input: {
+    tenantId: string;
+    opportunity: CustomerOnboardingSourceInput;
+    thread: CustomerOnboardingThreadRef;
+    idempotent: boolean;
+    linkedTaskCount: number;
+    missingFields: string[];
+  }): Promise<unknown>;
+}
+
 export interface CustomerOnboardingThreadRef {
   id: string;
   tenantId: string;
@@ -326,6 +338,7 @@ export interface CustomerOnboardingWorkflowDeps {
   repository?: CustomerOnboardingWorkflowRepository;
   taskAdapter?: LastMileTasksWorkflowAdapter;
   coordinator?: Pick<CoordinatorAgentService, "enqueueWakeup">;
+  workflowRunRecorder?: CustomerOnboardingWorkflowRunRecorder | null;
   progressReporter?: {
     refresh(input: { tenantId: string; threadId: string }): Promise<unknown>;
   };
@@ -357,6 +370,12 @@ export async function startCustomerOnboardingWorkflow(
   const taskAdapter =
     deps.taskAdapter ?? createUnavailableLastMileTaskAdapter();
   const coordinator = deps.coordinator ?? createCoordinatorAgentService();
+  const workflowRunRecorder =
+    deps.workflowRunRecorder === undefined
+      ? deps.repository
+        ? null
+        : createTwentyCrmWorkflowRunRecorder()
+      : deps.workflowRunRecorder;
   const normalized = normalizeCustomerOnboardingSource(input.opportunity);
 
   let space = await repository.findSpace({
@@ -446,6 +465,16 @@ export async function startCustomerOnboardingWorkflow(
         tenantId: input.tenantId,
         threadId: existing.id,
       });
+      await recordWorkflowRunIfNeeded({
+        source: input.source,
+        recorder: workflowRunRecorder,
+        tenantId: input.tenantId,
+        opportunity: input.opportunity,
+        thread: existing,
+        idempotent: true,
+        linkedTaskCount: 0,
+        missingFields: normalized.missingFields,
+      });
       return {
         thread: existing,
         idempotent: true,
@@ -517,12 +546,51 @@ export async function startCustomerOnboardingWorkflow(
     requestedBy: input.startedBy ?? { type: "system" },
   });
 
+  await recordWorkflowRunIfNeeded({
+    source: input.source,
+    recorder: workflowRunRecorder,
+    tenantId: input.tenantId,
+    opportunity: input.opportunity,
+    thread,
+    idempotent,
+    linkedTaskCount: linkedTaskResults.length,
+    missingFields: normalized.missingFields,
+  });
+
   return {
     thread,
     idempotent,
     linkedTasks: linkedTaskResults,
     missingFields: normalized.missingFields,
   };
+}
+
+function createTwentyCrmWorkflowRunRecorder(): CustomerOnboardingWorkflowRunRecorder {
+  const db = getDb();
+  return {
+    record: (input) => recordTwentyCrmWorkflowRun(db, input),
+  };
+}
+
+async function recordWorkflowRunIfNeeded(input: {
+  source: CustomerOnboardingStartSource;
+  recorder: CustomerOnboardingWorkflowRunRecorder | null;
+  tenantId: string;
+  opportunity: CustomerOnboardingSourceInput;
+  thread: CustomerOnboardingThreadRef;
+  idempotent: boolean;
+  linkedTaskCount: number;
+  missingFields: string[];
+}): Promise<void> {
+  if (input.source !== "webhook" || !input.recorder) return;
+  await input.recorder.record({
+    tenantId: input.tenantId,
+    opportunity: input.opportunity,
+    thread: input.thread,
+    idempotent: input.idempotent,
+    linkedTaskCount: input.linkedTaskCount,
+    missingFields: input.missingFields,
+  });
 }
 
 export function normalizeCustomerOnboardingSource(

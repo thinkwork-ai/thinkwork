@@ -184,6 +184,7 @@ describe("startCustomerOnboardingWorkflow", () => {
         assignmentId: "assignment-1",
       })),
     };
+    const workflowRunRecorder = { record: vi.fn(async () => null) };
 
     const result = await startCustomerOnboardingWorkflow(
       {
@@ -192,7 +193,7 @@ describe("startCustomerOnboardingWorkflow", () => {
         opportunity: richPayload,
         startedBy: { type: "system" },
       },
-      { repository, taskAdapter, coordinator },
+      { repository, taskAdapter, coordinator, workflowRunRecorder },
     );
 
     expect(result).toMatchObject({
@@ -251,6 +252,16 @@ describe("startCustomerOnboardingWorkflow", () => {
         reason: "kickoff_triage",
       }),
     );
+    expect(workflowRunRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        opportunity: richPayload,
+        thread: expect.objectContaining({ id: "thread-1" }),
+        idempotent: false,
+        linkedTaskCount: 2,
+        missingFields: [],
+      }),
+    );
   });
 
   it("returns the existing Thread for duplicate close-won events without creating tasks", async () => {
@@ -265,6 +276,7 @@ describe("startCustomerOnboardingWorkflow", () => {
       },
     });
     const taskAdapter = { createTask: vi.fn() };
+    const workflowRunRecorder = { record: vi.fn(async () => null) };
 
     const result = await startCustomerOnboardingWorkflow(
       {
@@ -272,7 +284,12 @@ describe("startCustomerOnboardingWorkflow", () => {
         source: "webhook",
         opportunity: richPayload,
       },
-      { repository, taskAdapter, coordinator: noopCoordinator },
+      {
+        repository,
+        taskAdapter,
+        coordinator: noopCoordinator,
+        workflowRunRecorder,
+      },
     );
 
     expect(result).toMatchObject({
@@ -291,6 +308,15 @@ describe("startCustomerOnboardingWorkflow", () => {
       }),
     ]);
     expect(taskAdapter.createTask).not.toHaveBeenCalled();
+    expect(workflowRunRecorder.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        opportunity: richPayload,
+        thread: expect.objectContaining({ id: "thread-existing" }),
+        idempotent: true,
+        linkedTaskCount: 0,
+      }),
+    );
   });
 
   it("initializes a prepared webhook Thread instead of deduping or creating another case", async () => {

@@ -62,6 +62,47 @@ describe("managed application status helpers", () => {
     expect(mod.normalizeManagedApplicationKey("kestra")).toBeNull();
     expect(mod.normalizeManagedApplicationKey("unknown")).toBeNull();
   });
+
+  it("projects Twenty workflow readiness from app and MCP state", () => {
+    expect(
+      mod.twentyWorkflowProjection({
+        key: "twenty",
+        status: "running",
+        provisioned: true,
+        runtimeEnabled: true,
+        url: "https://crm.example.com",
+        managedMcpInstalled: true,
+        managedMcpStatus: "installed",
+        managedMcpMessage: null,
+      }),
+    ).toMatchObject({
+      workflowReadinessState: "ready",
+      workflowReadinessReasons: [],
+      workflowCapabilityFlags: expect.objectContaining({
+        triggerFamilies: ["crm"],
+        start: false,
+        monitor: true,
+      }),
+    });
+
+    expect(
+      mod.twentyWorkflowProjection({
+        key: "twenty",
+        status: "parked",
+        provisioned: true,
+        runtimeEnabled: false,
+        url: "https://crm.example.com",
+        managedMcpInstalled: true,
+        managedMcpStatus: "installed",
+        managedMcpMessage: null,
+      }),
+    ).toMatchObject({
+      workflowReadinessState: "blocked_not_ready",
+      workflowReadinessReasons: [
+        expect.objectContaining({ code: "managed_app_parked" }),
+      ],
+    });
+  });
 });
 
 describe("n8n status served from DB state", () => {

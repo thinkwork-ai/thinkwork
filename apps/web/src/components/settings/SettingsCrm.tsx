@@ -8,6 +8,7 @@ import {
   SettingsInstallManagedApplicationMcpServerMutation,
   SettingsManagedApplicationHealthCheckQuery,
 } from "@/lib/settings-queries";
+import type { SettingsDeploymentStatusQuery as SettingsDeploymentStatusQueryResult } from "@/gql/graphql";
 import {
   SettingsHeader,
   SettingsPane,
@@ -95,6 +96,20 @@ export function SettingsCrm() {
               </Button>
             </SettingsRow>
             <CopyableSettingsRow label="URL" value={crm?.url} external />
+            <SettingsRow
+              label="Workflow readiness"
+              description={formatWorkflowReadiness(crm)}
+            >
+              <Badge
+                variant={
+                  crm?.workflowReadinessState === "ready"
+                    ? "default"
+                    : "secondary"
+                }
+              >
+                {crm?.workflowReadinessState ?? "unknown"}
+              </Badge>
+            </SettingsRow>
             {crm?.runtimeEnabled ? (
               <SettingsRow
                 label="MCP server"
@@ -227,6 +242,33 @@ function formatHealthCheck(check: {
 }) {
   const status = check.statusCode ? `HTTP ${check.statusCode}` : "no status";
   return `${status} in ${check.latencyMs} ms. ${check.message}`;
+}
+
+function formatWorkflowReadiness(
+  crm:
+    | SettingsDeploymentStatusQueryResult["deploymentStatus"]["managedApplications"][number]
+    | undefined,
+) {
+  if (!crm) return "CRM deployment status unavailable.";
+  if (crm.workflowReadinessState === "ready") {
+    return "Twenty CRM workflows can trigger and record evidence.";
+  }
+  const reason = firstReadinessReason(crm.workflowReadinessReasons);
+  return (
+    reason?.message ?? "Twenty CRM workflows are visible but not runnable."
+  );
+}
+
+function firstReadinessReason(value: unknown) {
+  if (!Array.isArray(value)) return null;
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const message = (entry as Record<string, unknown>).message;
+    if (typeof message === "string" && message.trim()) {
+      return { message };
+    }
+  }
+  return null;
 }
 
 function ValueListRow({ label, values }: { label: string; values: string[] }) {

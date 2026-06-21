@@ -183,6 +183,9 @@ type ManagedApplicationDeployment {
   managedMcpInstalled: Boolean!
   managedMcpInstallAvailable: Boolean!
   managedMcpMessage: String
+  workflowReadinessState: String!
+  workflowReadinessReasons: AWSJSON!
+  workflowCapabilityFlags: AWSJSON!
 }
 
 type KnowledgeGraphDeploymentChange {

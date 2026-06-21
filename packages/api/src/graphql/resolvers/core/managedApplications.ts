@@ -87,6 +87,9 @@ export type ManagedApplicationStatus = {
   managedMcpInstalled: boolean;
   managedMcpInstallAvailable: boolean;
   managedMcpMessage: string | null;
+  workflowReadinessState: string;
+  workflowReadinessReasons: unknown[];
+  workflowCapabilityFlags: Record<string, unknown>;
 };
 
 export function normalizeManagedApplicationKey(
@@ -511,6 +514,7 @@ function cogneeManagedApplication(): ManagedApplicationStatus {
     managedMcpInstalled: false,
     managedMcpInstallAvailable: false,
     managedMcpMessage: null,
+    ...nonWorkflowManagedApplicationProjection(),
   };
 }
 
@@ -533,7 +537,7 @@ async function twentyManagedApplication(
     twenty.workerServiceName,
   ].filter((value): value is string => Boolean(value));
 
-  return {
+  const application: ManagedApplicationStatus = {
     key: "twenty",
     displayName: "Twenty CRM",
     description: "Self-hosted CRM runtime managed by ThinkWork.",
@@ -563,6 +567,13 @@ async function twentyManagedApplication(
       status === "running" && twenty.url
         ? "Twenty CRM MCP server has not been registered yet."
         : null,
+    workflowReadinessState: "unknown",
+    workflowReadinessReasons: [],
+    workflowCapabilityFlags: {},
+  };
+  return {
+    ...application,
+    ...twentyWorkflowProjection(application),
   };
 }
 
@@ -614,6 +625,7 @@ async function n8nManagedApplication(
       status === "running" && n8n.url
         ? "n8n MCP service credential has not been registered yet."
         : null,
+    ...nonWorkflowManagedApplicationProjection(),
   };
 }
 
@@ -667,6 +679,103 @@ async function planeManagedApplication(
       status === "running" && plane.url
         ? "Plane MCP server has not been registered yet."
         : null,
+    ...nonWorkflowManagedApplicationProjection(),
+  };
+}
+
+export function twentyWorkflowProjection(
+  application: Pick<
+    ManagedApplicationStatus,
+    | "key"
+    | "status"
+    | "provisioned"
+    | "runtimeEnabled"
+    | "url"
+    | "managedMcpInstalled"
+    | "managedMcpStatus"
+    | "managedMcpMessage"
+  >,
+): Pick<
+  ManagedApplicationStatus,
+  | "workflowReadinessState"
+  | "workflowReadinessReasons"
+  | "workflowCapabilityFlags"
+> {
+  if (application.key !== "twenty") {
+    return nonWorkflowManagedApplicationProjection();
+  }
+  const ready =
+    application.status === "running" &&
+    application.provisioned &&
+    application.runtimeEnabled &&
+    Boolean(application.url) &&
+    application.managedMcpInstalled &&
+    ["installed", "plugin_managed"].includes(application.managedMcpStatus);
+  const reasons: unknown[] = [];
+  if (!application.provisioned || application.status === "disabled") {
+    reasons.push({
+      code: "managed_app_destroyed",
+      component: "managed_app",
+      severity: "blocker",
+      message:
+        "Twenty CRM managed application is destroyed or disabled; workflow history remains available.",
+    });
+  } else if (application.status === "parked" || !application.runtimeEnabled) {
+    reasons.push({
+      code: "managed_app_parked",
+      component: "managed_app",
+      severity: "blocker",
+      message:
+        "Twenty CRM runtime is parked; workflows remain visible but cannot run.",
+    });
+  } else if (!application.managedMcpInstalled) {
+    reasons.push({
+      code: "mcp_server_missing",
+      component: "mcp",
+      severity: "blocker",
+      message: "Twenty CRM MCP server is not registered for agents.",
+    });
+  } else if (
+    !["installed", "plugin_managed"].includes(application.managedMcpStatus)
+  ) {
+    reasons.push({
+      code: `mcp_server_${application.managedMcpStatus}`,
+      component: "mcp",
+      severity: "blocker",
+      message:
+        application.managedMcpMessage ??
+        "Twenty CRM MCP server is not ready for workflow actions.",
+    });
+  }
+  return {
+    workflowReadinessState: ready ? "ready" : "blocked_not_ready",
+    workflowReadinessReasons: reasons,
+    workflowCapabilityFlags: {
+      sourceSystem: "twenty",
+      bindingType: "twenty_crm",
+      triggerFamilies: ["crm"],
+      actions: ["create_customer_onboarding_thread", "mirror_checklist_tasks"],
+      resources: ["opportunity", "customer", "thread", "checklist_item"],
+      start: false,
+      monitor: true,
+      cancel: false,
+      retry: false,
+      replay: false,
+      evidence: true,
+    },
+  };
+}
+
+function nonWorkflowManagedApplicationProjection(): Pick<
+  ManagedApplicationStatus,
+  | "workflowReadinessState"
+  | "workflowReadinessReasons"
+  | "workflowCapabilityFlags"
+> {
+  return {
+    workflowReadinessState: "not_applicable",
+    workflowReadinessReasons: [],
+    workflowCapabilityFlags: {},
   };
 }
 

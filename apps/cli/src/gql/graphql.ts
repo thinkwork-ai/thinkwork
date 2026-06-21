@@ -2484,6 +2484,9 @@ export type ManagedApplicationDeployment = {
   storageBucketName?: Maybe<Scalars['String']['output']>;
   targetGroupArn?: Maybe<Scalars['String']['output']>;
   url?: Maybe<Scalars['String']['output']>;
+  workflowCapabilityFlags: Scalars['AWSJSON']['output'];
+  workflowReadinessReasons: Scalars['AWSJSON']['output'];
+  workflowReadinessState: Scalars['String']['output'];
 };
 
 export enum ManagedApplicationDeploymentAction {

@@ -84,10 +84,10 @@ status: in_progress
   `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`.
 - Linear issue: `THNK-59`.
 - Target branch: `main`.
-- Current implementation unit: U5 n8n plugin workflow discovery and stock-node
-  bridge.
-- Current branch: `codex/thnk-59-u5-n8n-workflows`.
-- Current worktree: `.Codex/worktrees/thnk-59-u5-n8n-workflows`.
+- Current implementation unit: U6 connected-app workflow bindings and readiness
+  matrix.
+- Current branch: `codex/thnk-59-u6-app-bindings`.
+- Current worktree: `.Codex/worktrees/thnk-59-u6-app-bindings`.
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -96,9 +96,10 @@ status: in_progress
   `bf18489960f7bcef2a66b19888138b7529f7f298`; U4
   [#2767](https://github.com/thinkwork-ai/thinkwork/pull/2767) merged as
   `6252d8727d5dd1b5caaa601644e347f1fca48930`; U5
-  [#2773](https://github.com/thinkwork-ai/thinkwork/pull/2773) open.
-- Status: U1-U4 complete and merged. U5 implementation is complete, rebased
-  onto current `origin/main`, locally verified, and awaiting final PR checks.
+  [#2773](https://github.com/thinkwork-ai/thinkwork/pull/2773) merged as
+  `304e57a50556a69bd753f40ea7ab7f086c106ea0`.
+- Status: U1-U5 complete and merged. U6 implementation is locally complete
+  from `origin/main` at `304e57a50556a69bd753f40ea7ab7f086c106ea0`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
@@ -116,6 +117,13 @@ status: in_progress
     infrastructure remains separate. If a public n8n workflow bridge endpoint is
     added later, it should reuse the contract and credential storage from this
     slice.
+  - U6 adds the first Twenty CRM connected-app workflow binding and readiness
+    projection. The workflow remains visible when Twenty is parked, destroyed,
+    missing MCP registration, or missing user OAuth, but run/trigger readiness is
+    `blocked_not_ready` and carries evidence-grade reasons.
+  - Webhook-triggered customer onboarding now records a workflow run ledger entry
+    with CRM event/object metadata and ThinkWork thread evidence. Manual
+    onboarding starts remain outside the CRM trigger path.
 - Local verification:
   - `pnpm install` completed with the known optional `canvas@2.11.2` native
     fallback warning under local Node 25.
@@ -156,9 +164,36 @@ status: in_progress
     workspace test pass included `packages/api` (542 files passed, 3 skipped;
     5095 tests passed, 9 skipped), `apps/web` (178 files, 1342 tests), release
     tests, and plugin source boundary tests.
+  - U6 `pnpm schema:build` passed.
+  - U6 codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
+    `@thinkwork/mobile`; `@thinkwork/api` has no codegen script in this
+    checkout.
+  - U6 targeted API tests passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/workflows/connected-app-bindings.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/graphql/resolvers/core/managedApplications.test.ts src/__tests__/webhook-crm-opportunity.test.ts`
+    (4 files, 43 tests).
+  - U6 targeted web test passed:
+    `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsCrm.test.tsx`
+    (1 file, 4 tests).
+  - U6 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U6 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U6 `pnpm lint` passed.
+  - U6 `pnpm typecheck` passed workspace-wide.
+  - U6 first `pnpm test` run exposed the known local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly` after an `EEXIST`
+    framework symlink extraction warning). `pnpm --filter @thinkwork/desktop
+rebuild electron` repaired the local install.
+  - U6 `pnpm --filter @thinkwork/desktop test` passed after the Electron
+    repair: 15 files, 105 tests.
+  - U6 rerun `pnpm test` passed workspace-wide after the Electron repair:
+    `packages/api` 545 files passed, 3 skipped, 5109 tests passed, 9 skipped;
+    `apps/web` 180 files passed, 1348 tests passed; release tests 17 passed;
+    plugin source boundary tests 7 passed.
+  - U6 `pnpm --filter @thinkwork/web build` passed with existing route-file,
+    sourcemap, and large-chunk warnings.
+  - U6 `git diff --check` passed.
 - CI log: U5 PR [#2773](https://github.com/thinkwork-ai/thinkwork/pull/2773)
-  passed CLA, lint, typecheck, verify, and test before the rebase; final
-  post-rebase CI is pending.
+  passed CLA, lint, typecheck, verify, and test; GitHub auto-merge squash
+  merged it after the final up-to-date check.
 - Blockers: none.
 
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
