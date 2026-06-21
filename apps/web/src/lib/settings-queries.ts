@@ -1684,21 +1684,7 @@ export const SettingsCostTimeSeriesQuery = graphql(`
   }
 `);
 
-// ─── Routines + Webhooks (operator-only) ─────────────────────────────────
-
-export const SettingsRoutinesQuery = graphql(`
-  query SettingsRoutines($tenantId: ID!) {
-    routines(tenantId: $tenantId) {
-      id
-      name
-      description
-      status
-      lastRunAt
-      engine
-      createdAt
-    }
-  }
-`);
+// ─── Webhooks (operator-only) ────────────────────────────────────────────
 
 export const SettingsWebhooksQuery = graphql(`
   query SettingsWebhooks($tenantId: ID!) {

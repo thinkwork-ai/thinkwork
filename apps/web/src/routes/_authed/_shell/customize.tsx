@@ -7,7 +7,7 @@ export const Route = createFileRoute("/_authed/_shell/customize")({
 
 export const CUSTOMIZE_TABS = [
   { to: "/customize/skills", label: "Skills" },
-  { to: "/customize/workflows", label: "Workflows" },
+  { to: "/customize/workflows", label: "Workflow Templates" },
 ] as const;
 
 function CustomizeLayout() {

@@ -27,9 +27,9 @@ function readScheduleFromConfig(config: unknown): string | null {
 }
 
 /**
- * Enable a workflow on the caller's tenant platform agent. Looks up the
- * catalog row by `(tenant_id, slug)` and upserts a `routines` row keyed
- * by the partial unique index `uq_routines_catalog_slug_per_agent`.
+ * Enable a workflow template on the caller's tenant platform agent.
+ * The compatibility row is still materialized in `routines` until the
+ * Step Functions adapter is fully migrated behind first-class Workflows.
  */
 export async function enableWorkflow(
   _parent: unknown,

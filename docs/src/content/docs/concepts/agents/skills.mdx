@@ -32,12 +32,12 @@ Skill packs are _not_ the right tool when:
 
 - **You need per-user configuration.** Skill packs are per-agent, not per-user. OAuth tokens and per-user credentials live in the credential vault and the mobile connect flows, not in skill packs.
 - **You need to store secrets.** `SKILL.md` is plaintext. Don't put API keys there. Skills reference credentials by name; the runtime resolves them at invocation.
-- **You want orchestration or branching logic.** A skill pack is a capability, not a workflow. Multi-step orchestration belongs in routines.
+- **You want orchestration or branching logic.** A skill pack is a capability, not a workflow. Multi-step orchestration belongs in Workflows.
 
 <Aside type="tip">
   The fastest calibration question when authoring: "does this work inside one
   turn?" If yes, it's a skill. If it needs multiple turns, human approvals, or
-  scheduling, it's a routine.
+  scheduling, it's a Workflow.
 </Aside>
 
 ## The `SKILL.md` format

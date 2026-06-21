@@ -5,7 +5,7 @@ description: Two entry points into ThinkWork automations — cron-like schedules
 
 import { Aside } from "@astrojs/starlight/components";
 
-Automations start from one of two entry points: a schedule fires at a predetermined time, or an event arrives and triggers a run. Both converge on whichever execution path the trigger's target dictates — a single-turn agent invocation lands in an `AUTO-` thread, a multi-step routine lands as a `routine_executions` row with step-event logging. The difference is all at the front; the downstream model is uniform within its shape. Routing both entry points through the same execution layer is what gives the **Traceability** operating guarantee its consistency at the automation tier — a scheduled monthly digest and an event-triggered triage flow look identical in the audit log, identical in the cost ledger, identical in the operator's queue.
+Automations start from one of two entry points: a schedule fires at a predetermined time, or an event arrives and triggers a run. Both converge on whichever execution path the trigger's target dictates — a single-turn agent invocation lands in an `AUTO-` thread, a multi-step workflow lands as a Workflow run with Step Functions adapter evidence in `routine_executions`. The difference is all at the front; the downstream model is uniform within its shape. Routing both entry points through the same execution layer is what gives the **Traceability** operating guarantee its consistency at the automation tier — a scheduled monthly digest and an event-triggered triage flow look identical in the audit log, identical in the cost ledger, identical in the operator's queue.
 
 ## The two entry points
 
@@ -52,10 +52,10 @@ AWS Scheduler: CreateSchedule (or UpdateSchedule)
         ▼
 When the schedule fires:
 AWS Scheduler → job-trigger Lambda
-        │  (resolves the job row; starts a routine SFN execution OR
+        │  (resolves the job row; starts a workflow SFN execution OR
         │   wakes the agent for single-turn work)
         ▼
-For routine targets: triggerRoutineRun → SFN.StartExecution → routine_executions
+For workflow targets: Workflow run → Routine adapter → SFN.StartExecution
 For agent targets:   AgentCore invocation → AUTO- thread → thread_turns
 ```
 

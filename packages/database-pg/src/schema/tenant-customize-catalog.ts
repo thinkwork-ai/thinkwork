@@ -1,8 +1,8 @@
 /**
  * Per-tenant catalog tables that back the apps/web Customize page's
- * Available / Discover sections for Workflows. Skills now live in the S3
- * skill catalog and workspace `skills/` folders, while MCP servers already
- * have `tenant_mcp_servers`; this table fills the missing workflow catalog.
+ * Available / Discover sections for workflow templates. Skills now live in the
+ * S3 skill catalog and workspace `skills/` folders, while MCP servers already
+ * have `tenant_mcp_servers`; this table fills the missing template catalog.
  *
  * Plan: docs/plans/2026-05-09-006-feat-computer-customization-page-plan.md U9.
  */
@@ -35,7 +35,7 @@ export const tenantWorkflowCatalog = pgTable(
     description: text("description"),
     category: text("category"),
     icon: text("icon"),
-    /** Default config copied into the `routines` row when the user enables this catalog item. */
+    /** Default config copied into the Step Functions Routine compatibility row when enabled. */
     default_config: jsonb("default_config").notNull().default({}),
     /** Default schedule cron string, or null for on-demand workflows. */
     default_schedule: text("default_schedule"),

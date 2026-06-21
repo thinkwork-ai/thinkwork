@@ -24,13 +24,13 @@ function WorkflowsTab() {
       activeTab="/customize/workflows"
       items={items}
       onAction={handleAction}
-      searchPlaceholder="Search workflows…"
+      searchPlaceholder="Search workflow templates…"
       emptyMessage={
         error
-          ? `Couldn't load workflows: ${error.message}`
+          ? `Couldn't load workflow templates: ${error.message}`
           : fetching
-            ? "Loading workflows…"
-            : "No workflows match your filters."
+            ? "Loading workflow templates…"
+            : "No workflow templates match your filters."
       }
     />
   );

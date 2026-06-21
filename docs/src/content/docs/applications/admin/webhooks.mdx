@@ -1,11 +1,11 @@
 ---
 title: Admin — Webhooks
-description: Custom HTTP webhooks that fire an agent or a routine when an external system POSTs to them. Token-based auth, rate limiting, invocation log, and test invocation.
+description: Custom HTTP webhooks that fire an agent or a workflow when an external system POSTs to them. Token-based auth, rate limiting, invocation log, and test invocation.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Webhooks are custom HTTP endpoints that external systems can POST to in order to trigger an agent turn or a routine. They're blank slates — any system that can make an authenticated HTTP POST can become a ThinkWork trigger through a webhook.
+Webhooks are custom HTTP endpoints that external systems can POST to in order to trigger an agent turn or a workflow. They're blank slates — any system that can make an authenticated HTTP POST can become a ThinkWork trigger through a webhook.
 
 ## The list
 
@@ -14,15 +14,15 @@ Webhooks are custom HTTP endpoints that external systems can POST to in order to
 
 A searchable `DataTable` with:
 
-| Column           | Notes                                                                 |
-| ---------------- | --------------------------------------------------------------------- |
-| Name             | Display name                                                          |
-| Type             | Badge: **Agent** or **Routine** depending on what the webhook targets |
-| Target           | Agent or routine name                                                 |
-| Enabled          | Enabled / Disabled badge                                              |
-| Last Invoked     | Relative timestamp                                                    |
-| Invocation count | Lifetime count                                                        |
-| Created          | Timestamp                                                             |
+| Column           | Notes                                                                  |
+| ---------------- | ---------------------------------------------------------------------- |
+| Name             | Display name                                                           |
+| Type             | Badge: **Agent** or **Workflow** depending on what the webhook targets |
+| Target           | Agent or workflow name                                                 |
+| Enabled          | Enabled / Disabled badge                                               |
+| Last Invoked     | Relative timestamp                                                     |
+| Invocation count | Lifetime count                                                         |
+| Created          | Timestamp                                                              |
 
 A **New Webhook** button opens the creation dialog.
 
@@ -48,7 +48,7 @@ External systems call the URL with `Authorization: Bearer <token>` and a JSON bo
 
 Read-only display of:
 
-- Target type (agent / routine)
+- Target type (agent / workflow)
 - Target name
 - Rate limit (requests per minute)
 - Prompt override (for agent targets — the string the agent receives when the webhook fires)
@@ -105,7 +105,7 @@ If thread creation succeeds but workflow initialization fails, the endpoint stil
 
 ## Data model
 
-- **`webhooks`** — Aurora table with id, tenant_id, name, description, token, target_type (`agent` / `routine`), agent_id / routine_id, prompt, config, enabled, rate_limit, last_invoked_at, invocation_count, created_at, updated_at
+- **`webhooks`** — Aurora table with id, tenant_id, name, description, token, target_type (`agent` / `routine` compatibility value for Step Functions-backed workflows), agent_id / routine_id, prompt, config, enabled, rate_limit, last_invoked_at, invocation_count, created_at, updated_at
 - **Runs** — `thread_turns` rows with `webhook_id` FK and a `context_snapshot` field storing the inbound JSON payload
 - **Rate limit state** — in-memory per webhook (per instance, not distributed); resets on Lambda cold start
 
@@ -168,6 +168,6 @@ The webhook id changes, so the URL also changes. Plan for that in the external s
 
 ## Related pages
 
-- [Automations](/applications/web/automations/) — the time-based counterpart to webhook-driven triggers, plus the multi-step routines webhooks can launch
+- [Automations](/applications/web/automations/) — the time-based counterpart to webhook-driven triggers, plus the multi-step workflows webhooks can launch
 - [Agents](/applications/web/agents/) — the other target type for webhook invocations
 - [Automations (concept)](/concepts/automations/) — the product model
