@@ -102,6 +102,9 @@ export const SettingsDeploymentStatusQuery = graphql(`
         managedMcpInstalled
         managedMcpInstallAvailable
         managedMcpMessage
+        workflowReadinessState
+        workflowReadinessReasons
+        workflowCapabilityFlags
       }
     }
   }

@@ -14,6 +14,7 @@ import {
   userMcpTokens,
 } from "@thinkwork/database-pg/schema";
 import type { ManagedApplicationStatus } from "../graphql/resolvers/core/managedApplications.js";
+import { twentyWorkflowProjection } from "../graphql/resolvers/core/managedApplications.js";
 import { db as defaultDb } from "../graphql/utils.js";
 import { computeMcpUrlHash } from "./mcp-server-hash.js";
 
@@ -358,13 +359,17 @@ function applyManagedMcpState(
   application: ManagedApplicationStatus,
   state: ManagedMcpDeploymentState,
 ): ManagedApplicationStatus {
-  return {
+  const enriched = {
     ...application,
     managedMcpServerId: state.serverId,
     managedMcpStatus: state.status,
     managedMcpInstalled: state.installed,
     managedMcpInstallAvailable: state.installAvailable,
     managedMcpMessage: state.message,
+  };
+  return {
+    ...enriched,
+    ...twentyWorkflowProjection(enriched),
   };
 }
 

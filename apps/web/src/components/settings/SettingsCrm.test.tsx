@@ -61,6 +61,7 @@ describe("SettingsCrm", () => {
     expect(source).not.toContain("Destroy Twenty CRM and delete data?");
     expect(source).toContain("SettingsManagedApplicationHealthCheckQuery");
     expect(source).toContain("managedApplicationHealthCheck");
+    expect(source).toContain("Workflow readiness");
   });
 
   it("guards CRM configuration until Twenty has been provisioned", () => {
@@ -87,6 +88,7 @@ describe("SettingsCrm", () => {
     expect(
       screen.queryByRole("button", { name: /install mcp server/i }),
     ).toBeNull();
+    expect(screen.getByText("blocked_not_ready")).toBeTruthy();
   });
 
   it("keeps lifecycle actions on the managed applications page once provisioned", () => {
@@ -107,6 +109,7 @@ describe("SettingsCrm", () => {
     expect(
       screen.getByRole("button", { name: /install mcp server/i }),
     ).toBeTruthy();
+    expect(screen.getByText("blocked_not_ready")).toBeTruthy();
   });
 });
 
@@ -187,6 +190,17 @@ const deploymentWithTwentyDisabled = {
       managedMcpInstalled: false,
       managedMcpInstallAvailable: false,
       managedMcpMessage: null,
+      workflowReadinessState: "blocked_not_ready",
+      workflowReadinessReasons: [
+        {
+          code: "managed_app_destroyed",
+          component: "managed_app",
+          severity: "blocker",
+          message:
+            "Twenty CRM managed application is destroyed or disabled; workflow history remains available.",
+        },
+      ],
+      workflowCapabilityFlags: {},
     },
   ],
 } as SettingsDeploymentStatusQuery["deploymentStatus"];
@@ -234,6 +248,20 @@ const deploymentWithTwentyRunning = {
       managedMcpInstalled: false,
       managedMcpInstallAvailable: true,
       managedMcpMessage: "Twenty CRM MCP server has not been registered yet.",
+      workflowReadinessState: "blocked_not_ready",
+      workflowReadinessReasons: [
+        {
+          code: "mcp_server_missing",
+          component: "mcp",
+          severity: "blocker",
+          message: "Twenty CRM MCP server is not registered for agents.",
+        },
+      ],
+      workflowCapabilityFlags: {
+        sourceSystem: "twenty",
+        triggerFamilies: ["crm"],
+        monitor: true,
+      },
     },
   ],
 } as SettingsDeploymentStatusQuery["deploymentStatus"];

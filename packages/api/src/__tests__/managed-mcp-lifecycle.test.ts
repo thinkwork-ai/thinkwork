@@ -221,6 +221,9 @@ function runningTwenty() {
     managedMcpInstalled: false,
     managedMcpInstallAvailable: true,
     managedMcpMessage: null,
+    workflowReadinessState: "blocked_not_ready",
+    workflowReadinessReasons: [],
+    workflowCapabilityFlags: {},
   };
 }
 
