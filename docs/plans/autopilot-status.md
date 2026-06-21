@@ -201,9 +201,9 @@ rebuild electron` repaired the local install.
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
 - Linear issue: `THNK-34`.
 - Target branch: `main`.
-- Current implementation unit: U7 Add mobile fallback and documentation.
-- Current branch: `codex/thnk-34-u7-mobile-fallback`.
-- Current worktree: `.Codex/worktrees/thnk-34-u7-mobile-fallback`.
+- Current implementation unit: Complete.
+- Current branch: none.
+- Current worktree: none.
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
   merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
   [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) merged as
@@ -218,11 +218,10 @@ rebuild electron` repaired the local install.
   `77f71c11b7915264c484ebb62aa3f90c7fe3f779`; U6
   [#2775](https://github.com/thinkwork-ai/thinkwork/pull/2775) merged as
   `30e467070b6cd3ff3ddb737e9274109e25510ac4`; U7
-  [#2778](https://github.com/thinkwork-ai/thinkwork/pull/2778) passed CI and
-  is ready to merge.
-- Status: U1, U2, U8, U3, U4, U5, and U6 complete and merged. U7 is in
-  progress from `origin/main` at
-  `30e467070b6cd3ff3ddb737e9274109e25510ac4`.
+  [#2778](https://github.com/thinkwork-ai/thinkwork/pull/2778) merged as
+  `3f1ec5eebe345080a7ba969c66e43c3689fe0ac6`.
+- Status: All THNK-34 implementation units complete and merged. Unit worktrees
+  and branches were cleaned up after merge.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
     and U7 in dependency order.
