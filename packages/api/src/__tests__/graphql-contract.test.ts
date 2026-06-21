@@ -102,6 +102,7 @@ describe("GraphQL Schema Contract", () => {
       "costByAgent",
       "costByUser",
       "costByModel",
+      "accountUsage",
       "budgetPolicies",
       "budgetStatus",
       "userBudgetStatus",
@@ -138,6 +139,51 @@ describe("GraphQL Schema Contract", () => {
         expect(queryFields).toContain(q);
       });
     }
+  });
+
+  describe("Costs contract", () => {
+    const schema = buildSchema(loadFullSchema());
+
+    it("exposes account usage profile contracts", () => {
+      const query = schema.getQueryType() as any;
+      const accountUsage = schema.getType("AccountUsage") as any;
+      const summary = schema.getType("AccountUsageSummary") as any;
+      const day = schema.getType("AccountUsageDay") as any;
+      const model = schema.getType("AccountUsageModel") as any;
+
+      expect(
+        query
+          .getFields()
+          .accountUsage.args.map((arg: any) => [arg.name, arg.type.toString()]),
+      ).toEqual([
+        ["tenantId", "ID!"],
+        ["userId", "ID!"],
+        ["days", "Int"],
+      ]);
+      expect(query.getFields().accountUsage.type.toString()).toBe(
+        "AccountUsage!",
+      );
+      expect(accountUsage.getFields().periodStart.type.toString()).toBe(
+        "AWSDateTime!",
+      );
+      expect(accountUsage.getFields().periodEnd.type.toString()).toBe(
+        "AWSDateTime!",
+      );
+      expect(accountUsage.getFields().summary.type.toString()).toBe(
+        "AccountUsageSummary!",
+      );
+      expect(accountUsage.getFields().daily.type.toString()).toBe(
+        "[AccountUsageDay!]!",
+      );
+      expect(accountUsage.getFields().models.type.toString()).toBe(
+        "[AccountUsageModel!]!",
+      );
+
+      expect(summary.getFields().totalUsd.type.toString()).toBe("Float!");
+      expect(day.getFields().inputTokens.type.toString()).toBe("Int!");
+      expect(model.getFields().displayName.type.toString()).toBe("String!");
+      expect(model.getFields().usageShare.type.toString()).toBe("Float!");
+    });
   });
 
   describe("Spaces contract", () => {
