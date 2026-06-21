@@ -325,7 +325,10 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     requestedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
   ) {
-    const trimmed = prompt.trim();
+    const trimmed =
+      goalMode?.action === "start" && goalMode.objective
+        ? goalMode.objective.trim()
+        : prompt.trim();
     if (!trimmed && files.length === 0) return;
     const targetSpaceId = selectedSpace?.id ?? defaultSpaceId ?? undefined;
     if (!tenantId || (!computerId && !targetSpaceId)) {

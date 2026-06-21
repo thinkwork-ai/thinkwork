@@ -16,7 +16,11 @@ import {
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
-import type { ComposerGoalModeIntent } from "@/components/workbench/goal-mode";
+import { GoalModeToggle } from "@/components/workbench/GoalModeControls";
+import {
+  resolveStartGoalModeSubmission,
+  type ComposerGoalModeIntent,
+} from "@/components/workbench/goal-mode";
 import { IconPaperclip, IconPlanet } from "@tabler/icons-react";
 import {
   useEffect,
@@ -174,8 +178,14 @@ export function SpacesComposer({
   // Once the user manually toggles, their choice persists until the draft is
   // cleared; until then the toggle tracks the derived default.
   const agentOverriddenRef = useRef(false);
+  const [goalModeEnabled, setGoalModeEnabled] = useState(false);
+  const goalModeSubmission = useMemo(
+    () => resolveStartGoalModeSubmission(value, goalModeEnabled),
+    [value, goalModeEnabled],
+  );
   const agentForcedOn = hasDefaultAgentMentionAlias(value);
-  const effectiveAgentEnabled = agentForcedOn || agentEnabled;
+  const effectiveAgentEnabled =
+    goalModeSubmission.requested || agentForcedOn || agentEnabled;
 
   useEffect(() => {
     setActiveMentionIndex(0);
@@ -237,13 +247,31 @@ export function SpacesComposer({
     if (disabled || isSubmitting) return;
     if (modelSelectionBlocked) return;
     const files = await fileUiPartsToFiles(message.files);
-    const hasText = value.trim().length > 0;
+    if (goalModeSubmission.requested && !goalModeSubmission.goalMode) {
+      toast.error("Goal mode needs an objective.");
+      return;
+    }
+    const submittedContent = goalModeSubmission.content;
+    const hasText = submittedContent.length > 0;
     if (!hasText && files.length === 0) return;
     const submittedMentions = mentions.filter((mention) =>
-      value.includes(mention.rawText),
+      submittedContent.includes(mention.rawText),
     );
-    const pinnedSkills = extractPinnedSkillSlugs(value, skillCatalog);
-    if (selectedModelId) {
+    const pinnedSkills = extractPinnedSkillSlugs(
+      submittedContent,
+      skillCatalog,
+    );
+    const submittedGoalMode = goalModeSubmission.goalMode;
+    if (selectedModelId && submittedGoalMode) {
+      onSubmit(
+        files,
+        submittedMentions,
+        true,
+        pinnedSkills,
+        selectedModelId,
+        submittedGoalMode,
+      );
+    } else if (selectedModelId) {
       onSubmit(
         files,
         submittedMentions,
@@ -251,10 +279,20 @@ export function SpacesComposer({
         pinnedSkills,
         selectedModelId,
       );
+    } else if (submittedGoalMode) {
+      onSubmit(
+        files,
+        submittedMentions,
+        true,
+        pinnedSkills,
+        undefined,
+        submittedGoalMode,
+      );
     } else {
       onSubmit(files, submittedMentions, effectiveAgentEnabled, pinnedSkills);
     }
     setMentions([]);
+    setGoalModeEnabled(false);
     // Fresh draft after send: drop the manual override so the next new thread
     // starts from the derived default again.
     agentOverriddenRef.current = false;
@@ -321,9 +359,11 @@ export function SpacesComposer({
 
   const agentToggleTitle = agentForcedOn
     ? "Agent handling is required by @agent or @think"
-    : effectiveAgentEnabled
-      ? "Agent will respond"
-      : "Send without waking the agent";
+    : goalModeSubmission.requested
+      ? "Goal mode requires agent handling"
+      : effectiveAgentEnabled
+        ? "Agent will respond"
+        : "Send without waking the agent";
 
   return (
     <div className="grid gap-2">
@@ -440,7 +480,7 @@ export function SpacesComposer({
               <button
                 type="button"
                 onClick={() => {
-                  if (!agentForcedOn) {
+                  if (!agentForcedOn && !goalModeSubmission.requested) {
                     agentOverriddenRef.current = true;
                     setAgentEnabled((value) => !value);
                   }
@@ -448,7 +488,11 @@ export function SpacesComposer({
                 aria-label="Send to agent"
                 aria-pressed={effectiveAgentEnabled}
                 title={agentToggleTitle}
-                disabled={isComposerDisabled || agentForcedOn}
+                disabled={
+                  isComposerDisabled ||
+                  agentForcedOn ||
+                  goalModeSubmission.requested
+                }
                 className={cn(
                   "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
                   effectiveAgentEnabled && "text-[#54a9ff]",
@@ -456,6 +500,11 @@ export function SpacesComposer({
               >
                 <Bot className="size-5" />
               </button>
+              <GoalModeToggle
+                enabled={goalModeSubmission.requested}
+                disabled={isComposerDisabled}
+                onToggle={() => setGoalModeEnabled((value) => !value)}
+              />
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}
@@ -473,7 +522,8 @@ export function SpacesComposer({
                 disabled={disabled || isSubmitting}
               />
               <ConditionalSubmit
-                hasText={value.trim().length > 0}
+                hasText={goalModeSubmission.content.length > 0}
+                requiresText={goalModeSubmission.requested}
                 disabled={disabled || modelSelectionBlocked}
                 isSubmitting={isSubmitting}
               />
@@ -497,16 +547,19 @@ export function SpacesComposer({
  */
 function ConditionalSubmit({
   hasText,
+  requiresText,
   disabled,
   isSubmitting,
 }: {
   hasText: boolean;
+  requiresText?: boolean;
   disabled: boolean;
   isSubmitting: boolean;
 }) {
   const attachments = usePromptInputAttachments();
   const hasFile = attachments.files.length > 0;
-  const canSubmit = (hasText || hasFile) && !disabled && !isSubmitting;
+  const canSubmit =
+    (hasText || (hasFile && !requiresText)) && !disabled && !isSubmitting;
   return (
     <PromptInputSubmit
       className="rounded-full"

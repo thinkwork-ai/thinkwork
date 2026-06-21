@@ -3836,6 +3836,135 @@ describe("TaskThreadView", () => {
     });
   });
 
+  it("submits follow-up goal mode from the icon toggle", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Goal follow-up thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+
+    const goalToggle = screen.getByRole("button", { name: "Goal mode" });
+    fireEvent.click(goalToggle);
+    expect(goalToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+
+    setFollowUpText(screen.getByLabelText("Follow up"), "Finish the migration");
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "Finish the migration",
+        [],
+        [],
+        true,
+        [],
+        undefined,
+        {
+          enabled: true,
+          action: "start",
+          objective: "Finish the migration",
+        },
+      );
+    });
+  });
+
+  it("submits /goal follow-up shorthand as stripped goal content", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Slash goal thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    setFollowUpText(
+      screen.getByLabelText("Follow up"),
+      "/goal reconcile the customer list",
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Goal mode" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalledWith(
+        "reconcile the customer list",
+        [],
+        [],
+        true,
+        [],
+        undefined,
+        {
+          enabled: true,
+          action: "start",
+          objective: "reconcile the customer list",
+        },
+      );
+    });
+  });
+
+  it("resets follow-up Goal mode after a successful send", async () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Goal reset thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const goalToggle = screen.getByRole("button", { name: "Goal mode" });
+    fireEvent.click(goalToggle);
+    setFollowUpText(screen.getByLabelText("Follow up"), "Do the thing");
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(goalToggle.getAttribute("aria-pressed")).toBe("false");
+    });
+
+    setFollowUpText(screen.getByLabelText("Follow up"), "Normal follow up");
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenLastCalledWith(
+        "Normal follow up",
+        [],
+        [],
+        true,
+        [],
+      );
+    });
+  });
+
   it("keeps the agent toggle off after a successful human-only send", async () => {
     const onSendFollowUp = vi.fn();
     render(
