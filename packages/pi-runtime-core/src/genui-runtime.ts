@@ -41,7 +41,7 @@ export function normalizeRuntimeThreadGenUIPart(
 
   const candidateRecord = recordValue(candidate);
   const candidateData =
-    candidateRecord?.type === THREAD_GENUI_PART_TYPE
+    candidateRecord && candidateRecord.type === THREAD_GENUI_PART_TYPE
       ? candidateRecord.data
       : candidate;
   const dataResult = validateThreadGenUIData(candidateData, context);
