@@ -1,6 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { ExternalLink, Save } from "lucide-react";
-import { Button } from "@thinkwork/ui";
+import {
+  Button,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@thinkwork/ui";
 import type { GenUIPromotionStatus } from "./use-promote-genui";
 
 export interface PromoteGenUIButtonProps {
@@ -16,27 +22,59 @@ export function PromoteGenUIButton({
 }: PromoteGenUIButtonProps) {
   if (status.state === "promoted") {
     return (
-      <Button asChild size="sm" variant="outline">
-        <Link to="/artifacts/$id" params={{ id: status.artifactId }}>
-          <ExternalLink className="mr-2 size-4" />
-          Open artifact
-        </Link>
-      </Button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label="Open saved artifact"
+              asChild
+              className="size-8 bg-transparent p-0 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+              size="icon"
+              variant="ghost"
+            >
+              <Link
+                aria-label="Open saved artifact"
+                to="/artifacts/$id"
+                params={{ id: status.artifactId }}
+              >
+                <ExternalLink className="size-4" />
+              </Link>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Open artifact</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={disabled || status.state === "submitting"}
-        onClick={onPromote}
-      >
-        <Save className="mr-2 size-4" />
-        {status.state === "submitting" ? "Saving" : "Save artifact"}
-      </Button>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={
+                status.state === "submitting"
+                  ? "Saving artifact"
+                  : "Save as artifact"
+              }
+              className="size-8 bg-transparent p-0 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+              disabled={disabled || status.state === "submitting"}
+              onClick={onPromote}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <Save className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{status.state === "submitting" ? "Saving" : "Save artifact"}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       {status.state === "error" ? (
         <p className="max-w-72 text-right text-xs text-destructive">
           {status.message}
