@@ -51,6 +51,31 @@
 -- creates-constraint: public.workflow_run_events.workflow_run_events_provenance_check
 -- creates-constraint: public.workflow_evidence.workflow_evidence_redaction_state_check
 
+DO $$
+BEGIN
+  IF to_regclass('public.tenants') IS NULL THEN
+    RAISE EXCEPTION 'tenants not found; apply core tenant migrations first';
+  END IF;
+  IF to_regclass('public.users') IS NULL THEN
+    RAISE EXCEPTION 'users not found; apply core user migrations first';
+  END IF;
+  IF to_regclass('public.agents') IS NULL THEN
+    RAISE EXCEPTION 'agents not found; apply agent migrations first';
+  END IF;
+  IF to_regclass('public.routines') IS NULL THEN
+    RAISE EXCEPTION 'routines not found; apply routine substrate migrations first';
+  END IF;
+  IF to_regclass('public.routine_asl_versions') IS NULL THEN
+    RAISE EXCEPTION 'routine_asl_versions not found; apply Step Functions routine migrations first';
+  END IF;
+  IF to_regclass('public.plugin_installs') IS NULL THEN
+    RAISE EXCEPTION 'plugin_installs not found; apply application plugin migrations first';
+  END IF;
+  IF to_regclass('public.managed_applications') IS NULL THEN
+    RAISE EXCEPTION 'managed_applications not found; apply managed application migrations first';
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.workflows (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,

@@ -73,6 +73,21 @@ describe("migration 0177 - workflow control plane", () => {
     expect(migration0177).not.toMatch(/\bDROP\s+(TABLE|COLUMN|INDEX)\b/i);
   });
 
+  it("fails preflight before partial DDL when prerequisite tables are missing", () => {
+    for (const relation of [
+      "public.tenants",
+      "public.users",
+      "public.agents",
+      "public.routines",
+      "public.routine_asl_versions",
+      "public.plugin_installs",
+      "public.managed_applications",
+    ]) {
+      expect(migration0177).toContain(`to_regclass('${relation}')`);
+    }
+    expect(migration0177).toMatch(/RAISE EXCEPTION/i);
+  });
+
   it("rolls back dependent tables before workflow identity", () => {
     const evidenceDrop = rollback0177.indexOf(
       "DROP TABLE IF EXISTS public.workflow_evidence",
