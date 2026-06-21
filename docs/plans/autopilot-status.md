@@ -18,7 +18,8 @@ status: in_progress
 - Current unit: U4 - Generated artifacts and regression verification.
 - Current branch: `codex/thnk-60-u4-account-usage-regression`.
 - Current worktree: `.Codex/worktrees/thnk-60-u4-account-usage-regression`.
-- Current pull request: Pending.
+- Current pull request:
+  [#2811](https://github.com/thinkwork-ai/thinkwork/pull/2811).
 - Base: `origin/main` at `efc578cd3`.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
@@ -136,7 +137,10 @@ status: in_progress
     `pnpm dlx prettier@3.8.2 --check ...` for hand-edited source/docs;
     generated files were left in codegen's emitted format.
   - U4 whitespace check passed: `git diff --check`.
-  - U4 PR: Pending.
+  - U4 PR: [#2811](https://github.com/thinkwork-ai/thinkwork/pull/2811).
+  - U4 CI: Pending.
+  - U4 merge: Pending.
+  - U4 cleanup: Pending.
 - Blockers: None.
 
 ## Skill Library Import / Export Autopilot - 2026-06-21
