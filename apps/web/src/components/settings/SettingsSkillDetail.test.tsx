@@ -24,6 +24,16 @@ import {
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { SettingsSkillDetail } from "./SettingsSkillDetail";
 
+const mocks = vi.hoisted(() => ({
+  exportSkillArchive: vi.fn(),
+  setHeader: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
+  workspaceFileEditor: vi.fn(),
+  createObjectURL: vi.fn(),
+  revokeObjectURL: vi.fn(),
+}));
+
 vi.mock("urql", async (importOriginal) => {
   const actual = await importOriginal<typeof import("urql")>();
   return {
@@ -52,11 +62,76 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
-  usePageHeaderActions: vi.fn(),
+  usePageHeaderActions: mocks.setHeader,
+}));
+
+vi.mock("@/lib/workspace-files-api", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/workspace-files-api")>();
+  return {
+    ...actual,
+    exportSkillArchive: mocks.exportSkillArchive,
+  };
+});
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: mocks.toastError,
+    success: mocks.toastSuccess,
+  },
 }));
 
 vi.mock("@thinkwork/workspace-editor", () => ({
-  WorkspaceFileEditor: () => <div data-testid="skill-file-editor" />,
+  WorkspaceFileEditor: (props: {
+    defaultOpenFile?: string;
+    target?: { skill?: string };
+  }) => {
+    mocks.workspaceFileEditor(props);
+    return (
+      <div
+        data-testid="skill-file-editor"
+        data-default-open-file={props.defaultOpenFile}
+        data-skill={props.target?.skill}
+      />
+    );
+  },
+}));
+
+vi.mock("@thinkwork/ui", () => ({
+  Badge: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLSpanElement> & { variant?: string }) => (
+    <span {...props}>{children}</span>
+  ),
+  Button: ({
+    asChild,
+    children,
+    size: _size,
+    variant: _variant,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    asChild?: boolean;
+    size?: string;
+    variant?: string;
+  }) =>
+    asChild ? (
+      <>{children}</>
+    ) : (
+      <button type={props.type ?? "button"} {...props}>
+        {children}
+      </button>
+    ),
+  Spinner: (props: React.HTMLAttributes<HTMLSpanElement>) => (
+    <span {...props}>Loading</span>
+  ),
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock("@/components/LoadingShimmer", () => ({
@@ -69,6 +144,12 @@ const applyUpdateMock = vi.fn();
 let scoreData: unknown;
 let datasetsData: unknown;
 const agentData = { agent: { id: "agent-1" } };
+
+function renderLatestHeaderAction() {
+  const action = mocks.setHeader.mock.calls.at(-1)?.[0]?.action;
+  expect(action).toBeTruthy();
+  return render(<>{action}</>);
+}
 
 function setupMocks() {
   vi.mocked(useQuery).mockImplementation((args) => {
@@ -121,6 +202,32 @@ beforeEach(() => {
       },
     },
   });
+  mocks.exportSkillArchive.mockReset();
+  mocks.exportSkillArchive.mockResolvedValue({
+    slug: "web-research",
+    filename: "web-research.zip",
+    contentType: "application/zip",
+    archiveBase64: "UEsDBAo=",
+    bytes: Uint8Array.from([0x50, 0x4b, 0x03, 0x04]),
+    blob: new Blob([Uint8Array.from([0x50, 0x4b, 0x03, 0x04])], {
+      type: "application/zip",
+    }),
+  });
+  mocks.setHeader.mockReset();
+  mocks.toastError.mockReset();
+  mocks.toastSuccess.mockReset();
+  mocks.workspaceFileEditor.mockReset();
+  mocks.createObjectURL.mockReset();
+  mocks.createObjectURL.mockReturnValue("blob:skill-archive");
+  mocks.revokeObjectURL.mockReset();
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: mocks.createObjectURL,
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: mocks.revokeObjectURL,
+  });
   setupMocks();
 });
 
@@ -132,6 +239,79 @@ afterEach(() => {
 });
 
 describe("SettingsSkillDetail eval panel", () => {
+  it("registers a header export action that downloads the current skill archive", async () => {
+    let downloadedFilename: string | null = null;
+    const originalCreateElement = document.createElement.bind(document);
+    const createElementSpy = vi
+      .spyOn(document, "createElement")
+      .mockImplementation(((
+        tagName: string,
+        options?: ElementCreationOptions,
+      ) => {
+        const element = originalCreateElement(tagName, options);
+        if (tagName === "a") {
+          Object.defineProperty(element, "click", {
+            configurable: true,
+            value: vi.fn(() => {
+              downloadedFilename = (element as HTMLAnchorElement).download;
+            }),
+          });
+        }
+        return element;
+      }) as typeof document.createElement);
+
+    render(<SettingsSkillDetail />);
+    const { getByRole } = renderLatestHeaderAction();
+
+    fireEvent.click(getByRole("button", { name: "Export skill archive" }));
+
+    await waitFor(() =>
+      expect(mocks.exportSkillArchive).toHaveBeenCalledWith("web-research"),
+    );
+    expect(mocks.createObjectURL).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "application/zip" }),
+    );
+    expect(downloadedFilename).toBe("web-research.zip");
+    expect(mocks.revokeObjectURL).toHaveBeenCalledWith("blob:skill-archive");
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill archive exported.");
+
+    createElementSpy.mockRestore();
+  });
+
+  it("shows export failures and does not create a download", async () => {
+    mocks.exportSkillArchive.mockRejectedValueOnce(new Error("archive failed"));
+    render(<SettingsSkillDetail />);
+    const { getByRole } = renderLatestHeaderAction();
+
+    fireEvent.click(getByRole("button", { name: "Export skill archive" }));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Could not export the skill: archive failed",
+      ),
+    );
+    expect(mocks.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("opens the source editor on SKILL.md for the selected skill", () => {
+    render(<SettingsSkillDetail />);
+
+    expect(
+      screen
+        .getByTestId("skill-file-editor")
+        .getAttribute("data-default-open-file"),
+    ).toBe("SKILL.md");
+    expect(
+      screen.getByTestId("skill-file-editor").getAttribute("data-skill"),
+    ).toBe("web-research");
+    expect(mocks.workspaceFileEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultOpenFile: "SKILL.md",
+        target: { skill: "web-research" },
+      }),
+    );
+  });
+
   it("renders a scored skill's pass rate and enables 'run evals now'", () => {
     render(<SettingsSkillDetail />);
     expect(screen.getByTestId("skill-eval-score").textContent).toBe("80%");
@@ -245,6 +425,11 @@ describe("SettingsSkillDetail eval panel", () => {
     render(<SettingsSkillDetail />);
 
     expect(screen.getByTestId("skill-held-update")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Installed agent copies keep running their pinned version/i,
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByTestId("skill-apply-update"));
 
     await waitFor(() => expect(applyUpdateMock).toHaveBeenCalledTimes(1));
