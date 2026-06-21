@@ -62,6 +62,44 @@ type DailyCostPoint {
   eventCount: Int!
 }
 
+type AccountUsageSummary {
+  totalUsd: Float!
+  llmUsd: Float!
+  computeUsd: Float!
+  toolsUsd: Float!
+  inputTokens: Int!
+  outputTokens: Int!
+  eventCount: Int!
+}
+
+type AccountUsageDay {
+  day: String!
+  totalUsd: Float!
+  llmUsd: Float!
+  computeUsd: Float!
+  toolsUsd: Float!
+  inputTokens: Int!
+  outputTokens: Int!
+  eventCount: Int!
+}
+
+type AccountUsageModel {
+  model: String!
+  displayName: String!
+  totalUsd: Float!
+  inputTokens: Int!
+  outputTokens: Int!
+  usageShare: Float!
+}
+
+type AccountUsage {
+  periodStart: AWSDateTime!
+  periodEnd: AWSDateTime!
+  summary: AccountUsageSummary!
+  daily: [AccountUsageDay!]!
+  models: [AccountUsageModel!]!
+}
+
 type BudgetPolicy {
   id: ID!
   tenantId: ID!
@@ -115,6 +153,7 @@ extend type Query {
     to: AWSDateTime
   ): [ModelCostSummary!]!
   costTimeSeries(tenantId: ID!, days: Int): [DailyCostPoint!]!
+  accountUsage(tenantId: ID!, userId: ID!, days: Int): AccountUsage!
   budgetPolicies(tenantId: ID!): [BudgetPolicy!]!
   budgetStatus(tenantId: ID!): [BudgetStatus!]!
   userBudgetStatus(tenantId: ID!, userId: ID!): BudgetStatus

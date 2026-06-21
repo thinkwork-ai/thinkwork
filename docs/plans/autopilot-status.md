@@ -6,6 +6,64 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-60 Account Usage Autopilot - 2026-06-21
+
+- Plan: `docs/plans/2026-06-21-002-feat-account-usage-profile-plan.md`.
+- Origin requirements:
+  `docs/brainstorms/2026-06-21-account-usage-requirements.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: In progress.
+- Current unit: U1 - Add user-scoped account usage GraphQL contract and
+  resolver.
+- Current branch: `codex/thnk-60-u1-account-usage-api`.
+- Current worktree: `.Codex/worktrees/thnk-60-u1-account-usage-api`.
+- Current pull request:
+  [#2806](https://github.com/thinkwork-ai/thinkwork/pull/2806).
+- Base: `origin/main` at `c4228d12b`.
+- Notes:
+  - U1 started from a clean isolated worktree created from `origin/main`.
+  - Planning artifacts were copied into the U1 branch because they were local
+    untracked docs from the planning handoff and not yet durable on `main`.
+  - U1 adds the `accountUsage(tenantId, userId, days)` GraphQL contract,
+    user-scoped resolver, resolver registration, schema contract coverage, and
+    focused resolver tests.
+  - Resolver access follows the existing self-or-admin/service pattern:
+    Cognito self callers may read their own usage; other callers go through
+    `requireAdminOrServiceCaller(ctx, tenantId, "account_usage:read")`.
+  - The resolver verifies the viewed user belongs to the requested tenant
+    before aggregating `cost_events`, returns sparse daily rows, and resolves
+    model display names from tenant model catalog first, then global model
+    catalog, then raw model id.
+- Local verification:
+  - Initial `npx vitest run src/graphql/resolvers/costs/accountUsage.query.test.ts src/__tests__/graphql-contract.test.ts`
+    failed before tests because the fresh worktree had no `node_modules`; `npx`
+    fetched external Vitest and could not resolve the repo config.
+  - `pnpm install` completed in the worktree; local Node 25 logged the existing
+    optional `canvas@2.11.2` native fallback/missing `pkg-config` warning, but
+    pnpm returned success.
+  - `pnpm exec vitest run src/graphql/resolvers/costs/accountUsage.query.test.ts src/__tests__/graphql-contract.test.ts`
+    passed: 2 files, 143 tests.
+  - `pnpm exec vitest run src/graphql/resolvers/costs` passed: 7 files, 23
+    tests.
+  - `pnpm --filter @thinkwork/api typecheck` passed after fixing a local
+    `normalizeDays` narrowing error.
+  - `pnpm --filter @thinkwork/api test` passed: 549 files passed, 3 skipped;
+    5181 tests passed, 9 skipped.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for touched Markdown and
+    TypeScript files after formatting the copied plan document.
+  - `pnpm schema:build` passed and produced no `terraform/schema.graphql`
+    diff.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed.
+- PR / CI:
+  - U1 PR: [#2806](https://github.com/thinkwork-ai/thinkwork/pull/2806).
+  - CI: Pending.
+  - Merge: Pending.
+  - Cleanup: Pending.
+- Blockers: None.
+
 ## Skill Library Import / Export Autopilot - 2026-06-21
 
 - Plan: `docs/plans/2026-06-21-001-feat-skill-library-import-export-plan.md`.
