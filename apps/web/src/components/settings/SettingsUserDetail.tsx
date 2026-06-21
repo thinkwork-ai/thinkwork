@@ -43,6 +43,7 @@ import {
   Textarea,
 } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { AccountUsageSection } from "@/components/profile/AccountUsageSection";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -147,6 +148,7 @@ export function SettingsUserDetail() {
           </div>
         }
       />
+      <AccountUsageSection tenantId={tenantId ?? ""} userId={user.id} />
       <ProfileSection
         userId={user.id}
         name={user.name ?? ""}

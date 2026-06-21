@@ -22,6 +22,7 @@ const {
   queryDocs,
   members,
   userBudgetStatus,
+  accountUsageProps,
 } = vi.hoisted(() => ({
   deleteBudgetMock: vi.fn(),
   inviteMemberMock: vi.fn(),
@@ -53,6 +54,10 @@ const {
   },
   members: [] as unknown[],
   userBudgetStatus: { current: null as unknown },
+  accountUsageProps: [] as Array<{
+    tenantId?: string | null;
+    userId?: string | null;
+  }>,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -101,6 +106,23 @@ vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: () => {},
 }));
 vi.mock("@/lib/settings-queries", () => queryDocs);
+vi.mock("@/components/profile/AccountUsageSection", () => ({
+  AccountUsageSection: (props: {
+    tenantId?: string | null;
+    userId?: string | null;
+  }) => {
+    accountUsageProps.push(props);
+    return (
+      <section
+        data-tenant-id={props.tenantId ?? ""}
+        data-testid="account-usage-section"
+        data-user-id={props.userId ?? ""}
+      >
+        Account Usage
+      </section>
+    );
+  },
+}));
 vi.mock("@/components/settings/UserModelsSection", () => ({
   UserModelsSection: ({ userId }: { userId: string }) => (
     <section data-testid="user-models-section" data-user-id={userId} />
@@ -178,6 +200,7 @@ beforeEach(() => {
   userBudgetStatus.current = null;
   tenant.userId = "caller-1";
   tenant.role = "owner";
+  accountUsageProps.length = 0;
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -191,6 +214,16 @@ describe("SettingsUserDetail role merge", () => {
     expect(screen.getByText("Active")).toBeTruthy();
     expect(screen.queryByText("Membership")).toBeNull();
     expect(screen.queryByText(/can.?t change your own role/i)).toBeNull();
+    expect(accountUsageProps).toContainEqual({
+      tenantId: "tenant-1",
+      userId: "user-9",
+    });
+    expect(
+      screen
+        .getByTestId("account-usage-section")
+        .compareDocumentPosition(screen.getByDisplayValue("Dana Member")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders model approvals on the Spaces user detail page", () => {
@@ -325,7 +358,9 @@ describe("SettingsUserDetail role merge", () => {
     });
     render(<SettingsUserDetail />);
 
-    expect(screen.queryByRole("button", { name: /^set password$/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^set password$/i }),
+    ).toBeNull();
   });
 
   it("requires a positive numeric budget before saving", () => {
