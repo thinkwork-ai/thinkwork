@@ -239,8 +239,9 @@ status: in_progress
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
   `228c9bafd9964297b75c6d6f3e5d80f689b78932`; U3
   [#2764](https://github.com/thinkwork-ai/thinkwork/pull/2764) merged as
-  `bf18489960f7bcef2a66b19888138b7529f7f298`; U4 in progress.
-- Status: U1, U2, and U3 complete and merged. U4 implementation is underway.
+  `bf18489960f7bcef2a66b19888138b7529f7f298`; U4
+  [#2767](https://github.com/thinkwork-ai/thinkwork/pull/2767) opened.
+- Status: U1, U2, and U3 complete and merged. U4 PR is open and awaiting CI.
 - Notes:
   - Started autopilot execution from `origin/main`.
   - Created isolated U1 worktree from `origin/main` at `080513f00`.
@@ -423,7 +424,7 @@ src/lib/workflows/run-ledger.test.ts
 src/__tests__/webhook-task-event.test.ts` (4 files, 19 tests).
   - U4 post-review `pnpm --filter @thinkwork/api typecheck`,
     touched-source Prettier check, and `git diff --check` passed.
-- CI: U1, U2, and U3 passed and merged; U4 not opened yet.
+- CI: U1, U2, and U3 passed and merged; U4 PR #2767 CI pending.
 
 ## Space Webhook Thread Starts - 2026-06-19
 
