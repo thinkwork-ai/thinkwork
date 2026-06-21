@@ -3154,6 +3154,7 @@ export type Mutation = {
    */
   testWebhook: WebhookDelivery;
   triggerRoutineRun: RoutineExecution;
+  triggerWorkflowRun: WorkflowRun;
   /**
    * Tear down every component and derived state (tenant admin): activations +
    * token secrets, skill folders + seeded catalog prefix, MCP rows, then the
@@ -4243,6 +4244,11 @@ export type MutationTestWebhookArgs = {
 export type MutationTriggerRoutineRunArgs = {
   input?: InputMaybe<Scalars['AWSJSON']['input']>;
   routineId: Scalars['ID']['input'];
+};
+
+
+export type MutationTriggerWorkflowRunArgs = {
+  input: TriggerWorkflowRunInput;
 };
 
 
@@ -7819,6 +7825,7 @@ export type TenantToolInventory = {
   routines: Array<TenantToolInventoryRoutine>;
   skills: Array<TenantToolInventorySkill>;
   tools: Array<TenantToolInventoryTool>;
+  workflows: Array<TenantToolInventoryWorkflow>;
 };
 
 export type TenantToolInventoryAgent = {
@@ -7850,6 +7857,19 @@ export type TenantToolInventoryTool = {
   id: Scalars['ID']['output'];
   name: Scalars['String']['output'];
   source: Scalars['String']['output'];
+};
+
+export type TenantToolInventoryWorkflow = {
+  __typename?: 'TenantToolInventoryWorkflow';
+  capabilityFlags: Scalars['AWSJSON']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  startCallable: Scalars['Boolean']['output'];
+  triggerFamily: WorkflowTriggerFamily;
+  visibility: Scalars['String']['output'];
 };
 
 export type Thread = {
@@ -8288,6 +8308,16 @@ export type TraceEvent = {
   toolCallId?: Maybe<Scalars['String']['output']>;
   toolName?: Maybe<Scalars['String']['output']>;
   traceId: Scalars['String']['output'];
+};
+
+export type TriggerWorkflowRunInput = {
+  actorId?: InputMaybe<Scalars['ID']['input']>;
+  actorType?: InputMaybe<Scalars['String']['input']>;
+  agentId?: InputMaybe<Scalars['ID']['input']>;
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
+  input?: InputMaybe<Scalars['AWSJSON']['input']>;
+  triggerSource?: InputMaybe<Scalars['String']['input']>;
+  workflowId: Scalars['ID']['input'];
 };
 
 /** Result of the one-time Twenty plugin cutover (plan 2026-06-12-001 U10). */

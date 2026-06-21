@@ -283,6 +283,16 @@ input CreateN8nWorkflowBridgeInput {
   idempotencyKey: String!
 }
 
+input TriggerWorkflowRunInput {
+  workflowId: ID!
+  input: AWSJSON
+  idempotencyKey: String
+  triggerSource: String
+  actorType: String
+  actorId: ID
+  agentId: ID
+}
+
 type N8nWorkflowBridgeCredential {
   workflowId: ID!
   bindingId: ID!
@@ -318,4 +328,5 @@ extend type Mutation {
   createN8nWorkflowBridge(
     input: CreateN8nWorkflowBridgeInput!
   ): N8nWorkflowBridgeCredential!
+  triggerWorkflowRun(input: TriggerWorkflowRunInput!): WorkflowRun!
 }

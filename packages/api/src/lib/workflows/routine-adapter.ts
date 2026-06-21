@@ -60,6 +60,7 @@ export type RoutineWorkflowRunInput = {
   actorType?: string | null;
   actorId?: string | null;
   correlationId?: string | null;
+  idempotencyKey?: string | null;
   inputSummary?: Record<string, unknown> | null;
   startedAt?: Date | null;
 };
@@ -277,7 +278,8 @@ export async function createRoutineWorkflowRun(
   input: RoutineWorkflowRunInput,
 ): Promise<{ id: string }> {
   const startedAt = input.startedAt ?? new Date();
-  const idempotencyKey = `routine-execution:${input.executionArn}`;
+  const idempotencyKey =
+    input.idempotencyKey ?? `routine-execution:${input.executionArn}`;
   const runRows = await dbInsert(database)
     .insert(workflowRuns)
     .values({

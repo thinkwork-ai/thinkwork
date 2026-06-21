@@ -13,6 +13,7 @@
  *   - tenant_builtin_tools (one row per enabled, source: "builtin")
  *   - agent_skills        (workspace-backed skills assigned to tenant agents)
  *   - routines            (only engine='step_functions'; visibility per R21)
+ *   - workflows           (first-class workflow inventory with readiness)
  *
  * Visibility (R21): agent-stamped routines (agent_id IS NOT NULL) are
  * private-by-default until promoted. The visibility column itself is a
@@ -29,6 +30,7 @@ import {
   routines,
   tenantBuiltinTools,
   tenantMcpServers,
+  workflows,
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { db } from "../../utils.js";
@@ -62,11 +64,24 @@ interface ToolInventoryRoutine {
   visibility: "tenant" | "agent_private";
 }
 
+interface ToolInventoryWorkflow {
+  id: string;
+  name: string;
+  description: string | null;
+  visibility: "tenant" | "agent_private";
+  triggerFamily: string;
+  readinessState: string;
+  readinessReasons: unknown[];
+  capabilityFlags: Record<string, unknown>;
+  startCallable: boolean;
+}
+
 export interface TenantToolInventoryResult {
   agents: ToolInventoryAgent[];
   tools: ToolInventoryTool[];
   skills: ToolInventorySkill[];
   routines: ToolInventoryRoutine[];
+  workflows: ToolInventoryWorkflow[];
 }
 
 /** Shape of a single MCP server tools[] entry, as cached on
@@ -88,89 +103,115 @@ export async function tenantToolInventory(
   // service-to-service callers carry it on auth directly.
   const caller = await resolveCaller(ctx);
   if (!caller.tenantId || caller.tenantId !== args.tenantId) {
-    return { agents: [], tools: [], skills: [], routines: [] };
+    return { agents: [], tools: [], skills: [], routines: [], workflows: [] };
   }
+  const callerAgentId = ctx.auth?.agentId ?? null;
 
-  const [agentRows, mcpRows, builtinRows, skillRows, routineRows] =
-    await Promise.all([
-      db
-        .select({
-          id: agents.id,
-          name: agents.name,
-        })
-        .from(agents)
-        .where(
-          and(
-            eq(agents.tenant_id, args.tenantId),
-            ne(agents.status, "archived"),
-            // Hide the hidden eval-baseline agent (Skill Tests & Evals U3).
-            ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
-          ),
+  const [
+    agentRows,
+    mcpRows,
+    builtinRows,
+    skillRows,
+    routineRows,
+    workflowRows,
+  ] = await Promise.all([
+    db
+      .select({
+        id: agents.id,
+        name: agents.name,
+      })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.tenant_id, args.tenantId),
+          ne(agents.status, "archived"),
+          // Hide the hidden eval-baseline agent (Skill Tests & Evals U3).
+          ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
         ),
-      db
-        .select({
-          id: tenantMcpServers.id,
-          name: tenantMcpServers.name,
-          slug: tenantMcpServers.slug,
-          tools: tenantMcpServers.tools,
-        })
-        .from(tenantMcpServers)
-        .where(
-          and(
-            eq(tenantMcpServers.tenant_id, args.tenantId),
-            eq(tenantMcpServers.enabled, true),
-            // Plugin-installed MCP servers land enabled but pending; only
-            // approved servers are surfaced to the chat builder so it can't
-            // compose tool_invoke steps that downstream dispatch refuses.
-            // Mirrors the pattern in packages/api/src/lib/mcp-configs.ts.
-            eq(tenantMcpServers.status, "approved"),
-          ),
+      ),
+    db
+      .select({
+        id: tenantMcpServers.id,
+        name: tenantMcpServers.name,
+        slug: tenantMcpServers.slug,
+        tools: tenantMcpServers.tools,
+      })
+      .from(tenantMcpServers)
+      .where(
+        and(
+          eq(tenantMcpServers.tenant_id, args.tenantId),
+          eq(tenantMcpServers.enabled, true),
+          // Plugin-installed MCP servers land enabled but pending; only
+          // approved servers are surfaced to the chat builder so it can't
+          // compose tool_invoke steps that downstream dispatch refuses.
+          // Mirrors the pattern in packages/api/src/lib/mcp-configs.ts.
+          eq(tenantMcpServers.status, "approved"),
         ),
-      db
-        .select({
-          id: tenantBuiltinTools.id,
-          tool_slug: tenantBuiltinTools.tool_slug,
-          provider: tenantBuiltinTools.provider,
-        })
-        .from(tenantBuiltinTools)
-        .where(
-          and(
-            eq(tenantBuiltinTools.tenant_id, args.tenantId),
-            eq(tenantBuiltinTools.enabled, true),
-          ),
+      ),
+    db
+      .select({
+        id: tenantBuiltinTools.id,
+        tool_slug: tenantBuiltinTools.tool_slug,
+        provider: tenantBuiltinTools.provider,
+      })
+      .from(tenantBuiltinTools)
+      .where(
+        and(
+          eq(tenantBuiltinTools.tenant_id, args.tenantId),
+          eq(tenantBuiltinTools.enabled, true),
         ),
-      db
-        .select({
-          skill_id: agentSkills.skill_id,
-        })
-        .from(agentSkills)
-        .innerJoin(agents, eq(agentSkills.agent_id, agents.id))
-        .where(
-          and(
-            eq(agents.tenant_id, args.tenantId),
-            ne(agents.status, "archived"),
-            ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
-            eq(agentSkills.enabled, true),
-          ),
+      ),
+    db
+      .select({
+        skill_id: agentSkills.skill_id,
+      })
+      .from(agentSkills)
+      .innerJoin(agents, eq(agentSkills.agent_id, agents.id))
+      .where(
+        and(
+          eq(agents.tenant_id, args.tenantId),
+          ne(agents.status, "archived"),
+          ne(agents.source, EVAL_BASELINE_AGENT_SOURCE),
+          eq(agentSkills.enabled, true),
         ),
-      // Only step_functions routines are inventory-eligible. Legacy Python
-      // rows are not callable from a routine_invoke step.
-      db
-        .select({
-          id: routines.id,
-          name: routines.name,
-          description: routines.description,
-          agent_id: routines.agent_id,
-        })
-        .from(routines)
-        .where(
-          and(
-            eq(routines.tenant_id, args.tenantId),
-            eq(routines.engine, "step_functions"),
-            eq(routines.status, "active"),
-          ),
+      ),
+    // Only step_functions routines are inventory-eligible. Legacy Python
+    // rows are not callable from a routine_invoke step.
+    db
+      .select({
+        id: routines.id,
+        name: routines.name,
+        description: routines.description,
+        agent_id: routines.agent_id,
+      })
+      .from(routines)
+      .where(
+        and(
+          eq(routines.tenant_id, args.tenantId),
+          eq(routines.engine, "step_functions"),
+          eq(routines.status, "active"),
         ),
-    ]);
+      ),
+    db
+      .select({
+        id: workflows.id,
+        name: workflows.name,
+        description: workflows.description,
+        visibility: workflows.visibility,
+        owner_agent_id: workflows.owner_agent_id,
+        primary_trigger_family: workflows.primary_trigger_family,
+        readiness_state: workflows.readiness_state,
+        readiness_reasons: workflows.readiness_reasons,
+        capability_flags: workflows.capability_flags,
+      })
+      .from(workflows)
+      .where(
+        and(
+          eq(workflows.tenant_id, args.tenantId),
+          eq(workflows.lifecycle_status, "active"),
+        ),
+      ),
+  ]);
 
   const agentInventory: ToolInventoryAgent[] = agentRows.map((r) => ({
     id: r.id,
@@ -240,10 +281,45 @@ export async function tenantToolInventory(
     .filter((r) => r.agent_id === null)
     .map(({ agent_id: _agentId, ...rest }) => rest);
 
+  const workflowInventory: ToolInventoryWorkflow[] = workflowRows
+    .filter((workflow) => {
+      if (workflow.visibility === "tenant_shared") return true;
+      return (
+        typeof callerAgentId === "string" &&
+        workflow.owner_agent_id === callerAgentId
+      );
+    })
+    .map((workflow) => {
+      const capabilityFlags = isRecord(workflow.capability_flags)
+        ? workflow.capability_flags
+        : {};
+      return {
+        id: workflow.id,
+        name: workflow.name,
+        description: workflow.description ?? null,
+        visibility:
+          workflow.visibility === "tenant_shared" ? "tenant" : "agent_private",
+        triggerFamily: workflow.primary_trigger_family,
+        readinessState: workflow.readiness_state,
+        readinessReasons: Array.isArray(workflow.readiness_reasons)
+          ? workflow.readiness_reasons
+          : [],
+        capabilityFlags,
+        startCallable:
+          workflow.readiness_state === "ready" &&
+          capabilityFlags.start !== false,
+      };
+    });
+
   return {
     agents: agentInventory,
     tools: toolInventory,
     skills: skillInventory,
     routines: routineInventory,
+    workflows: workflowInventory,
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
