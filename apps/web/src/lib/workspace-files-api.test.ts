@@ -6,6 +6,7 @@ vi.mock("@/lib/api-fetch", () => ({ apiFetch }));
 import {
   createPrefixedWorkspaceClient,
   exportSkillArchive,
+  importSkillArchive,
   spacesWorkspaceFilesClient,
 } from "./workspace-files-api";
 
@@ -181,6 +182,67 @@ describe("exportSkillArchive", () => {
 
     await expect(exportSkillArchive("missing")).rejects.toThrow(
       "missing archive data",
+    );
+  });
+});
+
+describe("importSkillArchive", () => {
+  it("submits a catalog skill archive import", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "pdf-processing",
+      status: "created",
+      generatedWiring: true,
+    });
+
+    const result = await importSkillArchive("UEsDBAo=");
+
+    expect(lastBody()).toEqual({
+      action: "import-skill",
+      catalog: true,
+      archiveBase64: "UEsDBAo=",
+    });
+    expect(result).toEqual({
+      slug: "pdf-processing",
+      status: "created",
+      generatedWiring: true,
+    });
+  });
+
+  it("passes confirmed replacement and preserves non-fatal warnings", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "pdf-processing",
+      status: "updated",
+      generatedWiring: false,
+      indexWarning: "Rebuild the catalog index.",
+      evalDatasetWarning: "Eval dataset sync failed.",
+    });
+
+    const result = await importSkillArchive("UEsDBAo=", {
+      confirmReplace: true,
+    });
+
+    expect(lastBody()).toEqual({
+      action: "import-skill",
+      catalog: true,
+      archiveBase64: "UEsDBAo=",
+      confirmReplace: true,
+    });
+    expect(result).toEqual({
+      slug: "pdf-processing",
+      status: "updated",
+      generatedWiring: false,
+      indexWarning: "Rebuild the catalog index.",
+      evalDatasetWarning: "Eval dataset sync failed.",
+    });
+  });
+
+  it("fails loudly when the import response omits metadata", async () => {
+    apiFetch.mockResolvedValueOnce({ ok: true, slug: "missing-status" });
+
+    await expect(importSkillArchive("UEsDBAo=")).rejects.toThrow(
+      "missing import metadata",
     );
   });
 });
