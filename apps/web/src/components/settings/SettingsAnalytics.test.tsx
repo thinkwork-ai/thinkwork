@@ -37,4 +37,18 @@ describe("SettingsAnalytics user cost reporting", () => {
     expect(querySource).toContain("userId");
     expect(querySource).not.toContain("query SettingsCostByAgent");
   });
+
+  it("keeps profile account usage separate from tenant analytics", () => {
+    expect(querySource).toContain("query SettingsAccountUsage");
+    expect(querySource).toContain(
+      "accountUsage(tenantId: $tenantId, userId: $userId, days: $days)",
+    );
+
+    expect(componentSource).toContain("SettingsCostSummaryQuery");
+    expect(componentSource).toContain("SettingsCostByUserQuery");
+    expect(componentSource).toContain("SettingsCostByModelQuery");
+    expect(componentSource).toContain("SettingsCostTimeSeriesQuery");
+    expect(componentSource).not.toContain("SettingsAccountUsageQuery");
+    expect(componentSource).not.toContain("accountUsage");
+  });
 });
