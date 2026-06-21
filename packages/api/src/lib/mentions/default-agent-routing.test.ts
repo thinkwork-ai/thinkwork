@@ -390,6 +390,48 @@ describe("default agent routing", () => {
     ]);
   });
 
+  it("forwards resolved goal mode to direct chat invoke", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const invoked: unknown[] = [];
+    const goalMode = {
+      enabled: true as const,
+      action: "start" as const,
+      objective: "Reconcile the customer list",
+      resolvedBudget: { tokenBudget: 150_000 },
+    };
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "Reconcile the customer list",
+        goalMode,
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input);
+          return true;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(invoked).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        messageId: "message-1",
+        userMessage: "Reconcile the customer list",
+        goalMode,
+      },
+    ]);
+  });
+
   it("falls back to the wakeup queue when direct chat invoke is unavailable", async () => {
     const repository = makeRepository({ agentId: "agent-1" });
 
@@ -430,6 +472,40 @@ describe("default agent routing", () => {
         requestedModelId: "anthropic.claude-haiku",
         requestedProfileSlug: "research",
       },
+    });
+  });
+
+  it("carries resolved goal mode into the fallback wakeup payload", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const goalMode = {
+      enabled: true as const,
+      action: "start" as const,
+      objective: "Keep working until done",
+      resolvedBudget: { tokenBudget: 100_000 },
+    };
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "Keep working until done",
+        goalMode,
+      },
+      repository,
+      {
+        async invokeChatAgent() {
+          return false;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(repository.wakeups[0].payload).toMatchObject({
+      threadId: "thread-1",
+      messageId: "message-1",
+      goalMode,
     });
   });
 

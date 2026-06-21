@@ -5,6 +5,8 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useNavigate } from "@tanstack/react-router";
 
@@ -32,6 +34,11 @@ import {
   getPendingThreadStart,
 } from "@/lib/pending-thread-starts";
 import { SpacesWorkbench } from "./SpacesWorkbench";
+
+const spacesWorkbenchSource = readFileSync(
+  path.join(process.cwd(), "src/components/workbench/SpacesWorkbench.tsx"),
+  "utf8",
+);
 
 vi.mock("@tanstack/react-router", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-router")>(
@@ -395,5 +402,18 @@ describe("SpacesWorkbench", () => {
         },
       });
     });
+  });
+
+  it("keeps goal mode metadata in the same new-thread metadata envelope", () => {
+    expect(spacesWorkbenchSource).toContain("appendGoalModeMetadata");
+    expect(spacesWorkbenchSource).toContain(
+      "if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;",
+    );
+    expect(spacesWorkbenchSource).toContain(
+      "metadata.requestedModelId = turnModelId;",
+    );
+    expect(spacesWorkbenchSource).toContain(
+      "metadata = appendGoalModeMetadata(metadata, goalMode);",
+    );
   });
 });

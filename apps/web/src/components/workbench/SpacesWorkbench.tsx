@@ -22,6 +22,10 @@ import {
   mergeAgentProfileMentionTargets,
   type AgentProfileMentionSource,
 } from "@/components/workbench/agent-profile-mention-targets";
+import {
+  appendGoalModeMetadata,
+  type ComposerGoalModeIntent,
+} from "@/components/workbench/goal-mode";
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateThreadMutation,
@@ -319,6 +323,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     agentRequested: boolean,
     pinnedSkills: string[] = [],
     requestedModelId?: string,
+    goalMode?: ComposerGoalModeIntent,
   ) {
     const trimmed = prompt.trim();
     if (!trimmed && files.length === 0) return;
@@ -402,7 +407,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         content: trimmed,
         mentions,
       };
-      const metadata: Record<string, unknown> = {};
+      let metadata: Record<string, unknown> = {};
       if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
       if (pinnedSkills.length > 0) {
         metadata.skills = pinnedSkills.map((slug) => ({ slug }));
@@ -412,6 +417,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         sendInput.modelId = turnModelId;
         metadata.requestedModelId = turnModelId;
       }
+      metadata = appendGoalModeMetadata(metadata, goalMode);
       if (Object.keys(metadata).length > 0) {
         sendInput.metadata = JSON.stringify(metadata);
       }

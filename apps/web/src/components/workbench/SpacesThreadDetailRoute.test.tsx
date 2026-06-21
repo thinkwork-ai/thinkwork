@@ -7,6 +7,8 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serializeEditor } from "./SkillTokenInput";
@@ -33,6 +35,14 @@ import {
   clearPendingThreadStart,
   setPendingThreadStart,
 } from "@/lib/pending-thread-starts";
+
+const spacesThreadDetailRouteSource = readFileSync(
+  path.join(
+    process.cwd(),
+    "src/components/workbench/SpacesThreadDetailRoute.tsx",
+  ),
+  "utf8",
+);
 
 // Follow-up composer is a contenteditable token field, not a <textarea>.
 function setFollowUpText(value: string) {
@@ -1385,6 +1395,19 @@ describe("SpacesThreadDetailRoute", () => {
         },
       });
     });
+  });
+
+  it("keeps goal mode metadata in the same follow-up metadata envelope", () => {
+    expect(spacesThreadDetailRouteSource).toContain("appendGoalModeMetadata");
+    expect(spacesThreadDetailRouteSource).toContain(
+      "if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;",
+    );
+    expect(spacesThreadDetailRouteSource).toContain(
+      "metadata.requestedModelId = turnModelId;",
+    );
+    expect(spacesThreadDetailRouteSource).toContain(
+      "metadata = appendGoalModeMetadata(metadata, goalMode);",
+    );
   });
 
   it("seeds the composer with the thread's last-used model over the global stored pick", async () => {

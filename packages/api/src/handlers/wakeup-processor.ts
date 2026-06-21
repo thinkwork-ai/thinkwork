@@ -125,6 +125,10 @@ import {
   pendingQuestionAnswersFromPayload,
   toRuntimePendingUserQuestions,
 } from "../lib/user-questions/runtime-payload.js";
+import {
+  toRuntimeGoalModePayload,
+  type RuntimeGoalMode,
+} from "../lib/goal-mode.js";
 import { linkN8nAgentStepRunTurn } from "../lib/n8n-agent-step/link-turn.js";
 import { normalizeThreadGenUIParts } from "../lib/chat-finalize/notify.js";
 
@@ -2083,6 +2087,14 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           pending_user_questions: toRuntimePendingUserQuestions(answerContext),
         });
       }
+    }
+
+    if (wakeup.source === "chat_message" && payload?.goalMode) {
+      Object.assign(agentCorePayload, {
+        goal_mode: toRuntimeGoalModePayload(
+          payload.goalMode as RuntimeGoalMode,
+        ),
+      });
     }
 
     if (wakeup.source === "workspace_event" && workspacePayload) {

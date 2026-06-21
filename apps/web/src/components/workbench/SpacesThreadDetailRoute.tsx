@@ -42,6 +42,10 @@ import {
   mergeAgentProfileMentionTargets,
   type AgentProfileMentionSource,
 } from "@/components/workbench/agent-profile-mention-targets";
+import {
+  appendGoalModeMetadata,
+  type ComposerGoalModeIntent,
+} from "@/components/workbench/goal-mode";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -1645,6 +1649,7 @@ export function SpacesThreadDetailRoute({
         agentRequested = true,
         pinnedSkills = [],
         requestedModelId,
+        goalMode,
       ) => {
         setOptimisticMessage({
           content,
@@ -1725,7 +1730,7 @@ export function SpacesThreadDetailRoute({
           role: "USER",
           content,
         };
-        const metadata: Record<string, unknown> = {};
+        let metadata: Record<string, unknown> = {};
         if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
         if (pinnedSkills.length > 0) {
           metadata.skills = pinnedSkills.map((slug) => ({ slug }));
@@ -1735,6 +1740,7 @@ export function SpacesThreadDetailRoute({
           sendInput.modelId = turnModelId;
           metadata.requestedModelId = turnModelId;
         }
+        metadata = appendGoalModeMetadata(metadata, goalMode);
         if (Object.keys(metadata).length > 0) {
           sendInput.metadata = JSON.stringify(metadata);
         }

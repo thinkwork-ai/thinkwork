@@ -16,6 +16,7 @@ import {
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
+import type { ComposerGoalModeIntent } from "@/components/workbench/goal-mode";
 import { IconPaperclip, IconPlanet } from "@tabler/icons-react";
 import {
   useEffect,
@@ -76,6 +77,7 @@ interface SpacesComposerProps {
     agentRequested: boolean,
     pinnedSkills: string[],
     selectedModelId?: string,
+    goalMode?: ComposerGoalModeIntent,
   ) => void;
   mentionTargets?: MentionTarget[];
   /** Tenant skill catalog for the `/skill` force-pin popup. */

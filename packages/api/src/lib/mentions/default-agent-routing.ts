@@ -15,6 +15,7 @@ import {
 } from "../thread-attachments/message-attachment-refs.js";
 import { resolveDispatchPinnedSkills } from "../skills/message-pinned-skills.js";
 import type { PendingQuestionAnswersPayload } from "../user-questions/runtime-payload.js";
+import type { RuntimeGoalMode } from "../goal-mode.js";
 
 export interface DefaultAgentTurnWakeup {
   tenantId: string;
@@ -54,6 +55,7 @@ export interface DispatchDefaultAgentTurnInput {
   content?: string | null;
   requestedModelId?: string | null;
   requestedProfileSlug?: string | null;
+  goalMode?: RuntimeGoalMode | null;
   /**
    * ask_user_question (plan 2026-06-09-005 U3): when the dispatching
    * message CAS-consumed the thread's pending question batch (plain-reply
@@ -95,6 +97,7 @@ export interface DefaultAgentChatInvoke {
   pendingQuestionAnswers?: PendingQuestionAnswersPayload;
   requestedModelId?: string;
   requestedProfileSlug?: string;
+  goalMode?: RuntimeGoalMode;
 }
 
 export interface DefaultAgentChatExecutor {
@@ -188,6 +191,7 @@ export async function dispatchDefaultAgentChatTurn(
     ...(input.requestedProfileSlug
       ? { requestedProfileSlug: input.requestedProfileSlug }
       : {}),
+    ...(input.goalMode ? { goalMode: input.goalMode } : {}),
   });
   if (directInvoked) {
     return {
@@ -290,6 +294,7 @@ export function buildDefaultAgentTurnWakeup(
       ...(input.requestedProfileSlug
         ? { requestedProfileSlug: input.requestedProfileSlug }
         : {}),
+      ...(input.goalMode ? { goalMode: input.goalMode } : {}),
       // Reply-consumed answer context must survive the wakeup fallback
       // path too — the consume already committed, so dropping it here
       // would orphan the answers (plan 2026-06-09-005 U3).
