@@ -12725,8 +12725,10 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 - Plan: `docs/plans/2026-06-18-001-feat-pi-goal-composer-mode-plan.md`
 - Linear: THNK-21
 - Started: 2026-06-21 15:09 CDT
+- Completed: 2026-06-21 18:51 CDT
 - Autopilot contract: one isolated worktree/branch per implementation unit,
   PRs target `main`, merge after local verification and required CI.
+- Status: all THNK-21 implementation units complete and merged.
 - Main checkout state at start:
   - Preserved unrelated local changes in
     `apps/web/src/components/profile/AccountUsageSection.tsx` and
@@ -12734,15 +12736,15 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - Restored plan, requirements, and ideation docs from the backup commit into
     the U1 worktree so the implementation PR has current source artifacts.
 
-| Unit                           | Branch                                    | PR                                                           | State       | Notes                                                                                          |
-| ------------------------------ | ----------------------------------------- | ------------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------- |
-| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`      | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete. |
-| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
-| U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged      | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
-| U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | Merged      | Squash merged as `a69e5799e6d3a2d7bc4e0a23173ca9393f825c11`; worktree/branch cleanup complete. |
-| U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821) | Merged      | Squash merged as `a8f4064a846112b9b479f2b7648101ec51dcd6f3`; worktree/branch cleanup complete. |
-| U5 goal-run status rendering   | `codex/thnk-21-u5-goal-status-rendering`  | [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822) | Merged      | Squash merged as `ae21f019cef9e9f8057cc7c253cc548e611348f7`; worktree/branch cleanup complete. |
-| U6 smoke/docs/codegen          | `codex/thnk-21-u6-smoke-docs`             | [#2823](https://github.com/thinkwork-ai/thinkwork/pull/2823) | In progress | PR opened; CI pending.                                                                         |
+| Unit                           | Branch                                    | PR                                                           | State  | Notes                                                                                          |
+| ------------------------------ | ----------------------------------------- | ------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------- |
+| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`      | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete. |
+| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
+| U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
+| U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | Merged | Squash merged as `a69e5799e6d3a2d7bc4e0a23173ca9393f825c11`; worktree/branch cleanup complete. |
+| U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821) | Merged | Squash merged as `a8f4064a846112b9b479f2b7648101ec51dcd6f3`; worktree/branch cleanup complete. |
+| U5 goal-run status rendering   | `codex/thnk-21-u5-goal-status-rendering`  | [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822) | Merged | Squash merged as `ae21f019cef9e9f8057cc7c253cc548e611348f7`; worktree/branch cleanup complete. |
+| U6 smoke/docs/codegen          | `codex/thnk-21-u6-smoke-docs`             | [#2823](https://github.com/thinkwork-ai/thinkwork/pull/2823) | Merged | Squash merged as `92b75b4448c8d3fea15a69cc60be6f5dc09a4d38`; worktree/branch cleanup complete. |
 
 ### U1 Progress
 
@@ -13050,4 +13052,6 @@ src/__tests__/pi-runtime-capability-smoke.test.ts` (5 tests).
     files, 105 tests); rerunning full `pnpm test` then passed across the
     workspace.
 - U6 PR opened: [#2823](https://github.com/thinkwork-ai/thinkwork/pull/2823).
-  Required CI pending.
+  Required CI passed: CLA, lint, verify, typecheck, and test.
+- U6 squash merged as `92b75b4448c8d3fea15a69cc60be6f5dc09a4d38`; remote
+  branch deleted, local worktree and branch removed, and main synced.

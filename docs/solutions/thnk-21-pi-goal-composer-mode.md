@@ -25,6 +25,25 @@ continuation is disabled, `goal_complete` is allowlisted only for goal-mode
 turns, and every continuation/resume must re-enter the normal
 thread-turn/finalize/cost path.
 
+## Implementation Record
+
+The autopilot rollout landed in seven isolated units:
+
+- U1 extension import/load:
+  [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816)
+- U7 tenant goal budget settings:
+  [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817)
+- U2 metadata contract:
+  [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818)
+- U3 composer controls:
+  [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820)
+- U4 runtime translation:
+  [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821)
+- U5 goal-run status rendering:
+  [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822)
+- U6 smoke/docs/codegen:
+  [#2823](https://github.com/thinkwork-ai/thinkwork/pull/2823)
+
 ## Runtime Contract
 
 - User messages carry `metadata.goalMode` with `enabled`, `action`,
