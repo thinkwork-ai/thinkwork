@@ -77,6 +77,7 @@ function makeFakeExtensionApi() {
     registerTool: (tool: unknown) => {
       tools.push(tool as RegisteredTool);
     },
+    registerCommand: vi.fn(),
     on: vi.fn(),
   };
   return { api, tools };
@@ -2333,6 +2334,163 @@ describe("buildInvocationResources — fetch_workspace_source gating", () => {
 });
 
 describe("buildInvocationResources — Pi built-in tools", () => {
+  it("loads the pi-goal extension only for goal-mode payloads", async () => {
+    const baseArgs = {
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed" as const,
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    };
+
+    const normal = await buildInvocationResources({
+      ...baseArgs,
+      payload: { message: "hi" },
+    });
+    const goalMode = await buildInvocationResources({
+      ...baseArgs,
+      payload: {
+        message: "hi",
+        goal_mode: { enabled: true, action: "start" },
+      },
+    });
+
+    expect(normal.extensionToolNames).not.toContain("goal_complete");
+    expect(goalMode.extensionToolNames).toContain("goal_complete");
+
+    const allowlist = buildToolAllowlist([], goalMode.extensionToolNames);
+    expect(allowlist).toContain("goal_complete");
+  });
+
+  it("registers the upstream goal_complete tool through the adapter factory", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {
+        message: "hi",
+        goal_mode: { enabled: true, action: "start" },
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+    const { api, tools } = makeFakeExtensionApi();
+
+    for (const factory of bundle.extensionFactories) {
+      await factory(api as never);
+    }
+
+    expect(getTool(tools, "goal_complete")).toBeTruthy();
+    expect(api.registerCommand).toHaveBeenCalledWith(
+      "goal",
+      expect.objectContaining({ description: expect.stringContaining("goal") }),
+    );
+  });
+
+  it("surfaces pi-goal registration failures from the adapter factory", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {
+        message: "hi",
+        goal_mode: { enabled: true, action: "start" },
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+    const registrationError = new Error("register boom");
+    const failingApi = {
+      registerTool: vi.fn(() => {
+        throw registrationError;
+      }),
+      registerCommand: vi.fn(),
+      on: vi.fn(),
+    };
+
+    await expect(
+      bundle.extensionFactories.at(-1)!(failingApi as never),
+    ).rejects.toThrow("register boom");
+  });
+
   it("registers execute_code when the sandbox interpreter id is present", async () => {
     const cleanup: Array<() => Promise<void>> = [];
     const bundle = await buildInvocationResources({
