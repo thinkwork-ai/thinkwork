@@ -12640,15 +12640,15 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - Restored plan, requirements, and ideation docs from the backup commit into
     the U1 worktree so the implementation PR has current source artifacts.
 
-| Unit                           | Branch                                    | PR                                                           | State       | Notes                                                                                                                              |
-| ------------------------------ | ----------------------------------------- | ------------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`      | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete.                                     |
-| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete.                                     |
-| U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | Pending                                                      | In progress | Worktree: `.Codex/worktrees/thnk-21-u2-goal-metadata-contract`; starting from U7 merge `73f9b3ade5cde3370f727cd3b403d1d1444c2651`. |
-| U3 composer controls           | Pending                                   | Pending                                                      | Pending     | Depends on U2/U7.                                                                                                                  |
-| U4 runtime translation         | Pending                                   | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                                                               |
-| U5 goal-run status rendering   | Pending                                   | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                                                               |
-| U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                                                       |
+| Unit                           | Branch                                    | PR                                                           | State       | Notes                                                                                          |
+| ------------------------------ | ----------------------------------------- | ------------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------- |
+| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`      | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete. |
+| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
+| U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | In progress | Worktree: `.Codex/worktrees/thnk-21-u2-goal-metadata-contract`; CI pending.                    |
+| U3 composer controls           | Pending                                   | Pending                                                      | Pending     | Depends on U2/U7.                                                                              |
+| U4 runtime translation         | Pending                                   | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                           |
+| U5 goal-run status rendering   | Pending                                   | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                           |
+| U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
 
 ### U1 Progress
 
@@ -12782,3 +12782,4 @@ src/components/workbench/SpacesThreadDetailRoute.test.tsx` passed: 44 tests.
   - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
     files after formatting.
   - `git diff --check` passed.
+- U2 PR opened: [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818).
