@@ -168,11 +168,12 @@ status: in_progress
   `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`.
 - Linear issue: `THNK-59`.
 - Target branch: `main`.
-- Current implementation unit: U9 agent and API workflow invocation contract.
-- Current branch: `codex/thnk-59-u9-workflow-invocation`.
-- Current worktree: `.Codex/worktrees/thnk-59-u9-workflow-invocation`.
+- Current implementation unit: U10 multi-environment migration, backfill, and
+  SQL operations runbook.
+- Current branch: `codex/thnk-59-u10-migration-runbook`.
+- Current worktree: `.Codex/worktrees/thnk-59-u10-migration-runbook`.
 - Current pull request:
-  [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791).
+  [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792).
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -188,9 +189,11 @@ status: in_progress
   [#2784](https://github.com/thinkwork-ai/thinkwork/pull/2784) merged as
   `20c1fb0078497b81e5b8eaf933424d008cf290d9`; U8
   [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787) merged as
-  `a048e5486f6df85f60e9f5c8e144d19bd074a56a`.
-- Status: U1-U8 complete and merged. U9 is in progress from `origin/main` at
-  `a048e5486f6df85f60e9f5c8e144d19bd074a56a`.
+  `a048e5486f6df85f60e9f5c8e144d19bd074a56a`; U9
+  [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791) merged as
+  `c6bd505a9ac26e652a4ae2ec00216760efaf3809`.
+- Status: U1-U9 complete and merged. U10 is in progress from `origin/main` at
+  `c6bd505a9ac26e652a4ae2ec00216760efaf3809`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
@@ -411,12 +414,55 @@ status: in_progress
     `packages/api` 547 files passed, 3 skipped, 5162 tests passed, 9 skipped;
     `apps/web` 184 files passed, 1368 tests passed; release tests 17 passed;
     plugin source boundary tests 7 passed.
+  - U10 worktree created from `origin/main` at
+    `c6bd505a9ac26e652a4ae2ec00216760efaf3809`.
+  - U10 `pnpm install --frozen-lockfile` completed with the known optional
+    `canvas@2.11.2` native fallback warning under local Node 25; the install
+    command exited successfully.
+  - U10 focused migration tests and manual-migration marker dry run passed:
+    `pnpm --filter @thinkwork/database-pg test -- __tests__/migration-0177-workflow-control-plane.test.ts __tests__/migration-0178-workflow-backfill.test.ts`
+    and
+    `bash scripts/db-migrate-manual.sh --dry-run packages/database-pg/drizzle/0177_workflow_control_plane.sql packages/database-pg/drizzle/0178_workflow_backfill_existing_routines.sql`.
+  - U10 changed-file Prettier check passed with
+    `pnpm dlx prettier@3.8.2 --check --ignore-unknown <U10 changed files>`.
+  - U10 `pnpm --filter @thinkwork/database-pg test` passed: 39 files, 285
+    tests.
+  - U10 `pnpm --filter @thinkwork/database-pg typecheck` passed.
+  - U10 `pnpm lint && pnpm typecheck && git diff --check` passed.
+  - U10 first `pnpm test` run exposed the known local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly` after an `EEXIST`
+    framework symlink extraction warning).
+    `pnpm --filter @thinkwork/desktop rebuild electron` repaired the local
+    install.
+  - U10 `pnpm --filter @thinkwork/desktop test` passed after the Electron
+    repair: 15 files, 105 tests.
+  - U10 rerun `pnpm test` passed workspace-wide after the Electron repair:
+    `packages/api` 547 files passed, 3 skipped, 5162 tests passed, 9 skipped;
+    `apps/web` 184 files passed, 1368 tests passed; release tests 17 passed;
+    plugin source boundary tests 7 passed.
+  - U10 PR #2792 first CI run passed CLA, lint, and verify, then failed
+    `Migration Drift Precheck (dev)` because the new 0178 manual migration had
+    not yet been applied to dev.
+  - U10 applied the scoped 0178 dev migration with
+    `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0178_workflow_backfill_existing_routines.sql`.
+    It inserted or updated 4 workflows, 9 workflow versions, 4 current-version
+    pointers, 4 engine bindings, 4 manual triggers, 0 schedule triggers, and
+    created `public.view_workflow_backfill_existing_routines_status`.
+  - U10 dev drift verification passed after applying 0178:
+    `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0178_workflow_backfill_existing_routines.sql`.
+    The status view reported 4 eligible Step Functions routines, 4 backfilled
+    Step Functions bindings, 0 missing bindings, 0 skipped legacy Python
+    routines, and 0 enabled scheduled routines without version pins.
 - CI log: U8 PR [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787)
   passed CLA, lint, typecheck, verify, and test after rebasing onto current
   `origin/main`, then squash merged. U9 PR
-  [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791) opened after
-  local post-rebase verification passed; required CI checks (`cla`, `lint`,
-  `typecheck`, `verify`, and `test`) passed and the PR is ready to merge.
+  [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791) passed required
+  CI checks (`cla`, `lint`, `typecheck`, `verify`, and `test`) and was squash
+  merged as `c6bd505a9ac26e652a4ae2ec00216760efaf3809`. U10 PR
+  [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792) opened after
+  local verification passed; first migration drift precheck failed because the
+  0178 manual migration was not yet applied to dev, then the scoped 0178 dev
+  migration was applied and verified.
 - Blockers: none.
 
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
