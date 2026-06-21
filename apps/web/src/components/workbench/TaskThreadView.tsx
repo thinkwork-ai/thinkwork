@@ -67,7 +67,11 @@ import {
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
-import type { ComposerGoalModeIntent } from "@/components/workbench/goal-mode";
+import { GoalModeToggle } from "@/components/workbench/GoalModeControls";
+import {
+  resolveStartGoalModeSubmission,
+  type ComposerGoalModeIntent,
+} from "@/components/workbench/goal-mode";
 import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -2561,6 +2565,7 @@ function FollowUpComposer({
   // false, the toggle tracks the derived default; once true, the manual choice
   // persists until the thread changes (which clears it).
   const agentOverriddenRef = useRef(false);
+  const [goalModeEnabled, setGoalModeEnabled] = useState(false);
   const prefillText = prefill?.text;
   const prefillToken = prefill?.token;
   const mentionQuery = useMemo(
@@ -2601,12 +2606,18 @@ function FollowUpComposer({
       hasStructuredDefaultAgentMention(mentions, defaultAgentTarget),
     [composer.text, defaultAgentTarget, mentions],
   );
-  const effectiveAgentEnabled = agentForcedOn || agentEnabled;
+  const goalModeSubmission = useMemo(
+    () => resolveStartGoalModeSubmission(composer.text, goalModeEnabled),
+    [composer.text, goalModeEnabled],
+  );
+  const effectiveAgentEnabled =
+    goalModeSubmission.requested || agentForcedOn || agentEnabled;
   const modelSelectionBlocked =
     approvedModels !== undefined &&
     (approvedModels.length === 0 || !selectedModelId);
   const canSubmit =
-    (composer.text.trim().length > 0 || composer.files.length > 0) &&
+    (goalModeSubmission.content.length > 0 ||
+      (composer.files.length > 0 && !goalModeSubmission.requested)) &&
     !disabled &&
     !isSending &&
     !modelSelectionBlocked;
@@ -2619,6 +2630,7 @@ function FollowUpComposer({
   useEffect(() => {
     agentOverriddenRef.current = false;
     setAgentEnabled(agentDefaultOn);
+    setGoalModeEnabled(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
 
@@ -2686,16 +2698,30 @@ function FollowUpComposer({
     composer.setError(null);
     composer.setSubmitting(true);
     try {
+      if (goalModeSubmission.requested && !goalModeSubmission.goalMode) {
+        throw new Error("Goal mode needs an objective.");
+      }
       // PromptInput emits FileUIPart entries with blob URLs. Fetch the
       // blob and rebuild File objects so the route's upload helper can
       // POST the bytes through presign + PUT + finalize.
       const files = await fileUiPartsToFiles(message.files);
-      const content = composer.text.trim();
+      const content = goalModeSubmission.content;
       const submittedMentions = mentions.filter((mention) =>
         content.includes(mention.rawText),
       );
       const pinnedSkills = extractPinnedSkillSlugs(content, skillCatalog);
-      if (selectedModelId) {
+      const submittedGoalMode = goalModeSubmission.goalMode;
+      if (selectedModelId && submittedGoalMode) {
+        await onSubmit(
+          content,
+          files,
+          submittedMentions,
+          true,
+          pinnedSkills,
+          selectedModelId,
+          submittedGoalMode,
+        );
+      } else if (selectedModelId) {
         await onSubmit(
           content,
           files,
@@ -2703,6 +2729,16 @@ function FollowUpComposer({
           effectiveAgentEnabled,
           pinnedSkills,
           selectedModelId,
+        );
+      } else if (submittedGoalMode) {
+        await onSubmit(
+          content,
+          files,
+          submittedMentions,
+          true,
+          pinnedSkills,
+          undefined,
+          submittedGoalMode,
         );
       } else {
         await onSubmit(
@@ -2715,6 +2751,7 @@ function FollowUpComposer({
       }
       composer.clear();
       setMentions([]);
+      setGoalModeEnabled(false);
     } catch (err) {
       composer.setError(err instanceof Error ? err.message : "Failed to send");
     } finally {
@@ -2725,9 +2762,11 @@ function FollowUpComposer({
   const hasTaskQueue = Boolean(taskQueue);
   const agentToggleTitle = agentForcedOn
     ? "Agent handling is required by @agent or @think"
-    : effectiveAgentEnabled
-      ? "Agent will respond"
-      : "Send without waking the agent";
+    : goalModeSubmission.requested
+      ? "Goal mode requires agent handling"
+      : effectiveAgentEnabled
+        ? "Agent will respond"
+        : "Send without waking the agent";
 
   function selectMention(target: MentionTarget) {
     const trigger = target.targetType === "AGENT_PROFILE" ? "#" : "@";
@@ -2866,7 +2905,7 @@ function FollowUpComposer({
               <button
                 type="button"
                 onClick={() => {
-                  if (!agentForcedOn) {
+                  if (!agentForcedOn && !goalModeSubmission.requested) {
                     agentOverriddenRef.current = true;
                     setAgentEnabled((value) => !value);
                   }
@@ -2874,7 +2913,12 @@ function FollowUpComposer({
                 aria-label="Send to agent"
                 aria-pressed={effectiveAgentEnabled}
                 title={agentToggleTitle}
-                disabled={disabled || isSending || agentForcedOn}
+                disabled={
+                  disabled ||
+                  isSending ||
+                  agentForcedOn ||
+                  goalModeSubmission.requested
+                }
                 className={cn(
                   "flex size-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
                   effectiveAgentEnabled && "text-[#54a9ff]",
@@ -2882,6 +2926,12 @@ function FollowUpComposer({
               >
                 <Bot className="size-5" />
               </button>
+              <GoalModeToggle
+                enabled={goalModeSubmission.requested}
+                disabled={disabled || isSending}
+                tone="dark"
+                onToggle={() => setGoalModeEnabled((value) => !value)}
+              />
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}

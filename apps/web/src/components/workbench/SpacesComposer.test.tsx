@@ -379,6 +379,86 @@ describe("SpacesComposer", () => {
     });
   });
 
+  it("submits goal mode from the icon toggle and forces agent dispatch", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <SpacesComposer
+        value="Reconcile the customer list"
+        onChange={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const goalToggle = screen.getByRole("button", { name: "Goal mode" });
+    expect(goalToggle.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByLabelText(/token budget/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+
+    fireEvent.click(goalToggle);
+    expect(goalToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith([], [], true, [], undefined, {
+        enabled: true,
+        action: "start",
+        objective: "Reconcile the customer list",
+      });
+    });
+  });
+
+  it("submits /goal shorthand as a stripped goal objective", async () => {
+    const onSubmit = vi.fn();
+    render(<ControlledComposer onSubmit={onSubmit} />);
+
+    setComposerText("/goal reconcile the customer list");
+    expect(
+      screen
+        .getByRole("button", { name: "Goal mode" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith([], [], true, [], undefined, {
+        enabled: true,
+        action: "start",
+        objective: "reconcile the customer list",
+      });
+    });
+  });
+
+  it("removes goal metadata when Goal mode is toggled back off", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <SpacesComposer
+        value="Send normally"
+        onChange={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const goalToggle = screen.getByRole("button", { name: "Goal mode" });
+    fireEvent.click(goalToggle);
+    fireEvent.click(goalToggle);
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith([], [], true, []);
+    });
+  });
+
   it("forces agent handling on for @agent and @think aliases", () => {
     const { rerender } = render(
       <SpacesComposer

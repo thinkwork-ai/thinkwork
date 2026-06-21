@@ -14,6 +14,12 @@ export interface ComposerGoalModeIntent {
   goalRunId?: string;
 }
 
+export interface ComposerGoalModeSubmission {
+  content: string;
+  goalMode: ComposerGoalModeIntent | null;
+  requested: boolean;
+}
+
 export function createStartGoalModeIntent(
   objective: string,
 ): ComposerGoalModeIntent | null {
@@ -26,6 +32,26 @@ export function createStartGoalModeIntent(
   };
 }
 
+export function isGoalModeShorthand(content: string): boolean {
+  return /^\/goal(?:\s|$)/i.test(content.trimStart());
+}
+
+export function resolveStartGoalModeSubmission(
+  content: string,
+  enabled: boolean,
+): ComposerGoalModeSubmission {
+  const trimmed = content.trim();
+  const shorthand = parseGoalModeShorthand(trimmed);
+  const requested = enabled || shorthand !== null;
+  const normalizedContent = (shorthand ?? trimmed).trim();
+
+  return {
+    content: requested ? normalizedContent : trimmed,
+    goalMode: requested ? createStartGoalModeIntent(normalizedContent) : null,
+    requested,
+  };
+}
+
 export function appendGoalModeMetadata(
   metadata: Record<string, unknown>,
   goalMode: ComposerGoalModeIntent | null | undefined,
@@ -35,4 +61,10 @@ export function appendGoalModeMetadata(
     ...metadata,
     [GOAL_MODE_METADATA_KEY]: goalMode,
   };
+}
+
+function parseGoalModeShorthand(content: string): string | null {
+  const match = content.match(/^\/goal(?:\s+(.*))?$/is);
+  if (!match) return null;
+  return match[1] ?? "";
 }

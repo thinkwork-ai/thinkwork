@@ -409,11 +409,37 @@ describe("SpacesWorkbench", () => {
     expect(spacesWorkbenchSource).toContain(
       "if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;",
     );
+    expect(spacesWorkbenchSource).toContain("goalMode.objective.trim()");
     expect(spacesWorkbenchSource).toContain(
       "metadata.requestedModelId = turnModelId;",
     );
     expect(spacesWorkbenchSource).toContain(
       "metadata = appendGoalModeMetadata(metadata, goalMode);",
     );
+  });
+
+  it("strips /goal shorthand before creating the first user message", async () => {
+    render(<SpacesWorkbench />);
+
+    setComposerText("/goal reconcile the customer list");
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: "reconcile the customer list",
+          mentions: [],
+          metadata: JSON.stringify({
+            goalMode: {
+              enabled: true,
+              action: "start",
+              objective: "reconcile the customer list",
+            },
+          }),
+        },
+      });
+    });
   });
 });

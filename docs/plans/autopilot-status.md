@@ -12644,8 +12644,8 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 | ------------------------------ | ----------------------------------------- | ------------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------- |
 | U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`      | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete. |
 | U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
-| U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | In progress | Worktree: `.Codex/worktrees/thnk-21-u2-goal-metadata-contract`; CI pending.                    |
-| U3 composer controls           | Pending                                   | Pending                                                      | Pending     | Depends on U2/U7.                                                                              |
+| U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged      | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
+| U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | Pending                                                      | In progress | Worktree: `.Codex/worktrees/thnk-21-u3-composer-controls`; local verification passed.          |
 | U4 runtime translation         | Pending                                   | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                           |
 | U5 goal-run status rendering   | Pending                                   | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                           |
 | U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
@@ -12783,3 +12783,40 @@ src/components/workbench/SpacesThreadDetailRoute.test.tsx` passed: 44 tests.
     files after formatting.
   - `git diff --check` passed.
 - U2 PR opened: [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818).
+- U2 CI passed: CLA, lint, verify, typecheck, and test.
+- U2 squash merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; remote
+  branch deleted, local worktree and branch removed, and main synced.
+
+### U3 Progress
+
+- 2026-06-21 16:49 CDT: Created worktree
+  `.Codex/worktrees/thnk-21-u3-composer-controls` on
+  `codex/thnk-21-u3-composer-controls` from merged `origin/main`.
+  Scope: expose a compact Goal mode toggle in the empty-thread and follow-up
+  composers, support `/goal ...` shorthand, force agent dispatch for goal
+  sends, and keep token/cost budgets out of the composer.
+- 2026-06-21 16:59 CDT: U3 implementation locally verified. Added
+  `GoalModeToggle`, shared goal shorthand parsing, empty-thread and follow-up
+  composer goal state, slash-command objective stripping, successful-send reset
+  behavior, and first-message persistence of the normalized objective.
+- U3 local verification:
+  - `pnpm install --frozen-lockfile` completed in the worktree; local Node 25
+    logged the existing optional `canvas@2.11.2` native fallback/missing
+    `pkg-config` warning, but pnpm exited successfully.
+  - `pnpm --filter @thinkwork/web exec vitest run
+src/components/workbench/goal-mode.test.ts
+src/components/workbench/SpacesComposer.test.tsx
+src/components/workbench/TaskThreadView.test.tsx
+src/components/workbench/SpacesWorkbench.test.tsx` passed: 152 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - Visual smoke attempted with Vite at `http://127.0.0.1:5180/new`; headless
+    Chromium and the regular Brave profile both reached the localhost sign-in
+    page, so authenticated workbench visual inspection was blocked by local
+    auth/session origin. The dev server was stopped afterward. Layout/ARIA
+    behavior is covered by focused component tests.
+  - `pnpm --filter @thinkwork/web test` passed: 186 files, 1395 tests.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed across the workspace.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
+    files after formatting.
+  - `git diff --check` passed.
