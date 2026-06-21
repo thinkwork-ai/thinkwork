@@ -14,13 +14,12 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: In progress.
-- Current unit: U4 - Generated artifacts and regression verification.
-- Current branch: `codex/thnk-60-u4-account-usage-regression`.
-- Current worktree: `.Codex/worktrees/thnk-60-u4-account-usage-regression`.
-- Current pull request:
-  [#2811](https://github.com/thinkwork-ai/thinkwork/pull/2811).
-- Base: `origin/main` at `efc578cd3`.
+- Status: Complete.
+- Current unit: None.
+- Current branch: None.
+- Current worktree: None.
+- Current pull request: None.
+- Completed on: 2026-06-21.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -138,9 +137,12 @@ status: in_progress
     generated files were left in codegen's emitted format.
   - U4 whitespace check passed: `git diff --check`.
   - U4 PR: [#2811](https://github.com/thinkwork-ai/thinkwork/pull/2811).
-  - U4 CI: Pending.
-  - U4 merge: Pending.
-  - U4 cleanup: Pending.
+  - U4 CI passed: CLA, lint, verify, typecheck, test.
+  - U4 squash merged as `0423c6751aa43050b1856c714c50b7d52ce496cf`.
+  - U4 cleanup completed: remote branch was deleted by GitHub merge flow; local
+    worktree and branch were removed after syncing `main`.
+  - Final status ledger update prepared on
+    `codex/thnk-60-final-status` after all implementation units merged.
 - Blockers: None.
 
 ## Skill Library Import / Export Autopilot - 2026-06-21
