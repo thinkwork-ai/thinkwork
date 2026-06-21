@@ -167,9 +167,34 @@ describe("resolvePluginGate", () => {
       { tenantId: TENANT, requesterUserId: USER },
       { store },
     );
-    expect(gate.blockedSkillFolderPrefixes).toEqual(["skills/lastmile--"]);
+    expect(gate.blockedSkillFolderPrefixes).toEqual([
+      "skills/lastmile--",
+      "skills/lastmile-",
+    ]);
     expect(
       pluginGateExcludesWorkspacePath(gate, "skills/lastmile--crm/SKILL.md"),
+    ).toBe(true);
+    expect(
+      pluginGateExcludesWorkspacePath(gate, "skills/lastmile-crm/SKILL.md"),
+    ).toBe(true);
+  });
+
+  it("falls back closed for Agent Skills spec-compliant plugin skill folders", async () => {
+    seedInstall({
+      id: "install-a",
+      pluginKey: "n8n",
+      workspaceFolders: null, // pending provision — nothing recorded
+    });
+    const gate = await resolvePluginGate(
+      { tenantId: TENANT, requesterUserId: USER },
+      { store },
+    );
+    expect(gate.blockedSkillFolderPrefixes).toContain("skills/n8n-");
+    expect(
+      pluginGateExcludesWorkspacePath(
+        gate,
+        "skills/n8n-workflow-operator/SKILL.md",
+      ),
     ).toBe(true);
   });
 
@@ -198,10 +223,15 @@ describe("resolvePluginGate", () => {
 });
 
 describe("path helpers", () => {
-  it("isNamespacedPluginSkillPath matches only double-hyphen-namespaced skill folders", () => {
+  it("isNamespacedPluginSkillPath matches only legacy double-hyphen plugin folders", () => {
     expect(isNamespacedPluginSkillPath("skills/lastmile--crm/SKILL.md")).toBe(
       true,
     );
+    expect(
+      isNamespacedPluginSkillPath(
+        "skills/n8n-workflow-operator/references/mcp-tooling.md",
+      ),
+    ).toBe(false);
     expect(isNamespacedPluginSkillPath("skills/notes-helper/SKILL.md")).toBe(
       false,
     );

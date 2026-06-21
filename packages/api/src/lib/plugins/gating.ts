@@ -32,8 +32,10 @@
  * Fail-closed contract: no resolvable requester → empty allowed set →
  * every plugin install's skill folders are excluded. A gate-resolution
  * error (e.g. DB unavailable inside the renderer Lambda) degrades to
- * pattern-based exclusion of ALL `skills/<key>--<slug>/` namespaced
- * folders — never open.
+ * pattern-based exclusion of legacy plugin-namespaced skill folders — never
+ * open for the historical shape; exact recorded folders and known install
+ * plugin-key prefixes cover Agent Skills compliant plugin folders when the
+ * store is reachable.
  *
  * AGENTS.md routing finding (documented per U7): plugin skill routing
  * entries are NOT generated at render time. `installCatalogSkill` appends
@@ -76,13 +78,14 @@ export interface PluginActivationGate {
    * Workspace-relative skill folder prefixes to exclude. Entries are
    * either exact folders recorded on the skills component handler_ref
    * (`skills/lastmile--crm-basics/`) or, as the fallback for installs
-   * whose handler_ref never recorded folders, the plugin's namespace
-   * prefix (`skills/lastmile--`).
+   * whose handler_ref never recorded folders, conservative plugin-key
+   * prefixes (`skills/lastmile--` for legacy ThinkWork namespaced skills
+   * and `skills/lastmile-` for Agent Skills spec-compliant plugin skills).
    */
   blockedSkillFolderPrefixes: string[];
   /**
-   * Degraded fail-closed mode: gate resolution errored, so every
-   * `skills/<key>--<slug>/` namespaced folder is excluded by pattern.
+   * Degraded fail-closed mode: gate resolution errored, so every legacy
+   * plugin-namespaced skill folder is excluded by pattern.
    */
   blockAllNamespacedPluginFolders: boolean;
 }
@@ -103,15 +106,9 @@ export const FAIL_CLOSED_PLUGIN_GATE: PluginActivationGate = Object.freeze({
   blockAllNamespacedPluginFolders: true,
 });
 
-/**
- * Plugin skill slugs are namespaced `<pluginKey>--<skillSlug>` (U5), so a
- * workspace path under a double-hyphen skill folder is plugin-namespaced.
- * This is the PATTERN fallback only — the authoritative folder list comes
- * from plugin_components handler_ref / install plugin_key.
- */
 const NAMESPACED_PLUGIN_SKILL_PATH_RE = /^skills\/[a-z0-9][a-z0-9-]*--[^/]+\//;
 
-/** Pattern check: does this workspace-relative path sit under a plugin-namespaced skill folder? */
+/** Pattern check: does this workspace-relative path sit under a legacy plugin-namespaced skill folder? */
 export function isNamespacedPluginSkillPath(relPath: string): boolean {
   return NAMESPACED_PLUGIN_SKILL_PATH_RE.test(relPath);
 }
@@ -160,11 +157,14 @@ function skillFolderPrefixesForInstall(
       }
     }
   }
-  // Namespace-pattern belt: covers skills components whose handler_ref was
+  // Prefix-pattern belt: covers skills components whose handler_ref was
   // never (or only partially) recorded — pending/partial provisions, crash
-  // windows. Plugin folders are always `skills/<pluginKey>--<slug>/`, so
-  // this can never exclude a non-plugin skill.
+  // windows. Legacy ThinkWork plugin skills used `skills/<pluginKey>--...`;
+  // Agent Skills spec-compliant plugin skills use `skills/<pluginKey>-...`.
+  // This fallback is intentionally conservative and only used when exact
+  // provisioned folders are unavailable.
   prefixes.add(`skills/${install.plugin_key}--`);
+  prefixes.add(`skills/${install.plugin_key}-`);
   return [...prefixes];
 }
 
@@ -220,7 +220,7 @@ export async function resolvePluginGate(
     };
   } catch (error) {
     console.warn(
-      `[plugin-gate] gate resolution failed for tenant ${args.tenantId}; failing closed for all plugin-namespaced skill folders:`,
+      `[plugin-gate] gate resolution failed for tenant ${args.tenantId}; failing closed for legacy plugin-namespaced skill folders:`,
       error,
     );
     return FAIL_CLOSED_PLUGIN_GATE;
