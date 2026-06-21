@@ -1,9 +1,8 @@
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "urql";
 import { Activity, Coins, Cpu, Hash } from "lucide-react";
-import { cn } from "@thinkwork/ui";
+import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
-import { SettingsSection } from "@/components/settings/SettingsContent";
 import { SettingsAccountUsageQuery } from "@/lib/settings-queries";
 
 type AccountUsageSectionProps = {
@@ -33,6 +32,7 @@ type CalendarCell = {
   day: string;
   row?: UsageDay;
   intensity: number;
+  isPadding?: boolean;
 };
 
 const DEFAULT_DAYS = 90;
@@ -62,11 +62,20 @@ export function AccountUsageSection({
 
   if (result.fetching && !result.data) {
     return (
-      <SettingsSection label="Account Usage">
+      <section
+        aria-labelledby="account-usage-heading"
+        className="mb-8 space-y-5"
+      >
+        <h2
+          className="text-xl font-semibold tracking-tight text-foreground"
+          id="account-usage-heading"
+        >
+          Account Usage
+        </h2>
         <div className="flex items-center justify-center py-12">
           <LoadingShimmer />
         </div>
-      </SettingsSection>
+      </section>
     );
   }
 
@@ -80,54 +89,62 @@ export function AccountUsageSection({
   ).length;
 
   return (
-    <SettingsSection label="Account Usage">
-      <div className="space-y-5 p-4">
-        {result.error ? (
-          <p className="text-sm text-destructive">
-            Account usage could not be loaded.
+    <section
+      aria-labelledby="account-usage-heading"
+      className="mb-8 space-y-5"
+    >
+      <h2
+        className="text-xl font-semibold tracking-tight text-foreground"
+        id="account-usage-heading"
+      >
+        Account Usage
+      </h2>
+
+      {result.error ? (
+        <p className="text-sm text-destructive">
+          Account usage could not be loaded.
+        </p>
+      ) : null}
+      {hasUsage ? null : (
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5">
+          <p className="text-sm font-medium text-foreground">No usage yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Activity will appear here after this account runs agents or tools.
           </p>
-        ) : null}
-        {hasUsage ? null : (
-          <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5">
-            <p className="text-sm font-medium text-foreground">No usage yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Activity will appear here after this account runs agents or tools.
-            </p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <UsageMetric
-            icon={<Coins className="size-4" />}
-            label="Total Spend"
-            value={formatUsd(summary?.totalUsd ?? 0)}
-          />
-          <UsageMetric
-            icon={<Hash className="size-4" />}
-            label="Tokens"
-            value={formatTokens(totalTokens)}
-          />
-          <UsageMetric
-            icon={<Activity className="size-4" />}
-            label="Events"
-            value={formatInteger(summary?.eventCount ?? 0)}
-          />
-          <UsageMetric
-            icon={<Cpu className="size-4" />}
-            label="Active Days"
-            value={formatInteger(activeDayCount)}
-          />
         </div>
+      )}
 
-        <UsageCalendar
-          rows={usage?.daily ?? []}
-          periodEnd={usage?.periodEnd}
-          dayCount={queryDays}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <UsageMetric
+          icon={<Coins className="size-4" />}
+          label="Total Spend"
+          value={formatUsd(summary?.totalUsd ?? 0)}
         />
-
-        <ModelBreakdown models={usage?.models ?? []} />
+        <UsageMetric
+          icon={<Hash className="size-4" />}
+          label="Tokens"
+          value={formatTokens(totalTokens)}
+        />
+        <UsageMetric
+          icon={<Activity className="size-4" />}
+          label="Events"
+          value={formatInteger(summary?.eventCount ?? 0)}
+        />
+        <UsageMetric
+          icon={<Cpu className="size-4" />}
+          label="Active Days"
+          value={formatInteger(activeDayCount)}
+        />
       </div>
-    </SettingsSection>
+
+      <UsageCalendar
+        rows={usage?.daily ?? []}
+        periodEnd={usage?.periodEnd}
+        dayCount={queryDays}
+      />
+
+      <ModelBreakdown models={usage?.models ?? []} />
+    </section>
   );
 }
 
@@ -175,10 +192,24 @@ function UsageCalendar({
       </div>
       <div
         aria-label={`Account usage calendar for the last ${dayCount} days`}
-        className="grid grid-cols-[repeat(15,minmax(0,1fr))] gap-1 sm:grid-cols-[repeat(18,minmax(0,1fr))] md:grid-cols-[repeat(30,minmax(0,1fr))]"
+        className="grid grid-flow-col grid-rows-7 auto-cols-max gap-1 overflow-x-auto pb-1"
         role="list"
       >
         {cells.map((cell) => {
+          if (cell.isPadding) {
+            return (
+              <div
+                aria-hidden="true"
+                className={cn(
+                  "size-3 rounded-[3px] border border-border sm:size-3.5",
+                  intensityClassName(0),
+                )}
+                data-testid="usage-calendar-cell"
+                key={cell.day}
+                role="presentation"
+              />
+            );
+          }
           const tokens =
             (cell.row?.inputTokens ?? 0) + (cell.row?.outputTokens ?? 0);
           const label = `${cell.day}: ${formatUsd(
@@ -187,17 +218,37 @@ function UsageCalendar({
             cell.row?.eventCount ?? 0,
           )} events`;
           return (
-            <div
-              aria-label={label}
-              className={cn(
-                "size-3 rounded-[3px] border border-border",
-                intensityClassName(cell.intensity),
-              )}
-              data-testid="usage-day"
-              key={cell.day}
-              role="listitem"
-              title={label}
-            />
+            <Tooltip delayDuration={0} disableHoverableContent key={cell.day}>
+              <TooltipTrigger asChild>
+                <div
+                  aria-label={label}
+                  className={cn(
+                    "size-3 rounded-[3px] border border-border outline-none ring-offset-background transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-3.5",
+                    intensityClassName(cell.intensity),
+                  )}
+                  data-testid="usage-day"
+                  role="listitem"
+                  tabIndex={0}
+                />
+              </TooltipTrigger>
+              <TooltipContent
+                className="pointer-events-none block min-w-36 space-y-1.5 px-3 py-2 text-left"
+                sideOffset={6}
+              >
+                <p className="font-medium">{formatDateLabel(cell.day)}</p>
+                <div className="grid gap-1">
+                  <TooltipMetric
+                    label="Spend"
+                    value={formatUsd(cell.row?.totalUsd ?? 0)}
+                  />
+                  <TooltipMetric label="Tokens" value={formatTokens(tokens)} />
+                  <TooltipMetric
+                    label="Events"
+                    value={formatInteger(cell.row?.eventCount ?? 0)}
+                  />
+                </div>
+              </TooltipContent>
+            </Tooltip>
           );
         })}
       </div>
@@ -219,6 +270,15 @@ function UsageCalendar({
   );
 }
 
+function TooltipMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-background/70">{label}</span>
+      <span className="font-medium tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 function ModelBreakdown({ models }: { models: UsageModel[] }) {
   const sorted = [...models].sort((a, b) => b.totalUsd - a.totalUsd);
   return (
@@ -231,31 +291,31 @@ function ModelBreakdown({ models }: { models: UsageModel[] }) {
           No model usage in this period.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-lg border border-border">
           {sorted.map((model) => {
             const name = model.displayName || shortenModelId(model.model);
             const totalTokens = model.inputTokens + model.outputTokens;
             return (
               <div
-                className="grid gap-3 border-b border-border bg-background px-3 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                className="grid min-w-[38rem] grid-cols-[minmax(12rem,1fr)_8rem_7rem_5rem] items-center gap-4 border-b border-border bg-background px-3 py-3 last:border-b-0"
+                data-testid="model-row"
                 key={model.model}
               >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {name}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {formatTokens(totalTokens)} tokens
-                  </p>
-                </div>
-                <div className="text-left sm:text-right">
-                  <p className="text-sm font-semibold tabular-nums text-foreground">
-                    {formatUsd(model.totalUsd)}
-                  </p>
-                  <p className="text-xs tabular-nums text-muted-foreground">
-                    {formatPercent(model.usageShare)}
-                  </p>
-                </div>
+                <p
+                  className="min-w-0 truncate text-sm font-medium text-foreground"
+                  title={name}
+                >
+                  {name}
+                </p>
+                <p className="text-right text-sm tabular-nums text-muted-foreground">
+                  {formatTokens(totalTokens)} tokens
+                </p>
+                <p className="text-right text-sm font-semibold tabular-nums text-foreground">
+                  {formatUsd(model.totalUsd)}
+                </p>
+                <p className="text-right text-sm tabular-nums text-muted-foreground">
+                  {formatPercent(model.usageShare)}
+                </p>
               </div>
             );
           })}
@@ -277,7 +337,7 @@ function buildCalendarCells(
     parseDateOnly(periodEnd) ?? parseDateOnly(new Date().toISOString());
   if (!end) return [];
 
-  return Array.from({ length: dayCount }, (_, index) => {
+  const days = Array.from({ length: dayCount }, (_, index) => {
     const date = new Date(end.getTime() - (dayCount - index - 1) * DAY_MS);
     const day = date.toISOString().slice(0, 10);
     const row = byDay.get(day);
@@ -287,6 +347,14 @@ function buildCalendarCells(
       intensity: getIntensity(row, maxSpend, maxEvents),
     };
   });
+  const leadingPadding = (7 - (days.length % 7)) % 7;
+  const padding = Array.from({ length: leadingPadding }, (_, index) => ({
+    day: `padding-${index}`,
+    intensity: 0,
+    isPadding: true,
+  }));
+
+  return [...padding, ...days];
 }
 
 function getIntensity(
@@ -348,6 +416,17 @@ function formatInteger(value: number): string {
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatDateLabel(value: string): string {
+  const date = parseDateOnly(value);
+  if (!date) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date);
 }
 
 function shortenModelId(modelId: string): string {
