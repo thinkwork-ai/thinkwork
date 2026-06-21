@@ -118,6 +118,11 @@ jobs:
             container:
               - 'packages/agentcore-pi/**'
               - 'packages/agentcore/**'
+              # GenUI analytical display packages are runtime imports inside
+              # the Pi container; changes here must rebuild AgentCore even
+              # when the Pi host package itself is unchanged.
+              - 'packages/analytics-display/**'
+              - 'packages/genui/**'
               - 'packages/pi-aws/**'
               - 'packages/pi-extensions/**'
               - 'packages/pi-runtime-core/**'
@@ -152,6 +157,8 @@ jobs:
           PI_SHA=$(git log -1 --format=%H -- \
             packages/agentcore-pi \
             packages/agentcore \
+            packages/analytics-display \
+            packages/genui \
             packages/pi-aws \
             packages/pi-extensions \
             packages/pi-runtime-core \
