@@ -18,7 +18,8 @@ status: in_progress
 - Current unit: U3 - Mount account usage on profile pages.
 - Current branch: `codex/thnk-60-u3-account-usage-pages`.
 - Current worktree: `.Codex/worktrees/thnk-60-u3-account-usage-pages`.
-- Current pull request: Pending.
+- Current pull request:
+  [#2810](https://github.com/thinkwork-ai/thinkwork/pull/2810).
 - Base: `origin/main` at `a4fdc35ac`.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
@@ -98,7 +99,10 @@ status: in_progress
   - U3 formatting check passed:
     `pnpm dlx prettier@3.8.2 --check ...` for touched source/docs.
   - U3 whitespace check passed: `git diff --check`.
-  - U3 PR: Pending.
+  - U3 PR: [#2810](https://github.com/thinkwork-ai/thinkwork/pull/2810).
+  - U3 CI: Pending.
+  - U3 merge: Pending.
+  - U3 cleanup: Pending.
 - Blockers: None.
 
 ## Skill Library Import / Export Autopilot - 2026-06-21
