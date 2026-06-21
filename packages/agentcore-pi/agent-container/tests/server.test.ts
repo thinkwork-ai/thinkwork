@@ -27,6 +27,7 @@ import {
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import {
   buildToolAllowlist,
   type DelegationProvider,
@@ -237,6 +238,7 @@ describe("handleInvocation — payload validation", () => {
 describe("handleInvocation — happy path", () => {
   it("chat-turn invocation returns 200 and SKIPS the completion callback (chat-agent-invoke owns turn writeback)", async () => {
     let fetchCalled = 0;
+    const part = createTaskReviewGenUIFixture();
     const fetchImpl: typeof fetch = (async () => {
       fetchCalled += 1;
       return new Response();
@@ -244,7 +246,16 @@ describe("handleInvocation — happy path", () => {
 
     const result = await handleInvocation({
       payload: VALID_PAYLOAD(),
-      deps: makeDeps({ fetchImpl }),
+      deps: makeDeps({
+        fetchImpl,
+        runAgentLoop: async () => ({
+          content: "stub response",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+          uiMessageParts: [part],
+        }),
+      }),
     });
 
     expect(result.statusCode).toBe(200);
@@ -252,6 +263,10 @@ describe("handleInvocation — happy path", () => {
     expect(body.runtime).toBe("pi");
     expect((body.response as Record<string, unknown>).content).toBe(
       "stub response",
+    );
+    expect(body.ui_message_parts).toEqual([part]);
+    expect((body.response as Record<string, unknown>).ui_message_parts).toEqual(
+      [part],
     );
     expect(fetchCalled).toBe(0);
   });
@@ -730,7 +745,9 @@ describe("handleInvocation — happy path", () => {
     });
 
     expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
-    expect(childMessage).toBe("What current sources mention eric@thinkwork.ai?");
+    expect(childMessage).toBe(
+      "What current sources mention eric@thinkwork.ai?",
+    );
     const body = result.body as Record<string, unknown>;
     expect(body.agent_profile_runs).toEqual([
       expect.objectContaining({

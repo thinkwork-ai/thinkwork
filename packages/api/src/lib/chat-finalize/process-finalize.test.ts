@@ -136,6 +136,7 @@ import {
   toFinalizeResponse,
   turnAskedUserQuestion,
 } from "./process-finalize";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const AGENT_ID = "22222222-2222-2222-2222-222222222222";
@@ -1380,6 +1381,29 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
     ) as Record<string, unknown> | undefined;
     expect(threadUpdate?.last_response_preview).toBe("All done!");
     expect(mocks.sendTurnCompletedPush).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards validated UI message parts into assistant message persistence", async () => {
+    const part = createTaskReviewGenUIFixture();
+    const persistedPart = part as unknown as Record<string, unknown>;
+
+    await processFinalize({
+      ...askingPayload,
+      response: {
+        content: "Here is the review.",
+        tools_called: ["review_task"],
+        ui_message_parts: [persistedPart],
+      },
+    });
+
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      THREAD_ID,
+      TENANT_ID,
+      AGENT_ID,
+      "Here is the review.",
+      expect.any(Array),
+      [persistedPart],
+    );
   });
 });
 

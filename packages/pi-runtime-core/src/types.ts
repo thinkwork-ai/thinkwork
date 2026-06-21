@@ -1,6 +1,7 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Message, Usage } from "@earendil-works/pi-ai";
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import type { ThreadGenUIPart } from "@thinkwork/genui";
 
 import type { SessionStore } from "./durable-session-manager.js";
 import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
@@ -138,6 +139,7 @@ export interface InvocationResponse {
     usage?: Usage;
     tools_called?: string[];
     tool_invocations?: ToolInvocationRecord[];
+    ui_message_parts?: ThreadGenUIPart[];
     model_routed_tool_calls?: ModelRoutedToolCallRecord[];
     agent_profile_runs?: AgentProfileRunRecord[];
     tool_costs?: ToolCostRecord[];
@@ -150,6 +152,7 @@ export interface InvocationResponse {
   mcp_proxy_registered?: boolean;
   tools_called?: string[];
   tool_invocations?: ToolInvocationRecord[];
+  ui_message_parts?: ThreadGenUIPart[];
   model_routed_tool_calls?: ModelRoutedToolCallRecord[];
   agent_profile_runs?: AgentProfileRunRecord[];
   tool_costs?: ToolCostRecord[];
@@ -226,6 +229,7 @@ export interface RunAgentLoopResult {
   modelId: string;
   toolsCalled: string[];
   toolInvocations: ToolInvocationRecord[];
+  uiMessageParts?: ThreadGenUIPart[];
   modelRoutedToolCalls?: ModelRoutedToolCallRecord[];
   agentProfileRuns?: AgentProfileRunRecord[];
   toolCosts?: ToolCostRecord[];

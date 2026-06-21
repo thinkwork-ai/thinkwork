@@ -20,6 +20,12 @@ import {
   type SessionLog,
   type SessionStore,
 } from "./durable-session-manager.js";
+import {
+  extractRuntimeThreadGenUICandidates,
+  mergeFinalThreadGenUIParts,
+  normalizeRuntimeThreadGenUIPart,
+  threadGenUIActivityEvent,
+} from "./genui-runtime.js";
 import { textFromAssistant } from "./history.js";
 import { collectToolCosts } from "./tool-costs.js";
 import type {
@@ -654,6 +660,7 @@ export async function runAgentLoop(
 
   const toolsCalled = new Set<string>();
   const toolInvocations: RunAgentLoopResult["toolInvocations"] = [];
+  let uiMessageParts: NonNullable<RunAgentLoopResult["uiMessageParts"]> = [];
   const toolStarts = new Map<string, number>();
   const identity = isInvocationIdentity(args.identity) ? args.identity : null;
   // ask_user_question turn-end (U5): set when a non-error tool result carries
@@ -802,6 +809,24 @@ export async function runAgentLoop(
             is_error: event.isError,
           },
         });
+        const genuiParts = extractRuntimeThreadGenUICandidates(
+          event.result,
+        ).map(
+          (candidate, index) =>
+            normalizeRuntimeThreadGenUIPart(
+              candidate,
+              `genui:${event.toolCallId}:${index}`,
+            ).part,
+        );
+        if (genuiParts.length > 0) {
+          uiMessageParts = mergeFinalThreadGenUIParts(
+            uiMessageParts,
+            genuiParts,
+          );
+          for (const part of genuiParts) {
+            emitActivitySafely(deps, threadGenUIActivityEvent(part));
+          }
+        }
         // ask_user_question turn-end (U5): the tool result is recorded above;
         // now stop the run deterministically. The sentinel result itself
         // carries the SDK's `terminate: true` early-termination hint, which
@@ -899,6 +924,7 @@ export async function runAgentLoop(
       modelId,
       toolsCalled: [...toolsCalled],
       toolInvocations,
+      ...(uiMessageParts.length > 0 ? { uiMessageParts } : {}),
       ...(modelRoutedToolCalls.length > 0 ? { modelRoutedToolCalls } : {}),
       ...(agentProfileRuns.length > 0 ? { agentProfileRuns } : {}),
       toolCosts: toolInvocations.flatMap((invocation) =>

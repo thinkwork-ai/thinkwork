@@ -11,19 +11,20 @@ status: in_progress
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
 - Linear issue: `THNK-34`.
 - Target branch: `main`.
-- Current implementation unit: U3 Render web Thread GenUI with compact
-  fallbacks.
-- Current branch: `codex/thnk-34-u3-web-renderer`.
-- Current worktree: `.Codex/worktrees/thnk-34-u3-web-renderer`.
+- Current implementation unit: U4 Emit and persist `data-genui` from the
+  runtime path.
+- Current branch: `codex/thnk-34-u4-mobile-renderer`.
+- Current worktree: `.Codex/worktrees/thnk-34-u4-mobile-renderer`.
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
   merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
   [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) merged as
   `6d91bb9bd1a953414c6c7a497da2b65fca1346fd`; U8
   [#2758](https://github.com/thinkwork-ai/thinkwork/pull/2758) merged as
   `4d105e50543937dedd95378dcd71d9e3e98efa5e`; U3
-  [#2760](https://github.com/thinkwork-ai/thinkwork/pull/2760) opened.
-- Status: U1, U2, and U8 complete and merged. U3 implementation in progress
-  from `origin/main` at `a1e42c646636`.
+  [#2760](https://github.com/thinkwork-ai/thinkwork/pull/2760) merged as
+  `9c13dac27c6efc66156058b1af99103fdb44e70a`.
+- Status: U1, U2, U8, and U3 complete and merged. U4 implementation complete
+  and PR opened from `origin/main` at `8f2a29e20169`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
     and U7 in dependency order.
@@ -113,6 +114,45 @@ status: in_progress
   - U3 `git diff --check` passed.
   - U3 `pnpm --filter @thinkwork/web build` passed with existing route-file,
     sourcemap, and large-chunk warnings.
+  - U4 `pnpm install` completed with the known optional `canvas@2.11.2` native
+    fallback warning under local Node 25 because `pkg-config` / `pixman-1` are
+    unavailable.
+  - U4 `pnpm --filter @thinkwork/pi-runtime-core test -- test/genui-runtime.test.ts test/finalize-client.test.ts test/activity-client.test.ts test/agent-loop.test.ts`
+    passed: 4 files, 69 tests.
+  - U4 `pnpm --filter @thinkwork/pi-runtime-core typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/api test -- src/handlers/chat-agent-activity.test.ts src/lib/chat-finalize/process-finalize.test.ts src/handlers/chat-agent-finalize.test.ts`
+    passed: 3 files, 68 tests.
+  - U4 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/web test -- src/components/workbench/SpacesThreadDetailRoute.test.tsx src/components/workbench/TaskThreadView.test.tsx`
+    passed: 2 files, 137 tests.
+  - U4 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U4 `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts`
+    passed: 1 file, 81 tests.
+  - U4 `pnpm --filter @thinkwork/agentcore-pi typecheck` passed.
+  - U4 `pnpm lint` passed.
+  - U4 `git diff --check` passed.
+  - U4 `pnpm typecheck` passed workspace-wide.
+  - U4 `pnpm --filter @thinkwork/web build` passed with existing route-file,
+    sourcemap, and large-chunk warnings.
+  - U4 first `pnpm test` run exposed a local generated Electron install race in
+    `apps/desktop` (`Electron failed to install correctly`) after an `EEXIST`
+    symlink warning during the binary install. Rebuilding Electron with
+    `pnpm --filter @thinkwork/desktop rebuild electron` repaired the local
+    install, and `pnpm --filter @thinkwork/desktop test` passed: 15 files, 105
+    tests.
+  - U4 reran `pnpm test` after the Electron repair; the workspace suite passed,
+    including `apps/web` (175 files, 1334 tests), `packages/api` (535 files
+    passed, 3 skipped; 5065 tests passed, 9 skipped), release tests, and plugin
+    source boundary tests.
+  - U4 rebased cleanly onto `origin/main` at `bf18489960f7`; post-rebase
+    focused pi-runtime-core tests, API tests, web Thread tests, and
+    `git diff --check origin/main..HEAD` passed.
+  - U4 rebased cleanly again after `main` moved to `d0fd90e754a5`;
+    post-rebase focused pi-runtime-core tests, API tests, web Thread tests, and
+    `git diff --check origin/main..HEAD` passed.
+  - U4 rebased cleanly again after `main` moved to `8f2a29e20169`;
+    post-rebase focused pi-runtime-core tests, API tests, web Thread tests, and
+    `git diff --check origin/main..HEAD` passed.
   - U3 rebased cleanly onto `origin/main` at `a1e42c646636`; post-rebase
     focused web tests, web typecheck, and `git diff --check origin/main..HEAD`
     passed.
@@ -155,6 +195,10 @@ status: in_progress
     when the fallback payload changes and adding recovery coverage.
   - U3 review flagged duplicate key risks in fallback/list rendering. Fixed by
     including list indexes in fallback and preview keys.
+  - U4 review confirmed the runtime emission, finalize persistence, wakeup
+    persistence, live web merge path, and synchronous runtime response all reuse
+    the canonical Thread GenUI envelope and analytics validator context. No
+    fixups were required after review.
 - CI log:
   - U1 PR #2753 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) twice: once on the initial PR head and again after rebasing because
@@ -169,9 +213,13 @@ status: in_progress
     `test`) after rebasing once because `main` moved.
   - U8 PR #2758 was squash merged to `main` as
     `4d105e50543937dedd95378dcd71d9e3e98efa5e`.
+  - U3 PR #2760 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) after repeated rebases because `main` moved.
+  - U3 PR #2760 was squash merged to `main` as
+    `9c13dac27c6efc66156058b1af99103fdb44e70a`.
 - Blockers: none.
-- Next action: monitor U3 PR #2760 CI, fix any failures, and squash merge when
-  green.
+- Next action: open the U4 PR, monitor CI, fix any failures, and squash merge
+  when green.
 
 ## First-Class Workflow Control Plane - 2026-06-20
 

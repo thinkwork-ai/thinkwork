@@ -449,8 +449,10 @@ export function TaskThreadView({
     runbookQueues,
     streamState?.parts ?? [],
   );
+  const hasTypedStreamParts = (streamState?.parts.length ?? 0) > 0;
   const showStreamingBuffer =
-    streamingChunks.length > 0 && !hasAssistantAfterLatestUser(visibleMessages);
+    (streamingChunks.length > 0 || hasTypedStreamParts) &&
+    !hasAssistantAfterLatestUser(visibleMessages);
   const latestUserIndex = findLastIndex(
     transcriptMessages,
     (message) => message.role.toUpperCase() === "USER",

@@ -569,6 +569,7 @@ export async function processFinalize(
         agentId,
         displayResponse,
         toolInvocations,
+        invokeResult.ui_message_parts,
       );
 
   // 7a. Link orphan artifacts created during this turn to the thread + message.

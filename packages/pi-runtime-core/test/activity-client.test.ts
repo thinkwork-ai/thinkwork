@@ -4,6 +4,8 @@ import {
   readActivityCallbackConfig,
   type ActivityCallbackConfig,
 } from "../src/activity-client.js";
+import { threadGenUIActivityEvent } from "../src/genui-runtime.js";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 
 const TURN_ID = "44444444-4444-4444-4444-444444444444";
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
@@ -88,6 +90,31 @@ describe("createActivityEmitter", () => {
       event_type: "tool_invocation_started",
       stream: "step",
       message: "web_search",
+    });
+  });
+
+  it("POSTs data-genui UIMessage chunks on the ui stream", async () => {
+    const fixture = createTaskReviewGenUIFixture();
+    const fetchImpl = okFetch();
+    const emitter = createActivityEmitter(config(), {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    emitter.emit(threadGenUIActivityEvent(fixture));
+    await emitter.drain();
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.events[0]).toMatchObject({
+      event_type: "ui_message_chunk",
+      stream: "ui",
+      message: "Review onboarding task",
+      payload: {
+        kind: "thread_genui.ui_message_chunk",
+        chunk: fixture,
+      },
     });
   });
 
