@@ -26,6 +26,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { computeCatalogSkillSha } from "../lib/catalog-skill-sha.js";
+import { renderCatalogSkillArchive } from "../lib/catalog-skill-archive.js";
 
 // ─── Hoisted DB mock ─────────────────────────────────────────────────────────
 
@@ -277,6 +278,31 @@ vi.mock("../lib/catalog-index.js", () => ({
   listIndexedSkills: listIndexedSkillsMock,
 }));
 
+const { ensureSkillDatasetSeededMock, launchSkillEvalRunMock } = vi.hoisted(
+  () => ({
+    ensureSkillDatasetSeededMock: vi.fn(),
+    launchSkillEvalRunMock: vi.fn(),
+  }),
+);
+
+vi.mock("../lib/evals/skill-dataset.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/evals/skill-dataset.js")>();
+  return {
+    ...actual,
+    ensureSkillDatasetSeeded: ensureSkillDatasetSeededMock,
+  };
+});
+
+vi.mock("../lib/evals/skill-eval-run.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/evals/skill-eval-run.js")>();
+  return {
+    ...actual,
+    launchSkillEvalRun: launchSkillEvalRunMock,
+  };
+});
+
 // ─── Mock the Agent Profile projection functions (U7). Path predicates stay
 // real (isGovernanceFilePath depends on them); only the DB-touching
 // projection entry points are spied so the handler wiring can be asserted
@@ -434,8 +460,27 @@ function body(content: string) {
   return {
     Body: {
       transformToString: async (_enc?: string) => content,
+      transformToByteArray: async () => new TextEncoder().encode(content),
     } as unknown as never,
   };
+}
+
+async function archiveBase64(
+  slug: string,
+  files: { path: string; content: Buffer }[],
+): Promise<string> {
+  const archive = await renderCatalogSkillArchive({ slug, files });
+  return archive.bytes.toString("base64");
+}
+
+function skillMd(name: string, description = "Does useful work."): Buffer {
+  return Buffer.from(`---
+name: ${name}
+description: ${description}
+---
+
+# ${name}
+`);
 }
 
 function noSuchKey() {
@@ -461,6 +506,18 @@ beforeEach(() => {
   reindexCatalogSkillMock.mockResolvedValue({ slug: "", action: "upserted" });
   listIndexedSkillsMock.mockReset();
   listIndexedSkillsMock.mockResolvedValue([]);
+  ensureSkillDatasetSeededMock.mockReset();
+  ensureSkillDatasetSeededMock.mockResolvedValue({
+    action: "skipped",
+    datasetSlug: "skill-finance-audit-xls",
+    addedCaseIds: [],
+    updatedCaseIds: [],
+    removedCaseIds: [],
+    skipped: [],
+    bundledCaseCount: 0,
+  });
+  launchSkillEvalRunMock.mockReset();
+  launchSkillEvalRunMock.mockResolvedValue({ status: "queued" });
   enqueueComputerTaskMock.mockReset();
   enqueueComputerTaskMock.mockResolvedValue({ id: "computer-task-1" });
   bootstrapAgentWorkspaceMock.mockReset();
@@ -1571,6 +1628,509 @@ describe("catalog write-through (U3)", () => {
 
     expect(res.statusCode).toBe(200);
     expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("catalog import-skill action", () => {
+  it("imports a new skill archive into an empty catalog and generates WIRING.md", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+            {
+              path: "references/guide.md",
+              content: Buffer.from("# Guide\n"),
+            },
+            {
+              path: "assets/icon.bin",
+              content: Buffer.from([0x00, 0xff, 0x7f]),
+            },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "imported-skill",
+      status: "created",
+      generatedWiring: true,
+    });
+    const puts = s3Mock.commandCalls(PutObjectCommand).map((call) => ({
+      key: call.args[0].input.Key,
+      body: call.args[0].input.Body,
+    }));
+    expect(puts.map((put) => put.key).sort()).toEqual([
+      "tenants/acme/skill-catalog/imported-skill/SKILL.md",
+      "tenants/acme/skill-catalog/imported-skill/WIRING.md",
+      "tenants/acme/skill-catalog/imported-skill/assets/icon.bin",
+      "tenants/acme/skill-catalog/imported-skill/references/guide.md",
+    ]);
+    expect(
+      String(puts.find((put) => put.key?.endsWith("WIRING.md"))?.body),
+    ).toContain("skills/imported-skill/SKILL.md");
+    expect(
+      Buffer.isBuffer(
+        puts.find((put) => put.key?.endsWith("assets/icon.bin"))?.body,
+      ),
+    ).toBe(true);
+    expect(reindexCatalogSkillMock).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "imported-skill", tenantSlug: "acme" }),
+    );
+  });
+
+  it("returns validation errors for invalid archives without mutating S3", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          archiveBase64: Buffer.from("not a zip").toString("base64"),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe("invalid_skill_archive");
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 for existing catalog slugs until replacement is confirmed", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md" },
+        ],
+      });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toMatchObject({
+      ok: false,
+      code: "skill_exists",
+      slug: "imported-skill",
+    });
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("returns 409 when a concurrent unconfirmed create wins the S3 conditional write", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(PutObjectCommand).callsFake(() => {
+      const err = new Error("already exists");
+      err.name = "PreconditionFailed";
+      throw err;
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toMatchObject({
+      ok: false,
+      code: "skill_exists",
+      slug: "imported-skill",
+    });
+    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+    expect(ensureSkillDatasetSeededMock).not.toHaveBeenCalled();
+  });
+
+  it("replaces an existing catalog skill when confirmed without touching installed copies", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md" },
+          { Key: "tenants/acme/skill-catalog/imported-skill/WIRING.md" },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md",
+      })
+      .resolves(body("old skill"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/imported-skill/WIRING.md",
+      })
+      .resolves(body("old wiring"));
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          confirmReplace: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+            {
+              path: "WIRING.md",
+              content: Buffer.from("# Wiring suggestions\n"),
+            },
+            {
+              path: "references/new.md",
+              content: Buffer.from("new reference"),
+            },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "imported-skill",
+      status: "updated",
+      generatedWiring: false,
+    });
+    expect(
+      s3Mock
+        .commandCalls(DeleteObjectCommand)
+        .map((call) => call.args[0].input.Key),
+    ).toEqual([
+      "tenants/acme/skill-catalog/imported-skill/SKILL.md",
+      "tenants/acme/skill-catalog/imported-skill/WIRING.md",
+    ]);
+    expect(
+      s3Mock
+        .commandCalls(PutObjectCommand)
+        .map((call) => String(call.args[0].input.Key)),
+    ).not.toContain("tenants/acme/agents/marco/skills/imported-skill/SKILL.md");
+    expect(reindexCatalogSkillMock).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "imported-skill" }),
+    );
+  });
+
+  it("restores previous catalog objects when a confirmed replacement write fails", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md" },
+          { Key: "tenants/acme/skill-catalog/imported-skill/WIRING.md" },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md",
+      })
+      .resolves(body("old skill"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/imported-skill/WIRING.md",
+      })
+      .resolves(body("old wiring"));
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    let failedSentinelWrite = false;
+    s3Mock.on(PutObjectCommand).callsFake((input) => {
+      if (!failedSentinelWrite && String(input.Key).endsWith("zz-fail.txt")) {
+        failedSentinelWrite = true;
+        throw new Error("s3 write failed");
+      }
+      return {};
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          confirmReplace: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+            {
+              path: "WIRING.md",
+              content: Buffer.from("# Wiring suggestions\n"),
+            },
+            {
+              path: "references/new.md",
+              content: Buffer.from("new reference"),
+            },
+            { path: "zz-fail.txt", content: Buffer.from("fail") },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body.code).toBe("catalog_skill_import_failed");
+    expect(
+      s3Mock.commandCalls(PutObjectCommand).map((call) => ({
+        key: call.args[0].input.Key,
+        body: String(call.args[0].input.Body),
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          key: "tenants/acme/skill-catalog/imported-skill/SKILL.md",
+          body: "old skill",
+        },
+        {
+          key: "tenants/acme/skill-catalog/imported-skill/WIRING.md",
+          body: "old wiring",
+        },
+      ]),
+    );
+    expect(
+      s3Mock
+        .commandCalls(DeleteObjectCommand)
+        .map((call) => call.args[0].input.Key),
+    ).toContain("tenants/acme/skill-catalog/imported-skill/references/new.md");
+    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+  });
+
+  it("reports rollback failure precisely and skips reindex/eval sync", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md" },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md",
+      })
+      .resolves(body("old skill"));
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    let failedNewWiringWrite = false;
+    s3Mock.on(PutObjectCommand).callsFake((input) => {
+      if (
+        !failedNewWiringWrite &&
+        String(input.Key).endsWith("WIRING.md") &&
+        String(input.Body).includes("# Wiring suggestions")
+      ) {
+        failedNewWiringWrite = true;
+        throw new Error("s3 write failed");
+      }
+      if (String(input.Body) === "old skill") {
+        throw new Error("rollback restore failed");
+      }
+      return {};
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          confirmReplace: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+            {
+              path: "WIRING.md",
+              content: Buffer.from("# Wiring suggestions\n"),
+            },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body.code).toBe("catalog_skill_import_rollback_failed");
+    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+    expect(ensureSkillDatasetSeededMock).not.toHaveBeenCalled();
+  });
+
+  it("syncs bundled eval cases without blocking catalog success", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    ensureSkillDatasetSeededMock.mockResolvedValueOnce({
+      action: "seeded",
+      datasetSlug: "skill-imported-skill",
+      addedCaseIds: ["asks-first"],
+      updatedCaseIds: [],
+      removedCaseIds: [],
+      skipped: [],
+      bundledCaseCount: 1,
+    });
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const evalCase = JSON.stringify({ query: "Ask first", rubric: "Good" });
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+            { path: "evals/asks-first.json", content: Buffer.from(evalCase) },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.evalDataset).toEqual({
+      slug: "skill-imported-skill",
+      cases: 1,
+      skipped: 0,
+    });
+    expect(res.body.evalRun).toEqual({ status: "queued" });
+    expect(ensureSkillDatasetSeededMock).toHaveBeenCalledWith(
+      TENANT_A,
+      "imported-skill",
+      [{ fileName: "asks-first.json", content: evalCase }],
+    );
+    expect(launchSkillEvalRunMock).toHaveBeenCalledWith({
+      tenantId: TENANT_A,
+      skillSlug: "imported-skill",
+    });
+  });
+
+  it("surfaces reindex and eval sync warnings without failing durable import", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    reindexCatalogSkillMock.mockRejectedValueOnce(new Error("db unavailable"));
+    ensureSkillDatasetSeededMock.mockRejectedValueOnce(new Error("eval down"));
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({ Contents: [] });
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+            {
+              path: "evals/asks-first.json",
+              content: Buffer.from(
+                JSON.stringify({ query: "Ask first", rubric: "Good" }),
+              ),
+            },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.indexWarning).toMatch(/rebuild/i);
+    expect(res.body.evalDatasetWarning).toMatch(/eval dataset sync failed/i);
+    expect(s3Mock.commandCalls(PutObjectCommand).length).toBeGreaterThan(0);
+    expect(launchSkillEvalRunMock).not.toHaveBeenCalled();
+  });
+
+  it("reconciles bundled evals with an empty list when an update removes eval files", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md" },
+          {
+            Key: "tenants/acme/skill-catalog/imported-skill/evals/old.json",
+          },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md",
+      })
+      .resolves(body("old skill"));
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: "tenants/acme/skill-catalog/imported-skill/evals/old.json",
+      })
+      .resolves(body(JSON.stringify({ query: "Old", rubric: "Old" })));
+    s3Mock.on(DeleteObjectCommand).resolves({});
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill",
+          catalog: true,
+          confirmReplace: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(ensureSkillDatasetSeededMock).toHaveBeenCalledWith(
+      TENANT_A,
+      "imported-skill",
+      [],
+    );
   });
 });
 

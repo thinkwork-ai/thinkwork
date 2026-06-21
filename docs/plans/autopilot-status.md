@@ -14,9 +14,9 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: U1 PR opened; monitoring CI.
-- Current branch: `codex/skill-library-u1-archive`.
-- Current worktree: `.Codex/worktrees/skill-library-u1-archive`.
+- Status: U2 implementation in progress.
+- Current branch: `codex/skill-library-u2-import`.
+- Current worktree: `.Codex/worktrees/skill-library-u2-import`.
 - Notes:
   - The user-referenced plan file was absent from the starting checkout and
     from `origin/main`; `origin/main` did contain the matching requirements doc.
@@ -31,6 +31,15 @@ status: in_progress
     tests.
   - Compound review pass found entry-count, export slug, and test-coverage
     gaps; fixes are applied before PR.
+  - U1 PR [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777)
+    passed CLA, lint, test, typecheck, and verify; squash merged as
+    `134907ab08cf5c6bcb81200f7c0f76ed30ec7952`.
+  - U2 adds the admin-gated catalog `import-skill` API action for validated
+    archive creation/replacement, rollback, reindex warning propagation, and
+    bundled eval sync.
+  - U2 Compound review pass found collision-code, rollback-coverage,
+    rollback-failure, concurrent-create, and eval reconciliation gaps; fixes are
+    applied before PR.
 - Local verification:
   - `pnpm install --frozen-lockfile` completed; local Node 25 logged the
     existing `canvas@2.11.2` native fallback failure for missing `pkg-config`
@@ -40,13 +49,27 @@ status: in_progress
     passed: 58 tests.
   - `pnpm --filter @thinkwork/api typecheck` passed.
   - `pnpm --filter @thinkwork/api test` passed: 5,119 tests, 9 skipped.
+  - U2: `pnpm install --frozen-lockfile` completed; local Node 25 logged the
+    existing `canvas@2.11.2` native fallback failure for missing `pkg-config`
+    / `pixman-1`, but the install command exited successfully and workspace
+    executables linked.
+  - U2: `pnpm --filter @thinkwork/api exec vitest run src/__tests__/workspace-files-handler.test.ts -t "catalog import-skill action"`
+    passed: 10 tests, 150 skipped.
+  - U2: `pnpm --filter @thinkwork/api exec vitest run src/__tests__/workspace-files-handler.test.ts`
+    passed: 160 tests.
+  - U2: `pnpm --filter @thinkwork/api typecheck` passed.
+  - U2: `pnpm --filter @thinkwork/api test` passed: 5,143 tests, 9 skipped.
+  - U2: `pnpm lint` passed.
+  - U2: `pnpm dlx prettier@3.8.2 --check --ignore-unknown docs/plans/autopilot-status.md packages/api/workspace-files.ts packages/api/src/__tests__/workspace-files-handler.test.ts`
+    passed.
+  - U2: `git diff --check` passed.
 - Unit ledger:
 
 | Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                        |
 | ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------ |
 | Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | Merged      | Squash merged as `1f427854fc51b7e7c7b1f9937c6418627088d98d`. |
-| U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | In progress | PR opened; CI monitoring in progress.                        |
-| U2 Catalog Import API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                               |
+| U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | Merged      | Squash merged as `134907ab08cf5c6bcb81200f7c0f76ed30ec7952`. |
+| U2 Catalog Import API Action                   | `codex/skill-library-u2-import`          | Pending                                                      | In progress | Full API tests passing after Compound review fixes.          |
 | U3 Catalog Export API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                               |
 | U4 Skill Library Import UI                     | Pending                                  | Pending                                                      | Pending     | Depends on U2.                                               |
 | U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                        |

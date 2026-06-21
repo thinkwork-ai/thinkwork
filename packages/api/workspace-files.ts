@@ -22,7 +22,7 @@
  *   list → { ok: true, files: Array<{ path, source, sha256, overridden }> }
  *   put  → { ok: true }
  *   delete → { ok: true }
- *   install-skill / uninstall-skill / reinstall-skill → { ok: true, ... }
+ *   import-skill / install-skill / uninstall-skill / reinstall-skill → { ok: true, ... }
  *   generate-folder-structure → { ok: true }
  *   regenerate-map → { ok: true } (optional path scopes refresh to that AGENTS.md)
  *   normalize-map → { ok: true }
@@ -93,6 +93,7 @@ import { callerVisibleThreadPredicate } from "./src/graphql/resolvers/threads/ac
 import { emitAuditEvent } from "./src/lib/compliance/emit.js";
 import {
   CatalogInstallError,
+  extractBundledEvalCases,
   installCatalogSkill,
 } from "./src/lib/catalog-install.js";
 import {
@@ -117,6 +118,10 @@ import {
   reindexCatalogSkill,
   listIndexedSkills,
 } from "./src/lib/catalog-index.js";
+import {
+  parseCatalogSkillArchive,
+  textFromCatalogArchiveFile,
+} from "./src/lib/catalog-skill-archive.js";
 import {
   identityFieldLabel,
   isAgentIdentityField,
@@ -627,6 +632,7 @@ const WRITE_ACTIONS = new Set([
   "rename",
   "create-sub-agent",
   "install-skill",
+  "import-skill",
   "reinstall-skill",
   "uninstall-skill",
   "generate-folder-structure",
@@ -963,6 +969,224 @@ async function handleCatalogSummary(
       sha: s.content_sha,
     })),
   });
+}
+
+type ExistingCatalogObject = {
+  key: string;
+  content: Buffer;
+  contentType?: string;
+};
+
+async function handleImportSkill(
+  deps: HandlerDeps,
+  archiveBase64: string | undefined,
+  confirmReplace: boolean,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+  if (target.kind !== "catalog") {
+    return json(400, {
+      ok: false,
+      code: "unsupported_target",
+      error: "import-skill requires the skill catalog target",
+    });
+  }
+  if (typeof archiveBase64 !== "string" || archiveBase64.length === 0) {
+    return json(400, {
+      ok: false,
+      code: "archive_required",
+      error: "archiveBase64 is required for import-skill",
+    });
+  }
+
+  const parsed = await parseCatalogSkillArchive(
+    Buffer.from(archiveBase64, "base64"),
+  );
+  if (!parsed.ok) {
+    return json(400, {
+      ok: false,
+      code: "invalid_skill_archive",
+      error: "Skill archive is invalid.",
+      errors: parsed.errors,
+    });
+  }
+  if (isBuiltinToolSlug(parsed.slug)) {
+    return json(400, {
+      ok: false,
+      code: "builtin_tool_slug",
+      error: `Catalog skill slug '${parsed.slug}' conflicts with a built-in tool slug.`,
+    });
+  }
+
+  const skillPrefix = `${target.prefix}${parsed.slug}/`;
+  const existingRelativePaths = await listAllObjectsUnfiltered(skillPrefix);
+  const existingKeys = existingRelativePaths.map(
+    (path) => `${skillPrefix}${path}`,
+  );
+  const exists = existingKeys.length > 0;
+  if (exists && !confirmReplace) {
+    return json(409, {
+      ok: false,
+      code: "skill_exists",
+      error: `Catalog skill '${parsed.slug}' already exists.`,
+      slug: parsed.slug,
+      generatedWiring: parsed.generatedWiring,
+    });
+  }
+
+  const priorObjects = exists
+    ? await Promise.all(existingKeys.map((key) => readCatalogObject(key)))
+    : [];
+  const writtenKeys: string[] = [];
+
+  try {
+    if (exists) {
+      for (const key of existingKeys) {
+        await s3.send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
+      }
+    }
+
+    for (const file of parsed.files) {
+      const key = `${skillPrefix}${file.path}`;
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket(),
+          Key: key,
+          Body: file.content,
+          ContentType: contentTypeForCatalogSkillPath(file.path),
+          ...(!exists && !confirmReplace ? { IfNoneMatch: "*" } : {}),
+        }),
+      );
+      writtenKeys.push(key);
+    }
+  } catch (err) {
+    const rollback = await rollbackCatalogImport(writtenKeys, priorObjects);
+    if (isPreconditionFailed(err) && !exists && !confirmReplace) {
+      if (!rollback.ok) {
+        return json(500, {
+          ok: false,
+          code: "catalog_skill_import_rollback_failed",
+          error:
+            `Catalog skill import collided while creating '${parsed.slug}' ` +
+            `(${errorMessage(err)}) and rollback failed: ${rollback.error}`,
+          slug: parsed.slug,
+        });
+      }
+      return json(409, {
+        ok: false,
+        code: "skill_exists",
+        error: `Catalog skill '${parsed.slug}' already exists.`,
+        slug: parsed.slug,
+        generatedWiring: parsed.generatedWiring,
+      });
+    }
+    if (!rollback.ok) {
+      return json(500, {
+        ok: false,
+        code: "catalog_skill_import_rollback_failed",
+        error:
+          `Catalog skill import failed (${errorMessage(err)}) and rollback failed: ` +
+          rollback.error,
+        slug: parsed.slug,
+      });
+    }
+    return json(500, {
+      ok: false,
+      code: "catalog_skill_import_failed",
+      error: `Catalog skill import failed after rollback: ${errorMessage(err)}`,
+      slug: parsed.slug,
+    });
+  }
+
+  const indexWarning = await reindexCatalogAfterMutation(
+    target,
+    tenantId,
+    parsed.slug,
+    "import-skill",
+  );
+  const evalCases = extractBundledEvalCases(
+    parsed.files.map((file) => ({
+      relativePath: file.path,
+      content: textFromCatalogArchiveFile(file),
+    })),
+  );
+  const evalOutcome = await syncSkillEvalDataset(
+    tenantId,
+    parsed.slug,
+    evalCases,
+  );
+
+  return json(200, {
+    ok: true,
+    slug: parsed.slug,
+    status: exists ? "updated" : "created",
+    generatedWiring: parsed.generatedWiring,
+    ...(indexWarning ? { indexWarning } : {}),
+    ...evalOutcome,
+  });
+}
+
+async function readCatalogObject(key: string): Promise<ExistingCatalogObject> {
+  const resp = await s3.send(
+    new GetObjectCommand({ Bucket: bucket(), Key: key }),
+  );
+  const body = resp.Body as
+    | {
+        transformToByteArray?: () => Promise<Uint8Array>;
+        transformToString?: (encoding?: string) => Promise<string>;
+      }
+    | undefined;
+  if (body?.transformToByteArray) {
+    return {
+      key,
+      content: Buffer.from(await body.transformToByteArray()),
+      contentType: resp.ContentType,
+    };
+  }
+  return {
+    key,
+    content: Buffer.from(
+      (await body?.transformToString?.("utf-8")) ?? "",
+      "utf8",
+    ),
+    contentType: resp.ContentType,
+  };
+}
+
+async function rollbackCatalogImport(
+  writtenKeys: string[],
+  priorObjects: ExistingCatalogObject[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    for (const key of writtenKeys) {
+      await s3.send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
+    }
+    for (const object of priorObjects) {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket(),
+          Key: object.key,
+          Body: object.content,
+          ContentType:
+            object.contentType ?? contentTypeForCatalogSkillPath(object.key),
+        }),
+      );
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) };
+  }
+}
+
+function contentTypeForCatalogSkillPath(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".md")) return "text/markdown; charset=utf-8";
+  if (lower.endsWith(".json")) return "application/json; charset=utf-8";
+  if (lower.endsWith(".txt")) return "text/plain; charset=utf-8";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  return "application/octet-stream";
 }
 
 function catalogPathSlug(path: string): string {
@@ -3021,6 +3245,10 @@ interface RequestBody {
   contextContent?: string;
   /** For `install-skill`: selected WIRING.md suggestion id. */
   wiring_choice?: string;
+  /** For catalog `import-skill`: base64-encoded single-skill ZIP archive. */
+  archiveBase64?: string;
+  /** For catalog `import-skill`: explicitly replace an existing catalog slug. */
+  confirmReplace?: boolean;
   /** For `move`: source file or folder path (relative to workspace). */
   fromPath?: string;
   /**
@@ -3143,7 +3371,7 @@ export async function handler(
 
   if (
     target.kind === "catalog" &&
-    !["get", "list", "put", "delete"].includes(action)
+    !["get", "list", "put", "delete", "import-skill"].includes(action)
   ) {
     return json(400, {
       ok: false,
@@ -3212,6 +3440,13 @@ export async function handler(
           });
         }
         return await handleReinstallSkill(deps, body.slug);
+      }
+      case "import-skill": {
+        return await handleImportSkill(
+          deps,
+          body.archiveBase64,
+          body.confirmReplace === true,
+        );
       }
       case "delete": {
         if (!body.path)
@@ -3315,6 +3550,13 @@ function isNoSuchKey(err: unknown): boolean {
   const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
     ?.$metadata?.httpStatusCode;
   return name === "NoSuchKey" || name === "NotFound" || status === 404;
+}
+
+function isPreconditionFailed(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name;
+  const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  return name === "PreconditionFailed" || status === 412;
 }
 
 async function listPrefix(prefix: string): Promise<string[]> {
