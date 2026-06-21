@@ -6,12 +6,12 @@ import {
   Clock,
   Cpu,
   History,
-  Repeat,
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
   Users,
   Webhook,
+  Workflow,
   Wrench,
 } from "lucide-react";
 import { IconPlanet, IconPlug } from "@tabler/icons-react";
@@ -107,9 +107,9 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     operatorOnly: true,
   },
   {
-    label: "Routines",
-    to: "/settings/routines",
-    icon: Repeat,
+    label: "Workflows",
+    to: "/settings/workflows",
+    icon: Workflow,
     operatorOnly: true,
   },
   {

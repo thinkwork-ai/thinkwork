@@ -77,10 +77,10 @@ export function SettingsRoutineDetail() {
           : null;
 
   usePageHeaderActions({
-    title: routine?.name ?? "Routine",
+    title: routine?.name ?? "Workflow",
     breadcrumbs: [
-      { label: "Routines", href: "/settings/routines" },
-      { label: routine?.name ?? "Routine" },
+      { label: "Workflows", href: "/settings/workflows" },
+      { label: routine?.name ?? "Workflow" },
     ],
     action: routine ? (
       <Button
@@ -91,7 +91,7 @@ export function SettingsRoutineDetail() {
         title={testDisabledReason ?? undefined}
       >
         <Zap className="h-3.5 w-3.5" />
-        {triggerState.fetching ? "Starting…" : "Test Routine"}
+        {triggerState.fetching ? "Starting…" : "Test Workflow"}
       </Button>
     ) : undefined,
     actionKey: `routine-test:${routineId}:${triggerState.fetching}:${testDisabledReason ?? "ok"}`,
@@ -122,7 +122,7 @@ export function SettingsRoutineDetail() {
     return (
       <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
         <p className="text-sm text-muted-foreground">
-          This routine could not be loaded — it may have been removed.
+          This workflow could not be loaded — it may have been removed.
         </p>
       </div>
     );

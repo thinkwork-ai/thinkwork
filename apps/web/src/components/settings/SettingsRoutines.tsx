@@ -77,12 +77,12 @@ export function SettingsRoutines() {
 
   return (
     <SettingsTablePane
-      title="Routines"
-      description="Manage cron-scheduled remote agents and review their runs."
+      title="Workflows"
+      description="Manage imported Step Functions workflows and review their runs."
       loading={result.fetching && !result.data}
       toolbar={
         <Input
-          placeholder="Search routines…"
+          placeholder="Search workflows..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
@@ -106,7 +106,7 @@ export function SettingsRoutines() {
         }
         emptyState={
           <div className="py-10 text-center text-sm text-muted-foreground">
-            No routines yet.
+            No workflows yet.
           </div>
         }
       />

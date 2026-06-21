@@ -1,13 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsRoutineExecutionDetail } from "@/components/settings/SettingsRoutineExecutionDetail";
+import { RoutineWorkflowRunRedirect } from "@/components/workflows/RoutineWorkflowRedirects";
 
 export const Route = createFileRoute(
   "/_authed/settings/routines/$routineId_/executions/$executionId",
 )({
-  component: () => (
-    <OperatorGuard>
-      <SettingsRoutineExecutionDetail />
-    </OperatorGuard>
-  ),
+  component: RoutineExecutionCompatibilityRoute,
 });
+
+function RoutineExecutionCompatibilityRoute() {
+  const { routineId, executionId } = Route.useParams();
+  return (
+    <OperatorGuard>
+      <RoutineWorkflowRunRedirect
+        routineId={routineId}
+        executionId={executionId}
+      />
+    </OperatorGuard>
+  );
+}

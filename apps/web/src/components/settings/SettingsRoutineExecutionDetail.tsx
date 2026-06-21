@@ -40,6 +40,52 @@ export function SettingsRoutineExecutionDetail() {
   const { routineId, executionId } = useParams({
     from: "/_authed/settings/routines/$routineId_/executions/$executionId",
   });
+  return (
+    <RoutineExecutionDetailView
+      routineId={routineId}
+      executionId={executionId}
+      header="routine"
+    />
+  );
+}
+
+function RoutineExecutionHeaderPublisher({
+  routineId,
+  executionId,
+  routineName,
+  status,
+}: {
+  routineId: string;
+  executionId: string;
+  routineName?: string | null;
+  status?: string | null;
+}) {
+  usePageHeaderActions({
+    title: routineName ?? "Execution",
+    breadcrumbs: routineName
+      ? [
+          { label: "Workflows", href: "/settings/workflows" },
+          { label: routineName, href: `/settings/routines/${routineId}` },
+          { label: `Run ${executionId.slice(0, 8)}` },
+        ]
+      : [{ label: "Workflows", href: "/settings/workflows" }],
+    action: status ? <StatusBadge status={status.toLowerCase()} /> : undefined,
+    actionKey: `exec:${executionId}:${status ?? "loading"}`,
+  });
+  return null;
+}
+
+export function RoutineExecutionDetailView({
+  routineId,
+  executionId,
+  header = "none",
+  className = "p-6",
+}: {
+  routineId: string;
+  executionId: string;
+  header?: "routine" | "none";
+  className?: string;
+}) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -76,21 +122,6 @@ export function SettingsRoutineExecutionDetail() {
       manifestSteps[0]?.nodeId ?? execution?.stepEvents[0]?.nodeId ?? null;
     if (firstStep) setSelectedNodeId(firstStep);
   }, [execution?.stepEvents, manifestSteps, selectedNodeId]);
-
-  usePageHeaderActions({
-    title: routine?.name ?? "Execution",
-    breadcrumbs: routine
-      ? [
-          { label: "Routines", href: "/settings/routines" },
-          { label: routine.name, href: `/settings/routines/${routineId}` },
-          { label: `Run ${executionId.slice(0, 8)}` },
-        ]
-      : [{ label: "Routines", href: "/settings/routines" }],
-    action: execution ? (
-      <StatusBadge status={execution.status.toLowerCase()} />
-    ) : undefined,
-    actionKey: `exec:${executionId}:${execution?.status ?? "loading"}`,
-  });
 
   if (fetching && !execution) {
     return (
@@ -171,7 +202,17 @@ export function SettingsRoutineExecutionDetail() {
     );
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-6">
+    <div
+      className={`flex h-full min-h-0 w-full flex-col overflow-hidden ${className}`}
+    >
+      {header === "routine" ? (
+        <RoutineExecutionHeaderPublisher
+          routineId={routineId}
+          executionId={executionId}
+          routineName={routine?.name}
+          status={execution.status}
+        />
+      ) : null}
       <div className="flex h-full min-h-0 gap-3">
         <div className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border/80 bg-background">
           <ExecutionGraph

@@ -40,6 +40,7 @@ import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new"
 import { Route as AuthedShellMemoryRouteImport } from "./routes/_authed/_shell/memory";
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
 import { Route as AuthedShellAutomationsRouteImport } from "./routes/_authed/_shell/automations";
+import { Route as AuthedSettingsWorkflowsIndexRouteImport } from "./routes/_authed/settings.workflows.index";
 import { Route as AuthedSettingsWebhooksIndexRouteImport } from "./routes/_authed/settings.webhooks.index";
 import { Route as AuthedSettingsUsersIndexRouteImport } from "./routes/_authed/settings.users.index";
 import { Route as AuthedSettingsSpacesIndexRouteImport } from "./routes/_authed/settings.spaces.index";
@@ -59,6 +60,7 @@ import { Route as AuthedShellCustomizeIndexRouteImport } from "./routes/_authed/
 import { Route as AuthedShellAutomationsIndexRouteImport } from "./routes/_authed/_shell/automations.index";
 import { Route as AuthedShellArtifactsIndexRouteImport } from "./routes/_authed/_shell/artifacts.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
+import { Route as AuthedSettingsWorkflowsWorkflowIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId";
 import { Route as AuthedSettingsWebhooksWebhookIdRouteImport } from "./routes/_authed/settings.webhooks.$webhookId";
 import { Route as AuthedSettingsUsersUserIdRouteImport } from "./routes/_authed/settings.users.$userId";
 import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authed/settings.spaces.$spaceId";
@@ -98,6 +100,7 @@ import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
 import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./routes/_authed/settings.evaluations.datasets.$slug";
 import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_shell/memory.kbs.$kbId";
+import { Route as AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId_.runs.$runId";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.$executionId";
 import { Route as AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.edit.$testCaseId";
 import { Route as AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport } from "./routes/_authed/crm.$provider.$objectType.$objectId.$workflowKey";
@@ -261,6 +264,12 @@ const AuthedShellAutomationsRoute = AuthedShellAutomationsRouteImport.update({
   path: "/automations",
   getParentRoute: () => AuthedShellRoute,
 } as any);
+const AuthedSettingsWorkflowsIndexRoute =
+  AuthedSettingsWorkflowsIndexRouteImport.update({
+    id: "/workflows/",
+    path: "/workflows/",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsWebhooksIndexRoute =
   AuthedSettingsWebhooksIndexRouteImport.update({
     id: "/webhooks/",
@@ -371,6 +380,12 @@ const AuthedShellApprovalsIndexRoute =
     id: "/approvals/",
     path: "/approvals/",
     getParentRoute: () => AuthedShellRoute,
+  } as any);
+const AuthedSettingsWorkflowsWorkflowIdRoute =
+  AuthedSettingsWorkflowsWorkflowIdRouteImport.update({
+    id: "/workflows/$workflowId",
+    path: "/workflows/$workflowId",
+    getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsWebhooksWebhookIdRoute =
   AuthedSettingsWebhooksWebhookIdRouteImport.update({
@@ -601,6 +616,12 @@ const AuthedShellMemoryKbsKbIdRoute =
     path: "/$kbId",
     getParentRoute: () => AuthedShellMemoryKbsRoute,
   } as any);
+const AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute =
+  AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport.update({
+    id: "/workflows/$workflowId_/runs/$runId",
+    path: "/workflows/$workflowId/runs/$runId",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute =
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport.update({
     id: "/routines/$routineId_/executions/$executionId",
@@ -686,6 +707,7 @@ export interface FileRoutesByFullPath {
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
+  "/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/automations/": typeof AuthedShellAutomationsIndexRoute;
@@ -705,6 +727,7 @@ export interface FileRoutesByFullPath {
   "/settings/spaces/": typeof AuthedSettingsSpacesIndexRoute;
   "/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
+  "/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
@@ -718,6 +741,7 @@ export interface FileRoutesByFullPath {
   "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
+  "/settings/workflows/$workflowId/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
@@ -774,6 +798,7 @@ export interface FileRoutesByTo {
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
+  "/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
   "/artifacts": typeof AuthedShellArtifactsIndexRoute;
   "/automations": typeof AuthedShellAutomationsIndexRoute;
@@ -793,6 +818,7 @@ export interface FileRoutesByTo {
   "/settings/spaces": typeof AuthedSettingsSpacesIndexRoute;
   "/settings/users": typeof AuthedSettingsUsersIndexRoute;
   "/settings/webhooks": typeof AuthedSettingsWebhooksIndexRoute;
+  "/settings/workflows": typeof AuthedSettingsWorkflowsIndexRoute;
   "/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
@@ -806,6 +832,7 @@ export interface FileRoutesByTo {
   "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
+  "/settings/workflows/$workflowId/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -870,6 +897,7 @@ export interface FileRoutesById {
   "/_authed/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/_authed/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/_authed/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
+  "/_authed/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
   "/_authed/_shell/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/_authed/_shell/automations/": typeof AuthedShellAutomationsIndexRoute;
@@ -889,6 +917,7 @@ export interface FileRoutesById {
   "/_authed/settings/spaces/": typeof AuthedSettingsSpacesIndexRoute;
   "/_authed/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/_authed/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
+  "/_authed/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
   "/_authed/_shell/memory/kbs/$kbId": typeof AuthedShellMemoryKbsKbIdRoute;
   "/_authed/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/_authed/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
@@ -902,6 +931,7 @@ export interface FileRoutesById {
   "/_authed/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/_authed/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/_authed/settings/routines/$routineId_/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
+  "/_authed/settings/workflows/$workflowId_/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -965,6 +995,7 @@ export interface FileRouteTypes {
     | "/settings/spaces/$spaceId"
     | "/settings/users/$userId"
     | "/settings/webhooks/$webhookId"
+    | "/settings/workflows/$workflowId"
     | "/approvals/"
     | "/artifacts/"
     | "/automations/"
@@ -984,6 +1015,7 @@ export interface FileRouteTypes {
     | "/settings/spaces/"
     | "/settings/users/"
     | "/settings/webhooks/"
+    | "/settings/workflows/"
     | "/memory/kbs/$kbId"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
@@ -996,7 +1028,8 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId/threads/$threadId"
     | "/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/settings/evaluations/studio/edit/$testCaseId"
-    | "/settings/routines/$routineId/executions/$executionId";
+    | "/settings/routines/$routineId/executions/$executionId"
+    | "/settings/workflows/$workflowId/runs/$runId";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
@@ -1053,6 +1086,7 @@ export interface FileRouteTypes {
     | "/settings/spaces/$spaceId"
     | "/settings/users/$userId"
     | "/settings/webhooks/$webhookId"
+    | "/settings/workflows/$workflowId"
     | "/approvals"
     | "/artifacts"
     | "/automations"
@@ -1072,6 +1106,7 @@ export interface FileRouteTypes {
     | "/settings/spaces"
     | "/settings/users"
     | "/settings/webhooks"
+    | "/settings/workflows"
     | "/memory/kbs/$kbId"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
@@ -1084,7 +1119,8 @@ export interface FileRouteTypes {
     | "/spaces/$spaceId/threads/$threadId"
     | "/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/settings/evaluations/studio/edit/$testCaseId"
-    | "/settings/routines/$routineId/executions/$executionId";
+    | "/settings/routines/$routineId/executions/$executionId"
+    | "/settings/workflows/$workflowId/runs/$runId";
   id:
     | "__root__"
     | "/"
@@ -1148,6 +1184,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/spaces/$spaceId"
     | "/_authed/settings/users/$userId"
     | "/_authed/settings/webhooks/$webhookId"
+    | "/_authed/settings/workflows/$workflowId"
     | "/_authed/_shell/approvals/"
     | "/_authed/_shell/artifacts/"
     | "/_authed/_shell/automations/"
@@ -1167,6 +1204,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/spaces/"
     | "/_authed/settings/users/"
     | "/_authed/settings/webhooks/"
+    | "/_authed/settings/workflows/"
     | "/_authed/_shell/memory/kbs/$kbId"
     | "/_authed/settings/evaluations/datasets/$slug"
     | "/_authed/settings/evaluations/studio/$testCaseId"
@@ -1179,7 +1217,8 @@ export interface FileRouteTypes {
     | "/_authed/_shell/spaces/$spaceId/threads/$threadId"
     | "/_authed/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/_authed/settings/evaluations/studio/edit/$testCaseId"
-    | "/_authed/settings/routines/$routineId_/executions/$executionId";
+    | "/_authed/settings/routines/$routineId_/executions/$executionId"
+    | "/_authed/settings/workflows/$workflowId_/runs/$runId";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -1412,6 +1451,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellAutomationsRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
+    "/_authed/settings/workflows/": {
+      id: "/_authed/settings/workflows/";
+      path: "/workflows";
+      fullPath: "/settings/workflows/";
+      preLoaderRoute: typeof AuthedSettingsWorkflowsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/webhooks/": {
       id: "/_authed/settings/webhooks/";
       path: "/webhooks";
@@ -1544,6 +1590,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/approvals/";
       preLoaderRoute: typeof AuthedShellApprovalsIndexRouteImport;
       parentRoute: typeof AuthedShellRoute;
+    };
+    "/_authed/settings/workflows/$workflowId": {
+      id: "/_authed/settings/workflows/$workflowId";
+      path: "/workflows/$workflowId";
+      fullPath: "/settings/workflows/$workflowId";
+      preLoaderRoute: typeof AuthedSettingsWorkflowsWorkflowIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/webhooks/$webhookId": {
       id: "/_authed/settings/webhooks/$webhookId";
@@ -1818,6 +1871,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellMemoryKbsKbIdRouteImport;
       parentRoute: typeof AuthedShellMemoryKbsRoute;
     };
+    "/_authed/settings/workflows/$workflowId_/runs/$runId": {
+      id: "/_authed/settings/workflows/$workflowId_/runs/$runId";
+      path: "/workflows/$workflowId/runs/$runId";
+      fullPath: "/settings/workflows/$workflowId/runs/$runId";
+      preLoaderRoute: typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/routines/$routineId_/executions/$executionId": {
       id: "/_authed/settings/routines/$routineId_/executions/$executionId";
       path: "/routines/$routineId/executions/$executionId";
@@ -2058,6 +2118,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsSpacesSpaceIdRoute: typeof AuthedSettingsSpacesSpaceIdRoute;
   AuthedSettingsUsersUserIdRoute: typeof AuthedSettingsUsersUserIdRoute;
   AuthedSettingsWebhooksWebhookIdRoute: typeof AuthedSettingsWebhooksWebhookIdRoute;
+  AuthedSettingsWorkflowsWorkflowIdRoute: typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   AuthedSettingsAgentsIndexRoute: typeof AuthedSettingsAgentsIndexRoute;
   AuthedSettingsAutomationsIndexRoute: typeof AuthedSettingsAutomationsIndexRoute;
   AuthedSettingsEvaluationsIndexRoute: typeof AuthedSettingsEvaluationsIndexRoute;
@@ -2069,6 +2130,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsSpacesIndexRoute: typeof AuthedSettingsSpacesIndexRoute;
   AuthedSettingsUsersIndexRoute: typeof AuthedSettingsUsersIndexRoute;
   AuthedSettingsWebhooksIndexRoute: typeof AuthedSettingsWebhooksIndexRoute;
+  AuthedSettingsWorkflowsIndexRoute: typeof AuthedSettingsWorkflowsIndexRoute;
   AuthedSettingsEvaluationsDatasetsSlugRoute: typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   AuthedSettingsEvaluationsStudioTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   AuthedSettingsEvaluationsStudioNewRoute: typeof AuthedSettingsEvaluationsStudioNewRoute;
@@ -2077,6 +2139,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsStudioIndexRoute: typeof AuthedSettingsEvaluationsStudioIndexRoute;
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
+  AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute: typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
 }
 
 const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
@@ -2112,6 +2175,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsSpacesSpaceIdRoute: AuthedSettingsSpacesSpaceIdRoute,
   AuthedSettingsUsersUserIdRoute: AuthedSettingsUsersUserIdRoute,
   AuthedSettingsWebhooksWebhookIdRoute: AuthedSettingsWebhooksWebhookIdRoute,
+  AuthedSettingsWorkflowsWorkflowIdRoute:
+    AuthedSettingsWorkflowsWorkflowIdRoute,
   AuthedSettingsAgentsIndexRoute: AuthedSettingsAgentsIndexRoute,
   AuthedSettingsAutomationsIndexRoute: AuthedSettingsAutomationsIndexRoute,
   AuthedSettingsEvaluationsIndexRoute: AuthedSettingsEvaluationsIndexRoute,
@@ -2124,6 +2189,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsSpacesIndexRoute: AuthedSettingsSpacesIndexRoute,
   AuthedSettingsUsersIndexRoute: AuthedSettingsUsersIndexRoute,
   AuthedSettingsWebhooksIndexRoute: AuthedSettingsWebhooksIndexRoute,
+  AuthedSettingsWorkflowsIndexRoute: AuthedSettingsWorkflowsIndexRoute,
   AuthedSettingsEvaluationsDatasetsSlugRoute:
     AuthedSettingsEvaluationsDatasetsSlugRoute,
   AuthedSettingsEvaluationsStudioTestCaseIdRoute:
@@ -2140,6 +2206,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsEvaluationsStudioEditTestCaseIdRoute,
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute:
     AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute,
+  AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute:
+    AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute,
 };
 
 const AuthedSettingsRouteWithChildren = AuthedSettingsRoute._addFileChildren(
