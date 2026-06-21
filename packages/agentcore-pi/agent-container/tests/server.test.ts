@@ -2413,7 +2413,11 @@ describe("buildInvocationResources — Pi built-in tools", () => {
 
     // Memory is loaded as an extension, not as hand-assembled recall/reflect
     // AgentTools (U5 retires the buildHindsightTools wiring on this path).
-    expect(bundle.extensionFactories).toHaveLength(1);
+    // Other safe built-in extensions may also be present, so assert the
+    // tool-name surface rather than a brittle factory count.
+    expect(bundle.extensionToolNames).toEqual(
+      expect.arrayContaining(["show_analytics_display", "recall", "reflect"]),
+    );
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("recall");
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("reflect");
     expect(bundle.tools.map((tool) => tool.name)).not.toContain(
@@ -2457,7 +2461,9 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       mcpRegistry: new McpToolRegistry(),
     });
 
-    expect(bundle.extensionFactories).toHaveLength(0);
+    expect(bundle.extensionToolNames).toEqual(["show_analytics_display"]);
+    expect(bundle.extensionToolNames).not.toContain("recall");
+    expect(bundle.extensionToolNames).not.toContain("reflect");
   });
 
   it("registers browser_automation when browser automation is enabled", async () => {

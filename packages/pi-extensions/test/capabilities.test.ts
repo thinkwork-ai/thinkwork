@@ -2,8 +2,10 @@ import type {
   ExtensionAPI,
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { createCrmOpportunityValueByOwnerFixture } from "@thinkwork/analytics-display";
 import { describe, expect, it, vi } from "vitest";
 
+import { createAnalyticsDisplayExtension } from "../src/analytics-display.js";
 import { createBrowserAutomationExtension } from "../src/browser.js";
 import { createContextEngineExtension } from "../src/context-engine.js";
 import { createDelegationExtension } from "../src/delegation.js";
@@ -37,6 +39,44 @@ const NO_UPDATE = undefined;
 const NO_CTX = undefined as never;
 
 describe("U7 capability extensions", () => {
+  it("show_analytics_display returns Thread GenUI for a valid analytics payload", async () => {
+    const { api, tools } = makeFakeApi();
+    const extension = createAnalyticsDisplayExtension();
+    await toExtensionFactory(extension, {})(api);
+
+    expect(extension.toolNames).toEqual(["show_analytics_display"]);
+    const result = await getTool(tools, "show_analytics_display").execute(
+      "call-1",
+      {
+        id: "genui:analytics:crm-owner-value",
+        payload: createCrmOpportunityValueByOwnerFixture(),
+        artifactTitle: "Opportunity value by owner",
+      },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    expect((result.content?.[0] as { text: string }).text).toContain(
+      "Opportunity Value by Owner",
+    );
+    expect((result.details as any).threadGenUI).toMatchObject({
+      type: "data-genui",
+      id: "genui:analytics:crm-owner-value",
+      data: {
+        schemaVersion: "thread-genui/v1",
+        catalogVersion: "thread-genui-catalog/v1",
+        spec: {
+          elements: {
+            analytics: {
+              component: "analytics.display",
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("web_search gates on config and calls the configured provider", async () => {
     const empty = makeFakeApi();
     await toExtensionFactory(createWebSearchExtension({}), {})(empty.api);
