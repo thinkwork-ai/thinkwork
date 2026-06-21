@@ -45,6 +45,11 @@ import {
   resolveRequestedModelId,
   withRequestedModelMetadata,
 } from "../../../lib/turn-model-selection.js";
+import {
+  normalizeMessageGoalModeMetadata,
+  resolveTenantGoalTokenBudget,
+  toRuntimeGoalMode,
+} from "../../../lib/goal-mode.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -183,6 +188,18 @@ export const sendMessage = async (
     canonicalMetadata,
     requestedModelId,
   );
+  const goalModeResult = normalizeMessageGoalModeMetadata(
+    canonicalMetadata,
+    i.content,
+  );
+  canonicalMetadata = goalModeResult.metadata;
+  const goalModeIntent = goalModeResult.goalMode;
+  const resolvedGoalMode = goalModeIntent
+    ? toRuntimeGoalMode(
+        goalModeIntent,
+        await resolveTenantGoalTokenBudget(db, thread.tenant_id),
+      )
+    : null;
   const mentionTargets = await loadThreadMentionTargets({
     tenantId: thread.tenant_id,
     threadId: i.threadId,
@@ -193,6 +210,25 @@ export const sendMessage = async (
     targets: mentionTargets,
     explicitMentions: i.mentions,
   });
+  const hasAgentMentions = parsedMentions.some(
+    (mention) => mention.targetType === "agent",
+  );
+  if (
+    resolvedGoalMode &&
+    !shouldDispatchDefaultAgentTurn({
+      isUserMessage,
+      senderType,
+      agentRequested: i.agentRequested,
+      dispatchMode: i.dispatchMode,
+      hasAgentMentions,
+      hasComputerThread: Boolean(thread.computer_id),
+      customerOnboardingHandled: false,
+    })
+  ) {
+    throw new GraphQLError("Goal mode requires default agent dispatch.", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
   const messageActivityAt = new Date();
 
   const row = await db.transaction(async (tx) => {
@@ -277,9 +313,6 @@ export const sendMessage = async (
     return messageRow;
   });
 
-  const hasAgentMentions = parsedMentions.some(
-    (mention) => mention.targetType === "agent",
-  );
   const requestedProfileSlug = profileSlugFromMentions(
     parsedMentions,
     mentionTargets,
@@ -287,6 +320,7 @@ export const sendMessage = async (
   let customerOnboardingHandled = false;
   let responseMessage = row;
   if (
+    !resolvedGoalMode &&
     shouldApplyCustomerOnboardingChatUpdate({
       isUserMessage,
       senderType,
@@ -423,6 +457,7 @@ export const sendMessage = async (
         content: i.content,
         requestedModelId,
         requestedProfileSlug,
+        ...(resolvedGoalMode ? { goalMode: resolvedGoalMode } : {}),
         ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
         sender: { type: senderType, id: senderId },
       });

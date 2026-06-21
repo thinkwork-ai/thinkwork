@@ -12640,15 +12640,15 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - Restored plan, requirements, and ideation docs from the backup commit into
     the U1 worktree so the implementation PR has current source artifacts.
 
-| Unit                           | Branch                                  | PR                                                           | State       | Notes                                                                                                                            |
-| ------------------------------ | --------------------------------------- | ------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`    | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete.                                   |
-| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings` | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | PR open     | Worktree: `.Codex/worktrees/thnk-21-u7-goal-budget-settings`; starting from U1 merge `93d47fb8e6188531ace4542d0e69b9bb8972885b`. |
-| U2 metadata contract           | Pending                                 | Pending                                                      | Pending     | Depends on U7 and U1 field names.                                                                                                |
-| U3 composer controls           | Pending                                 | Pending                                                      | Pending     | Depends on U2/U7.                                                                                                                |
-| U4 runtime translation         | Pending                                 | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                                                             |
-| U5 goal-run status rendering   | Pending                                 | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                                                             |
-| U6 smoke/docs/codegen          | Pending                                 | Pending                                                      | Pending     | Final integration/docs pass.                                                                                                     |
+| Unit                           | Branch                                    | PR                                                           | State       | Notes                                                                                          |
+| ------------------------------ | ----------------------------------------- | ------------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------- |
+| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`      | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete. |
+| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
+| U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | In progress | Worktree: `.Codex/worktrees/thnk-21-u2-goal-metadata-contract`; CI pending.                    |
+| U3 composer controls           | Pending                                   | Pending                                                      | Pending     | Depends on U2/U7.                                                                              |
+| U4 runtime translation         | Pending                                   | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                           |
+| U5 goal-run status rendering   | Pending                                   | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                           |
+| U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
 
 ### U1 Progress
 
@@ -12708,10 +12708,10 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - `pnpm --filter thinkwork-cli codegen` passed.
   - `pnpm --filter @thinkwork/mobile codegen` passed.
   - `pnpm --filter @thinkwork/api exec vitest run
-    src/graphql/resolvers/core/updateTenantSettings.mutation.test.ts
-    src/__tests__/graphql-contract.test.ts` passed: 146 tests.
+src/graphql/resolvers/core/updateTenantSettings.mutation.test.ts
+src/__tests__/graphql-contract.test.ts` passed: 146 tests.
   - `pnpm --filter @thinkwork/web exec vitest run
-    src/components/settings/SettingsAgents.test.tsx` passed: 10 tests.
+src/components/settings/SettingsAgents.test.tsx` passed: 10 tests.
   - `pnpm --filter @thinkwork/api test && pnpm --filter @thinkwork/web test`
     passed: API suite plus web suite, including 185 web files / 1381 tests.
   - `pnpm lint` passed.
@@ -12733,7 +12733,53 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `packages/database-pg/drizzle/0179_tenant_goal_budget_settings.sql` to the
   dev database with `psql -v ON_ERROR_STOP=1`, then reran
   `bash scripts/db-migrate-manual.sh
-  packages/database-pg/drizzle/0179_tenant_goal_budget_settings.sql`
+packages/database-pg/drizzle/0179_tenant_goal_budget_settings.sql`
   successfully. The reporter found both
   `public.tenant_settings.goal_default_token_budget` and
   `public.tenant_settings.tenant_settings_goal_default_token_budget_check`.
+- U7 rerun CI passed: CLA, lint, verify, typecheck, Migration Drift Precheck
+  (dev), and test.
+- U7 squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; remote
+  branch deleted, local worktree and branch removed, and main synced.
+
+### U2 Progress
+
+- 2026-06-21 16:22 CDT: Created worktree
+  `.Codex/worktrees/thnk-21-u2-goal-metadata-contract` on
+  `codex/thnk-21-u2-goal-metadata-contract` from merged `origin/main`.
+  Scope: define the persisted composer `metadata.goalMode` intent contract,
+  resolve the runtime token budget from tenant Agent settings server-side, and
+  forward the normalized goal envelope through direct invoke and wakeup
+  fallback without adding composer budget controls.
+- 2026-06-21 16:38 CDT: U2 implementation locally verified. Added the
+  `metadata.goalMode` composer intent normalizer, tenant budget resolver,
+  runtime `goal_mode` serializer, send-message dispatch validation, and web
+  composer metadata plumbing without exposing per-prompt budget fields.
+- U2 protects the product contract by rejecting composer-supplied budget keys,
+  deriving start objectives from the submitted prompt when needed, and
+  requiring goal mode to take the default agent-dispatch path before a message
+  is persisted.
+- U2 local verification:
+  - `pnpm install --frozen-lockfile` completed in the worktree; local Node 25
+    logged the existing optional `canvas@2.11.2` native fallback/missing
+    `pkg-config` warning, but pnpm exited successfully.
+  - `pnpm --filter @thinkwork/api exec vitest run
+src/lib/goal-mode.test.ts src/lib/goal-mode.dispatch.test.ts
+src/lib/mentions/default-agent-routing.test.ts
+src/graphql/resolvers/messages/sendMessage.mentions.test.ts` passed: 46 tests.
+  - `pnpm --filter @thinkwork/web exec vitest run
+src/components/workbench/goal-mode.test.ts
+src/components/workbench/SpacesWorkbench.test.tsx
+src/components/workbench/SpacesThreadDetailRoute.test.tsx` passed: 44 tests.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/api test && pnpm --filter @thinkwork/web test`
+    passed: API package suite plus 186 web files / 1385 web tests.
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed across the workspace.
+  - `pnpm exec prettier --check ...` failed because root `prettier` is not
+    linked in this worktree; reran with `pnpm dlx prettier@3.8.2`.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
+    files after formatting.
+  - `git diff --check` passed.
+- U2 PR opened: [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818).

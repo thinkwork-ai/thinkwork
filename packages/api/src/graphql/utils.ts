@@ -375,6 +375,7 @@ export async function invokeChatAgent(payload: {
    */
   pendingQuestionAnswers?: import("../lib/user-questions/runtime-payload.js").PendingQuestionAnswersPayload;
   requestedModelId?: string;
+  goalMode?: import("../lib/goal-mode.js").RuntimeGoalMode;
 }): Promise<boolean> {
   try {
     const fnArn = await getChatAgentInvokeFnArn();

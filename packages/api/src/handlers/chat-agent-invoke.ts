@@ -83,6 +83,10 @@ import {
   toRuntimePendingUserQuestions,
   type PendingQuestionAnswersPayload,
 } from "../lib/user-questions/runtime-payload.js";
+import {
+  toRuntimeGoalModePayload,
+  type RuntimeGoalMode,
+} from "../lib/goal-mode.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
 import {
   isWorkspaceProjectionManifestLike,
@@ -205,13 +209,15 @@ function mentionedPluginIntent(
   for (const key of configuredKeys) {
     const aliases = EXPLICIT_PLUGIN_MCP_ALIASES[key] ?? [key];
     const negated = aliases.some(
-      (alias) => hasAliasMention(lower, alias) && hasNegatedAliasMention(lower, alias),
+      (alias) =>
+        hasAliasMention(lower, alias) && hasNegatedAliasMention(lower, alias),
     );
     if (negated) {
       excluded.add(key);
     }
     const positive = aliases.some(
-      (alias) => hasAliasMention(lower, alias) && !hasNegatedAliasMention(lower, alias),
+      (alias) =>
+        hasAliasMention(lower, alias) && !hasNegatedAliasMention(lower, alias),
     );
     if (positive) {
       requested.add(key);
@@ -292,6 +298,7 @@ interface InvokeEvent {
    * invocation_source 'question_answer' from the wakeup row.
    */
   pendingQuestionAnswers?: PendingQuestionAnswersPayload;
+  goalMode?: RuntimeGoalMode;
   modelId?: string;
   requestedModelId?: string;
   requestedProfileSlug?: string;
@@ -1486,6 +1493,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // the runtime prompt block from this; here we only deliver the field.
       pending_user_questions: event.pendingQuestionAnswers
         ? toRuntimePendingUserQuestions(event.pendingQuestionAnswers)
+        : undefined,
+      goal_mode: event.goalMode
+        ? toRuntimeGoalModePayload(event.goalMode)
         : undefined,
       cost_owner_user_id: currentUserId || undefined,
       // Dispatch-control fields shared with both wakeup-processor builders

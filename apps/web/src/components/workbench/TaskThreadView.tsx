@@ -67,6 +67,7 @@ import {
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
+import type { ComposerGoalModeIntent } from "@/components/workbench/goal-mode";
 import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -242,6 +243,7 @@ interface TaskThreadViewProps {
     agentRequested?: boolean,
     pinnedSkills?: string[],
     selectedModelId?: string,
+    goalMode?: ComposerGoalModeIntent,
   ) => Promise<void> | void;
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;
@@ -2524,6 +2526,7 @@ function FollowUpComposer({
     agentRequested?: boolean,
     pinnedSkills?: string[],
     selectedModelId?: string,
+    goalMode?: ComposerGoalModeIntent,
   ) => Promise<void> | void;
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;

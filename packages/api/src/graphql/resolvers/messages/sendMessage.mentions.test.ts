@@ -70,6 +70,32 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("requestedModelId,");
   });
 
+  it("normalizes goal mode metadata before persisting and dispatches the resolved runtime budget", () => {
+    expect(source).toContain("normalizeMessageGoalModeMetadata");
+    expect(source).toContain("resolveTenantGoalTokenBudget");
+    expect(source).toContain("toRuntimeGoalMode");
+    expect(source.indexOf("normalizeMessageGoalModeMetadata")).toBeLessThan(
+      source.indexOf(".insert(messages)"),
+    );
+    expect(source.indexOf("resolveTenantGoalTokenBudget")).toBeLessThan(
+      source.indexOf(".insert(messages)"),
+    );
+    expect(source).toContain(
+      "...(resolvedGoalMode ? { goalMode: resolvedGoalMode } : {})",
+    );
+    expect(source).not.toContain("tokenBudget: parsedMetadata");
+  });
+
+  it("rejects goal mode before persistence when it cannot dispatch the default agent", () => {
+    expect(source).toContain("Goal mode requires default agent dispatch.");
+    expect(
+      source.indexOf("Goal mode requires default agent dispatch"),
+    ).toBeLessThan(source.indexOf(".insert(messages)"));
+    expect(source).toContain(
+      "!resolvedGoalMode &&\n    shouldApplyCustomerOnboardingChatUpdate",
+    );
+  });
+
   it("preserves sender defaults while allowing agent-authenticated senders", () => {
     expect(source).toContain(
       "const senderType = normalizeMessageSenderType(i.senderType)",
