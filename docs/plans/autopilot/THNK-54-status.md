@@ -621,6 +621,20 @@ should not leak"`, confirming the regression.
   - `pnpm --filter @thinkwork/deployment-runner typecheck`
   - `pnpm --filter @thinkwork/plugin-n8n test -- manifest.test.ts`
   - `pnpm --filter @thinkwork/plugin-n8n typecheck`
+- U7 PR #2770 passed required checks on final head `7386f7f96`:
+  - `cla`
+  - `lint`
+  - `Validate signed catalog build`
+  - `verify`
+  - `test`
+  - `typecheck`
+- U7 PR #2770 squash-merged to `main` at 2026-06-21T01:46:27Z:
+  https://github.com/thinkwork-ai/thinkwork/pull/2770
+- U7 squash merge commit:
+  `87cf3c381253bf792d80540b1b83c87510e85c28`
+- The merge flow had already deleted the remote
+  `codex/thnk-54-u7-n8n-smoke` branch. The local U7 branch was deleted after
+  switching away.
 
 ## Blockers
 
