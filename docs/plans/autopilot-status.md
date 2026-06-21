@@ -440,6 +440,19 @@ status: in_progress
     `packages/api` 547 files passed, 3 skipped, 5162 tests passed, 9 skipped;
     `apps/web` 184 files passed, 1368 tests passed; release tests 17 passed;
     plugin source boundary tests 7 passed.
+  - U10 PR #2792 first CI run passed CLA, lint, and verify, then failed
+    `Migration Drift Precheck (dev)` because the new 0178 manual migration had
+    not yet been applied to dev.
+  - U10 applied the scoped 0178 dev migration with
+    `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database-pg/drizzle/0178_workflow_backfill_existing_routines.sql`.
+    It inserted or updated 4 workflows, 9 workflow versions, 4 current-version
+    pointers, 4 engine bindings, 4 manual triggers, 0 schedule triggers, and
+    created `public.view_workflow_backfill_existing_routines_status`.
+  - U10 dev drift verification passed after applying 0178:
+    `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0178_workflow_backfill_existing_routines.sql`.
+    The status view reported 4 eligible Step Functions routines, 4 backfilled
+    Step Functions bindings, 0 missing bindings, 0 skipped legacy Python
+    routines, and 0 enabled scheduled routines without version pins.
 - CI log: U8 PR [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787)
   passed CLA, lint, typecheck, verify, and test after rebasing onto current
   `origin/main`, then squash merged. U9 PR
@@ -447,7 +460,9 @@ status: in_progress
   CI checks (`cla`, `lint`, `typecheck`, `verify`, and `test`) and was squash
   merged as `c6bd505a9ac26e652a4ae2ec00216760efaf3809`. U10 PR
   [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792) opened after
-  local verification passed.
+  local verification passed; first migration drift precheck failed because the
+  0178 manual migration was not yet applied to dev, then the scoped 0178 dev
+  migration was applied and verified.
 - Blockers: none.
 
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
