@@ -133,6 +133,17 @@ vi.mock("../graphql/utils.js", () => {
       render_diagnostics: tableCol("spaces.render_diagnostics"),
       updated_at: tableCol("spaces.updated_at"),
     },
+    skillDrafts: {
+      id: tableCol("skill_drafts.id"),
+      tenant_id: tableCol("skill_drafts.tenant_id"),
+      requested_by_user_id: tableCol("skill_drafts.requested_by_user_id"),
+      status: tableCol("skill_drafts.status"),
+      draft_s3_prefix: tableCol("skill_drafts.draft_s3_prefix"),
+      current_content_hash: tableCol("skill_drafts.current_content_hash"),
+      published_catalog_slug: tableCol("skill_drafts.published_catalog_slug"),
+      published_content_hash: tableCol("skill_drafts.published_content_hash"),
+      updated_at: tableCol("skill_drafts.updated_at"),
+    },
     tenants: {
       id: tableCol("tenants.id"),
       slug: tableCol("tenants.slug"),
@@ -362,6 +373,7 @@ const TEMPLATE_ID = "template-exec-id";
 const SPACE_ID = "space-eng-id";
 const COMPUTER_ID = "computer-marco-id";
 const USER_ID = "user-eric-id";
+const DRAFT_ID = "draft-skill-id";
 const EMAIL = "eric@acme.com";
 
 // aws-sdk-client-mock accepts Uint8Array for Payload at runtime, but the
@@ -417,6 +429,17 @@ function tenantRow(id = TENANT_A, slug = "acme", name = "Acme") {
   return { id, slug, name };
 }
 
+function skillDraftRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: DRAFT_ID,
+    tenant_id: TENANT_A,
+    requested_by_user_id: USER_ID,
+    status: "draft",
+    draft_s3_prefix: `tenants/acme/skill-drafts/${DRAFT_ID}/`,
+    ...overrides,
+  };
+}
+
 function userRow(overrides: Record<string, unknown> = {}) {
   return {
     id: USER_ID,
@@ -451,6 +474,26 @@ function queueAdminSpaceTargetRows(): void {
 
 function queueAdminCatalogTargetRows(): void {
   pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+  pushDbRows([tenantRow()]);
+  pushDbRows([{ role: "admin" }]);
+}
+
+function queueOwnerSkillDraftTargetRows(
+  overrides: Record<string, unknown> = {},
+): void {
+  pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+  pushDbRows([skillDraftRow(overrides)]);
+  pushDbRows([tenantRow()]);
+  pushDbRows([{ role: "member" }]);
+}
+
+function queueOperatorSkillDraftTargetRows(
+  overrides: Record<string, unknown> = {},
+): void {
+  pushDbRows([{ id: "operator-id", tenant_id: TENANT_A }]);
+  pushDbRows([
+    skillDraftRow({ requested_by_user_id: "author-id", ...overrides }),
+  ]);
   pushDbRows([tenantRow()]);
   pushDbRows([{ role: "admin" }]);
 }
@@ -1384,6 +1427,185 @@ describe("tenant skill catalog target", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.body.error).toContain("not supported");
+  });
+});
+
+describe("skill draft file target", () => {
+  it("lists and reads draft files from the tenant draft prefix for the requester", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueOwnerSkillDraftTargetRows();
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        { Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md` },
+        { Key: `tenants/acme/skill-drafts/${DRAFT_ID}/references/guide.md` },
+      ],
+    });
+
+    const listRes = await parse(
+      await handler(event({ action: "list", skillDraftId: DRAFT_ID })),
+    );
+
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.body.files).toEqual([
+      {
+        path: "SKILL.md",
+        source: "skillDraft",
+        sha256: "",
+        overridden: false,
+      },
+      {
+        path: "references/guide.md",
+        source: "skillDraft",
+        sha256: "",
+        overridden: false,
+      },
+    ]);
+
+    queueOwnerSkillDraftTargetRows();
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md`,
+      })
+      .resolves(body(skillMd("draft-helper").toString("utf8")));
+
+    const getRes = await parse(
+      await handler(
+        event({
+          action: "get",
+          skillDraftId: DRAFT_ID,
+          path: "SKILL.md",
+        }),
+      ),
+    );
+
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.body).toMatchObject({
+      ok: true,
+      source: "skillDraft",
+    });
+  });
+
+  it("lets the requester write draft files, then updates the draft content hash and clears publish fields", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueOwnerSkillDraftTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md` }],
+    });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "put",
+          skillDraftId: DRAFT_ID,
+          path: "SKILL.md",
+          content: skillMd("draft-helper").toString("utf8"),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.slug).toBe("draft-helper");
+    expect(res.body.currentContentHash).toMatch(/^sha256:/);
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Bucket: "test-bucket",
+      Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md`,
+    });
+    expect(dbUpdateCalls.at(-1)).toMatchObject({
+      current_content_hash: expect.stringMatching(/^sha256:/),
+      published_catalog_slug: null,
+      published_content_hash: null,
+    });
+  });
+
+  it("allows tenant operators to read draft files but not edit them", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueOperatorSkillDraftTargetRows();
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md` }],
+    });
+
+    const listRes = await parse(
+      await handler(event({ action: "list", skillDraftId: DRAFT_ID })),
+    );
+    expect(listRes.statusCode).toBe(200);
+
+    queueOperatorSkillDraftTargetRows();
+    const putRes = await parse(
+      await handler(
+        event({
+          action: "put",
+          skillDraftId: DRAFT_ID,
+          path: "SKILL.md",
+          content: skillMd("draft-helper").toString("utf8"),
+        }),
+      ),
+    );
+
+    expect(putRes.statusCode).toBe(403);
+    expect(putRes.body.code).toBe("skill_draft_not_owned");
+  });
+
+  it("locks writes once the draft is submitted for review", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueOwnerSkillDraftTargetRows({ status: "submitted" });
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "delete",
+          skillDraftId: DRAFT_ID,
+          path: "SKILL.md",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.code).toBe("skill_draft_readonly");
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("rejects malformed skillDraftId values before target resolution", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    pushDbRows([{ id: USER_ID, tenant_id: TENANT_A }]);
+
+    const res = await parse(
+      await handler(event({ action: "list", skillDraftId: null })),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/skillDraftId is required/);
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+  });
+
+  it("validates a complete draft directory without mutating S3", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueOwnerSkillDraftTargetRows();
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md` }],
+    });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md`,
+      })
+      .resolves(body(skillMd("draft-helper").toString("utf8")));
+
+    const res = await parse(
+      await handler(
+        event({ action: "validate-skill-draft", skillDraftId: DRAFT_ID }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "draft-helper",
+      generatedWiring: true,
+    });
+    expect(res.body.currentContentHash).toMatch(/^sha256:/);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
 });
 
