@@ -1983,6 +1983,119 @@ describe("TaskThreadView", () => {
     expect(screen.queryByLabelText("ThinkWork is typing")).toBeNull();
   });
 
+  it("renders persisted goal-run completion evidence from a completed turn", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-goal-complete",
+          title: "Goal complete",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "/goal Finish the release notes",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-goal-complete",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              finishedAt: "2026-06-21T20:00:00Z",
+              resultJson: {
+                response: "Release notes are ready.",
+                goal_run: {
+                  source: "pi_goal",
+                  status: "complete",
+                  objective: "Finish the release notes",
+                  completion_summary: "Drafted and verified release notes.",
+                  token_budget: 125000,
+                  tokens_used: 42000,
+                  verification_notes: ["Docs test passed."],
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    openThinkingDisclosure();
+    expect(screen.getByText("Goal")).toBeTruthy();
+    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(
+      screen.getAllByText("Finish the release notes").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Drafted and verified release notes."),
+    ).toBeTruthy();
+    expect(screen.getByText("Tokens: 42.0K / 125.0K")).toBeTruthy();
+    expect(screen.getByText("Docs test passed.")).toBeTruthy();
+  });
+
+  it("resumes a budget-limited goal run through goal-mode follow-up metadata", () => {
+    const onSendFollowUp = vi.fn();
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-goal-budget",
+          title: "Goal budget",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "/goal Finish the launch plan",
+            },
+          ],
+          turns: [
+            {
+              id: "turn-goal-budget",
+              status: "succeeded",
+              invocationSource: "chat_message",
+              finishedAt: "2026-06-21T20:00:00Z",
+              resultJson: {
+                response: "Paused at budget.",
+                goal_run: {
+                  source: "pi_goal",
+                  status: "budget_limited",
+                  goal_id: "goal-run-1",
+                  objective: "Finish the launch plan",
+                  token_budget: 125000,
+                  tokens_used: 125001,
+                  budget_limited_reason: "Tenant goal budget reached.",
+                  resume_eligible: true,
+                },
+              },
+            },
+          ],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    openThinkingDisclosure();
+    screen.getByText("Budget limited");
+    screen.getByText("Budget: Tenant goal budget reached.");
+    screen.getByRole("button", { name: "Resume" }).click();
+
+    expect(onSendFollowUp).toHaveBeenCalledWith(
+      "Resume goal: Finish the launch plan",
+      [],
+      [],
+      true,
+      undefined,
+      undefined,
+      {
+        enabled: true,
+        action: "resume",
+        objective: "Finish the launch plan",
+        goalRunId: "goal-run-1",
+      },
+    );
+  });
+
   it("renders a completed Computer task response when the assistant message has not refetched yet", () => {
     render(
       <TaskThreadView

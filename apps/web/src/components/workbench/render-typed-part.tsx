@@ -39,6 +39,10 @@ import {
 } from "@/components/ai-elements/tool";
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
 import { GenUIRenderer } from "@/components/workbench/genui/GenUIRenderer";
+import {
+  GoalRunCard,
+  normalizeGoalRunEvidence,
+} from "@/components/workbench/GoalRunCard";
 import { UserQuestionCard } from "@/components/workbench/UserQuestionCard";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
 import type {
@@ -205,6 +209,10 @@ export function renderTypedPart(
           threadId={threadId}
         />
       );
+    }
+    if (part.type === "data-goal-run") {
+      const goalRun = normalizeGoalRunEvidence(part.data);
+      return goalRun ? <GoalRunCard key={key} goalRun={goalRun} /> : null;
     }
     if (part.type === "data-runbook-queue" || part.type === "data-task-queue") {
       // Queue data is projected into the prompt composer by TaskThreadView.

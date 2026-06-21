@@ -131,6 +131,7 @@ import {
   diagnosticsFromFinalizePayload,
   diagnosticsWithWorkspaceReconcile,
   enrichToolInvocationsWithModelRouting,
+  goalRunProjectionFromFinalizePayload,
   isHiddenDesktopDelegation,
   processFinalize,
   toFinalizeResponse,
@@ -215,6 +216,59 @@ describe("capturedSystemPromptFromFinalizePayload", () => {
         response: { composed_system_prompt: "" },
       }),
     ).toBeNull();
+  });
+});
+
+describe("goalRunProjectionFromFinalizePayload", () => {
+  it("normalizes bounded Pi goal-run evidence", () => {
+    const goalRun = goalRunProjectionFromFinalizePayload({
+      response: {
+        goal_run: {
+          source: "pi_goal",
+          action: "start",
+          goal_id: "goal-1",
+          objective: "Ship the reporting workflow",
+          status: "budget_limited",
+          token_budget: 125000,
+          tokens_used: 124532,
+          completion_summary: "Implemented most of the workflow.",
+          verification_notes: ["Focused tests passed."],
+          updated_at: "2026-06-21T22:00:00.000Z",
+        },
+      },
+    });
+
+    expect(goalRun).toEqual(
+      expect.objectContaining({
+        source: "pi_goal",
+        status: "budget_limited",
+        action: "start",
+        goal_id: "goal-1",
+        objective: "Ship the reporting workflow",
+        token_budget: 125000,
+        tokens_used: 124532,
+        completion_summary: "Implemented most of the workflow.",
+        verification_notes: ["Focused tests passed."],
+        resume_eligible: true,
+      }),
+    );
+  });
+
+  it("falls back to bounded debug evidence for malformed runtime payloads", () => {
+    const goalRun = goalRunProjectionFromFinalizePayload({
+      response: { goal_run: "not-json" },
+    });
+
+    expect(goalRun).toEqual({
+      source: "pi_goal",
+      status: "unknown",
+      summary: "Malformed goal-run evidence",
+      resume_eligible: false,
+      debug: {
+        error: "malformed_goal_run",
+        preview: '"not-json"',
+      },
+    });
   });
 });
 
@@ -504,6 +558,55 @@ describe("processFinalize reconcile seam", () => {
         userId: "55555555-5555-5555-5555-555555555555",
         amountUsd: 1.23,
       }),
+    );
+  });
+
+  it("persists bounded goal-run evidence on completed turns", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "Goal paused at the tenant budget.",
+          goal_run: {
+            action: "start",
+            goal_id: "goal-1",
+            objective: "Complete the rollout checklist",
+            status: "budget_limited",
+            token_budget: 125000,
+            tokens_used: 125001,
+            completion_summary: "Implemented two of three rollout items.",
+            verification_notes: ["API tests passed."],
+          },
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 100,
+          output_tokens: 10,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    const succeededUpdate = mocks.updateSets.find((value: any) =>
+      Boolean(value?.result_json?.goal_run),
+    ) as any;
+    expect(succeededUpdate.result_json.goal_run).toMatchObject({
+      source: "pi_goal",
+      status: "budget_limited",
+      goal_id: "goal-1",
+      objective: "Complete the rollout checklist",
+      token_budget: 125000,
+      tokens_used: 125001,
+      completion_summary: "Implemented two of three rollout items.",
+      verification_notes: ["API tests passed."],
+      resume_eligible: true,
+    });
+    expect(succeededUpdate.usage_json.goal_run).toEqual(
+      succeededUpdate.result_json.goal_run,
     );
   });
 

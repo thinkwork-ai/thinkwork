@@ -220,6 +220,29 @@ describe("renderTypedPart", () => {
     expect(screen.getByText("unknown.panel")).toBeTruthy();
   });
 
+  it("renders goal-run data parts with compact status evidence", () => {
+    const part: AccumulatedPart = {
+      type: "data-goal-run",
+      id: "goal-run-1",
+      data: {
+        source: "pi_goal",
+        status: "complete",
+        objective: "Prepare launch report",
+        completion_summary: "Launch report is complete.",
+        tokens_used: 28000,
+        token_budget: 125000,
+      },
+    };
+
+    render(<>{renderTypedPart(part, rk())}</>);
+
+    expect(screen.getByText("Goal")).toBeTruthy();
+    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.getByText("Prepare launch report")).toBeTruthy();
+    expect(screen.getByText("Launch report is complete.")).toBeTruthy();
+    expect(screen.getByText("Tokens: 28.0K / 125.0K")).toBeTruthy();
+  });
+
   it("renders a source-url part as an anchor", () => {
     const part: AccumulatedPart = {
       type: "source-url",

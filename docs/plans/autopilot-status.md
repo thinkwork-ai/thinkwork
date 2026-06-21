@@ -12646,8 +12646,8 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 | U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
 | U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged      | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
 | U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | Merged      | Squash merged as `a69e5799e6d3a2d7bc4e0a23173ca9393f825c11`; worktree/branch cleanup complete. |
-| U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821) | In progress | PR opened; CI pending.                                                                         |
-| U5 goal-run status rendering   | Pending                                   | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                           |
+| U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821) | Merged      | Squash merged as `a8f4064a846112b9b479f2b7648101ec51dcd6f3`; worktree/branch cleanup complete. |
+| U5 goal-run status rendering   | `codex/thnk-21-u5-goal-status-rendering`  | [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822) | In progress | CI passed; ready to merge.                                                                     |
 | U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
 
 ### U1 Progress
@@ -12830,7 +12830,9 @@ test/finalize-client.test.ts`.
     server test, `@thinkwork/agentcore-pi` typecheck, formatter, and
     `git diff --check` passed again.
 - U4 PR opened: [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821).
-  Required CI pending.
+- U4 CI passed: CLA, lint, verify, typecheck, and test.
+- U4 squash merged as `a8f4064a846112b9b479f2b7648101ec51dcd6f3`; remote
+  branch deleted, local worktree and branch removed, and main synced.
 - U3 PR opened: [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820).
 - U2 PR opened: [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818).
 - U2 CI passed: CLA, lint, verify, typecheck, and test.
@@ -12870,3 +12872,47 @@ src/components/workbench/SpacesWorkbench.test.tsx` passed: 152 tests.
   - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
     files after formatting.
   - `git diff --check` passed.
+
+### U5 Progress
+
+- 2026-06-21 17:54 CDT: Created worktree
+  `.Codex/worktrees/thnk-21-u5-goal-status-rendering` on
+  `codex/thnk-21-u5-goal-status-rendering` from merged `origin/main`.
+  Scope: persist bounded Pi goal-run evidence on completed turns and render
+  compact goal status in the thread transcript/activity surfaces without adding
+  composer budget controls.
+- 2026-06-21 22:59 CDT: U5 implementation locally verified. Added a bounded
+  `goal_run` projection to completed turn `result_json` and `usage_json`, shared
+  web goal-run normalization/rendering, transcript/activity rendering,
+  typed-part rendering, operator activity rendering, malformed-evidence fallback,
+  and resume follow-up metadata for budget-limited/paused goal runs.
+- U5 local verification:
+  - `pnpm install --frozen-lockfile` completed in the worktree; local Node 25
+    logged the existing optional `canvas@2.11.2` native fallback/missing
+    `pkg-config` warning, but pnpm exited successfully.
+  - Focused API test passed:
+    `pnpm --filter @thinkwork/api exec vitest run
+src/lib/chat-finalize/process-finalize.test.ts` (37 tests).
+  - Focused web tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run
+src/components/workbench/TaskThreadView.test.tsx
+src/components/workbench/render-typed-part.test.tsx
+src/components/workbench/SpacesThreadDetailRoute.test.tsx
+src/components/settings/SettingsActivityThreadDetail.test.tsx` (172 tests).
+  - Package typechecks passed for `@thinkwork/api` and `@thinkwork/web`.
+  - Affected package suites passed:
+    `pnpm --filter @thinkwork/api test` (552 files passed, 3 skipped; 5207
+    tests passed, 9 skipped) and `pnpm --filter @thinkwork/web test` (186
+    files, 1401 tests).
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed across the workspace.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
+    files after formatting.
+  - `git diff --check` passed.
+  - `pnpm test` initially hit a local Electron extraction race
+    (`EEXIST: ... Electron Framework`). Reinstalling the generated Electron
+    artifact and rerunning `pnpm --filter @thinkwork/desktop test` passed (15
+    files, 105 tests); rerunning full `pnpm test` then passed across the
+    workspace.
+- U5 PR opened: [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822).
+  Required CI passed: CLA, lint, verify, typecheck, and test.
