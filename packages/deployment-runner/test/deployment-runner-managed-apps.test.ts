@@ -291,6 +291,12 @@ describe("managed app deployment adapters", () => {
         command: "plugins/n8n/smoke/n8n-managed-app-smoke.mjs",
       }),
     );
+    expect(summary.smokeContracts).toContainEqual(
+      expect.objectContaining({
+        command: "plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs",
+        required: false,
+      }),
+    );
     expect(summary.statusOutputs).toContain("n8n_url");
     expect(summary.statusOutputs).toContain("n8n_database_name");
     expect(summary.statusOutputs).toContain("n8n_valkey_endpoint");

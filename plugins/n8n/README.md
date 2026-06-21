@@ -106,6 +106,7 @@ pnpm --filter @thinkwork/plugin-n8n typecheck
 pnpm --filter @thinkwork/plugin-catalog check:plugins
 node plugins/n8n/smoke/n8n-managed-app-smoke.mjs
 node plugins/n8n/smoke/n8n-mcp-smoke.mjs
+node plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs
 ```
 
 Live verification must prove the ThinkWork install path after the plugin is
@@ -126,13 +127,26 @@ SMOKE_ENABLE_N8N_MCP=1 \
   SMOKE_TENANT_ID=<tenant-id> \
   SMOKE_EVIDENCE_FILE=deploy-artifacts/n8n-mcp-smoke.json \
   node plugins/n8n/smoke/n8n-mcp-smoke.mjs
+
+SMOKE_ENABLE_N8N_AGENT_STEP_BRIDGE=1 \
+  SMOKE_N8N_MCP_URL=<n8n-mcp-url> \
+  SMOKE_N8N_MCP_SERVICE_TOKEN=<n8n-service-token> \
+  SMOKE_N8N_BRIDGE_TRIGGER_URL=<disposable-workflow-webhook-url> \
+  SMOKE_N8N_BRIDGE_CORRELATION_ID=<unique-correlation-id> \
+  SMOKE_GRAPHQL_HTTP_URL=<graphql-url> \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_EVIDENCE_FILE=deploy-artifacts/n8n-agent-step-bridge-smoke.json \
+  node plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs
 ```
 
 The managed-app smoke verifies public endpoint health plus main/worker service,
 database, Valkey, storage, image digest, package digest, and service credential
 evidence when those Terraform outputs are available. The MCP smoke lists native
 n8n tools through ThinkWork's `/api/mcp` proxy and can read a configured
-disposable workflow with `SMOKE_N8N_WORKFLOW_ID`.
+disposable workflow with `SMOKE_N8N_WORKFLOW_ID`. The bridge smoke verifies a
+disposable n8n workflow can call ThinkWork, produce bridge telemetry, create a
+visible ThinkWork thread, and resume n8n with structured terminal payload
+evidence.
 
 ## Teardown
 
