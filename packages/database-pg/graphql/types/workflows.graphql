@@ -278,6 +278,34 @@ type ConnectN8nWorkflowResult {
   created: Boolean!
 }
 
+type N8nWorkflowDraftDiagnostic {
+  code: String!
+  severity: String!
+  message: String!
+  nodeId: String
+  nodeName: String
+  nodeType: String
+}
+
+input ImportN8nWorkflowDraftInput {
+  tenantId: ID!
+  workflowUrl: String!
+  name: String
+  description: String
+  n8nCredentialSlug: String
+  pdiCredentialSlug: String
+}
+
+type ImportN8nWorkflowDraftResult {
+  workflow: Workflow!
+  workflowVersion: WorkflowVersion!
+  binding: WorkflowEngineBinding!
+  diagnostics: [N8nWorkflowDraftDiagnostic!]!
+  credentialRequirements: AWSJSON!
+  sourceMetadata: AWSJSON!
+  activationBlocked: Boolean!
+}
+
 input CreateN8nWorkflowBridgeInput {
   workflowId: ID!
   idempotencyKey: String!
@@ -325,6 +353,9 @@ extend type Query {
 
 extend type Mutation {
   connectN8nWorkflow(input: ConnectN8nWorkflowInput!): ConnectN8nWorkflowResult!
+  importN8nWorkflowDraft(
+    input: ImportN8nWorkflowDraftInput!
+  ): ImportN8nWorkflowDraftResult!
   createN8nWorkflowBridge(
     input: CreateN8nWorkflowBridgeInput!
   ): N8nWorkflowBridgeCredential!
