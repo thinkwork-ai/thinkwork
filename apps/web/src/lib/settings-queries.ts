@@ -1505,6 +1505,42 @@ export const SettingsUserBudgetStatusQuery = graphql(`
   }
 `);
 
+export const SettingsAccountUsageQuery = graphql(`
+  query SettingsAccountUsage($tenantId: ID!, $userId: ID!, $days: Int) {
+    accountUsage(tenantId: $tenantId, userId: $userId, days: $days) {
+      periodStart
+      periodEnd
+      summary {
+        totalUsd
+        llmUsd
+        computeUsd
+        toolsUsd
+        inputTokens
+        outputTokens
+        eventCount
+      }
+      daily {
+        day
+        totalUsd
+        llmUsd
+        computeUsd
+        toolsUsd
+        inputTokens
+        outputTokens
+        eventCount
+      }
+      models {
+        model
+        displayName
+        totalUsd
+        inputTokens
+        outputTokens
+        usageShare
+      }
+    }
+  }
+`);
+
 export const SettingsUpsertBudgetPolicyMutation = graphql(`
   mutation SettingsUpsertBudgetPolicy(
     $tenantId: ID!
@@ -2098,6 +2134,7 @@ export const SettingsTenantCredentialsQuery = graphql(`
   }
 `);
 
+// prettier-ignore
 export const SettingsCreateTenantCredentialMutation = graphql(`
   mutation SettingsCreateTenantCredential($input: CreateTenantCredentialInput!) {
     createTenantCredential(input: $input) {
@@ -2110,6 +2147,7 @@ export const SettingsCreateTenantCredentialMutation = graphql(`
   }
 `);
 
+// prettier-ignore
 export const SettingsRotateTenantCredentialMutation = graphql(`
   mutation SettingsRotateTenantCredential($input: RotateTenantCredentialInput!) {
     rotateTenantCredential(input: $input) {

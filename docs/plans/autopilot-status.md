@@ -15,13 +15,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U1 - Add user-scoped account usage GraphQL contract and
-  resolver.
-- Current branch: `codex/thnk-60-u1-account-usage-api`.
-- Current worktree: `.Codex/worktrees/thnk-60-u1-account-usage-api`.
-- Current pull request:
-  [#2806](https://github.com/thinkwork-ai/thinkwork/pull/2806).
-- Base: `origin/main` at `c4228d12b`.
+- Current unit: U2 - Add web query and reusable account usage section.
+- Current branch: `codex/thnk-60-u2-account-usage-section`.
+- Current worktree: `.Codex/worktrees/thnk-60-u2-account-usage-section`.
+- Current pull request: Pending.
+- Base: `origin/main` at `833d512d0`.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -59,9 +57,27 @@ status: in_progress
   - `pnpm typecheck` passed.
 - PR / CI:
   - U1 PR: [#2806](https://github.com/thinkwork-ai/thinkwork/pull/2806).
-  - CI: Pending.
-  - Merge: Pending.
-  - Cleanup: Pending.
+  - U1 CI passed: CLA, lint, verify, typecheck, test.
+  - U1 squash merged as `833d512d04436e22caf338c094f299e500ff1cd5`.
+  - U1 cleanup completed: remote branch was deleted by GitHub merge flow; local
+    worktree and branch were removed after syncing `main`.
+  - U2 adds `SettingsAccountUsageQuery`, a reusable
+    `AccountUsageSection`, web generated GraphQL artifacts, and focused
+    component coverage for calendar/model/empty/pause behavior.
+  - U2 also preserves generated-client type safety for the existing n8n tenant
+    credential mutations after web codegen normalized those one-variable
+    operation strings.
+  - U2 focused verification passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/profile/AccountUsageSection.test.tsx`
+    (4 tests).
+  - U2 web codegen passed: `pnpm --filter @thinkwork/web codegen`.
+  - U2 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U2 monorepo typecheck passed: `pnpm typecheck`.
+  - U2 lint passed: `pnpm lint`.
+  - U2 formatting check passed:
+    `pnpm dlx prettier@3.8.2 --check ...` for touched source/docs.
+  - U2 whitespace check passed: `git diff --check`.
+  - U2 PR: Pending.
 - Blockers: None.
 
 ## Skill Library Import / Export Autopilot - 2026-06-21
