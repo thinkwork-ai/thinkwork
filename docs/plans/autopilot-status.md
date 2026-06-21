@@ -260,6 +260,9 @@ status: in_progress
     `apps/web` (179 files, 1345 tests), `packages/api` (542 files passed, 3
     skipped; 5096 tests passed, 9 skipped), release tests, and plugin source
     boundary tests.
+  - U6 rebased cleanly onto `origin/main` after PR #2775 opened; post-rebase
+    `git diff --check origin/main..HEAD`, focused API promotion/artifact tests,
+    and focused web promotion/Thread route tests passed.
 - Compound review:
   - Correctness review flagged unrelated upstream MCP changes when diffing
     against the moving `origin/main`; the U1 branch will be rebased before PR so
