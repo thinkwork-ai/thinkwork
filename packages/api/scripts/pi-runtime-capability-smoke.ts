@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 type Capability =
   | "plain"
@@ -8,6 +9,7 @@ type Capability =
   | "web_extract"
   | "execute_code"
   | "browser_automation"
+  | "goal"
   | "hindsight"
   | "mcp";
 
@@ -44,12 +46,16 @@ interface ThreadTurn {
   id: string;
   status: string;
   threadId: string | null;
-  resultJson?: { response?: string };
+  resultJson?: {
+    response?: string;
+    goal_run?: Record<string, unknown>;
+  };
   usageJson?: {
     tools_called?: unknown;
     tool_invocations?: unknown;
     tool_costs?: unknown;
     duration_ms?: number;
+    goal_run?: Record<string, unknown>;
   };
   error?: string | null;
   createdAt: string;
@@ -86,6 +92,7 @@ const ALL_CAPABILITIES: Capability[] = [
 const SELECTABLE_CAPABILITIES: Capability[] = [
   ...ALL_CAPABILITIES,
   "browser_automation",
+  "goal",
   "web_extract",
 ];
 
@@ -95,7 +102,7 @@ function usage(exitCode = 2): never {
     --tenant-id <tenant-id> \\
     --agent-id <agent-id> \\
     [--sender-id <human-user-id>] \\
-    [--capability plain,web_search,web_extract,execute_code,browser_automation,hindsight,mcp] \\
+    [--capability plain,web_search,web_extract,execute_code,browser_automation,goal,hindsight,mcp] \\
     [--timeout 90000] [--json]
 
 Environment:
@@ -276,7 +283,12 @@ async function verifySender(args: Args, capability: Capability): Promise<void> {
   }
 }
 
-async function sendMessage(args: Args, threadId: string, content: string) {
+async function sendMessage(
+  args: Args,
+  threadId: string,
+  content: string,
+  metadata?: Record<string, unknown>,
+) {
   await gql<{ sendMessage: { id: string } }>(
     args,
     `mutation($input: SendMessageInput!) {
@@ -291,6 +303,7 @@ async function sendMessage(args: Args, threadId: string, content: string) {
         content,
         senderType: "user",
         senderId: args.senderId,
+        ...(metadata ? { metadata: JSON.stringify(metadata) } : {}),
       },
     },
   );
@@ -509,6 +522,38 @@ function hasMcpResult(invocation: Record<string, unknown>): boolean {
   );
 }
 
+function hasGoalCompleteInvocation(turn: ThreadTurn): boolean {
+  return invocationRecords(turn).some((invocation) => {
+    const text = `${invocationName(invocation)} ${invocationBlob(invocation)}`;
+    return invocation.is_error !== true && /goal_complete/.test(text);
+  });
+}
+
+function goalRunEvidence(turn: ThreadTurn): Record<string, unknown> | null {
+  const goalRun = turn.usageJson?.goal_run ?? turn.resultJson?.goal_run;
+  return goalRun && typeof goalRun === "object" && !Array.isArray(goalRun)
+    ? goalRun
+    : null;
+}
+
+function hasGoalEvidence(turn: ThreadTurn): boolean {
+  const goalRun = goalRunEvidence(turn);
+  if (!goalRun) return false;
+
+  const source = goalRun.source;
+  const status = String(goalRun.status ?? "").toLowerCase();
+  if (source !== "pi_goal") return false;
+  if (status === "budget_limited") {
+    return Boolean(goalRun.budget_limited_reason || goalRun.token_budget);
+  }
+  if (status === "complete" || status === "completed") {
+    return (
+      hasGoalCompleteInvocation(turn) || Boolean(goalRun.completion_summary)
+    );
+  }
+  return false;
+}
+
 function promptFor(capability: Capability, token: string): string {
   switch (capability) {
     case "plain":
@@ -537,6 +582,12 @@ function promptFor(capability: Capability, token: string): string {
         "Confirm the page loads and captures browser evidence.",
         `After using the browser tool, reply with ${token} and the page URL.`,
         "Do not answer from memory; use the tool.",
+      ].join(" ");
+    case "goal":
+      return [
+        "Goal-mode smoke objective: complete this tiny verification task in this same turn.",
+        `Reply with ${token}.`,
+        "Then mark the goal complete with the goal_complete tool and include a one-sentence summary plus verification note.",
       ].join(" ");
     case "hindsight":
       return [
@@ -592,11 +643,26 @@ function evaluate(
     return { ...base, status: "PASS", reason: "assistant_message_persisted" };
   }
 
+  if (capability === "goal") {
+    if (!hasGoalEvidence(turn)) {
+      return {
+        ...base,
+        reason: "no_goal_run_evidence_in_thread_turn_usage_json_or_result_json",
+      };
+    }
+    return {
+      ...base,
+      status: "PASS",
+      reason: "goal_run_evidence_present",
+    };
+  }
+
   const patterns: Record<Exclude<Capability, "plain">, RegExp[]> = {
     web_search: [/web[-_ ]?search/, /search/],
     web_extract: [/web[-_ ]?extract/, /firecrawl/, /extract/],
     execute_code: [/execute_code/, /sandbox/, /code/],
     browser_automation: [/browser_automation/, /agentcore_browser/, /browser/],
+    goal: [/goal_complete/, /goal/],
     hindsight: [/hindsight/, /memory/, /reflect/, /recall/],
     mcp: [/mcp/, /server/],
   };
@@ -659,7 +725,21 @@ async function runCapability(
   const thread = await createThread(args, capability);
   const token = `PI-${capability.toUpperCase().replace(/_/g, "-")}-SMOKE-${Date.now()}`;
   try {
-    await sendMessage(args, thread.id, promptFor(capability, token));
+    const prompt = promptFor(capability, token);
+    await sendMessage(
+      args,
+      thread.id,
+      prompt,
+      capability === "goal"
+        ? {
+            goalMode: {
+              enabled: true,
+              action: "start",
+              objective: prompt,
+            },
+          }
+        : undefined,
+    );
     const { assistant, turn } = await waitForTurn(args, thread.id);
     const result = evaluate(capability, token, turn, assistant);
     return {
@@ -703,7 +783,23 @@ async function main() {
   if (failed.length > 0 || skipped.length > 0) process.exit(1);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+export {
+  evaluate,
+  goalRunEvidence,
+  hasGoalEvidence,
+  promptFor,
+  type Capability,
+  type Message,
+  type SmokeResult,
+  type ThreadTurn,
+};
