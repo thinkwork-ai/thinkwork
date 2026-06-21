@@ -12646,7 +12646,7 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 | U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
 | U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged      | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
 | U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | Merged      | Squash merged as `a69e5799e6d3a2d7bc4e0a23173ca9393f825c11`; worktree/branch cleanup complete. |
-| U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | Pending                                                      | In progress | Worktree: `.Codex/worktrees/thnk-21-u4-runtime-translation`; implementation in progress.       |
+| U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821) | In progress | PR opened; CI pending.                                                                         |
 | U5 goal-run status rendering   | Pending                                   | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                           |
 | U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
 
@@ -12829,6 +12829,8 @@ test/finalize-client.test.ts`.
     capture the adapter's invocation-local `PI_CODING_AGENT_DIR`; the focused
     server test, `@thinkwork/agentcore-pi` typecheck, formatter, and
     `git diff --check` passed again.
+- U4 PR opened: [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821).
+  Required CI pending.
 - U3 PR opened: [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820).
 - U2 PR opened: [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818).
 - U2 CI passed: CLA, lint, verify, typecheck, and test.
