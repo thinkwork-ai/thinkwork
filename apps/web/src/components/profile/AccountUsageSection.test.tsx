@@ -262,7 +262,7 @@ describe("AccountUsageSection", () => {
     expect(
       screen.getByLabelText("2026-06-21: $0.00 spend, 0 tokens, 3 events")
         .className,
-    ).toContain("bg-cyan-600");
+    ).toContain("bg-blue-700");
   });
 
   it("pauses the account usage query when the profile scope is incomplete", () => {

@@ -375,13 +375,13 @@ function getIntensity(
 function intensityClassName(level: number): string {
   switch (level) {
     case 1:
-      return "bg-emerald-100 dark:bg-emerald-950";
+      return "bg-blue-200 dark:bg-blue-900";
     case 2:
-      return "bg-emerald-300 dark:bg-emerald-800";
+      return "bg-blue-300 dark:bg-blue-700";
     case 3:
-      return "bg-teal-500 dark:bg-teal-700";
+      return "bg-blue-500 dark:bg-blue-600";
     case 4:
-      return "bg-cyan-600 dark:bg-cyan-500";
+      return "bg-blue-700 dark:bg-blue-500";
     default:
       return "bg-muted";
   }
