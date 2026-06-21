@@ -146,6 +146,15 @@ describe("n8n plugin manifest", () => {
     expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
       "shared native n8n operator",
     );
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("HTTP Request");
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("Wait nodes");
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("$execution.resumeUrl");
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
+      "custom ThinkWork n8n node",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
+      "should not scrape ThinkWork thread pages",
+    );
     expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toMatch(
       /Plugin Detail n8n custom\s+package settings/,
     );
@@ -162,6 +171,11 @@ describe("n8n plugin manifest", () => {
     expect(skillFile).toContain("publish, unpublish");
     expect(skillFile).toContain("workflow id");
     expect(skillFile).toContain("shared native n8n operator");
+    expect(skillFile).toContain("HTTP Request");
+    expect(skillFile).toContain("Wait nodes");
+    expect(skillFile).toContain("$execution.resumeUrl");
+    expect(skillFile).toContain("custom ThinkWork n8n node");
+    expect(skillFile).toContain("should not scrape ThinkWork thread pages");
   });
 
   it("keeps LastMile runtime source out of the n8n package", async () => {

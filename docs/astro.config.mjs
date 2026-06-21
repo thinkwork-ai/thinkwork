@@ -48,6 +48,17 @@ export default defineConfig({
           items: [
             { label: "Overview", slug: "applications" },
             {
+              label: "n8n",
+              collapsed: true,
+              items: [
+                { label: "Overview", slug: "applications/n8n" },
+                {
+                  label: "Agent-Step Bridge",
+                  slug: "applications/n8n-agent-step-bridge",
+                },
+              ],
+            },
+            {
               label: "Admin",
               collapsed: true,
               items: [

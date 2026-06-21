@@ -92,21 +92,30 @@ U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7.
 - 2026-06-20: moved `THNK-54` from `Verification` back to `In Progress` after
   U5 verification found that `outputPreview` could expose raw object payloads
   through the supposedly redacted telemetry contract.
+- 2026-06-21: kept `THNK-54` in `Verification` while the U5 focused redaction
+  fix PR checks passed and merged.
+- 2026-06-21: moved `THNK-54` from `Verification` back to `In Progress` when
+  U6 documentation/example work began after the U5 focused fix merged.
 
 ## Active Unit
 
-### U5 focused fix - Redact telemetry output previews
+### U6 - Document the n8n workflow recipe and operator runbook
 
-Objective: repair the U5 redaction contract so operator telemetry never derives
-`outputPreview` by JSON-stringifying arbitrary raw output or result payloads.
+Objective: document a working stock-node n8n agent-step bridge recipe and
+operator runbook, including the deployed n8n.thinkwork.ai example/testing path.
 
-Branch: `codex/thnk-54-u5-redaction-fix`
+Branch: `codex/thnk-54-u6-n8n-docs`
 
 Planned files:
 
-- `packages/api/src/graphql/resolvers/n8n-agent-step-runs/n8n-agent-step-runs.test.ts`
-- `packages/api/src/graphql/resolvers/n8n-agent-step-runs/telemetry.ts`
-- `packages/api/src/graphql/resolvers/plugins/n8n-settings.test.ts`
+- `plugins/n8n/README.md`
+- `plugins/n8n/src/skills/n8n-workflow-operator/SKILL.md`
+- `plugins/n8n/src/manifest.ts`
+- `plugins/n8n/test/manifest.test.ts`
+- `docs/src/content/docs/applications/n8n.mdx`
+- `docs/src/content/docs/applications/n8n-agent-step-bridge.mdx`
+- `docs/astro.config.mjs`
+- `docs/plans/autopilot/THNK-54-status.md`
 
 ## Progress Log
 
@@ -454,8 +463,8 @@ prettier@latest --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"` reports
   `dispatcher:THNK-54:Verification:Codex` on 2026-06-20T23:43:40Z:
   `payloadPreview(row.output_payload ?? row.result_payload)` could expose raw
   object output by falling back to `JSON.stringify(value)`. The proof row with
-  `output_payload: { secret: "raw output should not leak", nested: { token:
-"nested raw token" } }` returned both raw strings in `outputPreview`.
+  `output_payload: { secret: "raw output should not leak", nested: { token: "nested raw token" } }`
+  returned both raw strings in `outputPreview`.
 - Created focused fix branch `codex/thnk-54-u5-redaction-fix` from current
   `origin/main` and left `THNK-54` in `In Progress`.
 - Implemented the U5 focused redaction fix:
@@ -485,6 +494,71 @@ should not leak"`, confirming the regression.
   (`fix(n8n): redact bridge telemetry previews`)
 - Moving `THNK-54` back to `Verification` for the focused redaction
   verification pass while remote PR checks start.
+- PR #2763 required several clean rebases because `main` advanced while the
+  long `test` check was running. Auto-merge was enabled after the rebased heads
+  were pushed so GitHub could land the PR as soon as the up-to-date gate and
+  checks aligned.
+- Final PR #2763 checks passed on head `c84cf2ce1`:
+  - `cla`
+  - `lint`
+  - `verify`
+  - `typecheck`
+  - `test`
+- U5 focused fix PR #2763 squash-merged to `main` at
+  2026-06-21T00:35:36Z:
+  https://github.com/thinkwork-ai/thinkwork/pull/2763
+- U5 focused fix squash merge commit:
+  `8f2a29e20169e88c9e138aada0dfa6449b1b28f2`
+- Remote branch `codex/thnk-54-u5-redaction-fix` was deleted by the merge
+  flow; local branch was deleted after switching away.
+- Synced from `origin/main` at merge commit `8f2a29e20` and created fresh U6
+  branch `codex/thnk-54-u6-n8n-docs`.
+- U6 objective: document the stock-node n8n agent-step bridge workflow recipe
+  and operator guidance, including the provided n8n.thinkwork.ai MCP-backed
+  end-to-end example/testing path.
+- U6 docs/operator guidance implemented:
+  - added n8n docs pages for the managed app overview and stock-node
+    agent-step bridge recipe;
+  - added the Applications sidebar entries;
+  - updated the n8n plugin README, operator skill, embedded manifest copy, and
+    manifest coverage for HTTP Request / Wait-node bridge guidance;
+  - documented that bridge auth is separate from native n8n MCP auth and that
+    workflows should use resume payloads rather than scraping ThinkWork thread
+    pages.
+- Live n8n MCP probe for U6 example path:
+  - normal local resolver failed for `n8n.thinkwork.ai`, while direct DNS lookup
+    resolved the load balancer;
+  - MCP `initialize` and `tools/list` succeeded through a temporary
+    tool-level host override;
+  - observed MCP server name/version: `n8n MCP Server` / `1.1.0`;
+  - observed tools include workflow search/details/execution, publish/unpublish,
+    workflow validation, workflow creation/update/archive, node search/type
+    discovery, credentials/tags, projects/folders, data tables, and SDK
+    reference helpers.
+- U6 local verification passed:
+  - `pnpm --filter @thinkwork/plugin-n8n test -- manifest.test.ts`
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck`
+  - `pnpm --filter @thinkwork/docs build`
+  - `pnpm lint`
+  - `pnpm dlx prettier@latest --check docs/astro.config.mjs docs/plans/autopilot/THNK-54-status.md plugins/n8n/README.md plugins/n8n/src/manifest.ts plugins/n8n/src/skills/n8n-workflow-operator/SKILL.md plugins/n8n/test/manifest.test.ts docs/src/content/docs/applications/n8n.mdx docs/src/content/docs/applications/n8n-agent-step-bridge.mdx`
+  - `git diff --check`
+- Docs build produced the new routes
+  `/applications/n8n/index.html` and
+  `/applications/n8n-agent-step-bridge/index.html`.
+- U6 PR opened:
+  https://github.com/thinkwork-ai/thinkwork/pull/2768
+- U6 PR branch: `codex/thnk-54-u6-n8n-docs`
+- Current U6 docs commit after rebase: `76e887bb1`
+  (`docs(n8n): add agent-step bridge recipe`)
+- Moved `THNK-54` from `In Progress` back to `Verification` for active U6 PR
+  verification.
+- First remote PR #2768 snapshot:
+  - state: open, not draft;
+  - merge state: `BEHIND`;
+  - head: `1904cae981487e31f83fb562bc7833bcb43a5cf8`;
+  - `cla`, `lint`, `Validate signed catalog build`, `verify`, `test`, and
+    `typecheck` were in progress.
+- Rebasing onto current `origin/main` after PR open was clean.
 
 ## Blockers
 
