@@ -14,11 +14,12 @@ import { ChatBubble } from "@/components/chat/ChatBubble";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import {
-  useMessages,
   useNewMessageSubscription,
   useSendMessage,
   useThread,
 } from "@thinkwork/react-native-sdk";
+import { useMessages as useLocalMessages } from "@/lib/hooks/use-messages";
+import { parseThreadGenUIMobileFallbacks } from "@/lib/genui-registry";
 import { useMe } from "@/lib/hooks/use-users";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
@@ -48,7 +49,7 @@ export default function ThreadConversationScreen() {
 
   const { thread: threadData } = useThread(id);
 
-  const { messages, refetch: reexecuteMessages } = useMessages(id);
+  const [{ data: messagesData }, reexecuteMessages] = useLocalMessages(id);
 
   // Subscribe to new messages in real-time — refetch messages when event arrives
   const { markThreadActive, clearThreadActive } = useTurnCompletion();
@@ -75,14 +76,35 @@ export default function ThreadConversationScreen() {
   // the uppercase enum literal ("USER" | "ASSISTANT" | ...) whereas the
   // local ChatMessage type expects lowercase; normalize here.
   const chatMessages: ChatMessage[] = useMemo(() => {
-    return messages.map((m) => ({
-      id: m.id,
-      role: (m.role === "USER" ? "user" : "assistant") as ChatMessage["role"],
-      content: (m.content ?? "").trim(),
-      timestamp: new Date(m.createdAt).getTime(),
-      isStreaming: false,
-    }));
-  }, [messages]);
+    const edges = (messagesData?.messages?.edges ?? []) as any[];
+    return edges.map((edge) => {
+      const m = edge.node;
+      const normalizedRole = String(m.role || "").toLowerCase();
+      let toolResults: Array<Record<string, unknown>> | null = null;
+      if (m.toolResults) {
+        try {
+          const parsed =
+            typeof m.toolResults === "string"
+              ? JSON.parse(m.toolResults)
+              : m.toolResults;
+          if (Array.isArray(parsed) && parsed.length > 0) toolResults = parsed;
+        } catch {}
+      }
+
+      return {
+        id: m.id,
+        role: (normalizedRole === "user"
+          ? "user"
+          : "assistant") as ChatMessage["role"],
+        content: (m.content ?? "").trim(),
+        durableArtifact: m.durableArtifact ?? null,
+        toolResults,
+        genuiFallbacks: parseThreadGenUIMobileFallbacks(m.parts),
+        timestamp: new Date(m.createdAt).getTime(),
+        isStreaming: false,
+      };
+    });
+  }, [messagesData]);
 
   const visibleChatMessages = useMemo(
     () =>

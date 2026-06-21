@@ -141,9 +141,9 @@ status: in_progress
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
 - Linear issue: `THNK-34`.
 - Target branch: `main`.
-- Current implementation unit: U6 Promote inline GenUI into durable artifacts.
-- Current branch: `codex/thnk-34-u6-durable-artifacts`.
-- Current worktree: `.Codex/worktrees/thnk-34-u6-durable-artifacts`.
+- Current implementation unit: U7 Add mobile fallback and documentation.
+- Current branch: `codex/thnk-34-u7-mobile-fallback`.
+- Current worktree: `.Codex/worktrees/thnk-34-u7-mobile-fallback`.
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
   merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
   [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) merged as
@@ -156,10 +156,13 @@ status: in_progress
   `14085702dbd0726830efe08c19c19f8a3d897397`; U5
   [#2771](https://github.com/thinkwork-ai/thinkwork/pull/2771) merged as
   `77f71c11b7915264c484ebb62aa3f90c7fe3f779`; U6
-  [#2775](https://github.com/thinkwork-ai/thinkwork/pull/2775) open.
-- Status: U1, U2, U8, U3, U4, and U5 complete and merged. U6 implementation is
-  locally complete from `origin/main` at
-  `77f71c11b7915264c484ebb62aa3f90c7fe3f779`.
+  [#2775](https://github.com/thinkwork-ai/thinkwork/pull/2775) merged as
+  `30e467070b6cd3ff3ddb737e9274109e25510ac4`; U7
+  [#2778](https://github.com/thinkwork-ai/thinkwork/pull/2778) passed CI and
+  is ready to merge.
+- Status: U1, U2, U8, U3, U4, U5, and U6 complete and merged. U7 is in
+  progress from `origin/main` at
+  `30e467070b6cd3ff3ddb737e9274109e25510ac4`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
     and U7 in dependency order.
@@ -361,6 +364,27 @@ status: in_progress
   - U6 rebased cleanly onto `origin/main` after PR #2775 opened; post-rebase
     `git diff --check origin/main..HEAD`, focused API promotion/artifact tests,
     and focused web promotion/Thread route tests passed.
+  - U7 `pnpm install` completed with the known optional `canvas@2.11.2` native
+    fallback warning under local Node 25 because `pkg-config` / `pixman-1` are
+    unavailable.
+  - U7 `pnpm --filter @thinkwork/mobile codegen` passed.
+  - U7 `pnpm --filter @thinkwork/mobile test -- lib/genui-registry.test.ts lib/genui-contract.test.ts`
+    passed: 2 files, 6 tests.
+  - U7 `pnpm --filter @thinkwork/mobile test` passed: 32 files, 154 tests.
+  - U7 `pnpm --filter @thinkwork/docs build` passed, including the new
+    `/applications/web/thread-generative-ui/` page.
+  - U7 `git diff --check`, `pnpm typecheck`, `pnpm lint`, and scoped
+    `pnpm dlx prettier@3.8.2 --check <U7 files>` passed.
+  - U7 first `pnpm test` run exposed the local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly`) after an `EEXIST`
+    symlink warning during binary install. Rebuilding Electron with
+    `pnpm --filter @thinkwork/desktop rebuild electron` repaired the local
+    install, and `pnpm --filter @thinkwork/desktop test` passed: 15 files, 105
+    tests.
+  - U7 final `pnpm test` passed workspace-wide after the Electron repair,
+    including `apps/web` (179 files, 1345 tests), `packages/api` (542 files
+    passed, 3 skipped; 5096 tests passed, 9 skipped), release tests, and plugin
+    source boundary tests.
 - Compound review:
   - Correctness review flagged unrelated upstream MCP changes when diffing
     against the moving `origin/main`; the U1 branch will be rebased before PR so
@@ -443,10 +467,14 @@ status: in_progress
   - U5 PR #2771 passed required CI (`cla`, `lint`, `verify`, `test`, and
     `typecheck`) after rebasing because `main` moved, and was squash merged as
     `77f71c11b7915264c484ebb62aa3f90c7fe3f779`.
-  - U6 PR #2775 opened after local verification passed.
+  - U6 PR #2775 passed required CI (`cla`, `lint`, `verify`, `test`, and
+    `typecheck`) and was squash merged as
+    `30e467070b6cd3ff3ddb737e9274109e25510ac4`.
+  - U7 PR #2778 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) on initial head.
 - Blockers: none.
-- Next action: open the U6 PR, monitor CI, fix any failures, and squash merge
-  when green.
+- Next action: squash merge U7 PR #2778, remove the branch/worktree, and sync
+  `main`.
 
 ## First-Class Workflow Control Plane - 2026-06-20
 

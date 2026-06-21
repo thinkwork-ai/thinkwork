@@ -1,0 +1,83 @@
+---
+title: Web — Thread Generative UI
+description: Inline Thread GenUI rendering, the data-genui envelope, shared analytical display contract, action security, and artifact promotion behavior in the ThinkWork web app.
+---
+
+Thread Generative UI renders agent-produced interface fragments inside web Thread conversations. The v1 surface is web-first: agents can stream or persist bounded `data-genui` parts, the web app renders supported catalog components inline, and mobile renders the same parts through the required fallback summary.
+
+## Scope
+
+Thread GenUI is for ephemeral inline work inside a conversation. It can show a review card, workflow status, key-value list, action form, or analytical display returned by the agent for the current turn.
+
+Durable dashboards, saved reports, refresh schedules, sharing, and dashboard layout ownership belong to the Analytics/Dashboard foundation, not to Thread GenUI.
+
+## Envelope
+
+Persisted and streamed Thread GenUI parts use the canonical `data-genui` envelope:
+
+```json
+{
+  "type": "data-genui",
+  "id": "genui:example",
+  "data": {
+    "schemaVersion": "thread-genui/v1",
+    "catalogVersion": "thread-genui-catalog/v1",
+    "spec": {
+      "root": "root",
+      "elements": {
+        "root": {
+          "component": "task.review",
+          "props": {}
+        }
+      }
+    },
+    "status": "ready",
+    "mobileFallback": {
+      "title": "Review task",
+      "summary": "Confirm the task is ready.",
+      "lines": ["Status: pending"]
+    }
+  }
+}
+```
+
+The `mobileFallback` object is required. It is the compatibility contract for native mobile and any other consumer that cannot render the full web catalog.
+
+## Catalog Ownership
+
+Thread GenUI owns the inline catalog components used in conversation:
+
+- `task.review`
+- `workflow.status`
+- `keyValue.list`
+- `form.action`
+
+Analytical charts and tables use the reserved `analytics.display` adapter from `@thinkwork/analytics-display`. Thread GenUI does not define a parallel chart or table catalog. Agents that need inline charts emit an `analytics.display` payload wrapped in the same `data-genui` envelope.
+
+## Rendering
+
+The web Thread renderer accepts both live stream chunks and persisted message `parts`. It validates `data-genui` through the shared `@thinkwork/genui` validator before rendering. Unsupported or malformed parts fail closed to the fallback copy rather than executing arbitrary payloads.
+
+Component props must be bounded data, not code. References to external dashboards or datasets are rejected for inline analytical payloads; the inline part must include the bounded render payload needed for the current Thread view.
+
+## Actions
+
+Actions are declared by the envelope and executed by server-side resolvers. Clients send the action id and constrained params back to the API; the server validates thread visibility, source message, source part, action registration, and rate limits before invoking any effect.
+
+Clients must not treat payload-provided tool names, URLs, or arbitrary params as executable authority.
+
+## Promotion
+
+Ready `data-genui` parts can be promoted to durable `DATA_VIEW` artifacts. Promotion creates a snapshot of the validated source part and records source thread/message/part metadata, spec hash, status, title, summary, provenance, freshness, diagnostics, and sensitivity metadata where present.
+
+Promotion does not create dashboard persistence, refresh scheduling, or sharing. Those workflows remain separate durable analytics work.
+
+## Mobile Compatibility
+
+Mobile receives the same persisted message `parts` but v1 does not implement the full web renderer. It renders the required `mobileFallback` title, summary, and lines. If a malformed `data-genui` part is present, mobile shows a stable unsupported state instead of blanking the message or crashing.
+
+## Related Pages
+
+- [Mobile — Threads & Chat](/applications/mobile/threads-and-chat/) — native Thread timeline behavior
+- [Admin — Analytics](/applications/admin/analytics/) — durable analytics pages
+- [Threads](/concepts/threads/) — durable thread model

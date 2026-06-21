@@ -11,6 +11,12 @@
  */
 
 import React from "react";
+import {
+  createAnalyticsDisplayGenUIValidationContext,
+  validateThreadGenUIPart,
+  type ThreadGenUIDiagnostic,
+  type ThreadGenUIPart,
+} from "@thinkwork/genui";
 
 export interface GenUIProps {
   data: Record<string, unknown>;
@@ -113,6 +119,92 @@ export function getGenUIComponent(
   type: string,
 ): React.LazyExoticComponent<React.ComponentType<GenUIProps>> | null {
   return REGISTRY[type] || null;
+}
+
+// ---------------------------------------------------------------------------
+// Thread GenUI mobile fallback parser
+// ---------------------------------------------------------------------------
+
+export interface MobileGenUIFallback {
+  id: string;
+  title: string;
+  summary: string;
+  lines: string[];
+  status: "ready" | "streaming" | "invalid" | "stale" | "unsupported";
+  component?: string;
+  specHash?: string;
+  diagnostics?: ThreadGenUIDiagnostic[];
+}
+
+const GENERIC_MOBILE_FALLBACK: Omit<MobileGenUIFallback, "id" | "diagnostics"> =
+  {
+    title: "Generated view",
+    summary: "Open this thread on web to view the generated interface.",
+    lines: [],
+    status: "unsupported",
+  };
+
+const analyticsValidationContext =
+  createAnalyticsDisplayGenUIValidationContext();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseParts(parts: unknown): unknown[] {
+  if (Array.isArray(parts)) return parts;
+  if (typeof parts !== "string") return [];
+  try {
+    const parsed = JSON.parse(parts);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function rootComponent(part: ThreadGenUIPart): string | undefined {
+  const root = part.data.spec.root;
+  const element = part.data.spec.elements[root];
+  return typeof element?.component === "string" ? element.component : undefined;
+}
+
+function fallbackId(part: unknown, index: number): string {
+  if (isRecord(part) && typeof part.id === "string" && part.id.length > 0) {
+    return part.id;
+  }
+  return `data-genui:${index}`;
+}
+
+function toMobileGenUIFallback(part: ThreadGenUIPart): MobileGenUIFallback {
+  return {
+    id: part.id,
+    title: part.data.mobileFallback.title,
+    summary: part.data.mobileFallback.summary,
+    lines: part.data.mobileFallback.lines ?? [],
+    status: part.data.status,
+    component: rootComponent(part),
+    specHash: part.data.specHash,
+    diagnostics: part.data.diagnostics,
+  };
+}
+
+export function parseThreadGenUIMobileFallbacks(
+  parts: unknown,
+): MobileGenUIFallback[] {
+  return parseParts(parts).flatMap((part, index) => {
+    if (!isRecord(part) || part.type !== "data-genui") return [];
+
+    const result = validateThreadGenUIPart(part, analyticsValidationContext);
+    if (result.ok) return [toMobileGenUIFallback(result.part)];
+
+    return [
+      {
+        id: fallbackId(part, index),
+        ...GENERIC_MOBILE_FALLBACK,
+        diagnostics: result.diagnostics,
+      },
+    ];
+  });
 }
 
 // ---------------------------------------------------------------------------

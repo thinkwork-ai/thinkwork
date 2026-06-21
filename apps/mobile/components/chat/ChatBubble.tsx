@@ -11,6 +11,7 @@ import {
   parseMessageBlocks,
   type MessageBlock,
   type GenUIAction,
+  type MobileGenUIFallback,
 } from "@/lib/genui-registry";
 import {
   getRenderableMessageContent,
@@ -22,9 +23,7 @@ import { TypingIndicator } from "./TypingIndicator";
 import { InlineApprovalCard } from "../inbox/InlineApprovalCard";
 
 /** Extract inline approval metadata from message content if present. */
-function extractApprovalMeta(
-  content: string,
-): {
+function extractApprovalMeta(content: string): {
   inboxItemId: string;
   title: string;
   description?: string;
@@ -119,6 +118,43 @@ function BlinkingCursor() {
   );
 }
 
+function MobileGenUIFallbackCard({
+  fallback,
+}: {
+  fallback: MobileGenUIFallback;
+}) {
+  const isUnsupported =
+    fallback.status === "unsupported" || fallback.status === "invalid";
+
+  return (
+    <View className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 px-3 py-2.5">
+      <Text className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+        {fallback.title}
+      </Text>
+      <Text className="text-sm text-neutral-700 dark:text-neutral-300 mt-1">
+        {fallback.summary}
+      </Text>
+      {fallback.lines.length > 0 ? (
+        <View className="mt-2 gap-1">
+          {fallback.lines.map((line, index) => (
+            <Text
+              key={`${fallback.id}-line-${index}`}
+              className="text-xs text-neutral-600 dark:text-neutral-400"
+            >
+              {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      {isUnsupported ? (
+        <Text className="text-xs text-neutral-500 dark:text-neutral-500 mt-2">
+          Interactive view available on web.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function ChatBubble({
   message,
   onEnvelopeAction,
@@ -161,9 +197,17 @@ export function ChatBubble({
 
   const isUser = message.role === "user";
   const content = getRenderableMessageContent(message, showSystemMessages);
+  const genuiFallbacks = !isUser ? (message.genuiFallbacks ?? []) : [];
 
   // Don't render empty bubbles (e.g., hidden system messages or tool calls with no text content)
-  if (!content && !message.isStreaming) return null;
+  if (
+    !content &&
+    !message.isStreaming &&
+    genuiFallbacks.length === 0 &&
+    !message.durableArtifact &&
+    !message.toolResults?.length
+  )
+    return null;
 
   const displayContent = content ?? "";
   // Optimistic user messages: always animate (slide up on send)
@@ -294,9 +338,19 @@ export function ChatBubble({
               status={message.durableArtifact.status?.toLowerCase()}
               content={message.durableArtifact.content ?? displayContent}
             />
-          ) : (
+          ) : displayContent ? (
             <MarkdownMessage content={displayContent} isUser={isUser} />
-          )}
+          ) : null}
+          {genuiFallbacks.length > 0 ? (
+            <View className="gap-2 mt-2">
+              {genuiFallbacks.map((fallback) => (
+                <MobileGenUIFallbackCard
+                  key={fallback.id}
+                  fallback={fallback}
+                />
+              ))}
+            </View>
+          ) : null}
           {approvalMeta && (
             <InlineApprovalCard
               inboxItemId={approvalMeta.inboxItemId}
