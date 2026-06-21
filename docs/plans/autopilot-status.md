@@ -14,7 +14,7 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: planning recovery in progress.
+- Status: planning recovery PR opened.
 - Current branch: `codex/skill-library-import-export-plan`.
 - Current worktree: `.Codex/worktrees/skill-library-import-export-plan`.
 - Notes:
@@ -27,14 +27,14 @@ status: in_progress
     Validation and Packaging Module.
 - Unit ledger:
 
-| Unit                                           | Branch                                   | PR      | State       | Notes                                                           |
-| ---------------------------------------------- | ---------------------------------------- | ------- | ----------- | --------------------------------------------------------------- |
-| Plan recovery                                  | `codex/skill-library-import-export-plan` | Pending | In progress | Adds the missing referenced plan and starts this status ledger. |
-| U1 Archive Validation and Packaging Module     | Pending                                  | Pending | Pending     | Next unit after plan recovery merges.                           |
-| U2 Catalog Import API Action                   | Pending                                  | Pending | Pending     | Depends on U1.                                                  |
-| U3 Catalog Export API Action                   | Pending                                  | Pending | Pending     | Depends on U1.                                                  |
-| U4 Skill Library Import UI                     | Pending                                  | Pending | Pending     | Depends on U2.                                                  |
-| U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending | Pending     | Depends on U3 and U4.                                           |
+| Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                           |
+| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | --------------------------------------------------------------- |
+| Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | In progress | Adds the missing referenced plan and starts this status ledger. |
+| U1 Archive Validation and Packaging Module     | Pending                                  | Pending                                                      | Pending     | Next unit after plan recovery merges.                           |
+| U2 Catalog Import API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                                  |
+| U3 Catalog Export API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                                  |
+| U4 Skill Library Import UI                     | Pending                                  | Pending                                                      | Pending     | Depends on U2.                                                  |
+| U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                           |
 
 ---
 
