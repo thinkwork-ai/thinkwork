@@ -1,16 +1,16 @@
 ---
 title: Automations
-description: How ThinkWork runs agent work without a human chat message — schedules, webhooks, and Step Functions routines, all backed by the same ASL substrate, observable end-to-end via routine_executions + step events or AUTO threads.
+description: How ThinkWork runs agent work without a human chat message — schedules, webhooks, and Step Functions-backed workflows, observable end-to-end via Workflow runs, routine_executions adapter evidence, step events, or AUTO threads.
 ---
 
 import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
-Automations are how ThinkWork starts agent work from outside a chat conversation — a daily digest at 9am, a webhook that triages new tickets, a multi-step routine that fetches data, classifies it, drafts a reply, waits for human approval, and sends. The harness exposes three primitives: **routines** (multi-step Step Functions workflows), **schedules** (cron + rate triggers via AWS Scheduler), and **webhooks** (public HTTPS endpoints with shared-secret tokens). All three live behind one Automations parent in the admin sidebar; all three flow through the same Step Functions substrate when the work is non-trivial.
+Automations are how ThinkWork starts agent work from outside a chat conversation — a daily digest at 9am, a webhook that triages new tickets, a multi-step workflow that fetches data, classifies it, drafts a reply, waits for human approval, and sends. The harness exposes three primitives: **workflows** (multi-step orchestration, currently backed by the Step Functions Routine adapter), **schedules** (cron + rate triggers via AWS Scheduler), and **webhooks** (public HTTPS endpoints with shared-secret tokens). All three live behind the automation and workflow operator surfaces; all three flow through the same Step Functions substrate when the work is non-trivial.
 
 The important architectural choice is that ThinkWork has two parallel observability surfaces depending on the shape of the work:
 
 - **Single-turn agent work** (a scheduled "send the morning digest" prompt to an agent) lands as a `thread_turns` row attached to an `AUTO-` thread — the same audit + cost + memory surface as a chat-initiated turn.
-- **Multi-step routines** land as a `routine_executions` row with a `routine_step_events` log — observable through the run-detail graph rather than a chat timeline.
+- **Multi-step workflows** land as a Workflow run with Step Functions adapter evidence in `routine_executions` and `routine_step_events` — observable through the run-detail graph rather than a chat timeline.
 
 Both surfaces share Aurora for storage, Bedrock AgentCore for any agent invocation, and the same tenant + cost accounting. The shape of the work determines which surface the operator opens to debug; the platform doesn't make the operator pick when authoring.
 
@@ -19,9 +19,9 @@ Both surfaces share Aurora for storage, Bedrock AgentCore for any agent invocati
 The alternative — a single execution model that handles both single-turn and multi-step work — is what early agent platforms tend to build. It collapses the audit story but blurs the abstraction:
 
 - Single-turn agent work is a conversation. The natural debugger is a chat timeline. A `thread_turns` row carries every tool call, every memory read, every guardrail activation in narrative order.
-- Multi-step routines are state machines. The natural debugger is a graph with status overlays. A `routine_executions` row plus its step events carries timing and structural shape that doesn't fit a linear timeline.
+- Multi-step workflows are state machines. The natural debugger is a graph with status overlays. A Workflow run plus Step Functions adapter evidence carries timing and structural shape that doesn't fit a linear timeline.
 
-ThinkWork lets each shape have the surface that fits. A scheduled `agent_invoke`-only routine still gets a routine execution row (the SFN substrate is uniform) but operators tend to debug through the agent's thread when something goes wrong at the agent level; they reach for the SFN execution view when the failure is at the state-machine level (a step timed out, retries exhausted, a branch routed wrong).
+ThinkWork lets each shape have the surface that fits. A scheduled `agent_invoke`-only workflow still gets Step Functions adapter evidence (the SFN substrate is uniform), but operators tend to debug through the agent's thread when something goes wrong at the agent level; they reach for the SFN execution view when the failure is at the state-machine level (a step timed out, retries exhausted, a branch routed wrong).
 
 ## What automations give you
 
@@ -29,9 +29,9 @@ ThinkWork lets each shape have the surface that fits. A scheduled `agent_invoke`
   <Card title="Scheduled and Event-driven" icon="time">
     Cron-like schedules ("every weekday at 9am") and event triggers (webhooks,
     integration events). Backed by AWS Scheduler + EventBridge. Both can target
-    a routine or a single agent invocation.
+    a workflow or a single agent invocation.
   </Card>
-  <Card title="Routines and Execution Model" icon="gear">
+  <Card title="Workflows and Execution Model" icon="gear">
     Multi-step work backed by Step Functions — branching, retries,
     human-in-the-loop waits, parallel fan-out, and failure handling, all
     composed from a small fixed catalog of recipes that the chat builder agent
@@ -52,13 +52,13 @@ Both paths converge on either a thread-based agent invocation or a Step Function
 
 A scheduled "every weekday at 9am, ask the agent for the morning digest" is single-turn: AWS Scheduler fires, the `job-trigger` Lambda invokes the agent through the chat path, the result lands in an `AUTO-` thread. The thread debugger is the right view.
 
-A scheduled "every overnight, fetch new emails, classify each, draft urgent replies, require approval before sending" is multi-step: AWS Scheduler fires, `job-trigger` calls `triggerRoutineRun` against the routine's alias ARN, Step Functions starts an execution, every step transition writes a `routine_step_events` row, the run-detail UI renders the graph in real time.
+A scheduled "every overnight, fetch new emails, classify each, draft urgent replies, require approval before sending" is multi-step: AWS Scheduler fires, `job-trigger` starts the Step Functions-backed workflow through the Routine adapter, Step Functions starts an execution, every step transition writes a `routine_step_events` row, and the Workflow run-detail UI renders the graph in real time.
 
-The chat builder picks the shape automatically. If the operator's intent decomposes into multiple discrete steps with branching or HITL, the agent emits a routine. If it's a single agent invocation against a configured prompt, the agent emits a `scheduled_jobs` row pointing at an agent.
+The chat builder picks the shape automatically. If the operator's intent decomposes into multiple discrete steps with branching or HITL, the agent emits a workflow. If it's a single agent invocation against a configured prompt, the agent emits a `scheduled_jobs` row pointing at an agent.
 
-## Routines: composed from a fixed recipe catalog
+## Workflows: composed from a fixed recipe catalog
 
-A routine is composed from a small vocabulary of recipes — `http_request`, `aurora_query`, `slack_send`, `email_send`, `inbox_approval`, `python`, `agent_invoke`, `tool_invoke`, `routine_invoke`, plus the ASL primitives `choice`, `wait`, `map`, `sequence`, `fail`. Each recipe has a JSON Schema for its arguments and an ASL emitter the validator runs at publish time. The catalog stays small on purpose so the chat builder can keep the surface area human-readable; new recipes are added as real integration demand surfaces.
+A Step Functions-backed workflow is composed from a small vocabulary of recipes — `http_request`, `aurora_query`, `slack_send`, `email_send`, `inbox_approval`, `python`, `agent_invoke`, `tool_invoke`, `routine_invoke`, plus the ASL primitives `choice`, `wait`, `map`, `sequence`, `fail`. Each recipe has a JSON Schema for its arguments and an ASL emitter the validator runs at publish time. The catalog stays small on purpose so the chat builder can keep the surface area human-readable; new recipes are added as real integration demand surfaces.
 
 `python` is the escape hatch for behavior no recipe covers. It runs in an AgentCore code-interpreter sandbox with an explicit env-var allowlist; the `routine-task-python` wrapper offloads stdout/stderr to S3 with a 4KB inline preview so a 10MB python step doesn't blow Step Functions' 256KB state-payload limit.
 
@@ -83,7 +83,7 @@ Agent loop runs — tools, memory, response
 thread_turns row recorded; thread marked succeeded or failed
 ```
 
-## The run shape — multi-step (routine)
+## The run shape — multi-step workflow
 
 ```
 AWS Scheduler fires (or webhook arrives, or operator clicks Run Now)
@@ -92,7 +92,7 @@ AWS Scheduler fires (or webhook arrives, or operator clicks Run Now)
 triggerRoutineRun mutation
         │
         ▼
-SFN.StartExecution against the routine's alias ARN
+SFN.StartExecution against the workflow version's Routine adapter ARN
         │
         ▼
 routine_executions row inserted (status=running)
@@ -112,28 +112,28 @@ EventBridge SFN-state-change → routine-execution-callback updates
 routine_executions.status to terminal value
 ```
 
-Every step in the routine path is observable via `routine_step_events`. The run-detail UI polls every 5s while the execution is non-terminal and renders the latest event per node as a graph dot.
+Every step in the Step Functions adapter path is observable via `routine_step_events`. The Workflow run-detail UI polls every 5s while the execution is non-terminal and renders the latest event per node as a graph dot.
 
 ## Debugging a failed automation
 
 Three complementary views depending on the shape:
 
 - **For thread-based runs (single-turn agent work).** Open the AUTO thread in the admin app. See the conversation, tool calls, memory reads, and any guardrail activations inline.
-- **For routine runs (multi-step).** Open the routine execution at `/automations/routines/:routineId/executions/:executionId`. The graph shows the state shape; the step-detail panel shows input/output/cost/duration per step; the markdown summary names HITL anchor points.
+- **For workflow runs (multi-step).** Open the Workflow run detail at `/settings/workflows/:workflowId/runs/:runId`. The graph shows the state shape; the step-detail panel shows input/output/cost/duration per step; the markdown summary names HITL anchor points.
 - **For state-machine-level failures.** Open the Step Functions execution in the AWS console. See which state failed, how many retries were attempted, what the state-machine input and output look like at each step. The right view when the failure is structural rather than agent-level.
 
-For agent-level failures inside a routine, the run-detail UI's step panel surfaces the agent turn directly. For state-machine-level failures (a step timed out, retries exhausted, a branch routed wrong), the SFN execution view is the one to open.
+For agent-level failures inside a workflow, the run-detail UI's step panel surfaces the agent turn directly. For state-machine-level failures (a step timed out, retries exhausted, a branch routed wrong), the SFN execution view is the one to open.
 
 <Aside type="tip">
   A common pitfall: thinking a "failed automation" means the agent did the wrong
   thing. Often it means the state machine couldn't *reach* the agent — a step
   that fetches input data failed, a trigger misfired, or a scheduler
-  configuration was wrong. For routines, always check the run-detail step graph
+  configuration was wrong. For workflows, always check the run-detail step graph
   before drilling into a specific step's agent turn.
 </Aside>
 
 ## Related pages
 
 - [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — the two entry points in detail
-- [Admin: Automations](/applications/admin/automations/) — the operator UI for routines, schedules, webhooks
+- [Admin: Automations](/applications/admin/automations/) — the operator UI for schedules and webhooks; active workflow inventory lives in Settings → Workflows
 - [Architecture](/architecture/) — where EventBridge, Scheduler, and Step Functions fit in the deploy

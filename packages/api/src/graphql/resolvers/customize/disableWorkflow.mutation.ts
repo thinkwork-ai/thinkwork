@@ -14,9 +14,9 @@ export interface DisableWorkflowArgs {
 }
 
 /**
- * Disable a workflow on the caller's tenant platform agent. Flips
- * status to 'inactive' rather than deleting so history is preserved.
- * Idempotent.
+ * Disable a workflow template on the caller's tenant platform agent. The
+ * backing compatibility row remains a Routine until the Step Functions adapter
+ * stops using routine catalog slugs.
  */
 export async function disableWorkflow(
   _parent: unknown,

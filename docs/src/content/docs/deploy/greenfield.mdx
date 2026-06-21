@@ -33,7 +33,7 @@ ThinkWork is organized into three infrastructure tiers that deploy in order:
 - API Gateway v2 HTTP API
 - AgentCore Lambda (container image, 3GB memory, 15min timeout)
 - Integration Lambda functions (Slack, GitHub, Google)
-- Step Functions state machines (automations, routine runner)
+- Step Functions state machines (automations, Workflow execution adapter)
 - CloudFront distributions (web app)
 - Bedrock AgentCore Memory (always on — auto-provisioned for managed long-term memory)
 - ECS Fargate (only if `enable_hindsight = true`)
@@ -222,7 +222,7 @@ In the AWS console:
 | AppSync         | 14       | API, schema, resolvers, data sources, functions                       |
 | API Gateway     | 8        | HTTP API, routes, integrations, stage                                 |
 | CloudFront      | 6        | Admin dist, end-user dist, OAC policies, cache behaviors              |
-| Step Functions  | 4        | State machines for automations, routine runner                        |
+| Step Functions  | 4        | State machines for automations and the Workflow execution adapter     |
 | EventBridge     | 3        | Scheduled automation rules, event bus                                 |
 | SES             | 5        | Identity, config set, event destination, suppression list             |
 | Secrets Manager | 4        | DB credentials, Cognito secrets, integration secrets                  |

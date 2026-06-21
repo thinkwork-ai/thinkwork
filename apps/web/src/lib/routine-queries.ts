@@ -1,7 +1,7 @@
 import { graphql } from "@/gql";
 
-// Routine queries ported from apps/web for the Settings → Routines detail
-// (React Flow / AWS Step Functions ASL workflow editor + executions).
+// Step Functions Routine adapter queries for Workflow compatibility detail
+// views (React Flow / AWS Step Functions ASL workflow editor + executions).
 
 export const RoutineDetailQuery = graphql(`
   query RoutineDetail($id: ID!) {

@@ -3,9 +3,9 @@ import { useMutation, type AnyVariables, type TypedDocumentNode } from "urql";
 import { toast } from "sonner";
 import {
   DisableSkillMutation,
-  DisableWorkflowMutation,
+  DisableWorkflowTemplateMutation,
   EnableSkillMutation,
-  EnableWorkflowMutation,
+  EnableWorkflowTemplateMutation,
 } from "@/lib/graphql-queries";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
 
@@ -18,7 +18,7 @@ const SKILL_TYPENAMES = ["AgentSkill", "CustomizeBindings"] as const;
 
 const WORKFLOW_TYPENAMES = [
   "Routine",
-  "WorkflowBinding",
+  "WorkflowTemplateBinding",
   "CustomizeBindings",
 ] as const;
 
@@ -30,7 +30,7 @@ interface ToggleMutationOptions {
   enableMutation: TypedDocumentNode<unknown, AnyVariables>;
   disableMutation: TypedDocumentNode<unknown, AnyVariables>;
   typenames: readonly string[];
-  buildVariables: (computerId: string, key: string) => AnyVariables;
+  buildVariables: (agentId: string, key: string) => AnyVariables;
   /** Map a server `extensions.code` to a sonner `toast.message` hint. */
   errorCodeHints?: Readonly<Record<string, string>>;
 }
@@ -43,8 +43,8 @@ const SKILL_OPTS: ToggleMutationOptions = {
   enableMutation: EnableSkillMutation,
   disableMutation: DisableSkillMutation,
   typenames: SKILL_TYPENAMES,
-  buildVariables: (computerId, skillId) => ({
-    input: { computerId, skillId },
+  buildVariables: (agentId, skillId) => ({
+    input: { agentId, skillId },
   }),
   errorCodeHints: {
     CUSTOMIZE_BUILTIN_TOOL_NOT_ENABLEABLE: BUILTIN_TOOL_HINT,
@@ -52,10 +52,10 @@ const SKILL_OPTS: ToggleMutationOptions = {
 };
 
 const WORKFLOW_OPTS: ToggleMutationOptions = {
-  enableMutation: EnableWorkflowMutation,
-  disableMutation: DisableWorkflowMutation,
+  enableMutation: EnableWorkflowTemplateMutation,
+  disableMutation: DisableWorkflowTemplateMutation,
   typenames: WORKFLOW_TYPENAMES,
-  buildVariables: (computerId, slug) => ({ input: { computerId, slug } }),
+  buildVariables: (agentId, slug) => ({ input: { agentId, slug } }),
 };
 
 /**
@@ -65,7 +65,7 @@ const WORKFLOW_OPTS: ToggleMutationOptions = {
  * server `extensions.code` errors to per-mutation hint messages when
  * present (otherwise falls back to `toast.error(message)`).
  *
- * The skill / workflow hooks are thin wrappers around this helper.
+ * The skill / workflow-template hooks are thin wrappers around this helper.
  * Plan: docs/plans/2026-05-09-010-feat-customize-workflows-live-plan.md U6-4.
  */
 export function useToggleMutation(
@@ -134,8 +134,8 @@ export function useSkillMutation(): UseToggleMutationResult {
 }
 
 /**
- * urql wrapper for the Workflows-tab Connect / Disable button. Composes
- * useToggleMutation with the workflow mutation pair and the
+ * urql wrapper for the Workflow Templates tab Connect / Disable button.
+ * Composes useToggleMutation with the workflow-template mutation pair and the
  * `WORKFLOW_TYPENAMES` invalidation set. No special-case error code
  * routing — `CUSTOMIZE_CATALOG_NOT_FOUND` and
  * `CUSTOMIZE_PRIMARY_AGENT_NOT_FOUND` fall through to `toast.error`.

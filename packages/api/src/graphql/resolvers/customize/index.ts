@@ -6,11 +6,14 @@ import { workflowCatalog } from "./workflowCatalog.query.js";
 
 export const customizeQueries = {
   customizeBindings,
+  workflowTemplateCatalog: workflowCatalog,
   workflowCatalog,
 };
 
 export const customizeMutations = {
   disableSkill,
+  enableWorkflowTemplate: enableWorkflow,
+  disableWorkflowTemplate: disableWorkflow,
   enableWorkflow,
   disableWorkflow,
 };

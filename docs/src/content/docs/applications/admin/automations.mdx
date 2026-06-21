@@ -1,66 +1,58 @@
 ---
 title: Admin — Automations
-description: Tenant-wide home for routines (Step Functions workflows), schedules (cron + rate triggers), and webhooks. Three children under one Automations parent in the admin sidebar — each with its own list, detail, and run/invocation history.
+description: Tenant-wide home for scheduled jobs, webhooks, and the first-class Workflow inventory. Step Functions-backed workflows still use the Routine adapter internally, but operators monitor them from Settings → Workflows.
 ---
 
-import { Aside, CardGrid, Card } from '@astrojs/starlight/components';
-
-Automations is the admin app's parent surface for everything that runs agent work without a human chat message — Step Functions routines, scheduled jobs, and webhook endpoints. It's a real route group in the sidebar (not a label-only rename), with three children: Routines, Schedules, and Webhooks. The detail surfaces under Routines are where the operator watches a routine execute step by step, with a live graph of state transitions, per-step input/output/cost, and the agent-authored markdown summary that names HITL approval points by state name.
+Automations is the admin app's surface for work that starts without a human chat message: scheduled jobs, webhook endpoints, and workflows. Active multi-step work now appears in the first-class **Settings → Workflows** inventory. Step Functions-backed workflows still use the Routine adapter internally, so old Routine deep links continue to resolve during the transition, but Routines are no longer presented as a separate top-level product surface.
 
 ## Where it lives in the admin sidebar
 
-Automations is a parent group in the **Work** section, with three children:
+The current operator placement is:
 
 ```
-Work
-├── Dashboard
-├── Agents
-├── Threads
-├── Inbox
-└── Automations            ← parent; expands to:
-    ├── Routines           ← /automations/routines
-    ├── Schedules          ← /automations/schedules
-    └── Webhooks           ← /automations/webhooks
+Settings
+├── Workflows              ← /settings/workflows
+├── Automations            ← schedules and one-shot jobs
+└── Webhooks               ← webhook endpoints
 ```
 
-The previous top-level routes (`/scheduled-jobs`, `/webhooks`, `/routines`) survive as 301-redirect shims so existing deep-links and bookmarks still land. Webhooks moved out of the Manage group during the Phase D nav restructure; Manage now keeps pure config/infra surfaces — Analytics, People, Billing, Settings.
+The previous Routine settings list redirects to `/settings/workflows`. Old Routine detail and execution URLs remain compatibility routes that either redirect to the matching Workflow detail/run or render the Step Functions adapter detail as a fallback.
 
-## Routines
+## Workflows
 
-**List route:** `/automations/routines`
-**Detail route:** `/automations/routines/:routineId`
-**Run-detail route:** `/automations/routines/:routineId/executions/:executionId`
-**New routine:** `/automations/routines/new`
+**Inventory route:** `/settings/workflows`
+**Detail route:** `/settings/workflows/:workflowId`
+**Run-detail route:** `/settings/workflows/:workflowId/runs/:runId`
 
-A routine is an Amazon States Language state machine the chat builder agent emits, validated and provisioned by the `publishRoutineVersion` GraphQL mutation. Each routine has:
+A Step Functions-backed workflow is an Amazon States Language state machine the chat builder agent emits, validated and provisioned by the Routine adapter's `publishRoutineVersion` GraphQL mutation. Each one has:
 
-- **An ASL state machine** versioned via Step Functions `PublishStateMachineVersion`. The routine carries an alias ARN; the alias points at the current version, so triggering a routine always runs whatever the latest publish set as current.
+- **An ASL state machine** versioned via Step Functions `PublishStateMachineVersion`. The adapter records the version ARN so Workflow runs can show exactly which definition executed.
 - **An agent-authored markdown summary** (`documentationMd`), regenerated on every publish, that names the steps the operator will see in the run-detail graph plus any HITL approval points.
 - **A step manifest** (`step_manifest_json` on `routine_asl_versions`) that maps ASL state names to v0 recipe ids — the run-detail graph derives nodes from this manifest so brand-new executions render their shape immediately.
-- **A visibility model** — `visibility = 'agent_private'` (only the owning agent can invoke) or `visibility = 'tenant_shared'` (any agent in the tenant). Splits the conflated `agentId` field; `owning_agent_id` is the authoring/stewardship agent for private routines.
+- **A visibility model** — `visibility = 'agent_private'` (only the owning agent can invoke) or `visibility = 'tenant_shared'` (any agent in the tenant). Splits the conflated `agentId` field; `owning_agent_id` is the authoring/stewardship agent for private Step Functions-backed workflows.
 
-### The routines list
+### The workflow inventory
 
-Filtered to `engine = 'step_functions'` so legacy_python rows don't pollute the operator's view. Columns: status badge, name, type, schedule, agent, last run, next run. Click a row to drill into the detail page.
+The inventory aggregates Step Functions-backed workflows, n8n-connected workflows, CRM lifecycle workflows, and future connected-app/native sources. Columns show workflow identity, readiness, source, trigger family, lifecycle status, version, and last run. Blocked workflows remain visible with readiness reasons so operators can see missing OAuth, MCP, plugin, or engine prerequisites.
 
-The **New Routine** button routes to a thin form-based create page that mints a placeholder routine (no-op `Succeed`-state ASL) and drops the operator into the routine detail page. Iteration happens via the chat builder once that surface lands; until then, operators iterate via direct ASL edits.
+Step Functions-backed rows expose a Step Functions tab in detail, reusing the existing graph and definition panel. Source-specific setup remains on source pages such as `/settings/plugins/n8n`.
 
-### The routine detail page
+### The workflow detail page
 
-Two tabs:
+Workflow detail has source-appropriate tabs:
 
-- **Runs** — the `ExecutionList` component. Status filter pills (running / awaiting_approval / succeeded / failed / cancelled / timed_out / all) persist via URL search params, so reload preserves the filter. Cursor pagination keyed on `started_at`; explicit Previous/Next with a cursor stack. The list polls every 5s while at least one row is non-terminal AND the page is visible (no background polling). Click a row → run-detail page.
-- **Scheduled Jobs** — the `routine_triggers` rows that fire this routine on a schedule. Routine triggers go through the same `scheduled_jobs` substrate as agent triggers but with `trigger_type = 'routine_schedule'` or `'routine_one_time'`.
+- **Overview** — lifecycle, readiness, trigger family, source binding, and readiness reasons.
+- **Step Functions** — only for `step_functions_routine` bindings; embeds the Routine adapter definition panel.
+- **Runs** — recent Workflow runs with canonical status, trigger source, start time, and duration.
+- **Definition** — version, source kind, capability snapshot, and definition snapshot.
 
-Side card shows routine metadata: type, schedule, owning agent, team, last run, next run, created.
+### The workflow run-detail page
 
-### The run-detail page
-
-The customer-visible "watch the routine execute" surface. Three components combine:
+The customer-visible "watch the workflow execute" surface combines canonical Workflow ledger data with source-specific evidence:
 
 - **`ExecutionGraph`** — vertical-stepper visualization of the state machine. Nodes derive from the routine_asl_versions step manifest backing this specific execution (resolved via `RoutineExecution.aslVersion`); fall back to deriving from `routine_step_events` when the manifest isn't fetchable. Latest-event-per-node selection collapses retry chatter into a single graph dot. Status icons: spinning loader for running, green check for succeeded, red X for failed, purple pause for awaiting_approval, amber clock for timed_out.
 - **`StepDetailPanel`** — click a step in the graph; this panel shows input/output JSON, recipe type, retry count, LLM cost, duration. For `python` recipe steps with S3-offloaded stdout/stderr, the inline 4KB preview surfaces with a "(truncated)" marker plus the S3 URI for full output.
-- **`MarkdownSummary`** — renders the routine's `documentationMd`. HITL anchor links of the form `[label](#step-NodeName)` are intercepted and route to the parent's step-selection handler so clicking the anchor jumps the graph + panel to the named state.
+- **Workflow evidence** — backend/app proof such as Step Functions executions, n8n execution IDs, CRM event references, and redacted payload summaries.
 
 The page polls every 5s while non-terminal. Subscription wiring (AppSync `OnRoutineExecutionUpdated`) is a Phase E follow-up — current polling is fine at 4-tenant scale.
 
@@ -69,26 +61,27 @@ The page polls every 5s while non-terminal. Subscription wiring (AppSync `OnRout
 **Route:** `/automations/schedules`
 **Detail:** `/automations/schedules/:scheduledJobId`
 
-The `scheduled_jobs` substrate that previously lived at `/scheduled-jobs`. Behavior is unchanged — same four trigger types (heartbeats, reminders, scheduled invocations, routine triggers), same EventBridge → `job-schedule-manager` → `job-trigger` provisioning chain. Routine triggers fire `triggerRoutineRun` GraphQL mutation, which calls SFN `StartExecution` against the routine's alias ARN.
+The `scheduled_jobs` substrate behavior is unchanged — same four trigger types (heartbeats, reminders, scheduled invocations, workflow triggers), same EventBridge → `job-schedule-manager` → `job-trigger` provisioning chain. Step Functions-backed workflow triggers still pass through the Routine adapter while Workflow runs provide the product ledger.
 
 ## Webhooks
 
 **Route:** `/automations/webhooks`
 **Detail:** `/automations/webhooks/:webhookId`
 
-The webhook surface that previously lived at `/webhooks`. Behavior is unchanged — webhook tokens, target_type (agent | routine), enabled toggle, invocation history. Routine-target webhooks invoke `triggerRoutineRun` via the webhook handler.
+The webhook surface behavior is unchanged — webhook tokens, target_type (agent | workflow, with `routine` as the compatibility storage value for Step Functions-backed workflow targets), enabled toggle, invocation history. Workflow-target webhooks create Workflow run evidence when they invoke multi-step work.
 
-## What does *not* live here
+## What does _not_ live here
 
-- **Workspace HITL reviews** — system-agent workspace reviews surface in [Inbox](/applications/admin/inbox/), not Automations. Routine-driven HITL approvals (the `inbox_approval` recipe) also surface in Inbox; deciding an inbox item with `type = 'routine_approval'` resumes the paused Step Functions execution.
-- **Per-thread agent invocations** — those live in [Threads](/applications/admin/threads/). Routines are distinct: a routine execution has its own `routine_executions` row, not a `thread_turns` row, and is observable through the run-detail graph rather than a chat timeline.
+- **Workspace HITL reviews** — system-agent workspace reviews surface in [Inbox](/applications/admin/inbox/), not Automations. Workflow-driven HITL approvals (the `inbox_approval` recipe) also surface in Inbox; deciding an inbox item with `type = 'routine_approval'` resumes the paused Step Functions execution.
+- **Per-thread agent invocations** — those live in [Threads](/applications/admin/threads/). Multi-step workflows are distinct: a Workflow run has its own ledger and, for Step Functions-backed workflows, adapter evidence in `routine_executions` rather than a `thread_turns` row.
 - **Per-user OAuth or integration credentials** — those live in the mobile app. Admin owns tenant-wide infra and config; users own their own integration auth on mobile.
-- **Legacy Python routines** — `engine = 'legacy_python'` rows are archived during the Phase E migration and excluded from the routines list. They're not deleted (status flips to `archived`); they stop being actionable from this UI.
+- **Legacy Python routines** — `engine = 'legacy_python'` rows are archived during the compatibility migration and excluded from active Workflow inventory. They're not deleted (status flips to `archived`); they stop being actionable from this UI.
 
 ## Under the hood
 
-- Routines: `routines` table holds the routine record; `routine_asl_versions` is the version history (one row per `publishRoutineVersion`); `routine_executions` records each SFN execution; `routine_step_events` is the per-step event log (running/succeeded/failed transitions, plus python stdout previews + LLM cost). EventBridge bridges SFN execution-state-change events into `routine-execution-callback` so the executions row tracks lifecycle even for `agent_invoke`-only routines that have no wrapper Lambda.
-- Schedules: `scheduled_jobs` table; `job-schedule-manager` reconciles to AWS Scheduler; `job-trigger` fires the wakeup or routine StartExecution.
+- Workflows: first-class `workflows`, `workflow_versions`, `workflow_triggers`, `workflow_engine_bindings`, `workflow_runs`, `workflow_run_events`, and `workflow_evidence` rows form the product control plane and run ledger.
+- Step Functions adapter: `routines` stores the adapter record; `routine_asl_versions` is the ASL version history; `routine_executions` records each SFN execution; `routine_step_events` is the per-step event log. EventBridge bridges SFN execution-state-change events into `routine-execution-callback` so the adapter execution row tracks lifecycle even for `agent_invoke`-only workflows that have no wrapper Lambda.
+- Schedules: `scheduled_jobs` table; `job-schedule-manager` reconciles to AWS Scheduler; `job-trigger` fires the wakeup or workflow StartExecution.
 - Webhooks: `webhooks` table; `webhooks` handler authenticates the public endpoint and routes the payload.
 
 `rate()` schedules treat the cadence as creation-time + interval, not wall-clock-aligned — a `rate(1 hour)` job created at 09:23 fires at 10:23, 11:23, … rather than on the hour. Use `cron()` for wall-clock alignment. The Schedule create form steers operators toward `cron()` for this reason.
@@ -97,6 +90,6 @@ User-initiated create and update Lambda invokes use `RequestResponse` so errors 
 
 ## Related pages
 
-- [Inbox](/applications/admin/inbox/) — the operator queue for human-in-the-loop decisions, including routine `inbox_approval` waits.
-- [Threads](/applications/admin/threads/) — the conversation surface for agent runs that aren't routine-driven.
-- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — how schedules and event triggers feed routines and agent invocations.
+- [Inbox](/applications/admin/inbox/) — the operator queue for human-in-the-loop decisions, including workflow `inbox_approval` waits.
+- [Threads](/applications/admin/threads/) — the conversation surface for agent runs that aren't workflow-driven.
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — how schedules and event triggers feed workflows and agent invocations.

@@ -1,4 +1,20 @@
-# Customize page surface — read-only catalog + bindings for Workflows.
+# Customize page surface — read-only catalog + bindings for Workflow templates.
+# These catalog/template rows predate the first-class Workflow control plane.
+# They enable reusable templates by materializing Step Functions-backed Routine
+# compatibility rows; they are not active Workflow inventory records.
+
+type WorkflowTemplateCatalogItem {
+  id: ID!
+  tenantId: ID!
+  slug: String!
+  displayName: String!
+  description: String
+  category: String
+  icon: String
+  defaultSchedule: String
+  status: String!
+  enabled: Boolean!
+}
 
 type WorkflowCatalogItem {
   id: ID!
@@ -19,13 +35,26 @@ type WorkflowCatalogItem {
 type CustomizeBindings {
   agentId: ID!
   connectedSkillIds: [String!]!
+  connectedWorkflowTemplateSlugs: [String!]!
+  # Compatibility field for the pre-control-plane Customize API name.
   connectedWorkflowSlugs: [String!]!
 }
 
-# Mirrors ConnectorBinding shape for parity. Distinct from the heavier
-# Routine type (which carries ASL versions, executions, triggers) — this
-# is the binding-toggle projection only, sufficient for the Customize
-# Sheet's status flip.
+# Mirrors ConnectorBinding shape for parity. Distinct from first-class
+# WorkflowEngineBinding and from the heavier Routine type (which carries ASL
+# versions, executions, triggers). This is the Customize template toggle
+# projection only, sufficient for the Customize Sheet's status flip.
+type WorkflowTemplateBinding {
+  id: ID!
+  tenantId: ID!
+  agentId: ID!
+  catalogSlug: String!
+  status: String!
+  enabled: Boolean!
+  updatedAt: AWSDateTime!
+}
+
+# Compatibility type for the pre-control-plane Customize API name.
 type WorkflowBinding {
   id: ID!
   tenantId: ID!
@@ -41,6 +70,16 @@ input DisableSkillInput {
   skillId: String!
 }
 
+input EnableWorkflowTemplateInput {
+  agentId: ID!
+  slug: String!
+}
+
+input DisableWorkflowTemplateInput {
+  agentId: ID!
+  slug: String!
+}
+
 input EnableWorkflowInput {
   agentId: ID!
   slug: String!
@@ -52,12 +91,17 @@ input DisableWorkflowInput {
 }
 
 extend type Query {
+  workflowTemplateCatalog: [WorkflowTemplateCatalogItem!]!
   workflowCatalog: [WorkflowCatalogItem!]!
   customizeBindings: CustomizeBindings
 }
 
 extend type Mutation {
   disableSkill(input: DisableSkillInput!): Boolean!
+  enableWorkflowTemplate(
+    input: EnableWorkflowTemplateInput!
+  ): WorkflowTemplateBinding!
+  disableWorkflowTemplate(input: DisableWorkflowTemplateInput!): Boolean!
   enableWorkflow(input: EnableWorkflowInput!): WorkflowBinding!
   disableWorkflow(input: DisableWorkflowInput!): Boolean!
 }

@@ -3,7 +3,7 @@ title: Admin — Artifacts
 description: Tenant-wide gallery of thread-generated artifacts — reports, data views, notes, plans, drafts, and digests — with a detail viewer and links back to their source threads.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Artifacts are structured, thread-attached outputs that agents produce during a turn. Unlike chat messages — which are conversational — artifacts are durable, named outputs meant to outlive the thread that produced them. The Artifacts page is the tenant-wide gallery for browsing them, reading their contents, and linking back to the threads that generated them.
 
@@ -14,14 +14,14 @@ Artifacts are structured, thread-attached outputs that agents produce during a t
 
 Agents can produce six artifact types today:
 
-| Type | Purpose |
-|---|---|
-| **`REPORT`** | Multi-section analysis with markdown, embedded metrics, and tables |
-| **`DATA_VIEW`** | Structured data visualization — JSON schema plus a rendering hint |
-| **`NOTE`** | Plain-text or markdown note |
-| **`PLAN`** | Step-by-step action plan |
-| **`DRAFT`** | Early version of something the agent is iterating on |
-| **`DIGEST`** | Summary of thread turns, emails, or events |
+| Type            | Purpose                                                            |
+| --------------- | ------------------------------------------------------------------ |
+| **`REPORT`**    | Multi-section analysis with markdown, embedded metrics, and tables |
+| **`DATA_VIEW`** | Structured data visualization — JSON schema plus a rendering hint  |
+| **`NOTE`**      | Plain-text or markdown note                                        |
+| **`PLAN`**      | Step-by-step action plan                                           |
+| **`DRAFT`**     | Early version of something the agent is iterating on               |
+| **`DIGEST`**    | Summary of thread turns, emails, or events                         |
 
 Artifacts are typically generated mid-turn when the agent wraps part of its output as a named artifact instead of a conversational message. The thread carries the conversation; the artifact carries the deliverable.
 
@@ -29,12 +29,12 @@ Artifacts are typically generated mid-turn when the agent wraps part of its outp
 
 A searchable `DataTable` with columns:
 
-| Column | Notes |
-|---|---|
-| Title | Type icon + title |
-| Type | Badge (REPORT / DATA_VIEW / NOTE / PLAN / DRAFT / DIGEST) |
-| Status | Draft / Published / Archived |
-| Created | Relative timestamp |
+| Column  | Notes                                                     |
+| ------- | --------------------------------------------------------- |
+| Title   | Type icon + title                                         |
+| Type    | Badge (REPORT / DATA_VIEW / NOTE / PLAN / DRAFT / DIGEST) |
+| Status  | Draft / Published / Archived                              |
+| Created | Relative timestamp                                        |
 
 Clicking a row opens an **`ArtifactViewDialog`** — a modal with the full content rendered inline. The modal takes an artifact id, fires `ArtifactDetailQuery` to load the content (which isn't returned in the list query for performance), and renders the result.
 
@@ -50,10 +50,10 @@ The dialog also shows metadata: the source thread (clickable — navigates to th
 
 ## GraphQL queries
 
-| Query | Purpose |
-|---|---|
+| Query                                   | Purpose                                         |
+| --------------------------------------- | ----------------------------------------------- |
 | `ArtifactsListQuery($tenantId, $limit)` | List artifacts with summary fields (no content) |
-| `ArtifactDetailQuery($id)` | Lazy-loaded full content when a row is clicked |
+| `ArtifactDetailQuery($id)`              | Lazy-loaded full content when a row is clicked  |
 
 The list query intentionally omits the `content` field because artifact content can be large (full reports are multi-thousand-character markdown blobs). Lazy loading on click keeps the list responsive.
 
@@ -112,4 +112,4 @@ Because the content is just text / markdown, any downstream system can consume i
 
 - [Threads](/applications/web/threads/) — the source of every artifact; the thread detail page lists artifacts produced on that thread
 - [Agents](/applications/web/agents/) — which agents produce which artifact types is a function of their tool policy
-- [Automations (concept)](/concepts/automations/) — routines can produce artifacts as their output
+- [Automations (concept)](/concepts/automations/) — workflows can produce artifacts as their output

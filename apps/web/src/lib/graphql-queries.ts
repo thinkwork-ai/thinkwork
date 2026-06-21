@@ -1612,9 +1612,9 @@ export const SkillCatalogQuery = gql`
   }
 `;
 
-export const WorkflowCatalogQuery = gql`
-  query WorkflowCatalog {
-    workflowCatalog {
+export const WorkflowTemplateCatalogQuery = gql`
+  query WorkflowTemplateCatalog {
+    workflowTemplateCatalog {
       id
       slug
       displayName
@@ -1633,7 +1633,7 @@ export const CustomizeBindingsQuery = gql`
     customizeBindings {
       agentId
       connectedSkillIds
-      connectedWorkflowSlugs
+      connectedWorkflowTemplateSlugs
     }
   }
 `;
@@ -1656,9 +1656,9 @@ export const DisableSkillMutation = gql`
   }
 `;
 
-export const EnableWorkflowMutation = gql`
-  mutation EnableWorkflow($input: EnableWorkflowInput!) {
-    enableWorkflow(input: $input) {
+export const EnableWorkflowTemplateMutation = gql`
+  mutation EnableWorkflowTemplate($input: EnableWorkflowTemplateInput!) {
+    enableWorkflowTemplate(input: $input) {
       id
       tenantId
       agentId
@@ -1670,9 +1670,9 @@ export const EnableWorkflowMutation = gql`
   }
 `;
 
-export const DisableWorkflowMutation = gql`
-  mutation DisableWorkflow($input: DisableWorkflowInput!) {
-    disableWorkflow(input: $input)
+export const DisableWorkflowTemplateMutation = gql`
+  mutation DisableWorkflowTemplate($input: DisableWorkflowTemplateInput!) {
+    disableWorkflowTemplate(input: $input)
   }
 `;
 

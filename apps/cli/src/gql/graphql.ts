@@ -1296,6 +1296,7 @@ export type CustomizeBindings = {
   agentId: Scalars['ID']['output'];
   connectedSkillIds: Array<Scalars['String']['output']>;
   connectedWorkflowSlugs: Array<Scalars['String']['output']>;
+  connectedWorkflowTemplateSlugs: Array<Scalars['String']['output']>;
 };
 
 export type DailyCostPoint = {
@@ -1419,6 +1420,11 @@ export type DisableSkillInput = {
 };
 
 export type DisableWorkflowInput = {
+  agentId: Scalars['ID']['input'];
+  slug: Scalars['String']['input'];
+};
+
+export type DisableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
 };
@@ -1678,6 +1684,11 @@ export type EmailSpaceSenderAllowlist = {
 };
 
 export type EnableWorkflowInput = {
+  agentId: Scalars['ID']['input'];
+  slug: Scalars['String']['input'];
+};
+
+export type EnableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
 };
@@ -2996,7 +3007,9 @@ export type Mutation = {
   deleteWebhook: Scalars['Boolean']['output'];
   disableSkill: Scalars['Boolean']['output'];
   disableWorkflow: Scalars['Boolean']['output'];
+  disableWorkflowTemplate: Scalars['Boolean']['output'];
   enableWorkflow: WorkflowBinding;
+  enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
   handleGenUIAction: Message;
@@ -3625,8 +3638,18 @@ export type MutationDisableWorkflowArgs = {
 };
 
 
+export type MutationDisableWorkflowTemplateArgs = {
+  input: DisableWorkflowTemplateInput;
+};
+
+
 export type MutationEnableWorkflowArgs = {
   input: EnableWorkflowInput;
+};
+
+
+export type MutationEnableWorkflowTemplateArgs = {
+  input: EnableWorkflowTemplateInput;
 };
 
 
@@ -5456,6 +5479,7 @@ export type Query = {
   workflowCatalog: Array<WorkflowCatalogItem>;
   workflowRun?: Maybe<WorkflowRun>;
   workflowRuns: Array<WorkflowRun>;
+  workflowTemplateCatalog: Array<WorkflowTemplateCatalogItem>;
   workflows: Array<Workflow>;
 };
 
@@ -9279,6 +9303,31 @@ export enum WorkflowRunStatus {
   Succeeded = 'succeeded',
   TimedOut = 'timed_out'
 }
+
+export type WorkflowTemplateBinding = {
+  __typename?: 'WorkflowTemplateBinding';
+  agentId: Scalars['ID']['output'];
+  catalogSlug: Scalars['String']['output'];
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type WorkflowTemplateCatalogItem = {
+  __typename?: 'WorkflowTemplateCatalogItem';
+  category?: Maybe<Scalars['String']['output']>;
+  defaultSchedule?: Maybe<Scalars['String']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  enabled: Scalars['Boolean']['output'];
+  icon?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+};
 
 export type WorkflowTrigger = {
   __typename?: 'WorkflowTrigger';

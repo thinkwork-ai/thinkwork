@@ -1296,6 +1296,7 @@ export type CustomizeBindings = {
   agentId: Scalars['ID']['output'];
   connectedSkillIds: Array<Scalars['String']['output']>;
   connectedWorkflowSlugs: Array<Scalars['String']['output']>;
+  connectedWorkflowTemplateSlugs: Array<Scalars['String']['output']>;
 };
 
 export type DailyCostPoint = {
@@ -1419,6 +1420,11 @@ export type DisableSkillInput = {
 };
 
 export type DisableWorkflowInput = {
+  agentId: Scalars['ID']['input'];
+  slug: Scalars['String']['input'];
+};
+
+export type DisableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
 };
@@ -1678,6 +1684,11 @@ export type EmailSpaceSenderAllowlist = {
 };
 
 export type EnableWorkflowInput = {
+  agentId: Scalars['ID']['input'];
+  slug: Scalars['String']['input'];
+};
+
+export type EnableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
 };
@@ -2996,7 +3007,9 @@ export type Mutation = {
   deleteWebhook: Scalars['Boolean']['output'];
   disableSkill: Scalars['Boolean']['output'];
   disableWorkflow: Scalars['Boolean']['output'];
+  disableWorkflowTemplate: Scalars['Boolean']['output'];
   enableWorkflow: WorkflowBinding;
+  enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
   handleGenUIAction: Message;
@@ -3625,8 +3638,18 @@ export type MutationDisableWorkflowArgs = {
 };
 
 
+export type MutationDisableWorkflowTemplateArgs = {
+  input: DisableWorkflowTemplateInput;
+};
+
+
 export type MutationEnableWorkflowArgs = {
   input: EnableWorkflowInput;
+};
+
+
+export type MutationEnableWorkflowTemplateArgs = {
+  input: EnableWorkflowTemplateInput;
 };
 
 
@@ -5456,6 +5479,7 @@ export type Query = {
   workflowCatalog: Array<WorkflowCatalogItem>;
   workflowRun?: Maybe<WorkflowRun>;
   workflowRuns: Array<WorkflowRun>;
+  workflowTemplateCatalog: Array<WorkflowTemplateCatalogItem>;
   workflows: Array<Workflow>;
 };
 
@@ -9280,6 +9304,31 @@ export enum WorkflowRunStatus {
   TimedOut = 'timed_out'
 }
 
+export type WorkflowTemplateBinding = {
+  __typename?: 'WorkflowTemplateBinding';
+  agentId: Scalars['ID']['output'];
+  catalogSlug: Scalars['String']['output'];
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+  updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type WorkflowTemplateCatalogItem = {
+  __typename?: 'WorkflowTemplateCatalogItem';
+  category?: Maybe<Scalars['String']['output']>;
+  defaultSchedule?: Maybe<Scalars['String']['output']>;
+  description?: Maybe<Scalars['String']['output']>;
+  displayName: Scalars['String']['output'];
+  enabled: Scalars['Boolean']['output'];
+  icon?: Maybe<Scalars['String']['output']>;
+  id: Scalars['ID']['output'];
+  slug: Scalars['String']['output'];
+  status: Scalars['String']['output'];
+  tenantId: Scalars['ID']['output'];
+};
+
 export type WorkflowTrigger = {
   __typename?: 'WorkflowTrigger';
   actorContract: Scalars['AWSJSON']['output'];
@@ -10371,13 +10420,6 @@ export type SettingsCostTimeSeriesQueryVariables = Exact<{
 
 export type SettingsCostTimeSeriesQuery = { __typename?: 'Query', costTimeSeries: Array<{ __typename?: 'DailyCostPoint', day: string, totalUsd: number, llmUsd: number, computeUsd: number, toolsUsd: number, eventCount: number }> };
 
-export type SettingsRoutinesQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type SettingsRoutinesQuery = { __typename?: 'Query', routines: Array<{ __typename?: 'Routine', id: string, name: string, description?: string | null, status: string, lastRunAt?: any | null, engine: string, createdAt: any }> };
-
 export type SettingsWebhooksQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
 }>;
@@ -10676,7 +10718,6 @@ export const SettingsCostByUserDocument = {"kind":"Document","definitions":[{"ki
 export const SettingsBudgetStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsBudgetStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"budgetStatus"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"policy"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"userId"}},{"kind":"Field","name":{"kind":"Name","value":"scope"}},{"kind":"Field","name":{"kind":"Name","value":"period"}},{"kind":"Field","name":{"kind":"Name","value":"limitUsd"}},{"kind":"Field","name":{"kind":"Name","value":"actionOnExceed"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}},{"kind":"Field","name":{"kind":"Name","value":"spentUsd"}},{"kind":"Field","name":{"kind":"Name","value":"remainingUsd"}},{"kind":"Field","name":{"kind":"Name","value":"percentUsed"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<SettingsBudgetStatusQuery, SettingsBudgetStatusQueryVariables>;
 export const SettingsCostByModelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCostByModel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"costByModel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"model"}},{"kind":"Field","name":{"kind":"Name","value":"totalUsd"}},{"kind":"Field","name":{"kind":"Name","value":"inputTokens"}},{"kind":"Field","name":{"kind":"Name","value":"outputTokens"}}]}}]}}]} as unknown as DocumentNode<SettingsCostByModelQuery, SettingsCostByModelQueryVariables>;
 export const SettingsCostTimeSeriesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCostTimeSeries"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"days"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"costTimeSeries"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"days"},"value":{"kind":"Variable","name":{"kind":"Name","value":"days"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"day"}},{"kind":"Field","name":{"kind":"Name","value":"totalUsd"}},{"kind":"Field","name":{"kind":"Name","value":"llmUsd"}},{"kind":"Field","name":{"kind":"Name","value":"computeUsd"}},{"kind":"Field","name":{"kind":"Name","value":"toolsUsd"}},{"kind":"Field","name":{"kind":"Name","value":"eventCount"}}]}}]}}]} as unknown as DocumentNode<SettingsCostTimeSeriesQuery, SettingsCostTimeSeriesQueryVariables>;
-export const SettingsRoutinesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsRoutines"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routines"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"engine"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SettingsRoutinesQuery, SettingsRoutinesQueryVariables>;
 export const SettingsWebhooksDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsWebhooks"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"webhooks"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"invocationCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastInvokedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SettingsWebhooksQuery, SettingsWebhooksQueryVariables>;
 export const SettingsWebhookDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsWebhook"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"webhook"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"token"}},{"kind":"Field","name":{"kind":"Name","value":"targetType"}},{"kind":"Field","name":{"kind":"Name","value":"spaceId"}},{"kind":"Field","name":{"kind":"Name","value":"prompt"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"rateLimit"}},{"kind":"Field","name":{"kind":"Name","value":"invocationCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastInvokedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SettingsWebhookQuery, SettingsWebhookQueryVariables>;
 export const SettingsWebhookDeliveriesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsWebhookDeliveries"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"webhookId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"webhookDeliveries"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"webhookId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"webhookId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"receivedAt"}},{"kind":"Field","name":{"kind":"Name","value":"providerName"}},{"kind":"Field","name":{"kind":"Name","value":"normalizedKind"}},{"kind":"Field","name":{"kind":"Name","value":"signatureStatus"}},{"kind":"Field","name":{"kind":"Name","value":"resolutionStatus"}},{"kind":"Field","name":{"kind":"Name","value":"statusCode"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"threadCreated"}},{"kind":"Field","name":{"kind":"Name","value":"bodyPreview"}},{"kind":"Field","name":{"kind":"Name","value":"bodySizeBytes"}},{"kind":"Field","name":{"kind":"Name","value":"bodySha256"}},{"kind":"Field","name":{"kind":"Name","value":"sourceIp"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"durationMs"}}]}}]}}]} as unknown as DocumentNode<SettingsWebhookDeliveriesQuery, SettingsWebhookDeliveriesQueryVariables>;
