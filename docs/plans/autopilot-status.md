@@ -63,6 +63,10 @@ status: in_progress
     and typecheck passed again; `test` was still pending when the repeated
     hard blocker was recorded; Migration Drift Precheck (dev) failed again on
     run `27918499277` / job `82607986527`.
+  - A third continuation check triggered run `27918635318` / job
+    `82608340536`; CLA, lint, verify, and typecheck passed, `test` was still
+    pending when stopped, and Migration Drift Precheck (dev) failed again with
+    the same missing-object report for `0180_skill_drafts.sql`.
 - Blockers:
   - Migration Drift Precheck (dev) failed because the new hand-rolled migration
     `packages/database-pg/drizzle/0180_skill_drafts.sql` has not been applied
@@ -84,6 +88,9 @@ status: in_progress
     `packages/database-pg/drizzle/0180_skill_drafts.sql` to dev, then rerun the
     failed PR check. After the gate passes, resume autopilot to merge U1 and
     continue with U2.
+  - The same blocker has now repeated across three consecutive goal turns, so
+    the active autopilot goal is marked blocked until the shared dev database
+    state changes.
 
 ## THNK-60 Account Usage Autopilot - 2026-06-21
 
