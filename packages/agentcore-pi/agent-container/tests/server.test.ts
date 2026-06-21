@@ -272,6 +272,90 @@ describe("handleInvocation — happy path", () => {
     expect(fetchCalled).toBe(0);
   });
 
+  it("translates goal-mode payloads into Pi commands and returns goal evidence", async () => {
+    const seenMessages: unknown[] = [];
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        message: "Finish the billing fix",
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Finish the billing fix",
+          resolved_budget: {
+            token_budget: 125000,
+            source: "tenant_settings",
+          },
+        },
+        agent_profiles: [
+          {
+            id: "profile-research",
+            slug: "research",
+            name: "Research",
+            modelId: "anthropic/claude-haiku-4-5",
+            builtInKey: "research",
+            instructions: "Research with sources.",
+            builtInTools: ["read", "web-search"],
+            executionControls: { maxRuntimeMs: 10_000 },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        runAgentLoop: async ({ message, goalRunExtractor }) => {
+          seenMessages.push(message);
+          const goalRun = goalRunExtractor?.({
+            sessionEntries: [
+              {
+                type: "custom",
+                customType: "goal-state",
+                data: {
+                  goal: {
+                    id: "goal-1",
+                    text: "Finish the billing fix",
+                    status: "paused",
+                    startedAt: 1_720_000_000_000,
+                    updatedAt: 1_720_000_060_000,
+                    iteration: 1,
+                    tokenBudget: 125000,
+                    tokensUsed: 321,
+                    timeUsedSeconds: 60,
+                  },
+                },
+              },
+            ],
+            toolInvocations: [],
+          });
+          return {
+            content: "Goal run paused for continuation",
+            modelId: "amazon-bedrock/test-model",
+            toolsCalled: [],
+            toolInvocations: [],
+            ...(goalRun ? { goalRun } : {}),
+          };
+        },
+      }),
+    });
+
+    expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
+    expect(seenMessages).toEqual([
+      "/goal --tokens 125000 Finish the billing fix",
+    ]);
+    const body = result.body as Record<string, unknown>;
+    expect(body.goal_run).toMatchObject({
+      source: "pi_goal",
+      action: "start",
+      goal_id: "goal-1",
+      status: "paused",
+      token_budget: 125000,
+      continuation_policy: "thinkwork_managed",
+    });
+    expect(body.response).toMatchObject({
+      goal_run: expect.objectContaining({
+        objective: "Finish the billing fix",
+        tokens_used: 321,
+      }),
+    });
+  });
+
   it("executes requested profile mentions and returns parent response with agent_profile_runs evidence", async () => {
     let childModel: unknown;
     const result = await handleInvocation({

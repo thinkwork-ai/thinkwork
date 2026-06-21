@@ -142,6 +142,8 @@ import {
 } from "./runtime/mcp-json.js";
 import {
   createPiGoalExtensionFactory,
+  extractGoalRunEvidence,
+  goalCommandForRuntimeMode,
   hasPiGoalMode,
   PI_GOAL_TOOL_NAMES,
 } from "./runtime/pi-goal-adapter.js";
@@ -1909,6 +1911,8 @@ export async function handleInvocation(
   });
 
   const userMessage = asString(args.payload.message);
+  const goalModeCommand = goalCommandForRuntimeMode(args.payload);
+  const runtimeUserMessage = goalModeCommand ?? userMessage;
   if (!userMessage) {
     logStructured({
       level: "warn",
@@ -2571,13 +2575,15 @@ export async function handleInvocation(
       count: bundle.tools.length,
     });
     runLoopStart = Date.now();
-    const requestedProfileSlugs = requestedAgentProfileSlugs({
-      payload: args.payload,
-      message: userMessage,
-      profiles: agentProfiles,
-    });
+    const requestedProfileSlugs = goalModeCommand
+      ? []
+      : requestedAgentProfileSlugs({
+          payload: args.payload,
+          message: userMessage,
+          profiles: agentProfiles,
+        });
     const automaticProfileSlug =
-      requestedProfileSlugs.length > 0
+      goalModeCommand || requestedProfileSlugs.length > 0
         ? ""
         : inferAutomaticAgentProfileSlug(userMessage, agentProfiles);
     const orchestrationProfileSlugs =
@@ -2632,7 +2638,7 @@ export async function handleInvocation(
     } else {
       runResult = await runLoop(
         {
-          message: withQuestionAnswerContext(userMessage),
+          message: withQuestionAnswerContext(runtimeUserMessage),
           history: parentHistory,
           // U6 — no prebuilt system prompt; the system-prompt extension's
           // before_agent_start hook composes and sets it for the turn.
@@ -2655,6 +2661,12 @@ export async function handleInvocation(
           // workspace S3 sync (delete-extraneous) cannot reap an in-flight
           // session file.
           sessionDir: "/tmp/pi-sessions",
+          goalRunExtractor: ({ sessionEntries, toolInvocations }) =>
+            extractGoalRunEvidence({
+              payload: args.payload,
+              sessionEntries,
+              toolInvocations,
+            }),
         },
         {
           log: (entry) => logStructured(entry),
@@ -3001,6 +3013,7 @@ export async function handleInvocation(
     model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
     agent_profile_runs: runResult.agentProfileRuns ?? [],
     hindsight_usage: hindsightUsage,
+    ...(runResult.goalRun ? { goal_run: runResult.goalRun } : {}),
     response: {
       role: "assistant",
       content: runResult.content,
@@ -3018,6 +3031,7 @@ export async function handleInvocation(
           collectToolCosts(invocation.result),
         ),
       hindsight_usage: hindsightUsage,
+      ...(runResult.goalRun ? { goal_run: runResult.goalRun } : {}),
     },
   };
   responseBody.tool_costs = responseBody.response.tool_costs;

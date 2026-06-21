@@ -93,6 +93,7 @@ export function buildFinalizeBody(
         "cacheRead",
         "cached_read_tokens",
       ),
+      ...(runResult?.goalRun ? { goal_run: runResult.goalRun } : {}),
       ...(runResult?.diagnostics ? { diagnostics: runResult.diagnostics } : {}),
     },
     response: runResult
@@ -109,6 +110,7 @@ export function buildFinalizeBody(
           model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
           tool_costs: toolCosts,
           hindsight_usage: [],
+          ...(runResult.goalRun ? { goal_run: runResult.goalRun } : {}),
           ...(runResult.diagnostics
             ? { diagnostics: runResult.diagnostics }
             : {}),

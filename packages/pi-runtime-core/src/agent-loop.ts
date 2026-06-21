@@ -81,6 +81,8 @@ export interface OpenedSession {
   /** True when a durable session is active (resumed or freshly seeded), so the
    *  loop must NOT prepend conversation text — the session carries context. */
   durable?: boolean;
+  /** Post-turn session entries for host-specific extension evidence capture. */
+  readSessionEntries?: () => unknown[];
 }
 
 function assistantFailureMessage(
@@ -618,6 +620,11 @@ async function defaultOpenSession(
     modelId: model?.id ?? inputs.modelId,
     durable: Boolean(durable),
     persistSession: durable ? () => durable.persist() : undefined,
+    readSessionEntries: () =>
+      typeof (sessionManager as { getBranch?: () => unknown[] }).getBranch ===
+      "function"
+        ? (sessionManager as { getBranch: () => unknown[] }).getBranch()
+        : sessionManager.getEntries(),
   };
 }
 
@@ -677,20 +684,21 @@ export async function runAgentLoop(
   const requestedModelId = resolveModelIdString(args.modelId);
   const cwd = args.cwd?.trim() || process.cwd();
 
-  const { session, modelId, durable, persistSession } = await openSession({
-    cwd,
-    agentDir: args.agentDir?.trim() || undefined,
-    systemPrompt: args.systemPrompt,
-    modelId: requestedModelId,
-    toolAllowlist,
-    customTools,
-    sessionStore: args.sessionStore,
-    threadId: args.threadId || undefined,
-    sessionDir: args.sessionDir,
-    seedHistory: args.history,
-    log: deps.log,
-    extensionFactories: args.extensionFactories,
-  });
+  const { session, modelId, durable, persistSession, readSessionEntries } =
+    await openSession({
+      cwd,
+      agentDir: args.agentDir?.trim() || undefined,
+      systemPrompt: args.systemPrompt,
+      modelId: requestedModelId,
+      toolAllowlist,
+      customTools,
+      sessionStore: args.sessionStore,
+      threadId: args.threadId || undefined,
+      sessionDir: args.sessionDir,
+      seedHistory: args.history,
+      log: deps.log,
+      extensionFactories: args.extensionFactories,
+    });
 
   try {
     session.subscribe((event) => {
@@ -917,6 +925,10 @@ export async function runAgentLoop(
     const agentProfileRuns = toolInvocations.flatMap((invocation) =>
       invocation.agent_profile_run ? [invocation.agent_profile_run] : [],
     );
+    const goalRun = args.goalRunExtractor?.({
+      sessionEntries: readSessionEntries?.() ?? [],
+      toolInvocations,
+    });
 
     return {
       content: textFromAssistant(assistant),
@@ -927,6 +939,7 @@ export async function runAgentLoop(
       ...(uiMessageParts.length > 0 ? { uiMessageParts } : {}),
       ...(modelRoutedToolCalls.length > 0 ? { modelRoutedToolCalls } : {}),
       ...(agentProfileRuns.length > 0 ? { agentProfileRuns } : {}),
+      ...(goalRun ? { goalRun } : {}),
       toolCosts: toolInvocations.flatMap((invocation) =>
         collectToolCosts(invocation.result),
       ),

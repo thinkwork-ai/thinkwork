@@ -247,6 +247,36 @@ describe("chat-agent-invoke runtime routing", () => {
     expect(body.agent_profiles).toEqual([]);
   });
 
+  it("passes the normalized goal_mode runtime envelope to Pi dispatch", async () => {
+    const { handler } = await import("./chat-agent-invoke.js");
+
+    await handler({
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      agentId: "agent-1",
+      userMessage: "finish the rollout",
+      messageId: "message-1",
+      goalMode: {
+        enabled: true,
+        action: "start",
+        objective: "finish the rollout",
+        resolvedBudget: { tokenBudget: 150000 },
+      },
+    });
+
+    const command = mocks.lambdaSend.mock.calls[0][0] as {
+      input: { Payload: Uint8Array };
+    };
+    const body = decodeInvokeBody(command);
+
+    expect(body.goal_mode).toEqual({
+      enabled: true,
+      action: "start",
+      objective: "finish the rollout",
+      resolved_budget: { token_budget: 150000 },
+    });
+  });
+
   it("narrows plugin MCP configs when the user explicitly names Plane", async () => {
     mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
       tenantId: "tenant-1",
@@ -297,8 +327,7 @@ describe("chat-agent-invoke runtime routing", () => {
       tenantId: "tenant-1",
       threadId: "thread-1",
       agentId: "agent-1",
-      userMessage:
-        "Use the Plane work items MCP tools to list Plane projects.",
+      userMessage: "Use the Plane work items MCP tools to list Plane projects.",
       messageId: "message-1",
     });
 

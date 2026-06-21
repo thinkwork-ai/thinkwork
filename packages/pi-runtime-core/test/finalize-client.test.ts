@@ -58,6 +58,17 @@ const runResult: RunAgentLoopResult = {
       total_ms: 56,
     },
   },
+  goalRun: {
+    source: "pi_goal",
+    action: "start",
+    goal_id: "goal-1",
+    objective: "finish billing",
+    status: "paused",
+    iteration: 1,
+    token_budget: 100000,
+    tokens_used: 500,
+    continuation_policy: "thinkwork_managed",
+  },
 };
 
 describe("buildFinalizeBody", () => {
@@ -109,6 +120,7 @@ describe("buildFinalizeBody", () => {
         runtime_host: "desktop-local",
         tools_called: ["lookup"],
         ui_message_parts: runResult.uiMessageParts,
+        goal_run: runResult.goalRun,
         tool_costs: [
           { provider: "test", event_type: "tool", amount_usd: "0.001" },
         ],
@@ -118,6 +130,7 @@ describe("buildFinalizeBody", () => {
         input_tokens: 5,
         output_tokens: 7,
         cached_read_tokens: 2,
+        goal_run: runResult.goalRun,
         diagnostics: {
           local_pi_timings_ms: {
             workspace_sync_ms: 12,

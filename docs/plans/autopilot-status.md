@@ -12645,8 +12645,8 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 | U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`      | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete. |
 | U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings`   | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | Merged      | Squash merged as `73f9b3ade5cde3370f727cd3b403d1d1444c2651`; worktree/branch cleanup complete. |
 | U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged      | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
-| U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | In progress | Worktree: `.Codex/worktrees/thnk-21-u3-composer-controls`; CI pending.                         |
-| U4 runtime translation         | Pending                                   | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                           |
+| U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | Merged      | Squash merged as `a69e5799e6d3a2d7bc4e0a23173ca9393f825c11`; worktree/branch cleanup complete. |
+| U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | Pending                                                      | In progress | Worktree: `.Codex/worktrees/thnk-21-u4-runtime-translation`; implementation in progress.       |
 | U5 goal-run status rendering   | Pending                                   | Pending                                                      | Pending     | Depends on U2/U4/U7.                                                                           |
 | U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
 
@@ -12782,6 +12782,53 @@ src/components/workbench/SpacesThreadDetailRoute.test.tsx` passed: 44 tests.
   - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
     files after formatting.
   - `git diff --check` passed.
+- U3 PR opened: [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820).
+- U3 CI passed: CLA, lint, verify, typecheck, and test.
+- U3 squash merged as `a69e5799e6d3a2d7bc4e0a23173ca9393f825c11`; remote
+  branch deleted, local worktree and branch removed, and main synced.
+
+### U4 Progress
+
+- 2026-06-21 17:20 CDT: Created worktree
+  `.Codex/worktrees/thnk-21-u4-runtime-translation` on
+  `codex/thnk-21-u4-runtime-translation` from merged `origin/main`.
+  Scope: translate API `goal_mode` payloads into Pi goal commands, preserve
+  tenant Settings-owned token budgets, capture Pi goal-run evidence through the
+  finalize payload, and keep continuation inside ThinkWork dispatch/finalize.
+- U4 implementation in progress: added runtime command translation for
+  start/resume/pause/cancel, goal-run evidence extraction from Pi session
+  custom entries and `goal_complete` tool output, response/finalize propagation
+  of `goal_run`, `/goal resume --tokens <budget>` support in the reviewed
+  vendored extension, and a ThinkWork-managed continuation gate that pauses
+  active goals instead of queuing hidden Pi follow-ups.
+- 2026-06-21 17:26 CDT: U4 implementation locally verified.
+- U4 local verification:
+  - `pnpm install --frozen-lockfile` completed in the worktree; local Node 25
+    logged the existing optional `canvas@2.11.2` native fallback/missing
+    `pkg-config` warning, but pnpm exited successfully.
+  - Focused runtime tests passed:
+    `pnpm --filter @thinkwork/api exec vitest run
+src/handlers/chat-agent-invoke.runtime-routing.test.ts`,
+    `pnpm --filter @thinkwork/agentcore-pi exec vitest run
+agent-container/tests/server.test.ts`, and
+    `pnpm --filter @thinkwork/pi-runtime-core exec vitest run
+test/finalize-client.test.ts`.
+  - Package typechecks passed for `@thinkwork/api`, `@thinkwork/agentcore-pi`,
+    and `@thinkwork/pi-runtime-core`.
+  - Affected package suites passed:
+    `pnpm --filter @thinkwork/agentcore-pi test` (32 files, 593 passed, 5
+    todo), `pnpm --filter @thinkwork/pi-runtime-core test` (12 files, 110
+    passed), and `pnpm --filter @thinkwork/api test` (552 files passed, 3
+    skipped; 5204 tests passed, 9 skipped).
+  - `pnpm lint` passed.
+  - `pnpm typecheck` passed across the workspace.
+  - `pnpm dlx prettier@3.8.2 --check ...` passed for hand-authored changed
+    files.
+  - `git diff --check` passed.
+  - After final diff review, the vendored legacy state helper was tightened to
+    capture the adapter's invocation-local `PI_CODING_AGENT_DIR`; the focused
+    server test, `@thinkwork/agentcore-pi` typecheck, formatter, and
+    `git diff --check` passed again.
 - U3 PR opened: [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820).
 - U2 PR opened: [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818).
 - U2 CI passed: CLA, lint, verify, typecheck, and test.

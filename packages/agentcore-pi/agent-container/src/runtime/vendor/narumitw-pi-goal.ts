@@ -70,7 +70,8 @@ const MAX_CANCELLED_CONTINUATION_PROMPTS = 20;
 const CONTINUATION_MARKER_PREFIX = "pi-goal-continuation:";
 function legacyStateFile() {
   return join(
-    process.env.PI_CODING_AGENT_DIR ??
+    legacyAgentDir ??
+      process.env.PI_CODING_AGENT_DIR ??
       join(process.env.HOME ?? ".", ".pi", "agent"),
     "pi-goal-state.json",
   );
@@ -80,6 +81,7 @@ let activeGoal: ActiveGoal | undefined;
 let completionStatusTimer: NodeJS.Timeout | undefined;
 let extensionApi: ExtensionAPI | undefined;
 let continuationPending: ContinuationPending | undefined;
+let legacyAgentDir: string | undefined;
 const cancelledContinuationMarkers = new Set<string>();
 
 const goalCompleteTool = defineTool({
@@ -128,6 +130,9 @@ const goalCompleteTool = defineTool({
 });
 
 export default function goal(pi: ExtensionAPI) {
+  const disableHiddenContinuation =
+    process.env.THINKWORK_PI_GOAL_DISABLE_HIDDEN_CONTINUATION === "true";
+  legacyAgentDir = process.env.PI_CODING_AGENT_DIR;
   extensionApi = pi;
   pi.registerTool(goalCompleteTool);
 
@@ -149,7 +154,7 @@ export default function goal(pi: ExtensionAPI) {
           pauseGoal(ctx);
           return;
         case "resume":
-          await resumeGoal(pi, ctx);
+          await resumeGoal(pi, ctx, result.tokenBudget);
           return;
         case "clear":
           clearGoal(ctx);
@@ -245,6 +250,14 @@ export default function goal(pi: ExtensionAPI) {
     )
       return;
     if (hasPendingMessages(ctx)) return;
+    if (disableHiddenContinuation) {
+      cancelContinuationPending();
+      activeGoal = transitionGoal(currentGoal, "paused");
+      persistGoal(activeGoal);
+      updateStatus(ctx, activeGoal);
+      ctx.ui.notify("Goal paused for ThinkWork-managed continuation.", "info");
+      return;
+    }
     await sendContinuationPrompt(pi, ctx, currentGoal);
     return;
   });
@@ -305,7 +318,11 @@ function pauseGoal(ctx: StatusContext) {
   ctx.ui.notify(`Goal paused: ${activeGoal.text}`, "info");
 }
 
-async function resumeGoal(pi: ExtensionAPI, ctx: StatusContext) {
+async function resumeGoal(
+  pi: ExtensionAPI,
+  ctx: StatusContext,
+  tokenBudget?: number,
+) {
   if (!activeGoal) {
     ctx.ui.notify("No active goal.", "info");
     return;
@@ -320,7 +337,14 @@ async function resumeGoal(pi: ExtensionAPI, ctx: StatusContext) {
     );
     return;
   }
-  activeGoal = transitionGoal(activeGoal, "active");
+  activeGoal = transitionGoal(
+    {
+      ...activeGoal,
+      tokenBudget: tokenBudget ?? activeGoal.tokenBudget,
+      updatedAt: Date.now(),
+    },
+    "active",
+  );
   persistGoal(activeGoal);
   updateStatus(ctx, activeGoal);
   if (activeGoal.status !== "active") {
@@ -478,14 +502,23 @@ export function parseCommand(args: string): CommandResult | string {
   const [first, ...rest] = tokens;
   if (first === "pause")
     return rest.length === 0 ? { kind: "pause" } : "Usage: /goal pause";
-  if (first === "resume")
-    return rest.length === 0 ? { kind: "resume" } : "Usage: /goal resume";
+  if (first === "resume") return parseResume(rest);
   if (first === "clear" || first === "stop")
     return rest.length === 0 ? { kind: "clear" } : "Usage: /goal clear";
   if (first === "status")
     return rest.length === 0 ? { kind: "show" } : "Usage: /goal status";
   if (first === "edit") return parseObjective("edit", rest);
   return parseObjective("start", tokens);
+}
+
+function parseResume(tokens: string[]): CommandResult | string {
+  if (tokens.length === 0) return { kind: "resume" };
+  if (tokens[0] !== "--tokens" || tokens.length !== 2) {
+    return "Usage: /goal resume [--tokens 100k]";
+  }
+  const parsedBudget = parseTokenBudget(tokens[1] ?? "");
+  if (parsedBudget === undefined) return `Invalid token budget: ${tokens[1]}`;
+  return { kind: "resume", tokenBudget: parsedBudget };
 }
 
 function parseObjective(
