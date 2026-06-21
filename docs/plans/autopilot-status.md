@@ -168,11 +168,10 @@ status: in_progress
   `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`.
 - Linear issue: `THNK-59`.
 - Target branch: `main`.
-- Current implementation unit: U11 n8n import draft diagnostics.
-- Current branch: `codex/thnk-59-u11-n8n-import-diagnostics`.
-- Current worktree: `.Codex/worktrees/thnk-59-u11-n8n-import-diagnostics`.
-- Current pull request:
-  [#2793](https://github.com/thinkwork-ai/thinkwork/pull/2793).
+- Current implementation unit: Complete.
+- Current branch: none.
+- Current worktree: none.
+- Current pull request: none.
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -192,9 +191,12 @@ status: in_progress
   [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791) merged as
   `c6bd505a9ac26e652a4ae2ec00216760efaf3809`; U10
   [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792) merged as
-  `65dc42a6eb6091db580e0ed226201ccba7c88f64`.
-- Status: U1-U10 complete and merged. U11 is in progress from `origin/main` at
-  `65dc42a6eb6091db580e0ed226201ccba7c88f64`.
+  `65dc42a6eb6091db580e0ed226201ccba7c88f64`; U11
+  [#2793](https://github.com/thinkwork-ai/thinkwork/pull/2793) merged as
+  `2ba96722ea60b1d2e3cca39db43b3922b30a3826`.
+- Status: U1-U11 complete and merged. All implementation units in
+  `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`
+  are complete.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
@@ -500,8 +502,9 @@ status: in_progress
   [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792) passed required
   CI after the scoped 0178 dev migration was applied and verified, then squash
   merged as `65dc42a6eb6091db580e0ed226201ccba7c88f64`. U11 PR
-  [#2793](https://github.com/thinkwork-ai/thinkwork/pull/2793) is open with CI
-  pending.
+  [#2793](https://github.com/thinkwork-ai/thinkwork/pull/2793) passed required
+  CI checks (`cla`, `lint`, `typecheck`, `verify`, and `test`) and was squash
+  merged as `2ba96722ea60b1d2e3cca39db43b3922b30a3826`.
 - Blockers: none.
 
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
