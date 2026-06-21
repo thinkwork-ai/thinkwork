@@ -111,6 +111,8 @@ status: in_progress
 - Current implementation unit: U7 workflow inventory and run monitoring UI.
 - Current branch: `codex/thnk-59-u7-workflow-ui`.
 - Current worktree: `.Codex/worktrees/thnk-59-u7-workflow-ui`.
+- Current pull request:
+  [#2784](https://github.com/thinkwork-ai/thinkwork/pull/2784).
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -123,7 +125,7 @@ status: in_progress
   `304e57a50556a69bd753f40ea7ab7f086c106ea0`; U6
   [#2780](https://github.com/thinkwork-ai/thinkwork/pull/2780) merged as
   `157bd8cd4851aababd15d2f438beb9735583f5ba`.
-- Status: U1-U6 complete and merged. U7 implementation is in progress from
+- Status: U1-U6 complete and merged. U7 PR is open from
   `origin/main` at `157bd8cd4851aababd15d2f438beb9735583f5ba`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
