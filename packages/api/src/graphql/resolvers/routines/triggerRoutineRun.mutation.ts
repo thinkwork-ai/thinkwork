@@ -30,7 +30,16 @@ import {
 
 export async function triggerRoutineRun(
   _parent: unknown,
-  args: { routineId: string; input?: Record<string, unknown> },
+  args: {
+    routineId: string;
+    input?: Record<string, unknown>;
+    triggerFamily?: "manual" | "schedule" | "api" | "agent";
+    triggerSource?: string;
+    actorType?: string | null;
+    actorId?: string | null;
+    correlationId?: string | null;
+    workflowRunIdempotencyKey?: string | null;
+  },
   ctx: GraphQLContext,
 ): Promise<unknown> {
   const [routine] = await db
@@ -113,7 +122,7 @@ export async function triggerRoutineRun(
       version_arn: aslVersion.version_arn,
       routine_asl_version_id: aslVersion.id,
       sfn_execution_arn: startResp.executionArn,
-      trigger_source: "manual",
+      trigger_source: args.triggerSource ?? "manual",
       input_json: args.input ?? {},
       status: "running",
       started_at: startResp.startDate ?? new Date(),
@@ -127,8 +136,12 @@ export async function triggerRoutineRun(
     stateMachineArn: routine.state_machine_arn!,
     aliasArn: routine.state_machine_alias_arn,
     routineExecutionId: execRow.id,
-    triggerFamily: "manual",
-    triggerSource: "manual",
+    triggerFamily: args.triggerFamily ?? "manual",
+    triggerSource: args.triggerSource ?? "manual",
+    actorType: args.actorType ?? null,
+    actorId: args.actorId ?? null,
+    correlationId: args.correlationId ?? null,
+    idempotencyKey: args.workflowRunIdempotencyKey ?? null,
     inputSummary: args.input ?? {},
     startedAt: startResp.startDate ?? new Date(),
   });

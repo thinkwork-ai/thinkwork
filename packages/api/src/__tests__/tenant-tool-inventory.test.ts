@@ -4,7 +4,7 @@
  * Mocks the graphql/utils.js module boundary so each select-chain returns
  * a queued row set. Drives every Promise.all branch in the resolver via
  * the order:
- *   agents → mcp servers → builtin tools → skills → routines.
+ *   agents → mcp servers → builtin tools → skills → routines → workflows.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -75,6 +75,19 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     enabled: "tenant_mcp_servers.enabled",
     status: "tenant_mcp_servers.status",
   },
+  workflows: {
+    id: "workflows.id",
+    name: "workflows.name",
+    description: "workflows.description",
+    visibility: "workflows.visibility",
+    owner_agent_id: "workflows.owner_agent_id",
+    primary_trigger_family: "workflows.primary_trigger_family",
+    readiness_state: "workflows.readiness_state",
+    readiness_reasons: "workflows.readiness_reasons",
+    capability_flags: "workflows.capability_flags",
+    tenant_id: "workflows.tenant_id",
+    lifecycle_status: "workflows.lifecycle_status",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -110,6 +123,7 @@ describe("tenantToolInventory", () => {
       tools: [],
       skills: [],
       routines: [],
+      workflows: [],
     });
     // Should never have queried the DB.
     expect(mockSelectRows).not.toHaveBeenCalled();
@@ -120,12 +134,13 @@ describe("tenantToolInventory", () => {
       userId: "u1",
       tenantId: "tenant-a",
     });
-    queueResultsInOrder([], [], [], [], []);
+    queueResultsInOrder([], [], [], [], [], []);
     const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
     expect(out.agents).toEqual([]);
     expect(out.tools).toEqual([]);
     expect(out.skills).toEqual([]);
     expect(out.routines).toEqual([]);
+    expect(out.workflows).toEqual([]);
   });
 
   it("flattens cached MCP server tools[] into individual tool rows and combines builtins", async () => {
@@ -156,6 +171,7 @@ describe("tenantToolInventory", () => {
         { skill_id: "deep-research" },
         { skill_id: "finance-audit-xls" },
       ],
+      [],
       [],
     );
     const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
@@ -219,6 +235,7 @@ describe("tenantToolInventory", () => {
           agent_id: "agent-1",
         },
       ],
+      [],
     );
     const out = await tenantToolInventory(null, { tenantId: "tenant-a" }, ctx);
     expect(out.routines).toEqual([
@@ -227,6 +244,89 @@ describe("tenantToolInventory", () => {
         name: "Nightly digest",
         description: "Sends a digest each night",
         visibility: "tenant",
+      },
+    ]);
+  });
+
+  it("surfaces tenant-shared workflows and agent-private workflows for the caller agent", async () => {
+    mockResolveCaller.mockResolvedValue({
+      userId: "u1",
+      tenantId: "tenant-a",
+    });
+    const agentCtx = {
+      auth: { agentId: "agent-1" },
+    } as unknown as Parameters<typeof tenantToolInventory>[2];
+    queueResultsInOrder(
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+        {
+          id: "workflow-tenant",
+          name: "Nightly workflow",
+          description: "Runs every night",
+          visibility: "tenant_shared",
+          owner_agent_id: null,
+          primary_trigger_family: "schedule",
+          readiness_state: "ready",
+          readiness_reasons: [],
+          capability_flags: { start: true, monitor: true },
+        },
+        {
+          id: "workflow-private",
+          name: "Private workflow",
+          description: null,
+          visibility: "agent_private",
+          owner_agent_id: "agent-1",
+          primary_trigger_family: "agent",
+          readiness_state: "blocked_not_ready",
+          readiness_reasons: [{ code: "missing_oauth" }],
+          capability_flags: { start: true },
+        },
+        {
+          id: "workflow-other-agent",
+          name: "Other agent workflow",
+          description: null,
+          visibility: "agent_private",
+          owner_agent_id: "agent-2",
+          primary_trigger_family: "agent",
+          readiness_state: "ready",
+          readiness_reasons: [],
+          capability_flags: { start: true },
+        },
+      ],
+    );
+
+    const out = await tenantToolInventory(
+      null,
+      { tenantId: "tenant-a" },
+      agentCtx,
+    );
+
+    expect(out.workflows).toEqual([
+      {
+        id: "workflow-tenant",
+        name: "Nightly workflow",
+        description: "Runs every night",
+        visibility: "tenant",
+        triggerFamily: "schedule",
+        readinessState: "ready",
+        readinessReasons: [],
+        capabilityFlags: { start: true, monitor: true },
+        startCallable: true,
+      },
+      {
+        id: "workflow-private",
+        name: "Private workflow",
+        description: null,
+        visibility: "agent_private",
+        triggerFamily: "agent",
+        readinessState: "blocked_not_ready",
+        readinessReasons: [{ code: "missing_oauth" }],
+        capabilityFlags: { start: true },
+        startCallable: false,
       },
     ]);
   });

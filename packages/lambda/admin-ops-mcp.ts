@@ -37,6 +37,7 @@ import {
   users as userOps,
   artifacts as artifactOps,
   routines as routineOps,
+  workflows as workflowOps,
 } from "@thinkwork/admin-ops";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
@@ -349,6 +350,131 @@ function buildTools(auth: AuthResult): ToolDefinition[] {
     },
 
     // -------------------------------------------------------------------
+    // Workflows (THNK-59 U9)
+    // -------------------------------------------------------------------
+    {
+      name: "workflows_list",
+      description:
+        "List first-class ThinkWork workflows visible to the caller's agent, including readiness and capability flags. Does not expose backend Routine ids, Step Functions ARNs, n8n URLs, or CRM identifiers. Disabled until WORKFLOWS_AGENT_TOOLS_ENABLED or ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description:
+              "Tenant UUID (omit when the admin key already pins the tenant).",
+          },
+          agentId: {
+            type: "string",
+            description:
+              "Caller's agent UUID. Used to include workflows private to this agent.",
+          },
+          principalId: {
+            type: "string",
+            description: "Invoking user's UUID (optional).",
+          },
+        },
+        required: ["agentId"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!workflowsAgentToolsEnabled()) {
+          return notYetEnabled("workflows_list");
+        }
+        const a = args as { agentId: string };
+        const client = clientFor(args);
+        const tenantId = client.tenantId;
+        if (!tenantId) {
+          throw new Error(
+            "tenantId required: pass via args or use a tenant-pinned admin key.",
+          );
+        }
+        const workflows = await workflowOps.listWorkflows(client, { tenantId });
+        return workflows.filter(
+          (workflow) =>
+            workflowOps.checkWorkflowVisibility(workflow, {
+              tenantId,
+              agentId: a.agentId,
+            }).ok,
+        );
+      },
+    },
+    {
+      name: "workflow_invoke",
+      description:
+        "Trigger a first-class ThinkWork workflow by workflowId. The workflow must be tenant-shared or private to the caller's agent. Returns the canonical workflow run; backend execution identifiers appear only as run evidence fields after creation. Disabled until WORKFLOWS_AGENT_TOOLS_ENABLED or ROUTINES_AGENT_TOOLS_ENABLED is set on the runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          tenantId: {
+            type: "string",
+            description:
+              "Tenant UUID (omit when the admin key already pins the tenant).",
+          },
+          agentId: {
+            type: "string",
+            description:
+              "Caller's agent UUID. Used for visibility check against agent-private workflows.",
+          },
+          workflowId: {
+            type: "string",
+            description: "ThinkWork workflow UUID to invoke.",
+          },
+          args: {
+            type: "object",
+            description: "Arbitrary JSON object passed to the workflow.",
+            additionalProperties: true,
+          },
+          idempotencyKey: {
+            type: "string",
+            description:
+              "Optional stable key for API/agent retry deduplication.",
+          },
+          principalId: {
+            type: "string",
+            description: "Invoking user's UUID (optional).",
+          },
+        },
+        required: ["agentId", "workflowId"],
+        additionalProperties: false,
+      },
+      async handler(args) {
+        if (!workflowsAgentToolsEnabled()) {
+          return notYetEnabled("workflow_invoke");
+        }
+        const a = args as {
+          agentId: string;
+          workflowId: string;
+          args?: Record<string, unknown>;
+          idempotencyKey?: string;
+        };
+        const client = clientFor(args);
+        const tenantId = client.tenantId;
+        if (!tenantId) {
+          throw new Error(
+            "tenantId required: pass via args or use a tenant-pinned admin key.",
+          );
+        }
+        const workflow = await workflowOps.getWorkflow(client, a.workflowId);
+        const visibility = workflowOps.checkWorkflowVisibility(workflow, {
+          tenantId,
+          agentId: a.agentId,
+        });
+        if (!visibility.ok) {
+          throw new Error(
+            `workflow_invoke denied: ${visibility.reason} (workflowId=${a.workflowId}, agentId=${a.agentId})`,
+          );
+        }
+        return workflowOps.triggerWorkflowRun(client, {
+          workflowId: a.workflowId,
+          args: a.args,
+          agentId: a.agentId,
+          idempotencyKey: a.idempotencyKey,
+        });
+      },
+    },
+
+    // -------------------------------------------------------------------
     // Routines (Plan 2026-05-01-006 §U11)
     // -------------------------------------------------------------------
     // Both tools are inert by default. ROUTINES_AGENT_TOOLS_ENABLED=true
@@ -518,6 +644,13 @@ function routinesAgentToolsEnabled(): boolean {
   return getConfig("ROUTINES_AGENT_TOOLS_ENABLED") === "true";
 }
 
+function workflowsAgentToolsEnabled(): boolean {
+  return (
+    getConfig("WORKFLOWS_AGENT_TOOLS_ENABLED") === "true" ||
+    routinesAgentToolsEnabled()
+  );
+}
+
 function notYetEnabled(toolName: string): {
   error: "not_yet_enabled";
   tool: string;
@@ -526,7 +659,7 @@ function notYetEnabled(toolName: string): {
   return {
     error: "not_yet_enabled",
     tool: toolName,
-    message: `${toolName} is defined but disabled — flip ROUTINES_AGENT_TOOLS_ENABLED=true on the runtime to activate.`,
+    message: `${toolName} is defined but disabled — flip WORKFLOWS_AGENT_TOOLS_ENABLED=true or ROUTINES_AGENT_TOOLS_ENABLED=true on the runtime to activate.`,
   };
 }
 

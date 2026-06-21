@@ -105,6 +105,7 @@ describe("admin-ops-mcp Lambda", () => {
     dbLookupResult = [];
     global.fetch = originalFetch;
     delete process.env.ROUTINES_AGENT_TOOLS_ENABLED;
+    delete process.env.WORKFLOWS_AGENT_TOOLS_ENABLED;
   });
 
   it("rejects non-POST methods", async () => {
@@ -221,6 +222,8 @@ describe("admin-ops-mcp Lambda", () => {
       "tenant_members_resend_invite",
       "artifacts_list",
       "artifacts_get",
+      "workflows_list",
+      "workflow_invoke",
       "create_routine",
       "routine_invoke",
     ];
@@ -548,6 +551,38 @@ describe("admin-ops-mcp Lambda", () => {
     });
   });
 
+  it("workflow_invoke stays inert when workflow tools are disabled", async () => {
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    global.fetch = vi.fn() as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 46,
+          method: "tools/call",
+          params: {
+            name: "workflow_invoke",
+            arguments: {
+              agentId: "agent-uuid",
+              workflowId: "workflow-id",
+            },
+          },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(false);
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload).toMatchObject({
+      error: "not_yet_enabled",
+      tool: "workflow_invoke",
+    });
+  });
+
   it("enabled create_routine rejects underspecified intent before GraphQL", async () => {
     process.env.ROUTINES_AGENT_TOOLS_ENABLED = "true";
     dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
@@ -770,6 +805,235 @@ describe("admin-ops-mcp Lambda", () => {
     expect(request.variables).toEqual({
       routineId: "routine-id",
       input: JSON.stringify({ location: "Austin", units: "imperial" }),
+    });
+  });
+
+  it("enabled workflows_list returns only workflows visible to the caller agent", async () => {
+    process.env.WORKFLOWS_AGENT_TOOLS_ENABLED = "true";
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            workflows: [
+              {
+                id: "workflow-shared",
+                tenantId: "tenant-uuid",
+                name: "Shared workflow",
+                description: null,
+                lifecycleStatus: "active",
+                visibility: "tenant_shared",
+                ownerAgentId: null,
+                primaryTriggerFamily: "agent",
+                currentVersionNumber: 1,
+                capabilityFlags: { start: true },
+                readinessState: "ready",
+                readinessReasons: [],
+                lastRunAt: null,
+              },
+              {
+                id: "workflow-other",
+                tenantId: "tenant-uuid",
+                name: "Other private workflow",
+                description: null,
+                lifecycleStatus: "active",
+                visibility: "agent_private",
+                ownerAgentId: "other-agent",
+                primaryTriggerFamily: "agent",
+                currentVersionNumber: 1,
+                capabilityFlags: { start: true },
+                readinessState: "ready",
+                readinessReasons: [],
+                lastRunAt: null,
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    ) as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 47,
+          method: "tools/call",
+          params: {
+            name: "workflows_list",
+            arguments: { agentId: "owner-agent" },
+          },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(false);
+    const payload = JSON.parse(body.result.content[0].text);
+    expect(payload.map((w: { id: string }) => w.id)).toEqual([
+      "workflow-shared",
+    ]);
+    const request = JSON.parse(
+      (
+        (global.fetch as unknown as ReturnType<typeof vi.fn>).mock
+          .calls[0]![1] as RequestInit
+      ).body as string,
+    );
+    expect(request.query).toContain("workflows");
+    expect(request.variables).toEqual({
+      tenantId: "tenant-uuid",
+      limit: 100,
+    });
+  });
+
+  it("enabled workflow_invoke rejects a workflow private to another agent", async () => {
+    process.env.WORKFLOWS_AGENT_TOOLS_ENABLED = "true";
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: {
+            workflow: {
+              id: "workflow-id",
+              tenantId: "tenant-uuid",
+              name: "Private workflow",
+              description: null,
+              lifecycleStatus: "active",
+              visibility: "agent_private",
+              ownerAgentId: "owner-agent",
+              primaryTriggerFamily: "agent",
+              currentVersionNumber: 1,
+              capabilityFlags: { start: true },
+              readinessState: "ready",
+              readinessReasons: [],
+              lastRunAt: null,
+            },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    ) as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 48,
+          method: "tools/call",
+          params: {
+            name: "workflow_invoke",
+            arguments: {
+              agentId: "other-agent",
+              workflowId: "workflow-id",
+            },
+          },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(true);
+    expect(body.result.content[0].text).toContain("private_to_other_agent");
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("enabled workflow_invoke forwards args to triggerWorkflowRun after visibility passes", async () => {
+    process.env.WORKFLOWS_AGENT_TOOLS_ENABLED = "true";
+    dbLookupResult = [{ id: "key-uuid", tenant_id: "tenant-uuid" }];
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              workflow: {
+                id: "workflow-id",
+                tenantId: "tenant-uuid",
+                name: "Shared workflow",
+                description: null,
+                lifecycleStatus: "active",
+                visibility: "tenant_shared",
+                ownerAgentId: null,
+                primaryTriggerFamily: "agent",
+                currentVersionNumber: 1,
+                capabilityFlags: { start: true },
+                readinessState: "ready",
+                readinessReasons: [],
+                lastRunAt: null,
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: {
+              triggerWorkflowRun: {
+                id: "run-id",
+                tenantId: "tenant-uuid",
+                workflowId: "workflow-id",
+                status: "running",
+                triggerFamily: "agent",
+                triggerSource: "admin_ops_mcp",
+                actorType: "agent",
+                actorId: "owner-agent",
+                idempotencyKey: "retry-key",
+                correlationId: "retry-key",
+                backendExecutionId: "arn:aws:states:execution",
+                backendExecutionRef: {},
+                readinessSnapshot: { state: "ready" },
+                startedAt: "2026-06-21T00:00:00.000Z",
+                lastEventAt: "2026-06-21T00:00:00.000Z",
+                errorCode: null,
+                errorMessage: null,
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ) as unknown as typeof fetch;
+
+    const res = await handler(
+      makeEvent(
+        {
+          jsonrpc: "2.0",
+          id: 49,
+          method: "tools/call",
+          params: {
+            name: "workflow_invoke",
+            arguments: {
+              agentId: "owner-agent",
+              workflowId: "workflow-id",
+              args: { location: "Austin" },
+              idempotencyKey: "retry-key",
+            },
+          },
+        },
+        { authHeader: "Bearer tkm_abc" },
+      ),
+    );
+
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.result.isError).toBe(false);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const triggerCall = (global.fetch as unknown as ReturnType<typeof vi.fn>)
+      .mock.calls[1]!;
+    const request = JSON.parse((triggerCall[1] as RequestInit).body as string);
+    expect(request.query).toContain("triggerWorkflowRun");
+    expect(request.variables).toEqual({
+      input: {
+        workflowId: "workflow-id",
+        input: JSON.stringify({ location: "Austin" }),
+        idempotencyKey: "retry-key",
+        triggerSource: "admin_ops_mcp",
+        actorType: "agent",
+        actorId: "owner-agent",
+        agentId: "owner-agent",
+      },
     });
   });
 

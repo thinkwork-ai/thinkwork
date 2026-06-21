@@ -46,3 +46,12 @@ export type {
   TriggerRoutineRunInput,
   VisibilityCheckResult,
 } from "./routines.js";
+
+export * as workflows from "./workflows.js";
+export type {
+  Workflow,
+  WorkflowRunLite,
+  ListWorkflowsInput,
+  TriggerWorkflowRunInput,
+  WorkflowVisibilityCheckResult,
+} from "./workflows.js";

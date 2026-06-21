@@ -276,11 +276,24 @@ type TenantToolInventoryRoutine {
   visibility: String
 }
 
+type TenantToolInventoryWorkflow {
+  id: ID!
+  name: String!
+  description: String
+  visibility: String!
+  triggerFamily: WorkflowTriggerFamily!
+  readinessState: WorkflowReadinessState!
+  readinessReasons: AWSJSON!
+  capabilityFlags: AWSJSON!
+  startCallable: Boolean!
+}
+
 type TenantToolInventory {
   agents: [TenantToolInventoryAgent!]!
   tools: [TenantToolInventoryTool!]!
   skills: [TenantToolInventorySkill!]!
   routines: [TenantToolInventoryRoutine!]!
+  workflows: [TenantToolInventoryWorkflow!]!
 }
 
 # --- Inputs ---
@@ -405,11 +418,7 @@ input DecideRoutineApprovalInput {
 # --- Query / Mutation extensions ---
 
 extend type Query {
-  routines(
-    tenantId: ID!
-    agentId: ID
-    status: RoutineStatus
-  ): [Routine!]!
+  routines(tenantId: ID!, agentId: ID, status: RoutineStatus): [Routine!]!
   routine(id: ID!): Routine
   # Phase A schema; resolvers ship in Phase B (U7+U9) and Phase A (U4).
   routineExecution(id: ID!): RoutineExecution

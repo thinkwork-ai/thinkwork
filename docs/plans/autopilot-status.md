@@ -168,12 +168,11 @@ status: in_progress
   `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`.
 - Linear issue: `THNK-59`.
 - Target branch: `main`.
-- Current implementation unit: U8 workflow/routine reference cleanup and
-  compatibility deprecation.
-- Current branch: `codex/thnk-59-u8-reference-cleanup`.
-- Current worktree: `.Codex/worktrees/thnk-59-u8-reference-cleanup`.
+- Current implementation unit: U9 agent and API workflow invocation contract.
+- Current branch: `codex/thnk-59-u9-workflow-invocation`.
+- Current worktree: `.Codex/worktrees/thnk-59-u9-workflow-invocation`.
 - Current pull request:
-  [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787).
+  [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791).
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -187,10 +186,11 @@ status: in_progress
   [#2780](https://github.com/thinkwork-ai/thinkwork/pull/2780) merged as
   `157bd8cd4851aababd15d2f438beb9735583f5ba`; U7
   [#2784](https://github.com/thinkwork-ai/thinkwork/pull/2784) merged as
-  `20c1fb0078497b81e5b8eaf933424d008cf290d9`.
-- Status: U1-U7 complete and merged. U8 is implemented, locally verified, and
-  open as PR #2787 rebased onto `origin/main` at
-  `8a664299665303efbd9df229e24f1e2cf1430563`.
+  `20c1fb0078497b81e5b8eaf933424d008cf290d9`; U8
+  [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787) merged as
+  `a048e5486f6df85f60e9f5c8e144d19bd074a56a`.
+- Status: U1-U8 complete and merged. U9 is in progress from `origin/main` at
+  `a048e5486f6df85f60e9f5c8e144d19bd074a56a`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
@@ -367,9 +367,56 @@ status: in_progress
     `origin/main` at `8a6642996653`; post-rebase `pnpm schema:build`, focused
     workflow/customize web tests, `pnpm --filter @thinkwork/web typecheck`, and
     `pnpm --filter @thinkwork/api typecheck` passed before force-push.
-- CI log: U7 PR [#2784](https://github.com/thinkwork-ai/thinkwork/pull/2784)
+  - U8 PR #2787 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) again after the rebase, then squash merged as
+    `a048e5486f6df85f60e9f5c8e144d19bd074a56a`; the remote and local branches
+    and U8 worktree were removed.
+  - U9 worktree created from `origin/main` at
+    `a048e5486f6df85f60e9f5c8e144d19bd074a56a`.
+  - U9 `pnpm install --frozen-lockfile` completed with the known optional
+    `canvas@2.11.2` native fallback warning under local Node 25; the install
+    command exited successfully.
+  - U9 focused admin-ops workflow/routine tests passed:
+    `pnpm --filter @thinkwork/admin-ops test -- src/workflows.test.ts src/routines.test.ts`
+    (2 files, 18 tests).
+  - U9 focused API tests passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/workflows/triggerWorkflowRun.mutation.test.ts src/__tests__/tenant-tool-inventory.test.ts`
+    (2 files, 8 tests).
+  - U9 focused Lambda MCP tests passed:
+    `pnpm --filter @thinkwork/lambda test -- __tests__/admin-ops-mcp.test.ts`
+    (1 file, 31 tests).
+  - U9 `pnpm schema:build` passed.
+  - U9 codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
+    `@thinkwork/mobile`.
+  - U9 typechecks passed for `@thinkwork/admin-ops`, `@thinkwork/api`, and
+    `@thinkwork/lambda`.
+  - U9 `pnpm lint` passed.
+  - U9 `pnpm typecheck` passed workspace-wide.
+  - U9 `pnpm --filter @thinkwork/admin-ops test` passed: 4 files, 30 tests.
+  - U9 `pnpm --filter @thinkwork/lambda test` passed: 15 files, 165 tests, 7
+    skipped.
+  - U9 `pnpm --filter @thinkwork/api test` passed: 547 files, 5162 tests, 9
+    skipped.
+  - U9 `git diff --check` passed.
+  - U9 pinned Prettier check passed for changed non-generated files with
+    `pnpm dlx prettier@3.8.2 --check --ignore-unknown <U9 changed non-generated files>`.
+  - U9 first `pnpm test` run exposed the known local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly` after an `EEXIST`
+    framework symlink extraction warning).
+    `pnpm --filter @thinkwork/desktop rebuild electron` repaired the local
+    install.
+  - U9 `pnpm --filter @thinkwork/desktop test` passed after the Electron
+    repair: 15 files, 105 tests.
+  - U9 rerun `pnpm test` passed workspace-wide after the Electron repair:
+    `packages/api` 547 files passed, 3 skipped, 5162 tests passed, 9 skipped;
+    `apps/web` 184 files passed, 1368 tests passed; release tests 17 passed;
+    plugin source boundary tests 7 passed.
+- CI log: U8 PR [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787)
   passed CLA, lint, typecheck, verify, and test after rebasing onto current
-  `origin/main`, then squash merged.
+  `origin/main`, then squash merged. U9 PR
+  [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791) opened after
+  local post-rebase verification passed; required CI checks (`cla`, `lint`,
+  `typecheck`, `verify`, and `test`) passed and the PR is ready to merge.
 - Blockers: none.
 
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
