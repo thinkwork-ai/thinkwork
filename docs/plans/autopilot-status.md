@@ -14,7 +14,7 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: In progress.
+- Status: Blocked.
 - Current unit: U1 Skill Draft Data Model and GraphQL Lifecycle.
 - Current branch: `codex/thnk-11-u1-skill-drafts`.
 - Current worktree: `.Codex/worktrees/thnk-11-u1-skill-drafts`.
@@ -56,8 +56,30 @@ status: in_progress
     generated lines.
 - PR / CI:
   - U1 PR: [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).
-  - CI pending.
-- Blockers: None.
+  - CI passed so far: CLA, lint, verify, typecheck.
+  - CI pending at blocker time: test.
+  - CI failed: Migration Drift Precheck (dev).
+- Blockers:
+  - Migration Drift Precheck (dev) failed because the new hand-rolled migration
+    `packages/database-pg/drizzle/0180_skill_drafts.sql` has not been applied
+    to the dev database. The reporter checked only this PR's migration and
+    found all declared objects missing:
+    `public.skill_drafts`, `public.skill_draft_events`,
+    `public.idx_skill_drafts_tenant_status_updated`,
+    `public.idx_skill_drafts_tenant_requester`,
+    `public.uq_skill_drafts_tenant_id`,
+    `public.idx_skill_draft_events_draft_created`,
+    `public.idx_skill_draft_events_tenant_type`,
+    `public.skill_drafts.skill_drafts_status_check`,
+    `public.skill_drafts.skill_drafts_source_kind_check`, and
+    `public.skill_draft_events.skill_draft_events_type_check`.
+  - Autopilot is stopped because clearing this gate requires applying a
+    database migration to a shared environment, which is a manual mutation
+    outside the allowed implementation/fix loop. Next recommended action: an
+    authorized operator should inspect and apply
+    `packages/database-pg/drizzle/0180_skill_drafts.sql` to dev, then rerun the
+    failed PR check. After the gate passes, resume autopilot to merge U1 and
+    continue with U2.
 
 ## THNK-60 Account Usage Autopilot - 2026-06-21
 
