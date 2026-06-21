@@ -2,6 +2,7 @@ import { Send } from "lucide-react";
 import { Button } from "@thinkwork/ui";
 import type { ThreadGenUIActionDescriptor } from "@thinkwork/genui";
 import { DecisionPanel } from "./DecisionPanel";
+import type { GenUIActionStatus } from "../use-genui-action";
 
 export interface ActionFormField {
   id: string;
@@ -18,6 +19,8 @@ export interface ActionFormProps {
   submitActionId?: string;
   actions?: ThreadGenUIActionDescriptor[];
   actionsDisabled?: boolean;
+  onAction?: (action: ThreadGenUIActionDescriptor) => void;
+  statusForAction?: (action: ThreadGenUIActionDescriptor) => GenUIActionStatus;
 }
 
 export function ActionForm({
@@ -27,8 +30,18 @@ export function ActionForm({
   submitActionId,
   actions = [],
   actionsDisabled = true,
+  onAction,
+  statusForAction,
 }: ActionFormProps) {
   const submitAction = actions.find((action) => action.id === submitActionId);
+  const submitStatus = submitAction
+    ? (statusForAction?.(submitAction) ?? { state: "idle" as const })
+    : { state: "idle" as const };
+  const submitDisabled =
+    actionsDisabled ||
+    submitAction?.disabled === true ||
+    submitStatus.state === "submitting" ||
+    submitStatus.state === "submitted";
 
   return (
     <section
@@ -84,21 +97,35 @@ export function ActionForm({
           </label>
         ))}
         {submitAction ? (
-          <Button
-            aria-label={submitAction.label}
-            className="min-h-9 justify-self-start gap-1.5"
-            disabled={actionsDisabled || submitAction.disabled === true}
-            size="sm"
-            type="submit"
-          >
-            <Send className="size-3.5" />
-            {submitAction.label}
-          </Button>
+          <div className="grid justify-items-start gap-1">
+            <Button
+              aria-label={submitAction.label}
+              className="min-h-9 gap-1.5"
+              disabled={submitDisabled}
+              onClick={() => onAction?.(submitAction)}
+              size="sm"
+              type="submit"
+            >
+              <Send className="size-3.5" />
+              {submitStatus.state === "submitting"
+                ? "Submitting..."
+                : submitStatus.state === "submitted"
+                  ? "Submitted"
+                  : submitAction.label}
+            </Button>
+            {submitStatus.state === "error" ? (
+              <p className="max-w-52 text-xs leading-4 text-destructive">
+                {submitStatus.message}
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </form>
       <DecisionPanel
         actions={actions.filter((action) => action.id !== submitActionId)}
         disabled={actionsDisabled}
+        onAction={onAction}
+        statusForAction={statusForAction}
       />
     </section>
   );

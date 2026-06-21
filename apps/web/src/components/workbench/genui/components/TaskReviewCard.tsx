@@ -7,6 +7,7 @@ import {
 import { Badge } from "@thinkwork/ui";
 import type { ThreadGenUIActionDescriptor } from "@thinkwork/genui";
 import { DecisionPanel } from "./DecisionPanel";
+import type { GenUIActionStatus } from "../use-genui-action";
 
 export interface TaskReviewCardProps {
   title: string;
@@ -17,6 +18,8 @@ export interface TaskReviewCardProps {
   primaryActionId?: string;
   actions?: ThreadGenUIActionDescriptor[];
   actionsDisabled?: boolean;
+  onAction?: (action: ThreadGenUIActionDescriptor) => void;
+  statusForAction?: (action: ThreadGenUIActionDescriptor) => GenUIActionStatus;
 }
 
 export function TaskReviewCard({
@@ -28,6 +31,8 @@ export function TaskReviewCard({
   primaryActionId,
   actions,
   actionsDisabled = true,
+  onAction,
+  statusForAction,
 }: TaskReviewCardProps) {
   const StatusIcon = statusIcon(status);
 
@@ -74,7 +79,9 @@ export function TaskReviewCard({
       <DecisionPanel
         actions={actions}
         disabled={actionsDisabled}
+        onAction={onAction}
         primaryActionId={primaryActionId}
+        statusForAction={statusForAction}
       />
     </section>
   );

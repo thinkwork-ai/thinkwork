@@ -3,6 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import { ThreadConversation } from "./ThreadConversation";
 
+vi.mock("urql", async () => {
+  const actual = await vi.importActual<typeof import("urql")>("urql");
+  return {
+    ...actual,
+    useMutation: () => [{ fetching: false }, vi.fn()],
+  };
+});
+
 afterEach(cleanup);
 
 describe("ThreadConversation", () => {

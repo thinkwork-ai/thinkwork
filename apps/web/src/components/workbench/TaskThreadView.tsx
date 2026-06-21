@@ -1619,6 +1619,7 @@ function TranscriptSegment({
     <>
       <TranscriptMessage
         message={message}
+        threadId={threadId}
         onOpenArtifact={onOpenArtifact}
         onSendFollowUp={onSendFollowUp}
         isSending={isSending}
@@ -1644,6 +1645,7 @@ function TranscriptSegment({
               {renderTypedParts(streamState!.parts, {
                 keyPrefix: `${message.id}::stream`,
                 live: true,
+                threadId,
               })}
               {streamState!.status === "streaming" ? (
                 <span
@@ -2117,6 +2119,7 @@ function CollapsibleUserMessageBody({
 
 function TranscriptMessage({
   message,
+  threadId,
   onOpenArtifact,
   onSendFollowUp,
   isSending,
@@ -2127,6 +2130,7 @@ function TranscriptMessage({
   skillCatalog,
 }: {
   message: TaskThreadMessage;
+  threadId?: string;
   onOpenArtifact?: (artifactId: string) => void;
   onSendFollowUp?: (
     content: string,
@@ -2163,6 +2167,8 @@ function TranscriptMessage({
     typedParts.length > 0
       ? renderTypedParts(typedParts, {
           keyPrefix: message.id,
+          sourceMessageId: message.id,
+          threadId,
           userQuestion,
         }).filter(Boolean)
       : [];

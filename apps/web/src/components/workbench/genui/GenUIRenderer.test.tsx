@@ -11,6 +11,14 @@ import {
 } from "@thinkwork/genui";
 import { GenUIErrorBoundary, GenUIRenderer } from "./GenUIRenderer";
 
+vi.mock("urql", async () => {
+  const actual = await vi.importActual<typeof import("urql")>("urql");
+  return {
+    ...actual,
+    useMutation: () => [{ fetching: false }, vi.fn()],
+  };
+});
+
 afterEach(cleanup);
 
 describe("GenUIRenderer", () => {

@@ -33,6 +33,14 @@ vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMock,
 }));
 
+vi.mock("urql", async () => {
+  const actual = await vi.importActual<typeof import("urql")>("urql");
+  return {
+    ...actual,
+    useMutation: () => [{ fetching: false }, vi.fn()],
+  };
+});
+
 // The Info Panel "Open thread detail" link is the only @tanstack/react-router
 // usage in TaskThreadView; stub Link to a plain anchor so these provider-less
 // render tests can assert it without mounting a RouterProvider.

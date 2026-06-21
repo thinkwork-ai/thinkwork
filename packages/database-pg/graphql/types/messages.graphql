@@ -165,6 +165,16 @@ input SendMessageMentionInput {
   endOffset: Int
 }
 
+input HandleGenUIActionInput {
+  threadId: ID!
+  sourceMessageId: ID!
+  partId: ID!
+  actionId: String!
+  specHash: String!
+  idempotencyKey: String!
+  params: AWSJSON
+}
+
 # --- Query / Mutation extensions ---
 
 extend type Thread {
@@ -186,4 +196,5 @@ extend type Mutation {
   # sendMessage — any user message on the thread consumes the pending
   # batch with answeredVia REPLY.
   answerUserQuestion(questionId: ID!, answers: AWSJSON!): UserQuestion!
+  handleGenUIAction(input: HandleGenUIActionInput!): Message!
 }
