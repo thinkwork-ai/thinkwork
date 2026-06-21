@@ -31,12 +31,15 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { createHash } from "node:crypto";
 import { Type, type TSchema } from "typebox";
 import type { ConnectMcpServerArgs, ConnectMcpServerFn } from "./mcp.js";
 
 /** Default per-RPC timeout; matches the legacy pi-mono MCP implementation. */
 const DEFAULT_LIST_TOOLS_TIMEOUT_MS = 30_000;
 const DEFAULT_CALL_TOOL_TIMEOUT_MS = 60_000;
+const MAX_EXPOSED_TOOL_NAME_LENGTH = 48;
+const TRUNCATED_TOOL_NAME_HASH_LENGTH = 8;
 
 export interface CreateConnectMcpServerOptions {
   /** Cleanup queue the trusted handler drains on completion. */
@@ -102,10 +105,16 @@ function sanitizeName(value: string): string {
 }
 
 function exposedToolName(serverName: string, toolName: string): string {
-  return `mcp_${sanitizeName(serverName)}_${sanitizeName(toolName)}`.slice(
-    0,
-    64,
-  );
+  const fullName = `mcp_${sanitizeName(serverName)}_${sanitizeName(toolName)}`;
+  if (fullName.length <= MAX_EXPOSED_TOOL_NAME_LENGTH) return fullName;
+
+  const hash = createHash("sha256")
+    .update(fullName)
+    .digest("hex")
+    .slice(0, TRUNCATED_TOOL_NAME_HASH_LENGTH);
+  const prefixLength =
+    MAX_EXPOSED_TOOL_NAME_LENGTH - TRUNCATED_TOOL_NAME_HASH_LENGTH - 1;
+  return `${fullName.slice(0, prefixLength)}_${hash}`;
 }
 
 function paramsRecord(params: unknown): Record<string, unknown> {

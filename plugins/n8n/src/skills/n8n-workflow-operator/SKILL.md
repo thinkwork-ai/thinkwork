@@ -1,38 +1,54 @@
 ---
-name: n8n--workflow-operator
-description: Work with the tenant n8n instance through ThinkWork's managed n8n MCP tools. Use when a request names n8n, workflows, executions, Code node packages, workflow migration, or automation drafts.
+name: n8n-workflow-operator
+description: Create, update, validate, test, and debug n8n workflows through ThinkWork's managed n8n MCP tools. Use when a request names n8n, workflows, executions, Code node packages, workflow migration, automation drafts, or asks to create an automation from a thread.
+license: Apache-2.0
+compatibility: ThinkWork n8n plugin with managed n8n MCP tools and a tenant n8n instance.
+metadata:
+  thinkwork-plugin: n8n
+  skill-format: agentskills
 ---
 
-# n8n workflow operator
+# n8n Workflow Operator
 
-Use n8n as a shared tenant automation runtime. Read the current workflow state,
-make draft-safe changes, test with disposable inputs when requested, and leave
-production activation to the shared native n8n operator.
+Use n8n as a shared tenant automation runtime. Read live workflow and node
+state, make draft-safe changes, validate the result, and leave production
+activation to the shared native n8n operator unless the human explicitly says
+otherwise.
 
-## Activation and scope
+## First Move
 
-1. Use the n8n MCP tools provided by the installed ThinkWork n8n plugin. The
+1. Use this skill before any n8n workflow create, update, validation, test, or
+   debug action.
+2. Use the n8n MCP tools provided by the installed ThinkWork n8n plugin. The
    plugin uses a tenant service credential, not per-user n8n activation.
-2. If n8n tools are missing, report that the operator must install the n8n
+3. If n8n tools are missing, report that the operator must install the n8n
    plugin, deploy the managed app, enable instance-level MCP in n8n, and enable
    MCP access on the workflow, project, or folder.
-3. Treat the native n8n UI as the final production activation surface in v1.
-   Do not publish, unpublish, activate, or deactivate production workflows
-   unless the human is explicitly operating the shared n8n operator account in
-   the native UI.
+4. Trust live MCP tool descriptions and node schemas over memory. n8n changes
+   quickly; if a live tool or schema disagrees with this skill, follow the live
+   tool and report the drift in the handoff.
 
-## Read and identify
+## Authoring Loop
 
-1. Resolve workflow id, name, active state, project or folder, tags, trigger
-   nodes, credential references, and recent executions before proposing changes.
-2. Return both workflow id and workflow name in every workflow handoff or
-   verification summary.
-3. Confirm whether the workflow, project, or folder has MCP access enabled
-   before assuming agents can inspect or edit it.
-4. If multiple workflows match, stop and ask for the exact workflow id or URL
-   before making changes.
+For requests such as "create a workflow", "edit this workflow", or "make a
+smoke test":
 
-## Agent-step bridge
+1. Classify the pattern: manual trigger, webhook, schedule, HTTP API
+   integration, database sync, AI agent, or batch processing.
+2. Read [MCP tooling](references/mcp-tooling.md), then discover live node
+   schemas before configuring nodes.
+3. Read [workflow authoring](references/workflow-authoring.md), then create or
+   update an inactive draft. Use UUID-shaped node ids, current `typeVersion`
+   values, and no placeholder credentials or secrets.
+4. Validate iteratively. Treat validation errors as normal feedback: fix the
+   specific field, then validate again.
+5. Fetch the workflow after every create or update and inspect `connections` so
+   silently dropped or wrong wires are caught before handoff.
+6. Test only when safe. n8n test runs execute real HTTP calls, writes, sends,
+   and other side effects.
+7. Finish with [validation and handoff](references/validation-and-handoff.md).
+
+## ThinkWork Agent-Step Bridge
 
 1. For n8n-to-ThinkWork agent work, use the v1 agent-step bridge with stock
    HTTP Request and Wait nodes. Do not suggest a custom ThinkWork n8n node in
@@ -45,39 +61,16 @@ production activation to the shared native n8n operator.
    request id, optional timeout, and the current Wait-node resume URL from
    `$execution.resumeUrl`.
 4. The Wait node should use On webhook call. Downstream nodes should branch on
-   the resumed payload's `status` and read `output`, `error`, `summary`, and
-   `links`; they should not scrape ThinkWork thread pages.
+   the resumed payload's `status` and read `output`, `error`, `summary`,
+   and `links`; they should not scrape ThinkWork thread pages.
 5. Explain idempotency as workflow id + execution id + correlation id + step
    id. Retrying the same bridge step should recover or replay the existing
    ThinkWork thread rather than creating a duplicate.
-6. For debugging, inspect bridge telemetry in the n8n Plugin Detail settings
-   and the related ThinkWork thread surfaces. Treat `resume_failed` as a
-   callback delivery or Wait URL problem, `expired` as a timeout path, and
-   `awaiting_human` as work that must be resolved in ThinkWork before n8n
-   resumes.
 
-## Draft and test safely
+## Stop Conditions
 
-1. Prefer draft workflows, disabled copies, or disposable test workflows for
-   agent-authored changes.
-2. For Code nodes, use only packages declared in the Plugin Detail n8n custom
-   package settings. Do not import undeclared packages or rely on private npm
-   registries.
-3. When asked to create or update a workflow, keep it inactive unless the
-   human explicitly completes activation in the native n8n UI.
-4. Run only low-risk reads or test executions that the human has allowed. Never
-   trigger a production webhook, production schedule, or destructive external
-   side effect as a smoke test.
-
-## Handoff
-
-1. Summarize the workflow id, workflow name, draft/test status, package
-   requirements, credential assumptions, MCP access state, and any bridge run
-   id/status/correlation evidence.
-2. Include the native n8n UI handoff: which shared operator should review the
-   workflow and what they need to activate or leave disabled.
-3. Record evidence links or execution ids for successful test runs, and record
-   exact failure messages for blocked tests.
-4. If a production activation, unpublish, credential rotation, or package image
-   change is required, hand it to the operator instead of trying to complete it
-   through MCP.
+Stop before writing when multiple workflows match, the workflow/project/folder
+does not have MCP access enabled, credentials are unknown, a test would touch
+production side effects, the user asks for production activation without using
+the native n8n operator account, or the live MCP tool surface conflicts with
+the requested action.

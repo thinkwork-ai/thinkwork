@@ -15,11 +15,14 @@ import {
   N8N_AGENT_STEP_BRIDGE_CREDENTIAL_SECRET_JSON_KEY,
   N8N_AGENT_STEP_BRIDGE_ENDPOINT_PATH,
   N8N_MCP_ENDPOINT_PATH,
+  N8N_WORKFLOW_OPERATOR_MCP_TOOLING_REFERENCE_MD,
   N8N_PLUGIN_VERSION,
   N8N_SERVICE_CREDENTIAL_KIND,
   N8N_SERVICE_CREDENTIAL_SECRET_JSON_KEY,
+  N8N_WORKFLOW_OPERATOR_VALIDATION_AND_HANDOFF_REFERENCE_MD,
   N8N_WORKFLOW_OPERATOR_SKILL_MD,
   N8N_WORKFLOW_OPERATOR_SKILL_SLUG,
+  N8N_WORKFLOW_OPERATOR_WORKFLOW_AUTHORING_REFERENCE_MD,
   n8nManifest,
 } from "../src/manifest";
 import { n8nPluginPackage } from "../src/index";
@@ -141,10 +144,33 @@ describe("n8n plugin manifest", () => {
       slug: N8N_WORKFLOW_OPERATOR_SKILL_SLUG,
       skillMd: N8N_WORKFLOW_OPERATOR_SKILL_MD,
     });
-    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("publish, unpublish");
-    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("workflow id");
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_SLUG).toBe("n8n-workflow-operator");
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_SLUG).toMatch(
+      /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,63}$/,
+    );
+    expect(skills.skills[0]?.supportingFiles?.map((file) => file.path)).toEqual(
+      [
+        "references/mcp-tooling.md",
+        "references/workflow-authoring.md",
+        "references/validation-and-handoff.md",
+      ],
+    );
     expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
-      "shared native n8n operator",
+      "name: n8n-workflow-operator",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("license: Apache-2.0");
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
+      "skill-format: agentskills",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("MCP tooling");
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
+      "references/mcp-tooling.md",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
+      "references/workflow-authoring.md",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
+      "references/validation-and-handoff.md",
     );
     expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("HTTP Request");
     expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain("Wait nodes");
@@ -152,30 +178,57 @@ describe("n8n plugin manifest", () => {
     expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
       "custom ThinkWork n8n node",
     );
-    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toContain(
-      "should not scrape ThinkWork thread pages",
+    expect(N8N_WORKFLOW_OPERATOR_MCP_TOOLING_REFERENCE_MD).toContain(
+      "nodes-base.httpRequest",
     );
-    expect(N8N_WORKFLOW_OPERATOR_SKILL_MD).toMatch(
-      /Plugin Detail n8n custom\s+package settings/,
+    expect(N8N_WORKFLOW_OPERATOR_MCP_TOOLING_REFERENCE_MD).toContain(
+      "n8n-nodes-base.httpRequest",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_MCP_TOOLING_REFERENCE_MD).toContain(
+      "Shortened Tool Names",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_WORKFLOW_AUTHORING_REFERENCE_MD).toContain(
+      "Manual trigger",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_WORKFLOW_AUTHORING_REFERENCE_MD).toContain(
+      "$json.body",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_VALIDATION_AND_HANDOFF_REFERENCE_MD).toContain(
+      "Validation passing is necessary, not sufficient",
+    );
+    expect(N8N_WORKFLOW_OPERATOR_VALIDATION_AND_HANDOFF_REFERENCE_MD).toContain(
+      "Handoff Checklist",
+    );
+
+    const skillRoot = new URL(
+      "../src/skills/n8n-workflow-operator/",
+      import.meta.url,
     );
 
     const skillFile = await readFile(
-      fileURLToPath(
-        new URL(
-          "../src/skills/n8n-workflow-operator/SKILL.md",
-          import.meta.url,
-        ),
-      ),
+      fileURLToPath(new URL("SKILL.md", skillRoot)),
       "utf8",
     );
-    expect(skillFile).toContain("publish, unpublish");
-    expect(skillFile).toContain("workflow id");
-    expect(skillFile).toContain("shared native n8n operator");
-    expect(skillFile).toContain("HTTP Request");
-    expect(skillFile).toContain("Wait nodes");
-    expect(skillFile).toContain("$execution.resumeUrl");
-    expect(skillFile).toContain("custom ThinkWork n8n node");
-    expect(skillFile).toContain("should not scrape ThinkWork thread pages");
+    expect(skillFile).toBe(N8N_WORKFLOW_OPERATOR_SKILL_MD);
+    await expect(
+      readFile(fileURLToPath(new URL("references/mcp-tooling.md", skillRoot)), {
+        encoding: "utf8",
+      }),
+    ).resolves.toBe(N8N_WORKFLOW_OPERATOR_MCP_TOOLING_REFERENCE_MD);
+    await expect(
+      readFile(
+        fileURLToPath(new URL("references/workflow-authoring.md", skillRoot)),
+        { encoding: "utf8" },
+      ),
+    ).resolves.toBe(N8N_WORKFLOW_OPERATOR_WORKFLOW_AUTHORING_REFERENCE_MD);
+    await expect(
+      readFile(
+        fileURLToPath(
+          new URL("references/validation-and-handoff.md", skillRoot),
+        ),
+        { encoding: "utf8" },
+      ),
+    ).resolves.toBe(N8N_WORKFLOW_OPERATOR_VALIDATION_AND_HANDOFF_REFERENCE_MD);
   });
 
   it("keeps LastMile runtime source out of the n8n package", async () => {

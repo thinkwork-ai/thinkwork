@@ -154,6 +154,37 @@ describe("createConnectMcpServer", () => {
     expect(tools[1]?.name).toBe("mcp_demo_fetch");
   });
 
+  it("keeps exposed MCP tool names below Bedrock toolUseId headroom", async () => {
+    const fake = makeFakeClient([
+      {
+        name: "create_workflow_with_http_request_and_schedule_trigger",
+        description: "Create a workflow",
+      },
+      {
+        name: "create_workflow_with_http_request_and_manual_trigger",
+        description: "Create a similar workflow",
+      },
+    ]);
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+
+    const tools = await factory({
+      url: "https://n8n.example.com/mcp-server/http",
+      headers: {},
+      serverName: "n8n--workflow-management",
+    });
+
+    expect(tools).toHaveLength(2);
+    expect(tools[0]?.name).toHaveLength(48);
+    expect(tools[1]?.name).toHaveLength(48);
+    expect(tools[0]?.name).not.toBe(tools[1]?.name);
+    expect(tools[0]?.name).toMatch(/_[a-f0-9]{8}$/);
+    expect(tools[1]?.name).toMatch(/_[a-f0-9]{8}$/);
+  });
+
   it("respects toolWhitelist", async () => {
     const fake = makeFakeClient([
       { name: "search" },
