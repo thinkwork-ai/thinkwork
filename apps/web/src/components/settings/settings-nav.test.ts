@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { IconFlask } from "@tabler/icons-react";
 import {
   SETTINGS_NAV_ITEMS,
   settingsCrumbForPath,
@@ -13,6 +14,7 @@ const MANAGED_APPLICATIONS = "/settings/managed-applications";
 const BILLING = "/settings/billing";
 const AGENTS = "/settings/agents";
 const MODEL_CATALOG = "/settings/model-catalog";
+const EVALUATIONS = "/settings/evaluations";
 
 describe("visibleSettingsNavItems", () => {
   it("no longer lists a standalone Main Agent entry (editor lives on Agents)", () => {
@@ -71,6 +73,12 @@ describe("visibleSettingsNavItems", () => {
 
     expect(operatorWeb.some((i) => i.to === AGENTS)).toBe(true);
     expect(memberWeb.some((i) => i.to === AGENTS)).toBe(false);
+  });
+
+  it("uses the flask icon for Evaluations", () => {
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.to === EVALUATIONS);
+    expect(item).toBeDefined();
+    expect(item?.icon).toBe(IconFlask);
   });
 
   it("shows Model Catalog to operators and hides it for members", () => {
