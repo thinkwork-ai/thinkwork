@@ -39,11 +39,17 @@ vi.mock("@thinkwork/ui", () => ({
   TooltipContent: ({
     children,
     className,
+    hideArrow,
   }: {
     children: ReactNode;
     className?: string;
+    hideArrow?: boolean;
   }) => (
-    <div className={className} data-testid="usage-tooltip">
+    <div
+      className={className}
+      data-hide-arrow={hideArrow ? "true" : undefined}
+      data-testid="usage-tooltip"
+    >
       {children}
     </div>
   ),
@@ -134,7 +140,7 @@ afterEach(() => {
 });
 
 describe("AccountUsageSection", () => {
-  it("renders totals, a 90-day calendar, active day labels, and model breakdown sorted by spend", () => {
+  it("renders totals, a 180-day calendar, active day labels, and model breakdown sorted by spend", () => {
     render(<AccountUsageSection tenantId="tenant-1" userId="user-1" />);
 
     expect(screen.getByText("Account Usage")).toBeTruthy();
@@ -144,13 +150,14 @@ describe("AccountUsageSection", () => {
     expect(screen.getByText("12")).toBeTruthy();
     expect(screen.getAllByText("3")[0]).toBeTruthy();
 
-    expect(screen.getAllByTestId("usage-day")).toHaveLength(90);
+    expect(screen.getAllByTestId("usage-day")).toHaveLength(180);
     const calendar = screen.getByLabelText(
-      "Account usage calendar for the last 90 days",
+      "Account usage calendar for the last 180 days",
     );
     expect(calendar.className).toContain("grid-flow-col");
     expect(calendar.className).toContain("grid-rows-7");
-    expect(screen.getAllByTestId("usage-calendar-cell")).toHaveLength(1);
+    expect(calendar.className).toContain("gap-[3px]");
+    expect(screen.getAllByTestId("usage-calendar-cell")).toHaveLength(3);
     expect(
       screen.getByLabelText("2026-06-20: $3.50 spend, 3.0k tokens, 7 events"),
     ).toBeTruthy();
@@ -160,6 +167,13 @@ describe("AccountUsageSection", () => {
     expect(screen.getAllByTestId("usage-tooltip")[0].className).toContain(
       "pointer-events-none",
     );
+    expect(screen.getAllByTestId("usage-tooltip")[0].className).toContain(
+      "bg-popover",
+    );
+    expect(screen.getAllByTestId("usage-tooltip")[0].dataset.hideArrow).toBe(
+      "true",
+    );
+    expect(screen.getByText("Sun Jun 21, 2026")).toBeTruthy();
     expect(screen.getAllByText("Spend")[0]).toBeTruthy();
     expect(screen.getAllByText("Tokens")[0]).toBeTruthy();
     expect(screen.getAllByText("Events")[0]).toBeTruthy();
@@ -178,7 +192,7 @@ describe("AccountUsageSection", () => {
     expect(urqlMocks.calls[0]).toMatchObject({
       pause: false,
       query: queryDocs.SettingsAccountUsageQuery,
-      variables: { tenantId: "tenant-1", userId: "user-1", days: 90 },
+      variables: { tenantId: "tenant-1", userId: "user-1", days: 180 },
     });
   });
 
@@ -208,7 +222,7 @@ describe("AccountUsageSection", () => {
 
     expect(screen.getByText("No usage yet")).toBeTruthy();
     expect(screen.getByText("No model usage in this period.")).toBeTruthy();
-    expect(screen.getAllByTestId("usage-day")).toHaveLength(90);
+    expect(screen.getAllByTestId("usage-day")).toHaveLength(180);
     expect(
       screen.getByLabelText("2026-06-21: $0.00 spend, 0 tokens, 0 events"),
     ).toBeTruthy();
@@ -258,11 +272,11 @@ describe("AccountUsageSection", () => {
     );
 
     expect(screen.getAllByTestId("usage-day")).toHaveLength(2);
-    expect(screen.getAllByTestId("usage-calendar-cell")).toHaveLength(5);
+    expect(screen.getAllByTestId("usage-calendar-cell")).toHaveLength(6);
     expect(
       screen.getByLabelText("2026-06-21: $0.00 spend, 0 tokens, 3 events")
         .className,
-    ).toContain("bg-blue-700");
+    ).toContain("bg-[#2666d0]");
   });
 
   it("pauses the account usage query when the profile scope is incomplete", () => {
@@ -273,7 +287,7 @@ describe("AccountUsageSection", () => {
     expect(container.textContent).toBe("");
     expect(urqlMocks.calls[0]).toMatchObject({
       pause: true,
-      variables: { tenantId: "", userId: "user-1", days: 90 },
+      variables: { tenantId: "", userId: "user-1", days: 180 },
     });
   });
 });
