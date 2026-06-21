@@ -24,14 +24,14 @@ describe("generated first-party plugin registry", () => {
         exportName: "companyBrainPluginPackage",
       },
       {
+        packageKey: "data-integrations",
+        packageName: "@thinkwork/plugin-data-integrations",
+        exportName: "dataIntegrationsPluginPackage",
+      },
+      {
         packageKey: "email-channel",
         packageName: "@thinkwork/plugin-email-channel",
         exportName: "emailChannelPluginPackage",
-      },
-      {
-        packageKey: "lakehouse",
-        packageName: "@thinkwork/plugin-lakehouse",
-        exportName: "lakehousePluginPackage",
       },
       {
         packageKey: "lastmile",
