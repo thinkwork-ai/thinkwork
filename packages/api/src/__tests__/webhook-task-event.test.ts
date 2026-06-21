@@ -83,6 +83,13 @@ describe("resolveTaskEvent", () => {
         eventType: "completed",
         milestonePosted: true,
         allRequiredComplete: true,
+        workflowTrigger: {
+          triggerFamily: "webhook",
+          triggerSource: "task-event:lastmile",
+          actorType: "connected_app",
+          idempotencyKey: "webhook:lastmile:evt-1",
+          correlationId: "evt-1",
+        },
       },
       delivery: {
         providerName: "lastmile",

@@ -12,6 +12,7 @@ import type {
 } from "aws-lambda";
 import { createWebhookHandler, type WebhookResolveResult } from "./_shared.js";
 import { syncLinkedTaskFromProviderEvent } from "../../lib/linked-tasks/sync-linked-task.js";
+import { normalizeWorkflowTriggerContract } from "../../lib/workflows/trigger-contract.js";
 
 interface TaskEventPayload {
   schema?: string;
@@ -145,6 +146,19 @@ export async function resolveTaskEvent(args: {
       },
     };
   }
+  const workflowTrigger = normalizeWorkflowTriggerContract({
+    family: "webhook",
+    source: `task-event:${provider}`,
+    actor: { type: "connected_app", externalId: provider },
+    idempotencyKey: `webhook:${provider}:${externalEventId}`,
+    correlationId: externalEventId,
+    occurredAt: stringValue(payload.occurredAt),
+    payload: {
+      externalTaskId,
+      eventName,
+      provider,
+    },
+  });
 
   const result = await syncLinkedTaskFromProviderEvent({
     tenantId: args.tenantId,
@@ -196,6 +210,13 @@ export async function resolveTaskEvent(args: {
       eventType: result.eventType,
       milestonePosted: result.milestonePosted,
       allRequiredComplete: result.allRequiredComplete,
+      workflowTrigger: {
+        triggerFamily: workflowTrigger.triggerFamily,
+        triggerSource: workflowTrigger.triggerSource,
+        actorType: workflowTrigger.actorType,
+        idempotencyKey: workflowTrigger.idempotencyKey,
+        correlationId: workflowTrigger.correlationId,
+      },
     },
     delivery: {
       providerName: provider,
