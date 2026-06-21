@@ -5,6 +5,7 @@ vi.mock("@/lib/api-fetch", () => ({ apiFetch }));
 
 import {
   createPrefixedWorkspaceClient,
+  exportSkillArchive,
   spacesWorkspaceFilesClient,
 } from "./workspace-files-api";
 
@@ -127,5 +128,59 @@ describe("createPrefixedWorkspaceClient", () => {
     const bare = createPrefixedWorkspaceClient("agents");
     await bare.putFile({ agentId: "agent-1" }, "x.md", "y");
     expect(lastBody()).toMatchObject({ path: "agents/x.md" });
+  });
+});
+
+describe("exportSkillArchive", () => {
+  it("requests a catalog export and exposes download-ready archive bytes", async () => {
+    const archiveBytes = Uint8Array.from([0x00, 0xff, 0x7f]);
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "pdf-processing",
+      filename: "pdf-processing.zip",
+      contentType: "application/zip",
+      archiveBase64: Buffer.from(archiveBytes).toString("base64"),
+    });
+
+    const archive = await exportSkillArchive("pdf-processing");
+
+    expect(lastBody()).toEqual({
+      action: "export-skill",
+      catalog: true,
+      slug: "pdf-processing",
+    });
+    expect(archive).toMatchObject({
+      slug: "pdf-processing",
+      filename: "pdf-processing.zip",
+      contentType: "application/zip",
+      archiveBase64: Buffer.from(archiveBytes).toString("base64"),
+    });
+    expect(Array.from(archive.bytes)).toEqual(Array.from(archiveBytes));
+    expect(archive.blob.type).toBe("application/zip");
+    expect(archive.blob.size).toBe(archiveBytes.byteLength);
+  });
+
+  it("defaults optional export metadata for download payloads", async () => {
+    const archiveBytes = Uint8Array.from([0x50, 0x4b, 0x03, 0x04]);
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      filename: "fallback.zip",
+      archiveBase64: Buffer.from(archiveBytes).toString("base64"),
+    });
+
+    const archive = await exportSkillArchive("fallback-skill");
+
+    expect(archive.slug).toBe("fallback-skill");
+    expect(archive.contentType).toBe("application/zip");
+    expect(archive.blob.type).toBe("application/zip");
+    expect(Array.from(archive.bytes)).toEqual(Array.from(archiveBytes));
+  });
+
+  it("fails loudly when the export response omits archive data", async () => {
+    apiFetch.mockResolvedValueOnce({ ok: true, filename: "missing.zip" });
+
+    await expect(exportSkillArchive("missing")).rejects.toThrow(
+      "missing archive data",
+    );
   });
 });

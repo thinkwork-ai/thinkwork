@@ -29,6 +29,15 @@ export interface SkillSummary {
   sha: string;
 }
 
+export interface ExportSkillArchiveResult {
+  slug: string;
+  filename: string;
+  contentType: string;
+  archiveBase64: string;
+  bytes: Uint8Array;
+  blob: Blob;
+}
+
 interface WorkspaceFilesResponse {
   ok?: boolean;
   files?: WorkspaceFileMeta[];
@@ -37,6 +46,10 @@ interface WorkspaceFilesResponse {
   source?: WorkspaceFileSource;
   sha256?: string;
   destPath?: string;
+  slug?: string;
+  filename?: string;
+  contentType?: string;
+  archiveBase64?: string;
 }
 
 async function request(
@@ -169,6 +182,40 @@ export async function listSkillSummaries(): Promise<SkillSummary[]> {
   return (data.skills ?? [])
     .slice()
     .sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+export async function exportSkillArchive(
+  slug: string,
+): Promise<ExportSkillArchiveResult> {
+  const data = await request({ action: "export-skill", catalog: true, slug });
+  if (!data.archiveBase64 || !data.filename) {
+    throw new Error("Skill export response was missing archive data.");
+  }
+  const contentType = data.contentType ?? "application/zip";
+  const bytes = bytesFromBase64(data.archiveBase64);
+  return {
+    slug: data.slug ?? slug,
+    filename: data.filename,
+    contentType,
+    archiveBase64: data.archiveBase64,
+    bytes,
+    blob: new Blob([arrayBufferFromBytes(bytes)], { type: contentType }),
+  };
+}
+
+function bytesFromBase64(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function arrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
 }
 
 /**

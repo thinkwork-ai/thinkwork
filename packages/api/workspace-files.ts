@@ -22,7 +22,7 @@
  *   list → { ok: true, files: Array<{ path, source, sha256, overridden }> }
  *   put  → { ok: true }
  *   delete → { ok: true }
- *   import-skill / install-skill / uninstall-skill / reinstall-skill → { ok: true, ... }
+ *   export-skill / import-skill / install-skill / uninstall-skill / reinstall-skill → { ok: true, ... }
  *   generate-folder-structure → { ok: true }
  *   regenerate-map → { ok: true } (optional path scopes refresh to that AGENTS.md)
  *   normalize-map → { ok: true }
@@ -119,9 +119,12 @@ import {
   listIndexedSkills,
 } from "./src/lib/catalog-index.js";
 import {
+  CATALOG_SKILL_ARCHIVE_LIMITS,
   parseCatalogSkillArchive,
+  renderCatalogSkillArchive,
   textFromCatalogArchiveFile,
 } from "./src/lib/catalog-skill-archive.js";
+import { isCatalogArchiveSlug } from "./src/types/catalog-skill.js";
 import {
   identityFieldLabel,
   isAgentIdentityField,
@@ -631,6 +634,7 @@ const WRITE_ACTIONS = new Set([
   "move",
   "rename",
   "create-sub-agent",
+  "export-skill",
   "install-skill",
   "import-skill",
   "reinstall-skill",
@@ -641,6 +645,13 @@ const WRITE_ACTIONS = new Set([
   "update-identity-field",
   "rematerialize",
 ]);
+
+const EXPORT_SKILL_ARCHIVE_LIMITS = {
+  maxEntries: CATALOG_SKILL_ARCHIVE_LIMITS.maxEntries,
+  maxFileBytes: 4 * 1024 * 1024,
+  maxTotalBytes: 4 * 1024 * 1024,
+  maxZipBytes: 4 * 1024 * 1024,
+} as const;
 
 async function callerIsTenantAdmin(
   tenantId: string,
@@ -1122,6 +1133,110 @@ async function handleImportSkill(
     generatedWiring: parsed.generatedWiring,
     ...(indexWarning ? { indexWarning } : {}),
     ...evalOutcome,
+  });
+}
+
+async function handleExportSkill(
+  deps: HandlerDeps,
+  slug: string | undefined,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  if (target.kind !== "catalog") {
+    return json(400, {
+      ok: false,
+      code: "unsupported_target",
+      error: "export-skill requires the skill catalog target",
+    });
+  }
+  if (!isCatalogArchiveSlug(slug)) {
+    return json(400, {
+      ok: false,
+      code: "invalid_skill_slug",
+      error:
+        "slug is required for export-skill and must be a portable Agent Skills name.",
+    });
+  }
+
+  const skillPrefix = `${target.prefix}${slug}/`;
+  const relativePaths = await listAllObjectsUnfiltered(skillPrefix);
+  if (relativePaths.length === 0) {
+    return json(404, {
+      ok: false,
+      code: "skill_not_found",
+      error: `Catalog skill '${slug}' was not found.`,
+      slug,
+    });
+  }
+  if (!relativePaths.includes("SKILL.md")) {
+    return json(404, {
+      ok: false,
+      code: "skill_md_not_found",
+      error: `Catalog skill '${slug}' is missing SKILL.md and cannot be exported.`,
+      slug,
+    });
+  }
+  if (relativePaths.length > EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries) {
+    return exportLimitExceeded(
+      slug,
+      `Catalog skill '${slug}' has ${relativePaths.length} files; max exportable files is ${EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries}.`,
+    );
+  }
+
+  let totalBytes = 0;
+  const files: { path: string; content: Buffer }[] = [];
+  for (const path of relativePaths) {
+    const object = await readCatalogObject(`${skillPrefix}${path}`);
+    if (object.content.byteLength > EXPORT_SKILL_ARCHIVE_LIMITS.maxFileBytes) {
+      return exportLimitExceeded(
+        slug,
+        `Catalog skill file '${path}' is too large to export.`,
+      );
+    }
+    totalBytes += object.content.byteLength;
+    if (totalBytes > EXPORT_SKILL_ARCHIVE_LIMITS.maxTotalBytes) {
+      return exportLimitExceeded(
+        slug,
+        `Catalog skill '${slug}' is too large to export.`,
+      );
+    }
+    files.push({ path, content: object.content });
+  }
+  const archive = await renderCatalogSkillArchive({ slug, files });
+  if (archive.bytes.byteLength > EXPORT_SKILL_ARCHIVE_LIMITS.maxZipBytes) {
+    return exportLimitExceeded(
+      slug,
+      `Catalog skill '${slug}' ZIP is too large to return from this API.`,
+    );
+  }
+  const roundTrip = await parseCatalogSkillArchive(archive.bytes);
+  if (!roundTrip.ok) {
+    return json(422, {
+      ok: false,
+      code: "invalid_catalog_skill_archive",
+      error: `Catalog skill '${slug}' is not exportable because its files are not import-compatible.`,
+      slug,
+      errors: roundTrip.errors,
+    });
+  }
+
+  return json(200, {
+    ok: true,
+    slug,
+    filename: archive.filename,
+    contentType: archive.contentType,
+    archiveBase64: archive.bytes.toString("base64"),
+  });
+}
+
+function exportLimitExceeded(
+  slug: string,
+  error: string,
+): APIGatewayProxyResult {
+  return json(413, {
+    ok: false,
+    code: "export_limit_exceeded",
+    error,
+    slug,
   });
 }
 
@@ -3239,7 +3354,7 @@ interface RequestBody {
   field?: string;
   /** For `update-identity-field`: the new line content. */
   value?: string;
-  /** For `create-sub-agent`: top-level sub-agent folder slug. */
+  /** For `create-sub-agent` / catalog skill actions: selected slug. */
   slug?: string;
   /** For `create-sub-agent`: seeded {slug}/CONTEXT.md content. */
   contextContent?: string;
@@ -3371,7 +3486,9 @@ export async function handler(
 
   if (
     target.kind === "catalog" &&
-    !["get", "list", "put", "delete", "import-skill"].includes(action)
+    !["get", "list", "put", "delete", "export-skill", "import-skill"].includes(
+      action,
+    )
   ) {
     return json(400, {
       ok: false,
@@ -3447,6 +3564,9 @@ export async function handler(
           body.archiveBase64,
           body.confirmReplace === true,
         );
+      }
+      case "export-skill": {
+        return await handleExportSkill(deps, body.slug);
       }
       case "delete": {
         if (!body.path)
