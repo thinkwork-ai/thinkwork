@@ -46,6 +46,7 @@ import { mkdir, readlink } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
+  createAnalyticsDisplayExtension,
   createAskUserQuestionExtension,
   createBrowserAutomationExtension,
   createContextEngineExtension,
@@ -1118,6 +1119,8 @@ export async function buildInvocationResources(
       }),
     );
   }
+
+  addExtension(createAnalyticsDisplayExtension());
 
   // Outbound side-effect kill list (Evaluations Trust Core U8, layer 2
   // of 2): send_email / web_search / web_extract never register under

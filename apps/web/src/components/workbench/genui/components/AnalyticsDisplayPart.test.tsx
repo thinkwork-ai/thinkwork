@@ -1,15 +1,18 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import {
   createAnalyticsDisplayFixture,
+  createCrmOpportunityValueByOwnerFixture,
   safeDisplayValue,
 } from "@thinkwork/analytics-display";
 import {
   createAnalyticsDisplayGenUIPart,
   createThreadGenUISpecHash,
 } from "@thinkwork/genui";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { AnalyticsDisplayPart } from "./AnalyticsDisplayPart";
+
+afterEach(cleanup);
 
 describe("AnalyticsDisplayPart", () => {
   it("renders an inline analytical chart payload in Thread density", () => {
@@ -25,17 +28,34 @@ describe("AnalyticsDisplayPart", () => {
     expect(
       screen
         .getByTestId("analytics-display-element-chart")
-        .textContent?.includes("thinkwork.ui.ChartContainer"),
-    ).toBe(true);
-    expect(
-      screen
-        .getByTestId("analytics-display-element-table")
-        .textContent?.includes("8 row preview"),
-    ).toBe(true);
+        .querySelector("[data-slot='chart']"),
+    ).toBeTruthy();
+    expect(screen.getAllByText("High Priority").length).toBeGreaterThan(0);
+    expect(screen.getByText("Daily Detail")).toBeTruthy();
     expect(screen.getByLabelText("Applied filters").textContent).toContain(
       "Priority",
     );
     expect(screen.getByText(/Source: Zendesk/)).toBeTruthy();
+  });
+
+  it("renders a CRM opportunity chart payload through the analytics adapter", () => {
+    const part = createAnalyticsDisplayGenUIPart({
+      id: "genui:analytics:crm-owner-value",
+      payload: createCrmOpportunityValueByOwnerFixture(),
+    });
+
+    render(<AnalyticsDisplayPart data={part.data} />);
+
+    expect(screen.getByText("Opportunity Value by Owner")).toBeTruthy();
+    expect(screen.getByText("$184,000")).toBeTruthy();
+    expect(screen.getByText("Open Opportunity Value")).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("analytics-display-element-chart")
+        .querySelector("[data-slot='chart']"),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Maya Chen").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Source: Twenty CRM/)).toBeTruthy();
   });
 
   it("renders a compact fallback for invalid analytical payloads", () => {

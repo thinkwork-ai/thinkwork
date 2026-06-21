@@ -1,4 +1,5 @@
 export * from "./define-extension.js";
+export * from "./analytics-display.js";
 export * from "./ask-user-question.js";
 export * from "./attachments.js";
 export * from "./browser.js";

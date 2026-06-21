@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createCrmOpportunityValueByOwnerFixture } from "@thinkwork/analytics-display";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import {
+  createAnalyticsDisplayGenUIPart,
+  createTaskReviewGenUIFixture,
+} from "@thinkwork/genui";
 import { ThreadConversation } from "./ThreadConversation";
 
 vi.mock("urql", async () => {
@@ -125,5 +129,37 @@ describe("ThreadConversation", () => {
 
     expect(screen.getByTestId("genui-task-review")).toBeTruthy();
     expect(screen.getByText("Review onboarding task")).toBeTruthy();
+  });
+
+  it("renders a persisted analytics GenUI chart inside a Thread message", () => {
+    const part = createAnalyticsDisplayGenUIPart({
+      id: "genui:analytics:crm-owner-value",
+      payload: createCrmOpportunityValueByOwnerFixture(),
+    });
+
+    render(
+      <ThreadConversation
+        messages={[
+          {
+            id: "m1",
+            role: "ASSISTANT",
+            content: "",
+            parts: [part],
+            sender: { type: "agent", id: "a1", displayName: "Coordinator" },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("analytics-display-part")).toBeTruthy();
+    expect(screen.getByText("Opportunity Value by Owner")).toBeTruthy();
+    expect(screen.getByText("$184,000")).toBeTruthy();
+    expect(screen.getByText("Open Opportunity Value")).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("analytics-display-element-chart")
+        .querySelector("[data-slot='chart']"),
+    ).toBeTruthy();
+    expect(screen.getByText(/Source: Twenty CRM/)).toBeTruthy();
   });
 });

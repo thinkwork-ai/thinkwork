@@ -121,3 +121,87 @@ export function createThreadGenUIFixture(): AnalyticsDisplayRenderPayload {
 export function createDashboardFixture(): AnalyticsDisplayRenderPayload {
   return createAnalyticsDisplayFixture();
 }
+
+export function createCrmOpportunityValueByOwnerFixture(): AnalyticsDisplayRenderPayload {
+  return {
+    kind: ANALYTICS_DISPLAY_KIND,
+    analyticsDisplayVersion: ANALYTICS_DISPLAY_VERSION,
+    spec: {
+      title: "Opportunity Value by Owner",
+      description: "Open Twenty CRM opportunity value grouped by owner.",
+      columns: [
+        { key: "owner", label: "Owner", type: "string" },
+        { key: "open_value", label: "Open Value", type: "number" },
+        { key: "opportunity_count", label: "Opportunities", type: "number" },
+      ],
+      filters: [
+        {
+          id: "status",
+          label: "Open opportunities",
+          columnKey: "open_value",
+          operator: "range",
+          range: { min: 0 },
+        },
+      ],
+      elements: [
+        {
+          type: "metric",
+          id: "pipeline-total",
+          title: "Top Owner Value",
+          valueKey: "open_value",
+          unit: "USD",
+          palette: "chart-1",
+        },
+        {
+          type: "chart",
+          id: "owner-value-chart",
+          title: "Open Opportunity Value",
+          chartKind: "bar",
+          categoryKey: "owner",
+          series: [
+            {
+              key: "open_value",
+              label: "Open Value",
+              valueKey: "open_value",
+              palette: "chart-1",
+            },
+          ],
+        },
+        {
+          type: "table",
+          id: "owner-value-table",
+          title: "Owner Detail",
+          columns: [
+            { key: "owner", label: "Owner" },
+            { key: "open_value", label: "Open Value" },
+            { key: "opportunity_count", label: "Opportunities" },
+          ],
+        },
+      ],
+      emptyState: {
+        title: "No open opportunities",
+        description: "Twenty CRM did not return open opportunity rows.",
+      },
+    },
+    data: {
+      rows: [
+        { owner: "Maya Chen", open_value: 184000, opportunity_count: 7 },
+        { owner: "Owen Brooks", open_value: 139500, opportunity_count: 5 },
+        { owner: "Priya Shah", open_value: 118250, opportunity_count: 4 },
+        { owner: "Luis Romero", open_value: 86500, opportunity_count: 3 },
+      ],
+    },
+    freshness: {
+      takenAt: "2026-06-21T14:10:00.000Z",
+      status: "fresh",
+    },
+    provenance: {
+      sourceLabels: ["Twenty CRM", "Opportunity snapshot"],
+      dataSourceSlugs: ["twenty-crm"],
+    },
+    sensitivity: {
+      containsSensitiveFields: false,
+      policy: "aggregate_only",
+    },
+  };
+}
