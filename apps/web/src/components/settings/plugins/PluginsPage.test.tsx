@@ -255,6 +255,7 @@ describe("PluginsPage", () => {
       "Open LastMile",
       "Open SendGrid Email",
       "Open Twenty CRM",
+      "Open WorkOS Auth",
     ]);
   });
 
@@ -418,6 +419,27 @@ describe("PluginsPage", () => {
 
     openMock.mockRestore();
   });
+
+  it("links a configured WorkOS row to the WorkOS dashboard", () => {
+    const openMock = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<PluginsPage />);
+
+    const workosRow = screen.getByRole("link", { name: "Open WorkOS Auth" });
+    fireEvent.click(
+      within(workosRow).getByRole("button", {
+        name: "Open WorkOS Auth application",
+      }),
+    );
+
+    expect(openMock).toHaveBeenCalledWith(
+      "https://dashboard.workos.com/",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(navigateMock).not.toHaveBeenCalled();
+
+    openMock.mockRestore();
+  });
 });
 
 const installedPlugins = [
@@ -442,6 +464,26 @@ const installedPlugins = [
     lastError: null,
     activatedUserCount: 0,
     components: [],
+  },
+  {
+    __typename: "PluginInstall" as const,
+    id: "install-workos",
+    pluginKey: "workos-auth",
+    pinnedVersion: "0.1.0",
+    state: "installed",
+    lastTransitionAt: "2026-06-12T12:00:00Z",
+    lastError: null,
+    activatedUserCount: 0,
+    components: [
+      {
+        __typename: "PluginComponent" as const,
+        id: "component-workos-auth",
+        componentKey: "workos-auth",
+        componentType: "auth-provider",
+        state: "provisioned",
+        lastError: null,
+      },
+    ],
   },
 ];
 
@@ -572,5 +614,24 @@ const catalogEntries = [
       },
     ],
     install: null,
+  },
+  {
+    __typename: "PluginCatalogEntry" as const,
+    pluginKey: "workos-auth",
+    displayName: "WorkOS Auth",
+    description:
+      "WorkOS-backed SSO broker that federates through Cognito while keeping Cognito as ThinkWork's final session issuer.",
+    latestVersion: "0.1.0",
+    launchUrl: null,
+    updateAvailable: false,
+    versions: [
+      {
+        version: "0.1.0",
+        payloadSha256: "sha256:workos",
+        requiredOauthScopes: [],
+        components: [],
+      },
+    ],
+    install: installedPlugins[2],
   },
 ];

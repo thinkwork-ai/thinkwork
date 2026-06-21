@@ -25,6 +25,11 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { installStateChipClassName, installStateLabel } from "./plugin-state";
+import {
+  isWorkosAccountConfigured,
+  WORKOS_AUTH_PLUGIN_KEY,
+  WORKOS_DASHBOARD_URL,
+} from "./workos";
 
 type PluginFilter = "all" | "installed";
 
@@ -534,10 +539,26 @@ function pluginEntryIsAuthCapable(entry: {
 }
 
 function deployedLaunchUrl(entry: {
-  install?: { state: string } | null;
+  pluginKey: string;
+  install?: {
+    state: string;
+    components?: readonly {
+      componentType: string;
+      componentKey: string;
+      state: string;
+    }[];
+  } | null;
   launchUrl?: string | null;
 }): string | null {
   if (!entry.install || entry.install.state === "uninstalling") return null;
+  // WorkOS has no deployed launchUrl; once its account is configured, link the
+  // row to the WorkOS dashboard (mirrors the detail-header affordance).
+  if (
+    entry.pluginKey === WORKOS_AUTH_PLUGIN_KEY &&
+    isWorkosAccountConfigured(entry.install.components)
+  ) {
+    return WORKOS_DASHBOARD_URL;
+  }
   return entry.launchUrl || null;
 }
 

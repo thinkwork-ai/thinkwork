@@ -638,11 +638,25 @@ describe("PluginDetail", () => {
 
     expect(screen.queryByText("WorkOS account setup")).toBeNull();
     expect(screen.queryByRole("link", { name: /create account/i })).toBeNull();
-    expect(
-      screen
-        .getByRole("link", { name: /open dashboard/i })
-        .getAttribute("href"),
-    ).toBe("https://dashboard.workos.com/");
+    // The Setup section no longer renders a "WorkOS dashboard" row; the
+    // dashboard link now lives in the page header (asserted below).
+    expect(screen.queryByText("WorkOS dashboard")).toBeNull();
+    expect(screen.queryByRole("link", { name: /open dashboard/i })).toBeNull();
+
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    const headerAction = lastHeaderAction();
+    expect(headerAction).toBeTruthy();
+    const headerRender = render(<>{headerAction}</>);
+    fireEvent.click(
+      headerRender.getByRole("button", { name: /open workos dashboard/i }),
+    );
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://dashboard.workos.com/",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    headerRender.unmount();
+    openSpy.mockRestore();
 
     fireEvent.click(
       screen.getByRole("button", { name: /setup instructions/i }),
@@ -702,6 +716,18 @@ describe("PluginDetail", () => {
         .getByRole("link", { name: /create account/i })
         .getAttribute("href"),
     ).toBe("https://dashboard.workos.com/get-started");
+
+    // No dashboard header affordance until the account is configured.
+    const headerAction = lastHeaderAction();
+    if (headerAction) {
+      const headerRender = render(<>{headerAction}</>);
+      expect(
+        headerRender.queryByRole("button", {
+          name: /open workos dashboard/i,
+        }),
+      ).toBeNull();
+      headerRender.unmount();
+    }
   });
 
   it("renders Resend provider setup for operators", () => {
@@ -1232,6 +1258,18 @@ const n8nPluginSettings = {
   lastEvidencePrefix: null,
   recentAgentStepRuns: [],
 };
+
+// Returns the most recent non-empty `action` node handed to the (mocked)
+// page-header hook, so tests can assert on header affordances rendered
+// outside the PluginDetail subtree.
+function lastHeaderAction() {
+  const calls = mocks.setHeader.mock.calls;
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const action = calls[i]?.[0]?.action;
+    if (action) return action;
+  }
+  return null;
+}
 
 const workosInstall = {
   ...baseInstall,

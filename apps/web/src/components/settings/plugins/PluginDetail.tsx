@@ -55,6 +55,11 @@ import { InstallKeyDialog } from "./InstallKeyDialog";
 import { N8nSettings } from "./n8n/N8nSettings";
 import { UninstallPluginDialog } from "./UninstallPluginDialog";
 import {
+  isWorkosAccountConfigured,
+  WORKOS_AUTH_PLUGIN_KEY,
+  WORKOS_DASHBOARD_URL,
+} from "./workos";
+import {
   broadenedScopes,
   componentStateChipClassName,
   componentStateLabel,
@@ -155,24 +160,23 @@ export function PluginDetail() {
     premium?.installKeyRequired && !hasActiveEntitlement,
   );
   const isCompanyBrain = pluginKey === "company-brain";
-  const isWorkosAuth = pluginKey === "workos-auth";
+  const isWorkosAuth = pluginKey === WORKOS_AUTH_PLUGIN_KEY;
   const twentyDeploymentProvisioned = Boolean(
     pluginKey === "twenty" &&
-      install?.components.some(
-        (component) =>
-          component.componentType === "infrastructure" &&
-          component.state === "provisioned",
-      ),
-  );
-  const workosCallbackUrl = isWorkosAuth ? workosAuthCallbackUrl() : null;
-  const workosAccountConfigured = Boolean(
     install?.components.some(
       (component) =>
-        component.componentType === "auth-provider" &&
-        component.componentKey === "workos-auth" &&
+        component.componentType === "infrastructure" &&
         component.state === "provisioned",
     ),
   );
+  const workosCallbackUrl = isWorkosAuth ? workosAuthCallbackUrl() : null;
+  const workosAccountConfigured = isWorkosAccountConfigured(
+    install?.components,
+  );
+  // When WorkOS is configured, surface a direct dashboard link from the
+  // detail header (mirrors the list-row external-link affordance).
+  const workosDashboardUrl =
+    isWorkosAuth && workosAccountConfigured ? WORKOS_DASHBOARD_URL : null;
   const emailProviderSettingsProvider =
     pluginKey === "sendgrid"
       ? "sendgrid"
@@ -225,6 +229,22 @@ export function PluginDetail() {
       { label: "Plugins", href: "/settings/plugins" },
       { label: displayName },
     ],
+    action: workosDashboardUrl ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Open WorkOS dashboard"
+        title="Open WorkOS dashboard"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => {
+          window.open(workosDashboardUrl, "_blank", "noopener,noreferrer");
+        }}
+      >
+        <ExternalLink className="size-4" />
+      </Button>
+    ) : undefined,
+    actionKey: workosDashboardUrl ? "workos-dashboard" : undefined,
   });
 
   async function install_(installKey?: string) {
@@ -681,22 +701,6 @@ export function PluginDetail() {
                 </Button>
               </SettingsRow>
             ) : null}
-            <SettingsRow
-              label="WorkOS dashboard"
-              description="Open WorkOS to manage applications, redirects, organizations, and connections."
-              layout="stacked"
-            >
-              <Button asChild type="button" variant="outline" size="sm">
-                <a
-                  href="https://dashboard.workos.com/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open dashboard
-                  <ExternalLink className="size-3.5" />
-                </a>
-              </Button>
-            </SettingsRow>
           </SettingsSection>
         ) : null}
 
