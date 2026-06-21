@@ -62,7 +62,7 @@ status: in_progress
   - U5 PR [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788)
     passed CLA, lint, test, typecheck, and verify after rebasing onto updated
     `origin/main`; squash merged as
-    `c223025e50b74d5ad5d9588f757e728a61633de1`.
+    `c223025e5ca6998c93539e85f9bb4c07897844b9`.
   - All implementation units in
     `docs/plans/2026-06-21-001-feat-skill-library-import-export-plan.md` are
     complete and merged.
@@ -148,7 +148,7 @@ status: in_progress
     and `git diff --check`.
   - U5: PR [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788)
     passed CLA, lint, test, typecheck, and verify on the rebased commit; squash
-    merged as `c223025e50b74d5ad5d9588f757e728a61633de1`.
+    merged as `c223025e5ca6998c93539e85f9bb4c07897844b9`.
 - Unit ledger:
 
 | Unit                                           | Branch                                   | PR                                                           | State  | Notes                                                        |
@@ -158,7 +158,7 @@ status: in_progress
 | U2 Catalog Import API Action                   | `codex/skill-library-u2-import`          | [#2781](https://github.com/thinkwork-ai/thinkwork/pull/2781) | Merged | Squash merged as `cf27205f897109586d32ebddff7ecff17c9775f2`. |
 | U3 Catalog Export API Action                   | `codex/skill-library-u3-export`          | [#2783](https://github.com/thinkwork-ai/thinkwork/pull/2783) | Merged | Squash merged as `8ace6cde15e61e23c786350b6bbe6053b6f218e2`. |
 | U4 Skill Library Import UI                     | `codex/skill-library-u4-import-ui`       | [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786) | Merged | Squash merged as `8a664299665303efbd9df229e24f1e2cf1430563`. |
-| U5 Skill Detail Export and Import-State Polish | `codex/skill-library-u5-export-polish`   | [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788) | Merged | Squash merged as `c223025e50b74d5ad5d9588f757e728a61633de1`. |
+| U5 Skill Detail Export and Import-State Polish | `codex/skill-library-u5-export-polish`   | [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788) | Merged | Squash merged as `c223025e5ca6998c93539e85f9bb4c07897844b9`. |
 
 ---
 
