@@ -15,12 +15,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U2 - Add web query and reusable account usage section.
-- Current branch: `codex/thnk-60-u2-account-usage-section`.
-- Current worktree: `.Codex/worktrees/thnk-60-u2-account-usage-section`.
+- Current unit: U3 - Mount account usage on profile pages.
+- Current branch: `codex/thnk-60-u3-account-usage-pages`.
+- Current worktree: `.Codex/worktrees/thnk-60-u3-account-usage-pages`.
 - Current pull request:
-  [#2809](https://github.com/thinkwork-ai/thinkwork/pull/2809).
-- Base: `origin/main` at `d84672f92`.
+  [#2810](https://github.com/thinkwork-ai/thinkwork/pull/2810).
+- Base: `origin/main` at `a4fdc35ac`.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -82,9 +82,36 @@ status: in_progress
   - U2 was rebased onto `origin/main` at `ca8e26aaf`, then again at
     `d84672f92`, after branch protection reported the head was behind base;
     focused component tests and web typecheck still passed after each rebase.
-  - U2 CI: Pending.
-  - U2 merge: Pending.
-  - U2 cleanup: Pending.
+  - U2 CI passed after latest rebase: CLA, lint, verify, typecheck, test.
+  - U2 squash merged as `a4fdc35ac536923f7658fe291b2f4bd5d00d6779`.
+  - U2 cleanup completed: remote branch was deleted by GitHub merge flow; local
+    worktree and branch were removed after syncing `main`.
+  - U3 mounts `AccountUsageSection` immediately after the page title in
+    `SelfProfilePage` and `SettingsUserDetail`, before the editable profile,
+    model approval, workspace, and danger sections.
+  - U3 page tests assert tenant/user props, placement before profile controls,
+    and the self-profile no-user guard.
+  - U3 focused page tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/profile/SelfProfilePage.test.tsx src/components/settings/SettingsUserDetail.test.tsx`
+    (23 tests).
+  - U3 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U3 lint passed: `pnpm lint`.
+  - U3 formatting check passed:
+    `pnpm dlx prettier@3.8.2 --check ...` for touched source/docs.
+  - U3 whitespace check passed: `git diff --check`.
+  - U3 PR: [#2810](https://github.com/thinkwork-ai/thinkwork/pull/2810).
+  - U3 CI attempt 1: CLA, lint, verify passed; test failed in
+    `apps/desktop/test/main/protocol.test.ts` with an unhandled rejection after
+    the test deleted its temporary renderer directory before the registered
+    async protocol handler finished reading `index.html`.
+  - U3 CI fix: await the registered protocol handler promise in that desktop
+    test.
+  - U3 desktop regression passed:
+    `pnpm --filter @thinkwork/desktop exec vitest run test/main/protocol.test.ts`
+    (8 tests).
+  - U3 CI: Pending.
+  - U3 merge: Pending.
+  - U3 cleanup: Pending.
 - Blockers: None.
 
 ## Skill Library Import / Export Autopilot - 2026-06-21

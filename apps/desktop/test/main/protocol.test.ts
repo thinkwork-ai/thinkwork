@@ -133,6 +133,7 @@ describe("thinkwork protocol handler", () => {
 
   it("registers a handler on the thinkwork scheme", async () => {
     let handledUrl: string | null = null;
+    let handledResponse: Promise<Response> | null = null;
 
     registerThinkworkProtocol({
       rendererRoot,
@@ -141,11 +142,12 @@ describe("thinkwork protocol handler", () => {
         handle(scheme, handler) {
           expect(scheme).toBe("thinkwork");
           handledUrl = `${DESKTOP_APP_URL}index.html`;
-          void handler({ url: handledUrl });
+          handledResponse = handler({ url: handledUrl });
         },
       },
     });
 
     expect(handledUrl).toBe(`${DESKTOP_APP_URL}index.html`);
+    await expect(handledResponse).resolves.toHaveProperty("status", 200);
   });
 });

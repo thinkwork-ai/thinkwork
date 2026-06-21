@@ -4,6 +4,7 @@ import { Badge } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
+import { AccountUsageSection } from "@/components/profile/AccountUsageSection";
 import {
   ProfileSection,
   titleCase,
@@ -66,6 +67,7 @@ export function SelfProfilePage() {
           description={user.email}
           badge={<Badge variant="secondary">{titleCase(resolvedRole)}</Badge>}
         />
+        <AccountUsageSection tenantId={resolvedTenantId} userId={user.id} />
         <ProfileSection
           userId={user.id}
           name={user.name ?? ""}

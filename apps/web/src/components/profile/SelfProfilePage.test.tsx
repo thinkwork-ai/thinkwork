@@ -48,12 +48,61 @@ const headerMocks = vi.hoisted(() => ({
 const userModelsMocks = vi.hoisted(() => ({
   props: [] as Array<{ readOnly?: boolean; userId: string }>,
 }));
+const accountUsageMocks = vi.hoisted(() => ({
+  props: [] as Array<{ tenantId?: string | null; userId?: string | null }>,
+}));
+const meMock = vi.hoisted(() => ({
+  current: {
+    email: "eric@example.com",
+    id: "user-1",
+    name: "Eric Odom",
+    profile: {
+      callBy: null,
+      id: "profile-1",
+      notes: "Likes focused work.",
+      pronouns: null,
+      timezone: "America/Chicago",
+      title: "Founder",
+    },
+    tenantId: "tenant-1",
+  } as {
+    email: string;
+    id: string;
+    name: string | null;
+    profile: {
+      callBy: string | null;
+      id: string;
+      notes: string | null;
+      pronouns: string | null;
+      timezone: string | null;
+      title: string | null;
+    } | null;
+    tenantId: string;
+  } | null,
+}));
 
 vi.mock("@/lib/settings-queries", () => queryDocs);
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMocks,
 }));
 vi.mock("@/context/PageHeaderContext", () => headerMocks);
+vi.mock("@/components/profile/AccountUsageSection", () => ({
+  AccountUsageSection: (props: {
+    tenantId?: string | null;
+    userId?: string | null;
+  }) => {
+    accountUsageMocks.props.push(props);
+    return (
+      <section
+        data-tenant-id={props.tenantId ?? ""}
+        data-testid="account-usage-section"
+        data-user-id={props.userId ?? ""}
+      >
+        Account Usage
+      </section>
+    );
+  },
+}));
 vi.mock("@/components/settings/UserModelsSection", () => ({
   UserModelsSection: (props: { readOnly?: boolean; userId: string }) => {
     userModelsMocks.props.push(props);
@@ -87,22 +136,7 @@ vi.mock("urql", () => ({
     if (query === queryDocs.SettingsMeQuery) {
       return [
         {
-          data: {
-            me: {
-              email: "eric@example.com",
-              id: "user-1",
-              name: "Eric Odom",
-              profile: {
-                callBy: null,
-                id: "profile-1",
-                notes: "Likes focused work.",
-                pronouns: null,
-                timezone: "America/Chicago",
-                title: "Founder",
-              },
-              tenantId: "tenant-1",
-            },
-          },
+          data: { me: meMock.current },
           fetching: false,
         },
         urqlMocks.refetchMe,
@@ -211,6 +245,20 @@ vi.mock("@thinkwork/ui", () => ({
 import { SelfProfilePage } from "./SelfProfilePage";
 
 beforeEach(() => {
+  meMock.current = {
+    email: "eric@example.com",
+    id: "user-1",
+    name: "Eric Odom",
+    profile: {
+      callBy: null,
+      id: "profile-1",
+      notes: "Likes focused work.",
+      pronouns: null,
+      timezone: "America/Chicago",
+      title: "Founder",
+    },
+    tenantId: "tenant-1",
+  };
   urqlMocks.updateUser.mockResolvedValue({ data: {} });
   urqlMocks.updateProfile.mockResolvedValue({ data: {} });
   urqlMocks.upsertBudget.mockResolvedValue({ data: {} });
@@ -222,6 +270,7 @@ afterEach(() => {
   headerMocks.usePageHeaderActions.mockReset();
   tenantMocks.role = "member";
   tenantMocks.tenantId = "tenant-1";
+  accountUsageMocks.props = [];
   userModelsMocks.props = [];
   for (const mock of Object.values(urqlMocks)) {
     mock.mockReset();
@@ -242,6 +291,16 @@ describe("SelfProfilePage", () => {
       "overflow-y-auto",
     );
     expect(screen.getByTestId("models").dataset.readonly).toBe("true");
+    expect(accountUsageMocks.props).toContainEqual({
+      tenantId: "tenant-1",
+      userId: "user-1",
+    });
+    expect(
+      screen
+        .getByTestId("account-usage-section")
+        .compareDocumentPosition(screen.getByDisplayValue("Eric Odom")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(userModelsMocks.props).toContainEqual({
       readOnly: true,
       userId: "user-1",
@@ -286,5 +345,14 @@ describe("SelfProfilePage", () => {
     expect(urqlMocks.updateMember).not.toHaveBeenCalled();
     expect(urqlMocks.upsertBudget).not.toHaveBeenCalled();
     expect(urqlMocks.deleteBudget).not.toHaveBeenCalled();
+  });
+
+  it("does not mount account usage before the profile user is loaded", () => {
+    meMock.current = null;
+
+    render(<SelfProfilePage />);
+
+    expect(screen.getByText("Your profile could not be loaded.")).toBeTruthy();
+    expect(accountUsageMocks.props).toEqual([]);
   });
 });
