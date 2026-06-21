@@ -548,7 +548,7 @@ should not leak"`, confirming the regression.
 - U6 PR opened:
   https://github.com/thinkwork-ai/thinkwork/pull/2768
 - U6 PR branch: `codex/thnk-54-u6-n8n-docs`
-- U6 docs commit: `1904cae98`
+- Current U6 docs commit after rebase: `76e887bb1`
   (`docs(n8n): add agent-step bridge recipe`)
 - Moved `THNK-54` from `In Progress` back to `Verification` for active U6 PR
   verification.
@@ -558,6 +558,7 @@ should not leak"`, confirming the regression.
   - head: `1904cae981487e31f83fb562bc7833bcb43a5cf8`;
   - `cla`, `lint`, `Validate signed catalog build`, `verify`, `test`, and
     `typecheck` were in progress.
+- Rebasing onto current `origin/main` after PR open was clean.
 
 ## Blockers
 
