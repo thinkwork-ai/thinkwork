@@ -1,0 +1,241 @@
+---
+title: n8n Agent-Step Bridge
+description: Stock HTTP Request plus Wait node recipe for calling ThinkWork from n8n and resuming with structured JSON.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The n8n agent-step bridge lets a managed n8n workflow call ThinkWork, pause at
+a Wait node, and resume when ThinkWork finishes the agent step.
+
+Use this for workflow steps where deterministic n8n automation needs an
+agentic ThinkWork turn: classification, enrichment, drafting, recommendation,
+or human-reviewed decisions.
+
+<Aside type="caution">
+  The bridge credential is separate from the native n8n MCP service credential.
+  MCP auth lets ThinkWork agents call n8n. The bridge credential lets n8n
+  workflows call ThinkWork.
+</Aside>
+
+## Prerequisites
+
+- The `n8n` plugin is installed and deployed through Settings -> Plugins.
+- The managed n8n app has a public HTTPS URL, for example
+  `https://n8n.thinkwork.ai`.
+- The managed-app desired config includes
+  `agentStepBridgeCredentialSecretArn`.
+- The n8n workflow has access to the bridge bearer token without embedding the
+  secret in committed workflow JSON.
+- The workflow author has the target ThinkWork `spaceId` and `agentId`.
+- The workflow contains a Wait node configured for On webhook call so
+  `$execution.resumeUrl` is available at runtime.
+
+## Start Request
+
+Use a stock HTTP Request node to call:
+
+```text
+POST <thinkwork-api-origin>/api/integrations/n8n/agent-steps
+Authorization: Bearer <bridge-token>
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "workflowId": "={{ $workflow.id }}",
+  "workflowName": "={{ $workflow.name }}",
+  "executionId": "={{ $execution.id }}",
+  "stepId": "lead-classification",
+  "correlationId": "={{ $json.leadId }}",
+  "agentId": "11111111-1111-4111-8111-111111111111",
+  "spaceId": "22222222-2222-4222-8222-222222222222",
+  "instructions": "Classify the lead as enterprise, mid-market, or self-serve. Return a short rationale.",
+  "input": {
+    "leadId": "={{ $json.leadId }}",
+    "company": "={{ $json.company }}",
+    "employeeCount": "={{ $json.employeeCount }}",
+    "website": "={{ $json.website }}"
+  },
+  "metadata": {
+    "source": "n8n lead intake",
+    "workflowEnvironment": "production"
+  },
+  "timeoutSeconds": 86400,
+  "resumeUrl": "={{ $execution.resumeUrl }}"
+}
+```
+
+ThinkWork returns `202 Accepted` with bridge evidence:
+
+```json
+{
+  "ok": true,
+  "runId": "5cbfc6d9-6837-4722-80ad-2f97a5bdfac7",
+  "status": "waiting",
+  "replayed": false,
+  "wakeupRequestId": "1d1c03c3-a187-4f87-8ed7-c1d64a9955d4",
+  "threadId": "7d28a8c8-3af1-46f4-bc3a-f4f080f0f96c",
+  "threadIdentifier": "HOOK-42",
+  "threadNumber": 42,
+  "openingMessageId": "2d73f454-93f1-4541-b3af-932d2d8b834a",
+  "expiresAt": "2026-06-22T00:00:00.000Z"
+}
+```
+
+Store `runId`, `threadId`, and `expiresAt` in execution data if downstream
+nodes need traceability.
+
+## Wait Node
+
+Add a Wait node after the HTTP Request node and set it to resume On webhook
+call. n8n generates a unique waiting-webhook URL for each execution and exposes
+it as `$execution.resumeUrl`.
+
+ThinkWork validates `resumeUrl` before accepting work:
+
+- scheme must be HTTPS;
+- origin must match the managed n8n public URL;
+- path must use n8n's waiting-webhook path, `/webhook-waiting`.
+
+This prevents a workflow from sending ThinkWork an attacker-controlled callback
+URL.
+
+## Resume Payload
+
+When the ThinkWork thread reaches a terminal result, ThinkWork calls the n8n
+Wait resume URL with structured JSON:
+
+```json
+{
+  "status": "succeeded",
+  "runId": "5cbfc6d9-6837-4722-80ad-2f97a5bdfac7",
+  "threadId": "7d28a8c8-3af1-46f4-bc3a-f4f080f0f96c",
+  "correlationId": "lead-123",
+  "output": {
+    "response": "Enterprise lead. Employee count and buying signals indicate a sales-assisted path."
+  },
+  "error": null,
+  "summary": "Enterprise lead with sales-assisted routing.",
+  "links": {
+    "thread": "https://app.thinkwork.ai/threads/7d28a8c8-3af1-46f4-bc3a-f4f080f0f96c",
+    "trace": "https://app.thinkwork.ai/threads/7d28a8c8-3af1-46f4-bc3a-f4f080f0f96c?turn=..."
+  }
+}
+```
+
+Downstream n8n nodes should branch on `status`:
+
+| `status`    | Meaning                          | Workflow action                                      |
+| ----------- | -------------------------------- | ---------------------------------------------------- |
+| `succeeded` | Agent step completed             | Read `output`, `summary`, and `links`                |
+| `failed`    | Agent step failed or was stopped | Read `error.message` and route to failure handling   |
+| `expired`   | Timeout elapsed before terminal  | Route to timeout handling or manual review follow-up |
+
+Do not scrape the ThinkWork thread URL for output. Use the resume payload.
+
+## Idempotency and Retries
+
+ThinkWork derives idempotency from:
+
+- tenant;
+- n8n workflow id;
+- n8n execution id;
+- bridge correlation id;
+- bridge step id.
+
+If an HTTP Request node retries with the same values, ThinkWork recovers or
+replays the existing run. It should not create a duplicate Space thread.
+
+Keep `correlationId` stable for the business item being processed. Keep
+`stepId` stable for the logical bridge step in the workflow. If a workflow has
+two ThinkWork agent steps in the same execution, give each step a different
+`stepId`.
+
+## Timeout Behavior
+
+The default timeout is 24 hours. A workflow may set `timeoutSeconds` between
+300 seconds and 604800 seconds.
+
+On expiry, ThinkWork resumes n8n with:
+
+```json
+{
+  "status": "expired",
+  "output": null,
+  "error": {
+    "message": "ThinkWork agent step expired before completion."
+  },
+  "summary": "ThinkWork agent step expired before completion."
+}
+```
+
+Use a bounded timeout that matches the workflow's business SLA. Long-running
+human review should happen in ThinkWork; n8n remains hibernated at the Wait
+node.
+
+## Debugging
+
+Use these surfaces before reading database state:
+
+- n8n Plugin Detail settings: recent bridge runs, statuses, attempts, and
+  compact error evidence;
+- ThinkWork thread detail: bridge badge/panel with workflow id, execution id,
+  correlation id, status, and links;
+- n8n execution view: HTTP Request acknowledgement and Wait-node resume data.
+
+Common states:
+
+| State            | What to inspect                                                    |
+| ---------------- | ------------------------------------------------------------------ |
+| `awaiting_human` | The ThinkWork thread needs a human answer or review resolution     |
+| `resume_pending` | ThinkWork has a result and is queued to call the n8n resume URL    |
+| `resuming`       | ThinkWork claimed the callback and is posting to n8n               |
+| `resumed`        | n8n accepted the callback                                          |
+| `resume_failed`  | Wait URL secret, callback HTTP status, or n8n waiting state failed |
+| `expired`        | Timeout elapsed before ThinkWork reached terminal state            |
+
+Telemetry intentionally excludes raw resume URLs, secret refs, idempotency
+keys, request metadata, and raw result/output/error payloads.
+
+## Live Example Notes
+
+Use the deployed n8n MCP endpoint for end-to-end example authoring:
+
+```json
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "type": "http",
+      "url": "https://n8n.thinkwork.ai/mcp-server/http",
+      "headers": {
+        "Authorization": "Bearer <n8n-mcp-token>"
+      }
+    }
+  }
+}
+```
+
+The official n8n MCP server can create, validate, execute, and inspect
+workflows. For a disposable bridge example:
+
+1. Use MCP to create a disabled workflow with a Webhook trigger, HTTP Request
+   node, Wait node, and IF/Switch branch on `status`.
+2. Keep the bridge token in n8n credentials or runtime secret variables.
+3. Execute the workflow with disposable input.
+4. Record evidence: n8n workflow id, execution id, ThinkWork bridge run id,
+   ThinkWork thread id, resume status, and terminal payload status.
+5. Archive or leave the workflow disabled after the smoke run.
+
+Local DNS may fail to resolve `n8n.thinkwork.ai` in some agent worktrees even
+when direct DNS lookup resolves the ELB. The smoke should record this as a
+skipped-with-reason condition unless the runner can provide a safe host
+override. Do not commit resolved IP addresses.
+
+## References
+
+- [n8n Wait node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.wait/)
+- [n8n execution built-ins](https://docs.n8n.io/code/cookbook/builtin/execution/)
+- [n8n endpoint environment variables](https://docs.n8n.io/hosting/configuration/environment-variables/endpoints/)

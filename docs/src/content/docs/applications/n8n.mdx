@@ -1,0 +1,96 @@
+---
+title: n8n
+description: Operator reference for the ThinkWork-managed n8n application, native MCP access, and the agent-step bridge.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+n8n is a ThinkWork-managed workflow automation runtime. Operators install it
+from Settings -> Plugins, deploy the self-hosted runtime through the normal
+managed-application flow, and expose selected workflows to agents through the
+native n8n MCP server.
+
+**Surface:** Settings -> Plugins -> n8n<br />
+**Primary files:** `plugins/n8n`, `packages/api/src/graphql/resolvers/plugins/n8n-settings.ts`
+
+<Aside type="note">
+  n8n v1 is self-hosted OSS n8n. It does not use n8n Cloud, n8n Enterprise,
+  per-user n8n activation, or ThinkWork SSO.
+</Aside>
+
+## What ThinkWork Owns
+
+The n8n plugin owns the managed runtime wrapper, Terraform module, app adapter,
+operator settings, package image contract, smoke scripts, and the installed
+`n8n--workflow-operator` skill.
+
+Operators configure:
+
+- runtime image, database, queue/cache, storage, TLS, and public URL inputs;
+- the shared native n8n operator account secret;
+- the native n8n MCP service credential used by ThinkWork agents;
+- the separate inbound agent-step bridge credential used by n8n workflows;
+- pinned public npm packages for Code nodes.
+
+Saving custom package settings creates a reviewable managed-app `UPGRADE` plan.
+It does not mutate infrastructure directly from the browser.
+
+## MCP Direction
+
+Native n8n MCP lets ThinkWork agents inspect and draft-safe edit n8n workflows.
+It uses a tenant service credential resolved server-side from the managed-app
+desired config.
+
+Operators must still enable MCP inside n8n and enable MCP access on each
+workflow, project, or folder that agents may inspect. Production publish,
+unpublish, activation, deactivation, credential rotation, and shared-operator
+recovery remain native n8n UI tasks in v1.
+
+## Agent-Step Bridge Direction
+
+The agent-step bridge is the opposite direction: n8n calls ThinkWork as a
+durable agent step inside a deterministic workflow.
+
+Use the bridge when a workflow needs ThinkWork to enrich, classify, draft,
+recommend, or review something before the n8n execution continues. n8n owns the
+workflow graph. ThinkWork owns the visible Space thread, agent dispatch, human
+review, timeout, telemetry, and final structured result.
+
+V1 uses stock n8n nodes:
+
+- an HTTP Request node starts the bridge;
+- a Wait node hibernates the n8n execution;
+- downstream nodes branch on the structured resume payload.
+
+Do not build or require a custom ThinkWork n8n node for v1 workflows, and do not
+ask n8n to scrape a ThinkWork thread page for the result. The resume payload is
+the contract.
+
+## Live Example Target
+
+Use `https://n8n.thinkwork.ai` for deployed example work and smoke evidence.
+The MCP endpoint is:
+
+```text
+https://n8n.thinkwork.ai/mcp-server/http
+```
+
+The MCP bearer token is a runtime secret. Keep it in local environment,
+Secrets Manager, or CI secrets; never commit it to workflow JSON, docs, or
+evidence files.
+
+In some local environments, normal system DNS resolution for
+`n8n.thinkwork.ai` can fail even when direct DNS lookup returns the load
+balancer. For temporary local testing only, resolve the host first and use a
+tool-level host override such as curl's `--resolve`. Do not bake an IP address
+into scripts or docs.
+
+## Related
+
+- [n8n Agent-Step Bridge](/applications/n8n-agent-step-bridge/) - stock-node
+  workflow recipe and operator runbook
+- [Plugins](/applications/admin/plugins/) - plugin catalog and install flow
+- [Managed Applications](/applications/admin/managed-applications/) - retained
+  runtime lifecycle
+- [Tenant MCP Servers](/applications/admin/mcp-servers/) - MCP registration and
+  assignment
