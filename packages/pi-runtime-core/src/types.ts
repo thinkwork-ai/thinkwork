@@ -130,6 +130,30 @@ export interface PiRetainStatus {
   error?: string;
 }
 
+export type GoalRunStatus =
+  | "active"
+  | "paused"
+  | "budget_limited"
+  | "complete"
+  | "cleared";
+
+export interface GoalRunEvidence {
+  source: "pi_goal";
+  action?: "start" | "resume" | "pause" | "cancel" | "clear";
+  goal_id?: string;
+  objective?: string;
+  status: GoalRunStatus;
+  iteration?: number;
+  token_budget?: number;
+  tokens_used?: number;
+  time_used_seconds?: number;
+  started_at?: string;
+  updated_at?: string;
+  completion_summary?: string;
+  budget_limited_reason?: string;
+  continuation_policy?: "thinkwork_managed";
+}
+
 export interface InvocationResponse {
   response: {
     role: "assistant";
@@ -144,6 +168,7 @@ export interface InvocationResponse {
     agent_profile_runs?: AgentProfileRunRecord[];
     tool_costs?: ToolCostRecord[];
     hindsight_usage?: unknown[];
+    goal_run?: GoalRunEvidence;
   };
   runtime: "pi";
   composed_system_prompt: string;
@@ -157,6 +182,7 @@ export interface InvocationResponse {
   agent_profile_runs?: AgentProfileRunRecord[];
   tool_costs?: ToolCostRecord[];
   hindsight_usage?: unknown[];
+  goal_run?: GoalRunEvidence;
 }
 
 export interface PiInvocationIdentity {
@@ -221,6 +247,15 @@ export interface RunAgentLoopArgs {
    * and keep the full ThinkWork Pi built-in set.
    */
   builtinToolNames?: string[];
+  /**
+   * Optional host-provided extractor for extension-managed goal evidence. The
+   * core loop stays extension-agnostic and passes the post-turn session entries
+   * plus recorded tool results back to the host package that understands them.
+   */
+  goalRunExtractor?: (args: {
+    sessionEntries: unknown[];
+    toolInvocations: ToolInvocationRecord[];
+  }) => GoalRunEvidence | undefined;
 }
 
 export interface RunAgentLoopResult {
@@ -234,6 +269,7 @@ export interface RunAgentLoopResult {
   agentProfileRuns?: AgentProfileRunRecord[];
   toolCosts?: ToolCostRecord[];
   diagnostics?: Record<string, unknown>;
+  goalRun?: GoalRunEvidence;
 }
 
 export interface PiRuntimeLogEntry {
