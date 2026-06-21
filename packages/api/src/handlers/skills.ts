@@ -1214,6 +1214,17 @@ async function mcpListTenantServers(
     .from(tenantMcpServers)
     .where(eq(tenantMcpServers.tenant_id, tenantId));
 
+  const authStatusByServerId = new Map(
+    await Promise.all(
+      rows.map(async (r): Promise<
+        [string, "active" | "not_connected" | undefined]
+      > => [
+        r.id,
+        await serviceCredentialAuthStatus(r.auth_type, r.auth_config),
+      ]),
+    ),
+  );
+
   return json({
     servers: rows.map((r) => ({
       id: r.id,
@@ -1225,6 +1236,7 @@ async function mcpListTenantServers(
       oauthProvider: r.oauth_provider,
       tools: r.tools,
       enabled: r.enabled,
+      authStatus: authStatusByServerId.get(r.id),
       // Plan §U11 admin-approval metadata. Existing rows default to
       // 'approved' so the admin UI can filter without bespoke
       // migration logic on the client.
@@ -1714,21 +1726,7 @@ async function mcpServiceCredentialStatus(
       ? server.authConfig.credentialKind
       : null;
   const secretRefConfigured = Boolean(server.secretRef);
-  let rawToken: string | null = null;
-  if (server.secretRef && binding) {
-    try {
-      const secret = await sm.send(
-        new GetSecretValueCommand({ SecretId: server.secretRef }),
-      );
-      rawToken =
-        serviceCredentialSecretField(
-          parseServiceCredentialSecret(secret.SecretString),
-          binding.secretJsonKey,
-        ) ?? null;
-    } catch (err: unknown) {
-      if (!(err instanceof ResourceNotFoundException)) throw err;
-    }
-  }
+  const rawToken = await readServiceCredentialToken(server.secretRef, binding);
 
   return json({
     authType: server.authType,
@@ -1982,6 +1980,27 @@ function serviceCredentialSecretField(
   if (!secretValue) return undefined;
   const value = secretValue[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+async function readServiceCredentialToken(
+  secretRef: string | null,
+  binding: ServiceCredentialHeaderBinding | null,
+): Promise<string | null> {
+  if (!secretRef || !binding) return null;
+  try {
+    const secret = await sm.send(
+      new GetSecretValueCommand({ SecretId: secretRef }),
+    );
+    return (
+      serviceCredentialSecretField(
+        parseServiceCredentialSecret(secret.SecretString),
+        binding.secretJsonKey,
+      ) ?? null
+    );
+  } catch (err: unknown) {
+    if (err instanceof ResourceNotFoundException) return null;
+    throw err;
+  }
 }
 
 async function readExistingServiceCredentialSecret(
@@ -2683,6 +2702,34 @@ async function mcpClearUserToken(
   await db.delete(userMcpTokens).where(eq(userMcpTokens.id, tokenRow.id));
 
   return json({ ok: true, cleared: true });
+}
+
+async function serviceCredentialAuthStatus(
+  authType: string | null,
+  authConfigValue: unknown,
+): Promise<"active" | "not_connected" | undefined> {
+  if (authType !== "service_credential") return undefined;
+  const authConfig =
+    typeof authConfigValue === "object" &&
+    authConfigValue !== null &&
+    !Array.isArray(authConfigValue)
+      ? (authConfigValue as Record<string, unknown>)
+      : {};
+  const secretRef =
+    typeof authConfig.secretRef === "string" && authConfig.secretRef.trim()
+      ? authConfig.secretRef.trim()
+      : null;
+  const binding = primaryServiceCredentialBinding(authConfig);
+  try {
+    const rawToken = await readServiceCredentialToken(secretRef, binding);
+    return rawToken ? "active" : "not_connected";
+  } catch (err) {
+    console.warn(
+      "[mcp] failed to read service credential status for tenant MCP list:",
+      err,
+    );
+    return "not_connected";
+  }
 }
 
 async function mcpListUserServers(

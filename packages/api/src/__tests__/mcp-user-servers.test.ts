@@ -311,6 +311,29 @@ describe("GET /api/skills/user-mcp-servers", () => {
 });
 
 describe("service credential MCP routes", () => {
+  it("marks service credential servers connected in the tenant MCP list when their access token is set", async () => {
+    dbState.selectQueue.push([{ id: "tenant-1" }], [n8nServiceServerRow()]);
+    mockSecretsSend.mockResolvedValue({
+      SecretString: JSON.stringify({
+        N8N_MCP_SERVICE_CREDENTIAL: "n8n_mcp_token_OMPc",
+      }),
+    });
+
+    const response = await handler(mcpServerListEvent());
+    const body = JSON.parse(response.body ?? "{}") as {
+      servers: Array<{ id: string; authStatus?: string }>;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body.servers).toEqual([
+      expect.objectContaining({
+        id: "11111111-1111-1111-1111-111111111111",
+        authType: "service_credential",
+        authStatus: "active",
+      }),
+    ]);
+  });
+
   it("reports whether the configured service credential secret has a token", async () => {
     dbState.selectQueue.push([{ id: "tenant-1" }], [n8nServiceServerRow()]);
     mockSecretsSend.mockResolvedValue({
@@ -454,9 +477,12 @@ function managedTwentyRow(overrides: Record<string, unknown> = {}) {
 function n8nServiceServerRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "11111111-1111-1111-1111-111111111111",
+    name: "n8n workflow management",
     slug: "n8n--workflow-management",
     url: "https://n8n.thinkwork.ai/mcp-server/http",
+    transport: "streamable_http",
     auth_type: "service_credential",
+    oauth_provider: null,
     auth_config: {
       credentialKind: "n8n-mcp-access-token",
       secretRef: "arn:aws:secretsmanager:secret:n8n-service",
@@ -469,6 +495,15 @@ function n8nServiceServerRow(overrides: Record<string, unknown> = {}) {
         },
       ],
     },
+    tools: [{ name: "search_workflows" }],
+    enabled: true,
+    status: "approved",
+    url_hash: "url-hash",
+    management_source: "plugin",
+    managed_application_key: null,
+    approved_by: "user-1",
+    approved_at: new Date("2026-06-20T00:00:00Z"),
+    created_at: new Date("2026-06-20T00:00:00Z"),
     ...overrides,
   };
 }
@@ -513,6 +548,17 @@ function event(input: { principalId?: string } = {}): APIGatewayProxyEventV2 {
       authorization: "Bearer token",
       "x-tenant-id": "tenant-1",
       "x-principal-id": input.principalId ?? "user-1",
+    },
+  } as unknown as APIGatewayProxyEventV2;
+}
+
+function mcpServerListEvent(): APIGatewayProxyEventV2 {
+  return {
+    rawPath: "/api/skills/mcp-servers",
+    requestContext: { http: { method: "GET" } },
+    headers: {
+      authorization: "Bearer token",
+      "x-tenant-slug": "thinkwork",
     },
   } as unknown as APIGatewayProxyEventV2;
 }

@@ -75,7 +75,7 @@ export function SettingsMcpServers() {
         setServers(
           tenantResult.servers.map((server) => ({
             ...server,
-            authStatus: userById.get(server.id)?.authStatus,
+            authStatus: userById.get(server.id)?.authStatus ?? server.authStatus,
           })),
         );
       })
@@ -143,24 +143,25 @@ export function SettingsMcpServers() {
         size: 110,
         cell: ({ row }) => {
           const server = row.original;
-          if (
+          const requiresUserAuth =
             server.authType === "oauth" ||
-            server.authType === "per_user_oauth"
-          ) {
+            server.authType === "per_user_oauth";
+          const authStatus =
+            server.authStatus ??
+            (requiresUserAuth ? "not_connected" : undefined);
+          if (authStatus) {
             return (
               <Badge
-                variant={
-                  server.authStatus === "active" ? "outline" : "secondary"
-                }
+                variant={authStatus === "active" ? "outline" : "secondary"}
                 className={
-                  server.authStatus === "active"
+                  authStatus === "active"
                     ? "border-emerald-500/40 text-emerald-400"
                     : undefined
                 }
               >
-                {server.authStatus === "active"
+                {authStatus === "active"
                   ? "connected"
-                  : server.authStatus === "expired"
+                  : authStatus === "expired"
                     ? "expired"
                     : "not connected"}
               </Badge>

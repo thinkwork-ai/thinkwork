@@ -94,6 +94,18 @@ describe("SettingsMcpServers", () => {
           managedApplicationKey: null,
         },
         {
+          id: "n8n",
+          name: "n8n workflow management",
+          slug: "n8n--workflow-management",
+          url: "https://n8n.thinkwork.ai/mcp-server/http",
+          enabled: true,
+          authType: "service_credential",
+          authStatus: "active",
+          status: "approved",
+          managementSource: "plugin",
+          managedApplicationKey: null,
+        },
+        {
           id: "manual-duplicate",
           name: "LastMile CRM",
           slug: "manual-lastmile-crm",
@@ -129,8 +141,14 @@ describe("SettingsMcpServers", () => {
     expect(screen.queryByText("Individual servers")).toBeNull();
     expect(screen.getByText("From plugins")).toBeTruthy();
     expect(screen.getAllByText("LastMile CRM")).toHaveLength(1);
-    expect(screen.getAllByText("plugin")).toHaveLength(3);
+    expect(screen.getAllByText("plugin")).toHaveLength(4);
     expect(textAppearsBefore("LastMile CRM", "LastMile Tasks")).toBe(true);
+    expect(textAppearsBefore("LastMile Tasks", "n8n workflow management")).toBe(
+      true,
+    );
+    expect(textAppearsBefore("n8n workflow management", "Twenty CRM")).toBe(
+      true,
+    );
     expect(textAppearsBefore("LastMile Tasks", "Twenty CRM")).toBe(true);
     expect(screen.queryByText("Rows per page")).toBeNull();
     expect(screen.queryByText(/Page\s+1\s+of/i)).toBeNull();
@@ -138,6 +156,7 @@ describe("SettingsMcpServers", () => {
     expect(screen.queryByText("System")).toBeNull();
     expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
     expect(screen.getByText("not connected")).toBeTruthy();
+    expect(screen.getByText("connected")).toBeTruthy();
   });
 
   it("adds a server through the New MCP Server dialog", async () => {
