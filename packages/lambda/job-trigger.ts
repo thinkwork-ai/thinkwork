@@ -20,6 +20,7 @@ import {
   budgetPolicies,
   costEvents,
   evalRuns,
+  routineAslVersions,
   routineExecutions,
   routines,
   scheduledJobs,
@@ -29,6 +30,12 @@ import {
   threadIdleLearningState,
   threadTurns,
   users,
+  workflowEngineBindings,
+  workflowEvidence,
+  workflowRuns,
+  workflowTriggers,
+  workflowVersions,
+  workflows,
 } from "@thinkwork/database-pg/schema";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
@@ -279,9 +286,8 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -379,9 +385,8 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -691,9 +696,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } = await import(
-          "@aws-sdk/client-lambda"
-        );
+        const { LambdaClient, InvokeCommand } =
+          await import("@aws-sdk/client-lambda");
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -942,9 +946,16 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
         .select({
           id: routines.id,
           tenant_id: routines.tenant_id,
+          name: routines.name,
+          description: routines.description,
           engine: routines.engine,
+          status: routines.status,
+          visibility: routines.visibility,
+          agent_id: routines.agent_id,
+          owning_agent_id: routines.owning_agent_id,
           state_machine_arn: routines.state_machine_arn,
           state_machine_alias_arn: routines.state_machine_alias_arn,
+          current_version: routines.current_version,
         })
         .from(routines)
         .where(eq(routines.id, routineId));
@@ -958,48 +969,106 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
           console.error(
             `[job-trigger] routine ${routineId} engine=step_functions but missing alias ARN; skipping`,
           );
+        } else if (!routine.current_version) {
+          console.error(
+            `[job-trigger] routine ${routineId} engine=step_functions but has no current ASL version; skipping`,
+          );
         } else {
           try {
-            const routineInput = buildRoutineExecutionInput(
-              {
-                triggerId,
-                triggerSource: "schedule",
-                scheduleName: scheduleName ?? null,
-                agentId: jobAgentId,
-                spaceId: jobSpaceId,
-              },
-              {
-                tenantId,
-                routineId,
-              },
-            );
-            const startResp = await _SFN_CLIENT.send(
-              new StartExecutionCommand({
-                stateMachineArn: routine.state_machine_alias_arn,
-                input: JSON.stringify(routineInput),
-              }),
-            );
-            if (startResp.executionArn) {
-              await db.insert(routineExecutions).values({
-                tenant_id: tenantId,
-                routine_id: routineId,
-                state_machine_arn: routine.state_machine_arn,
-                alias_arn: routine.state_machine_alias_arn,
-                sfn_execution_arn: startResp.executionArn,
-                trigger_id: triggerId,
-                trigger_source: "schedule",
-                input_json: {
+            const [aslVersion] = await db
+              .select({
+                id: routineAslVersions.id,
+                tenant_id: routineAslVersions.tenant_id,
+                routine_id: routineAslVersions.routine_id,
+                version_number: routineAslVersions.version_number,
+                state_machine_arn: routineAslVersions.state_machine_arn,
+                version_arn: routineAslVersions.version_arn,
+                asl_json: routineAslVersions.asl_json,
+                markdown_summary: routineAslVersions.markdown_summary,
+                step_manifest_json: routineAslVersions.step_manifest_json,
+                published_by_actor_type:
+                  routineAslVersions.published_by_actor_type,
+                published_by_actor_id: routineAslVersions.published_by_actor_id,
+                created_at: routineAslVersions.created_at,
+              })
+              .from(routineAslVersions)
+              .where(
+                and(
+                  eq(routineAslVersions.routine_id, routine.id),
+                  eq(
+                    routineAslVersions.version_number,
+                    routine.current_version,
+                  ),
+                ),
+              );
+            if (!aslVersion) {
+              console.error(
+                `[job-trigger] routine ${routineId} current ASL version ${routine.current_version} not found; skipping`,
+              );
+            } else {
+              const workflowProjection = await ensureRoutineWorkflowForJob({
+                routine,
+                aslVersion,
+                triggerFamily: "schedule",
+              });
+              const routineInput = buildRoutineExecutionInput(
+                {
                   triggerId,
+                  triggerSource: "schedule",
                   scheduleName: scheduleName ?? null,
                   agentId: jobAgentId,
                   spaceId: jobSpaceId,
                 },
-                status: "running",
-                started_at: startResp.startDate ?? new Date(),
-              });
-              console.log(
-                `[job-trigger] Started SFN execution ${startResp.executionArn} for routine ${routineId}`,
+                {
+                  tenantId,
+                  routineId,
+                },
               );
+              const startResp = await _SFN_CLIENT.send(
+                new StartExecutionCommand({
+                  stateMachineArn: aslVersion.version_arn,
+                  input: JSON.stringify(routineInput),
+                }),
+              );
+              if (startResp.executionArn) {
+                const [executionRow] = await db
+                  .insert(routineExecutions)
+                  .values({
+                    tenant_id: tenantId,
+                    routine_id: routineId,
+                    state_machine_arn: routine.state_machine_arn,
+                    alias_arn: routine.state_machine_alias_arn,
+                    version_arn: aslVersion.version_arn,
+                    routine_asl_version_id: aslVersion.id,
+                    sfn_execution_arn: startResp.executionArn,
+                    trigger_id: triggerId,
+                    trigger_source: "schedule",
+                    input_json: {
+                      triggerId,
+                      scheduleName: scheduleName ?? null,
+                      agentId: jobAgentId,
+                      spaceId: jobSpaceId,
+                    },
+                    status: "running",
+                    started_at: startResp.startDate ?? new Date(),
+                  })
+                  .returning({ id: routineExecutions.id });
+                await createRoutineWorkflowRunForJob({
+                  routine,
+                  aslVersion,
+                  projection: workflowProjection,
+                  executionArn: startResp.executionArn,
+                  routineExecutionId: executionRow?.id ?? null,
+                  triggerId,
+                  scheduleName: scheduleName ?? null,
+                  agentId: jobAgentId,
+                  spaceId: jobSpaceId,
+                  startedAt: startResp.startDate ?? new Date(),
+                });
+                console.log(
+                  `[job-trigger] Started SFN execution ${startResp.executionArn} for routine ${routineId}`,
+                );
+              }
             }
           } catch (sfnErr) {
             console.error(
@@ -1042,9 +1111,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } = await import(
-          "@aws-sdk/client-scheduler"
-        );
+        const { SchedulerClient, DeleteScheduleCommand } =
+          await import("@aws-sdk/client-scheduler");
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({
@@ -1103,6 +1171,369 @@ export function buildRoutineExecutionInput(
       "slack-send",
     ),
   };
+}
+
+type JobRoutineWorkflowRoutine = {
+  id: string;
+  tenant_id: string;
+  name: string | null;
+  description: string | null;
+  engine: string | null;
+  status: string | null;
+  visibility: string | null;
+  agent_id: string | null;
+  owning_agent_id: string | null;
+  state_machine_arn: string | null;
+  state_machine_alias_arn: string | null;
+  current_version: number | null;
+};
+
+type JobRoutineWorkflowAslVersion = {
+  id: string;
+  version_number: number;
+  state_machine_arn: string | null;
+  version_arn: string;
+  asl_json: unknown;
+  markdown_summary: string | null;
+  step_manifest_json: unknown;
+  published_by_actor_type: string | null;
+  published_by_actor_id: string | null;
+  created_at: Date | string | null;
+};
+
+type JobRoutineWorkflowProjection = {
+  workflowId: string;
+  workflowVersionId: string | null;
+  engineBindingId: string;
+};
+
+const ROUTINE_WORKFLOW_CAPABILITIES = {
+  start: true,
+  monitor: true,
+  cancel: true,
+  retry: false,
+  replay: false,
+  evidence: true,
+};
+
+async function ensureRoutineWorkflowForJob(input: {
+  routine: JobRoutineWorkflowRoutine;
+  aslVersion: JobRoutineWorkflowAslVersion;
+  triggerFamily: "schedule";
+}): Promise<JobRoutineWorkflowProjection> {
+  const db = getDb();
+  const { routine, aslVersion } = input;
+  const [existingBinding] = await db
+    .select({
+      id: workflowEngineBindings.id,
+      workflow_id: workflowEngineBindings.workflow_id,
+      workflow_version_id: workflowEngineBindings.workflow_version_id,
+    })
+    .from(workflowEngineBindings)
+    .where(
+      and(
+        eq(workflowEngineBindings.tenant_id, routine.tenant_id),
+        eq(workflowEngineBindings.routine_id, routine.id),
+      ),
+    )
+    .limit(1);
+
+  if (existingBinding) {
+    const workflowVersion = await ensureRoutineWorkflowVersionForJob(
+      existingBinding.workflow_id,
+      routine,
+      aslVersion,
+    );
+    await db
+      .update(workflows)
+      .set({
+        name: routine.name ?? "Untitled routine",
+        description: routine.description ?? null,
+        lifecycle_status: "active",
+        visibility:
+          routine.visibility === "tenant_shared"
+            ? "tenant_shared"
+            : "agent_private",
+        owner_agent_id: routine.owning_agent_id ?? routine.agent_id ?? null,
+        current_version_id: workflowVersion.id,
+        current_version_number: aslVersion.version_number,
+        capability_flags: ROUTINE_WORKFLOW_CAPABILITIES,
+        readiness_state: "ready",
+        readiness_reasons: [],
+        updated_at: new Date(),
+      })
+      .where(eq(workflows.id, existingBinding.workflow_id));
+    await db
+      .update(workflowEngineBindings)
+      .set({
+        workflow_version_id: workflowVersion.id,
+        routine_asl_version_id: aslVersion.id,
+        external_workflow_name: routine.name ?? null,
+        external_version_id: String(aslVersion.version_number),
+        connection_ref: {
+          stateMachineArn: routine.state_machine_arn,
+          aliasArn: routine.state_machine_alias_arn,
+        },
+        binding_status: "ready",
+        capability_flags: ROUTINE_WORKFLOW_CAPABILITIES,
+        readiness_state: "ready",
+        readiness_reasons: [],
+        updated_at: new Date(),
+      })
+      .where(eq(workflowEngineBindings.id, existingBinding.id));
+    await ensureRoutineWorkflowTriggerForJob(
+      routine,
+      existingBinding.workflow_id,
+      workflowVersion.id,
+    );
+    return {
+      workflowId: existingBinding.workflow_id,
+      workflowVersionId: workflowVersion.id,
+      engineBindingId: existingBinding.id,
+    };
+  }
+
+  const [workflow] = await db
+    .insert(workflows)
+    .values({
+      tenant_id: routine.tenant_id,
+      name: routine.name ?? "Untitled routine",
+      slug: `routine-${routine.id}`,
+      description: routine.description ?? null,
+      lifecycle_status: "active",
+      visibility:
+        routine.visibility === "tenant_shared"
+          ? "tenant_shared"
+          : "agent_private",
+      owner_agent_id: routine.owning_agent_id ?? routine.agent_id ?? null,
+      primary_trigger_family: input.triggerFamily,
+      capability_flags: ROUTINE_WORKFLOW_CAPABILITIES,
+      readiness_state: "ready",
+      readiness_reasons: [],
+    })
+    .returning({ id: workflows.id });
+  const workflowVersion = await ensureRoutineWorkflowVersionForJob(
+    workflow.id,
+    routine,
+    aslVersion,
+  );
+  await db
+    .update(workflows)
+    .set({
+      current_version_id: workflowVersion.id,
+      current_version_number: aslVersion.version_number,
+      updated_at: new Date(),
+    })
+    .where(eq(workflows.id, workflow.id));
+  const [binding] = await db
+    .insert(workflowEngineBindings)
+    .values({
+      tenant_id: routine.tenant_id,
+      workflow_id: workflow.id,
+      workflow_version_id: workflowVersion.id,
+      binding_type: "step_functions_routine",
+      binding_status: "ready",
+      routine_id: routine.id,
+      routine_asl_version_id: aslVersion.id,
+      external_workflow_id: routine.id,
+      external_workflow_name: routine.name ?? null,
+      external_version_id: String(aslVersion.version_number),
+      connection_ref: {
+        stateMachineArn: routine.state_machine_arn,
+        aliasArn: routine.state_machine_alias_arn,
+      },
+      capability_flags: ROUTINE_WORKFLOW_CAPABILITIES,
+      readiness_state: "ready",
+      readiness_reasons: [],
+    })
+    .returning({ id: workflowEngineBindings.id });
+  await ensureRoutineWorkflowTriggerForJob(
+    routine,
+    workflow.id,
+    workflowVersion.id,
+  );
+
+  return {
+    workflowId: workflow.id,
+    workflowVersionId: workflowVersion.id,
+    engineBindingId: binding.id,
+  };
+}
+
+async function ensureRoutineWorkflowVersionForJob(
+  workflowId: string,
+  routine: JobRoutineWorkflowRoutine,
+  aslVersion: JobRoutineWorkflowAslVersion,
+): Promise<{ id: string }> {
+  const db = getDb();
+  const [existing] = await db
+    .select({ id: workflowVersions.id })
+    .from(workflowVersions)
+    .where(
+      and(
+        eq(workflowVersions.workflow_id, workflowId),
+        eq(workflowVersions.version_number, aslVersion.version_number),
+      ),
+    )
+    .limit(1);
+  if (existing) return existing;
+
+  const [version] = await db
+    .insert(workflowVersions)
+    .values({
+      tenant_id: routine.tenant_id,
+      workflow_id: workflowId,
+      version_number: aslVersion.version_number,
+      version_status: "active",
+      source_kind: "step_functions_routine",
+      source_metadata: {
+        routineId: routine.id,
+        stateMachineArn:
+          aslVersion.state_machine_arn ?? routine.state_machine_arn,
+        versionArn: aslVersion.version_arn,
+      },
+      definition_snapshot: {
+        routineId: routine.id,
+        routineName: routine.name,
+        asl: aslVersion.asl_json,
+        markdownSummary: aslVersion.markdown_summary,
+        stepManifest: aslVersion.step_manifest_json,
+      },
+      capability_snapshot: ROUTINE_WORKFLOW_CAPABILITIES,
+      routine_asl_version_id: aslVersion.id,
+      created_by_actor_type: aslVersion.published_by_actor_type,
+      created_by_actor_id: aslVersion.published_by_actor_id,
+      published_at: aslVersion.created_at
+        ? new Date(aslVersion.created_at)
+        : new Date(),
+    })
+    .returning({ id: workflowVersions.id });
+  return version;
+}
+
+async function ensureRoutineWorkflowTriggerForJob(
+  routine: JobRoutineWorkflowRoutine,
+  workflowId: string,
+  workflowVersionId: string,
+): Promise<void> {
+  const db = getDb();
+  const [existing] = await db
+    .select({ id: workflowTriggers.id })
+    .from(workflowTriggers)
+    .where(
+      and(
+        eq(workflowTriggers.workflow_id, workflowId),
+        eq(workflowTriggers.trigger_family, "schedule"),
+      ),
+    )
+    .limit(1);
+  if (existing) {
+    await db
+      .update(workflowTriggers)
+      .set({
+        workflow_version_id: workflowVersionId,
+        enabled: true,
+        trigger_config: { routineId: routine.id },
+        actor_contract: {
+          agentVisible: routine.visibility === "tenant_shared",
+        },
+        readiness_state: "ready",
+        readiness_reasons: [],
+        updated_at: new Date(),
+      })
+      .where(eq(workflowTriggers.id, existing.id));
+    return;
+  }
+
+  await db.insert(workflowTriggers).values({
+    tenant_id: routine.tenant_id,
+    workflow_id: workflowId,
+    workflow_version_id: workflowVersionId,
+    trigger_family: "schedule",
+    source_system: "routine",
+    enabled: true,
+    idempotency_required: true,
+    trigger_config: { routineId: routine.id },
+    actor_contract: { agentVisible: routine.visibility === "tenant_shared" },
+    readiness_state: "ready",
+    readiness_reasons: [],
+  });
+}
+
+async function createRoutineWorkflowRunForJob(input: {
+  routine: JobRoutineWorkflowRoutine;
+  aslVersion: JobRoutineWorkflowAslVersion;
+  projection: JobRoutineWorkflowProjection;
+  executionArn: string;
+  routineExecutionId: string | null;
+  triggerId: string;
+  scheduleName: string | null;
+  agentId: string | null;
+  spaceId: string | null;
+  startedAt: Date;
+}): Promise<void> {
+  const db = getDb();
+  const [run] = await db
+    .insert(workflowRuns)
+    .values({
+      tenant_id: input.routine.tenant_id,
+      workflow_id: input.projection.workflowId,
+      workflow_version_id: input.projection.workflowVersionId,
+      engine_binding_id: input.projection.engineBindingId,
+      status: "running",
+      trigger_family: "schedule",
+      trigger_source: "schedule",
+      idempotency_key: `routine-execution:${input.executionArn}`,
+      correlation_id: input.executionArn,
+      backend_execution_id: input.executionArn,
+      backend_execution_ref: {
+        routineId: input.routine.id,
+        routineExecutionId: input.routineExecutionId,
+        stateMachineArn: input.routine.state_machine_arn,
+        aliasArn: input.routine.state_machine_alias_arn,
+        versionArn: input.aslVersion.version_arn,
+        routineAslVersionId: input.aslVersion.id,
+      },
+      capability_snapshot: ROUTINE_WORKFLOW_CAPABILITIES,
+      readiness_snapshot: { state: "ready", reasons: [] },
+      input_summary: {
+        triggerId: input.triggerId,
+        scheduleName: input.scheduleName,
+        agentId: input.agentId,
+        spaceId: input.spaceId,
+      },
+      started_at: input.startedAt,
+      last_event_at: input.startedAt,
+    })
+    .returning({ id: workflowRuns.id });
+
+  await db
+    .update(workflows)
+    .set({
+      last_run_id: run.id,
+      last_run_at: input.startedAt,
+      updated_at: new Date(),
+    })
+    .where(eq(workflows.id, input.projection.workflowId));
+
+  await db.insert(workflowEvidence).values({
+    tenant_id: input.routine.tenant_id,
+    workflow_id: input.projection.workflowId,
+    workflow_run_id: run.id,
+    evidence_type: "step_functions_execution",
+    source_system: "aws_step_functions",
+    source_id: input.executionArn,
+    uri: input.executionArn,
+    summary: {
+      routineId: input.routine.id,
+      routineExecutionId: input.routineExecutionId,
+      stateMachineArn: input.routine.state_machine_arn,
+      aliasArn: input.routine.state_machine_alias_arn,
+      versionArn: input.aslVersion.version_arn,
+      routineAslVersionId: input.aslVersion.id,
+    },
+    redaction_state: "summary_only",
+  });
 }
 
 function runtimeFunctionName(envName: string, handlerName: string): string {
