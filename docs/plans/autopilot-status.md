@@ -12625,3 +12625,62 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   - U6 browser smoke was not run because the worktree does not have reliable
     operator/non-operator local fixture accounts. The acceptance paths are
     covered by focused route/component tests and backend authorization tests.
+
+## THNK-21 Pi Agent Goal Extension Autopilot
+
+- Plan: `docs/plans/2026-06-18-001-feat-pi-goal-composer-mode-plan.md`
+- Linear: THNK-21
+- Started: 2026-06-21 15:09 CDT
+- Autopilot contract: one isolated worktree/branch per implementation unit,
+  PRs target `main`, merge after local verification and required CI.
+- Main checkout state at start:
+  - Preserved unrelated local changes in
+    `apps/web/src/components/profile/AccountUsageSection.tsx` and
+    `apps/web/src/components/profile/AccountUsageSection.test.tsx`.
+  - Restored plan, requirements, and ideation docs from the backup commit into
+    the U1 worktree so the implementation PR has current source artifacts.
+
+| Unit                           | Branch                               | PR                                                           | State                     | Notes                                                                                                  |
+| ------------------------------ | ------------------------------------ | ------------------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension` | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | CI passed, ready to merge | Worktree: `.Codex/worktrees/thnk-21-u1-pi-goal-extension`; starting from `origin/main` at `1edba59fb`. |
+| U7 tenant goal budget settings | Pending                              | Pending                                                      | Pending                   | Starts after U1 merges unless runtime package work uncovers a blocker.                                 |
+| U2 metadata contract           | Pending                              | Pending                                                      | Pending                   | Depends on U7 and U1 field names.                                                                      |
+| U3 composer controls           | Pending                              | Pending                                                      | Pending                   | Depends on U2/U7.                                                                                      |
+| U4 runtime translation         | Pending                              | Pending                                                      | Pending                   | Depends on U1/U2/U7.                                                                                   |
+| U5 goal-run status rendering   | Pending                              | Pending                                                      | Pending                   | Depends on U2/U4/U7.                                                                                   |
+| U6 smoke/docs/codegen          | Pending                              | Pending                                                      | Pending                   | Final integration/docs pass.                                                                           |
+
+### U1 Progress
+
+- 2026-06-21 15:09 CDT: Created worktree
+  `.Codex/worktrees/thnk-21-u1-pi-goal-extension` on
+  `codex/thnk-21-u1-pi-goal-extension` from `origin/main`.
+  Next: inspect existing Pi extension loading, pin `@narumitw/pi-goal`, add the
+  adapter, and verify extension factory/tool allowlist behavior.
+- 2026-06-21 15:23 CDT: U1 implementation locally verified. Added the pinned
+  `@narumitw/pi-goal@0.4.2` dependency and source review, then compiled a
+  reviewed vendored snapshot because the published package ships TypeScript
+  source rather than runnable JavaScript for the AgentCore Pi container.
+- U1 wires a ThinkWork adapter into `buildInvocationResources` only when the
+  payload carries a goal-mode envelope or goal action, and adds
+  `goal_complete` to the extension tool allowlist for those invocations only.
+- U1 tests cover normal payloads excluding `goal_complete`, goal-mode payloads
+  including it, upstream extension registration through the adapter factory,
+  and `runAgentLoop` allowlist plumbing for `goal_complete`.
+- U1 local verification:
+  - `pnpm --filter @thinkwork/agentcore-pi typecheck` passed.
+  - `pnpm --filter @thinkwork/pi-runtime-core typecheck` passed.
+  - `pnpm --filter @thinkwork/agentcore-pi test` passed: 32 files, 592 passed,
+    5 todo.
+  - `pnpm --filter @thinkwork/pi-runtime-core test` passed: 12 files, 110
+    passed.
+  - `bash scripts/verify-supply-chain.sh` passed: 5 package baseline entries
+    verified.
+  - `pnpm --filter @thinkwork/agentcore-pi build` passed.
+  - `pnpm --filter @thinkwork/pi-runtime-core build` passed.
+- U1 transient failure: an earlier formatter pass rewrote the whole
+  `pnpm-lock.yaml`, causing `verify-supply-chain.sh` to report missing baseline
+  packages. Restored the lockfile from `origin/main`, regenerated only the
+  dependency delta with pnpm, and reran the verifier successfully.
+- U1 PR opened: [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816).
+  Required CI passed: CLA, lint, verify, typecheck, and test.

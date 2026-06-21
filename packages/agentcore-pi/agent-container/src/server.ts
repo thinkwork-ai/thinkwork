@@ -140,6 +140,11 @@ import {
   McpJsonError,
   type McpJsonConfig,
 } from "./runtime/mcp-json.js";
+import {
+  createPiGoalExtensionFactory,
+  hasPiGoalMode,
+  PI_GOAL_TOOL_NAMES,
+} from "./runtime/pi-goal-adapter.js";
 import { createScrubbingFetch } from "./scrubbing-fetch.js";
 import { buildMemoryTools } from "./tools/memory.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
@@ -1121,6 +1126,19 @@ export async function buildInvocationResources(
   }
 
   addExtension(createAnalyticsDisplayExtension());
+
+  if (hasPiGoalMode(args.payload)) {
+    extensionFactories.push(
+      createPiGoalExtensionFactory({ agentDir: args.env.piAgentDir }),
+    );
+    extensionToolNames.push(...PI_GOAL_TOOL_NAMES);
+    logStructured({
+      level: "info",
+      event: "pi_goal_extension_loaded",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+    });
+  }
 
   // Outbound side-effect kill list (Evaluations Trust Core U8, layer 2
   // of 2): send_email / web_search / web_extract never register under

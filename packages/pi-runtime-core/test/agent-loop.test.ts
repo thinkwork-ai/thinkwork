@@ -221,6 +221,15 @@ describe("buildToolAllowlist", () => {
     expect(allowlist).toHaveLength(BUILTIN_TOOL_NAMES.length + 3);
   });
 
+  it("includes pi-goal's goal_complete extension tool in the allowlist", () => {
+    const allowlist = buildToolAllowlist([], ["goal_complete"]);
+    expect(allowlist).toContain("goal_complete");
+    for (const builtin of BUILTIN_TOOL_NAMES) {
+      expect(allowlist).toContain(builtin);
+    }
+    expect(allowlist).toHaveLength(BUILTIN_TOOL_NAMES.length + 1);
+  });
+
   it("supports a narrowed built-in allowlist for child profile runs", () => {
     const allowlist = buildToolAllowlist(
       [toToolDefinition(fakeAgentTool("profile_tool"))],

@@ -684,9 +684,15 @@ importers:
       '@earendil-works/pi-ai':
         specifier: 0.76.0
         version: 0.76.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
+      '@earendil-works/pi-coding-agent':
+        specifier: 0.76.0
+        version: 0.76.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6))(ws@8.20.0)(zod@4.3.6)
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
+      '@narumitw/pi-goal':
+        specifier: 0.4.2
+        version: 0.4.2
       '@thinkwork/genui':
         specifier: workspace:*
         version: link:../genui
@@ -5464,6 +5470,9 @@ packages:
   '@napi-rs/canvas@0.1.80':
     resolution: {integrity: sha512-DxuT1ClnIPts1kQx8FBmkk4BQDTfI5kIzywAaMjQSXfNnra5UFU9PwurXrl+Je3bJ6BGsp/zmshVVFbCmyI+ww==}
     engines: {node: '>= 10'}
+
+  '@narumitw/pi-goal@0.4.2':
+    resolution: {integrity: sha512-Ix2A0UKfRGJXgs4Q/PEkYqhJd+AMrK6Una90dEVnMmtdRPH5mUC/aoR2C4myWbSQBO8wJx3TKRFOVrDDbWji3g==}
 
   '@noble/ciphers@1.3.0':
     resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
@@ -21263,6 +21272,10 @@ snapshots:
       '@napi-rs/canvas-linux-x64-gnu': 0.1.80
       '@napi-rs/canvas-linux-x64-musl': 0.1.80
       '@napi-rs/canvas-win32-x64-msvc': 0.1.80
+
+  '@narumitw/pi-goal@0.4.2':
+    dependencies:
+      typebox: 1.1.38
 
   '@noble/ciphers@1.3.0': {}
 
