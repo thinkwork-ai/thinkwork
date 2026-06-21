@@ -100,6 +100,15 @@ status: in_progress
     `pnpm dlx prettier@3.8.2 --check ...` for touched source/docs.
   - U3 whitespace check passed: `git diff --check`.
   - U3 PR: [#2810](https://github.com/thinkwork-ai/thinkwork/pull/2810).
+  - U3 CI attempt 1: CLA, lint, verify passed; test failed in
+    `apps/desktop/test/main/protocol.test.ts` with an unhandled rejection after
+    the test deleted its temporary renderer directory before the registered
+    async protocol handler finished reading `index.html`.
+  - U3 CI fix: await the registered protocol handler promise in that desktop
+    test.
+  - U3 desktop regression passed:
+    `pnpm --filter @thinkwork/desktop exec vitest run test/main/protocol.test.ts`
+    (8 tests).
   - U3 CI: Pending.
   - U3 merge: Pending.
   - U3 cleanup: Pending.
