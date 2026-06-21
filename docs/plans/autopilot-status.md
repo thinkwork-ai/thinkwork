@@ -12725,3 +12725,15 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   reports 675 pre-existing files. The U7 hand-authored files pass targeted
   Prettier; generated GraphQL outputs are left in codegen's repository style.
 - U7 PR opened: [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817).
+- U7 CI failure: `Migration Drift Precheck (dev)` failed because the new
+  hand-rolled migration had not yet been applied to dev. Attempted to convert
+  it to an indexed Drizzle migration, but `drizzle-kit generate` hit the repo's
+  existing non-interactive snapshot conflict prompt and wrote no artifacts.
+- U7 drift fix: applied only
+  `packages/database-pg/drizzle/0179_tenant_goal_budget_settings.sql` to the
+  dev database with `psql -v ON_ERROR_STOP=1`, then reran
+  `bash scripts/db-migrate-manual.sh
+  packages/database-pg/drizzle/0179_tenant_goal_budget_settings.sql`
+  successfully. The reporter found both
+  `public.tenant_settings.goal_default_token_budget` and
+  `public.tenant_settings.tenant_settings_goal_default_token_budget_check`.
