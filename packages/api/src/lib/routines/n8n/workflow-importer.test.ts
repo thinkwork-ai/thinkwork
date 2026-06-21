@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import {
+  assertSafeN8nWorkflowLocation,
   fetchN8nWorkflow,
   parseN8nWorkflowLocation,
 } from "./workflow-importer.js";
@@ -42,7 +43,7 @@ describe("fetchN8nWorkflow", () => {
     };
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: workflow }),
+      text: async () => JSON.stringify({ data: workflow }),
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -53,12 +54,14 @@ describe("fetchN8nWorkflow", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://n8n.lastmile-tei.com/api/v1/workflows/workflow-1",
-      {
+      expect.objectContaining({
         headers: {
           accept: "application/json",
           "x-n8n-api-key": "n8n_api_key",
         },
-      },
+        redirect: "manual",
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(result.workflow).toEqual(workflow);
   });
@@ -80,7 +83,7 @@ describe("fetchN8nWorkflow", () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => workflow,
+        text: async () => JSON.stringify(workflow),
       });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -90,8 +93,56 @@ describe("fetchN8nWorkflow", () => {
 
     expect(fetchMock).toHaveBeenLastCalledWith(
       "https://n8n.lastmile-tei.com/rest/workflows/workflow-1",
-      { headers: { accept: "application/json" } },
+      expect.objectContaining({
+        headers: { accept: "application/json" },
+        redirect: "manual",
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(result.workflow).toEqual(workflow);
+  });
+});
+
+describe("assertSafeN8nWorkflowLocation", () => {
+  it("requires HTTPS", () => {
+    expect(() =>
+      assertSafeN8nWorkflowLocation({
+        baseUrl: "http://n8n.lastmile-tei.com",
+        workflowId: "workflow-1",
+      }),
+    ).toThrow("HTTPS");
+  });
+
+  it("rejects private and local hosts", () => {
+    expect(() =>
+      assertSafeN8nWorkflowLocation({
+        baseUrl: "https://127.0.0.1",
+        workflowId: "workflow-1",
+      }),
+    ).toThrow("private or local hosts");
+    expect(() =>
+      assertSafeN8nWorkflowLocation({
+        baseUrl: "https://169.254.169.254",
+        workflowId: "workflow-1",
+      }),
+    ).toThrow("private or local hosts");
+    expect(() =>
+      assertSafeN8nWorkflowLocation({
+        baseUrl: "https://n8n",
+        workflowId: "workflow-1",
+      }),
+    ).toThrow("private or local hosts");
+  });
+
+  it("requires the workflow URL to match the credential base URL", () => {
+    expect(() =>
+      assertSafeN8nWorkflowLocation(
+        {
+          baseUrl: "https://attacker.example.com",
+          workflowId: "workflow-1",
+        },
+        { allowedBaseUrl: "https://n8n.lastmile-tei.com" },
+      ),
+    ).toThrow("configured credential base URL");
   });
 });

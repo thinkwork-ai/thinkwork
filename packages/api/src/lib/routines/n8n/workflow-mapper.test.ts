@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { validateRoutineAsl } from "../../../handlers/routine-asl-validator.js";
 import { buildRoutineArtifactsFromPlan } from "../routine-authoring-planner.js";
 import fixture from "./pdi-fuel-order-fixture.json";
-import { mapN8nWorkflowToRoutinePlan } from "./workflow-mapper.js";
+import {
+  mapN8nWorkflowToDraft,
+  mapN8nWorkflowToRoutinePlan,
+} from "./workflow-mapper.js";
 import type { N8nWorkflow } from "./workflow-types.js";
 
 const okSfn = {
@@ -150,6 +153,66 @@ describe("n8n workflow mapper", () => {
         ],
       },
     });
+  });
+
+  it("turns unknown custom nodes into draft activation diagnostics", () => {
+    const workflow: N8nWorkflow = {
+      ...(fixture as unknown as N8nWorkflow),
+      nodes: [
+        ...(fixture as unknown as N8nWorkflow).nodes.slice(0, 1),
+        {
+          id: "custom-node",
+          name: "Mystery Transform",
+          type: "n8n-nodes-lastmile.mystery",
+          parameters: { operation: "doSomethingCustom" },
+        },
+        ...(fixture as unknown as N8nWorkflow).nodes.slice(3),
+      ],
+      connections: {
+        "PDI Fuel Order Webhook": {
+          main: [[{ node: "Mystery Transform", type: "main", index: 0 }]],
+        },
+        "Mystery Transform": {
+          main: [[{ node: "Respond to Webhook", type: "main", index: 0 }]],
+        },
+        "Respond to Webhook": { main: [[]] },
+      },
+    };
+
+    const draft = mapN8nWorkflowToDraft(workflow);
+
+    expect(draft.plan).not.toBeNull();
+    expect(draft.diagnostics).toEqual([
+      {
+        code: "unsupported_node",
+        severity: "blocker",
+        message:
+          "Review unsupported n8n node 'Mystery Transform' (n8n-nodes-lastmile.mystery) before activation.",
+        nodeId: "custom-node",
+        nodeName: "Mystery Transform",
+        nodeType: "n8n-nodes-lastmile.mystery",
+      },
+    ]);
+  });
+
+  it("keeps unsupported workflow shapes as draft diagnostics", () => {
+    const workflow: N8nWorkflow = {
+      id: "workflow-unsupported",
+      name: "Unsupported workflow",
+      nodes: [],
+      connections: {},
+    };
+
+    const draft = mapN8nWorkflowToDraft(workflow);
+
+    expect(draft.plan).toBeNull();
+    expect(draft.diagnostics).toEqual([
+      {
+        code: "unsupported_workflow_shape",
+        severity: "blocker",
+        message: "n8n workflow has no webhook trigger node.",
+      },
+    ]);
   });
 
   it("rejects missing connection edges instead of emitting malformed ASL", () => {

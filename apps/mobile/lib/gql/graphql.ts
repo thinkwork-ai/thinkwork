@@ -1932,6 +1932,26 @@ export type ImportN8nRoutineInput = {
   workflowUrl: Scalars['String']['input'];
 };
 
+export type ImportN8nWorkflowDraftInput = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  n8nCredentialSlug?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  pdiCredentialSlug?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+  workflowUrl: Scalars['String']['input'];
+};
+
+export type ImportN8nWorkflowDraftResult = {
+  __typename?: 'ImportN8nWorkflowDraftResult';
+  activationBlocked: Scalars['Boolean']['output'];
+  binding: WorkflowEngineBinding;
+  credentialRequirements: Scalars['AWSJSON']['output'];
+  diagnostics: Array<N8nWorkflowDraftDiagnostic>;
+  sourceMetadata: Scalars['AWSJSON']['output'];
+  workflow: Workflow;
+  workflowVersion: WorkflowVersion;
+};
+
 export type ImportTenantBedrockModelInput = {
   displayName?: InputMaybe<Scalars['String']['input']>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
@@ -3014,6 +3034,7 @@ export type Mutation = {
   flagThreadForEval: FlagThreadForEvalResult;
   handleGenUIAction: Message;
   importN8nRoutine: Routine;
+  importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   /**
@@ -3671,6 +3692,11 @@ export type MutationHandleGenUiActionArgs = {
 
 export type MutationImportN8nRoutineArgs = {
   input: ImportN8nRoutineInput;
+};
+
+
+export type MutationImportN8nWorkflowDraftArgs = {
+  input: ImportN8nWorkflowDraftInput;
 };
 
 
@@ -4677,6 +4703,16 @@ export type N8nWorkflowDiscovery = {
   readinessReasons: Scalars['AWSJSON']['output'];
   readinessState: WorkflowReadinessState;
   workflows: Array<N8nDiscoveredWorkflow>;
+};
+
+export type N8nWorkflowDraftDiagnostic = {
+  __typename?: 'N8nWorkflowDraftDiagnostic';
+  code: Scalars['String']['output'];
+  message: Scalars['String']['output'];
+  nodeId?: Maybe<Scalars['String']['output']>;
+  nodeName?: Maybe<Scalars['String']['output']>;
+  nodeType?: Maybe<Scalars['String']['output']>;
+  severity: Scalars['String']['output'];
 };
 
 export type NewMessageEvent = {

@@ -15,6 +15,23 @@ export type N8nWorkflowMapResult =
   | { ok: true; plan: RoutinePlan }
   | { ok: false; reason: string };
 
+export interface N8nWorkflowDraftDiagnostic {
+  code: string;
+  severity: "info" | "warning" | "blocker";
+  message: string;
+  nodeId?: string | null;
+  nodeName?: string | null;
+  nodeType?: string | null;
+}
+
+export interface N8nWorkflowDraftMapping {
+  workflowId: string | null;
+  workflowName: string;
+  plan: RoutinePlan | null;
+  diagnostics: N8nWorkflowDraftDiagnostic[];
+  credentialRequirements: Array<Record<string, unknown>>;
+}
+
 interface MigrationStage {
   node: N8nWorkflowNode;
   step?: RoutinePlanStep;
@@ -104,6 +121,54 @@ export function mapN8nWorkflowToRoutinePlan(
       metadata: { migration },
       steps,
     },
+  };
+}
+
+export function mapN8nWorkflowToDraft(
+  workflow: N8nWorkflow,
+  options: N8nMigrationOptions = {},
+): N8nWorkflowDraftMapping {
+  const mapped = mapN8nWorkflowToRoutinePlan(workflow, options);
+  if (!mapped.ok) {
+    return {
+      workflowId: workflow.id ?? null,
+      workflowName: workflow.name || "Untitled n8n workflow",
+      plan: null,
+      diagnostics: [
+        {
+          code: "unsupported_workflow_shape",
+          severity: "blocker",
+          message: mapped.reason,
+        },
+      ],
+      credentialRequirements: [],
+    };
+  }
+
+  const migration = recordValue(mapped.plan.metadata?.migration);
+  const todos = Array.isArray(migration.todos) ? migration.todos : [];
+  const diagnostics = todos.map((todo) => {
+    const record = recordValue(todo);
+    return {
+      code: "unsupported_node",
+      severity: "blocker" as const,
+      message:
+        stringValue(record.message) ??
+        `Review unsupported n8n node '${stringValue(record.sourceNodeName) ?? "unknown"}' before activation.`,
+      nodeId: stringValue(record.sourceNodeId),
+      nodeName: stringValue(record.sourceNodeName),
+      nodeType: stringValue(record.sourceNodeType),
+    };
+  });
+
+  return {
+    workflowId: workflow.id ?? null,
+    workflowName: workflow.name || mapped.plan.title || "Untitled n8n workflow",
+    plan: mapped.plan,
+    diagnostics,
+    credentialRequirements: Array.isArray(migration.credentialRequirements)
+      ? migration.credentialRequirements.filter(isRecord)
+      : [],
   };
 }
 
@@ -291,6 +356,20 @@ function safeNodeId(value: string): string {
 
 function unsupported(reason: string): { ok: false; reason: string } {
   return { ok: false, reason };
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function transformOrderToPdiCode(): string {

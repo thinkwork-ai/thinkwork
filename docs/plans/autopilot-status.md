@@ -168,12 +168,11 @@ status: in_progress
   `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`.
 - Linear issue: `THNK-59`.
 - Target branch: `main`.
-- Current implementation unit: U10 multi-environment migration, backfill, and
-  SQL operations runbook.
-- Current branch: `codex/thnk-59-u10-migration-runbook`.
-- Current worktree: `.Codex/worktrees/thnk-59-u10-migration-runbook`.
+- Current implementation unit: U11 n8n import draft diagnostics.
+- Current branch: `codex/thnk-59-u11-n8n-import-diagnostics`.
+- Current worktree: `.Codex/worktrees/thnk-59-u11-n8n-import-diagnostics`.
 - Current pull request:
-  [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792).
+  [#2793](https://github.com/thinkwork-ai/thinkwork/pull/2793).
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -191,9 +190,11 @@ status: in_progress
   [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787) merged as
   `a048e5486f6df85f60e9f5c8e144d19bd074a56a`; U9
   [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791) merged as
-  `c6bd505a9ac26e652a4ae2ec00216760efaf3809`.
-- Status: U1-U9 complete and merged. U10 is in progress from `origin/main` at
-  `c6bd505a9ac26e652a4ae2ec00216760efaf3809`.
+  `c6bd505a9ac26e652a4ae2ec00216760efaf3809`; U10
+  [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792) merged as
+  `65dc42a6eb6091db580e0ed226201ccba7c88f64`.
+- Status: U1-U10 complete and merged. U11 is in progress from `origin/main` at
+  `65dc42a6eb6091db580e0ed226201ccba7c88f64`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
@@ -453,16 +454,54 @@ status: in_progress
     The status view reported 4 eligible Step Functions routines, 4 backfilled
     Step Functions bindings, 0 missing bindings, 0 skipped legacy Python
     routines, and 0 enabled scheduled routines without version pins.
+  - U11 worktree created from `origin/main` at
+    `65dc42a6eb6091db580e0ed226201ccba7c88f64`.
+  - U11 `pnpm install --frozen-lockfile` completed with the known optional
+    `canvas@2.11.2` native fallback warning under local Node 25; the install
+    command exited successfully.
+  - U11 focused n8n importer, mapper, and draft resolver tests passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/routines/n8n/workflow-importer.test.ts src/lib/routines/n8n/workflow-mapper.test.ts src/graphql/resolvers/workflows/importN8nWorkflowDraft.mutation.test.ts`
+    (3 files, 17 tests).
+  - U11 `pnpm schema:build` passed.
+  - U11 codegen passed for `@thinkwork/web`, `thinkwork-cli`, and
+    `@thinkwork/mobile`.
+  - U11 typechecks passed for `@thinkwork/api`, `@thinkwork/web`, and
+    `thinkwork-cli`.
+  - U11 `pnpm --filter @thinkwork/mobile test` passed: 32 files, 154 tests.
+    Earlier mobile test attempts used a Jest-only `--runTestsByPath` flag and
+    then a non-existent target file; both failed before running product tests
+    and were corrected with the full mobile Vitest suite.
+  - U11 web GraphQL schema guard passed:
+    `pnpm --filter @thinkwork/web test -- src/lib/graphql-queries.schema.test.ts`
+    (1 file, 13 tests).
+  - U11 `pnpm --filter @thinkwork/api test` passed: 548 files, 3 skipped; 5171
+    tests passed, 9 skipped.
+  - U11 `pnpm lint && pnpm typecheck && git diff --check` passed.
+  - U11 first `pnpm test` run exposed the known local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly` after an `EEXIST`
+    framework symlink extraction warning).
+    `pnpm --filter @thinkwork/desktop rebuild electron` repaired the local
+    install.
+  - U11 `pnpm --filter @thinkwork/desktop test` passed after the Electron
+    repair: 15 files, 105 tests.
+  - U11 rerun `pnpm test` passed workspace-wide after the Electron repair:
+    `packages/api` 548 files passed, 3 skipped, 5171 tests passed, 9 skipped;
+    `apps/web` 184 files passed, 1368 tests passed; release tests 17 passed;
+    plugin source boundary tests 7 passed.
+  - U11 final n8n import safety hardening rejects single-label internal DNS
+    hosts. Rerun focused importer, mapper, and draft resolver tests passed: 3
+    files, 17 tests.
 - CI log: U8 PR [#2787](https://github.com/thinkwork-ai/thinkwork/pull/2787)
   passed CLA, lint, typecheck, verify, and test after rebasing onto current
   `origin/main`, then squash merged. U9 PR
   [#2791](https://github.com/thinkwork-ai/thinkwork/pull/2791) passed required
   CI checks (`cla`, `lint`, `typecheck`, `verify`, and `test`) and was squash
   merged as `c6bd505a9ac26e652a4ae2ec00216760efaf3809`. U10 PR
-  [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792) opened after
-  local verification passed; first migration drift precheck failed because the
-  0178 manual migration was not yet applied to dev, then the scoped 0178 dev
-  migration was applied and verified.
+  [#2792](https://github.com/thinkwork-ai/thinkwork/pull/2792) passed required
+  CI after the scoped 0178 dev migration was applied and verified, then squash
+  merged as `65dc42a6eb6091db580e0ed226201ccba7c88f64`. U11 PR
+  [#2793](https://github.com/thinkwork-ai/thinkwork/pull/2793) is open with CI
+  pending.
 - Blockers: none.
 
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
