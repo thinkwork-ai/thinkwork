@@ -6,6 +6,38 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## Skill Library Import / Export Autopilot - 2026-06-21
+
+- Plan: `docs/plans/2026-06-21-001-feat-skill-library-import-export-plan.md`.
+- Origin requirements:
+  `docs/brainstorms/2026-06-20-skill-library-export-import-requirements.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: planning recovery PR opened.
+- Current branch: `codex/skill-library-import-export-plan`.
+- Current worktree: `.Codex/worktrees/skill-library-import-export-plan`.
+- Notes:
+  - The user-referenced plan file was absent from the starting checkout and
+    from `origin/main`; `origin/main` did contain the matching requirements doc.
+  - Recovered the missing implementation plan from the requirements doc, current
+    codebase patterns, prior skill-catalog autopilot notes, and the Agent
+    Skills specification read on 2026-06-21.
+  - First implementation unit after this planning/setup PR is U1, Archive
+    Validation and Packaging Module.
+- Unit ledger:
+
+| Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                           |
+| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | --------------------------------------------------------------- |
+| Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | In progress | Adds the missing referenced plan and starts this status ledger. |
+| U1 Archive Validation and Packaging Module     | Pending                                  | Pending                                                      | Pending     | Next unit after plan recovery merges.                           |
+| U2 Catalog Import API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                                  |
+| U3 Catalog Export API Action                   | Pending                                  | Pending                                                      | Pending     | Depends on U1.                                                  |
+| U4 Skill Library Import UI                     | Pending                                  | Pending                                                      | Pending     | Depends on U2.                                                  |
+| U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                           |
+
+---
+
 ## THNK-34 Thread GenUI with json-render - 2026-06-20
 
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
