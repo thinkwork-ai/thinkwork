@@ -606,6 +606,21 @@ should not leak"`, confirming the regression.
   - `pnpm lint`
   - `pnpm dlx prettier@latest --check .github/workflows/deploy.yml docs/plans/autopilot/THNK-54-status.md plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs plugins/n8n/smoke/README.md plugins/n8n/src/deployment/managed-app.ts packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
   - `git diff --check`
+- U7 PR #2770 was open and green on head `fcb26631b` but behind `main`.
+  Rebased `codex/thnk-54-u7-n8n-smoke` onto `origin/main` at `6252d8727`
+  on 2026-06-20.
+- After required checks passed on `dd63adde3`, GitHub reported PR #2770 as
+  behind `main` again. Rebased onto `origin/main` at `45cd57074`, producing
+  head `131bac347`, on 2026-06-20.
+- `main` advanced again to `77f71c11b` while checks were running. Rebased
+  again cleanly, producing head `b355940bc`, on 2026-06-20.
+- U7 focused verification passed again after the rebase:
+  - `node --check plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs`
+  - `node plugins/n8n/smoke/n8n-agent-step-bridge-smoke.mjs`
+  - `pnpm --filter @thinkwork/deployment-runner exec vitest run test/deployment-runner-managed-apps.test.ts`
+  - `pnpm --filter @thinkwork/deployment-runner typecheck`
+  - `pnpm --filter @thinkwork/plugin-n8n test -- manifest.test.ts`
+  - `pnpm --filter @thinkwork/plugin-n8n typecheck`
 
 ## Blockers
 
