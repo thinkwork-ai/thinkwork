@@ -273,6 +273,37 @@ describe("provisionPluginInfraComponent", () => {
     expect(ref.componentHash).toBe(infraComponentHash(component()));
   });
 
+  it("treats reconciled running status as an already-running app", async () => {
+    const deps = fakeDeps();
+    deps.managedApps.set(`${TENANT}:n8n`, {
+      id: "app-n8n",
+      desiredConfig: {
+        publicUrl: "https://n8n.example.test",
+        serviceCredentialSecretArn:
+          "arn:aws:secretsmanager:us-east-1:123456789012:secret:n8n-service",
+      },
+      currentStatus: "running",
+      selectedReleaseVersion: "v0.1.0-canary.244",
+      selectedManifestDigest: "a".repeat(64),
+    });
+
+    const ref = await provisionPluginInfraComponent(
+      provisionArgs(deps, undefined, {
+        pluginKey: "n8n",
+        component: component({ managedAppKey: "n8n" }),
+      }),
+    );
+
+    expect(deps.startCalls).toHaveLength(0);
+    expect(ref).toMatchObject({
+      managedAppKey: "n8n",
+      managedApplicationId: "app-n8n",
+      operation: "ADOPT",
+      adoptedExisting: true,
+      adoptedRunningInfra: true,
+    });
+  });
+
   it("does not adopt a managed app row whose runtime status is unknown", async () => {
     const deps = fakeDeps();
     deps.managedApps.set(`${TENANT}:twenty`, {

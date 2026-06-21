@@ -443,6 +443,7 @@ function isRunningManagedApplication(
 ): boolean {
   return (
     app.currentStatus === "enabled" ||
+    app.currentStatus === "running" ||
     (app.id === null && app.currentStatus === undefined)
   );
 }

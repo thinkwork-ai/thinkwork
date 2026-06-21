@@ -561,6 +561,7 @@ describe("pluginLaunchUrlForInstall", () => {
         launchUrlDb({
           current_status: "parked",
           desired_config: { publicUrl: "https://plane.example.test" },
+          latestSucceededOperation: "UPGRADE",
         }),
       ),
     ).resolves.toBeNull();

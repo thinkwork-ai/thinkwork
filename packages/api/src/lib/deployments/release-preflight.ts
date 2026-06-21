@@ -755,6 +755,7 @@ function summarizePreservedConfig(varsJson: Record<string, unknown> | null) {
       hindsight: booleanValue(varsJson.enable_hindsight),
       cognee: booleanValue(varsJson.enable_cognee),
       twenty: booleanValue(varsJson.twenty_provisioned),
+      n8n: booleanValue(varsJson.n8n_provisioned),
     },
   };
   return {
