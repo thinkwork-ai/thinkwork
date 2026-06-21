@@ -960,6 +960,23 @@ export type ConfigureEmailProviderInput = {
   webhookSecretRef?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type ConnectN8nWorkflowInput = {
+  active?: InputMaybe<Scalars['Boolean']['input']>;
+  externalWorkflowId: Scalars['String']['input'];
+  externalWorkflowName: Scalars['String']['input'];
+  idempotencyKey: Scalars['String']['input'];
+  installId: Scalars['ID']['input'];
+  lastModifiedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
+  triggerTypes?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+export type ConnectN8nWorkflowResult = {
+  __typename?: 'ConnectN8nWorkflowResult';
+  binding: WorkflowEngineBinding;
+  created: Scalars['Boolean']['output'];
+  workflow: Workflow;
+};
+
 export type CostEvent = {
   __typename?: 'CostEvent';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -1059,6 +1076,11 @@ export type CreateKnowledgeBaseInput = {
   embeddingModel?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   tenantId: Scalars['ID']['input'];
+};
+
+export type CreateN8nWorkflowBridgeInput = {
+  idempotencyKey: Scalars['String']['input'];
+  workflowId: Scalars['ID']['input'];
 };
 
 export type CreateQuickActionInput = {
@@ -2901,6 +2923,7 @@ export type Mutation = {
    */
   compileWikiNow: WikiCompileJob;
   configureEmailProvider: EmailProviderInstall;
+  connectN8nWorkflow: ConnectN8nWorkflowResult;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   /**
@@ -2921,6 +2944,7 @@ export type Mutation = {
   createEvalTestCase: EvalTestCase;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
+  createN8nWorkflowBridge: N8nWorkflowBridgeCredential;
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
   createRoutine: Routine;
@@ -3361,6 +3385,11 @@ export type MutationConfigureEmailProviderArgs = {
 };
 
 
+export type MutationConnectN8nWorkflowArgs = {
+  input: ConnectN8nWorkflowInput;
+};
+
+
 export type MutationCreateAgentProfileArgs = {
   input: AgentProfileInput;
   tenantId: Scalars['ID']['input'];
@@ -3397,6 +3426,11 @@ export type MutationCreateInboxItemArgs = {
 
 export type MutationCreateKnowledgeBaseArgs = {
   input: CreateKnowledgeBaseInput;
+};
+
+
+export type MutationCreateN8nWorkflowBridgeArgs = {
+  input: CreateN8nWorkflowBridgeInput;
 };
 
 
@@ -4540,6 +4574,21 @@ export type N8nAgentStepRunTelemetry = {
   workflowName?: Maybe<Scalars['String']['output']>;
 };
 
+export type N8nDiscoveredWorkflow = {
+  __typename?: 'N8nDiscoveredWorkflow';
+  active?: Maybe<Scalars['Boolean']['output']>;
+  connectedBindingId?: Maybe<Scalars['ID']['output']>;
+  connectedWorkflowId?: Maybe<Scalars['ID']['output']>;
+  externalWorkflowId: Scalars['String']['output'];
+  lastExecutionAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  lastModifiedAt?: Maybe<Scalars['AWSDateTime']['output']>;
+  name: Scalars['String']['output'];
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  triggerTypes: Array<Scalars['String']['output']>;
+  warnings: Array<Scalars['String']['output']>;
+};
+
 export type N8nPackage = {
   __typename?: 'N8nPackage';
   name: Scalars['String']['output'];
@@ -4577,6 +4626,25 @@ export type N8nPluginSettings = {
   packageImageUri?: Maybe<Scalars['String']['output']>;
   pluginInstallId: Scalars['ID']['output'];
   recentAgentStepRuns: Array<N8nAgentStepRunTelemetry>;
+};
+
+export type N8nWorkflowBridgeCredential = {
+  __typename?: 'N8nWorkflowBridgeCredential';
+  bindingId: Scalars['ID']['output'];
+  replayWindowSeconds: Scalars['Int']['output'];
+  secretPreview: Scalars['String']['output'];
+  sharedSecret: Scalars['String']['output'];
+  signingHeader: Scalars['String']['output'];
+  timestampHeader: Scalars['String']['output'];
+  workflowId: Scalars['ID']['output'];
+};
+
+export type N8nWorkflowDiscovery = {
+  __typename?: 'N8nWorkflowDiscovery';
+  installId: Scalars['ID']['output'];
+  readinessReasons: Scalars['AWSJSON']['output'];
+  readinessState: WorkflowReadinessState;
+  workflows: Array<N8nDiscoveredWorkflow>;
 };
 
 export type NewMessageEvent = {
@@ -5171,6 +5239,7 @@ export type Query = {
   deploymentEvidence: DeploymentEvidence;
   deploymentReleases: Array<DeploymentRelease>;
   deploymentStatus: DeploymentStatus;
+  discoverN8nWorkflows: N8nWorkflowDiscovery;
   emailChannelLedger: Array<EmailLedgerEvent>;
   emailChannelSummary: EmailChannelSummary;
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
@@ -5605,6 +5674,11 @@ export type QueryDeploymentEvidenceArgs = {
 
 export type QueryDeploymentReleasesArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryDiscoverN8nWorkflowsArgs = {
+  installId: Scalars['ID']['input'];
 };
 
 

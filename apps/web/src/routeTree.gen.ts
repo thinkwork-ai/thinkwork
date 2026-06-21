@@ -64,6 +64,7 @@ import { Route as AuthedSettingsUsersUserIdRouteImport } from "./routes/_authed/
 import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authed/settings.spaces.$spaceId";
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
+import { Route as AuthedSettingsPluginsN8nRouteImport } from "./routes/_authed/settings.plugins.n8n";
 import { Route as AuthedSettingsPluginsPluginKeyRouteImport } from "./routes/_authed/settings.plugins.$pluginKey";
 import { Route as AuthedSettingsMemoryWikiRouteImport } from "./routes/_authed/settings.memory.wiki";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
@@ -91,6 +92,8 @@ import { Route as AuthedShellActivityThreadIdRouteImport } from "./routes/_authe
 import { Route as AuthedSettingsEvaluationsStudioIndexRouteImport } from "./routes/_authed/settings.evaluations.studio.index";
 import { Route as AuthedSettingsEvaluationsReplayToolsIndexRouteImport } from "./routes/_authed/settings.evaluations.replay-tools.index";
 import { Route as AuthedSettingsEvaluationsDatasetsIndexRouteImport } from "./routes/_authed/settings.evaluations.datasets.index";
+import { Route as AuthedSettingsPluginsN8nWorkflowsRouteImport } from "./routes/_authed/settings.plugins.n8n.workflows";
+import { Route as AuthedSettingsPluginsN8nSettingsRouteImport } from "./routes/_authed/settings.plugins.n8n.settings";
 import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes/_authed/settings.evaluations.studio.new";
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
 import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./routes/_authed/settings.evaluations.datasets.$slug";
@@ -399,6 +402,12 @@ const AuthedSettingsRoutinesRoutineIdRoute =
     path: "/routines/$routineId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsPluginsN8nRoute =
+  AuthedSettingsPluginsN8nRouteImport.update({
+    id: "/plugins/n8n",
+    path: "/plugins/n8n",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsPluginsPluginKeyRoute =
   AuthedSettingsPluginsPluginKeyRouteImport.update({
     id: "/plugins/$pluginKey",
@@ -556,6 +565,18 @@ const AuthedSettingsEvaluationsDatasetsIndexRoute =
     path: "/evaluations/datasets/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsPluginsN8nWorkflowsRoute =
+  AuthedSettingsPluginsN8nWorkflowsRouteImport.update({
+    id: "/workflows",
+    path: "/workflows",
+    getParentRoute: () => AuthedSettingsPluginsN8nRoute,
+  } as any);
+const AuthedSettingsPluginsN8nSettingsRoute =
+  AuthedSettingsPluginsN8nSettingsRouteImport.update({
+    id: "/settings",
+    path: "/settings",
+    getParentRoute: () => AuthedSettingsPluginsN8nRoute,
+  } as any);
 const AuthedSettingsEvaluationsStudioNewRoute =
   AuthedSettingsEvaluationsStudioNewRouteImport.update({
     id: "/evaluations/studio/new",
@@ -659,6 +680,7 @@ export interface FileRoutesByFullPath {
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
+  "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -687,6 +709,8 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
+  "/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
+  "/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
   "/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
@@ -744,6 +768,7 @@ export interface FileRoutesByTo {
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
+  "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -772,6 +797,8 @@ export interface FileRoutesByTo {
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
+  "/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
+  "/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
   "/settings/evaluations/datasets": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/settings/evaluations/replay-tools": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio": typeof AuthedSettingsEvaluationsStudioIndexRoute;
@@ -837,6 +864,7 @@ export interface FileRoutesById {
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/wiki": typeof AuthedSettingsMemoryWikiRoute;
   "/_authed/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
+  "/_authed/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/_authed/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -865,6 +893,8 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/_authed/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/_authed/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
+  "/_authed/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
+  "/_authed/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
   "/_authed/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/_authed/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/_authed/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
@@ -929,6 +959,7 @@ export interface FileRouteTypes {
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/wiki"
     | "/settings/plugins/$pluginKey"
+    | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/spaces/$spaceId"
@@ -957,6 +988,8 @@ export interface FileRouteTypes {
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
+    | "/settings/plugins/n8n/settings"
+    | "/settings/plugins/n8n/workflows"
     | "/settings/evaluations/datasets/"
     | "/settings/evaluations/replay-tools/"
     | "/settings/evaluations/studio/"
@@ -1014,6 +1047,7 @@ export interface FileRouteTypes {
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/wiki"
     | "/settings/plugins/$pluginKey"
+    | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/spaces/$spaceId"
@@ -1042,6 +1076,8 @@ export interface FileRouteTypes {
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
+    | "/settings/plugins/n8n/settings"
+    | "/settings/plugins/n8n/workflows"
     | "/settings/evaluations/datasets"
     | "/settings/evaluations/replay-tools"
     | "/settings/evaluations/studio"
@@ -1106,6 +1142,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/wiki"
     | "/_authed/settings/plugins/$pluginKey"
+    | "/_authed/settings/plugins/n8n"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
     | "/_authed/settings/spaces/$spaceId"
@@ -1134,6 +1171,8 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/datasets/$slug"
     | "/_authed/settings/evaluations/studio/$testCaseId"
     | "/_authed/settings/evaluations/studio/new"
+    | "/_authed/settings/plugins/n8n/settings"
+    | "/_authed/settings/plugins/n8n/workflows"
     | "/_authed/settings/evaluations/datasets/"
     | "/_authed/settings/evaluations/replay-tools/"
     | "/_authed/settings/evaluations/studio/"
@@ -1541,6 +1580,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesRoutineIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/plugins/n8n": {
+      id: "/_authed/settings/plugins/n8n";
+      path: "/plugins/n8n";
+      fullPath: "/settings/plugins/n8n";
+      preLoaderRoute: typeof AuthedSettingsPluginsN8nRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/plugins/$pluginKey": {
       id: "/_authed/settings/plugins/$pluginKey";
       path: "/plugins/$pluginKey";
@@ -1729,6 +1775,20 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/evaluations/datasets/";
       preLoaderRoute: typeof AuthedSettingsEvaluationsDatasetsIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/plugins/n8n/workflows": {
+      id: "/_authed/settings/plugins/n8n/workflows";
+      path: "/workflows";
+      fullPath: "/settings/plugins/n8n/workflows";
+      preLoaderRoute: typeof AuthedSettingsPluginsN8nWorkflowsRouteImport;
+      parentRoute: typeof AuthedSettingsPluginsN8nRoute;
+    };
+    "/_authed/settings/plugins/n8n/settings": {
+      id: "/_authed/settings/plugins/n8n/settings";
+      path: "/settings";
+      fullPath: "/settings/plugins/n8n/settings";
+      preLoaderRoute: typeof AuthedSettingsPluginsN8nSettingsRouteImport;
+      parentRoute: typeof AuthedSettingsPluginsN8nRoute;
     };
     "/_authed/settings/evaluations/studio/new": {
       id: "/_authed/settings/evaluations/studio/new";
@@ -1949,6 +2009,24 @@ const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
 const AuthedSettingsMemoryRouteWithChildren =
   AuthedSettingsMemoryRoute._addFileChildren(AuthedSettingsMemoryRouteChildren);
 
+interface AuthedSettingsPluginsN8nRouteChildren {
+  AuthedSettingsPluginsN8nSettingsRoute: typeof AuthedSettingsPluginsN8nSettingsRoute;
+  AuthedSettingsPluginsN8nWorkflowsRoute: typeof AuthedSettingsPluginsN8nWorkflowsRoute;
+}
+
+const AuthedSettingsPluginsN8nRouteChildren: AuthedSettingsPluginsN8nRouteChildren =
+  {
+    AuthedSettingsPluginsN8nSettingsRoute:
+      AuthedSettingsPluginsN8nSettingsRoute,
+    AuthedSettingsPluginsN8nWorkflowsRoute:
+      AuthedSettingsPluginsN8nWorkflowsRoute,
+  };
+
+const AuthedSettingsPluginsN8nRouteWithChildren =
+  AuthedSettingsPluginsN8nRoute._addFileChildren(
+    AuthedSettingsPluginsN8nRouteChildren,
+  );
+
 interface AuthedSettingsRouteChildren {
   AuthedSettingsActivityRoute: typeof AuthedSettingsActivityRouteWithChildren;
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
@@ -1974,6 +2052,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   AuthedSettingsMcpServersServerIdRoute: typeof AuthedSettingsMcpServersServerIdRoute;
   AuthedSettingsPluginsPluginKeyRoute: typeof AuthedSettingsPluginsPluginKeyRoute;
+  AuthedSettingsPluginsN8nRoute: typeof AuthedSettingsPluginsN8nRouteWithChildren;
   AuthedSettingsRoutinesRoutineIdRoute: typeof AuthedSettingsRoutinesRoutineIdRoute;
   AuthedSettingsSkillsSkillSlugRoute: typeof AuthedSettingsSkillsSkillSlugRoute;
   AuthedSettingsSpacesSpaceIdRoute: typeof AuthedSettingsSpacesSpaceIdRoute;
@@ -2027,6 +2106,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsKnowledgeBasesKbIdRoute: AuthedSettingsKnowledgeBasesKbIdRoute,
   AuthedSettingsMcpServersServerIdRoute: AuthedSettingsMcpServersServerIdRoute,
   AuthedSettingsPluginsPluginKeyRoute: AuthedSettingsPluginsPluginKeyRoute,
+  AuthedSettingsPluginsN8nRoute: AuthedSettingsPluginsN8nRouteWithChildren,
   AuthedSettingsRoutinesRoutineIdRoute: AuthedSettingsRoutinesRoutineIdRoute,
   AuthedSettingsSkillsSkillSlugRoute: AuthedSettingsSkillsSkillSlugRoute,
   AuthedSettingsSpacesSpaceIdRoute: AuthedSettingsSpacesSpaceIdRoute,
