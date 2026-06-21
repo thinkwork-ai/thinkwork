@@ -1,12 +1,15 @@
 import { Check, ExternalLink, Send, X } from "lucide-react";
 import { Button } from "@thinkwork/ui";
 import type { ThreadGenUIActionDescriptor } from "@thinkwork/genui";
+import type { GenUIActionStatus } from "../use-genui-action";
 
 export interface DecisionPanelProps {
   actions?: ThreadGenUIActionDescriptor[];
   primaryActionId?: string;
   disabled?: boolean;
   pendingLabel?: string;
+  onAction?: (action: ThreadGenUIActionDescriptor) => void;
+  statusForAction?: (action: ThreadGenUIActionDescriptor) => GenUIActionStatus;
 }
 
 export function DecisionPanel({
@@ -14,6 +17,8 @@ export function DecisionPanel({
   primaryActionId,
   disabled = true,
   pendingLabel = "Pending",
+  onAction,
+  statusForAction,
 }: DecisionPanelProps) {
   if (actions.length === 0) return null;
 
@@ -30,23 +35,40 @@ export function DecisionPanel({
             : action.id === primaryActionId
               ? "default"
               : "secondary";
-        const isDisabled = disabled || action.disabled === true;
+        const status = statusForAction?.(action) ?? { state: "idle" };
+        const isSubmitted = status.state === "submitted";
+        const isSubmitting = status.state === "submitting";
+        const isDisabled =
+          disabled || action.disabled === true || isSubmitting || isSubmitted;
         return (
-          <Button
-            aria-label={action.label}
-            className="min-h-9 gap-1.5"
-            disabled={isDisabled}
-            key={action.id}
-            size="sm"
-            type="button"
-            variant={variant}
-          >
-            <Icon className="size-3.5" />
-            <span>{action.label}</span>
-            {isDisabled ? (
-              <span className="sr-only"> {pendingLabel}</span>
+          <div className="grid gap-1" key={action.id}>
+            <Button
+              aria-label={action.label}
+              className="min-h-9 gap-1.5"
+              disabled={isDisabled}
+              onClick={() => onAction?.(action)}
+              size="sm"
+              type="button"
+              variant={variant}
+            >
+              <Icon className="size-3.5" />
+              <span>
+                {isSubmitting
+                  ? "Submitting..."
+                  : isSubmitted
+                    ? "Submitted"
+                    : action.label}
+              </span>
+              {isDisabled && !isSubmitting && !isSubmitted ? (
+                <span className="sr-only"> {pendingLabel}</span>
+              ) : null}
+            </Button>
+            {status.state === "error" ? (
+              <p className="max-w-52 text-xs leading-4 text-destructive">
+                {status.message}
+              </p>
             ) : null}
-          </Button>
+          </div>
         );
       })}
     </div>

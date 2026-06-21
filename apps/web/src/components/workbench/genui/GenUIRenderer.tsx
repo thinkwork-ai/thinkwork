@@ -23,16 +23,22 @@ import {
   type KeyValueListItem,
 } from "./components/WorkflowListPreview";
 import { GenUIFallback } from "./GenUIFallback";
+import { canSubmitGenUIAction } from "./actions";
+import { useGenUIAction, type GenUIActionStatus } from "./use-genui-action";
 
 export interface GenUIRendererProps {
   data: unknown;
   partId?: string;
+  sourceMessageId?: string;
+  threadId?: string;
   live?: boolean;
 }
 
 export function GenUIRenderer({
   data,
   partId,
+  sourceMessageId,
+  threadId,
   live = false,
 }: GenUIRendererProps) {
   const lastGood = useRef<ThreadGenUIData | null>(null);
@@ -50,6 +56,8 @@ export function GenUIRenderer({
               data={lastGood.current}
               live={live}
               partId={partId}
+              sourceMessageId={sourceMessageId}
+              threadId={threadId}
             />
           </GenUIErrorBoundary>
           <GenUIFallback
@@ -75,7 +83,13 @@ export function GenUIRenderer({
   return wrapPart(
     partId,
     <GenUIErrorBoundary fallbackData={result.data}>
-      <ValidatedGenUIRenderer data={result.data} live={live} partId={partId} />
+      <ValidatedGenUIRenderer
+        data={result.data}
+        live={live}
+        partId={partId}
+        sourceMessageId={sourceMessageId}
+        threadId={threadId}
+      />
     </GenUIErrorBoundary>,
   );
 }
@@ -134,11 +148,22 @@ export class GenUIErrorBoundary extends Component<
 function ValidatedGenUIRenderer({
   data,
   live,
+  partId,
+  sourceMessageId,
+  threadId,
 }: {
   data: ThreadGenUIData;
   live: boolean;
   partId?: string;
+  sourceMessageId?: string;
+  threadId?: string;
 }) {
+  const { submitAction, statusForAction } = useGenUIAction({
+    data,
+    partId,
+    sourceMessageId,
+    threadId,
+  });
   const element = data.spec.elements[data.spec.root];
   if (!element) {
     return (
@@ -155,12 +180,21 @@ function ValidatedGenUIRenderer({
     );
   }
 
-  const actionsDisabled = live || !data.promotion?.sourceMessageId;
+  const actionsDisabled =
+    live ||
+    !canSubmitGenUIAction({
+      data,
+      partId,
+      sourceMessageId,
+      threadId,
+    });
   return renderElement({
     element,
     data,
     actions: data.actions ?? [],
     actionsDisabled,
+    onAction: submitAction,
+    statusForAction,
   });
 }
 
@@ -169,11 +203,15 @@ function renderElement({
   data,
   actions,
   actionsDisabled,
+  onAction,
+  statusForAction,
 }: {
   element: ThreadGenUIElement;
   data: ThreadGenUIData;
   actions: ThreadGenUIActionDescriptor[];
   actionsDisabled: boolean;
+  onAction: (action: ThreadGenUIActionDescriptor) => void;
+  statusForAction: (action: ThreadGenUIActionDescriptor) => GenUIActionStatus;
 }) {
   switch (element.component) {
     case THREAD_GENUI_ANALYTICS_COMPONENT:
@@ -184,6 +222,8 @@ function renderElement({
           {...(element.props as unknown as TaskReviewCardProps)}
           actions={actions}
           actionsDisabled={actionsDisabled}
+          onAction={onAction}
+          statusForAction={statusForAction}
         />
       );
     case "workflow.status":
@@ -213,6 +253,8 @@ function renderElement({
           })}
           actions={actions}
           actionsDisabled={actionsDisabled}
+          onAction={onAction}
+          statusForAction={statusForAction}
         />
       );
     default:

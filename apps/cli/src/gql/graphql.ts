@@ -1871,6 +1871,16 @@ export type FlagThreadForEvalResult = {
   dataset: EvalDataset;
 };
 
+export type HandleGenUiActionInput = {
+  actionId: Scalars['String']['input'];
+  idempotencyKey: Scalars['String']['input'];
+  params?: InputMaybe<Scalars['AWSJSON']['input']>;
+  partId: Scalars['ID']['input'];
+  sourceMessageId: Scalars['ID']['input'];
+  specHash: Scalars['String']['input'];
+  threadId: Scalars['ID']['input'];
+};
+
 export type HeartbeatActivityEvent = {
   __typename?: 'HeartbeatActivityEvent';
   createdAt: Scalars['AWSDateTime']['output'];
@@ -2962,6 +2972,7 @@ export type Mutation = {
   enableWorkflow: WorkflowBinding;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
+  handleGenUIAction: Message;
   importN8nRoutine: Routine;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
@@ -3588,6 +3599,11 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationFlagThreadForEvalArgs = {
   input: FlagThreadForEvalInput;
+};
+
+
+export type MutationHandleGenUiActionArgs = {
+  input: HandleGenUiActionInput;
 };
 
 

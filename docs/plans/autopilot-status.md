@@ -11,10 +11,9 @@ status: in_progress
 - Plan: `docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md`.
 - Linear issue: `THNK-34`.
 - Target branch: `main`.
-- Current implementation unit: U4 Emit and persist `data-genui` from the
-  runtime path.
-- Current branch: `codex/thnk-34-u4-mobile-renderer`.
-- Current worktree: `.Codex/worktrees/thnk-34-u4-mobile-renderer`.
+- Current implementation unit: U5 Route catalog actions through Thread state.
+- Current branch: `codex/thnk-34-u5-genui-actions`.
+- Current worktree: `.Codex/worktrees/thnk-34-u5-genui-actions`.
 - Pull request: U1 [#2753](https://github.com/thinkwork-ai/thinkwork/pull/2753)
   merged as `10d712c163fdbd748daa67de4640be3b6785a2ba`; U2
   [#2756](https://github.com/thinkwork-ai/thinkwork/pull/2756) merged as
@@ -22,9 +21,13 @@ status: in_progress
   [#2758](https://github.com/thinkwork-ai/thinkwork/pull/2758) merged as
   `4d105e50543937dedd95378dcd71d9e3e98efa5e`; U3
   [#2760](https://github.com/thinkwork-ai/thinkwork/pull/2760) merged as
-  `9c13dac27c6efc66156058b1af99103fdb44e70a`.
-- Status: U1, U2, U8, and U3 complete and merged. U4 implementation complete
-  and PR opened from `origin/main` at `8f2a29e20169`.
+  `9c13dac27c6efc66156058b1af99103fdb44e70a`; U4
+  [#2766](https://github.com/thinkwork-ai/thinkwork/pull/2766) merged as
+  `14085702dbd0726830efe08c19c19f8a3d897397`; U5
+  [#2771](https://github.com/thinkwork-ai/thinkwork/pull/2771) open.
+- Status: U1, U2, U8, U3, and U4 complete and merged. U5 implementation is
+  locally complete from `origin/main` at
+  `14085702dbd0726830efe08c19c19f8a3d897397`.
 - Notes:
   - Autopilot started with U1, then will continue to U2, U8, U3, U4, U5, U6,
     and U7 in dependency order.
@@ -156,6 +159,35 @@ status: in_progress
   - U3 rebased cleanly onto `origin/main` at `a1e42c646636`; post-rebase
     focused web tests, web typecheck, and `git diff --check origin/main..HEAD`
     passed.
+  - U5 `pnpm install` completed with the known optional `canvas@2.11.2` native
+    fallback warning under local Node 25 because `pkg-config` / `pixman-1` are
+    unavailable.
+  - U5 `pnpm schema:build`, `pnpm --filter thinkwork-cli codegen`,
+    `pnpm --filter @thinkwork/web codegen`, and
+    `pnpm --filter @thinkwork/mobile codegen` passed.
+  - U5 `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/messages/handleGenUIAction.test.ts src/__tests__/graphql-contract.test.ts`
+    passed: 2 files, 141 tests.
+  - U5 `pnpm --filter @thinkwork/web test -- src/components/spaces/ThreadConversation.test.tsx src/components/workbench/genui/actions.test.ts src/components/workbench/genui/use-genui-action.test.tsx src/components/workbench/genui/GenUIRenderer.test.tsx src/components/workbench/TaskThreadView.test.tsx src/components/workbench/render-typed-part.test.tsx`
+    passed: 6 files, 136 tests.
+  - U5 `git diff --check`, `pnpm lint`, `pnpm typecheck`,
+    `pnpm --filter @thinkwork/web typecheck`, and
+    `pnpm --filter @thinkwork/web build` passed. The web build emitted the
+    existing route-file, sourcemap, and large-chunk warnings.
+  - U5 first `pnpm test` run exposed the local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly`) after an `EEXIST`
+    symlink warning during the binary install. Rebuilding Electron with
+    `pnpm --filter @thinkwork/desktop rebuild electron` repaired the local
+    install, and `pnpm --filter @thinkwork/desktop test` passed: 15 files, 105
+    tests.
+  - U5 second `pnpm test` run exposed a providerless `urql` mutation hook in
+    `ThreadConversation.test.tsx`; fixed by adding the local `urql` mutation
+    mock used by the GenUI tests.
+  - U5 final `pnpm test` passed workspace-wide, including `apps/web` (177
+    files, 1339 tests), `packages/api` (537 files passed, 3 skipped; 5079 tests
+    passed, 9 skipped), release tests, and plugin source boundary tests.
+  - U5 rebased cleanly onto `origin/main` at `45cd57074eda`; post-rebase API
+    resolver/GraphQL contract tests, focused web GenUI/Thread tests, and
+    `git diff --check origin/main..HEAD` passed.
 - Compound review:
   - Correctness review flagged unrelated upstream MCP changes when diffing
     against the moving `origin/main`; the U1 branch will be rebased before PR so
@@ -199,6 +231,16 @@ status: in_progress
     persistence, live web merge path, and synchronous runtime response all reuse
     the canonical Thread GenUI envelope and analytics validator context. No
     fixups were required after review.
+  - U5 review flagged idempotency key collision risk from concatenating and
+    truncating source/action values. Fixed by hashing the full Thread/action
+    vector and adding a long-id regression.
+  - U5 review flagged missing server-side security and rate-limit coverage for
+    catalog actions. Fixed by adding resolver tests for rejected parameter
+    overrides and the per-user/thread action rate limit.
+  - U5 full-suite verification flagged the providerless Thread conversation
+    render path after action hooks landed. Fixed by mocking `urql` in that test
+    module so persisted GenUI rendering remains covered without a network
+    provider.
 - CI log:
   - U1 PR #2753 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
     `test`) twice: once on the initial PR head and again after rebasing because
@@ -217,8 +259,15 @@ status: in_progress
     `test`) after repeated rebases because `main` moved.
   - U3 PR #2760 was squash merged to `main` as
     `9c13dac27c6efc66156058b1af99103fdb44e70a`.
+  - U4 PR #2766 passed required CI (`cla`, `lint`, `verify`, `typecheck`, and
+    `test`) after repeated rebases because `main` moved.
+  - U4 PR #2766 was squash merged to `main` as
+    `14085702dbd0726830efe08c19c19f8a3d897397`.
+  - U5 PR #2771 initially passed required CI (`cla`, `lint`, `verify`, `test`,
+    and `typecheck`), then `main` moved before merge. The branch was rebased
+    onto `origin/main` at `45cd57074eda` and refreshed CI is pending.
 - Blockers: none.
-- Next action: open the U4 PR, monitor CI, fix any failures, and squash merge
+- Next action: open the U5 PR, monitor CI, fix any failures, and squash merge
   when green.
 
 ## First-Class Workflow Control Plane - 2026-06-20

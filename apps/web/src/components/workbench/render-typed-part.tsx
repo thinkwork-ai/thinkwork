@@ -61,11 +61,21 @@ export interface RenderTypedPartOptions {
   userQuestion?: UserQuestionRecord | null;
   /** True while rendering a live stream before the assistant message persists. */
   live?: boolean;
+  /** Thread/source context for server-verified generated UI actions. */
+  threadId?: string;
+  sourceMessageId?: string;
 }
 
 export function renderTypedPart(
   part: AccumulatedPart,
-  { keyPrefix, index, userQuestion, live = false }: RenderTypedPartOptions,
+  {
+    keyPrefix,
+    index,
+    userQuestion,
+    live = false,
+    sourceMessageId,
+    threadId,
+  }: RenderTypedPartOptions,
 ): ReactNode {
   const key = `${keyPrefix}::${index}`;
 
@@ -191,6 +201,8 @@ export function renderTypedPart(
           data={part.data}
           live={live}
           partId={part.id}
+          sourceMessageId={sourceMessageId}
+          threadId={threadId}
         />
       );
     }
@@ -230,6 +242,8 @@ export function renderTypedParts(
     keyPrefix: string;
     userQuestion?: UserQuestionRecord | null;
     live?: boolean;
+    threadId?: string;
+    sourceMessageId?: string;
   },
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -261,6 +275,8 @@ export function renderTypedParts(
         index,
         userQuestion: options.userQuestion,
         live: options.live,
+        sourceMessageId: options.sourceMessageId,
+        threadId: options.threadId,
       }),
     );
   });

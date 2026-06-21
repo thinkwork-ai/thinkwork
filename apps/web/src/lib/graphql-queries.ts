@@ -1298,6 +1298,20 @@ export const SendMessageMutation = gql`
   }
 `;
 
+export const HandleGenUIActionMutation = gql`
+  mutation HandleGenUIAction($input: HandleGenUIActionInput!) {
+    handleGenUIAction(input: $input) {
+      id
+      threadId
+      tenantId
+      role
+      content
+      metadata
+      createdAt
+    }
+  }
+`;
+
 const ComputerApprovalFields = gql`
   fragment ComputerApprovalFields on InboxItem {
     id
