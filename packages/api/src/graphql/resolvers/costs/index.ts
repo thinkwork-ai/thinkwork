@@ -3,6 +3,7 @@ import { costByAgent } from "./costByAgent.query.js";
 import { costByUser } from "./costByUser.query.js";
 import { costByModel } from "./costByModel.query.js";
 import { costTimeSeries } from "./costTimeSeries.query.js";
+import { accountUsage } from "./accountUsage.query.js";
 import { budgetPolicies_ as budgetPolicies } from "./budgetPolicies.query.js";
 import { budgetStatus } from "./budgetStatus.query.js";
 import { agentBudgetStatus } from "./agentBudgetStatus.query.js";
@@ -18,6 +19,7 @@ export const costQueries = {
   costByUser,
   costByModel,
   costTimeSeries,
+  accountUsage,
   budgetPolicies,
   budgetStatus,
   agentBudgetStatus,

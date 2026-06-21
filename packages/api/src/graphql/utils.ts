@@ -39,6 +39,7 @@ import {
   agentProfiles,
   agentProfileSpaceAssignments,
   modelCatalog,
+  tenantModelCatalog,
   userModelApprovals,
   // Messages
   messages,
@@ -163,6 +164,7 @@ export {
   agentProfiles,
   agentProfileSpaceAssignments,
   modelCatalog,
+  tenantModelCatalog,
   userModelApprovals,
   messages,
   messageMentions,
