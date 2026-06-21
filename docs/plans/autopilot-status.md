@@ -57,7 +57,8 @@ status: in_progress
   [#2766](https://github.com/thinkwork-ai/thinkwork/pull/2766) merged as
   `14085702dbd0726830efe08c19c19f8a3d897397`; U5
   [#2771](https://github.com/thinkwork-ai/thinkwork/pull/2771) merged as
-  `77f71c11b7915264c484ebb62aa3f90c7fe3f779`; U6 pending.
+  `77f71c11b7915264c484ebb62aa3f90c7fe3f779`; U6
+  [#2775](https://github.com/thinkwork-ai/thinkwork/pull/2775) open.
 - Status: U1, U2, U8, U3, U4, and U5 complete and merged. U6 implementation is
   locally complete from `origin/main` at
   `77f71c11b7915264c484ebb62aa3f90c7fe3f779`.
@@ -341,7 +342,7 @@ status: in_progress
   - U5 PR #2771 passed required CI (`cla`, `lint`, `verify`, `test`, and
     `typecheck`) after rebasing because `main` moved, and was squash merged as
     `77f71c11b7915264c484ebb62aa3f90c7fe3f779`.
-  - U6 PR pending.
+  - U6 PR #2775 opened after local verification passed.
 - Blockers: none.
 - Next action: open the U6 PR, monitor CI, fix any failures, and squash merge
   when green.
