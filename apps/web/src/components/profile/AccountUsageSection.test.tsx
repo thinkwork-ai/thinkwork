@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 const queryDocs = vi.hoisted(() => ({
   SettingsAccountUsageQuery: Symbol("SettingsAccountUsageQuery"),
@@ -34,6 +35,19 @@ vi.mock("@/components/LoadingShimmer", () => ({
 vi.mock("@thinkwork/ui", () => ({
   cn: (...classes: Array<string | undefined | false | null>) =>
     classes.filter(Boolean).join(" "),
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipContent: ({
+    children,
+    className,
+  }: {
+    children: ReactNode;
+    className?: string;
+  }) => (
+    <div className={className} data-testid="usage-tooltip">
+      {children}
+    </div>
+  ),
+  TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 import { AccountUsageSection } from "./AccountUsageSection";
@@ -128,15 +142,33 @@ describe("AccountUsageSection", () => {
     expect(screen.getByText("$8.00")).toBeTruthy();
     expect(screen.getByText("5.5k")).toBeTruthy();
     expect(screen.getByText("12")).toBeTruthy();
-    expect(screen.getByText("3")).toBeTruthy();
+    expect(screen.getAllByText("3")[0]).toBeTruthy();
 
     expect(screen.getAllByTestId("usage-day")).toHaveLength(90);
+    const calendar = screen.getByLabelText(
+      "Account usage calendar for the last 90 days",
+    );
+    expect(calendar.className).toContain("grid-flow-col");
+    expect(calendar.className).toContain("grid-rows-7");
+    expect(screen.getAllByTestId("usage-calendar-cell")).toHaveLength(1);
     expect(
       screen.getByLabelText("2026-06-20: $3.50 spend, 3.0k tokens, 7 events"),
     ).toBeTruthy();
+    expect(screen.getAllByTestId("usage-tooltip")[0].className).toContain(
+      "space-y-1.5",
+    );
+    expect(screen.getAllByTestId("usage-tooltip")[0].className).toContain(
+      "pointer-events-none",
+    );
+    expect(screen.getAllByText("Spend")[0]).toBeTruthy();
+    expect(screen.getAllByText("Tokens")[0]).toBeTruthy();
+    expect(screen.getAllByText("Events")[0]).toBeTruthy();
 
     const sonnet = screen.getByText("Claude 3.5 Sonnet");
     const haiku = screen.getByText("Haiku");
+    expect(screen.getAllByTestId("model-row")[0].className).toContain(
+      "grid-cols-[minmax(12rem,1fr)_8rem_7rem_5rem]",
+    );
     expect(
       sonnet.compareDocumentPosition(haiku) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -226,6 +258,7 @@ describe("AccountUsageSection", () => {
     );
 
     expect(screen.getAllByTestId("usage-day")).toHaveLength(2);
+    expect(screen.getAllByTestId("usage-calendar-cell")).toHaveLength(5);
     expect(
       screen.getByLabelText("2026-06-21: $0.00 spend, 0 tokens, 3 events")
         .className,
