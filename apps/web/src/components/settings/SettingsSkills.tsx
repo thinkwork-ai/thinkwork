@@ -1,21 +1,40 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Upload } from "lucide-react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
   Badge,
   Button,
   DataTable,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
   Label,
   Popover,
   PopoverContent,
   PopoverTrigger,
   Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
+import { ApiError } from "@/lib/api-fetch";
 import {
+  importSkillArchive,
   listSkillSummaries,
   type SkillSummary,
 } from "@/lib/workspace-files-api";
@@ -26,6 +45,11 @@ import {
 } from "@/lib/evaluation-queries";
 import { formatPassRatePct } from "@/lib/skill-eval-format";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
+
+interface PendingReplace {
+  slug: string;
+  archiveBase64: string;
+}
 
 /**
  * Per-skill score cell (U9). Each row reads its own `skillEvalScore` — urql
@@ -185,25 +209,106 @@ function SkillEvalGateControl() {
 export function SettingsSkills() {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [search, setSearch] = useState("");
   const [skills, setSkills] = useState<SkillSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [pendingReplace, setPendingReplace] = useState<PendingReplace | null>(
+    null,
+  );
+
+  const loadSkills = useCallback(
+    async (cancelled?: () => boolean) => {
+      if (!tenantId) return;
+      setError(null);
+      const summaries = await listSkillSummaries();
+      if (!cancelled?.()) setSkills(summaries);
+    },
+    [tenantId],
+  );
 
   useEffect(() => {
     if (!tenantId) return;
     let cancelled = false;
-    setError(null);
-    listSkillSummaries()
-      .then((s) => !cancelled && setSkills(s))
-      .catch(
-        (e) =>
-          !cancelled &&
-          setError(e instanceof Error ? e.message : "Failed to load skills"),
-      );
+    loadSkills(() => cancelled).catch(
+      (e) =>
+        !cancelled &&
+        setError(e instanceof Error ? e.message : "Failed to load skills"),
+    );
     return () => {
       cancelled = true;
     };
-  }, [tenantId]);
+  }, [loadSkills, tenantId]);
+
+  const resetFileInput = useCallback(() => {
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  const runImport = useCallback(
+    async (archiveBase64: string, confirmReplace = false) => {
+      setImporting(true);
+      try {
+        const result = await importSkillArchive(archiveBase64, {
+          confirmReplace,
+        });
+        try {
+          await loadSkills();
+        } catch (refreshError) {
+          toast.warning(
+            `Skill ${result.status === "updated" ? "updated" : "imported"}, but the list could not refresh: ${importErrorMessage(refreshError)}`,
+          );
+        }
+        setPendingReplace(null);
+        toast.success(
+          result.status === "updated" ? "Skill updated." : "Skill imported.",
+        );
+        for (const warning of [
+          result.indexWarning,
+          result.evalDatasetWarning,
+        ]) {
+          if (warning) toast.warning(warning);
+        }
+        navigate({
+          to: "/settings/skills/$skillSlug",
+          params: { skillSlug: result.slug },
+        });
+      } catch (e) {
+        if (isSkillExistsError(e)) {
+          setPendingReplace({
+            slug: String(e.body.slug),
+            archiveBase64,
+          });
+          return;
+        }
+        toast.error(importErrorMessage(e));
+      } finally {
+        setImporting(false);
+        resetFileInput();
+      }
+    },
+    [loadSkills, navigate, resetFileInput],
+  );
+
+  const handleImportFile = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (!isZipFile(file)) {
+        toast.error("Choose a .zip skill archive.");
+        resetFileInput();
+        return;
+      }
+      try {
+        const archiveBase64 = await fileToBase64(file);
+        await runImport(archiveBase64);
+      } catch (e) {
+        toast.error(importErrorMessage(e));
+        resetFileInput();
+      }
+    },
+    [resetFileInput, runImport],
+  );
 
   const rows = useMemo<SkillSummary[]>(() => skills ?? [], [skills]);
 
@@ -255,7 +360,36 @@ export function SettingsSkills() {
               className="max-w-sm"
             />
           )}
-          <SkillEvalGateControl />
+          <div className="flex shrink-0 items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Import skill archive"
+                  disabled={importing}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {importing ? (
+                    <Spinner className="size-4" />
+                  ) : (
+                    <Upload className="size-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Import skill archive</TooltipContent>
+            </Tooltip>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              className="sr-only"
+              data-testid="skill-import-input"
+              onChange={handleImportFile}
+            />
+            <SkillEvalGateControl />
+          </div>
         </div>
       }
     >
@@ -280,6 +414,85 @@ export function SettingsSkills() {
           </div>
         }
       />
+      <Dialog
+        open={Boolean(pendingReplace)}
+        onOpenChange={(open) => {
+          if (!open && !importing) setPendingReplace(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Replace existing skill?</DialogTitle>
+            <DialogDescription>
+              {pendingReplace
+                ? `A catalog skill named ${pendingReplace.slug} already exists. Replace it with this archive?`
+                : "A catalog skill with this slug already exists."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={importing}
+              onClick={() => setPendingReplace(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={importing || !pendingReplace}
+              onClick={() => {
+                if (!pendingReplace) return;
+                void runImport(pendingReplace.archiveBase64, true);
+              }}
+            >
+              {importing ? <Spinner className="size-3.5" /> : "Replace"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SettingsTablePane>
   );
+}
+
+function isZipFile(file: File): boolean {
+  return (
+    file.name.toLowerCase().endsWith(".zip") ||
+    file.type === "application/zip" ||
+    file.type === "application/x-zip-compressed"
+  );
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
+  }
+  return btoa(binary);
+}
+
+function isSkillExistsError(error: unknown): error is ApiError & {
+  body: { code: "skill_exists"; slug: string };
+} {
+  if (!(error instanceof ApiError) || error.status !== 409) return false;
+  if (typeof error.body !== "object" || error.body === null) return false;
+  const body = error.body as { code?: unknown; slug?: unknown };
+  return body.code === "skill_exists" && typeof body.slug === "string";
+}
+
+function importErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (typeof error.body === "object" && error.body !== null) {
+      const body = error.body as { error?: unknown };
+      if (typeof body.error === "string" && body.error.trim()) {
+        return body.error;
+      }
+    }
+    return error.message;
+  }
+  return error instanceof Error ? error.message : "Could not import skill.";
 }

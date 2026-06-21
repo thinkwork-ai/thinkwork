@@ -38,6 +38,14 @@ export interface ExportSkillArchiveResult {
   blob: Blob;
 }
 
+export interface ImportSkillArchiveResult {
+  slug: string;
+  status: "created" | "updated";
+  generatedWiring: boolean;
+  indexWarning?: string;
+  evalDatasetWarning?: string;
+}
+
 interface WorkspaceFilesResponse {
   ok?: boolean;
   files?: WorkspaceFileMeta[];
@@ -50,6 +58,10 @@ interface WorkspaceFilesResponse {
   filename?: string;
   contentType?: string;
   archiveBase64?: string;
+  status?: "created" | "updated";
+  generatedWiring?: boolean;
+  indexWarning?: string;
+  evalDatasetWarning?: string;
 }
 
 async function request(
@@ -200,6 +212,30 @@ export async function exportSkillArchive(
     archiveBase64: data.archiveBase64,
     bytes,
     blob: new Blob([arrayBufferFromBytes(bytes)], { type: contentType }),
+  };
+}
+
+export async function importSkillArchive(
+  archiveBase64: string,
+  options: { confirmReplace?: boolean } = {},
+): Promise<ImportSkillArchiveResult> {
+  const data = await request({
+    action: "import-skill",
+    catalog: true,
+    archiveBase64,
+    ...(options.confirmReplace ? { confirmReplace: true } : {}),
+  });
+  if (!data.slug || (data.status !== "created" && data.status !== "updated")) {
+    throw new Error("Skill import response was missing import metadata.");
+  }
+  return {
+    slug: data.slug,
+    status: data.status,
+    generatedWiring: data.generatedWiring === true,
+    ...(data.indexWarning ? { indexWarning: data.indexWarning } : {}),
+    ...(data.evalDatasetWarning
+      ? { evalDatasetWarning: data.evalDatasetWarning }
+      : {}),
   };
 }
 
