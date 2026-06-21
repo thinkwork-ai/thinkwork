@@ -1,13 +1,24 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
+import { Download } from "lucide-react";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { toast } from "sonner";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
-import { Badge, Button, Spinner } from "@thinkwork/ui";
+import {
+  Badge,
+  Button,
+  Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
-import { skillCatalogClient } from "@/lib/workspace-files-api";
+import {
+  exportSkillArchive,
+  skillCatalogClient,
+} from "@/lib/workspace-files-api";
 import {
   ApplySkillUpdateMutation,
   EvalDatasetsQuery,
@@ -24,6 +35,15 @@ import { formatPassRatePct } from "@/lib/skill-eval-format";
 const liveDatasetSlug = (skillSlug: string) => `skill-${skillSlug}`;
 const candidateDatasetSlug = (skillSlug: string) =>
   `skill-${skillSlug}-candidate`;
+
+function downloadArchive(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 /**
  * Score + regression + on-demand-run surface for one catalog skill (U9), plus
@@ -285,6 +305,22 @@ export function SettingsSkillDetail() {
   const { skillSlug } = useParams({
     from: "/_authed/settings/skills/$skillSlug",
   });
+  const [exporting, setExporting] = useState(false);
+
+  async function exportSkill() {
+    setExporting(true);
+    try {
+      const archive = await exportSkillArchive(skillSlug);
+      downloadArchive(archive.blob, archive.filename);
+      toast.success("Skill archive exported.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unknown export failure.";
+      toast.error(`Could not export the skill: ${message}`);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // Title + back navigation relocate to the settings header bar: the "Skill
   // Library" crumb links back to the list, and the sidebar's back button also works.
@@ -294,11 +330,38 @@ export function SettingsSkillDetail() {
       { label: "Skill Library", href: "/settings/skills" },
       { label: skillSlug },
     ],
+    action: (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Export skill archive"
+            disabled={exporting}
+            onClick={() => void exportSkill()}
+          >
+            {exporting ? (
+              <Spinner className="size-4" />
+            ) : (
+              <Download className="size-4" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Export skill archive</TooltipContent>
+      </Tooltip>
+    ),
+    actionKey: `skill-export:${skillSlug}:${exporting ? "exporting" : "idle"}`,
   });
 
   return (
     <div className="flex h-full flex-col">
       <SkillEvalPanel skillSlug={skillSlug} />
+      <div className="border-b px-4 py-2 text-xs text-muted-foreground">
+        Catalog edits and imports update the library source only. Installed
+        agent copies keep running their pinned version until an operator applies
+        an update.
+      </div>
       <div className="min-h-0 flex-1">
         <WorkspaceFileEditor
           target={{ skill: skillSlug }}

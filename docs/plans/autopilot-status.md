@@ -14,11 +14,11 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: U4 implementation in progress.
-- Current branch: `codex/skill-library-u4-import-ui`.
-- Current worktree: `.Codex/worktrees/skill-library-u4-import-ui`.
+- Status: U5 implementation in progress.
+- Current branch: `codex/skill-library-u5-export-polish`.
+- Current worktree: `.Codex/worktrees/skill-library-u5-export-polish`.
 - Current pull request:
-  [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786).
+  [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788).
 - Notes:
   - The user-referenced plan file was absent from the starting checkout and
     from `origin/main`; `origin/main` did contain the matching requirements doc.
@@ -55,6 +55,11 @@ status: in_progress
   - U4 adds Skill Library import controls in the web settings page, including
     archive upload, replace confirmation, import toast feedback, list refresh,
     and navigation to the imported skill.
+  - U4 PR [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786)
+    passed CLA, lint, test, typecheck, and verify; squash merged as
+    `8a664299665303efbd9df229e24f1e2cf1430563`.
+  - U5 adds detail-page skill export, pinned-installed-copy messaging, and
+    operator docs for the import/export archive workflow.
 - Local verification:
   - `pnpm install --frozen-lockfile` completed; local Node 25 logged the
     existing `canvas@2.11.2` native fallback failure for missing `pkg-config`
@@ -110,6 +115,26 @@ status: in_progress
     the protected import toolbar/dialog workflow.
   - U4: Compound-style review pass found one missing planned edge-case test
     (cleared file picker); the test was added and focused verification reran.
+  - U4: PR [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786)
+    passed CLA, lint, test, typecheck, and verify after rebasing onto updated
+    `origin/main`; squash merged as
+    `8a664299665303efbd9df229e24f1e2cf1430563`.
+  - U5: `pnpm install --frozen-lockfile` completed; local Node 25 logged the
+    existing `canvas@2.11.2` native fallback failure for missing `pkg-config`
+    / `pixman-1`, but the install command exited successfully and workspace
+    executables linked.
+  - U5: first focused test run found one test-environment matcher issue
+    (`toHaveAttribute` without jest-dom); the assertion was changed to use DOM
+    `getAttribute`, then the focused tests reran successfully.
+  - U5: `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsSkillDetail.test.tsx src/lib/workspace-files-api.test.ts`
+    passed: 22 tests.
+  - U5: `pnpm --filter @thinkwork/web typecheck` passed.
+  - U5: `pnpm --filter @thinkwork/web test` passed: 184 files, 1,368 tests.
+  - U5: `pnpm lint` passed.
+  - U5: `pnpm dlx prettier@3.8.2 --check --ignore-unknown apps/web/src/components/settings/SettingsSkillDetail.tsx apps/web/src/components/settings/SettingsSkillDetail.test.tsx docs/src/content/docs/applications/admin/skills-catalog.mdx docs/plans/autopilot-status.md`
+    passed after formatting two touched files.
+  - U5: `git diff --check` passed after removing Markdown trailing-space hard
+    breaks from the touched docs page.
 - Unit ledger:
 
 | Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                        |
@@ -118,8 +143,8 @@ status: in_progress
 | U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | Merged      | Squash merged as `134907ab08cf5c6bcb81200f7c0f76ed30ec7952`. |
 | U2 Catalog Import API Action                   | `codex/skill-library-u2-import`          | [#2781](https://github.com/thinkwork-ai/thinkwork/pull/2781) | Merged      | Squash merged as `cf27205f897109586d32ebddff7ecff17c9775f2`. |
 | U3 Catalog Export API Action                   | `codex/skill-library-u3-export`          | [#2783](https://github.com/thinkwork-ai/thinkwork/pull/2783) | Merged      | Squash merged as `8ace6cde15e61e23c786350b6bbe6053b6f218e2`. |
-| U4 Skill Library Import UI                     | `codex/skill-library-u4-import-ui`       | [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786) | In progress | PR open; local verification passed, CI pending.              |
-| U5 Skill Detail Export and Import-State Polish | Pending                                  | Pending                                                      | Pending     | Depends on U3 and U4.                                        |
+| U4 Skill Library Import UI                     | `codex/skill-library-u4-import-ui`       | [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786) | Merged      | Squash merged as `8a664299665303efbd9df229e24f1e2cf1430563`. |
+| U5 Skill Detail Export and Import-State Polish | `codex/skill-library-u5-export-polish`   | [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788) | In progress | PR open; local verification passed, CI pending.              |
 
 ---
 
