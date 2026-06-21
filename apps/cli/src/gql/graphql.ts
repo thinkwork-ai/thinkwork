@@ -3199,6 +3199,8 @@ export type Mutation = {
   updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
   updateMemoryRecord: Scalars['Boolean']['output'];
+  /** Store or replace the tenant n8n public API key used for workflow discovery. */
+  updateN8nPluginApiCredential: UpdateN8nPluginApiCredentialResult;
   /** Update n8n custom package desired config and create/reuse an UPGRADE plan job. */
   updateN8nPluginPackageSettings: UpdateN8nPluginPackageSettingsResult;
   updateOntologyChangeSet: OntologyChangeSet;
@@ -4379,6 +4381,11 @@ export type MutationUpdateMemoryRecordArgs = {
 };
 
 
+export type MutationUpdateN8nPluginApiCredentialArgs = {
+  input: UpdateN8nPluginApiCredentialInput;
+};
+
+
 export type MutationUpdateN8nPluginPackageSettingsArgs = {
   input: UpdateN8nPluginPackageSettingsInput;
 };
@@ -4680,6 +4687,8 @@ export type N8nPluginSettings = {
   lastJobOperation?: Maybe<Scalars['String']['output']>;
   lastJobStatus?: Maybe<Scalars['String']['output']>;
   managedApplicationId?: Maybe<Scalars['ID']['output']>;
+  n8nApiCredentialBaseUrl?: Maybe<Scalars['String']['output']>;
+  n8nApiCredentialConfigured: Scalars['Boolean']['output'];
   packageImageConfigDigest?: Maybe<Scalars['String']['output']>;
   packageImageUri?: Maybe<Scalars['String']['output']>;
   pluginInstallId: Scalars['ID']['output'];
@@ -8466,6 +8475,18 @@ export type UpdateLinkedTaskInput = {
   status: LinkedTaskStatus;
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
+};
+
+export type UpdateN8nPluginApiCredentialInput = {
+  apiKey: Scalars['String']['input'];
+  baseUrl?: InputMaybe<Scalars['String']['input']>;
+  idempotencyKey: Scalars['String']['input'];
+  installId: Scalars['ID']['input'];
+};
+
+export type UpdateN8nPluginApiCredentialResult = {
+  __typename?: 'UpdateN8nPluginApiCredentialResult';
+  settings: N8nPluginSettings;
 };
 
 export type UpdateN8nPluginPackageSettingsInput = {

@@ -2069,6 +2069,74 @@ export const SettingsUpdateN8nPluginPackageSettingsMutation = graphql(`
   }
 `);
 
+export const SettingsUpdateN8nPluginApiCredentialMutation = graphql(`
+  mutation SettingsUpdateN8nPluginApiCredential(
+    $input: UpdateN8nPluginApiCredentialInput!
+  ) {
+    updateN8nPluginApiCredential(input: $input) {
+      settings {
+        pluginInstallId
+      }
+    }
+  }
+`);
+
+export const SettingsTenantCredentialsQuery = graphql(`
+  query SettingsTenantCredentials(
+    $tenantId: ID!
+    $status: TenantCredentialStatus
+  ) {
+    tenantCredentials(tenantId: $tenantId, status: $status) {
+      id
+      tenantId
+      displayName
+      slug
+      kind
+      status
+      metadataJson
+    }
+  }
+`);
+
+export const SettingsCreateTenantCredentialMutation = graphql(`
+  mutation SettingsCreateTenantCredential($input: CreateTenantCredentialInput!) {
+    createTenantCredential(input: $input) {
+      id
+      slug
+      kind
+      status
+      metadataJson
+    }
+  }
+`);
+
+export const SettingsRotateTenantCredentialMutation = graphql(`
+  mutation SettingsRotateTenantCredential($input: RotateTenantCredentialInput!) {
+    rotateTenantCredential(input: $input) {
+      id
+      slug
+      kind
+      status
+      metadataJson
+    }
+  }
+`);
+
+export const SettingsUpdateTenantCredentialMutation = graphql(`
+  mutation SettingsUpdateTenantCredential(
+    $id: ID!
+    $input: UpdateTenantCredentialInput!
+  ) {
+    updateTenantCredential(id: $id, input: $input) {
+      id
+      slug
+      kind
+      status
+      metadataJson
+    }
+  }
+`);
+
 export const SettingsMyPluginActivationsQuery = graphql(`
   query SettingsMyPluginActivations {
     myPluginActivations {

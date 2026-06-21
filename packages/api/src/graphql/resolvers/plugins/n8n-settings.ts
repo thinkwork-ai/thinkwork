@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import {
   managedApplicationDeploymentJobs,
   managedApplications,
+  tenantCredentials,
 } from "@thinkwork/database-pg/schema";
 import {
   normalizeN8nPackageConfig,
@@ -20,6 +22,11 @@ import {
   type ManagedApplicationDeploymentJobRow,
 } from "../../../lib/deployments/start-plan-job.js";
 import {
+  putTenantCredentialSecret,
+  rotateTenantCredentialSecret,
+  tenantCredentialSecretName,
+} from "../../../lib/tenant-credentials/secret-store.js";
+import {
   toDeploymentPayload,
   type DeploymentOperation,
 } from "../deployments/shared.js";
@@ -30,12 +37,17 @@ import { loadN8nAgentStepRunTelemetry } from "../n8n-agent-step-runs/telemetry.j
 type DbLike = typeof defaultDb;
 
 type ManagedApplicationRow = typeof managedApplications.$inferSelect;
+type TenantCredentialRow = typeof tenantCredentials.$inferSelect;
 
 export interface N8nPluginSettingsDeps {
   db?: DbLike;
   pluginDeps?: PluginEngineDeps;
   startPlanJob?: typeof startManagedApplicationPlanJob;
+  putTenantCredentialSecret?: typeof putTenantCredentialSecret;
+  rotateTenantCredentialSecret?: typeof rotateTenantCredentialSecret;
 }
+
+const N8N_API_CREDENTIAL_SLUG = "n8n-api";
 
 export async function n8nPluginSettings(
   _parent: unknown,
@@ -60,7 +72,14 @@ export async function n8nPluginSettings(
     limit: 5,
     db,
   });
-  return settingsPayload({ install, app, latestJob, recentAgentStepRuns });
+  const n8nApiCredential = await findN8nApiCredential(tenantId, db);
+  return settingsPayload({
+    install,
+    app,
+    latestJob,
+    recentAgentStepRuns,
+    n8nApiCredential,
+  });
 }
 
 export async function updateN8nPluginPackageSettings(
@@ -169,6 +188,82 @@ export async function updateN8nPluginPackageSettings(
   };
 }
 
+export async function updateN8nPluginApiCredential(
+  _parent: unknown,
+  args: {
+    input: {
+      installId: string;
+      apiKey: string;
+      baseUrl?: string | null;
+      idempotencyKey: string;
+    };
+  },
+  ctx: GraphQLContext,
+  deps: N8nPluginSettingsDeps = {},
+) {
+  const { tenantId, callerUserId } = await requirePluginTenantAdmin(ctx);
+  const idempotencyKey = args.input.idempotencyKey.trim();
+  if (!idempotencyKey) {
+    throw new GraphQLError("idempotencyKey is required", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+
+  const apiKey = args.input.apiKey.trim();
+  if (!apiKey) {
+    throw new GraphQLError("apiKey is required", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+
+  const pluginDeps = deps.pluginDeps ?? createDefaultPluginEngineDeps();
+  const install = await requireN8nInstall({
+    tenantId,
+    installId: args.input.installId,
+    pluginDeps,
+  });
+  const db = deps.db ?? defaultDb;
+  const app = await findN8nManagedApplication(tenantId, db);
+  if (!app) {
+    throw new GraphQLError("n8n managed application is not provisioned yet", {
+      extensions: { code: "FAILED_PRECONDITION" },
+    });
+  }
+
+  const desiredConfig = recordValue(app.desired_config);
+  const baseUrl = normalizeN8nBaseUrl(
+    args.input.baseUrl ?? stringValue(desiredConfig.publicUrl),
+  );
+  const metadata = { n8nBaseUrl: baseUrl };
+  const existing = await findN8nApiCredential(tenantId, db);
+  const savedCredential = existing
+    ? await updateExistingN8nApiCredential({
+        credential: existing,
+        apiKey,
+        metadata,
+        db,
+        rotateSecret: deps.rotateTenantCredentialSecret,
+      })
+    : await createN8nApiCredential({
+        tenantId,
+        callerUserId,
+        apiKey,
+        metadata,
+        db,
+        putSecret: deps.putTenantCredentialSecret,
+      });
+
+  return {
+    settings: settingsPayload({
+      install,
+      app,
+      latestJob: await findLatestN8nDeploymentJob(tenantId, db),
+      recentAgentStepRuns: [],
+      n8nApiCredential: savedCredential,
+    }),
+  };
+}
+
 async function requireN8nInstall(args: {
   tenantId: string;
   installId: string;
@@ -221,13 +316,96 @@ async function findLatestN8nDeploymentJob(
   return row ?? null;
 }
 
+async function findN8nApiCredential(
+  tenantId: string,
+  db: DbLike,
+): Promise<TenantCredentialRow | null> {
+  const [row] = await db
+    .select()
+    .from(tenantCredentials)
+    .where(
+      and(
+        eq(tenantCredentials.tenant_id, tenantId),
+        eq(tenantCredentials.slug, N8N_API_CREDENTIAL_SLUG),
+        eq(tenantCredentials.status, "active"),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function createN8nApiCredential(args: {
+  tenantId: string;
+  callerUserId: string | null;
+  apiKey: string;
+  metadata: Record<string, unknown>;
+  db: DbLike;
+  putSecret?: typeof putTenantCredentialSecret;
+}): Promise<TenantCredentialRow> {
+  const credentialId = randomUUID();
+  const secretName = tenantCredentialSecretName({
+    tenantId: args.tenantId,
+    credentialId,
+  });
+  const secretRef = await (args.putSecret ?? putTenantCredentialSecret)({
+    secretName,
+    payload: { apiKey: args.apiKey },
+  });
+  const [row] = await args.db
+    .insert(tenantCredentials)
+    .values({
+      id: credentialId,
+      tenant_id: args.tenantId,
+      display_name: "n8n API key",
+      slug: N8N_API_CREDENTIAL_SLUG,
+      kind: "api_key",
+      status: "active",
+      secret_ref: secretRef,
+      schema_json: {},
+      metadata_json: args.metadata,
+      created_by_user_id: args.callerUserId,
+    })
+    .returning();
+  return row;
+}
+
+async function updateExistingN8nApiCredential(args: {
+  credential: TenantCredentialRow;
+  apiKey: string;
+  metadata: Record<string, unknown>;
+  db: DbLike;
+  rotateSecret?: typeof rotateTenantCredentialSecret;
+}): Promise<TenantCredentialRow> {
+  await (args.rotateSecret ?? rotateTenantCredentialSecret)({
+    secretRef: args.credential.secret_ref,
+    payload: { apiKey: args.apiKey },
+  });
+  const [row] = await args.db
+    .update(tenantCredentials)
+    .set({
+      display_name: "n8n API key",
+      kind: "api_key",
+      status: "active",
+      metadata_json: args.metadata,
+      updated_at: new Date(),
+      last_validated_at: null,
+    })
+    .where(eq(tenantCredentials.id, args.credential.id))
+    .returning();
+  return row;
+}
+
 function settingsPayload(args: {
   install: PluginInstallRow;
   app: ManagedApplicationRow | null;
   latestJob: ManagedApplicationDeploymentJobRow | null;
   recentAgentStepRuns?: unknown[];
+  n8nApiCredential?: TenantCredentialRow | null;
 }) {
   const desiredConfig = recordValue(args.app?.desired_config);
+  const n8nApiCredentialMetadata = recordValue(
+    args.n8nApiCredential?.metadata_json,
+  );
   const packageConfig = normalizeN8nPackageConfig(desiredConfig);
   return {
     pluginInstallId: args.install.id,
@@ -240,6 +418,12 @@ function settingsPayload(args: {
     agentStepBridgeCredentialConfigured: Boolean(
       stringValue(desiredConfig.agentStepBridgeCredentialSecretArn),
     ),
+    n8nApiCredentialConfigured: Boolean(args.n8nApiCredential),
+    n8nApiCredentialBaseUrl:
+      stringValue(n8nApiCredentialMetadata.n8nBaseUrl) ??
+      stringValue(n8nApiCredentialMetadata.baseUrl) ??
+      stringValue(n8nApiCredentialMetadata.publicUrl) ??
+      stringValue(desiredConfig.publicUrl),
     currentPackageConfig: packageConfigPayload(packageConfig),
     packageImageUri: stringValue(desiredConfig.packageImageUri),
     packageImageConfigDigest: stringValue(
@@ -314,4 +498,31 @@ function plannedDesiredConfigFromJob(
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeN8nBaseUrl(value: unknown): string {
+  const raw = stringValue(value);
+  if (!raw) {
+    throw new GraphQLError(
+      "n8n public URL is required before saving an API key",
+      { extensions: { code: "BAD_USER_INPUT" } },
+    );
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch (error) {
+    throw new GraphQLError(
+      `n8n public URL must be a valid URL: ${(error as Error).message}`,
+      { extensions: { code: "BAD_USER_INPUT" } },
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.hostname !== "localhost") {
+    throw new GraphQLError("n8n public URL must use https", {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
+  }
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.toString().replace(/\/+$/, "");
 }

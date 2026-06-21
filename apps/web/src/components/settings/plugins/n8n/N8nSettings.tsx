@@ -1,19 +1,51 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import { normalizeN8nPackageConfig } from "@thinkwork/plugin-n8n/package-config";
-import { Badge, Button, Input, Label } from "@thinkwork/ui";
 import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@thinkwork/ui";
+import {
+  Activity,
   Copy,
-  KeyRound,
+  Loader2,
   PackagePlus,
   Plus,
+  Save,
   ShieldCheck,
   Trash2,
 } from "lucide-react";
+import { useTenant } from "@/context/TenantContext";
+import { TenantCredentialKind, TenantCredentialStatus } from "@/gql/graphql";
 import {
+  getMcpServiceCredentialStatus,
+  listMcpServers,
+  saveMcpServiceCredential,
+  type McpServer,
+  type McpServiceCredentialStatus,
+} from "@/lib/mcp-api";
+import {
+  SettingsCreateTenantCredentialMutation,
   SettingsManagedApplicationDeploymentQuery,
   SettingsN8nPluginSettingsQuery,
+  SettingsRotateTenantCredentialMutation,
+  SettingsTenantCredentialsQuery,
+  SettingsUpdateTenantCredentialMutation,
   SettingsUpdateN8nPluginPackageSettingsMutation,
 } from "@/lib/settings-queries";
 import {
@@ -30,25 +62,53 @@ const TERMINAL_JOB_STATUSES = new Set([
   "cancelled",
   "canceled",
 ]);
+const N8N_API_KEY_SESSION_STORAGE_KEY = "thinkwork:n8n-api-key";
 
 export function N8nSettings({
   installId,
   installState,
   onChanged,
+  onRecentAgentStepsActionChange,
 }: {
   installId: string;
   installState: string;
   onChanged: () => void;
+  onRecentAgentStepsActionChange?: (action: ReactNode | null) => void;
 }) {
-  const [rows, setRows] = useState<string[]>([""]);
+  const { tenant, tenantId } = useTenant();
+  const tenantSlug = tenant?.slug ?? null;
+  const [rows, setRows] = useState<string[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [agentStepsOpen, setAgentStepsOpen] = useState(false);
+  const [mcpServer, setMcpServer] = useState<McpServer | null>(null);
+  const [mcpStatus, setMcpStatus] = useState<McpServiceCredentialStatus | null>(
+    null,
+  );
+  const [mcpToken, setMcpToken] = useState("");
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [mcpSaving, setMcpSaving] = useState(false);
+  const [mcpError, setMcpError] = useState<string | null>(null);
+  const [n8nApiKey, setN8nApiKey] = useState("");
+  const [n8nApiError, setN8nApiError] = useState<string | null>(null);
+  const [savedApiKeyLastFour, setSavedApiKeyLastFour] = useState<string | null>(
+    null,
+  );
   const firstInvalidRef = useRef<HTMLInputElement | null>(null);
 
   const [settingsResult, refreshSettings] = useQuery({
     query: SettingsN8nPluginSettingsQuery,
     variables: { installId },
+    requestPolicy: "cache-and-network",
+  });
+  const [credentialResult, refreshCredentials] = useQuery({
+    query: SettingsTenantCredentialsQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      status: TenantCredentialStatus.Active,
+    },
+    pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
   const [jobResult, refreshJob] = useQuery({
@@ -60,8 +120,29 @@ export function N8nSettings({
   const [updateState, updatePackages] = useMutation(
     SettingsUpdateN8nPluginPackageSettingsMutation,
   );
+  const [createCredentialState, createCredential] = useMutation(
+    SettingsCreateTenantCredentialMutation,
+  );
+  const [rotateCredentialState, rotateCredential] = useMutation(
+    SettingsRotateTenantCredentialMutation,
+  );
+  const [updateCredentialState, updateCredential] = useMutation(
+    SettingsUpdateTenantCredentialMutation,
+  );
 
   const settings = settingsResult.data?.n8nPluginSettings ?? null;
+  const n8nApiCredential =
+    credentialResult.data?.tenantCredentials.find(
+      (credential) => credential.slug === "n8n-api",
+    ) ?? null;
+  const apiCredentialSaving =
+    createCredentialState.fetching ||
+    rotateCredentialState.fetching ||
+    updateCredentialState.fetching;
+  const n8nApiLastFour =
+    savedApiKeyLastFour ??
+    stringFromRecord(n8nApiCredential?.metadataJson, "apiKeyLastFour") ??
+    stringFromRecord(n8nApiCredential?.metadataJson, "lastFour");
   const currentPackageConfig = settings?.currentPackageConfig ?? null;
   const job = jobResult.data?.managedApplicationDeployment ?? null;
   const inFlightJob =
@@ -72,13 +153,56 @@ export function N8nSettings({
 
   useEffect(() => {
     if (!currentPackageConfig) return;
-    setRows(
-      currentPackageConfig.packageSpecs.length
-        ? currentPackageConfig.packageSpecs
-        : [""],
-    );
+    setRows(currentPackageConfig.packageSpecs);
     setServerError(null);
   }, [currentPackageConfig?.digest]);
+
+  const loadMcpServiceCredential = useCallback(async () => {
+    if (!tenantSlug) return;
+    setMcpLoading(true);
+    setMcpError(null);
+    try {
+      const response = await listMcpServers(tenantSlug);
+      const server =
+        response.servers.find(isN8nServiceCredentialServer) ?? null;
+      setMcpServer(server);
+      if (!server) {
+        setMcpStatus(null);
+        return;
+      }
+      setMcpStatus(await getMcpServiceCredentialStatus(tenantSlug, server.id));
+    } catch (error) {
+      setMcpError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load n8n MCP credential status",
+      );
+    } finally {
+      setMcpLoading(false);
+    }
+  }, [tenantSlug]);
+
+  useEffect(() => {
+    void loadMcpServiceCredential();
+  }, [loadMcpServiceCredential]);
+
+  useEffect(() => {
+    if (!onRecentAgentStepsActionChange) return;
+    onRecentAgentStepsActionChange(
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Open recent n8n agent steps"
+        title="Recent agent steps"
+        className="text-muted-foreground hover:text-foreground"
+        onClick={() => setAgentStepsOpen(true)}
+      >
+        <Activity className="size-4" />
+      </Button>,
+    );
+    return () => onRecentAgentStepsActionChange(null);
+  }, [onRecentAgentStepsActionChange]);
 
   const local = useMemo(() => {
     try {
@@ -138,7 +262,7 @@ export function N8nSettings({
     setServerError(null);
     setRows((current) => {
       const next = current.filter((_, entryIndex) => entryIndex !== index);
-      return next.length ? next : [""];
+      return next;
     });
   }
 
@@ -192,70 +316,242 @@ export function N8nSettings({
     toast.success("n8n bridge endpoint copied.");
   }
 
+  async function saveMcpAccessToken() {
+    if (!tenantSlug || !mcpServer || !mcpToken.trim()) return;
+    setMcpSaving(true);
+    setMcpError(null);
+    try {
+      const result = await saveMcpServiceCredential(
+        tenantSlug,
+        mcpServer.id,
+        mcpToken,
+      );
+      setMcpToken("");
+      setMcpStatus((current) => ({
+        authType: current?.authType ?? "service_credential",
+        credentialKind: current?.credentialKind ?? "n8n-mcp-access-token",
+        hasCredential: true,
+        lastFour: result.lastFour ?? current?.lastFour ?? null,
+        secretRefConfigured: current?.secretRefConfigured ?? true,
+        headerName: result.headerName ?? current?.headerName ?? null,
+        secretJsonKey: result.secretJsonKey ?? current?.secretJsonKey ?? null,
+      }));
+      toast.success("n8n MCP access token saved.");
+      await loadMcpServiceCredential();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to save n8n MCP access token";
+      setMcpError(message);
+      toast.error(message);
+    } finally {
+      setMcpSaving(false);
+    }
+  }
+
+  async function saveN8nApiCredential() {
+    const apiKey = n8nApiKey.trim();
+    if (!apiKey || !tenantId) return;
+    setN8nApiError(null);
+    const baseUrl = n8nPublicUrl(settings?.desiredConfig);
+    const apiKeyLastFour = apiKey.slice(-6);
+    const metadata = {
+      ...recordFromUnknown(n8nApiCredential?.metadataJson),
+      ...(baseUrl ? { n8nBaseUrl: baseUrl } : {}),
+      apiKeyLastFour,
+    };
+    const result = n8nApiCredential
+      ? await rotateCredential({
+          input: {
+            id: n8nApiCredential.id,
+            secretJson: JSON.stringify({ apiKey }),
+          },
+        }).then(async (rotateResult) => {
+          if (rotateResult.error) return rotateResult;
+          return updateCredential({
+            id: n8nApiCredential.id,
+            input: { metadataJson: JSON.stringify(metadata) },
+          });
+        })
+      : await createCredential({
+          input: {
+            tenantId,
+            displayName: "n8n API key",
+            slug: "n8n-api",
+            kind: TenantCredentialKind.ApiKey,
+            metadataJson: JSON.stringify(metadata),
+            secretJson: JSON.stringify({ apiKey }),
+          },
+        });
+    if (result.error) {
+      setN8nApiError(result.error.message);
+      toast.error(`Could not save n8n API key: ${result.error.message}`);
+      return;
+    }
+    if (import.meta.env.DEV) {
+      window.sessionStorage.setItem(N8N_API_KEY_SESSION_STORAGE_KEY, apiKey);
+    }
+    setN8nApiKey("");
+    setSavedApiKeyLastFour(apiKeyLastFour);
+    toast.success("n8n API key saved.");
+    refreshSettings({ requestPolicy: "network-only" });
+    refreshCredentials({ requestPolicy: "network-only" });
+    onChanged();
+  }
+
   const firstError = local.error ?? serverError;
   const packageSpecs = local.config?.packageSpecs ?? [];
+  const packageCount = packageSpecs.length;
 
   return (
     <SettingsSection label="n8n Settings">
       <SettingsRow
-        label="Agent-step bridge"
-        description="Tenant-scoped HTTP entrypoint for n8n workflows that delegate one workflow step to a ThinkWork agent."
+        label={
+          <SettingsLabelWithBadge
+            label="n8n API key"
+            badge={
+              <StatusBadge configured={Boolean(n8nApiCredential)}>
+                {n8nApiCredential ? "Configured" : "Not configured"}
+              </StatusBadge>
+            }
+          />
+        }
+        description="Used to pull published workflows from the n8n public API into ThinkWork discovery."
+        layout="stacked"
       >
         <div className="w-full space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant={
-                settings?.agentStepBridgeCredentialConfigured
-                  ? "default"
-                  : "outline"
-              }
-            >
-              <KeyRound className="size-3.5" />
-              {settings?.agentStepBridgeCredentialConfigured
-                ? "Credential configured"
-                : "Credential missing"}
-            </Badge>
-          </div>
+          {n8nApiError ? (
+            <p className="text-sm text-destructive">{n8nApiError}</p>
+          ) : null}
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <code className="min-h-9 rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-sm text-foreground">
-              {settings?.agentStepBridgeEndpointPath ??
-                "/api/integrations/n8n/agent-steps"}
-            </code>
+            <Input
+              aria-label="n8n API key"
+              type="password"
+              autoComplete="off"
+              value={n8nApiKey}
+              placeholder={
+                n8nApiLastFour
+                  ? `API key ending in ...${n8nApiLastFour}`
+                  : n8nApiCredential
+                    ? "Paste replacement n8n API key"
+                    : "Paste n8n API key"
+              }
+              disabled={!settings || !tenantId || apiCredentialSaving}
+              onChange={(event) => setN8nApiKey(event.currentTarget.value)}
+            />
             <Button
               type="button"
-              size="icon-sm"
-              variant="outline"
-              aria-label="Copy n8n bridge endpoint"
-              title="Copy endpoint"
-              disabled={!settings?.agentStepBridgeEndpointPath}
-              onClick={() => void copyBridgeEndpoint()}
+              size="sm"
+              disabled={
+                !settings || !tenantId || apiCredentialSaving || !n8nApiKey.trim()
+              }
+              onClick={() => void saveN8nApiCredential()}
             >
-              <Copy className="size-4" />
+              {apiCredentialSaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              Save
             </Button>
           </div>
         </div>
       </SettingsRow>
 
       <SettingsRow
-        label="Recent agent steps"
-        description="Redacted bridge-run evidence from n8n workflow steps that delegated work to ThinkWork agents."
+        label={
+          <SettingsLabelWithBadge
+            label="MCP access token"
+            badge={
+              <StatusBadge configured={Boolean(mcpStatus?.hasCredential)}>
+                {mcpLoading
+                  ? "Checking"
+                  : mcpStatus?.hasCredential
+                    ? "Configured"
+                    : "Not configured"}
+              </StatusBadge>
+            }
+          />
+        }
+        description="Stored server-side and sent as the Authorization header for the n8n workflow-management MCP server."
         layout="stacked"
       >
-        <BridgeRunTelemetryPanel
-          runs={settings?.recentAgentStepRuns ?? []}
-          title="Recent bridge runs"
-          compact
-          className="w-full"
-        />
-        {settings?.recentAgentStepRuns?.length ? null : (
-          <p className="text-sm text-muted-foreground">
-            No n8n agent-step bridge runs yet.
-          </p>
-        )}
+        <div className="w-full space-y-3">
+          {mcpError ? (
+            <p className="text-sm text-destructive">{mcpError}</p>
+          ) : null}
+          {!mcpServer && !mcpLoading ? (
+            <p className="text-sm text-muted-foreground">
+              n8n MCP server is not available yet.
+            </p>
+          ) : null}
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Input
+              aria-label="n8n MCP access token"
+              type="password"
+              autoComplete="off"
+              value={mcpToken}
+              placeholder={
+                mcpStatus?.lastFour
+                  ? `Access token ending in ...${mcpStatus.lastFour}`
+                  : mcpStatus?.hasCredential
+                    ? "Paste replacement access token"
+                    : "Paste access token"
+              }
+              disabled={!mcpServer || mcpLoading || mcpSaving}
+              onChange={(event) => setMcpToken(event.currentTarget.value)}
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={
+                !mcpServer || mcpLoading || mcpSaving || !mcpToken.trim()
+              }
+              onClick={() => void saveMcpAccessToken()}
+            >
+              {mcpSaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              Save
+            </Button>
+          </div>
+        </div>
       </SettingsRow>
 
+      {!onRecentAgentStepsActionChange ? (
+        <SettingsRow
+          label="Recent agent steps"
+          description="Redacted bridge-run evidence from n8n workflow steps that delegated work to ThinkWork agents."
+          layout="stacked"
+        >
+          <BridgeRunTelemetryPanel
+            runs={settings?.recentAgentStepRuns ?? []}
+            title="Recent bridge runs"
+            compact
+            className="w-full"
+          />
+          {settings?.recentAgentStepRuns?.length ? null : (
+            <p className="text-sm text-muted-foreground">
+              No n8n agent-step bridge runs yet.
+            </p>
+          )}
+        </SettingsRow>
+      ) : null}
+
       <SettingsRow
-        label="Custom packages"
+        label={
+          <SettingsLabelWithBadge
+            label="Custom packages"
+            badge={
+              <Badge variant={packageCount === 0 ? "secondary" : "outline"}>
+                {packageCount} package{packageCount === 1 ? "" : "s"}
+              </Badge>
+            }
+          />
+        }
         description="Pinned public npm packages injected into the n8n image and allow-listed for Code nodes."
         layout="stacked"
       >
@@ -280,7 +576,7 @@ export function N8nSettings({
                     }
                     id={`n8n-package-${index}`}
                     value={row}
-                    placeholder="lodash@4.17.21"
+                    placeholder="Package Name @ Version"
                     autoComplete="off"
                     disabled={disabled}
                     aria-invalid={Boolean(firstError)}
@@ -318,18 +614,7 @@ export function N8nSettings({
           ) : null}
 
           <div className="rounded-md border border-border bg-muted/20 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">
-                {packageSpecs.length} package
-                {packageSpecs.length === 1 ? "" : "s"}
-              </Badge>
-              {local.config ? (
-                <code className="break-all font-mono text-xs text-muted-foreground">
-                  {local.config.digest}
-                </code>
-              ) : null}
-            </div>
-            <div className="mt-2 space-y-1">
+            <div className="space-y-1">
               {packageSpecs.length ? (
                 packageSpecs.map((spec) => (
                   <code
@@ -399,6 +684,47 @@ export function N8nSettings({
         </div>
       </SettingsRow>
 
+      <SettingsRow
+        label={
+          <SettingsLabelWithBadge
+            label="Agent-step bridge"
+            badge={
+              <StatusBadge
+                configured={Boolean(
+                  settings?.agentStepBridgeCredentialConfigured,
+                )}
+              >
+                {settings?.agentStepBridgeCredentialConfigured
+                  ? "Configured"
+                  : "Not configured"}
+              </StatusBadge>
+            }
+          />
+        }
+        description="Tenant-scoped HTTP entrypoint for n8n workflows that delegate one workflow step to a ThinkWork agent."
+        layout="stacked"
+      >
+        <div className="w-full space-y-3">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <code className="min-h-9 overflow-x-auto whitespace-nowrap rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-sm text-foreground">
+              {settings?.agentStepBridgeEndpointPath ??
+                "/api/integrations/n8n/agent-steps"}
+            </code>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="outline"
+              aria-label="Copy n8n bridge endpoint"
+              title="Copy endpoint"
+              disabled={!settings?.agentStepBridgeEndpointPath}
+              onClick={() => void copyBridgeEndpoint()}
+            >
+              <Copy className="size-4" />
+            </Button>
+          </div>
+        </div>
+      </SettingsRow>
+
       <ManagedApplicationPlanDialog
         job={job}
         open={dialogOpen}
@@ -410,6 +736,31 @@ export function N8nSettings({
           onChanged();
         }}
       />
+
+      <Sheet open={agentStepsOpen} onOpenChange={setAgentStepsOpen}>
+        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-2xl">
+          <SheetHeader className="border-b border-border/70 px-6 py-4 pr-14">
+            <SheetTitle>Recent agent steps</SheetTitle>
+            <SheetDescription>
+              Redacted bridge-run evidence from n8n workflow steps that
+              delegated work to ThinkWork agents.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="p-6">
+            <BridgeRunTelemetryPanel
+              runs={settings?.recentAgentStepRuns ?? []}
+              title="Recent bridge runs"
+              compact
+              className="w-full"
+            />
+            {settings?.recentAgentStepRuns?.length ? null : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                No n8n agent-step bridge runs yet.
+              </p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </SettingsSection>
   );
 }
@@ -420,4 +771,74 @@ function splitPackageSpecs(value: string): string[] {
     .split(/[\n,]+/)
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function SettingsLabelWithBadge({
+  label,
+  badge,
+}: {
+  label: string;
+  badge: ReactNode;
+}) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <span>{label}</span>
+      {badge}
+    </span>
+  );
+}
+
+function StatusBadge({
+  configured,
+  children,
+}: {
+  configured: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Badge
+      variant={configured ? "outline" : "secondary"}
+      className={
+        configured ? "border-emerald-500/40 text-emerald-400" : undefined
+      }
+    >
+      {children}
+    </Badge>
+  );
+}
+
+function n8nPublicUrl(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return typeof record.publicUrl === "string" && record.publicUrl.trim()
+    ? record.publicUrl.trim()
+    : null;
+}
+
+function stringFromRecord(value: unknown, key: string): string | null {
+  const record = recordFromUnknown(value);
+  const entry = record[key];
+  return typeof entry === "string" && entry.trim() ? entry.trim() : null;
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return recordFromUnknown(parsed);
+    } catch {
+      return {};
+    }
+  }
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function isN8nServiceCredentialServer(server: McpServer): boolean {
+  if (server.authType !== "service_credential") return false;
+  if (server.managedApplicationKey === "n8n") return true;
+  const slug = server.slug?.toLowerCase() ?? "";
+  const name = server.name.toLowerCase();
+  return slug.includes("n8n") || name.includes("n8n");
 }

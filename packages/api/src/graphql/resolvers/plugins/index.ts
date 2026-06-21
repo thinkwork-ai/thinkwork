@@ -7,6 +7,7 @@ import {
 } from "./queries.js";
 import {
   n8nPluginSettings,
+  updateN8nPluginApiCredential,
   updateN8nPluginPackageSettings,
 } from "./n8n-settings.js";
 import {
@@ -46,5 +47,6 @@ export const pluginMutations = {
   redeemPremiumPluginInstallKey,
   revokePremiumPluginInstallKey,
   updateN8nPluginPackageSettings,
+  updateN8nPluginApiCredential,
   cutoverTwentyPlugin,
 };

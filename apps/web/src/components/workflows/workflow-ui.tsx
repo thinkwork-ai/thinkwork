@@ -69,7 +69,7 @@ export function primaryBinding(
 export function sourceLabel(binding?: WorkflowBinding | null): string {
   switch (binding?.bindingType) {
     case "step_functions_routine":
-      return "Step Functions";
+      return "AWS Step";
     case "n8n_bridge":
       return "n8n bridge";
     case "n8n_import":

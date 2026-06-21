@@ -2,11 +2,13 @@ import { and, eq } from "drizzle-orm";
 import {
   managedApplications,
   pluginInstalls,
+  tenantCredentials,
   workflowEngineBindings,
   workflowTriggers,
   workflowVersions,
   workflows,
 } from "@thinkwork/database-pg/schema";
+import { readTenantCredentialSecret } from "../tenant-credentials/secret-store.js";
 
 type WorkflowDb = any;
 
@@ -50,6 +52,11 @@ export type ConnectN8nWorkflowResult = {
   created: boolean;
 };
 
+type DiscoverN8nWorkflowsDeps = {
+  fetch?: typeof fetch;
+  readTenantCredentialSecret?: typeof readTenantCredentialSecret;
+};
+
 const N8N_WORKFLOW_CAPABILITIES = {
   start: false,
   monitor: true,
@@ -63,11 +70,23 @@ const N8N_WORKFLOW_CAPABILITIES = {
 export async function discoverN8nWorkflows(
   database: WorkflowDb,
   input: { tenantId: string; installId: string },
+  deps: DiscoverN8nWorkflowsDeps = {},
 ): Promise<N8nWorkflowDiscoveryResult> {
   const install = await loadN8nInstall(database, input);
   const app = await loadN8nManagedApplication(database, input.tenantId);
-  const readiness = n8nDiscoveryReadiness(install, app);
-  const snapshot = discoveredWorkflowsFromDesiredConfig(app?.desired_config);
+  const apiCredential = await loadN8nApiCredential(database, input.tenantId);
+  const baseReadiness = n8nDiscoveryReadiness(install, app, {
+    apiCredential,
+    requireApiCredential: true,
+  });
+  const snapshotResult = await discoverN8nApiWorkflows({
+    app,
+    apiCredential,
+    baseReadiness,
+    deps,
+  });
+  const readiness = snapshotResult.readiness;
+  const snapshot = snapshotResult.workflows;
   const connected = await loadConnectedN8nBindings(database, input);
   type ConnectedBinding = (typeof connected)[number];
   const discoveredById = new Map(
@@ -111,6 +130,225 @@ export async function discoverN8nWorkflows(
         };
       }),
   };
+}
+
+async function discoverN8nApiWorkflows(args: {
+  app: Awaited<ReturnType<typeof loadN8nManagedApplication>>;
+  apiCredential: Awaited<ReturnType<typeof loadN8nApiCredential>>;
+  baseReadiness: N8nWorkflowReadiness;
+  deps: DiscoverN8nWorkflowsDeps;
+}): Promise<{
+  readiness: N8nWorkflowReadiness;
+  workflows: N8nDiscoveredWorkflow[];
+}> {
+  const fallback = discoveredWorkflowsFromDesiredConfig(
+    args.app?.desired_config,
+  );
+  if (args.baseReadiness.state !== "ready" || !args.apiCredential) {
+    return { readiness: args.baseReadiness, workflows: fallback };
+  }
+
+  const desiredConfig = recordValue(args.app?.desired_config);
+  const metadata = recordValue(args.apiCredential.metadata_json);
+  const configuredBaseUrl =
+    stringValue(metadata.n8nBaseUrl) ??
+    stringValue(metadata.baseUrl) ??
+    stringValue(metadata.publicUrl) ??
+    stringValue(desiredConfig.publicUrl);
+  if (!configuredBaseUrl) {
+    return {
+      readiness: {
+        state: "blocked_not_ready",
+        bindingStatus: "blocked_not_ready",
+        reasons: [
+          {
+            code: "n8n_api_base_url_missing",
+            message:
+              "n8n API key is configured, but no n8n public URL is available.",
+          },
+        ],
+      },
+      workflows: fallback,
+    };
+  }
+
+  try {
+    const secret = await (
+      args.deps.readTenantCredentialSecret ?? readTenantCredentialSecret
+    )(args.apiCredential.secret_ref);
+    const apiKey = stringValue(secret.apiKey);
+    if (!apiKey) {
+      return {
+        readiness: {
+          state: "blocked_not_ready",
+          bindingStatus: "blocked_not_ready",
+          reasons: [
+            {
+              code: "n8n_api_key_missing",
+              message: "n8n API credential is missing the apiKey secret field.",
+            },
+          ],
+        },
+        workflows: fallback,
+      };
+    }
+    return {
+      readiness: args.baseReadiness,
+      workflows: await fetchN8nPublicApiWorkflows({
+        baseUrl: configuredBaseUrl,
+        apiKey,
+        fetchImpl: args.deps.fetch ?? fetch,
+      }),
+    };
+  } catch (error) {
+    return {
+      readiness: {
+        state: "blocked_not_ready",
+        bindingStatus: "blocked_not_ready",
+        reasons: [
+          {
+            code: "n8n_api_discovery_failed",
+            message: `Could not discover n8n workflows: ${(error as Error).message}`,
+          },
+        ],
+      },
+      workflows: fallback,
+    };
+  }
+}
+
+async function fetchN8nPublicApiWorkflows(input: {
+  baseUrl: string;
+  apiKey: string;
+  fetchImpl: typeof fetch;
+}): Promise<N8nDiscoveredWorkflow[]> {
+  const workflows: N8nDiscoveredWorkflow[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 10; page += 1) {
+    const endpoint = n8nWorkflowListUrl(input.baseUrl, cursor);
+    const response = await input.fetchImpl(endpoint, {
+      method: "GET",
+      headers: {
+        accept: "application/json",
+        "X-N8N-API-KEY": input.apiKey,
+      },
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(
+        `n8n API ${response.status}: ${text.slice(0, 300) || response.statusText}`,
+      );
+    }
+    const payload = parseJsonRecord(text, endpoint);
+    const data = Array.isArray(payload.data) ? payload.data : [];
+    const records = await Promise.all(
+      data.map((entry) => enrichN8nWorkflowRecord(input, entry)),
+    );
+    workflows.push(...records.flatMap(n8nWorkflowFromApiRecord));
+    cursor = stringValue(payload.nextCursor);
+    if (!cursor) break;
+  }
+  return workflows;
+}
+
+async function enrichN8nWorkflowRecord(
+  input: {
+    baseUrl: string;
+    apiKey: string;
+    fetchImpl: typeof fetch;
+  },
+  entry: unknown,
+): Promise<unknown> {
+  const parsed = n8nWorkflowFromApiRecord(entry)[0];
+  if (!parsed || parsed.triggerTypes.length > 0) return entry;
+  const workflowId = parsed.externalWorkflowId;
+  const endpoint = n8nWorkflowDetailUrl(input.baseUrl, workflowId);
+  const response = await input.fetchImpl(endpoint, {
+    method: "GET",
+    headers: {
+      accept: "application/json",
+      "X-N8N-API-KEY": input.apiKey,
+    },
+  });
+  const text = await response.text();
+  if (!response.ok) return entry;
+  return {
+    ...recordValue(entry),
+    ...parseJsonRecord(text, endpoint),
+  };
+}
+
+function n8nWorkflowListUrl(baseUrl: string, cursor: string | null): string {
+  const root = n8nApiRootUrl(baseUrl);
+  const endpoint = new URL("workflows", root);
+  endpoint.searchParams.set("limit", "100");
+  if (cursor) endpoint.searchParams.set("cursor", cursor);
+  return endpoint.toString();
+}
+
+function n8nWorkflowDetailUrl(baseUrl: string, workflowId: string): string {
+  const root = n8nApiRootUrl(baseUrl);
+  return new URL(`workflows/${encodeURIComponent(workflowId)}`, root).toString();
+}
+
+function n8nApiRootUrl(value: string): URL {
+  const url = new URL(value);
+  const path = url.pathname.replace(/\/+$/, "");
+  if (path.endsWith("/api/v1")) {
+    url.pathname = `${path}/`;
+  } else {
+    url.pathname = `${path}/api/v1/`.replace(/\/+/g, "/");
+  }
+  url.search = "";
+  url.hash = "";
+  return url;
+}
+
+function n8nWorkflowFromApiRecord(entry: unknown): N8nDiscoveredWorkflow[] {
+  const record = recordValue(entry);
+  const id = stringValue(record.id);
+  const name = stringValue(record.name) ?? id;
+  if (!id || !name) return [];
+  const nodes = Array.isArray(record.nodes) ? record.nodes : [];
+  const explicitTriggerTypes = normalizeTriggerTypes(record.triggerTypes);
+  return [
+    {
+      externalWorkflowId: id,
+      name,
+      active: booleanOrNull(record.active),
+      triggerTypes: explicitTriggerTypes.length
+        ? explicitTriggerTypes
+        : inferTriggerTypes(nodes),
+      lastModifiedAt: normalizeDate(record.updatedAt ?? record.lastModifiedAt),
+      lastExecutionAt: normalizeDate(record.lastExecutionAt),
+      warnings: [],
+    },
+  ];
+}
+
+function inferTriggerTypes(nodes: unknown[]): string[] {
+  const values = new Set<string>();
+  for (const node of nodes) {
+    const type = stringValue(recordValue(node).type)?.toLowerCase() ?? "";
+    if (!type) continue;
+    if (type.includes("webhook")) values.add("webhook");
+    else if (type.includes("schedule") || type.includes("cron"))
+      values.add("schedule");
+    else if (type.includes("manualtrigger")) values.add("manual");
+    else if (type.includes("formtrigger")) values.add("form");
+    else if (type.includes("trigger")) values.add("trigger");
+  }
+  return [...values];
+}
+
+function parseJsonRecord(text: string, endpoint: string): Record<string, unknown> {
+  try {
+    return recordValue(JSON.parse(text));
+  } catch (error) {
+    throw new Error(
+      `n8n API returned invalid JSON from ${endpoint}: ${(error as Error).message}`,
+    );
+  }
 }
 
 export async function connectN8nWorkflow(
@@ -424,6 +662,25 @@ async function loadN8nManagedApplication(
   return app ?? null;
 }
 
+async function loadN8nApiCredential(database: WorkflowDb, tenantId: string) {
+  const [credential] = await dbSelect(database)
+    .select({
+      id: tenantCredentials.id,
+      secret_ref: tenantCredentials.secret_ref,
+      metadata_json: tenantCredentials.metadata_json,
+    })
+    .from(tenantCredentials)
+    .where(
+      and(
+        eq(tenantCredentials.tenant_id, tenantId),
+        eq(tenantCredentials.slug, "n8n-api"),
+        eq(tenantCredentials.status, "active"),
+      ),
+    )
+    .limit(1);
+  return credential ?? null;
+}
+
 type N8nWorkflowReadiness = {
   state: "ready" | "blocked_not_ready" | "disabled";
   bindingStatus: "ready" | "blocked_not_ready" | "disabled";
@@ -437,6 +694,10 @@ function n8nDiscoveryReadiness(
     current_status?: string | null;
     desired_config?: unknown;
   } | null,
+  options: {
+    apiCredential?: { id: string } | null;
+    requireApiCredential?: boolean;
+  } = {},
 ): N8nWorkflowReadiness {
   if (install.state === "uninstalling" || install.state === "failed") {
     return {
@@ -477,6 +738,19 @@ function n8nDiscoveryReadiness(
         {
           code: "service_credential_missing",
           message: "n8n service credential is not configured.",
+        },
+      ],
+    };
+  }
+  if (options.requireApiCredential && !options.apiCredential) {
+    return {
+      state: "blocked_not_ready",
+      bindingStatus: "blocked_not_ready",
+      reasons: [
+        {
+          code: "n8n_api_key_missing",
+          message:
+            "n8n API key is not configured. Add one in the n8n plugin Settings tab to discover workflows.",
         },
       ],
     };

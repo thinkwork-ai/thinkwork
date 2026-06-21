@@ -37,6 +37,102 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      {
+        name: "thinkwork-dev-n8n-api-proxy",
+        configureServer(server) {
+          server.middlewares.use(
+            "/__thinkwork-dev/n8n/workflows",
+            async (req, res) => {
+              if (req.method !== "GET") {
+                res.statusCode = 405;
+                res.setHeader("content-type", "application/json");
+                res.end(JSON.stringify({ error: "Method not allowed" }));
+                return;
+              }
+              const requestUrl = new URL(req.url ?? "/", "http://localhost");
+              const baseUrl = requestUrl.searchParams.get("baseUrl");
+              const cursor = requestUrl.searchParams.get("cursor");
+              const apiKey = Array.isArray(req.headers["x-n8n-api-key"])
+                ? req.headers["x-n8n-api-key"][0]
+                : req.headers["x-n8n-api-key"];
+              if (!baseUrl || !apiKey) {
+                res.statusCode = 400;
+                res.setHeader("content-type", "application/json");
+                res.end(JSON.stringify({ error: "baseUrl and API key are required" }));
+                return;
+              }
+
+              try {
+                const origin = new URL(baseUrl).origin;
+                const upstream = new URL("/api/v1/workflows", origin);
+                upstream.searchParams.set("limit", "100");
+                if (cursor) upstream.searchParams.set("cursor", cursor);
+                const upstreamResponse = await fetch(upstream, {
+                  method: "GET",
+                  headers: {
+                    accept: "application/json",
+                    "X-N8N-API-KEY": apiKey,
+                  },
+                });
+                const body = await upstreamResponse.text();
+                res.statusCode = upstreamResponse.status;
+                res.setHeader(
+                  "content-type",
+                  upstreamResponse.headers.get("content-type") ??
+                    "application/json",
+                );
+                if (!upstreamResponse.ok) {
+                  res.end(body);
+                  return;
+                }
+                const payload = JSON.parse(body) as {
+                  data?: Array<Record<string, unknown>>;
+                  [key: string]: unknown;
+                };
+                if (Array.isArray(payload.data)) {
+                  payload.data = await Promise.all(
+                    payload.data.map(async (workflow) => {
+                      if (hasWorkflowTriggerData(workflow)) return workflow;
+                      const workflowId =
+                        typeof workflow.id === "string" ? workflow.id : null;
+                      if (!workflowId) return workflow;
+                      const detailUrl = new URL(
+                        `/api/v1/workflows/${encodeURIComponent(workflowId)}`,
+                        origin,
+                      );
+                      const detailResponse = await fetch(detailUrl, {
+                        method: "GET",
+                        headers: {
+                          accept: "application/json",
+                          "X-N8N-API-KEY": apiKey,
+                        },
+                      });
+                      if (!detailResponse.ok) return workflow;
+                      const detail = (await detailResponse.json()) as Record<
+                        string,
+                        unknown
+                      >;
+                      return { ...workflow, ...detail };
+                    }),
+                  );
+                }
+                res.end(JSON.stringify(payload));
+              } catch (error) {
+                res.statusCode = 502;
+                res.setHeader("content-type", "application/json");
+                res.end(
+                  JSON.stringify({
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "Failed to proxy n8n workflows",
+                  }),
+                );
+              }
+            },
+          );
+        },
+      },
       TanStackRouterVite({ quoteStyle: "double", semicolons: true }),
       react(),
       tailwindcss(),
@@ -67,3 +163,10 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
+
+function hasWorkflowTriggerData(workflow: Record<string, unknown>): boolean {
+  if (Array.isArray(workflow.triggerTypes) && workflow.triggerTypes.length > 0) {
+    return true;
+  }
+  return Array.isArray(workflow.nodes) && workflow.nodes.length > 0;
+}

@@ -1,19 +1,35 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useCallback, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
-import { Badge, DataTable, Input } from "@thinkwork/ui";
+import {
+  Badge,
+  Button,
+  cn,
+  DataTable,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@thinkwork/ui";
+import { Search } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
+import { SettingsPluginCatalogQuery } from "@/lib/settings-queries";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
+import { N8nPluginWorkflows } from "@/components/settings/plugins/n8n/N8nPluginWorkflows";
 import {
-  formatShortDate,
   primaryBinding,
   sourceLabel,
   SourceBadge,
   titleize,
   type WorkflowBinding,
-  type WorkflowRunSummary,
   WorkflowReadinessBadge,
 } from "./workflow-ui";
 
@@ -31,11 +47,10 @@ type WorkflowRow = {
     id: string;
     triggerFamily: string;
     sourceSystem?: string | null;
+    triggerConfig?: unknown;
     enabled: boolean;
     readinessState: string;
   }>;
-  lastRun?: WorkflowRunSummary | null;
-  lastRunAt?: string | null;
   updatedAt?: string | null;
 };
 
@@ -56,6 +71,7 @@ function rowMatchesSearch(row: WorkflowRow, search: string): boolean {
     row.name,
     row.description ?? "",
     row.primaryTriggerFamily,
+    workflowTriggerLabel(row),
     sourceLabel(primaryBinding(row.bindings)),
     row.lifecycleStatus,
     row.readinessState,
@@ -74,12 +90,12 @@ function uniqueOptions(
 
 export function WorkflowInventory() {
   const { tenantId } = useTenant();
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [readiness, setReadiness] = useState(ALL);
   const [binding, setBinding] = useState(ALL);
   const [trigger, setTrigger] = useState(ALL);
   const [status, setStatus] = useState(ALL);
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const ignoreDiscoveryState = useCallback(() => {}, []);
 
   const [result] = useQuery<WorkflowsData>({
     query: SettingsWorkflowsQuery,
@@ -87,22 +103,32 @@ export function WorkflowInventory() {
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const [catalogResult] = useQuery({
+    query: SettingsPluginCatalogQuery,
+    requestPolicy: "cache-and-network",
+  });
 
   const rows = useMemo(
     () => result.data?.workflows ?? [],
     [result.data?.workflows],
   );
+  const n8nCatalogEntry =
+    (catalogResult.data?.pluginCatalog ?? []).find(
+      (candidate) => candidate.pluginKey === "n8n",
+    ) ?? null;
+  const n8nInstall = n8nCatalogEntry?.install ?? null;
+  const n8nLaunchUrl = n8nCatalogEntry?.launchUrl ?? null;
+  const canDiscoverN8n = Boolean(n8nInstall);
   const filteredRows = useMemo(
     () =>
       rows.filter(
         (row) =>
           rowMatchesSearch(row, search) &&
-          (readiness === ALL || row.readinessState === readiness) &&
           (binding === ALL || bindingFilterValue(row) === binding) &&
-          (trigger === ALL || row.primaryTriggerFamily === trigger) &&
-          (status === ALL || row.lifecycleStatus === status),
+          (trigger === ALL || workflowTriggerLabel(row) === trigger) &&
+          (status === ALL || row.readinessState === status),
       ),
-    [binding, readiness, rows, search, status, trigger],
+    [binding, rows, search, status, trigger],
   );
 
   const columns = useMemo<ColumnDef<WorkflowRow>[]>(
@@ -110,19 +136,27 @@ export function WorkflowInventory() {
       {
         accessorKey: "name",
         header: "Workflow",
+        meta: {
+          headClassName: "w-full min-w-[200px]",
+          cellClassName: "w-full min-w-[200px] max-w-0",
+        },
         cell: ({ row }) => (
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate font-medium">{row.original.name}</span>
-            <span className="truncate text-xs text-muted-foreground">
-              {row.original.description ?? "No description"}
-            </span>
-          </div>
+          <a
+            href={`/settings/workflows/${encodeURIComponent(row.original.id)}`}
+            className="block truncate font-medium text-foreground transition-colors hover:text-primary"
+            title={row.original.name}
+          >
+            {row.original.name}
+          </a>
         ),
       },
       {
-        id: "readiness",
-        header: "Readiness",
-        size: 170,
+        id: "status",
+        header: "Status",
+        meta: {
+          headClassName: "w-px whitespace-nowrap",
+          cellClassName: "w-px whitespace-nowrap",
+        },
         cell: ({ row }) => (
           <WorkflowReadinessBadge
             state={row.original.readinessState}
@@ -133,63 +167,49 @@ export function WorkflowInventory() {
       {
         id: "source",
         header: "Source",
-        size: 140,
-        cell: ({ row }) => (
-          <SourceBadge binding={primaryBinding(row.original.bindings)} />
-        ),
+        meta: {
+          headClassName: "w-px whitespace-nowrap text-center",
+          cellClassName: "w-px whitespace-nowrap text-center",
+        },
+        cell: ({ row }) => {
+          const binding = primaryBinding(row.original.bindings);
+          const sourceUrl = n8nWorkflowUiUrl(n8nLaunchUrl, binding);
+          const badge = <SourceBadge binding={binding} />;
+          return sourceUrl ? (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex transition-opacity hover:opacity-80"
+              title="Open n8n workflow"
+            >
+              {badge}
+            </a>
+          ) : (
+            badge
+          );
+        },
       },
       {
         accessorKey: "primaryTriggerFamily",
         header: "Trigger",
-        size: 120,
+        meta: {
+          headClassName: "w-px whitespace-nowrap text-center",
+          cellClassName: "w-px whitespace-nowrap text-center",
+        },
         cell: ({ row }) => (
           <Badge variant="outline" className="text-xs">
-            {titleize(row.original.primaryTriggerFamily)}
+            {workflowTriggerLabel(row.original)}
           </Badge>
         ),
       },
-      {
-        accessorKey: "lifecycleStatus",
-        header: "Status",
-        size: 110,
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {titleize(row.original.lifecycleStatus)}
-          </span>
-        ),
-      },
-      {
-        id: "version",
-        header: "Version",
-        size: 90,
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {row.original.currentVersionNumber ?? "—"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "lastRunAt",
-        header: "Last run",
-        size: 120,
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {formatShortDate(
-              row.original.lastRun?.lastEventAt ??
-                row.original.lastRun?.startedAt ??
-                row.original.lastRunAt,
-            )}
-          </span>
-        ),
-      },
     ],
-    [],
+    [n8nLaunchUrl],
   );
 
   const loading = result.fetching && !result.data;
   const hasFilters =
     search.trim() !== "" ||
-    readiness !== ALL ||
     binding !== ALL ||
     trigger !== ALL ||
     status !== ALL;
@@ -199,19 +219,35 @@ export function WorkflowInventory() {
       title="Workflows"
       description="Monitor workflows imported from routines, plugins, connected apps, and native ThinkWork sources."
       loading={loading}
+      headerActions={
+        canDiscoverN8n ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Discover n8n workflows"
+            title="Discover n8n workflows"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setDiscoveryOpen(true)}
+          >
+            <Search className="size-4" />
+          </Button>
+        ) : null
+      }
+      headerActionKey={`workflow-discovery:${n8nInstall?.id ?? "missing"}`}
       toolbar={
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto pb-1">
           <Input
             placeholder="Search workflows..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="max-w-sm"
+            className="h-9 w-56 shrink-0"
           />
           <FilterSelect
-            label="Readiness"
-            value={readiness}
+            label="Status"
+            value={status}
             values={uniqueOptions(rows, (row) => row.readinessState)}
-            onChange={setReadiness}
+            onChange={setStatus}
           />
           <FilterSelect
             label="Source"
@@ -223,14 +259,8 @@ export function WorkflowInventory() {
           <FilterSelect
             label="Trigger"
             value={trigger}
-            values={uniqueOptions(rows, (row) => row.primaryTriggerFamily)}
+            values={uniqueOptions(rows, workflowTriggerLabel)}
             onChange={setTrigger}
-          />
-          <FilterSelect
-            label="Status"
-            value={status}
-            values={uniqueOptions(rows, (row) => row.lifecycleStatus)}
-            onChange={setStatus}
           />
         </div>
       }
@@ -246,15 +276,9 @@ export function WorkflowInventory() {
           filterValue=""
           filterColumn="name"
           scrollable
-          allowHorizontalScroll
+          allowHorizontalScroll={false}
           pageSize={25}
-          tableClassName="table-fixed"
-          onRowClick={(row) =>
-            navigate({
-              to: "/settings/workflows/$workflowId",
-              params: { workflowId: row.id },
-            })
-          }
+          tableClassName="w-full table-auto"
           emptyState={
             <div className="py-10 text-center text-sm text-muted-foreground">
               {rows.length === 0
@@ -266,8 +290,74 @@ export function WorkflowInventory() {
           }
         />
       )}
+      <Sheet open={discoveryOpen} onOpenChange={setDiscoveryOpen}>
+        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(900px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+          <SheetHeader className="border-b border-border px-6 py-5">
+            <SheetTitle>Discover n8n workflows</SheetTitle>
+            <SheetDescription>
+              Search available n8n workflows and connect them to ThinkWork.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 p-6">
+            <N8nPluginWorkflows
+              installId={n8nInstall?.id ?? null}
+              launchUrl={null}
+              refreshNonce={0}
+              onDiscoveryStateChange={ignoreDiscoveryState}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </SettingsTablePane>
   );
+}
+
+function n8nWorkflowUiUrl(
+  launchUrl: string | null,
+  binding: WorkflowBinding | null,
+): string | null {
+  if (
+    !launchUrl ||
+    !binding?.externalWorkflowId ||
+    (binding.bindingType !== "n8n_bridge" && binding.bindingType !== "n8n_import")
+  ) {
+    return null;
+  }
+  try {
+    return new URL(
+      `/workflow/${encodeURIComponent(binding.externalWorkflowId)}`,
+      new URL(launchUrl).origin,
+    ).toString();
+  } catch {
+    return null;
+  }
+}
+
+function workflowTriggerLabel(row: WorkflowRow): string {
+  const bindingType = primaryBinding(row.bindings)?.bindingType;
+  if (bindingType === "n8n_bridge" || bindingType === "n8n_import") {
+    const triggerTypes = row.triggers.flatMap((trigger) =>
+      stringArrayFromUnknown(recordFromUnknown(trigger.triggerConfig).triggerTypes),
+    );
+    if (triggerTypes.length) {
+      return Array.from(new Set(triggerTypes.map(titleize))).join(", ");
+    }
+  }
+  return titleize(row.primaryTriggerFamily);
+}
+
+function stringArrayFromUnknown(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function FilterSelect({
@@ -276,29 +366,31 @@ function FilterSelect({
   values,
   labelFor = titleize,
   onChange,
+  className,
 }: {
   label: string;
   value: string;
   values: string[];
   labelFor?: (value: string) => string;
   onChange: (value: string) => void;
+  className?: string;
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="sr-only">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger
         aria-label={label}
+        className={cn("h-9 w-auto min-w-24 shrink-0 gap-2 px-3", className)}
       >
-        <option value={ALL}>{label}</option>
+        <SelectValue placeholder={label} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL}>{label}</SelectItem>
         {values.map((item) => (
-          <option key={item} value={item}>
+          <SelectItem key={item} value={item}>
             {labelFor(item)}
-          </option>
+          </SelectItem>
         ))}
-      </select>
-    </label>
+      </SelectContent>
+    </Select>
   );
 }
