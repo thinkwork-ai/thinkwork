@@ -14,11 +14,10 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: U5 implementation in progress.
-- Current branch: `codex/skill-library-u5-export-polish`.
-- Current worktree: `.Codex/worktrees/skill-library-u5-export-polish`.
-- Current pull request:
-  [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788).
+- Status: Complete.
+- Current branch: None.
+- Current worktree: None.
+- Current pull request: None.
 - Notes:
   - The user-referenced plan file was absent from the starting checkout and
     from `origin/main`; `origin/main` did contain the matching requirements doc.
@@ -60,6 +59,13 @@ status: in_progress
     `8a664299665303efbd9df229e24f1e2cf1430563`.
   - U5 adds detail-page skill export, pinned-installed-copy messaging, and
     operator docs for the import/export archive workflow.
+  - U5 PR [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788)
+    passed CLA, lint, test, typecheck, and verify after rebasing onto updated
+    `origin/main`; squash merged as
+    `c223025e50b74d5ad5d9588f757e728a61633de1`.
+  - All implementation units in
+    `docs/plans/2026-06-21-001-feat-skill-library-import-export-plan.md` are
+    complete and merged.
 - Local verification:
   - `pnpm install --frozen-lockfile` completed; local Node 25 logged the
     existing `canvas@2.11.2` native fallback failure for missing `pkg-config`
@@ -135,16 +141,24 @@ status: in_progress
     passed after formatting two touched files.
   - U5: `git diff --check` passed after removing Markdown trailing-space hard
     breaks from the touched docs page.
+  - U5: post-rebase verification passed:
+    `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsSkillDetail.test.tsx src/lib/workspace-files-api.test.ts`,
+    `pnpm --filter @thinkwork/web typecheck`, `pnpm lint`,
+    `pnpm dlx prettier@3.8.2 --check --ignore-unknown apps/web/src/components/settings/SettingsSkillDetail.tsx apps/web/src/components/settings/SettingsSkillDetail.test.tsx docs/src/content/docs/applications/admin/skills-catalog.mdx docs/plans/autopilot-status.md`,
+    and `git diff --check`.
+  - U5: PR [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788)
+    passed CLA, lint, test, typecheck, and verify on the rebased commit; squash
+    merged as `c223025e50b74d5ad5d9588f757e728a61633de1`.
 - Unit ledger:
 
-| Unit                                           | Branch                                   | PR                                                           | State       | Notes                                                        |
-| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ----------- | ------------------------------------------------------------ |
-| Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | Merged      | Squash merged as `1f427854fc51b7e7c7b1f9937c6418627088d98d`. |
-| U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | Merged      | Squash merged as `134907ab08cf5c6bcb81200f7c0f76ed30ec7952`. |
-| U2 Catalog Import API Action                   | `codex/skill-library-u2-import`          | [#2781](https://github.com/thinkwork-ai/thinkwork/pull/2781) | Merged      | Squash merged as `cf27205f897109586d32ebddff7ecff17c9775f2`. |
-| U3 Catalog Export API Action                   | `codex/skill-library-u3-export`          | [#2783](https://github.com/thinkwork-ai/thinkwork/pull/2783) | Merged      | Squash merged as `8ace6cde15e61e23c786350b6bbe6053b6f218e2`. |
-| U4 Skill Library Import UI                     | `codex/skill-library-u4-import-ui`       | [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786) | Merged      | Squash merged as `8a664299665303efbd9df229e24f1e2cf1430563`. |
-| U5 Skill Detail Export and Import-State Polish | `codex/skill-library-u5-export-polish`   | [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788) | In progress | PR open; local verification passed, CI pending.              |
+| Unit                                           | Branch                                   | PR                                                           | State  | Notes                                                        |
+| ---------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| Plan recovery                                  | `codex/skill-library-import-export-plan` | [#2772](https://github.com/thinkwork-ai/thinkwork/pull/2772) | Merged | Squash merged as `1f427854fc51b7e7c7b1f9937c6418627088d98d`. |
+| U1 Archive Validation and Packaging Module     | `codex/skill-library-u1-archive`         | [#2777](https://github.com/thinkwork-ai/thinkwork/pull/2777) | Merged | Squash merged as `134907ab08cf5c6bcb81200f7c0f76ed30ec7952`. |
+| U2 Catalog Import API Action                   | `codex/skill-library-u2-import`          | [#2781](https://github.com/thinkwork-ai/thinkwork/pull/2781) | Merged | Squash merged as `cf27205f897109586d32ebddff7ecff17c9775f2`. |
+| U3 Catalog Export API Action                   | `codex/skill-library-u3-export`          | [#2783](https://github.com/thinkwork-ai/thinkwork/pull/2783) | Merged | Squash merged as `8ace6cde15e61e23c786350b6bbe6053b6f218e2`. |
+| U4 Skill Library Import UI                     | `codex/skill-library-u4-import-ui`       | [#2786](https://github.com/thinkwork-ai/thinkwork/pull/2786) | Merged | Squash merged as `8a664299665303efbd9df229e24f1e2cf1430563`. |
+| U5 Skill Detail Export and Import-State Polish | `codex/skill-library-u5-export-polish`   | [#2788](https://github.com/thinkwork-ai/thinkwork/pull/2788) | Merged | Squash merged as `c223025e50b74d5ad5d9588f757e728a61633de1`. |
 
 ---
 
