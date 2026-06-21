@@ -12643,7 +12643,7 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 | Unit                           | Branch                                  | PR                                                           | State       | Notes                                                                                                                            |
 | ------------------------------ | --------------------------------------- | ------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | U1 extension import/load       | `codex/thnk-21-u1-pi-goal-extension`    | [#2816](https://github.com/thinkwork-ai/thinkwork/pull/2816) | Merged      | Squash merged as `93d47fb8e6188531ace4542d0e69b9bb8972885b`; worktree/branch cleanup complete.                                   |
-| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings` | Pending                                                      | In progress | Worktree: `.Codex/worktrees/thnk-21-u7-goal-budget-settings`; starting from U1 merge `93d47fb8e6188531ace4542d0e69b9bb8972885b`. |
+| U7 tenant goal budget settings | `codex/thnk-21-u7-goal-budget-settings` | [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817) | PR open     | Worktree: `.Codex/worktrees/thnk-21-u7-goal-budget-settings`; starting from U1 merge `93d47fb8e6188531ace4542d0e69b9bb8972885b`. |
 | U2 metadata contract           | Pending                                 | Pending                                                      | Pending     | Depends on U7 and U1 field names.                                                                                                |
 | U3 composer controls           | Pending                                 | Pending                                                      | Pending     | Depends on U2/U7.                                                                                                                |
 | U4 runtime translation         | Pending                                 | Pending                                                      | Pending     | Depends on U1/U2/U7.                                                                                                             |
@@ -12724,3 +12724,4 @@ terraform -chdir=terraform/examples/greenfield validate`, and
   `pnpm dlx prettier@3.8.2 --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}"`
   reports 675 pre-existing files. The U7 hand-authored files pass targeted
   Prettier; generated GraphQL outputs are left in codegen's repository style.
+- U7 PR opened: [#2817](https://github.com/thinkwork-ai/thinkwork/pull/2817).
