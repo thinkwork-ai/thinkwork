@@ -108,10 +108,11 @@ status: in_progress
   `docs/plans/2026-06-20-001-feat-first-class-workflow-control-plane-plan.md`.
 - Linear issue: `THNK-59`.
 - Target branch: `main`.
-- Current implementation unit: U6 connected-app workflow bindings and readiness
-  matrix.
-- Current branch: `codex/thnk-59-u6-app-bindings`.
-- Current worktree: `.Codex/worktrees/thnk-59-u6-app-bindings`.
+- Current implementation unit: U7 workflow inventory and run monitoring UI.
+- Current branch: `codex/thnk-59-u7-workflow-ui`.
+- Current worktree: `.Codex/worktrees/thnk-59-u7-workflow-ui`.
+- Current pull request:
+  [#2784](https://github.com/thinkwork-ai/thinkwork/pull/2784).
 - Pull requests: U1 [#2754](https://github.com/thinkwork-ai/thinkwork/pull/2754)
   merged as `19f1f04781a6bb455d3448c031febd8fbc2a1083`; U2
   [#2759](https://github.com/thinkwork-ai/thinkwork/pull/2759) merged as
@@ -121,9 +122,11 @@ status: in_progress
   [#2767](https://github.com/thinkwork-ai/thinkwork/pull/2767) merged as
   `6252d8727d5dd1b5caaa601644e347f1fca48930`; U5
   [#2773](https://github.com/thinkwork-ai/thinkwork/pull/2773) merged as
-  `304e57a50556a69bd753f40ea7ab7f086c106ea0`.
-- Status: U1-U5 complete and merged. U6 implementation is locally complete
-  from `origin/main` at `304e57a50556a69bd753f40ea7ab7f086c106ea0`.
+  `304e57a50556a69bd753f40ea7ab7f086c106ea0`; U6
+  [#2780](https://github.com/thinkwork-ai/thinkwork/pull/2780) merged as
+  `157bd8cd4851aababd15d2f438beb9735583f5ba`.
+- Status: U1-U6 complete and merged. U7 PR is open and rebased onto
+  `origin/main` at `8ace6cde15e6`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
@@ -215,6 +218,39 @@ rebuild electron` repaired the local install.
   - U6 `pnpm --filter @thinkwork/web build` passed with existing route-file,
     sourcemap, and large-chunk warnings.
   - U6 `git diff --check` passed.
+  - U7 `pnpm install --frozen-lockfile` completed with the known optional
+    `canvas@2.11.2` native fallback failure under local Node 25; the install
+    command exited successfully and workspace executables linked.
+  - U7 focused web tests passed:
+    `pnpm --filter @thinkwork/web test -- src/components/workflows/WorkflowInventory.test.tsx src/components/workflows/WorkflowRunDetail.test.tsx src/routes/_authed/-settings.workflow-routing.test.tsx`
+    (3 files, 5 tests).
+  - U7 `pnpm --filter @thinkwork/web build` passed and regenerated
+    `routeTree.gen.ts`, with existing route-file, sourcemap, and large-chunk
+    warnings.
+  - U7 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U7 workflow query schema guard and focused tests passed:
+    `pnpm --filter @thinkwork/web test -- src/lib/graphql-queries.schema.test.ts src/components/workflows/WorkflowInventory.test.tsx src/components/workflows/WorkflowRunDetail.test.tsx src/routes/_authed/-settings.workflow-routing.test.tsx`
+    (4 files, 18 tests).
+  - U7 `pnpm lint` passed.
+  - U7 `pnpm typecheck` passed workspace-wide.
+  - U7 first `pnpm test` run exposed the known local Electron install race in
+    `apps/desktop` (`Electron failed to install correctly` after an `EEXIST`
+    framework symlink extraction warning). `pnpm --filter @thinkwork/desktop
+rebuild electron` repaired the local install.
+  - U7 `pnpm --filter @thinkwork/desktop test` passed after the Electron
+    repair: 15 files, 105 tests.
+  - U7 rerun `pnpm test` passed workspace-wide after the Electron repair:
+    `packages/api` 546 files passed, 3 skipped, 5149 tests passed, 9 skipped;
+    `apps/web` 183 files passed, 1353 tests passed; release tests 17 passed;
+    plugin source boundary tests 7 passed.
+  - U7 post-review polish removed Step Functions source/run links that looped
+    through legacy routine redirects back to the same workflow pages. The
+    focused workflow UI tests and `pnpm --filter @thinkwork/web typecheck`
+    passed after the polish.
+  - U7 PR #2784 initially passed required CI (`cla`, `lint`, `verify`,
+    `typecheck`, and `test`) but was behind `main`. Rebased cleanly onto
+    `origin/main` at `8ace6cde15e6`; post-rebase focused workflow UI tests and
+    `pnpm --filter @thinkwork/web typecheck` passed before force-push.
 - CI log: U5 PR [#2773](https://github.com/thinkwork-ai/thinkwork/pull/2773)
   passed CLA, lint, typecheck, verify, and test; GitHub auto-merge squash
   merged it after the final up-to-date check.

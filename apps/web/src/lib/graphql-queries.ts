@@ -376,6 +376,7 @@ export const SettingsWorkflowRunsQuery = gql`
       actorType
       correlationId
       backendExecutionId
+      backendExecutionRef
       startedAt
       finishedAt
       lastEventAt
