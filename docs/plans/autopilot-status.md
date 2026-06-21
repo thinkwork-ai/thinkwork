@@ -150,8 +150,8 @@ status: in_progress
   [#2784](https://github.com/thinkwork-ai/thinkwork/pull/2784) merged as
   `20c1fb0078497b81e5b8eaf933424d008cf290d9`.
 - Status: U1-U7 complete and merged. U8 is implemented, locally verified, and
-  open as PR #2787 from `origin/main` at
-  `20c1fb0078497b81e5b8eaf933424d008cf290d9`.
+  open as PR #2787 rebased onto `origin/main` at
+  `8a664299665303efbd9df229e24f1e2cf1430563`.
 - Notes:
   - U5 keeps n8n as a connected workflow source, not the canonical runtime for
     all workflows.
@@ -323,6 +323,11 @@ status: in_progress
     mutations to send `agentId` instead of stale `computerId`; rerun focused
     Customize tests passed (2 files, 13 tests) and
     `pnpm --filter @thinkwork/web typecheck` passed.
+  - U8 PR #2787 initially passed required CI (`cla`, `lint`, `verify`,
+    `typecheck`, and `test`) but was behind `main`. Rebased cleanly onto
+    `origin/main` at `8a6642996653`; post-rebase `pnpm schema:build`, focused
+    workflow/customize web tests, `pnpm --filter @thinkwork/web typecheck`, and
+    `pnpm --filter @thinkwork/api typecheck` passed before force-push.
 - CI log: U7 PR [#2784](https://github.com/thinkwork-ai/thinkwork/pull/2784)
   passed CLA, lint, typecheck, verify, and test after rebasing onto current
   `origin/main`, then squash merged.
