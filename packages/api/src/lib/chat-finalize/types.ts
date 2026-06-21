@@ -130,6 +130,8 @@ export interface FinalizePayload {
     choices?: unknown;
     /** Tool invocations with optional genui_data for UI render. */
     tool_invocations?: Array<Record<string, unknown>>;
+    /** Final validated UIMessage parts for durable Thread GenUI rendering. */
+    ui_message_parts?: Array<Record<string, unknown>>;
     /** Child model calls made for TOOLS.md model-routed tool invocations. */
     model_routed_tool_calls?: FinalizeModelRoutedToolCall[];
     /** Child Pi Agent Profile runs made inside the parent turn. */

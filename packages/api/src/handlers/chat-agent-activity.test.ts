@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 
 const mocks = vi.hoisted(() => ({
   selectResult: [] as Array<{
@@ -260,6 +261,50 @@ describe("chat-agent-activity — append + publish", () => {
       }),
     );
     expect(mocks.appendThreadTurnEvent.mock.calls[0][1].stream).toBe("step");
+  });
+
+  it("preserves data-genui UIMessage chunk events for live Thread rendering", async () => {
+    const part = createTaskReviewGenUIFixture();
+
+    const res = await handler(
+      mockEvent({
+        body: {
+          thread_turn_id: TURN_ID,
+          tenant_id: TENANT_ID,
+          thread_id: THREAD_ID,
+          agent_id: AGENT_ID,
+          events: [
+            {
+              event_type: "ui_message_chunk",
+              stream: "ui",
+              message: "Review onboarding task",
+              payload: {
+                kind: "thread_genui.ui_message_chunk",
+                chunk: part,
+              },
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mocks.appendThreadTurnEvent.mock.calls[0][1]).toMatchObject({
+      eventType: "ui_message_chunk",
+      stream: "ui",
+      payload: {
+        kind: "thread_genui.ui_message_chunk",
+        chunk: part,
+      },
+    });
+    expect(mocks.notifyThreadTurnStep.mock.calls[0][0]).toMatchObject({
+      eventType: "ui_message_chunk",
+      payload: {
+        kind: "thread_genui.ui_message_chunk",
+        chunk: part,
+      },
+      seq: 0,
+    });
   });
 
   it("appends a batch in order with monotonic seq", async () => {

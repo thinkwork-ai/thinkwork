@@ -1,6 +1,7 @@
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { Message } from "@earendil-works/pi-ai";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import { mkdtemp, readlink, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -643,6 +644,53 @@ describe("runAgentLoop", () => {
       { eventType: "tool_invocation_started", message: "web_search" },
       { eventType: "tool_invocation_completed", message: "web_search" },
     ]);
+  });
+
+  it("emits and returns Thread GenUI parts from tool results", async () => {
+    const fixture = createTaskReviewGenUIFixture();
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "c1",
+          toolName: "review_task",
+          args: { taskId: "task-123" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "c1",
+          toolName: "review_task",
+          result: {
+            content: [{ type: "text", text: "review ready" }],
+            details: { threadGenUI: fixture },
+          },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const emitted: Array<{
+      eventType: string;
+      stream?: string;
+      payload?: unknown;
+    }> = [];
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+      emitActivity: (event) => emitted.push(event),
+    });
+
+    expect(result.uiMessageParts).toEqual([fixture]);
+    expect(emitted).toContainEqual(
+      expect.objectContaining({
+        eventType: "ui_message_chunk",
+        stream: "ui",
+        payload: {
+          kind: "thread_genui.ui_message_chunk",
+          chunk: fixture,
+        },
+      }),
+    );
   });
 
   it("never lets a throwing emitActivity break the turn (best-effort, D1)", async () => {

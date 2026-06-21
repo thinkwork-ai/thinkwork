@@ -263,8 +263,7 @@ function explicitAgentProfileSlugsFromMessage(
     });
 }
 
-const EMAIL_ADDRESS_PATTERN =
-  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu;
+const EMAIL_ADDRESS_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu;
 
 function redactEmailAddresses(message: string): string {
   return message.replace(EMAIL_ADDRESS_PATTERN, " [redacted-address] ");
@@ -2977,6 +2976,7 @@ export async function handleInvocation(
     mcp_proxy_registered: bundle.mcpProxyRegistered,
     tools_called: runResult.toolsCalled,
     tool_invocations: runResult.toolInvocations,
+    ui_message_parts: runResult.uiMessageParts ?? [],
     model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
     agent_profile_runs: runResult.agentProfileRuns ?? [],
     hindsight_usage: hindsightUsage,
@@ -2988,6 +2988,7 @@ export async function handleInvocation(
       usage: runResult.usage,
       tools_called: runResult.toolsCalled,
       tool_invocations: runResult.toolInvocations,
+      ui_message_parts: runResult.uiMessageParts ?? [],
       model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
       agent_profile_runs: runResult.agentProfileRuns ?? [],
       tool_costs:

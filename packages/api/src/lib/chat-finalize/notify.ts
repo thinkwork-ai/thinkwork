@@ -15,6 +15,10 @@
 import { getConfig, getAppsyncApiKey } from "@thinkwork/runtime-config";
 import { messages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
+import {
+  createAnalyticsDisplayGenUIValidationContext,
+  validateThreadGenUIPart,
+} from "@thinkwork/genui";
 
 const db = getDb();
 
@@ -59,6 +63,7 @@ export async function insertAssistantMessage(
   agentId: string,
   content: string,
   toolInvocations?: Array<Record<string, unknown>>,
+  uiMessageParts?: Array<Record<string, unknown>>,
 ): Promise<{ id: string } | null> {
   try {
     // Extract GenUI data from tool invocations (typed JSON with _type field)
@@ -84,6 +89,7 @@ export async function insertAssistantMessage(
         content,
         sender_type: "agent",
         sender_id: agentId,
+        parts: normalizeThreadGenUIParts(uiMessageParts) || undefined,
         tool_results: genuiResults.length > 0 ? genuiResults : undefined,
         metadata:
           toolInvocations && toolInvocations.length > 0
@@ -105,6 +111,20 @@ export async function insertAssistantMessage(
     console.error(`[chat-finalize] Failed to insert assistant message:`, err);
     return null;
   }
+}
+
+export function normalizeThreadGenUIParts(
+  parts: Array<Record<string, unknown>> | undefined,
+): Array<Record<string, unknown>> | null {
+  if (!Array.isArray(parts) || parts.length === 0) return null;
+  const context = createAnalyticsDisplayGenUIValidationContext();
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const part of parts) {
+    const result = validateThreadGenUIPart(part, context);
+    if (!result.ok) continue;
+    byId.set(result.part.id, result.part as unknown as Record<string, unknown>);
+  }
+  return byId.size > 0 ? [...byId.values()] : null;
 }
 
 export async function notifyNewMessage(payload: {

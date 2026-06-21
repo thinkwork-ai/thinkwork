@@ -28,6 +28,11 @@ import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlin
 import type { BridgeRunTelemetry } from "@/components/workbench/BridgeRunTelemetryPanel";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import type { UserQuestionRecord } from "@/lib/ui-message-types";
+import {
+  emptyState,
+  mergeUIMessageChunk,
+  type UIMessageStreamState,
+} from "@/lib/ui-message-merge";
 import { toUserQuestionStatus } from "@/lib/user-question-record";
 import {
   InlineShortcutText,
@@ -670,6 +675,9 @@ export function SpacesThreadDetailRoute({
   const [liveStepsByRun, setLiveStepsByRun] = useState<
     Map<string, TaskThreadEvent[]>
   >(new Map());
+  const [liveStreamStateByRun, setLiveStreamStateByRun] = useState<
+    Map<string, UIMessageStreamState>
+  >(new Map());
   const liveStepSeqByRun = useRef<Map<string, Set<number>>>(new Map());
   const [{ data: stepUpdate }] = useSubscription<{
     onThreadTurnStep?: {
@@ -689,6 +697,7 @@ export function SpacesThreadDetailRoute({
   // Reset accumulated live steps when switching threads.
   useEffect(() => {
     setLiveStepsByRun(new Map());
+    setLiveStreamStateByRun(new Map());
     liveStepSeqByRun.current = new Map();
   }, [threadId]);
 
@@ -709,6 +718,18 @@ export function SpacesThreadDetailRoute({
       } catch {
         payload = null;
       }
+    }
+    const uiChunk = uiMessageChunkFromThreadTurnPayload(payload);
+    if (uiChunk !== null) {
+      setLiveStreamStateByRun((prev) => {
+        const next = new Map(prev);
+        next.set(
+          runId,
+          mergeUIMessageChunk(next.get(runId) ?? emptyState(), uiChunk, seq),
+        );
+        return next;
+      });
+      return;
     }
     const event: TaskThreadEvent = {
       id: `${runId}:${seq}`,
@@ -885,6 +906,10 @@ export function SpacesThreadDetailRoute({
       threadTurnEventsByRun,
     ),
   ];
+  const liveThreadTurnStreamState = latestLiveStreamState(
+    threadTurns,
+    liveStreamStateByRun,
+  );
   if (thread) {
     thread.turns = threadTurns;
   }
@@ -1585,8 +1610,14 @@ export function SpacesThreadDetailRoute({
         hasMismatchedThreadData
       }
       error={error?.message ?? null}
-      streamingChunks={hasDurableAssistant ? [] : chunks}
-      streamState={hasDurableAssistant ? undefined : streamState}
+      streamingChunks={
+        hasDurableAssistant || liveThreadTurnStreamState ? [] : chunks
+      }
+      streamState={
+        hasDurableAssistant
+          ? undefined
+          : (liveThreadTurnStreamState ?? streamState)
+      }
       isSending={sending}
       mentionTargets={mentionTargets}
       skillCatalog={skillCatalog}
@@ -2532,6 +2563,25 @@ function mergeTaskThreadEvents(
     if (ta !== tb) return ta - tb;
     return a.id.localeCompare(b.id);
   });
+}
+
+function latestLiveStreamState(
+  turns: TaskThreadTurn[],
+  states: Map<string, UIMessageStreamState>,
+): UIMessageStreamState | undefined {
+  for (const turn of [...turns].reverse()) {
+    if (turn.status !== "running" && turn.status !== "queued") continue;
+    const state = states.get(turn.id);
+    if (state && state.parts.length > 0) return state;
+  }
+  return undefined;
+}
+
+function uiMessageChunkFromThreadTurnPayload(payload: unknown): unknown | null {
+  const record = metadataObject(payload);
+  if (!record) return null;
+  if (record.kind !== "thread_genui.ui_message_chunk") return null;
+  return record.chunk ?? null;
 }
 
 function taskThreadEventDedupeKey(event: TaskThreadEvent): string {

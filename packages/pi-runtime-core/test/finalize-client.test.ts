@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 
 import {
   buildFinalizeBody,
@@ -41,6 +42,7 @@ const runResult: RunAgentLoopResult = {
       amount_usd: "0.001",
     },
   ],
+  uiMessageParts: [createTaskReviewGenUIFixture()],
   usage: {
     input: 5,
     output: 7,
@@ -106,6 +108,7 @@ describe("buildFinalizeBody", () => {
         runtime: "pi",
         runtime_host: "desktop-local",
         tools_called: ["lookup"],
+        ui_message_parts: runResult.uiMessageParts,
         tool_costs: [
           { provider: "test", event_type: "tool", amount_usd: "0.001" },
         ],

@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serializeEditor } from "./SkillTokenInput";
 import { useMutation, useQuery, useSubscription } from "urql";
@@ -757,6 +758,56 @@ describe("SpacesThreadDetailRoute", () => {
     await waitFor(() => {
       expect(resetStreamingChunks).toHaveBeenCalled();
     });
+  });
+
+  it("renders live data-genui chunks from thread turn step activity", async () => {
+    const part = createTaskReviewGenUIFixture();
+    taskData = { computerTasks: [] };
+    threadTurnsData = {
+      threadTurns: [
+        {
+          id: "turn-with-genui",
+          threadId: "thread-1",
+          invocationSource: "chat_message",
+          status: "running",
+          startedAt: "2026-06-20T12:00:00.000Z",
+        },
+      ],
+    };
+    let subscriptionCall = 0;
+    vi.mocked(useSubscription).mockImplementation(() => {
+      subscriptionCall += 1;
+      if (subscriptionCall === 4) {
+        return [
+          {
+            data: {
+              onThreadTurnStep: {
+                runId: "turn-with-genui",
+                seq: 7,
+                eventType: "ui_message_chunk",
+                level: "info",
+                payload: JSON.stringify({
+                  kind: "thread_genui.ui_message_chunk",
+                  chunk: part,
+                }),
+                createdAt: "2026-06-20T12:00:01.000Z",
+              },
+            },
+            fetching: false,
+            stale: false,
+          },
+          () => {},
+        ];
+      }
+      return [{ data: null, fetching: false, stale: false }, () => {}];
+    });
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Review onboarding task")).toBeTruthy();
+    });
+    expect(screen.queryByText("UI Message Chunk")).toBeNull();
   });
 
   it("renders native onboarding Progress in the Info Panel and task clicks prefill the composer", async () => {

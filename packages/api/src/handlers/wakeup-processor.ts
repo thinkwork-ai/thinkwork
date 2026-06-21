@@ -126,6 +126,7 @@ import {
   toRuntimePendingUserQuestions,
 } from "../lib/user-questions/runtime-payload.js";
 import { linkN8nAgentStepRunTurn } from "../lib/n8n-agent-step/link-turn.js";
+import { normalizeThreadGenUIParts } from "../lib/chat-finalize/notify.js";
 
 // Config-class values are read at call time via getConfig (env-wins merge
 // over the SSM document) — never captured at module load (R3): the SSM
@@ -2131,6 +2132,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     // PRD-22: Use response directly (signal protocol removed)
     const responseText = rawResponseText;
+    const responseParts = extractResponseUIMessageParts(invokeResult);
 
     // Extract tools_called for turn loop detection
     const toolsCalled = (invokeResult.tools_called ||
@@ -2157,6 +2159,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           wakeup.tenant_id,
           wakeup.agent_id,
           responseText,
+          responseParts,
         );
         if (assistantMsg) {
           await notifyNewMessage({
@@ -2230,6 +2233,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           wakeup.tenant_id,
           wakeup.agent_id,
           responseText,
+          responseParts,
         );
         if (assistantMsg) {
           await notifyNewMessage({
@@ -2303,6 +2307,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           wakeup.tenant_id,
           wakeup.agent_id,
           responseText,
+          responseParts,
         );
         if (assistantMsg) {
           await notifyNewMessage({
@@ -2328,6 +2333,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           wakeup.tenant_id,
           wakeup.agent_id,
           responseText,
+          responseParts,
         );
         if (assistantMsg) {
           await notifyNewMessage({
@@ -2356,6 +2362,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         wakeup.tenant_id,
         wakeup.agent_id,
         responseText,
+        responseParts,
       );
       if (assistantMsg) {
         await notifyNewMessage({
@@ -2628,6 +2635,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
         const loopResult = loopResponse.result;
         const rawLoop = extractResponseText(loopResult.response || loopResult);
+        const loopResponseParts = extractResponseUIMessageParts(loopResult);
         loopMessage = rawLoop;
         loopResponseText = rawLoop;
         loopToolsCalled = (loopResult.tools_called ||
@@ -2670,6 +2678,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               wakeup.tenant_id,
               wakeup.agent_id,
               loopResponseText,
+              loopResponseParts,
             );
             if (msg) {
               await notifyNewMessage({
@@ -3179,8 +3188,10 @@ async function insertAssistantMessage(
   tenantId: string,
   agentId: string,
   content: string,
+  uiMessageParts?: Array<Record<string, unknown>>,
 ): Promise<{ id: string } | null> {
   try {
+    const parts = normalizeThreadGenUIParts(uiMessageParts);
     const [row] = await db
       .insert(messages)
       .values({
@@ -3190,6 +3201,7 @@ async function insertAssistantMessage(
         content,
         sender_type: "agent",
         sender_id: agentId,
+        parts: parts || undefined,
       })
       .returning({ id: messages.id });
     console.log(`[wakeup-processor] Inserted assistant message: ${row.id}`);
@@ -3201,6 +3213,22 @@ async function insertAssistantMessage(
     );
     return null;
   }
+}
+
+function extractResponseUIMessageParts(
+  invokeResult: Record<string, unknown>,
+): Array<Record<string, unknown>> | undefined {
+  const response =
+    invokeResult.response && typeof invokeResult.response === "object"
+      ? (invokeResult.response as Record<string, unknown>)
+      : null;
+  const value = response?.ui_message_parts ?? invokeResult.ui_message_parts;
+  return Array.isArray(value)
+    ? value.filter(
+        (part): part is Record<string, unknown> =>
+          part !== null && typeof part === "object" && !Array.isArray(part),
+      )
+    : undefined;
 }
 
 async function insertUserMessage(
