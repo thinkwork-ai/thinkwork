@@ -12647,7 +12647,7 @@ terraform -chdir=terraform/examples/greenfield validate`, and
 | U2 metadata contract           | `codex/thnk-21-u2-goal-metadata-contract` | [#2818](https://github.com/thinkwork-ai/thinkwork/pull/2818) | Merged      | Merged as `6dc3cd7517aa8e5e5b9781d00d95f0ae3b25892d`; worktree/branch cleanup complete.        |
 | U3 composer controls           | `codex/thnk-21-u3-composer-controls`      | [#2820](https://github.com/thinkwork-ai/thinkwork/pull/2820) | Merged      | Squash merged as `a69e5799e6d3a2d7bc4e0a23173ca9393f825c11`; worktree/branch cleanup complete. |
 | U4 runtime translation         | `codex/thnk-21-u4-runtime-translation`    | [#2821](https://github.com/thinkwork-ai/thinkwork/pull/2821) | Merged      | Squash merged as `a8f4064a846112b9b479f2b7648101ec51dcd6f3`; worktree/branch cleanup complete. |
-| U5 goal-run status rendering   | `codex/thnk-21-u5-goal-status-rendering`  | [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822) | In progress | PR opened; CI pending.                                                                         |
+| U5 goal-run status rendering   | `codex/thnk-21-u5-goal-status-rendering`  | [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822) | In progress | CI passed; ready to merge.                                                                     |
 | U6 smoke/docs/codegen          | Pending                                   | Pending                                                      | Pending     | Final integration/docs pass.                                                                   |
 
 ### U1 Progress
@@ -12915,4 +12915,4 @@ src/components/settings/SettingsActivityThreadDetail.test.tsx` (172 tests).
     files, 105 tests); rerunning full `pnpm test` then passed across the
     workspace.
 - U5 PR opened: [#2822](https://github.com/thinkwork-ai/thinkwork/pull/2822).
-  Required CI pending.
+  Required CI passed: CLA, lint, verify, typecheck, and test.
