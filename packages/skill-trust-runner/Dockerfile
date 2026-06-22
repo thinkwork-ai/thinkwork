@@ -8,7 +8,7 @@ RUN dnf install -y git gcc gcc-c++ make && \
     python -m pip install --no-cache-dir \
       "git+https://github.com/NVIDIA/SkillSpector.git@${SKILLSPECTOR_REF}"
 
-COPY src/handler.py ${LAMBDA_TASK_ROOT}/handler.py
+COPY packages/skill-trust-runner/src/handler.py ${LAMBDA_TASK_ROOT}/handler.py
 
 ENV SKILLSPECTOR_LOG_LEVEL=WARNING
 
