@@ -53,6 +53,7 @@ import { Route as AuthedSettingsEvaluationsIndexRouteImport } from "./routes/_au
 import { Route as AuthedSettingsAutomationsIndexRouteImport } from "./routes/_authed/settings.automations.index";
 import { Route as AuthedSettingsArtifactsIndexRouteImport } from "./routes/_authed/settings.artifacts.index";
 import { Route as AuthedSettingsAgentsIndexRouteImport } from "./routes/_authed/settings.agents.index";
+import { Route as AuthedSettingsAgentLoopsIndexRouteImport } from "./routes/_authed/settings.agent-loops.index";
 import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
 import { Route as AuthedShellSpacesIndexRouteImport } from "./routes/_authed/_shell/spaces.index";
 import { Route as AuthedShellMemoryIndexRouteImport } from "./routes/_authed/_shell/memory.index";
@@ -79,6 +80,7 @@ import { Route as AuthedSettingsAutomationsScheduledJobIdRouteImport } from "./r
 import { Route as AuthedSettingsArtifactsIdRouteImport } from "./routes/_authed/settings.artifacts.$id";
 import { Route as AuthedSettingsApplicationsCogneeRouteImport } from "./routes/_authed/settings.applications.cognee";
 import { Route as AuthedSettingsAgentsProfileIdRouteImport } from "./routes/_authed/settings.agents.$profileId";
+import { Route as AuthedSettingsAgentLoopsAgentLoopIdRouteImport } from "./routes/_authed/settings.agent-loops.$agentLoopId";
 import { Route as AuthedSettingsActivityThreadIdRouteImport } from "./routes/_authed/settings.activity_.$threadId";
 import { Route as AuthedSettingsActivityThreadsRouteImport } from "./routes/_authed/settings.activity.threads";
 import { Route as AuthedShellThreadsIdRouteImport } from "./routes/_authed/_shell/threads.$id";
@@ -105,6 +107,7 @@ import { Route as AuthedShellMemoryKbsKbIdRouteImport } from "./routes/_authed/_
 import { Route as AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId_.runs.$runId";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.$executionId";
 import { Route as AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.edit.$testCaseId";
+import { Route as AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRouteImport } from "./routes/_authed/settings.agent-loops.$agentLoopId_.runs.$runId";
 import { Route as AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport } from "./routes/_authed/crm.$provider.$objectType.$objectId.$workflowKey";
 import { Route as AuthedShellSpacesSpaceIdThreadsThreadIdRouteImport } from "./routes/_authed/_shell/spaces.$spaceId.threads.$threadId";
 
@@ -344,6 +347,12 @@ const AuthedSettingsAgentsIndexRoute =
     path: "/agents/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsAgentLoopsIndexRoute =
+  AuthedSettingsAgentLoopsIndexRouteImport.update({
+    id: "/agent-loops/",
+    path: "/agent-loops/",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedShellThreadsIndexRoute = AuthedShellThreadsIndexRouteImport.update({
   id: "/threads/",
   path: "/threads/",
@@ -497,6 +506,12 @@ const AuthedSettingsAgentsProfileIdRoute =
     path: "/agents/$profileId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsAgentLoopsAgentLoopIdRoute =
+  AuthedSettingsAgentLoopsAgentLoopIdRouteImport.update({
+    id: "/agent-loops/$agentLoopId",
+    path: "/agent-loops/$agentLoopId",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsActivityThreadIdRoute =
   AuthedSettingsActivityThreadIdRouteImport.update({
     id: "/activity_/$threadId",
@@ -648,6 +663,12 @@ const AuthedSettingsEvaluationsStudioEditTestCaseIdRoute =
     path: "/evaluations/studio/edit/$testCaseId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute =
+  AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRouteImport.update({
+    id: "/agent-loops/$agentLoopId_/runs/$runId",
+    path: "/agent-loops/$agentLoopId/runs/$runId",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute =
   AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport.update({
     id: "/crm/$provider/$objectType/$objectId/$workflowKey",
@@ -704,6 +725,7 @@ export interface FileRoutesByFullPath {
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
+  "/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
@@ -730,6 +752,7 @@ export interface FileRoutesByFullPath {
   "/memory/": typeof AuthedShellMemoryIndexRoute;
   "/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/settings/agent-loops/": typeof AuthedSettingsAgentLoopsIndexRoute;
   "/settings/agents/": typeof AuthedSettingsAgentsIndexRoute;
   "/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
   "/settings/automations/": typeof AuthedSettingsAutomationsIndexRoute;
@@ -755,6 +778,7 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
+  "/settings/agent-loops/$agentLoopId/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/settings/workflows/$workflowId/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
@@ -797,6 +821,7 @@ export interface FileRoutesByTo {
   "/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/settings/activity/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
+  "/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
@@ -823,6 +848,7 @@ export interface FileRoutesByTo {
   "/memory": typeof AuthedShellMemoryIndexRoute;
   "/spaces": typeof AuthedShellSpacesIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
+  "/settings/agent-loops": typeof AuthedSettingsAgentLoopsIndexRoute;
   "/settings/agents": typeof AuthedSettingsAgentsIndexRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsIndexRoute;
   "/settings/automations": typeof AuthedSettingsAutomationsIndexRoute;
@@ -848,6 +874,7 @@ export interface FileRoutesByTo {
   "/settings/evaluations/studio": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
+  "/settings/agent-loops/$agentLoopId/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/settings/workflows/$workflowId/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
@@ -898,6 +925,7 @@ export interface FileRoutesById {
   "/_authed/_shell/threads/$id": typeof AuthedShellThreadsIdRoute;
   "/_authed/settings/activity/threads": typeof AuthedSettingsActivityThreadsRoute;
   "/_authed/settings/activity_/$threadId": typeof AuthedSettingsActivityThreadIdRoute;
+  "/_authed/settings/agent-loops/$agentLoopId": typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   "/_authed/settings/agents/$profileId": typeof AuthedSettingsAgentsProfileIdRoute;
   "/_authed/settings/applications/cognee": typeof AuthedSettingsApplicationsCogneeRoute;
   "/_authed/settings/artifacts/$id": typeof AuthedSettingsArtifactsIdRoute;
@@ -924,6 +952,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory/": typeof AuthedShellMemoryIndexRoute;
   "/_authed/_shell/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/_authed/settings/agent-loops/": typeof AuthedSettingsAgentLoopsIndexRoute;
   "/_authed/settings/agents/": typeof AuthedSettingsAgentsIndexRoute;
   "/_authed/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
   "/_authed/settings/automations/": typeof AuthedSettingsAutomationsIndexRoute;
@@ -949,6 +978,7 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
   "/_authed/_shell/spaces/$spaceId/threads/$threadId": typeof AuthedShellSpacesSpaceIdThreadsThreadIdRoute;
   "/_authed/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
+  "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/_authed/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   "/_authed/settings/routines/$routineId_/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/_authed/settings/workflows/$workflowId_/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
@@ -998,6 +1028,7 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/settings/activity/threads"
     | "/settings/activity/$threadId"
+    | "/settings/agent-loops/$agentLoopId"
     | "/settings/agents/$profileId"
     | "/settings/applications/cognee"
     | "/settings/artifacts/$id"
@@ -1024,6 +1055,7 @@ export interface FileRouteTypes {
     | "/memory/"
     | "/spaces/"
     | "/threads/"
+    | "/settings/agent-loops/"
     | "/settings/agents/"
     | "/settings/artifacts/"
     | "/settings/automations/"
@@ -1049,6 +1081,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/studio/"
     | "/spaces/$spaceId/threads/$threadId"
     | "/crm/$provider/$objectType/$objectId/$workflowKey"
+    | "/settings/agent-loops/$agentLoopId/runs/$runId"
     | "/settings/evaluations/studio/edit/$testCaseId"
     | "/settings/routines/$routineId/executions/$executionId"
     | "/settings/workflows/$workflowId/runs/$runId";
@@ -1091,6 +1124,7 @@ export interface FileRouteTypes {
     | "/threads/$id"
     | "/settings/activity/threads"
     | "/settings/activity/$threadId"
+    | "/settings/agent-loops/$agentLoopId"
     | "/settings/agents/$profileId"
     | "/settings/applications/cognee"
     | "/settings/artifacts/$id"
@@ -1117,6 +1151,7 @@ export interface FileRouteTypes {
     | "/memory"
     | "/spaces"
     | "/threads"
+    | "/settings/agent-loops"
     | "/settings/agents"
     | "/settings/artifacts"
     | "/settings/automations"
@@ -1142,6 +1177,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/studio"
     | "/spaces/$spaceId/threads/$threadId"
     | "/crm/$provider/$objectType/$objectId/$workflowKey"
+    | "/settings/agent-loops/$agentLoopId/runs/$runId"
     | "/settings/evaluations/studio/edit/$testCaseId"
     | "/settings/routines/$routineId/executions/$executionId"
     | "/settings/workflows/$workflowId/runs/$runId";
@@ -1191,6 +1227,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/threads/$id"
     | "/_authed/settings/activity/threads"
     | "/_authed/settings/activity_/$threadId"
+    | "/_authed/settings/agent-loops/$agentLoopId"
     | "/_authed/settings/agents/$profileId"
     | "/_authed/settings/applications/cognee"
     | "/_authed/settings/artifacts/$id"
@@ -1217,6 +1254,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory/"
     | "/_authed/_shell/spaces/"
     | "/_authed/_shell/threads/"
+    | "/_authed/settings/agent-loops/"
     | "/_authed/settings/agents/"
     | "/_authed/settings/artifacts/"
     | "/_authed/settings/automations/"
@@ -1242,6 +1280,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/studio/"
     | "/_authed/_shell/spaces/$spaceId/threads/$threadId"
     | "/_authed/crm/$provider/$objectType/$objectId/$workflowKey"
+    | "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId"
     | "/_authed/settings/evaluations/studio/edit/$testCaseId"
     | "/_authed/settings/routines/$routineId_/executions/$executionId"
     | "/_authed/settings/workflows/$workflowId_/runs/$runId";
@@ -1568,6 +1607,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsAgentsIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/agent-loops/": {
+      id: "/_authed/settings/agent-loops/";
+      path: "/agent-loops";
+      fullPath: "/settings/agent-loops/";
+      preLoaderRoute: typeof AuthedSettingsAgentLoopsIndexRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/_shell/threads/": {
       id: "/_authed/_shell/threads/";
       path: "/threads";
@@ -1750,6 +1796,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsAgentsProfileIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/agent-loops/$agentLoopId": {
+      id: "/_authed/settings/agent-loops/$agentLoopId";
+      path: "/agent-loops/$agentLoopId";
+      fullPath: "/settings/agent-loops/$agentLoopId";
+      preLoaderRoute: typeof AuthedSettingsAgentLoopsAgentLoopIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/activity_/$threadId": {
       id: "/_authed/settings/activity_/$threadId";
       path: "/activity/$threadId";
@@ -1930,6 +1983,13 @@ declare module "@tanstack/react-router" {
       path: "/evaluations/studio/edit/$testCaseId";
       fullPath: "/settings/evaluations/studio/edit/$testCaseId";
       preLoaderRoute: typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId": {
+      id: "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId";
+      path: "/agent-loops/$agentLoopId/runs/$runId";
+      fullPath: "/settings/agent-loops/$agentLoopId/runs/$runId";
+      preLoaderRoute: typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/crm/$provider/$objectType/$objectId/$workflowKey": {
@@ -2160,6 +2220,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsWikiRoute: typeof AuthedSettingsWikiRoute;
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute;
   AuthedSettingsActivityThreadIdRoute: typeof AuthedSettingsActivityThreadIdRoute;
+  AuthedSettingsAgentLoopsAgentLoopIdRoute: typeof AuthedSettingsAgentLoopsAgentLoopIdRoute;
   AuthedSettingsAgentsProfileIdRoute: typeof AuthedSettingsAgentsProfileIdRoute;
   AuthedSettingsApplicationsCogneeRoute: typeof AuthedSettingsApplicationsCogneeRoute;
   AuthedSettingsAutomationsScheduledJobIdRoute: typeof AuthedSettingsAutomationsScheduledJobIdRoute;
@@ -2175,6 +2236,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsUsersUserIdRoute: typeof AuthedSettingsUsersUserIdRoute;
   AuthedSettingsWebhooksWebhookIdRoute: typeof AuthedSettingsWebhooksWebhookIdRoute;
   AuthedSettingsWorkflowsWorkflowIdRoute: typeof AuthedSettingsWorkflowsWorkflowIdRoute;
+  AuthedSettingsAgentLoopsIndexRoute: typeof AuthedSettingsAgentLoopsIndexRoute;
   AuthedSettingsAgentsIndexRoute: typeof AuthedSettingsAgentsIndexRoute;
   AuthedSettingsAutomationsIndexRoute: typeof AuthedSettingsAutomationsIndexRoute;
   AuthedSettingsEvaluationsIndexRoute: typeof AuthedSettingsEvaluationsIndexRoute;
@@ -2193,6 +2255,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsDatasetsIndexRoute: typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   AuthedSettingsEvaluationsReplayToolsIndexRoute: typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   AuthedSettingsEvaluationsStudioIndexRoute: typeof AuthedSettingsEvaluationsStudioIndexRoute;
+  AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute: typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute: typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
@@ -2217,6 +2280,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsWikiRoute: AuthedSettingsWikiRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
   AuthedSettingsActivityThreadIdRoute: AuthedSettingsActivityThreadIdRoute,
+  AuthedSettingsAgentLoopsAgentLoopIdRoute:
+    AuthedSettingsAgentLoopsAgentLoopIdRoute,
   AuthedSettingsAgentsProfileIdRoute: AuthedSettingsAgentsProfileIdRoute,
   AuthedSettingsApplicationsCogneeRoute: AuthedSettingsApplicationsCogneeRoute,
   AuthedSettingsAutomationsScheduledJobIdRoute:
@@ -2234,6 +2299,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsWebhooksWebhookIdRoute: AuthedSettingsWebhooksWebhookIdRoute,
   AuthedSettingsWorkflowsWorkflowIdRoute:
     AuthedSettingsWorkflowsWorkflowIdRoute,
+  AuthedSettingsAgentLoopsIndexRoute: AuthedSettingsAgentLoopsIndexRoute,
   AuthedSettingsAgentsIndexRoute: AuthedSettingsAgentsIndexRoute,
   AuthedSettingsAutomationsIndexRoute: AuthedSettingsAutomationsIndexRoute,
   AuthedSettingsEvaluationsIndexRoute: AuthedSettingsEvaluationsIndexRoute,
@@ -2259,6 +2325,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsEvaluationsReplayToolsIndexRoute,
   AuthedSettingsEvaluationsStudioIndexRoute:
     AuthedSettingsEvaluationsStudioIndexRoute,
+  AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute:
+    AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute,
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute:
     AuthedSettingsEvaluationsStudioEditTestCaseIdRoute,
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute:

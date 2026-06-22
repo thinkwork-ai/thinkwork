@@ -66,12 +66,10 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U4 - Finalize projection, judgments, and loop policy
-  transitions.
-- Current branch: `codex/agent-loop-u4-finalize`.
-- Current worktree: `.Codex/worktrees/agent-loop-u4-finalize`.
-- Current pull request:
-  [#2856](https://github.com/thinkwork-ai/thinkwork/pull/2856).
+- Current unit: U5 - AgentLoop web builder and run inspector.
+- Current branch: `codex/agent-loop-u5-web-builder`.
+- Current worktree: `.Codex/worktrees/agent-loop-u5-web-builder`.
+- Current pull request: Not opened yet.
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -236,6 +234,46 @@ status: in_progress
     `test:release` and `test:plugin-source-boundary`.
   - 2026-06-22: U4 PR
     [#2856](https://github.com/thinkwork-ai/thinkwork/pull/2856) opened and CI
+    monitoring started.
+  - 2026-06-22: U4 PR
+    [#2856](https://github.com/thinkwork-ai/thinkwork/pull/2856) passed
+    required CI after rebasing onto moving `main`, squash merged as
+    `ffe6b020274d7b70c7ed6ec05ac73a36ad5752c2`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed.
+  - 2026-06-22: U5 started from a clean isolated worktree created from
+    `origin/main` after U4 merge. Scope: replace the settings Automations
+    surface with first-class AgentLoop inventory, builder, detail, manual run
+    action, and run inspector.
+  - 2026-06-22: U5 implementation added the `/settings/agent-loops` inventory,
+    create/edit builder, loop detail page, manual run action, and run
+    inspector. The legacy `/settings/automations` entry now redirects to the
+    AgentLoops surface, while existing scheduled-job detail deep links remain.
+  - 2026-06-22: U5 builder supports Phase 1 loop configuration for manual and
+    schedule triggers, goal intent/completion criteria, worker selection,
+    self-check/human-approval judges, budget/iteration/runtime policy, and
+    evidence capture. The run inspector exposes status, version/policy, loop
+    iterations, judgments, evidence pointers, and structured input/output
+    snapshots without exposing approval/resume controls yet.
+  - 2026-06-22: U5 focused verification passed:
+    `pnpm --dir apps/web exec vitest run src/components/agent-loops/AgentLoopForm.test.tsx src/components/agent-loops/AgentLoopInventory.test.tsx src/components/agent-loops/AgentLoopRunDetail.test.tsx src/routes/_authed/-settings.agent-loop-routing.test.tsx`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/web test`, touched-file Prettier verification
+    with `pnpm dlx prettier@3.6.2 --check`, `git diff --check`,
+    `pnpm lint`, and `pnpm typecheck`.
+  - 2026-06-22: U5 browser visual verification was attempted with the in-app
+    browser against a local Vite server on `127.0.0.1:5191`; Browser Use URL
+    policy blocked navigation to the local settings route, so visual inspection
+    could not be completed locally in this surface.
+  - 2026-06-22: U5 first full `pnpm test` run hit the known fresh-worktree
+    Electron generated-payload issue, then broad-suite contention in unrelated
+    API/web tests (`applets-resolvers`, `chat-agent-invoke.runtime-routing`,
+    and `host-build-define-smoke`). Repaired only the generated Electron
+    payload; all implicated suites passed in isolation.
+  - 2026-06-22: U5 final full `pnpm test` rerun passed, including package
+    tests, `test:release`, and `test:plugin-source-boundary`.
+  - 2026-06-22: U5 PR
+    [#2860](https://github.com/thinkwork-ai/thinkwork/pull/2860) opened and CI
     monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
