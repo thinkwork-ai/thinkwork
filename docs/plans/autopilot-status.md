@@ -194,8 +194,9 @@ status: in_progress
     Linear CI-passed comment `106f704e-a720-4ce1-93d7-9c11025409d0`.
   - 2026-06-22: U8 PR #2876 squash merged as `f783b5ab`; added Linear
     merged/final-bookkeeping comment `d39e37be-3f52-4746-a076-59f22e8299ee`.
-  - 2026-06-22: All THNK-63 implementation units U1-U8 are merged. Remaining
-    closeout is status-doc PR and final branch/worktree cleanup.
+  - 2026-06-22: Final status closeout PR #2878 squash merged as `416518d88`.
+    All THNK-63 implementation units, status closeout, and branch/worktree
+    cleanup are complete.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 
