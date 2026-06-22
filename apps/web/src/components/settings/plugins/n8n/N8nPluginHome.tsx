@@ -10,6 +10,7 @@ import {
 import { ChevronDown, ExternalLink, RefreshCw } from "lucide-react";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
+  SettingsDeploymentStatusQuery,
   SettingsPluginCatalogQuery,
   SettingsPluginInstallsQuery,
 } from "@/lib/settings-queries";
@@ -47,6 +48,10 @@ export function N8nPluginHome({ tab }: { tab: N8nPluginTab }) {
     query: SettingsPluginCatalogQuery,
     requestPolicy: "cache-and-network",
   });
+  const [deploymentResult] = useQuery({
+    query: SettingsDeploymentStatusQuery,
+    requestPolicy: "cache-and-network",
+  });
   const [installsResult, refreshInstalls] = useQuery({
     query: SettingsPluginInstallsQuery,
     requestPolicy: "cache-and-network",
@@ -63,7 +68,11 @@ export function N8nPluginHome({ tab }: { tab: N8nPluginTab }) {
     entry?.install ??
     null;
   const displayName = entry?.displayName ?? install?.pluginKey ?? "n8n";
-  const launchUrl = entry?.launchUrl ?? null;
+  const n8nRuntime =
+    deploymentResult.data?.deploymentStatus.managedApplications.find(
+      (candidate) => candidate.key === "n8n",
+    );
+  const launchUrl = n8nRuntime?.url ?? entry?.launchUrl ?? null;
   const description =
     entry?.description ??
     "Self-hosted n8n workflow automation runtime with managed workflow access.";

@@ -15,6 +15,7 @@ import {
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import {
+  SettingsDeploymentStatusQuery,
   SettingsMyPluginActivationsQuery,
   SettingsPluginCatalogQuery,
   SettingsRefreshPluginCatalogMutation,
@@ -59,6 +60,10 @@ export function PluginsPage() {
     query: SettingsMyPluginActivationsQuery,
     requestPolicy: "cache-and-network",
   });
+  const [deploymentResult, refreshDeployment] = useQuery({
+    query: SettingsDeploymentStatusQuery,
+    requestPolicy: "cache-and-network",
+  });
   const [refreshCatalogState, refreshRemoteCatalog] = useMutation(
     SettingsRefreshPluginCatalogMutation,
   );
@@ -66,6 +71,8 @@ export function PluginsPage() {
   const catalog = sortPluginEntriesByName(
     catalogResult.data?.pluginCatalog ?? [],
   );
+  const runtimeApps =
+    deploymentResult.data?.deploymentStatus.managedApplications ?? [];
   const catalogMetadata = catalogResult.data?.pluginCatalogMetadata ?? null;
   const activations = activationsResult.data?.myPluginActivations ?? [];
   const catalogUnavailable = Boolean(catalogResult.error);
@@ -89,6 +96,7 @@ export function PluginsPage() {
   function refreshAll() {
     refreshCatalog({ requestPolicy: "network-only" });
     refreshActivations({ requestPolicy: "network-only" });
+    refreshDeployment({ requestPolicy: "network-only" });
   }
 
   async function refreshTrustedCatalog() {
@@ -100,6 +108,7 @@ export function PluginsPage() {
     toast.success("Plugin catalog refreshed.");
     refreshCatalog({ requestPolicy: "network-only" });
     refreshActivations({ requestPolicy: "network-only" });
+    refreshDeployment({ requestPolicy: "network-only" });
   }
 
   function openPlugin(pluginKey: string) {
@@ -209,7 +218,7 @@ export function PluginsPage() {
                 entry.pluginKey,
                 activations,
               );
-              const launchUrl = deployedLaunchUrl(entry);
+              const launchUrl = deployedLaunchUrl(entry, runtimeApps);
               return (
                 <div
                   key={entry.pluginKey}
@@ -543,19 +552,31 @@ function pluginEntryIsAuthCapable(entry: {
   );
 }
 
-function deployedLaunchUrl(entry: {
-  pluginKey: string;
-  install?: {
-    state: string;
-    components?: readonly {
-      componentType: string;
-      componentKey: string;
+function deployedLaunchUrl(
+  entry: {
+    pluginKey: string;
+    install?: {
       state: string;
-    }[];
-  } | null;
-  launchUrl?: string | null;
-}): string | null {
+      components?: readonly {
+        componentType: string;
+        componentKey: string;
+        state: string;
+      }[];
+    } | null;
+    launchUrl?: string | null;
+  },
+  runtimeApps: readonly {
+    key: string;
+    url?: string | null;
+    runtimeEnabled?: boolean | null;
+    provisioned?: boolean | null;
+  }[],
+): string | null {
   if (!entry.install || entry.install.state === "uninstalling") return null;
+  const runtimeUrl = runtimeApps.find(
+    (candidate) => candidate.key === entry.pluginKey,
+  )?.url;
+  if (runtimeUrl) return runtimeUrl;
   // WorkOS has no deployed launchUrl; once its account is configured, link the
   // row to the WorkOS dashboard (mirrors the detail-header affordance).
   if (
