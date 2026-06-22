@@ -17,6 +17,7 @@
     "@octokit/auth-app": "^8.2.0",
     "@octokit/rest": "^22.0.1",
     "@thinkwork/admin-ops": "workspace:*",
+    "@thinkwork/agent-loops-core": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/runtime-config": "workspace:*",
     "drizzle-orm": "^0.39.0",

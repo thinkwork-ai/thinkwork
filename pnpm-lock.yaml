@@ -1249,6 +1249,9 @@ importers:
       '@thinkwork/admin-ops':
         specifier: workspace:*
         version: link:../admin-ops
+      '@thinkwork/agent-loops-core':
+        specifier: workspace:*
+        version: link:../agent-loops-core
       '@thinkwork/database-pg':
         specifier: workspace:*
         version: link:../database-pg

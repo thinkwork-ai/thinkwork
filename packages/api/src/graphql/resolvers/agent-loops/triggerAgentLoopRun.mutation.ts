@@ -1,6 +1,11 @@
+import {
+  dispatchAgentLoop,
+  type AgentLoopDispatchLedger,
+} from "@thinkwork/agent-loops-core";
 import { and, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import {
+  agentWakeupRequests,
   agentLoopIterations,
   agentLoopRuns,
   agentLoopVersions,
@@ -39,75 +44,57 @@ export async function triggerAgentLoopRun(
 
   await requireAgentLoopAdmin(ctx, loop.tenant_id, "trigger_agent_loop_run");
 
-  if (args.input.idempotencyKey) {
-    const [existing] = await db
-      .select()
-      .from(agentLoopRuns)
-      .where(
-        and(
-          eq(agentLoopRuns.tenant_id, loop.tenant_id),
-          eq(agentLoopRuns.agent_loop_id, loop.id),
-          eq(agentLoopRuns.idempotency_key, args.input.idempotencyKey),
-        ),
-      )
-      .limit(1);
-    if (existing) return agentLoopRowToGraphql(existing);
-  }
-
   const version = await loadCurrentVersion(loop.current_version_id);
   const actorId = await resolveCallerUserId(ctx);
   const inputSummary = parseAwsJsonObject(args.input.inputSummary);
   const now = new Date();
 
-  const [run] = await db
-    .insert(agentLoopRuns)
-    .values({
-      tenant_id: loop.tenant_id,
-      agent_loop_id: loop.id,
-      agent_loop_version_id: version?.id ?? null,
-      status: "queued",
-      trigger_family: "manual",
-      trigger_source: "manual_run",
-      actor_type: actorId ? "user" : "system",
-      actor_id: actorId,
-      idempotency_key: args.input.idempotencyKey ?? null,
-      correlation_id:
-        args.input.correlationId ??
-        args.input.idempotencyKey ??
-        `agent-loop:${loop.id}:${now.getTime()}`,
-      current_iteration: 1,
-      policy_snapshot: version?.loop_policy ?? {},
-      input_summary: inputSummary,
-      last_event_at: now,
-      created_at: now,
-      updated_at: now,
-    })
-    .returning();
-
-  await db.insert(agentLoopIterations).values({
-    tenant_id: loop.tenant_id,
-    agent_loop_run_id: run.id,
-    iteration_number: 1,
-    status: "queued",
-    goal_mode_action: "manual_run",
-    input_summary: inputSummary,
-    created_at: now,
-    updated_at: now,
-  });
-
-  await db
-    .update(agentLoops)
-    .set({
-      last_run_id: run.id,
-      last_run_status: run.status,
-      last_run_at: now,
-      last_run_summary: {
-        triggerFamily: "manual",
-        currentIteration: 1,
+  const result = await dispatchAgentLoop(
+    {
+      tenantId: loop.tenant_id,
+      loop: {
+        id: loop.id,
+        tenantId: loop.tenant_id,
+        name: loop.name,
+        enabled: loop.enabled,
+        lifecycleStatus: loop.lifecycle_status,
       },
-      updated_at: now,
-    })
-    .where(eq(agentLoops.id, loop.id));
+      version: version
+        ? {
+            id: version.id,
+            versionStatus: version.version_status,
+            goalSpec: version.goal_spec,
+            workerSpec: version.worker_spec,
+            judgeSpec: version.judge_spec,
+            loopPolicy: version.loop_policy,
+          }
+        : null,
+      trigger: {
+        family: "manual",
+        source: "manual_run",
+        actorType: actorId ? "user" : "system",
+        actorId,
+        idempotencyKey: args.input.idempotencyKey ?? null,
+        correlationId: args.input.correlationId ?? null,
+        inputSummary,
+      },
+      now,
+    },
+    createGraphqlAgentLoopLedger(),
+  );
+
+  const runId = "runId" in result ? result.runId : null;
+  if (!runId) {
+    throw new Error("AgentLoop dispatch did not create a run");
+  }
+  const [run] = await db
+    .select()
+    .from(agentLoopRuns)
+    .where(eq(agentLoopRuns.id, runId))
+    .limit(1);
+  if (!run) {
+    throw new Error(`AgentLoop run ${runId} not found after dispatch`);
+  }
 
   return agentLoopRowToGraphql(run);
 }
@@ -120,4 +107,141 @@ async function loadCurrentVersion(id?: string | null) {
     .where(eq(agentLoopVersions.id, id))
     .limit(1);
   return row ?? null;
+}
+
+function createGraphqlAgentLoopLedger(): AgentLoopDispatchLedger {
+  return {
+    async findRunByIdempotencyKey(input) {
+      const [row] = await db
+        .select()
+        .from(agentLoopRuns)
+        .where(
+          and(
+            eq(agentLoopRuns.tenant_id, input.tenantId),
+            eq(agentLoopRuns.idempotency_key, input.idempotencyKey),
+          ),
+        )
+        .limit(1);
+      return row ? { id: row.id, status: row.status as never } : null;
+    },
+
+    async createRun(input) {
+      const [row] = await db
+        .insert(agentLoopRuns)
+        .values({
+          tenant_id: input.tenantId,
+          agent_loop_id: input.agentLoopId,
+          agent_loop_version_id: input.agentLoopVersionId ?? null,
+          status: input.status,
+          trigger_family: input.triggerFamily,
+          trigger_source: input.triggerSource,
+          scheduled_job_id: input.scheduledJobId ?? null,
+          actor_type: input.actorType ?? null,
+          actor_id: input.actorId ?? null,
+          idempotency_key: input.idempotencyKey ?? null,
+          correlation_id: input.correlationId,
+          current_iteration: input.currentIteration,
+          policy_snapshot: input.policySnapshot,
+          input_summary: input.inputSummary,
+          error_code: input.errorCode ?? null,
+          error_message: input.errorMessage ?? null,
+          last_event_at: input.now,
+          created_at: input.now,
+          updated_at: input.now,
+        })
+        .returning({ id: agentLoopRuns.id, status: agentLoopRuns.status });
+      return { id: row.id, status: row.status as never };
+    },
+
+    async createIteration(input) {
+      const [row] = await db
+        .insert(agentLoopIterations)
+        .values({
+          tenant_id: input.tenantId,
+          agent_loop_run_id: input.runId,
+          iteration_number: input.iterationNumber,
+          status: input.status,
+          goal_mode_action: input.goalModeAction,
+          input_summary: input.inputSummary,
+          error_code: input.errorCode ?? null,
+          error_message: input.errorMessage ?? null,
+          created_at: input.now,
+          updated_at: input.now,
+        })
+        .returning({ id: agentLoopIterations.id });
+      return { id: row.id };
+    },
+
+    async enqueueWakeup(input) {
+      const [row] = await db
+        .insert(agentWakeupRequests)
+        .values({
+          tenant_id: input.tenantId,
+          agent_id: input.agentId,
+          source: input.source,
+          trigger_detail: input.triggerDetail,
+          reason: input.reason,
+          payload: input.payload,
+          status: "queued",
+          idempotency_key: input.idempotencyKey,
+          requested_by_actor_type: input.requestedByActorType ?? null,
+          requested_by_actor_id: input.requestedByActorId ?? null,
+          requested_at: input.now,
+          created_at: input.now,
+        })
+        .returning({ id: agentWakeupRequests.id });
+      return { id: row.id };
+    },
+
+    async markIterationWakeup(input) {
+      await db
+        .update(agentLoopIterations)
+        .set({
+          agent_wakeup_request_id: input.wakeupId,
+          updated_at: input.now,
+        })
+        .where(eq(agentLoopIterations.id, input.iterationId));
+    },
+
+    async markDispatchFailed(input) {
+      await db
+        .update(agentLoopRuns)
+        .set({
+          status: "failed",
+          error_code: input.errorCode,
+          error_message: input.errorMessage,
+          finished_at: input.now,
+          last_event_at: input.now,
+          updated_at: input.now,
+        })
+        .where(eq(agentLoopRuns.id, input.runId));
+      await db
+        .update(agentLoopIterations)
+        .set({
+          status: "failed",
+          error_code: input.errorCode,
+          error_message: input.errorMessage,
+          finished_at: input.now,
+          updated_at: input.now,
+        })
+        .where(eq(agentLoopIterations.id, input.iterationId));
+    },
+
+    async updateLoopAfterDispatch(input) {
+      await db
+        .update(agentLoops)
+        .set({
+          last_run_id: input.runId,
+          last_run_status: input.status,
+          last_run_at: input.now,
+          last_run_summary: {
+            triggerFamily: input.triggerFamily,
+            currentIteration: input.currentIteration,
+            ...input.summary,
+          },
+          updated_at: input.now,
+        })
+        .where(eq(agentLoops.id, input.loopId));
+    },
+  };
 }

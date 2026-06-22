@@ -89,6 +89,38 @@ vi.mock("@thinkwork/database-pg", () => ({
 
 vi.mock("@thinkwork/database-pg/schema", () => ({
   agentWakeupRequests: { id: "agent_wakeup_requests.id" },
+  agentLoops: {
+    id: "agent_loops.id",
+    tenant_id: "agent_loops.tenant_id",
+    name: "agent_loops.name",
+    enabled: "agent_loops.enabled",
+    lifecycle_status: "agent_loops.lifecycle_status",
+    current_version_id: "agent_loops.current_version_id",
+    last_run_id: "agent_loops.last_run_id",
+    last_run_status: "agent_loops.last_run_status",
+    last_run_at: "agent_loops.last_run_at",
+    last_run_summary: "agent_loops.last_run_summary",
+    updated_at: "agent_loops.updated_at",
+  },
+  agentLoopVersions: {
+    id: "agent_loop_versions.id",
+    version_status: "agent_loop_versions.version_status",
+    goal_spec: "agent_loop_versions.goal_spec",
+    worker_spec: "agent_loop_versions.worker_spec",
+    judge_spec: "agent_loop_versions.judge_spec",
+    loop_policy: "agent_loop_versions.loop_policy",
+  },
+  agentLoopRuns: {
+    id: "agent_loop_runs.id",
+    tenant_id: "agent_loop_runs.tenant_id",
+    agent_loop_id: "agent_loop_runs.agent_loop_id",
+    agent_loop_version_id: "agent_loop_runs.agent_loop_version_id",
+    status: "agent_loop_runs.status",
+    idempotency_key: "agent_loop_runs.idempotency_key",
+  },
+  agentLoopIterations: {
+    id: "agent_loop_iterations.id",
+  },
   agents: { id: "agents.id" },
   agentSkills: {
     id: "agent_skills.id",
@@ -172,16 +204,21 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   },
   scheduledJobs: {
     id: "scheduled_jobs.id",
+    tenant_id: "scheduled_jobs.tenant_id",
     enabled: "scheduled_jobs.enabled",
     budget_paused: "scheduled_jobs.budget_paused",
     budget_paused_at: "scheduled_jobs.budget_paused_at",
     budget_paused_reason: "scheduled_jobs.budget_paused_reason",
     name: "scheduled_jobs.name",
     agent_id: "scheduled_jobs.agent_id",
+    agent_loop_id: "scheduled_jobs.agent_loop_id",
     space_id: "scheduled_jobs.space_id",
+    prompt: "scheduled_jobs.prompt",
     config: "scheduled_jobs.config",
     created_by_type: "scheduled_jobs.created_by_type",
     created_by_id: "scheduled_jobs.created_by_id",
+    last_run_at: "scheduled_jobs.last_run_at",
+    updated_at: "scheduled_jobs.updated_at",
   },
   skillRuns: {
     id: "skill_runs.id",
@@ -317,6 +354,57 @@ const pushAgentSkillEnablement = (enabled: boolean | null): void => {
   mockSelect.mockReturnValueOnce(enabled === null ? [] : [{ enabled }]);
 };
 
+const AGENT_LOOP_JOB = (
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> => ({
+  enabled: true,
+  budget_paused: false,
+  budget_paused_reason: null,
+  name: "Daily research loop",
+  agent_id: "agent-1",
+  agent_loop_id: "loop-1",
+  prompt: "Prepare the daily research brief.",
+  config: { product: "agent_loop" },
+  created_by_type: "system",
+  created_by_id: null,
+  ...overrides,
+});
+
+const AGENT_LOOP_ROW = {
+  id: "loop-1",
+  tenant_id: "T1",
+  name: "Daily research loop",
+  enabled: true,
+  lifecycle_status: "active",
+  current_version_id: "version-1",
+};
+
+const AGENT_LOOP_VERSION_ROW = {
+  id: "version-1",
+  version_status: "active",
+  goal_spec: {
+    objective: "Prepare the daily research brief.",
+    completionCriteria: ["Brief exists."],
+  },
+  worker_spec: {
+    type: "agent",
+    id: "agent-1",
+    toolHints: [],
+    config: {},
+  },
+  judge_spec: {
+    mode: "self_check",
+    criteria: [],
+    config: {},
+  },
+  loop_policy: {
+    maxIterations: 1,
+    maxTokens: 50_000,
+    failBehavior: "return_blocker",
+    escalateOnFailure: false,
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.AGENTCORE_FUNCTION_NAME = "thinkwork-dev-api-agentcore-invoke";
@@ -337,6 +425,135 @@ beforeEach(() => {
     threadId: "thread-1",
     identifier: "AUTO-1",
     number: 1,
+  });
+});
+
+describe("job-trigger agent_loop_schedule", () => {
+  it("creates a run, first iteration, and agent_loop wakeup", async () => {
+    mockSelect
+      .mockReturnValueOnce([AGENT_LOOP_JOB()])
+      .mockReturnValueOnce([AGENT_LOOP_ROW])
+      .mockReturnValueOnce([AGENT_LOOP_VERSION_ROW])
+      .mockReturnValueOnce([]);
+    mockInsert
+      .mockReturnValueOnce([{ id: "run-1", status: "queued" }])
+      .mockReturnValueOnce([{ id: "iteration-1" }])
+      .mockReturnValueOnce([{ id: "wakeup-1" }]);
+
+    await handler({
+      triggerId: "job-loop-1",
+      triggerType: "agent_loop_schedule",
+      tenantId: "T1",
+      scheduleName: "thinkwork-dev-loop-daily",
+      scheduledTime: "2026-06-22T12:00:00.000Z",
+    });
+
+    expect(mockInsertValues).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        tenant_id: "T1",
+        agent_loop_id: "loop-1",
+        agent_loop_version_id: "version-1",
+        status: "queued",
+        trigger_family: "schedule",
+        trigger_source: "agent_loop_schedule",
+        scheduled_job_id: "job-loop-1",
+        idempotency_key:
+          "agent_loop_schedule:job-loop-1:2026-06-22T12:00:00.000Z",
+        current_iteration: 1,
+      }),
+    );
+    expect(mockInsertValues).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        tenant_id: "T1",
+        agent_loop_run_id: "run-1",
+        iteration_number: 1,
+        status: "queued",
+        goal_mode_action: "start",
+      }),
+    );
+    expect(mockInsertValues).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        tenant_id: "T1",
+        agent_id: "agent-1",
+        source: "agent_loop",
+        idempotency_key: "agent-loop:run-1:iteration:1",
+        payload: expect.objectContaining({
+          goalMode: expect.objectContaining({
+            action: "start",
+            goalRunId: "run-1",
+            resolvedBudget: { tokenBudget: 50_000 },
+          }),
+          agentLoop: expect.objectContaining({
+            loopId: "loop-1",
+            runId: "run-1",
+            iterationId: "iteration-1",
+            versionId: "version-1",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("reuses an existing scheduled run for the same fire id", async () => {
+    mockSelect
+      .mockReturnValueOnce([AGENT_LOOP_JOB()])
+      .mockReturnValueOnce([AGENT_LOOP_ROW])
+      .mockReturnValueOnce([AGENT_LOOP_VERSION_ROW])
+      .mockReturnValueOnce([{ id: "run-existing", status: "queued" }]);
+
+    await handler({
+      triggerId: "job-loop-1",
+      triggerType: "agent_loop_schedule",
+      tenantId: "T1",
+      fireId: "fire-1",
+    });
+
+    expect(mockInsertValues).not.toHaveBeenCalled();
+    expect(mockLambdaSend).not.toHaveBeenCalled();
+  });
+
+  it("records a skipped run when the schedule is budget paused", async () => {
+    mockSelect
+      .mockReturnValueOnce([
+        AGENT_LOOP_JOB({
+          budget_paused: true,
+          budget_paused_reason: "User budget exceeded.",
+        }),
+      ])
+      .mockReturnValueOnce([AGENT_LOOP_ROW])
+      .mockReturnValueOnce([AGENT_LOOP_VERSION_ROW])
+      .mockReturnValueOnce([]);
+    mockInsert
+      .mockReturnValueOnce([{ id: "run-1", status: "skipped" }])
+      .mockReturnValueOnce([{ id: "iteration-1" }]);
+
+    await handler({
+      triggerId: "job-loop-1",
+      triggerType: "agent_loop_schedule",
+      tenantId: "T1",
+      fireId: "fire-1",
+    });
+
+    expect(mockInsertValues).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        status: "skipped",
+        error_code: "schedule_budget_paused",
+        error_message: "User budget exceeded.",
+      }),
+    );
+    expect(mockInsertValues).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        status: "skipped",
+        error_code: "schedule_budget_paused",
+      }),
+    );
+    expect(mockInsertValues).toHaveBeenCalledTimes(2);
+    expect(mockLambdaSend).not.toHaveBeenCalled();
   });
 });
 

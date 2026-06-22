@@ -21,6 +21,8 @@ import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentWakeupRequests,
+  agentLoopIterations,
+  agentLoopRuns,
   agentCapabilities,
   threadTurns,
   threadTurnEvents,
@@ -221,8 +223,9 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -334,8 +337,9 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -680,6 +684,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   }
 
   const payload = wakeup.payload as Record<string, unknown> | null;
+  const agentLoopPayload = normalizeAgentLoopWakeupPayload(payload);
   const runtimeType = normalizeAgentRuntimeType(
     agent.runtime ?? agent.template_runtime,
   );
@@ -1096,7 +1101,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     wakeup.agent_id &&
     (wakeup.source === "trigger" ||
       wakeup.source === "on_demand" ||
-      wakeup.source === "timer")
+      wakeup.source === "timer" ||
+      wakeup.source === "agent_loop")
   ) {
     try {
       const triggerName = String(
@@ -1241,12 +1247,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } =
-          await import("../lib/orchestration/process-parser.js");
-        const { materializeProcess } =
-          await import("../lib/orchestration/process-materializer.js");
-        const { S3Client, GetObjectCommand } =
-          await import("@aws-sdk/client-s3");
+        const { parseProcessTemplate } = await import(
+          "../lib/orchestration/process-parser.js"
+        );
+        const { materializeProcess } = await import(
+          "../lib/orchestration/process-materializer.js"
+        );
+        const { S3Client, GetObjectCommand } = await import(
+          "@aws-sdk/client-s3"
+        );
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -1376,6 +1385,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         err,
       );
     }
+  }
+  if (run?.id && agentLoopPayload?.iterationId) {
+    await linkAgentLoopIterationTurn({
+      tenantId: wakeup.tenant_id,
+      runId: agentLoopPayload.runId,
+      iterationId: agentLoopPayload.iterationId,
+      threadTurnId: run.id,
+      now,
+    });
   }
 
   // Link run back to wakeup
@@ -1556,6 +1574,14 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       ]
         .filter(Boolean)
         .join("\n");
+      break;
+    }
+    case "agent_loop": {
+      agentMessage = String(
+        payload?.message ||
+          agentLoopPayload?.goalMode?.objective ||
+          "Start this AgentLoop iteration.",
+      );
       break;
     }
     default: {
@@ -2089,7 +2115,10 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
     }
 
-    if (wakeup.source === "chat_message" && payload?.goalMode) {
+    if (
+      (wakeup.source === "chat_message" || wakeup.source === "agent_loop") &&
+      payload?.goalMode
+    ) {
       Object.assign(agentCorePayload, {
         goal_mode: toRuntimeGoalModePayload(
           payload.goalMode as RuntimeGoalMode,
@@ -2757,6 +2786,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       })
       .where(eq(threadTurns.id, run.id));
 
+    await completeAgentLoopIterationForWakeup({
+      wakeupId: wakeup.id,
+      responseText,
+      now: new Date(),
+    });
+
     await updateWorkspaceRunAfterTurn(
       workspacePayload,
       wakeup,
@@ -2813,8 +2848,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,
@@ -2863,6 +2899,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         usage_json: { duration_ms: durationMs },
       })
       .where(eq(threadTurns.id, run.id));
+
+    await failAgentLoopIterationForWakeup({
+      wakeupId: wakeup.id,
+      error: errMsg,
+      now: new Date(),
+    });
 
     await updateWorkspaceRunAfterTurn(
       workspacePayload,
@@ -3004,6 +3046,104 @@ async function prependThreadProgressForAgentTurn(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function normalizeAgentLoopWakeupPayload(
+  payload: Record<string, unknown> | null,
+): { iterationId?: string; runId?: string; goalMode?: RuntimeGoalMode } | null {
+  const agentLoop =
+    payload?.agentLoop &&
+    typeof payload.agentLoop === "object" &&
+    !Array.isArray(payload.agentLoop)
+      ? (payload.agentLoop as Record<string, unknown>)
+      : null;
+  if (!agentLoop) return null;
+  return {
+    iterationId: stringValue(agentLoop.iterationId) ?? undefined,
+    runId: stringValue(agentLoop.runId) ?? undefined,
+    goalMode:
+      payload?.goalMode &&
+      typeof payload.goalMode === "object" &&
+      !Array.isArray(payload.goalMode)
+        ? (payload.goalMode as RuntimeGoalMode)
+        : undefined,
+  };
+}
+
+async function linkAgentLoopIterationTurn(input: {
+  tenantId: string;
+  runId?: string;
+  iterationId: string;
+  threadTurnId: string;
+  now: Date;
+}): Promise<void> {
+  await db
+    .update(agentLoopIterations)
+    .set({
+      ["thread_turn_id"]: input.threadTurnId,
+      status: "running",
+      started_at: input.now,
+      updated_at: input.now,
+    })
+    .where(
+      and(
+        eq(agentLoopIterations.id, input.iterationId),
+        eq(agentLoopIterations.tenant_id, input.tenantId),
+      ),
+    );
+
+  if (!input.runId) return;
+
+  await db
+    .update(agentLoopRuns)
+    .set({
+      status: "running",
+      started_at: input.now,
+      last_event_at: input.now,
+      updated_at: input.now,
+    })
+    .where(
+      and(
+        eq(agentLoopRuns.id, input.runId),
+        eq(agentLoopRuns.tenant_id, input.tenantId),
+        inArray(agentLoopRuns.status, ["queued", "running"]),
+      ),
+    );
+}
+
+async function completeAgentLoopIterationForWakeup(input: {
+  wakeupId: string;
+  responseText: string;
+  now: Date;
+}): Promise<void> {
+  await db
+    .update(agentLoopIterations)
+    .set({
+      status: "completed",
+      output_summary: {
+        responsePreview: input.responseText.slice(0, 1_000),
+      },
+      finished_at: input.now,
+      updated_at: input.now,
+    })
+    .where(eq(agentLoopIterations.agent_wakeup_request_id, input.wakeupId));
+}
+
+async function failAgentLoopIterationForWakeup(input: {
+  wakeupId: string;
+  error: string;
+  now: Date;
+}): Promise<void> {
+  await db
+    .update(agentLoopIterations)
+    .set({
+      status: "failed",
+      error_code: "agentcore_invoke_failed",
+      error_message: input.error.slice(0, 1_000),
+      finished_at: input.now,
+      updated_at: input.now,
+    })
+    .where(eq(agentLoopIterations.agent_wakeup_request_id, input.wakeupId));
+}
 
 async function failWakeup(wakeupId: string, error: string): Promise<void> {
   await db

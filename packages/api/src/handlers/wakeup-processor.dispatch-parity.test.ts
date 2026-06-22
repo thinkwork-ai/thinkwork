@@ -89,6 +89,26 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(linkSource).toContain("thread_turn_id: input.threadTurnId");
   });
 
+  it("links AgentLoop wakeups to the created thread turn before dispatch", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+
+    expect(wakeupSource).toContain("normalizeAgentLoopWakeupPayload");
+    expect(wakeupSource).toContain("linkAgentLoopIterationTurn");
+    expect(wakeupSource).toContain('["thread_turn_id"]: input.threadTurnId');
+    expect(wakeupSource).toContain(".update(agentLoopRuns)");
+    expect(wakeupSource).toContain('status: "running"');
+    expect(wakeupSource).toContain('wakeup.source === "agent_loop"');
+  });
+
+  it("converts AgentLoop wakeup goalMode to runtime goal_mode", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+
+    expect(wakeupSource).toContain(
+      '(wakeup.source === "chat_message" || wakeup.source === "agent_loop")',
+    );
+    expect(wakeupSource).toContain("goal_mode: toRuntimeGoalModePayload");
+  });
+
   it("no dispatch-critical field is assembled inline in either handler", () => {
     // If a future field lands inline in chat-agent-invoke instead of the
     // helper, this fails and forces it through the helper — which is what
