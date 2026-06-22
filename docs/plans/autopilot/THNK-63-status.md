@@ -92,6 +92,17 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   fixes that were identified locally after #2868 had already merged.
 - 2026-06-22T19:50:42Z: Added Linear U5 follow-up PR-opened comment
   `3c5d671e-cb6b-460e-aa05-35ee6d260e04`; monitoring PR #2869 CI.
+- 2026-06-22T20:00:28Z: PR #2869 merged at
+  `b3d58e8be7867b262be31d3d09aaa32ca91644ec`; final CI passed.
+- 2026-06-22T20:03Z: Added Linear U5 follow-up merged/cleanup comment
+  `9ec5927f-c2ca-44c5-acc3-c596d31fbb4d`.
+- 2026-06-22T20:06:40Z: Closed stale blocker artifact PR #2870 after Linear
+  access recovered; remote branch was deleted and the local blocker worktree was
+  removed.
+- 2026-06-22T20:07Z: Added Linear U6 start comment
+  `f8ca5b09-6737-475b-9ee0-81158af9fad1`; THNK-63 remains `In Progress`.
+- 2026-06-22T20:29:05Z: Added Linear U6 local-verification comment
+  `a191c6cd-375e-414b-94ff-f7483299938d`; preparing PR.
 
 ## Unit Log
 
@@ -576,4 +587,76 @@ PR:
 - Opened: https://github.com/thinkwork-ai/thinkwork/pull/2869
 - Linear PR-opened comment:
   `3c5d671e-cb6b-460e-aa05-35ee6d260e04`.
-- Current state: monitoring required CI.
+- Merged: 2026-06-22T20:00:28Z.
+- Merge commit: `b3d58e8be7867b262be31d3d09aaa32ca91644ec`.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Linear merged/cleanup comment:
+  `9ec5927f-c2ca-44c5-acc3-c596d31fbb4d`.
+- Cleanup: remote branch deleted by GitHub; local U5 follow-up worktree and
+  branch removed before U6 continued from fresh `origin/main`.
+
+### U6: Record And Render Wiki Context Trace Cards
+
+Objective: make OKF traversal evidence visible in thread detail during live Pi
+turns and after finalized replay, without exposing raw mount roots, S3 keys, or
+tenant storage internals.
+
+Branch/worktree:
+
+- Branch: `codex/thnk-63-u6-wiki-trace`
+- Worktree: `.Codex/worktrees/thnk-63-u6-wiki-trace`
+- Base: `origin/main` at `b3d58e8be7867b262be31d3d09aaa32ca91644ec`.
+
+Implementation:
+
+- In progress as of 2026-06-22T20:20Z.
+- Runtime core now extracts sanitized OKF trace details from navigator tool
+  results and records them on tool invocation evidence.
+- Pi agent loop emits live `wiki_context_trace` activity events when a
+  navigator call returns trace details.
+- Finalize backfills durable `wiki_context_trace` events from
+  `usage.tool_invocations` so refresh/replay preserves the same evidence.
+- Web thread detail renders compact OKF wiki trace cards and dedupes live events
+  against finalized usage rows by tool call id.
+
+Local verification:
+
+- 2026-06-22T20:21Z:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- test/okf-wiki-navigator.test.ts test/agent-loop.test.ts`
+  passed (58 tests).
+- 2026-06-22T20:21Z:
+  `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/process-finalize.test.ts`
+  passed (44 tests).
+- 2026-06-22T20:21Z:
+  `pnpm --filter @thinkwork/web test -- src/components/workbench/WikiContextTraceCard.test.tsx src/components/workbench/TaskThreadView.test.tsx`
+  passed (117 tests).
+- 2026-06-22T20:21Z:
+  `pnpm --filter @thinkwork/web test -- src/components/workbench/TaskThreadView.convergence.test.ts`
+  passed (8 tests).
+- 2026-06-22T20:21Z: `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/api typecheck`, and
+  `pnpm --filter @thinkwork/web typecheck` passed.
+- 2026-06-22T20:22Z: `git diff --check` passed.
+- 2026-06-22T20:22Z:
+  `pnpm dlx prettier@3.8.2 --check <touched files>` passed.
+- 2026-06-22T20:24Z: `pnpm --filter @thinkwork/pi-runtime-core test`
+  passed (13 files, 116 tests).
+- 2026-06-22T20:24Z: A concurrent broad
+  `pnpm --filter @thinkwork/api test` plus `pnpm --filter @thinkwork/web test`
+  run hit one 5s timeout in
+  `src/handlers/chat-agent-invoke.runtime-routing.test.ts`; the rest of the API
+  run passed (573 files, 5,349 tests, 9 skipped) and the web run passed.
+- 2026-06-22T20:27Z:
+  `pnpm --filter @thinkwork/api test -- src/handlers/chat-agent-invoke.runtime-routing.test.ts`
+  passed in isolation (12 tests), including the previously timed-out case.
+- 2026-06-22T20:27Z: `pnpm --filter @thinkwork/api test` passed when rerun
+  without the full web suite competing for local CPU (574 files, 5,350 tests,
+  9 skipped).
+- 2026-06-22T20:27Z: `pnpm --filter @thinkwork/web test` passed (192 files,
+  1,465 tests).
+- 2026-06-22T20:29Z: `pnpm lint` and `pnpm typecheck` passed.
+- 2026-06-22T20:31Z: CE review pass against the explicit THNK-63 U6 plan found
+  no unresolved actionable findings. The pass tightened OKF trace event messages
+  from raw tool ids such as `wiki_rg` to readable action verbs such as `search`.
+- Linear local-verification comment:
+  `a191c6cd-375e-414b-94ff-f7483299938d`.

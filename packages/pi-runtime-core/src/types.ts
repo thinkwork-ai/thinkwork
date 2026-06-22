@@ -5,6 +5,7 @@ import type { ThreadGenUIPart } from "@thinkwork/genui";
 
 import type { SessionStore } from "./durable-session-manager.js";
 import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
+import type { OkfWikiContextTrace } from "./okf-wiki-navigator.js";
 
 export type AgentProfileRunStatus =
   | "completed"
@@ -118,6 +119,7 @@ export interface ToolInvocationRecord {
   status?: string;
   model_routing?: ModelRoutedToolCallRecord;
   agent_profile_run?: AgentProfileRunRecord;
+  okf_wiki_trace?: OkfWikiContextTrace;
   started_at?: string;
   finished_at?: string;
   runtime: "pi";

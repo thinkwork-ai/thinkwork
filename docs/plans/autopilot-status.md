@@ -66,49 +66,65 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U1 - Surface current wiki retrieval in thread thinking.
-- Current branch: `codex/thnk-63-u1-wiki-trace`.
-- Current worktree: `.Codex/worktrees/thnk-63-u1-wiki-trace`.
-- Current pull request:
-  [#2857](https://github.com/thinkwork-ai/thinkwork/pull/2857).
+- Current unit: U6 - Record and render OKF wiki context trace cards.
+- Current branch: `codex/thnk-63-u6-wiki-trace`.
+- Current worktree: `.Codex/worktrees/thnk-63-u6-wiki-trace`.
+- Current pull request: Not opened yet.
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     OKF Wiki Navigator plan from the main checkout.
-  - 2026-06-22: U1 started from a clean isolated worktree created from
-    `origin/main` at `16846810a011c6b53b1efbadcacaf5713eb787d0`.
-  - 2026-06-22: Reviewed prior Context Engine/wiki solution notes for governed
-    provider boundaries and wiki section consistency before implementation.
-  - 2026-06-22: U1 implementation added structured
-    `details.wiki_context` metadata to `query_wiki_context`, normalized that
-    metadata into finalized `usage_json.tool_invocations`, appended
-    `wiki_context_result` thread turn events, and rendered wiki result cards in
-    both thread thinking and Settings execution trace.
-  - 2026-06-22: Focused verification passed:
-    `pnpm --dir packages/pi-extensions exec vitest run test/capabilities.test.ts`,
-    `pnpm --dir packages/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts`,
-    `pnpm --filter @thinkwork/web exec vitest run src/components/workbench/TaskThreadView.test.tsx src/components/settings/SettingsActivityExecutionTrace.test.tsx`,
-    `pnpm --dir packages/pi-extensions typecheck`,
-    `pnpm --dir packages/api typecheck`, and
+  - 2026-06-22: U1 merged via PR
+    [#2854](https://github.com/thinkwork-ai/thinkwork/pull/2854), squash
+    merge `1d2e9e6c`. Scope: OKF bundle contract and artifact manifest support.
+  - 2026-06-22: U2 merged via PR
+    [#2859](https://github.com/thinkwork-ai/thinkwork/pull/2859), squash
+    merge `19fa8694`. Scope: OKF materializer and S3 publication path.
+  - 2026-06-22: U3 merged via PR
+    [#2861](https://github.com/thinkwork-ai/thinkwork/pull/2861), squash
+    merge `472a57a4`. Scope: EFS current view, hydrator, and Pi read-only
+    mount wiring.
+  - 2026-06-22: U4 merged via PR
+    [#2867](https://github.com/thinkwork-ai/thinkwork/pull/2867), squash
+    merge `2aa7e158`. Scope: bounded OKF filesystem provider.
+  - 2026-06-22: U5 merged via PR
+    [#2868](https://github.com/thinkwork-ai/thinkwork/pull/2868), squash
+    merge `f6677e61`. Scope: expose Pi OKF navigator tools/runtime gates.
+  - 2026-06-22: U5 hardening follow-up merged via PR
+    [#2869](https://github.com/thinkwork-ai/thinkwork/pull/2869), squash
+    merge `b3d58e8b`. Scope: harden OKF navigator gates after review.
+  - 2026-06-22: Linear THNK-63 updated after token retry succeeded with U5
+    follow-up cleanup comment `9ec5927f-c2ca-44c5-acc3-c596d31fbb4d` and U6
+    start comment `f8ca5b09-6737-475b-9ee0-81158af9fad1`.
+  - 2026-06-22: U6 started from `origin/main` at `b3d58e8b` in
+    `.Codex/worktrees/thnk-63-u6-wiki-trace`.
+  - 2026-06-22: U6 implementation in progress. Runtime normalizes sanitized
+    `details.okfWikiTrace` payloads into `okf_wiki_trace`, emits live
+    `wiki_context_trace` activity, finalize persists trace evidence as durable
+    turn events, and the web thread thinking surface renders/dedupes OKF wiki
+    trace cards.
+  - 2026-06-22: Focused U6 verification passed:
+    `pnpm --filter @thinkwork/pi-runtime-core test -- test/okf-wiki-navigator.test.ts test/agent-loop.test.ts`,
+    `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/process-finalize.test.ts`,
+    `pnpm --filter @thinkwork/web test -- src/components/workbench/WikiContextTraceCard.test.tsx src/components/workbench/TaskThreadView.test.tsx`,
+    `pnpm --filter @thinkwork/web test -- src/components/workbench/TaskThreadView.convergence.test.ts`,
+    `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+    `pnpm --filter @thinkwork/api typecheck`, and
     `pnpm --filter @thinkwork/web typecheck`.
-  - 2026-06-22: Local formatting used
-    `pnpm dlx prettier@3.6.2 --write <touched files>` because this worktree
-    has no root `prettier` binary available to `pnpm exec prettier`.
-  - 2026-06-22: U1 broader verification passed: `pnpm lint`,
-    `pnpm typecheck`, `git diff --check`, and touched-file formatting
-    verification with `pnpm dlx prettier@3.6.2 --check <touched files>`.
-    `pnpm format:check` remains locally blocked because the repo script calls
-    `prettier`, but this worktree has no root/local `prettier` binary.
-  - 2026-06-22: U1 root `pnpm test` ran the broad suite and exposed a fresh
-    worktree Electron payload issue first; repaired only the generated Electron
-    install payload, then `pnpm --dir apps/desktop test` passed. The rerun of
-    root `pnpm test` completed nearly all suites but one unrelated
-    `artifact-resolvers-payloads` test timed out under broad-suite load; the
-    isolated regression rerun
-    `pnpm --dir packages/api exec vitest run src/__tests__/artifact-resolvers-payloads.test.ts`
-    passed immediately afterward.
-  - 2026-06-22: U1 PR
-    [#2857](https://github.com/thinkwork-ai/thinkwork/pull/2857) opened and CI
-    monitoring started.
+  - 2026-06-22: U6 diff hygiene passed: `git diff --check` and
+    `pnpm dlx prettier@3.8.2 --check <touched files>`.
+  - 2026-06-22: Broader U6 verification passed:
+    `pnpm --filter @thinkwork/pi-runtime-core test`,
+    `pnpm --filter @thinkwork/web test`, `pnpm --filter @thinkwork/api test`,
+    `pnpm lint`, and `pnpm typecheck`. An earlier concurrent broad API+web run
+    hit one 5s timeout in
+    `src/handlers/chat-agent-invoke.runtime-routing.test.ts`; the isolated file
+    rerun passed in 1.49s, and the full API suite rerun passed afterward
+    (574 files, 5,350 tests, 9 skipped).
+  - 2026-06-22: CE review pass against the explicit THNK-63 U6 plan found no
+    unresolved actionable findings. The pass tightened the user-facing OKF trace
+    event message from raw tool ids to readable action verbs.
+  - 2026-06-22: Added Linear U6 local-verification comment
+    `a191c6cd-375e-414b-94ff-f7483299938d`; preparing PR.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 

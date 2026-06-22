@@ -4,6 +4,10 @@ import type {
   OkfWikiNavigatorProvider,
   OkfWikiNavigatorReadResult,
 } from "../src/okf-wiki-navigator.js";
+import {
+  okfWikiContextTraceFromToolInvocation,
+  okfWikiContextTraceMessage,
+} from "../src/okf-wiki-navigator.js";
 
 function makeStub(files: Record<string, string>): OkfWikiNavigatorProvider {
   const store = new Map(Object.entries(files));
@@ -106,5 +110,82 @@ describe("OkfWikiNavigatorProvider contract", () => {
         policy: "cite_or_summarize_only",
       },
     });
+  });
+});
+
+describe("OKF wiki trace evidence", () => {
+  it("extracts sanitized trace details from tool invocations", () => {
+    const trace = okfWikiContextTraceFromToolInvocation({
+      id: "call-1",
+      tool_name: "wiki_rg",
+      result: {
+        details: {
+          okfWikiTrace: {
+            surface: "okf_efs",
+            tool: "wiki_rg",
+            query: "Acme",
+            path: "topics",
+            mountRoot: "/mnt/thinkwork-okf/tenants/acme/current",
+            s3Key: "tenants/acme/okf/current.json",
+            entries: [
+              {
+                path: "topics/acme.md",
+                title: "Acme",
+                source: "s3://thinkwork-okf/tenants/acme/private.md",
+                absolutePath:
+                  "/mnt/thinkwork-okf/tenants/acme/current/topics/acme.md",
+              },
+            ],
+            bounds: {
+              maxResults: 5,
+              maxDepth: 2,
+              maxBytes: 128_000,
+              truncated: true,
+            },
+            redaction: {
+              source: "okf_navigator",
+              policy: "cite_or_summarize_only",
+            },
+          },
+        },
+      },
+    });
+
+    expect(trace).toMatchObject({
+      surface: "okf_efs",
+      tool: "wiki_rg",
+      tool_call_id: "call-1",
+      query: "Acme",
+      path: "topics",
+      truncated: true,
+      bounds: expect.objectContaining({ maxResults: 5 }),
+      redaction: {
+        source: "okf_navigator",
+        policy: "cite_or_summarize_only",
+      },
+    });
+    expect(JSON.stringify(trace)).not.toContain("/mnt/thinkwork-okf");
+    expect(JSON.stringify(trace)).not.toContain("s3://");
+    expect(JSON.stringify(trace)).not.toContain("s3Key");
+    expect(okfWikiContextTraceMessage(trace!)).toBe(
+      'OKF wiki search returned 1 item for "Acme"',
+    );
+  });
+
+  it("ignores non-navigator trace echoes", () => {
+    expect(
+      okfWikiContextTraceFromToolInvocation({
+        id: "call-2",
+        tool_name: "web_search",
+        result: {
+          details: {
+            okfWikiTrace: {
+              surface: "okf_efs",
+              tool: "web_search",
+            },
+          },
+        },
+      }),
+    ).toBeNull();
   });
 });

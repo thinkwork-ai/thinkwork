@@ -1484,6 +1484,214 @@ describe("processFinalize reconcile seam", () => {
     );
   });
 
+  it("records OKF wiki trace metadata in turn usage and thread events", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        trace_id: "trace-okf",
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "Acme renewal depends on pricing approval.",
+          tools_called: ["wiki_rg"],
+          tool_invocations: [
+            {
+              id: "tool-okf",
+              tool_name: "wiki_rg",
+              result: {
+                content: [{ type: "text", text: "OKF wiki matches" }],
+                details: {
+                  okfWikiTrace: {
+                    surface: "okf_efs",
+                    tool: "wiki_rg",
+                    query: "Acme",
+                    path: "topics",
+                    matchCount: 1,
+                    entries: [
+                      {
+                        path: "topics/acme.md",
+                        title: "Acme",
+                        absolutePath:
+                          "/mnt/thinkwork-okf/tenants/acme/current/topics/acme.md",
+                      },
+                    ],
+                    bounds: {
+                      maxResults: 5,
+                      maxDepth: 2,
+                      maxBytes: 128_000,
+                      truncated: true,
+                    },
+                    redaction: {
+                      source: "okf_navigator",
+                      policy: "cite_or_summarize_only",
+                    },
+                  },
+                },
+              },
+              output_preview: "OKF wiki matches",
+            },
+          ],
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 12,
+          output_tokens: 417,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    const succeededUpdate = mocks.updateSets.find((value: any) =>
+      Boolean(value?.usage_json?.tool_invocations),
+    ) as any;
+    expect(succeededUpdate.usage_json.tool_invocations).toEqual([
+      expect.objectContaining({
+        id: "tool-okf",
+        tool_name: "wiki_rg",
+        okf_wiki_trace: expect.objectContaining({
+          surface: "okf_efs",
+          tool: "wiki_rg",
+          tool_call_id: "tool-okf",
+          query: "Acme",
+          path: "topics",
+          matchCount: 1,
+          truncated: true,
+        }),
+      }),
+    ]);
+    expect(
+      JSON.stringify(succeededUpdate.usage_json.tool_invocations),
+    ).not.toContain("/mnt/thinkwork-okf");
+    expect(mocks.appendThreadTurnEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: "wiki_context_trace",
+        message: 'OKF wiki search returned 1 item for "Acme"',
+        color: "amber",
+        payload: expect.objectContaining({
+          tool_call_id: "tool-okf",
+          tool: "wiki_rg",
+          query: "Acme",
+          path: "topics",
+          matchCount: 1,
+        }),
+      }),
+    );
+  });
+
+  it("records OKF wiki navigator traces in turn usage and thread events", async () => {
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "Acme renewal links to pricing approval.",
+          tools_called: ["wiki_rg"],
+          tool_invocations: [
+            {
+              id: "tool-okf-wiki",
+              tool_name: "wiki_rg",
+              args: { query: "Acme renewal" },
+              result: {
+                content: [{ type: "text", text: "Acme Renewal" }],
+                details: {
+                  okfWikiTrace: {
+                    surface: "okf_efs",
+                    tool: "wiki_rg",
+                    query: "Acme renewal",
+                    path: ".",
+                    matchCount: 2,
+                    root: "/mnt/thinkwork-okf/tenants/acme/current",
+                    s3Key: "s3://thinkwork-okf/tenants/acme/current.json",
+                    entries: [
+                      {
+                        path: "topics/acme-renewal.md",
+                        title: "Acme Renewal",
+                        line: 12,
+                        snippet:
+                          "Renewal depends on s3://thinkwork-okf/tenants/acme/private.md",
+                        absolutePath:
+                          "/mnt/thinkwork-okf/tenants/acme/current/topics/acme-renewal.md",
+                      },
+                    ],
+                    bounds: {
+                      maxResults: 50,
+                      maxDepth: 8,
+                      maxBytes: 128_000,
+                      truncated: false,
+                    },
+                    redaction: {
+                      source: "okf_navigator",
+                      policy: "cite_or_summarize_only",
+                    },
+                  },
+                },
+              },
+              output_preview: "Acme Renewal",
+            },
+          ],
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 12,
+          output_tokens: 417,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    const succeededUpdate = mocks.updateSets.find((value: any) =>
+      Boolean(value?.usage_json?.tool_invocations),
+    ) as any;
+    const invocation = succeededUpdate.usage_json.tool_invocations[0];
+    expect(invocation).toMatchObject({
+      id: "tool-okf-wiki",
+      tool_name: "wiki_rg",
+      okf_wiki_trace: expect.objectContaining({
+        surface: "okf_efs",
+        tool: "wiki_rg",
+        tool_call_id: "tool-okf-wiki",
+        query: "Acme renewal",
+        path: ".",
+        matchCount: 2,
+        entries: [
+          expect.objectContaining({
+            path: "topics/acme-renewal.md",
+            title: "Acme Renewal",
+          }),
+        ],
+        redaction: {
+          source: "okf_navigator",
+          policy: "cite_or_summarize_only",
+        },
+      }),
+    });
+    expect(JSON.stringify(invocation.okf_wiki_trace)).not.toContain(
+      "/mnt/thinkwork-okf",
+    );
+    expect(JSON.stringify(invocation.okf_wiki_trace)).not.toContain("s3://");
+    expect(JSON.stringify(invocation.okf_wiki_trace)).not.toContain("s3Key");
+    expect(mocks.appendThreadTurnEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: "wiki_context_trace",
+        message: 'OKF wiki search returned 2 items for "Acme renewal"',
+        payload: expect.objectContaining({
+          surface: "okf_efs",
+          tool: "wiki_rg",
+          tool_call_id: "tool-okf-wiki",
+          query: "Acme renewal",
+          matchCount: 2,
+        }),
+      }),
+    );
+  });
+
   it("does not overwrite explicit routed model evidence with parent fallback attribution", async () => {
     await expect(
       processFinalize({
