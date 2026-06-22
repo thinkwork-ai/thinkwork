@@ -394,6 +394,12 @@ status: in_progress
   - 2026-06-22: U7 PR
     [#2865](https://github.com/thinkwork-ai/thinkwork/pull/2865) opened and CI
     monitoring started.
+  - 2026-06-22: U7 CI first run passed CLA, lint, verify, and typecheck; test
+    failed in an unrelated `SettingsUserDetail` password-toast assertion that
+    waited for the mutation call but not the async success message. Hardened the
+    focused web test to wait for `Password set.`, then verified
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUserDetail.test.tsx -t "sets a permanent password"`
+    and touched-file Prettier check.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 

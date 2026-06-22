@@ -286,7 +286,7 @@ describe("SettingsUserDetail role merge", () => {
         permanent: true,
       },
     });
-    expect(screen.getByText("Password set.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("Password set.")).toBeTruthy());
   });
 
   it("can require the user to change a temporary password on next sign-in", async () => {
