@@ -25,6 +25,7 @@ export const SKILL_DRAFT_STATUSES = [
   "submitted",
   "rejected",
   "failed",
+  "published",
 ] as const;
 
 export type SkillDraftStatus = (typeof SKILL_DRAFT_STATUSES)[number];
@@ -191,7 +192,13 @@ export async function appendSkillDraftEvent(args: {
   tenantId: string;
   draftId: string;
   actorUserId?: string | null;
-  eventType: "created" | "updated" | "submitted" | "rejected" | "failed";
+  eventType:
+    | "created"
+    | "updated"
+    | "submitted"
+    | "rejected"
+    | "failed"
+    | "published";
   message?: string | null;
   payload?: Record<string, unknown>;
 }): Promise<void> {

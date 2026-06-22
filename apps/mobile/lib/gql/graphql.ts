@@ -3122,6 +3122,8 @@ export type Mutation = {
   promoteDraftApplet: SaveAppletPayload;
   promoteGenUIArtifact: Artifact;
   publishRoutineVersion: RoutineAslVersion;
+  /** Tenant-operator approval that publishes a trust-ready draft to the Skill Library. */
+  publishSkillDraft: SkillDraft;
   rebuildRoutineVersion: RoutineAslVersion;
   /**
    * Reconcile the skill_catalog index from the S3 catalog. For one tenant
@@ -3951,6 +3953,11 @@ export type MutationPromoteGenUiArtifactArgs = {
 
 export type MutationPublishRoutineVersionArgs = {
   input: PublishRoutineVersionInput;
+};
+
+
+export type MutationPublishSkillDraftArgs = {
+  input: PublishSkillDraftInput;
 };
 
 
@@ -5302,6 +5309,11 @@ export type PublishRoutineVersionInput = {
   markdownSummary: Scalars['String']['input'];
   routineId: Scalars['ID']['input'];
   stepManifest: Scalars['AWSJSON']['input'];
+};
+
+export type PublishSkillDraftInput = {
+  confirmReplace?: InputMaybe<Scalars['Boolean']['input']>;
+  id: Scalars['ID']['input'];
 };
 
 export type Query = {

@@ -3122,6 +3122,8 @@ export type Mutation = {
   promoteDraftApplet: SaveAppletPayload;
   promoteGenUIArtifact: Artifact;
   publishRoutineVersion: RoutineAslVersion;
+  /** Tenant-operator approval that publishes a trust-ready draft to the Skill Library. */
+  publishSkillDraft: SkillDraft;
   rebuildRoutineVersion: RoutineAslVersion;
   /**
    * Reconcile the skill_catalog index from the S3 catalog. For one tenant
@@ -3951,6 +3953,11 @@ export type MutationPromoteGenUiArtifactArgs = {
 
 export type MutationPublishRoutineVersionArgs = {
   input: PublishRoutineVersionInput;
+};
+
+
+export type MutationPublishSkillDraftArgs = {
+  input: PublishSkillDraftInput;
 };
 
 
@@ -5302,6 +5309,11 @@ export type PublishRoutineVersionInput = {
   markdownSummary: Scalars['String']['input'];
   routineId: Scalars['ID']['input'];
   stepManifest: Scalars['AWSJSON']['input'];
+};
+
+export type PublishSkillDraftInput = {
+  confirmReplace?: InputMaybe<Scalars['Boolean']['input']>;
+  id: Scalars['ID']['input'];
 };
 
 export type Query = {
@@ -10923,6 +10935,18 @@ export type TenantSkillCatalogQueryVariables = Exact<{
 
 export type TenantSkillCatalogQuery = { __typename?: 'Query', tenantSkillCatalog: Array<{ __typename?: 'SkillCatalogEntry', slug: string, displayName?: string | null, description?: string | null, icon?: string | null, installed: boolean }> };
 
+export type SettingsSkillDraftsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type SettingsSkillDraftsQuery = { __typename?: 'Query', skillDrafts: Array<{ __typename?: 'SkillDraftSummary', id: string, tenantId: string, slug: string, title: string, displayName?: string | null, summary?: string | null, status: string, currentContentHash?: string | null, inboxItemId?: string | null, submittedAt?: any | null, createdAt: any, updatedAt: any, requester?: { __typename?: 'SkillDraftRequester', id: string, name?: string | null, email?: string | null } | null, source: { __typename?: 'SkillDraftSource', kind: string, threadId?: string | null, messageId?: string | null } }> };
+
+export type PublishSkillDraftMutationVariables = Exact<{
+  input: PublishSkillDraftInput;
+}>;
+
+
+export type PublishSkillDraftMutation = { __typename?: 'Mutation', publishSkillDraft: { __typename?: 'SkillDraft', id: string, slug: string, displayName?: string | null, status: string, currentContentHash?: string | null, publishedCatalogSlug?: string | null, publishedContentHash?: string | null, updatedAt: any } };
+
 export type AnswerUserQuestionMutationVariables = Exact<{
   questionId: Scalars['ID']['input'];
   answers: Scalars['AWSJSON']['input'];
@@ -11103,5 +11127,7 @@ export const SettingsActivatePluginDocument = {"kind":"Document","definitions":[
 export const SettingsActivatePluginWithCredentialsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsActivatePluginWithCredentials"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ActivatePluginWithCredentialsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activatePluginWithCredentials"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsActivatePluginWithCredentialsMutation, SettingsActivatePluginWithCredentialsMutationVariables>;
 export const SettingsDeactivatePluginDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsDeactivatePlugin"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DeactivatePluginInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deactivatePlugin"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsDeactivatePluginMutation, SettingsDeactivatePluginMutationVariables>;
 export const TenantSkillCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TenantSkillCatalog"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantSkillCatalog"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"icon"}},{"kind":"Field","name":{"kind":"Name","value":"installed"}}]}}]}}]} as unknown as DocumentNode<TenantSkillCatalogQuery, TenantSkillCatalogQueryVariables>;
+export const SettingsSkillDraftsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsSkillDrafts"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillDrafts"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"currentContentHash"}},{"kind":"Field","name":{"kind":"Name","value":"inboxItemId"}},{"kind":"Field","name":{"kind":"Name","value":"submittedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"requester"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}}]}},{"kind":"Field","name":{"kind":"Name","value":"source"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsSkillDraftsQuery, SettingsSkillDraftsQueryVariables>;
+export const PublishSkillDraftDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PublishSkillDraft"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PublishSkillDraftInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishSkillDraft"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"currentContentHash"}},{"kind":"Field","name":{"kind":"Name","value":"publishedCatalogSlug"}},{"kind":"Field","name":{"kind":"Name","value":"publishedContentHash"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PublishSkillDraftMutation, PublishSkillDraftMutationVariables>;
 export const AnswerUserQuestionDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"AnswerUserQuestion"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"questionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"answers"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AWSJSON"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"answerUserQuestion"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"questionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"questionId"}}},{"kind":"Argument","name":{"kind":"Name","value":"answers"},"value":{"kind":"Variable","name":{"kind":"Name","value":"answers"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"answers"}},{"kind":"Field","name":{"kind":"Name","value":"answeredVia"}},{"kind":"Field","name":{"kind":"Name","value":"answeredBy"}},{"kind":"Field","name":{"kind":"Name","value":"answeredAt"}}]}}]}}]} as unknown as DocumentNode<AnswerUserQuestionMutation, AnswerUserQuestionMutationVariables>;
 export const OnboardingBootstrapUserDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"OnboardingBootstrapUser"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"bootstrapUser"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenant"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"plan"}}]}}]}}]}}]} as unknown as DocumentNode<OnboardingBootstrapUserMutation, OnboardingBootstrapUserMutationVariables>;

@@ -1,3 +1,4 @@
+import { publishSkillDraft } from "./publishSkillDraft.mutation.js";
 import { createSkillDraft } from "./createSkillDraft.mutation.js";
 import { rejectSkillDraft } from "./rejectSkillDraft.mutation.js";
 import { skillDraft } from "./skillDraft.query.js";
@@ -15,4 +16,5 @@ export const skillCreatorMutations = {
   updateSkillDraft,
   submitSkillDraft,
   rejectSkillDraft,
+  publishSkillDraft,
 };
