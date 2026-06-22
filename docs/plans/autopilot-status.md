@@ -114,12 +114,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U7 - Route uploaded skill archives into drafts.
-- Current branch: `codex/thnk-11-u7-import-drafts`.
+- Current unit: U8 - Expose skill cards in the published catalog.
+- Current branch: `codex/thnk-11-u8-skill-card-doc`.
 - Current worktree:
-  `.Codex/worktrees/thnk-11-u7-import-drafts`.
-- Current pull request:
-  [#2846](https://github.com/thinkwork-ai/thinkwork/pull/2846).
+  `.Codex/worktrees/thnk-11-u8-skill-card-doc`.
+- Current pull request: pending.
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -208,6 +207,17 @@ status: in_progress
   - 2026-06-22: U7 PR
     [#2846](https://github.com/thinkwork-ai/thinkwork/pull/2846) opened and
     CI monitoring started.
+  - 2026-06-22: U7 PR
+    [#2846](https://github.com/thinkwork-ai/thinkwork/pull/2846) passed
+    required CI after a clean rebase onto current `main`, squash merged as
+    `1f701e9c87a9105f621b99874ca9a2b702f1268a`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U8 started from a clean isolated worktree created from
+    `origin/main` after U7 merge. Scope: expose published skill cards from the
+    Skill Detail header, route missing cards into the Skill Card trust fix
+    path, and keep the nested trust-step side sheet the same width as the
+    Skill Trust sheet.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
     local Node 25 logged the existing optional `canvas@2.11.2`
@@ -328,6 +338,20 @@ status: in_progress
     browser layer rejected the localhost route under its URL policy after a
     navigation timeout; the Vite server remained running for manual operator
     verification.
+  - U8 `pnpm install --frozen-lockfile --offline` completed in the worktree;
+    local Node 25 logged the existing optional `canvas@2.11.2`
+    native-fallback/missing `pkg-config` warning, but pnpm exited
+    successfully.
+  - U8 focused Skill Detail component tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsSkillDetail.test.tsx`
+    (24 tests).
+  - U8 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U8 full web test suite passed: `pnpm --filter @thinkwork/web test` (187
+    files passed; 1447 tests passed).
+  - U8 targeted Prettier check and `git diff --check` passed for touched
+    web/status files.
+  - U8 package-scoped lint command was checked; `@thinkwork/web` does not
+    define a `lint` script.
 
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 

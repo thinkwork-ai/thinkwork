@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Download, Info, ShieldCheck, UploadCloud } from "lucide-react";
+import {
+  Download,
+  FileText,
+  Info,
+  ShieldCheck,
+  UploadCloud,
+} from "lucide-react";
 import { IconFlask } from "@tabler/icons-react";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { toast } from "sonner";
@@ -40,6 +46,7 @@ import {
   SettingsSkillDraftsQuery,
 } from "@/lib/skill-creator-queries";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
+import { ApiError } from "@/lib/api-fetch";
 import { formatPassRatePct } from "@/lib/skill-eval-format";
 import {
   desktopToolbarActiveButtonClassName,
@@ -54,6 +61,8 @@ import { cn } from "@/lib/utils";
 const liveDatasetSlug = (skillSlug: string) => `skill-${skillSlug}`;
 const candidateDatasetSlug = (skillSlug: string) =>
   `skill-${skillSlug}-candidate`;
+const SKILL_TRUST_SHEET_WIDTH_CLASS =
+  "data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none";
 
 function downloadArchive(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -330,22 +339,49 @@ function SkillInfoSheetContent() {
   );
 }
 
+function SkillCardSheetContent({
+  content,
+  sha256,
+}: {
+  content: string;
+  sha256: string | null;
+}) {
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
+      <article className="rounded-md border border-border/70 bg-background/30 p-4">
+        <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
+          {content.trim()}
+        </pre>
+      </article>
+      {sha256 ? (
+        <p className="mt-4 break-all font-mono text-[11px] text-muted-foreground">
+          {sha256}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function SkillTrustSheetContent({
   skillSlug,
   report,
   running,
   fixingStep,
   fixWarning,
+  requestedStepId,
   onRun,
   onFix,
+  onRequestedStepHandled,
 }: {
   skillSlug: string;
   report: SkillTrustReport | null;
   running: boolean;
   fixingStep: SkillTrustEvidenceFixStepId | null;
   fixWarning: string | null;
+  requestedStepId?: SkillTrustStepId | null;
   onRun: () => void;
   onFix: (step: SkillTrustEvidenceFixStepId) => void;
+  onRequestedStepHandled?: () => void;
 }) {
   const [selectedStepId, setSelectedStepId] = useState<SkillTrustStepId | null>(
     null,
@@ -367,6 +403,13 @@ function SkillTrustSheetContent({
       current && steps.some((step) => step.id === current) ? current : null,
     );
   }, [report?.contentHash]);
+
+  useEffect(() => {
+    if (!report || !requestedStepId) return;
+    if (!steps.some((step) => step.id === requestedStepId)) return;
+    setSelectedStepId(requestedStepId);
+    onRequestedStepHandled?.();
+  }, [requestedStepId, report?.contentHash]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-6 pt-2">
@@ -426,7 +469,12 @@ function SkillTrustSheetContent({
               if (!open) setSelectedStepId(null);
             }}
           >
-            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+            <SheetContent
+              className={cn(
+                "flex w-full flex-col gap-0 overflow-y-auto",
+                SKILL_TRUST_SHEET_WIDTH_CLASS,
+              )}
+            >
               <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
                 <SheetTitle>{selectedStep?.label ?? "Trust step"}</SheetTitle>
                 <SheetDescription>
@@ -873,6 +921,10 @@ function isSkillDraftExistsError(error: {
   );
 }
 
+function isMissingWorkspaceFileError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
+}
+
 type SettingsSkillDetailProps =
   | { mode?: "catalog"; skillSlug: string }
   | { mode: "draft"; draftId: string };
@@ -885,10 +937,16 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
   const [exporting, setExporting] = useState(false);
   const [publishingDraft, setPublishingDraft] = useState(false);
   const [pendingDraftReplace, setPendingDraftReplace] = useState(false);
+  const [skillCardSheetOpen, setSkillCardSheetOpen] = useState(false);
+  const [skillCardLoading, setSkillCardLoading] = useState(false);
+  const [skillCardContent, setSkillCardContent] = useState("");
+  const [skillCardSha256, setSkillCardSha256] = useState<string | null>(null);
   const [evalSheetOpen, setEvalSheetOpen] = useState(false);
   const [trustSheetOpen, setTrustSheetOpen] = useState(false);
   const [trustRunning, setTrustRunning] = useState(false);
   const [trustReport, setTrustReport] = useState<SkillTrustReport | null>(null);
+  const [requestedTrustStepId, setRequestedTrustStepId] =
+    useState<SkillTrustStepId | null>(null);
   const [trustFixingStep, setTrustFixingStep] =
     useState<SkillTrustEvidenceFixStepId | null>(null);
   const [trustFixWarning, setTrustFixWarning] = useState<string | null>(null);
@@ -929,7 +987,7 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
     }
   }
 
-  async function runTrust() {
+  async function runTrust(requestedStepId?: SkillTrustStepId) {
     if (!catalogSkillSlug) return;
     if (trustInFlightRef.current) return;
     trustInFlightRef.current = true;
@@ -938,6 +996,9 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
       const report = await runSkillTrustPipeline(catalogSkillSlug);
       setTrustReport(report);
       setTrustFixWarning(null);
+      if (requestedStepId) {
+        setRequestedTrustStepId(requestedStepId);
+      }
       toast.success("Skill trust pipeline completed.");
     } catch (err) {
       const message =
@@ -946,6 +1007,43 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
     } finally {
       trustInFlightRef.current = false;
       setTrustRunning(false);
+    }
+  }
+
+  async function openMissingSkillCardTrustStep() {
+    setSkillCardSheetOpen(false);
+    setTrustSheetOpen(true);
+    setRequestedTrustStepId("skillCard");
+    if (!trustReport) {
+      await runTrust("skillCard");
+    }
+  }
+
+  async function openSkillCard() {
+    if (!catalogSkillSlug || skillCardLoading) return;
+    setSkillCardLoading(true);
+    try {
+      const file = await skillCatalogClient.getFile(
+        { skill: catalogSkillSlug },
+        "skill-card.md",
+      );
+      if (file.content?.trim()) {
+        setSkillCardContent(file.content);
+        setSkillCardSha256(file.sha256);
+        setSkillCardSheetOpen(true);
+        return;
+      }
+      await openMissingSkillCardTrustStep();
+    } catch (err) {
+      if (isMissingWorkspaceFileError(err)) {
+        await openMissingSkillCardTrustStep();
+        return;
+      }
+      const message =
+        err instanceof Error ? err.message : "Unknown skill card failure.";
+      toast.error(`Could not open the skill card: ${message}`);
+    } finally {
+      setSkillCardLoading(false);
     }
   }
 
@@ -1047,6 +1145,26 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
               variant="ghost"
               size="icon-sm"
               className={
+                skillCardSheetOpen || skillCardLoading
+                  ? desktopToolbarActiveButtonClassName
+                  : desktopToolbarButtonClassName
+              }
+              aria-label="Skill card"
+              title="Skill card"
+              disabled={skillCardLoading}
+              onClick={() => void openSkillCard()}
+            >
+              {skillCardLoading ? (
+                <Spinner className="size-4" />
+              ) : (
+                <FileText className="size-4" />
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={
                 evalSheetOpen
                   ? desktopToolbarActiveButtonClassName
                   : desktopToolbarButtonClassName
@@ -1109,11 +1227,27 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
         ) : null}
       </div>
     ),
-    actionKey: `skill-actions:${isDraft ? `draft:${draftId}` : `catalog:${catalogSkillSlug}`}:${exporting ? "exporting" : "idle"}:${publishingDraft ? "publishing" : "publish-idle"}:${draft?.status ?? "no-draft"}:${evalSheetOpen ? "evals" : "evals-closed"}:${trustSheetOpen ? "trust" : "trust-closed"}:${trustRunning ? "trust-running" : "trust-idle"}:${infoSheetOpen ? "info" : "info-closed"}`,
+    actionKey: `skill-actions:${isDraft ? `draft:${draftId}` : `catalog:${catalogSkillSlug}`}:${exporting ? "exporting" : "idle"}:${publishingDraft ? "publishing" : "publish-idle"}:${draft?.status ?? "no-draft"}:${skillCardSheetOpen ? "card" : "card-closed"}:${skillCardLoading ? "card-loading" : "card-idle"}:${evalSheetOpen ? "evals" : "evals-closed"}:${trustSheetOpen ? "trust" : "trust-closed"}:${trustRunning ? "trust-running" : "trust-idle"}:${requestedTrustStepId ?? "no-trust-step"}:${infoSheetOpen ? "info" : "info-closed"}`,
   });
 
   return (
     <div className="flex h-full flex-col">
+      {!isDraft ? (
+        <Sheet open={skillCardSheetOpen} onOpenChange={setSkillCardSheetOpen}>
+          <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+            <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+              <SheetTitle>Skill card</SheetTitle>
+              <SheetDescription>
+                Human-readable summary and governance notes for this skill.
+              </SheetDescription>
+            </SheetHeader>
+            <SkillCardSheetContent
+              content={skillCardContent}
+              sha256={skillCardSha256}
+            />
+          </SheetContent>
+        </Sheet>
+      ) : null}
       {!isDraft ? (
         <Sheet open={evalSheetOpen} onOpenChange={setEvalSheetOpen}>
           <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(480px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
@@ -1138,7 +1272,12 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
       </Sheet>
       {!isDraft ? (
         <Sheet open={trustSheetOpen} onOpenChange={setTrustSheetOpen}>
-          <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+          <SheetContent
+            className={cn(
+              "flex w-full flex-col gap-0 overflow-y-auto",
+              SKILL_TRUST_SHEET_WIDTH_CLASS,
+            )}
+          >
             <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
               <SheetTitle>Skill trust</SheetTitle>
               <SheetDescription>
@@ -1151,8 +1290,10 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
               running={trustRunning}
               fixingStep={trustFixingStep}
               fixWarning={trustFixWarning}
+              requestedStepId={requestedTrustStepId}
               onRun={() => void runTrust()}
               onFix={(step) => void fixTrustStep(step)}
+              onRequestedStepHandled={() => setRequestedTrustStepId(null)}
             />
           </SheetContent>
         </Sheet>
