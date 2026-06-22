@@ -139,7 +139,7 @@ export interface AgentLoopWakeupPayload {
   message: string;
   goalMode: {
     enabled: true;
-    action: "start";
+    action: "start" | "resume";
     objective: string;
     goalRunId: string;
     resolvedBudget: {
@@ -230,6 +230,7 @@ export function buildAgentLoopWakeupPayload(input: {
   trigger: AgentLoopTriggerContext;
   runId: string;
   iterationId: string;
+  goalModeAction?: "start" | "resume";
 }): AgentLoopWakeupPayload {
   const tokenBudget =
     input.version.loopPolicy.maxTokens ?? DEFAULT_AGENT_LOOP_GOAL_TOKEN_BUDGET;
@@ -237,7 +238,7 @@ export function buildAgentLoopWakeupPayload(input: {
     message: input.version.goalSpec.objective,
     goalMode: {
       enabled: true,
-      action: "start",
+      action: input.goalModeAction ?? "start",
       objective: input.version.goalSpec.objective,
       goalRunId: input.runId,
       resolvedBudget: {

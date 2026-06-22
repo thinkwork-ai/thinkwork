@@ -13,11 +13,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U3 - AgentLoop dispatcher and scheduled firing.
-- Current branch: `codex/agent-loop-u3-dispatcher`.
-- Current worktree: `.Codex/worktrees/agent-loop-u3-dispatcher`.
+- Current unit: U4 - Finalize projection, judgments, and loop policy
+  transitions.
+- Current branch: `codex/agent-loop-u4-finalize`.
+- Current worktree: `.Codex/worktrees/agent-loop-u4-finalize`.
 - Current pull request:
-  [#2850](https://github.com/thinkwork-ai/thinkwork/pull/2850).
+  [#2856](https://github.com/thinkwork-ai/thinkwork/pull/2856).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -147,6 +148,41 @@ status: in_progress
     Prettier binary.
   - 2026-06-22: U3 PR
     [#2850](https://github.com/thinkwork-ai/thinkwork/pull/2850) opened and CI
+    monitoring started.
+  - 2026-06-22: U3 PR
+    [#2850](https://github.com/thinkwork-ai/thinkwork/pull/2850) passed CI
+    after rebasing onto moving `main`, auto-merged as
+    `5f60054a893baaecd50b432412ff4cd429b73214`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed.
+  - 2026-06-22: U4 started from a clean isolated worktree created from
+    `origin/main` after U3 merge. Scope: project worker finalization into
+    AgentLoop judgments, evidence, terminal statuses, continuation decisions,
+    and Phase 1 human-approval/model-judge behavior.
+  - 2026-06-22: U4 implementation added pure AgentLoop judgment rules,
+    AgentLoop finalize projection with an injectable ledger, continuation
+    wakeup support via `goalMode.action=resume`, and a best-effort
+    `processFinalize` hook that does not break normal chat finalization.
+  - 2026-06-22: U4 focused verification passed:
+    `pnpm --dir packages/api exec vitest run src/lib/agent-loops/judgment.test.ts src/lib/agent-loops/finalize-projection.test.ts src/lib/chat-finalize/process-finalize.test.ts src/graphql/resolvers/agent-loops/agentLoops.resolver.test.ts`,
+    `pnpm --dir packages/api typecheck`,
+    `pnpm --dir packages/agent-loops-core test`,
+    `pnpm --dir packages/agent-loops-core typecheck`, and `git diff --check`.
+  - 2026-06-22: U4 review hardening added a bounded
+    `agent_loop_projection_failed` recovery path so projection side-effect
+    failures can mark the AgentLoop run/iteration failed when the database is
+    still reachable; the focused finalize/chat-finalize suites and API
+    typecheck passed afterward.
+  - 2026-06-22: U4 broader local verification passed: API full test suite,
+    workspace typecheck, workspace lint, touched-file Prettier verification,
+    `git diff --check`, and full `pnpm test`. The first full `pnpm test` run
+    hit the known fresh-worktree Electron generated-payload race in
+    `apps/desktop`; removing only the generated Electron payload and rerunning
+    `node node_modules/.pnpm/electron@42.2.0/node_modules/electron/install.js`
+    repaired it, then the full `pnpm test` rerun passed including
+    `test:release` and `test:plugin-source-boundary`.
+  - 2026-06-22: U4 PR
+    [#2856](https://github.com/thinkwork-ai/thinkwork/pull/2856) opened and CI
     monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
