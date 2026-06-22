@@ -16,7 +16,8 @@ status: in_progress
 - Current unit: U1 - AgentLoop schema and shared contracts.
 - Current branch: `codex/agent-loop-u1-schema`.
 - Current worktree: `.Codex/worktrees/agent-loop-u1-schema`.
-- Current pull request: pending.
+- Current pull request:
+  [#2844](https://github.com/thinkwork-ai/thinkwork/pull/2844).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -50,6 +51,9 @@ status: in_progress
   - 2026-06-22: Pre-PR review pass completed with no blocking findings; U1
     remains scoped to shared contracts, persistence schema, GraphQL type
     declarations, migration markers, and tests.
+  - 2026-06-22: U1 PR
+    [#2844](https://github.com/thinkwork-ai/thinkwork/pull/2844) opened and CI
+    monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 
