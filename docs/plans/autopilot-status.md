@@ -15,11 +15,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U1 Skill Draft Data Model and GraphQL Lifecycle.
-- Current branch: `codex/thnk-11-u1-skill-drafts`.
-- Current worktree: `.Codex/worktrees/thnk-11-u1-skill-drafts`.
+- Current unit: U2 Draft File Storage, Spec Validation, and Catalog Publish
+  Reuse.
+- Current branch: `codex/thnk-11-u2-draft-files`.
+- Current worktree: `.Codex/worktrees/thnk-11-u2-draft-files`.
 - Current pull request:
-  [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).
+  [#2825](https://github.com/thinkwork-ai/thinkwork/pull/2825).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -28,7 +29,41 @@ status: in_progress
   - U1 adds the `skill_drafts` and `skill_draft_events` lifecycle substrate,
     the `skill-creator.graphql` contract, resolver registration, tenant-scoped
     draft lifecycle queries/mutations, and focused resolver tests.
+  - U1 merged as
+    `2f0e9f58ffb550b1e00a06d5f4860114c96535cf` after dev migration drift was
+    cleared and required CI checks passed.
+  - U1 cleanup completed: remote branch was deleted by GitHub merge flow; local
+    worktree and branch were removed after syncing `main`.
+  - U2 started from a clean isolated worktree created from `origin/main` after
+    U1 merge.
+  - U2 extracts catalog archive validation into a reusable normalized file-list
+    validator, adds skill-draft file/path/hash helpers, adds publish-readiness
+    decision logic for future trust integration, and adds `skillDraftId` support
+    to the workspace-files API.
+  - U2 draft file writes are isolated under
+    `tenants/<tenant-slug>/skill-drafts/<draft-id>/`, limited to the draft
+    requester or service-auth, locked for non-editable statuses, and recompute
+    `current_content_hash` while clearing prior publish markers.
 - Local verification:
+  - U2 `pnpm install --frozen-lockfile --offline` completed; local Node 25
+    logged the existing optional `canvas@2.11.2` native fallback/missing
+    `pkg-config` warning, but pnpm returned success.
+  - U2 focused API tests passed:
+    `pnpm --filter @thinkwork/api test -- src/lib/catalog-skill-archive.test.ts src/lib/skill-drafts/files.test.ts src/lib/skill-drafts/publish.test.ts src/__tests__/workspace-files-handler.test.ts`
+    (208 tests).
+  - U2 focused web client test passed:
+    `pnpm --filter @thinkwork/web test -- src/lib/workspace-files-api.test.ts`
+    (15 tests).
+  - U2 `pnpm --filter @thinkwork/api typecheck` passed.
+  - U2 `pnpm --filter @thinkwork/web typecheck` passed.
+  - U2 `pnpm lint` passed.
+  - U2 full API tests passed:
+    `pnpm --filter @thinkwork/api test` (556 files passed, 3 skipped; 5230
+    tests passed, 9 skipped).
+  - U2 full web tests passed:
+    `pnpm --filter @thinkwork/web test` (186 files passed; 1403 tests passed).
+  - U2 `git diff --check` passed.
+  - U2 targeted Prettier check passed for touched API/web/status files.
   - `pnpm install --frozen-lockfile --offline` completed; local Node 25 logged
     the existing optional `canvas@2.11.2` native fallback/missing `pkg-config`
     warning, but pnpm returned success.
@@ -55,6 +90,7 @@ status: in_progress
     3.8.2 to those files would rewrite tens of thousands of unrelated
     generated lines.
 - PR / CI:
+  - U2 PR: [#2825](https://github.com/thinkwork-ai/thinkwork/pull/2825).
   - U1 PR: [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).
   - CI passed so far: CLA, lint, verify, typecheck.
   - CI pending at blocker time: test.

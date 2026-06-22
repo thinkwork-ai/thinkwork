@@ -84,6 +84,7 @@ import {
   eq,
   sql,
   spaces,
+  skillDrafts,
   tenantMembers,
   tenants,
   threads,
@@ -118,6 +119,15 @@ import {
   reindexCatalogSkill,
   listIndexedSkills,
 } from "./src/lib/catalog-index.js";
+import {
+  computeSkillDraftContentHash,
+  contentTypeForSkillDraftPath,
+  isSkillDraftEditableStatus,
+  skillDraftPrefix,
+  type SkillDraftFile,
+  validateSkillDraftFiles,
+  validateSkillDraftPath,
+} from "./src/lib/skill-drafts/files.js";
 import {
   CATALOG_SKILL_ARCHIVE_LIMITS,
   parseCatalogSkillArchive,
@@ -388,6 +398,18 @@ interface CatalogTarget {
   key: (path: string) => string;
 }
 
+interface SkillDraftTarget {
+  kind: "skillDraft";
+  tenantSlug: string;
+  draftId: string;
+  requestedByUserId: string;
+  status: string;
+  prefix: string;
+  readPrefixes?: string[];
+  key: (path: string) => string;
+  canWrite: boolean;
+}
+
 type Target =
   | AgentTarget
   | TemplateTarget
@@ -395,7 +417,8 @@ type Target =
   | ThreadTarget
   | DefaultsTarget
   | UserContextTarget
-  | CatalogTarget;
+  | CatalogTarget
+  | SkillDraftTarget;
 
 async function resolveAgentTarget(
   tenantId: string,
@@ -621,6 +644,58 @@ async function resolveCatalogTarget(
     tenantSlug: tenant.slug,
     prefix: catalogPrefix(tenant.slug),
     key: (path) => catalogKey(tenant.slug, path),
+  };
+}
+
+async function resolveSkillDraftTarget(
+  tenantId: string,
+  draftId: string,
+  userId: string | null,
+  auth: AuthResult,
+): Promise<SkillDraftTarget | null> {
+  const [draft] = await db
+    .select({
+      id: skillDrafts.id,
+      tenant_id: skillDrafts.tenant_id,
+      requested_by_user_id: skillDrafts.requested_by_user_id,
+      status: skillDrafts.status,
+      draft_s3_prefix: skillDrafts.draft_s3_prefix,
+    })
+    .from(skillDrafts)
+    .where(
+      and(eq(skillDrafts.id, draftId), eq(skillDrafts.tenant_id, tenantId)),
+    )
+    .limit(1);
+  if (!draft || draft.tenant_id !== tenantId) return null;
+
+  const [tenant] = await db
+    .select({ slug: tenants.slug })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (!tenant?.slug) return null;
+
+  const isRequester = Boolean(userId && draft.requested_by_user_id === userId);
+  const isOperator = await callerIsTenantAdmin(tenantId, userId);
+  if (!isRequester && !isOperator && auth.authType !== "apikey") return null;
+
+  const canonicalPrefix = skillDraftPrefix(tenant.slug, draft.id);
+  const storedPrefix =
+    typeof draft.draft_s3_prefix === "string" &&
+    draft.draft_s3_prefix.startsWith(canonicalPrefix)
+      ? draft.draft_s3_prefix
+      : canonicalPrefix;
+  const prefix = storedPrefix.endsWith("/") ? storedPrefix : `${storedPrefix}/`;
+
+  return {
+    kind: "skillDraft",
+    tenantSlug: tenant.slug,
+    draftId: draft.id,
+    requestedByUserId: draft.requested_by_user_id,
+    status: draft.status,
+    prefix,
+    key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
+    canWrite: auth.authType === "apikey" || isRequester,
   };
 }
 
@@ -982,6 +1057,39 @@ async function handleCatalogSummary(
   });
 }
 
+async function handleValidateSkillDraft(
+  deps: HandlerDeps,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  if (target.kind !== "skillDraft") {
+    return json(400, {
+      ok: false,
+      code: "unsupported_target",
+      error: "validate-skill-draft requires a skillDraftId target",
+    });
+  }
+  const files = await loadSkillDraftFiles(target);
+  const validation = validateSkillDraftFiles(files);
+  if (!validation.ok) {
+    return json(422, {
+      ok: false,
+      code: "invalid_skill_draft",
+      error: "Skill draft files are not a valid Agent Skills directory.",
+      errors: validation.errors,
+    });
+  }
+  return json(200, {
+    ok: true,
+    slug: validation.slug,
+    generatedWiring: validation.generatedWiring,
+    currentContentHash: validation.currentContentHash,
+    files: validation.files.map((file) => ({
+      path: file.path,
+      bytes: file.content.byteLength,
+    })),
+  });
+}
+
 type ExistingCatalogObject = {
   key: string;
   content: Buffer;
@@ -1304,6 +1412,68 @@ function contentTypeForCatalogSkillPath(path: string): string {
   return "application/octet-stream";
 }
 
+async function loadSkillDraftFiles(
+  target: SkillDraftTarget,
+  overlay?: { path: string; content?: Buffer; delete?: boolean },
+): Promise<SkillDraftFile[]> {
+  const relativePaths = await listAllObjectsUnfiltered(target.prefix);
+  const paths = new Set(relativePaths);
+  if (overlay && !overlay.delete) paths.add(overlay.path);
+  if (overlay?.delete) paths.delete(overlay.path);
+
+  const files: SkillDraftFile[] = [];
+  for (const path of [...paths].sort((a, b) => a.localeCompare(b))) {
+    if (overlay?.path === path && overlay.content) {
+      files.push({ path, content: overlay.content });
+      continue;
+    }
+    const object = await readCatalogObject(target.key(path));
+    files.push({ path, content: object.content });
+  }
+  return files;
+}
+
+async function updateSkillDraftContentHash(
+  target: SkillDraftTarget,
+  files: SkillDraftFile[],
+): Promise<string> {
+  const validated = validateSkillDraftFiles(files);
+  const contentHash = computeSkillDraftContentHash(
+    validated.ok ? validated.files : files,
+  );
+  await db
+    .update(skillDrafts)
+    .set({
+      current_content_hash: contentHash,
+      published_catalog_slug: null,
+      published_content_hash: null,
+      updated_at: new Date(),
+    })
+    .where(eq(skillDrafts.id, target.draftId));
+  return contentHash;
+}
+
+function rejectReadonlySkillDraft(
+  target: SkillDraftTarget,
+): APIGatewayProxyResult | null {
+  if (!target.canWrite) {
+    return json(403, {
+      ok: false,
+      code: "skill_draft_not_owned",
+      error:
+        "Only the draft requester or creator service can edit draft files.",
+    });
+  }
+  if (!isSkillDraftEditableStatus(target.status)) {
+    return json(409, {
+      ok: false,
+      code: "skill_draft_readonly",
+      error: `Skill draft files are read-only while status is '${target.status}'.`,
+    });
+  }
+  return null;
+}
+
 function catalogPathSlug(path: string): string {
   return path.replace(/^\/+/, "").split("/")[0] ?? "";
 }
@@ -1483,6 +1653,52 @@ async function handlePut(
       ok: false,
       error:
         "Built-in tools are configured through the Built-in Tools API, not workspace skill files.",
+    });
+  }
+
+  if (target.kind === "skillDraft") {
+    const readonly = rejectReadonlySkillDraft(target);
+    if (readonly) return readonly;
+    const pathValidation = validateSkillDraftPath(cleanPath);
+    if (!pathValidation.ok) {
+      return json(400, {
+        ok: false,
+        code: "invalid_skill_draft_path",
+        error: pathValidation.error.message,
+        errors: [pathValidation.error],
+      });
+    }
+    const contentBytes = Buffer.from(content, "utf8");
+    if (contentBytes.byteLength > CATALOG_SKILL_ARCHIVE_LIMITS.maxFileBytes) {
+      return json(413, {
+        ok: false,
+        code: "skill_draft_file_too_large",
+        error: `Skill draft file '${cleanPath}' exceeds the per-file size limit.`,
+      });
+    }
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: target.key(pathValidation.path),
+        Body: content,
+        ContentType: contentTypeForSkillDraftPath(pathValidation.path),
+      }),
+    );
+    const files = await loadSkillDraftFiles(target, {
+      path: pathValidation.path,
+      content: contentBytes,
+    });
+    const currentContentHash = await updateSkillDraftContentHash(target, files);
+    const validation = validateSkillDraftFiles(files);
+    return json(200, {
+      ok: true,
+      currentContentHash,
+      ...(validation.ok
+        ? {
+            slug: validation.slug,
+            generatedWiring: validation.generatedWiring,
+          }
+        : { validationErrors: validation.errors }),
     });
   }
 
@@ -1904,6 +2120,31 @@ async function handleDelete(
       ok: false,
       error: "User context path is not editable from this surface.",
     });
+  }
+  if (target.kind === "skillDraft") {
+    const readonly = rejectReadonlySkillDraft(target);
+    if (readonly) return readonly;
+    const pathValidation = validateSkillDraftPath(cleanPath);
+    if (!pathValidation.ok) {
+      return json(400, {
+        ok: false,
+        code: "invalid_skill_draft_path",
+        error: pathValidation.error.message,
+        errors: [pathValidation.error],
+      });
+    }
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: bucket(),
+        Key: target.key(pathValidation.path),
+      }),
+    );
+    const files = await loadSkillDraftFiles(target, {
+      path: pathValidation.path,
+      delete: true,
+    });
+    const currentContentHash = await updateSkillDraftContentHash(target, files);
+    return json(200, { ok: true, currentContentHash });
   }
   await s3.send(
     new DeleteObjectCommand({ Bucket: bucket(), Key: target.key(cleanPath) }),
@@ -3336,6 +3577,7 @@ interface RequestBody {
   userId?: string;
   defaults?: boolean;
   catalog?: boolean;
+  skillDraftId?: string;
   path?: string;
   content?: string;
   acceptTemplateUpdate?: boolean;
@@ -3431,16 +3673,27 @@ export async function handler(
     (body.threadId ? 1 : 0) +
     (body.userId ? 1 : 0) +
     (body.defaults ? 1 : 0) +
-    (body.catalog ? 1 : 0);
+    (body.catalog ? 1 : 0) +
+    (body.skillDraftId !== undefined ? 1 : 0);
   if (targetCount !== 1) {
     return json(400, {
       ok: false,
       error:
-        "Exactly one of agentId, templateId, spaceId, threadId, userId, defaults, catalog is required",
+        "Exactly one of agentId, templateId, spaceId, threadId, userId, defaults, catalog, skillDraftId is required",
     });
   }
 
   let target: Target | null = null;
+  if (
+    body.skillDraftId !== undefined &&
+    (typeof body.skillDraftId !== "string" || body.skillDraftId.trim() === "")
+  ) {
+    return json(400, {
+      ok: false,
+      error: "skillDraftId is required for skill draft file operations",
+    });
+  }
+
   if (body.agentId) {
     target = await resolveAgentTarget(tenantId, body.agentId);
   } else if (body.templateId) {
@@ -3455,6 +3708,13 @@ export async function handler(
     target = await resolveDefaultsTarget(tenantId);
   } else if (body.catalog) {
     target = await resolveCatalogTarget(tenantId);
+  } else if (body.skillDraftId) {
+    target = await resolveSkillDraftTarget(
+      tenantId,
+      body.skillDraftId,
+      userId,
+      auth,
+    );
   }
   if (!target) {
     // 404 rather than 403 so the response doesn't leak whether a row
@@ -3471,6 +3731,7 @@ export async function handler(
   // holds users.id, and Google-federated users have users.id ≠ Cognito sub.
   if (
     (WRITE_ACTIONS.has(action) || target.kind === "catalog") &&
+    target.kind !== "skillDraft" &&
     auth.authType !== "apikey"
   ) {
     const isAdmin = await callerIsTenantAdmin(tenantId, userId);
@@ -3496,6 +3757,16 @@ export async function handler(
     });
   }
 
+  if (
+    target.kind === "skillDraft" &&
+    !["get", "list", "put", "delete", "validate-skill-draft"].includes(action)
+  ) {
+    return json(400, {
+      ok: false,
+      error: `Action ${action} is not supported for the skill draft target`,
+    });
+  }
+
   try {
     switch (action) {
       case "get": {
@@ -3508,6 +3779,8 @@ export async function handler(
           return await handleCatalogSummary(deps.tenantId);
         }
         return await handleList(deps, body.includeContent === true);
+      case "validate-skill-draft":
+        return await handleValidateSkillDraft(deps);
       case "put": {
         if (!body.path || body.content === undefined) {
           return json(400, {

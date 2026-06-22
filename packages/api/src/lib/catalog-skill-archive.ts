@@ -80,6 +80,97 @@ export async function parseCatalogSkillArchive(
   const shape = normalizeSkillShape(loaded.files);
   if (!shape.ok) return shape;
 
+  return validateNormalizedSkillShape(shape);
+}
+
+export function validateCatalogSkillFiles(
+  files: CatalogSkillArchiveFile[],
+): ParseCatalogSkillArchiveResult {
+  const errors: CatalogSkillArchiveError[] = [];
+  if (files.length > CATALOG_SKILL_ARCHIVE_LIMITS.maxEntries) {
+    errors.push({
+      code: "size_limit_exceeded",
+      message: `Skill has ${files.length} files; max is ${CATALOG_SKILL_ARCHIVE_LIMITS.maxEntries}.`,
+      details: {
+        count: files.length,
+        max: CATALOG_SKILL_ARCHIVE_LIMITS.maxEntries,
+      },
+    });
+  }
+
+  let totalBytes = 0;
+  const loaded: LoadedArchiveFile[] = [];
+  const seenPaths = new Set<string>();
+  for (const file of files) {
+    const cleanPath = normalizeArchivePath(file.path);
+    const pathError = validateRelativeSkillPath(cleanPath, file.path);
+    if (pathError) {
+      errors.push(pathError);
+      continue;
+    }
+    if (cleanPath.length > CATALOG_SKILL_ARCHIVE_LIMITS.maxPathLength) {
+      errors.push({
+        code: "unsafe_path",
+        message:
+          `Skill file path is ${cleanPath.length} chars; max is ` +
+          `${CATALOG_SKILL_ARCHIVE_LIMITS.maxPathLength}.`,
+        path: file.path,
+      });
+      continue;
+    }
+    if (cleanPath.includes("\0")) {
+      errors.push({
+        code: "unsafe_path",
+        message: "Skill file path contains a NUL byte.",
+        path: file.path,
+      });
+      continue;
+    }
+    if (seenPaths.has(cleanPath)) {
+      errors.push({
+        code: "unsafe_path",
+        message: `Skill file path '${cleanPath}' appears more than once.`,
+        path: file.path,
+      });
+      continue;
+    }
+    seenPaths.add(cleanPath);
+
+    totalBytes += file.content.byteLength;
+    if (
+      file.content.byteLength > CATALOG_SKILL_ARCHIVE_LIMITS.maxFileBytes ||
+      totalBytes > CATALOG_SKILL_ARCHIVE_LIMITS.maxTotalUncompressedBytes
+    ) {
+      errors.push({
+        code: "size_limit_exceeded",
+        message: `Skill file '${cleanPath}' exceeds skill archive size limits.`,
+        path: cleanPath,
+        details: {
+          fileBytes: file.content.byteLength,
+          maxFileBytes: CATALOG_SKILL_ARCHIVE_LIMITS.maxFileBytes,
+          totalBytes,
+          maxTotalBytes: CATALOG_SKILL_ARCHIVE_LIMITS.maxTotalUncompressedBytes,
+        },
+      });
+    }
+
+    loaded.push({
+      path: cleanPath,
+      content: file.content,
+      uncompressedSize: file.content.byteLength,
+    });
+  }
+
+  if (errors.length > 0) return { ok: false, errors };
+
+  const shape = normalizeSkillShape(loaded);
+  if (!shape.ok) return shape;
+  return validateNormalizedSkillShape(shape);
+}
+
+function validateNormalizedSkillShape(
+  shape: Extract<NormalizedSkillShapeResult, { ok: true }>,
+): ParseCatalogSkillArchiveResult {
   const skillFile = shape.files.find((file) => file.path === SKILL_MD);
   if (!skillFile) {
     return invalid("missing_skill_md", "Archive must contain SKILL.md.");

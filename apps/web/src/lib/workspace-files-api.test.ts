@@ -8,6 +8,7 @@ import {
   exportSkillArchive,
   importSkillArchive,
   spacesWorkspaceFilesClient,
+  validateSkillDraft,
 } from "./workspace-files-api";
 
 function lastBody(): Record<string, unknown> {
@@ -58,6 +59,20 @@ describe("spacesWorkspaceFilesClient target scoping", () => {
       action: "get",
       agentId: "agent-1",
       path: "AGENTS.md",
+    });
+  });
+
+  it("sends exactly the skillDraftId target for draft edits", async () => {
+    await spacesWorkspaceFilesClient.putFile(
+      { skillDraftId: "draft-1" },
+      "SKILL.md",
+      "---\nname: draft-1\n---\n",
+    );
+    expect(lastBody()).toEqual({
+      action: "put",
+      skillDraftId: "draft-1",
+      path: "SKILL.md",
+      content: "---\nname: draft-1\n---\n",
     });
   });
 });
@@ -244,5 +259,36 @@ describe("importSkillArchive", () => {
     await expect(importSkillArchive("UEsDBAo=")).rejects.toThrow(
       "missing import metadata",
     );
+  });
+});
+
+describe("validateSkillDraft", () => {
+  it("requests validation for a skill draft target", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "draft-helper",
+      generatedWiring: true,
+      currentContentHash: "sha256:abc",
+      files: [
+        { path: "SKILL.md", bytes: 64 },
+        { path: "WIRING.md", bytes: 128 },
+      ],
+    });
+
+    const result = await validateSkillDraft("draft-1");
+
+    expect(lastBody()).toEqual({
+      action: "validate-skill-draft",
+      skillDraftId: "draft-1",
+    });
+    expect(result).toEqual({
+      slug: "draft-helper",
+      generatedWiring: true,
+      currentContentHash: "sha256:abc",
+      files: [
+        { path: "SKILL.md", bytes: 64 },
+        { path: "WIRING.md", bytes: 128 },
+      ],
+    });
   });
 });

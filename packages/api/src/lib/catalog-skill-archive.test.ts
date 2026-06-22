@@ -6,6 +6,7 @@ import {
   parseCatalogSkillArchive,
   renderCatalogSkillArchive,
   textFromCatalogArchiveFile,
+  validateCatalogSkillFiles,
 } from "./catalog-skill-archive.js";
 import { parseWiringMd } from "./wiring-md.js";
 
@@ -304,6 +305,35 @@ describe("parseCatalogSkillArchive", () => {
     const result = await parseCatalogSkillArchive(await zipBytes(entries));
 
     expectInvalid(result, "size_limit_exceeded");
+  });
+});
+
+describe("validateCatalogSkillFiles", () => {
+  it("validates normalized file lists with the same defaults as archive import", () => {
+    const result = validateCatalogSkillFiles([
+      { path: "SKILL.md", content: Buffer.from(skillMd("draft-helper")) },
+      { path: "references/guide.md", content: Buffer.from("# Guide\n") },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected valid skill files");
+    expect(result.slug).toBe("draft-helper");
+    expect(result.generatedWiring).toBe(true);
+    expect(result.files.map((file) => file.path).sort()).toEqual([
+      "SKILL.md",
+      "WIRING.md",
+      "references/guide.md",
+    ]);
+  });
+
+  it("rejects duplicate normalized paths", () => {
+    const result = validateCatalogSkillFiles([
+      { path: "SKILL.md", content: Buffer.from(skillMd("draft-helper")) },
+      { path: "references/guide.md", content: Buffer.from("# Guide\n") },
+      { path: "references//guide.md", content: Buffer.from("# Dupe\n") },
+    ]);
+
+    expectInvalid(result, "unsafe_path");
   });
 });
 

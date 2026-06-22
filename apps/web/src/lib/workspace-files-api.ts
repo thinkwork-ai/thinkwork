@@ -11,7 +11,8 @@ export type WorkspaceFilesTarget =
   | { spaceId: string }
   | { agentId: string }
   | { userId: string }
-  | { catalog: true };
+  | { catalog: true }
+  | { skillDraftId: string };
 
 export interface ThreadGoalFileFallback {
   file: string;
@@ -46,6 +47,13 @@ export interface ImportSkillArchiveResult {
   evalDatasetWarning?: string;
 }
 
+export interface ValidateSkillDraftResult {
+  slug: string;
+  generatedWiring: boolean;
+  currentContentHash: string;
+  files: Array<{ path: string; bytes: number }>;
+}
+
 interface WorkspaceFilesResponse {
   ok?: boolean;
   files?: WorkspaceFileMeta[];
@@ -60,6 +68,9 @@ interface WorkspaceFilesResponse {
   archiveBase64?: string;
   status?: "created" | "updated";
   generatedWiring?: boolean;
+  currentContentHash?: string;
+  validationErrors?: unknown[];
+  code?: string;
   indexWarning?: string;
   evalDatasetWarning?: string;
 }
@@ -237,6 +248,31 @@ export async function importSkillArchive(
       ? { evalDatasetWarning: data.evalDatasetWarning }
       : {}),
   };
+}
+
+export async function validateSkillDraft(
+  skillDraftId: string,
+): Promise<ValidateSkillDraftResult> {
+  const data = await request({
+    action: "validate-skill-draft",
+    skillDraftId,
+  });
+  if (!data.slug || !data.currentContentHash) {
+    throw new Error("Skill draft validation response was missing metadata.");
+  }
+  return {
+    slug: data.slug,
+    generatedWiring: data.generatedWiring === true,
+    currentContentHash: data.currentContentHash,
+    files: (data.files ?? []).map((file) => ({
+      path: file.path,
+      bytes: typeof readBytes(file) === "number" ? readBytes(file)! : 0,
+    })),
+  };
+}
+
+function readBytes(file: WorkspaceFileMeta): number | undefined {
+  return (file as unknown as { bytes?: number }).bytes;
 }
 
 function bytesFromBase64(value: string): Uint8Array {
