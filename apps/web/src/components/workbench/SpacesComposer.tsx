@@ -16,7 +16,10 @@ import {
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
-import { GoalModeToggle } from "@/components/workbench/GoalModeControls";
+import {
+  GoalModeDialog,
+  GoalModeToggle,
+} from "@/components/workbench/GoalModeControls";
 import {
   resolveStartGoalModeSubmission,
   type ComposerGoalModeIntent,
@@ -130,11 +133,6 @@ export function SpacesComposer({
   error,
 }: SpacesComposerProps) {
   const [mentions, setMentions] = useState<SpacesComposerMention[]>([]);
-  const skillPins = useComposerSkillPins({
-    value,
-    onChange,
-    catalog: skillCatalog,
-  });
   const textareaRef = useRef<SkillTokenInputHandle | null>(null);
   const spacePickerColorClass = selectedSpaceIsDefault
     ? "text-muted-foreground hover:text-foreground"
@@ -179,13 +177,21 @@ export function SpacesComposer({
   // cleared; until then the toggle tracks the derived default.
   const agentOverriddenRef = useRef(false);
   const [goalModeEnabled, setGoalModeEnabled] = useState(false);
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const goalModeSubmission = useMemo(
     () => resolveStartGoalModeSubmission(value, goalModeEnabled),
     [value, goalModeEnabled],
   );
   const agentForcedOn = hasDefaultAgentMentionAlias(value);
-  const effectiveAgentEnabled =
-    goalModeSubmission.requested || agentForcedOn || agentEnabled;
+  const effectiveAgentEnabled = agentForcedOn || agentEnabled;
+  const goalModeBlocked =
+    goalModeSubmission.requested && !effectiveAgentEnabled;
+  const skillPins = useComposerSkillPins({
+    value,
+    onChange,
+    catalog: skillCatalog,
+    goalDisabled: !effectiveAgentEnabled,
+  });
 
   useEffect(() => {
     setActiveMentionIndex(0);
@@ -246,6 +252,10 @@ export function SpacesComposer({
   async function handlePromptSubmit(message: PromptInputMessage) {
     if (disabled || isSubmitting) return;
     if (modelSelectionBlocked) return;
+    if (goalModeBlocked) {
+      toast.error("Turn on agent handling to use Goal.");
+      return;
+    }
     const files = await fileUiPartsToFiles(message.files);
     if (goalModeSubmission.requested && !goalModeSubmission.goalMode) {
       toast.error("Goal mode needs an objective.");
@@ -319,6 +329,12 @@ export function SpacesComposer({
         rawText: replacement.trim(),
       },
     ]);
+  }
+
+  function applyGoalObjective(objective: string) {
+    onChange(`/goal ${objective}`);
+    setGoalModeEnabled(false);
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -480,7 +496,7 @@ export function SpacesComposer({
               <button
                 type="button"
                 onClick={() => {
-                  if (!agentForcedOn && !goalModeSubmission.requested) {
+                  if (!agentForcedOn) {
                     agentOverriddenRef.current = true;
                     setAgentEnabled((value) => !value);
                   }
@@ -488,11 +504,7 @@ export function SpacesComposer({
                 aria-label="Send to agent"
                 aria-pressed={effectiveAgentEnabled}
                 title={agentToggleTitle}
-                disabled={
-                  isComposerDisabled ||
-                  agentForcedOn ||
-                  goalModeSubmission.requested
-                }
+                disabled={isComposerDisabled || agentForcedOn}
                 className={cn(
                   "flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
                   effectiveAgentEnabled && "text-[#54a9ff]",
@@ -501,9 +513,10 @@ export function SpacesComposer({
                 <Bot className="size-5" />
               </button>
               <GoalModeToggle
-                enabled={goalModeSubmission.requested}
-                disabled={isComposerDisabled}
-                onToggle={() => setGoalModeEnabled((value) => !value)}
+                enabled={goalModeSubmission.requested && effectiveAgentEnabled}
+                objective={goalModeSubmission.content}
+                disabled={isComposerDisabled || !effectiveAgentEnabled}
+                onClick={() => setGoalDialogOpen(true)}
               />
               <ComposerModelPicker
                 models={approvedModels}
@@ -524,7 +537,7 @@ export function SpacesComposer({
               <ConditionalSubmit
                 hasText={goalModeSubmission.content.length > 0}
                 requiresText={goalModeSubmission.requested}
-                disabled={disabled || modelSelectionBlocked}
+                disabled={disabled || modelSelectionBlocked || goalModeBlocked}
                 isSubmitting={isSubmitting}
               />
             </div>
@@ -534,6 +547,14 @@ export function SpacesComposer({
       {displayError ? (
         <p className="text-sm text-destructive">{displayError}</p>
       ) : null}
+      <GoalModeDialog
+        open={goalDialogOpen}
+        initialObjective={
+          goalModeSubmission.content || (value.startsWith("/") ? "" : value)
+        }
+        onOpenChange={setGoalDialogOpen}
+        onSubmit={applyGoalObjective}
+      />
     </div>
   );
 }

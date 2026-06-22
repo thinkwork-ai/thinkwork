@@ -11,11 +11,16 @@ const catalog: SkillOption[] = [
   { slug: "invoice-parser", displayName: "Invoice Parser" },
 ];
 
-function setup(initialValue: string) {
+function setup(initialValue: string, options: { goalDisabled?: boolean } = {}) {
   const onChange = vi.fn();
   const view = renderHook(
     ({ v }: { v: string }) =>
-      useComposerSkillPins({ value: v, onChange, catalog }),
+      useComposerSkillPins({
+        value: v,
+        onChange,
+        catalog,
+        goalDisabled: options.goalDisabled,
+      }),
     { initialProps: { v: initialValue } },
   );
   return { ...view, onChange };
@@ -39,6 +44,15 @@ describe("extractPinnedSkillSlugs", () => {
       [],
     );
     expect(extractPinnedSkillSlugs("/not-a-skill", catalog)).toEqual([]);
+  });
+
+  it("reserves /goal for composer goal mode instead of skill pinning", () => {
+    expect(
+      extractPinnedSkillSlugs("/goal reconcile the list", [
+        ...catalog,
+        { slug: "goal", displayName: "Goal Skill" },
+      ]),
+    ).toEqual([]);
   });
 
   it("does not match a slash mid-token (urls)", () => {
@@ -70,6 +84,13 @@ describe("useComposerSkillPins", () => {
     ]);
   });
 
+  it("shows Goal as a reserved slash option", () => {
+    const { result } = setup("/go");
+    expect(result.current.menuOpen).toBe(true);
+    expect(result.current.options.map((o) => o.slug)).toEqual(["goal"]);
+    expect(result.current.options[0]?.reserved).toBe("goal");
+  });
+
   it("does not open the menu without a slash query", () => {
     const { result } = setup("hello");
     expect(result.current.menuOpen).toBe(false);
@@ -79,6 +100,21 @@ describe("useComposerSkillPins", () => {
     const { result, onChange } = setup("find me /cr");
     act(() => result.current.selectSkill(catalog[0]!));
     expect(onChange).toHaveBeenCalledWith("find me /crm-dashboard ");
+  });
+
+  it("selecting Goal inserts the reserved /goal token", () => {
+    const { result, onChange } = setup("/go");
+    act(() => result.current.selectSkill(result.current.options[0]!));
+    expect(onChange).toHaveBeenCalledWith("/goal ");
+  });
+
+  it("marks Goal disabled when agent handling is off", () => {
+    const { result } = setup("/go", { goalDisabled: true });
+    expect(result.current.options[0]).toMatchObject({
+      slug: "goal",
+      disabled: true,
+      disabledReason: "Turn on agent handling to use Goal",
+    });
   });
 
   it("Enter commits the active option as inline text", () => {
