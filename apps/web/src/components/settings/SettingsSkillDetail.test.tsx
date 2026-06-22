@@ -26,6 +26,7 @@ import { SettingsSkillDetail } from "./SettingsSkillDetail";
 
 const mocks = vi.hoisted(() => ({
   exportSkillArchive: vi.fn(),
+  runSkillTrustPipeline: vi.fn(),
   setHeader: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock("@/lib/workspace-files-api", async (importOriginal) => {
   return {
     ...actual,
     exportSkillArchive: mocks.exportSkillArchive,
+    runSkillTrustPipeline: mocks.runSkillTrustPipeline,
   };
 });
 
@@ -187,6 +189,12 @@ async function openInfoSheet() {
   await screen.findByRole("dialog");
 }
 
+async function openTrustSheet() {
+  const { getByRole } = renderLatestHeaderAction();
+  fireEvent.click(getByRole("button", { name: "Skill trust" }));
+  await screen.findByRole("dialog");
+}
+
 function setupMocks() {
   vi.mocked(useQuery).mockImplementation((args) => {
     let data: unknown = undefined;
@@ -248,6 +256,41 @@ beforeEach(() => {
     blob: new Blob([Uint8Array.from([0x50, 0x4b, 0x03, 0x04])], {
       type: "application/zip",
     }),
+  });
+  mocks.runSkillTrustPipeline.mockReset();
+  mocks.runSkillTrustPipeline.mockResolvedValue({
+    slug: "web-research",
+    contentHash: "a".repeat(64),
+    generatedAt: "2026-06-21T00:00:00.000Z",
+    status: "review",
+    summary:
+      "Static trust evidence is available; SkillSpector is not configured in this environment.",
+    spec: {
+      status: "passed",
+      name: "web-research",
+      description: "Researches the web.",
+      allowedTools: ["web_search"],
+      errors: [],
+    },
+    scanner: { status: "not_configured" },
+    severityCounts: {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      info: 0,
+    },
+    findings: [],
+    evidence: {
+      skillCard: "present",
+      evalDataset: "missing",
+      benchmark: "missing",
+      signature: "missing",
+    },
+    artifactPaths: {
+      skillCard: "skill-card.md",
+      evals: [],
+    },
   });
   mocks.setHeader.mockReset();
   mocks.toastError.mockReset();
@@ -508,5 +551,38 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(
       screen.getByText(/Installed agent copies keep running/i),
     ).toBeTruthy();
+  });
+
+  it("opens the trust sheet and runs the Skill Trust pipeline for the current skill", async () => {
+    render(<SettingsSkillDetail />);
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+
+    await waitFor(() =>
+      expect(mocks.runSkillTrustPipeline).toHaveBeenCalledWith("web-research"),
+    );
+    expect(await screen.findByText("Pipeline status")).toBeTruthy();
+    expect(screen.getByText("review")).toBeTruthy();
+    expect(screen.getByText("SkillSpector")).toBeTruthy();
+    expect(screen.getByText("not configured")).toBeTruthy();
+    expect(screen.getByText("Skill card")).toBeTruthy();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Skill trust pipeline completed.",
+    );
+  });
+
+  it("surfaces Skill Trust pipeline failures", async () => {
+    mocks.runSkillTrustPipeline.mockRejectedValueOnce(new Error("runner down"));
+    render(<SettingsSkillDetail />);
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Could not run the trust pipeline: runner down",
+      ),
+    );
   });
 });

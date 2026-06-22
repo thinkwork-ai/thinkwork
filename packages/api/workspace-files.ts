@@ -128,6 +128,8 @@ import {
   validateSkillDraftFiles,
   validateSkillDraftPath,
 } from "./src/lib/skill-drafts/files.js";
+import { buildCatalogSkillTrustReport } from "./src/lib/skill-trust/catalog-report.js";
+import { runSkillSpectorForFiles } from "./src/lib/skill-trust/skillspector.js";
 import {
   CATALOG_SKILL_ARCHIVE_LIMITS,
   parseCatalogSkillArchive,
@@ -710,6 +712,7 @@ const WRITE_ACTIONS = new Set([
   "rename",
   "create-sub-agent",
   "export-skill",
+  "run-skill-trust",
   "install-skill",
   "import-skill",
   "reinstall-skill",
@@ -1333,6 +1336,87 @@ async function handleExportSkill(
     filename: archive.filename,
     contentType: archive.contentType,
     archiveBase64: archive.bytes.toString("base64"),
+  });
+}
+
+async function handleRunSkillTrust(
+  deps: HandlerDeps,
+  slug: string | undefined,
+): Promise<APIGatewayProxyResult> {
+  const { target } = deps;
+  if (target.kind !== "catalog") {
+    return json(400, {
+      ok: false,
+      code: "unsupported_target",
+      error: "run-skill-trust requires the skill catalog target",
+    });
+  }
+  if (!isCatalogArchiveSlug(slug)) {
+    return json(400, {
+      ok: false,
+      code: "invalid_skill_slug",
+      error:
+        "slug is required for run-skill-trust and must be a portable Agent Skills name.",
+    });
+  }
+
+  const skillPrefix = `${target.prefix}${slug}/`;
+  const relativePaths = await listAllObjectsUnfiltered(skillPrefix);
+  if (relativePaths.length === 0) {
+    return json(404, {
+      ok: false,
+      code: "skill_not_found",
+      error: `Catalog skill '${slug}' was not found.`,
+      slug,
+    });
+  }
+  if (!relativePaths.includes("SKILL.md")) {
+    return json(404, {
+      ok: false,
+      code: "skill_md_not_found",
+      error: `Catalog skill '${slug}' is missing SKILL.md and cannot be scanned.`,
+      slug,
+    });
+  }
+  if (relativePaths.length > EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries) {
+    return exportLimitExceeded(
+      slug,
+      `Catalog skill '${slug}' has ${relativePaths.length} files; max scannable files is ${EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries}.`,
+    );
+  }
+
+  let totalBytes = 0;
+  const files: { path: string; content: Buffer }[] = [];
+  for (const filePath of relativePaths) {
+    const object = await readCatalogObject(`${skillPrefix}${filePath}`);
+    if (object.content.byteLength > EXPORT_SKILL_ARCHIVE_LIMITS.maxFileBytes) {
+      return exportLimitExceeded(
+        slug,
+        `Catalog skill file '${filePath}' is too large to scan.`,
+      );
+    }
+    totalBytes += object.content.byteLength;
+    if (totalBytes > EXPORT_SKILL_ARCHIVE_LIMITS.maxTotalBytes) {
+      return exportLimitExceeded(
+        slug,
+        `Catalog skill '${slug}' is too large to scan.`,
+      );
+    }
+    files.push({ path: filePath, content: object.content });
+  }
+
+  const scan = await runSkillSpectorForFiles({ slug, files });
+  const trustReport = buildCatalogSkillTrustReport({
+    slug,
+    files,
+    scanner: scan.scanner,
+    scannerFindings: scan.findings,
+  });
+
+  return json(200, {
+    ok: true,
+    slug,
+    trustReport,
   });
 }
 
@@ -3747,9 +3831,15 @@ export async function handler(
 
   if (
     target.kind === "catalog" &&
-    !["get", "list", "put", "delete", "export-skill", "import-skill"].includes(
-      action,
-    )
+    ![
+      "get",
+      "list",
+      "put",
+      "delete",
+      "export-skill",
+      "import-skill",
+      "run-skill-trust",
+    ].includes(action)
   ) {
     return json(400, {
       ok: false,
@@ -3840,6 +3930,9 @@ export async function handler(
       }
       case "export-skill": {
         return await handleExportSkill(deps, body.slug);
+      }
+      case "run-skill-trust": {
+        return await handleRunSkillTrust(deps, body.slug);
       }
       case "delete": {
         if (!body.path)

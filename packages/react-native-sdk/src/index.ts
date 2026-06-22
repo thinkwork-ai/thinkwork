@@ -34,6 +34,12 @@ export {
 } from "./hooks/use-subscriptions";
 export { useCaptureMobileMemory } from "./hooks/use-capture-mobile-memory";
 export {
+  SKILL_CREATOR_COMMAND,
+  SKILL_CREATOR_FALLBACK_PROMPT,
+  normalizeSkillCreatorCommandContent,
+  type SkillCreatorCommandMetadata,
+} from "./skill-creator-command";
+export {
   useMobileMemoryCaptures,
   useDeleteMobileMemoryCapture,
 } from "./hooks/use-mobile-memory-captures";

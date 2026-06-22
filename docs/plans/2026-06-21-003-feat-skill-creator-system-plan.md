@@ -640,8 +640,9 @@ creator workflow using upstream skill-creator assets with recorded provenance.
 
 - U4. **Add Skill Trust Runner with SkillSpector, Skill Cards, and Signature Status**
 
-**Goal:** Run the actual NVIDIA-aligned trust pipeline on staged skill drafts and
-write durable evidence that gates operator approval.
+**Goal:** Run the actual NVIDIA-aligned trust pipeline on staged skill drafts
+and on existing catalog skills, then write durable evidence that gates operator
+approval and gives operators a per-skill trust report from the Skill Library.
 
 **Requirements:** R7, R8, R9, R12; F3, F4; AE2, AE3
 
@@ -667,12 +668,26 @@ write durable evidence that gates operator approval.
 - Create: `packages/api/src/graphql/resolvers/skill-creator/startSkillTrustRun.mutation.ts`
 - Create: `packages/api/src/graphql/resolvers/skill-creator/acceptSkillTrustFinding.mutation.ts`
 - Create: `packages/api/src/graphql/resolvers/skill-creator/skillTrustRun.test.ts`
+- Modify: `packages/api/workspace-files.ts`
+- Modify: `apps/web/src/lib/workspace-files-api.ts`
+- Modify: `apps/web/src/components/settings/SettingsSkillDetail.tsx`
+- Modify: `apps/web/src/components/settings/SettingsSkillDetail.test.tsx`
 
 **Approach:**
 
 - Implement a trust-run state machine in application code: spec validation,
   generated skill card validation, SkillSpector scan, optional signature
   verification, eval packet detection, and publish-readiness summary.
+- Add a catalog-skill trust target beside the draft target. Operators can start
+  a trust run for `skill-catalog/<slug>/` from the Skill Library detail page;
+  the run uses the same SkillSpector runner, artifact detection, severity
+  policy, signature status, and report parsing as draft trust runs, but it does
+  not mutate catalog source or installed agent copies.
+- Add a shield icon to the Skill Library detail header. Clicking it opens a
+  right-side "Skill trust" sheet scoped to the current skill with a run button,
+  latest report status, severity counts, SkillSpector provenance, skill-card /
+  eval / benchmark / signature evidence, and links or expandable sections for
+  detailed findings.
 - Start U4 with a runner spike: build a Python 3.12 Lambda container image,
   invoke the actual SkillSpector CLI against a fixture skill, and prove
   JSON/Markdown/SARIF reports are emitted and uploaded. Do not build the review
@@ -741,11 +756,18 @@ write durable evidence that gates operator approval.
   errors.
 - Runner failure: scanner crash records failed trust run and preserves the draft
   for retry without mutating catalog files.
+- Catalog scan: opening a Skill Library detail page and clicking the shield
+  opens a trust sheet for that slug; running the pipeline scans the complete
+  catalog skill directory and renders the resulting report without changing the
+  catalog or installed copies.
+- Catalog authorization: non-operators cannot start catalog skill trust runs.
 
 **Verification:**
 
 - Unit tests cover report parsing, skill card requirements, blocking policy, and
   authorization. Runner tests mock SkillSpector invocation and S3 report writes.
+  Web tests cover the shield header action, sheet states, run dispatch, and
+  report rendering.
 
 ---
 

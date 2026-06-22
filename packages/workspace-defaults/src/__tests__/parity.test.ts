@@ -24,34 +24,13 @@ const PACKAGE_ROOT = resolve(__dirname, "..", "..");
 
 const LOCAL_FILES_DIR = join(PACKAGE_ROOT, "files");
 
-// Map canonical name → absolute path of its authoritative .md source.
-const AUTHORITATIVE_SOURCES: Record<string, string> = {
-  "USER.md": join(LOCAL_FILES_DIR, "USER.md"),
-  "SPACE.md": join(LOCAL_FILES_DIR, "SPACE.md"),
-  "AGENTS.md": join(LOCAL_FILES_DIR, "AGENTS.md"),
-  "CONTEXT.md": join(LOCAL_FILES_DIR, "CONTEXT.md"),
-  "TOOLS.md": join(LOCAL_FILES_DIR, "TOOLS.md"),
-  "GUARDRAILS.md": join(LOCAL_FILES_DIR, "GUARDRAILS.md"),
-  "MEMORY_GUIDE.md": join(LOCAL_FILES_DIR, "MEMORY_GUIDE.md"),
-  "ROUTER.md": join(LOCAL_FILES_DIR, "ROUTER.md"),
-  "memory/lessons.md": join(LOCAL_FILES_DIR, "memory", "lessons.md"),
-  "memory/preferences.md": join(LOCAL_FILES_DIR, "memory", "preferences.md"),
-  "memory/contacts.md": join(LOCAL_FILES_DIR, "memory", "contacts.md"),
-  "skills/.gitkeep": join(LOCAL_FILES_DIR, "skills", ".gitkeep"),
-  "skills/artifact-builder/SKILL.md": join(
-    LOCAL_FILES_DIR,
-    "skills",
-    "artifact-builder",
-    "SKILL.md",
-  ),
-  "skills/artifact-builder/references/crm-dashboard.md": join(
-    LOCAL_FILES_DIR,
-    "skills",
-    "artifact-builder",
-    "references",
-    "crm-dashboard.md",
-  ),
-};
+// Map canonical name -> absolute path of its authoritative source file.
+const AUTHORITATIVE_SOURCES: Record<string, string> = Object.fromEntries(
+  CANONICAL_FILE_NAMES.map((name) => [
+    name,
+    join(LOCAL_FILES_DIR, ...name.split("/")),
+  ]),
+);
 
 describe("workspace-defaults parity", () => {
   it("exports exactly the canonical file names", () => {

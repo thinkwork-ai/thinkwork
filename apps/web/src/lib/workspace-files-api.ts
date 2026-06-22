@@ -5,6 +5,7 @@ import type {
   WorkspaceMoveResult,
 } from "@thinkwork/workspace-editor";
 import { apiFetch } from "@/lib/api-fetch";
+import { readRuntimeEnv } from "@/lib/runtime-config";
 
 export type WorkspaceFilesTarget =
   | { threadId: string }
@@ -37,6 +38,53 @@ export interface ExportSkillArchiveResult {
   archiveBase64: string;
   bytes: Uint8Array;
   blob: Blob;
+}
+
+export type SkillTrustStatus = "passed" | "review" | "blocked" | "failed";
+
+export interface SkillTrustFinding {
+  id: string;
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  category: string;
+  message: string;
+  path?: string;
+}
+
+export interface SkillTrustReport {
+  slug: string;
+  contentHash: string;
+  generatedAt: string;
+  status: SkillTrustStatus;
+  summary: string;
+  spec: {
+    status: "passed" | "failed";
+    name?: string;
+    description?: string;
+    allowedTools: string[];
+    errors: string[];
+  };
+  scanner: {
+    status: "completed" | "not_configured" | "failed";
+    version?: string;
+    riskScore?: number | null;
+    riskSeverity?: string | null;
+    recommendation?: string | null;
+    error?: string;
+  };
+  severityCounts: Record<SkillTrustFinding["severity"], number>;
+  findings: SkillTrustFinding[];
+  evidence: {
+    skillCard: "present" | "missing";
+    evalDataset: "present" | "missing";
+    benchmark: "present" | "missing";
+    signature: "verified" | "present_unverified" | "missing";
+  };
+  artifactPaths: {
+    skillCard?: string;
+    evals: string[];
+    benchmark?: string;
+    signature?: string;
+  };
 }
 
 export interface ImportSkillArchiveResult {
@@ -73,14 +121,17 @@ interface WorkspaceFilesResponse {
   code?: string;
   indexWarning?: string;
   evalDatasetWarning?: string;
+  trustReport?: SkillTrustReport;
 }
 
 async function request(
   body: Record<string, unknown>,
+  options: { baseUrl?: string } = {},
 ): Promise<WorkspaceFilesResponse> {
   return apiFetch<WorkspaceFilesResponse>("/api/workspaces/files", {
     method: "POST",
     body: JSON.stringify(body),
+    ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
   });
 }
 
@@ -224,6 +275,24 @@ export async function exportSkillArchive(
     bytes,
     blob: new Blob([arrayBufferFromBytes(bytes)], { type: contentType }),
   };
+}
+
+export async function runSkillTrustPipeline(
+  slug: string,
+): Promise<SkillTrustReport> {
+  const skillTrustApiUrl = readRuntimeEnv("VITE_SKILL_TRUST_API_URL");
+  const data = await request(
+    {
+      action: "run-skill-trust",
+      catalog: true,
+      slug,
+    },
+    skillTrustApiUrl ? { baseUrl: skillTrustApiUrl } : {},
+  );
+  if (!data.trustReport) {
+    throw new Error("Skill trust response was missing a report.");
+  }
+  return data.trustReport;
 }
 
 export async function importSkillArchive(

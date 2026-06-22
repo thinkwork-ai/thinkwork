@@ -5,6 +5,7 @@ import {
   filterSkillCatalog,
   type SkillOption,
 } from "@/components/spaces/SkillMenu";
+import { isSkillCreatorSlashQuery } from "@/lib/skill-creator-command";
 
 export const GOAL_SLASH_OPTION: SkillOption = {
   slug: "goal",
@@ -71,7 +72,9 @@ export function useComposerSkillPins(params: {
   );
   const options = useMemo(
     () =>
-      slashQuery === null ? [] : filterSkillCatalog(slashOptions, slashQuery),
+      slashQuery === null || isSkillCreatorSlashQuery(slashQuery)
+        ? []
+        : filterSkillCatalog(slashOptions, slashQuery),
     [slashQuery, slashOptions],
   );
   const [activeIndex, setActiveIndex] = useState(0);

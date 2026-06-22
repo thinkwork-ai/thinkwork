@@ -87,6 +87,7 @@ import {
   toRuntimeGoalModePayload,
   type RuntimeGoalMode,
 } from "../lib/goal-mode.js";
+import type { RuntimeSkillCreatorCommandPayload } from "../lib/skill-creator/command-metadata.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
 import {
   isWorkspaceProjectionManifestLike,
@@ -299,6 +300,7 @@ interface InvokeEvent {
    */
   pendingQuestionAnswers?: PendingQuestionAnswersPayload;
   goalMode?: RuntimeGoalMode;
+  skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
   modelId?: string;
   requestedModelId?: string;
   requestedProfileSlug?: string;
@@ -1497,6 +1499,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       goal_mode: event.goalMode
         ? toRuntimeGoalModePayload(event.goalMode)
         : undefined,
+      skill_creator_command: event.skillCreatorCommand,
       cost_owner_user_id: currentUserId || undefined,
       // Dispatch-control fields shared with both wakeup-processor builders
       // (plan 2026-06-12-002 U1). Unit 7: thinkwork_api_url/_secret let the

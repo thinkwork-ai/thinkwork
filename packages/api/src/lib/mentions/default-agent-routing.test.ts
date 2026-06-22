@@ -174,6 +174,54 @@ describe("default agent routing", () => {
     ]);
   });
 
+  it("forwards /skill-creator command metadata to the direct chat invoke", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+    const invoked: unknown[] = [];
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "build a support triage skill",
+        skillCreatorCommand: {
+          type: "skill_creator",
+          source: "slash_command",
+          command: "/skill-creator",
+        },
+        sender: { type: "user", id: "user-1" },
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input);
+          return true;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(invoked).toEqual([
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        messageId: "message-1",
+        userMessage: "build a support triage skill",
+        skillCreatorCommand: {
+          type: "skill_creator",
+          source: "slash_command",
+          command: "/skill-creator",
+          draftApi: {
+            target: "skillDraftId",
+            workspaceFilesApi: "/api/workspaces/files",
+          },
+        },
+      },
+    ]);
+  });
+
   it("forwards reply-consumed pendingQuestionAnswers to the direct chat invoke WITHOUT enqueueing a wakeup", async () => {
     const repository = makeRepository({ agentId: "agent-1" });
     const invoked: unknown[] = [];
@@ -506,6 +554,46 @@ describe("default agent routing", () => {
       threadId: "thread-1",
       messageId: "message-1",
       goalMode,
+    });
+  });
+
+  it("carries /skill-creator command metadata into the fallback wakeup payload", async () => {
+    const repository = makeRepository({ agentId: "agent-1" });
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "build a support triage skill",
+        skillCreatorCommand: {
+          type: "skill_creator",
+          source: "slash_command",
+          command: "/skill-creator",
+        },
+      },
+      repository,
+      {
+        async invokeChatAgent() {
+          return false;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(repository.wakeups[0].payload).toMatchObject({
+      threadId: "thread-1",
+      messageId: "message-1",
+      skillCreatorCommand: {
+        type: "skill_creator",
+        source: "slash_command",
+        command: "/skill-creator",
+        draftApi: {
+          target: "skillDraftId",
+          workspaceFilesApi: "/api/workspaces/files",
+        },
+      },
     });
   });
 

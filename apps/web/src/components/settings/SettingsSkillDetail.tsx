@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { Download, Info } from "lucide-react";
+import { Download, Info, ShieldCheck } from "lucide-react";
 import { IconFlask } from "@tabler/icons-react";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { toast } from "sonner";
@@ -20,7 +20,9 @@ import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
 import {
   exportSkillArchive,
+  runSkillTrustPipeline,
   skillCatalogClient,
+  type SkillTrustReport,
 } from "@/lib/workspace-files-api";
 import {
   ApplySkillUpdateMutation,
@@ -320,12 +322,223 @@ function SkillInfoSheetContent() {
   );
 }
 
+function SkillTrustSheetContent({
+  report,
+  running,
+  onRun,
+}: {
+  report: SkillTrustReport | null;
+  running: boolean;
+  onRun: () => void;
+}) {
+  const statusVariant =
+    report?.status === "blocked" || report?.status === "failed"
+      ? "destructive"
+      : "secondary";
+  const counts = report?.severityCounts;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-6 pt-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              Pipeline status
+            </span>
+            {report ? (
+              <Badge variant={statusVariant}>{report.status}</Badge>
+            ) : null}
+          </div>
+          {report ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {report.summary}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">
+              No trust report has been generated in this session.
+            </p>
+          )}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          data-testid="skill-run-trust"
+          disabled={running}
+          onPointerDown={(event) => {
+            if (event.button !== 0 || running) return;
+            event.preventDefault();
+            onRun();
+          }}
+          onClick={onRun}
+        >
+          {running ? <Spinner className="size-3.5" /> : "Run pipeline"}
+        </Button>
+      </div>
+
+      {report ? (
+        <>
+          <div className="space-y-1.5 text-sm" data-testid="skill-trust-list">
+            <TrustEvidence label="Spec" value={report.spec.status} />
+            <TrustEvidence label="SkillSpector" value={report.scanner.status} />
+            <TrustEvidence
+              label="Skill card"
+              value={report.evidence.skillCard}
+            />
+            <TrustEvidence label="Evals" value={report.evidence.evalDataset} />
+            <TrustEvidence
+              label="Benchmark"
+              value={report.evidence.benchmark}
+            />
+            <TrustEvidence
+              label="Signature"
+              value={report.evidence.signature}
+            />
+          </div>
+
+          <div className="rounded-md border border-border/70 p-3">
+            <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+              Severity counts
+            </div>
+            <div className="grid grid-cols-5 gap-2 text-center text-sm tabular-nums">
+              {(["critical", "high", "medium", "low", "info"] as const).map(
+                (severity) => (
+                  <div key={severity}>
+                    <div className="font-semibold">
+                      {counts?.[severity] ?? 0}
+                    </div>
+                    <div className="text-[11px] capitalize text-muted-foreground">
+                      {severity}
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
+
+          {report.scanner.error ? (
+            <p className="text-xs text-destructive">{report.scanner.error}</p>
+          ) : null}
+
+          {report.spec.errors.length > 0 ? (
+            <div className="rounded-md border border-destructive/40 p-3 text-sm">
+              <div className="mb-2 font-medium text-destructive">
+                Spec validation
+              </div>
+              <ul className="space-y-1 text-muted-foreground">
+                {report.spec.errors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {report.findings.length > 0 ? (
+            <div className="space-y-2">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                Findings
+              </div>
+              {report.findings.map((finding) => (
+                <div
+                  key={finding.id}
+                  className="rounded-md border border-border/70 p-3 text-sm"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{finding.category}</span>
+                    <Badge
+                      variant={
+                        finding.severity === "critical" ||
+                        finding.severity === "high"
+                          ? "destructive"
+                          : "secondary"
+                      }
+                    >
+                      {finding.severity}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-muted-foreground">
+                    {finding.message}
+                  </p>
+                  {finding.path ? (
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
+                      {finding.path}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <p className="font-mono text-[11px] text-muted-foreground">
+            {report.contentHash}
+          </p>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function TrustEvidence({ label, value }: { label: string; value: string }) {
+  const tone = trustEvidenceTone(value);
+  const displayValue = value.replace(/_/g, " ");
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-md border bg-background/30 px-3 py-2",
+        tone.row,
+      )}
+    >
+      <div className="min-w-0 truncate text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <Badge
+        variant="outline"
+        className={cn(
+          "max-w-[58%] shrink-0 justify-center truncate border px-2 py-0.5 text-[11px] font-medium capitalize",
+          tone.badge,
+        )}
+      >
+        {displayValue}
+      </Badge>
+    </div>
+  );
+}
+
+function trustEvidenceTone(value: string) {
+  if (
+    value === "passed" ||
+    value === "completed" ||
+    value === "present" ||
+    value === "verified"
+  ) {
+    return {
+      row: "border-emerald-500/35",
+      badge:
+        "border-emerald-500/45 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    };
+  }
+  if (value === "failed" || value === "blocked") {
+    return {
+      row: "border-destructive/45",
+      badge: "border-destructive/50 bg-destructive/10 text-destructive",
+    };
+  }
+  return {
+    row: "border-amber-500/35",
+    badge:
+      "border-amber-500/45 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  };
+}
+
 export function SettingsSkillDetail() {
   const { skillSlug } = useParams({
     from: "/_authed/settings/skills/$skillSlug",
   });
   const [exporting, setExporting] = useState(false);
   const [evalSheetOpen, setEvalSheetOpen] = useState(false);
+  const [trustSheetOpen, setTrustSheetOpen] = useState(false);
+  const [trustRunning, setTrustRunning] = useState(false);
+  const [trustReport, setTrustReport] = useState<SkillTrustReport | null>(null);
+  const trustInFlightRef = useRef(false);
   const [infoSheetOpen, setInfoSheetOpen] = useState(false);
 
   async function exportSkill() {
@@ -340,6 +553,24 @@ export function SettingsSkillDetail() {
       toast.error(`Could not export the skill: ${message}`);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function runTrust() {
+    if (trustInFlightRef.current) return;
+    trustInFlightRef.current = true;
+    setTrustRunning(true);
+    try {
+      const report = await runSkillTrustPipeline(skillSlug);
+      setTrustReport(report);
+      toast.success("Skill trust pipeline completed.");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unknown trust pipeline failure.";
+      toast.error(`Could not run the trust pipeline: ${message}`);
+    } finally {
+      trustInFlightRef.current = false;
+      setTrustRunning(false);
     }
   }
 
@@ -367,6 +598,21 @@ export function SettingsSkillDetail() {
           onClick={() => setEvalSheetOpen(true)}
         >
           <IconFlask className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className={
+            trustSheetOpen
+              ? desktopToolbarActiveButtonClassName
+              : desktopToolbarButtonClassName
+          }
+          aria-label="Skill trust"
+          title="Skill trust"
+          onClick={() => setTrustSheetOpen(true)}
+        >
+          <ShieldCheck className="size-4" />
         </Button>
         <Button
           type="button"
@@ -401,7 +647,7 @@ export function SettingsSkillDetail() {
         </Button>
       </div>
     ),
-    actionKey: `skill-actions:${skillSlug}:${exporting ? "exporting" : "idle"}:${evalSheetOpen ? "evals" : "evals-closed"}:${infoSheetOpen ? "info" : "info-closed"}`,
+    actionKey: `skill-actions:${skillSlug}:${exporting ? "exporting" : "idle"}:${evalSheetOpen ? "evals" : "evals-closed"}:${trustSheetOpen ? "trust" : "trust-closed"}:${trustRunning ? "trust-running" : "trust-idle"}:${infoSheetOpen ? "info" : "info-closed"}`,
   });
 
   return (
@@ -424,6 +670,21 @@ export function SettingsSkillDetail() {
             <SheetDescription>Catalog source behavior</SheetDescription>
           </SheetHeader>
           <SkillInfoSheetContent />
+        </SheetContent>
+      </Sheet>
+      <Sheet open={trustSheetOpen} onOpenChange={setTrustSheetOpen}>
+        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+          <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+            <SheetTitle>Skill trust</SheetTitle>
+            <SheetDescription>
+              SkillSpector scan, release evidence, and signature status.
+            </SheetDescription>
+          </SheetHeader>
+          <SkillTrustSheetContent
+            report={trustReport}
+            running={trustRunning}
+            onRun={() => void runTrust()}
+          />
         </SheetContent>
       </Sheet>
       <div className="min-h-0 flex-1">

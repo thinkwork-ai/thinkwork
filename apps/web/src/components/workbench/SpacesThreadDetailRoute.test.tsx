@@ -1425,6 +1425,30 @@ describe("SpacesThreadDetailRoute", () => {
     });
   });
 
+  it("normalizes /skill-creator into message command metadata for follow-up turns", async () => {
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    setFollowUpText("/skill-creator improve my calendar skill");
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: "improve my calendar skill",
+          metadata: JSON.stringify({
+            command: {
+              type: "skill_creator",
+              source: "slash_command",
+              command: "/skill-creator",
+            },
+          }),
+        },
+      });
+    });
+  });
+
   it("sends selected approved model metadata for follow-up turns", async () => {
     approvedModelsData = {
       myApprovedModelCatalog: [

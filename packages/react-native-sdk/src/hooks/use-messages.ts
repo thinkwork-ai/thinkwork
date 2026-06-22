@@ -47,6 +47,8 @@ export interface SendMessageOptions {
   senderType?: string;
   /** Optional user/agent id stamped on the message row. */
   senderId?: string;
+  /** Optional message metadata. Serialized to GraphQL AWSJSON. */
+  metadata?: Record<string, unknown>;
 }
 
 // Unbound imperative sender. Pre-0.2.0 the hook took a threadId at render time,
@@ -71,6 +73,9 @@ export function useSendMessage() {
           content,
           senderType: opts?.senderType ?? "user",
           ...(opts?.senderId ? { senderId: opts.senderId } : {}),
+          ...(opts?.metadata
+            ? { metadata: JSON.stringify(opts.metadata) }
+            : {}),
         },
       });
       const message = result.data?.sendMessage;

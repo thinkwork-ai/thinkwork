@@ -25,6 +25,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import Markdown from "react-native-markdown-display";
 import {
+  normalizeSkillCreatorCommandContent,
   useMessages,
   useSendMessage,
   useThread,
@@ -107,7 +108,10 @@ export function ThinkworkChat({
 
   // Server returns newest-first; reverse into chronological order for the
   // FlatList so the reader scans top → bottom as oldest → newest.
-  const timeline = React.useMemo(() => [...messages].slice().reverse(), [messages]);
+  const timeline = React.useMemo(
+    () => [...messages].slice().reverse(),
+    [messages],
+  );
 
   // Index of the last assistant message. On first load we land the reader on
   // the message BEFORE it (usually the user's question) so they see their
@@ -161,14 +165,16 @@ export function ThinkworkChat({
   const submit = async () => {
     const text = draft.trim();
     if (!text || sending) return;
+    const skillCreatorCommand = normalizeSkillCreatorCommandContent(text);
     setDraft("");
     setSending(true);
     try {
-      await sendMessage(
-        threadId,
-        text,
-        currentUserId ? { senderId: currentUserId } : undefined,
-      );
+      await sendMessage(threadId, skillCreatorCommand.content, {
+        ...(currentUserId ? { senderId: currentUserId } : {}),
+        ...(skillCreatorCommand.command
+          ? { metadata: { command: skillCreatorCommand.command } }
+          : {}),
+      });
     } catch (err) {
       // Restore the draft so the user can retry without retyping.
       setDraft(text);
@@ -258,7 +264,9 @@ function MessageBubble({ message }: { message: Message }) {
     return (
       <View style={[styles.bubbleRow, styles.bubbleRowUser]}>
         <View style={[styles.bubble, styles.bubbleUser]}>
-          <Text style={[styles.bubbleText, styles.bubbleTextUser]}>{content}</Text>
+          <Text style={[styles.bubbleText, styles.bubbleTextUser]}>
+            {content}
+          </Text>
         </View>
       </View>
     );
@@ -272,10 +280,34 @@ function MessageBubble({ message }: { message: Message }) {
 
 const markdownStyles = {
   body: { color: "#111827", fontSize: 15, lineHeight: 22 },
-  heading1: { fontSize: 22, fontWeight: "700", marginTop: 12, marginBottom: 8, color: "#111827" },
-  heading2: { fontSize: 19, fontWeight: "700", marginTop: 12, marginBottom: 6, color: "#111827" },
-  heading3: { fontSize: 17, fontWeight: "700", marginTop: 10, marginBottom: 4, color: "#111827" },
-  heading4: { fontSize: 15, fontWeight: "700", marginTop: 8, marginBottom: 4, color: "#111827" },
+  heading1: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginTop: 12,
+    marginBottom: 8,
+    color: "#111827",
+  },
+  heading2: {
+    fontSize: 19,
+    fontWeight: "700",
+    marginTop: 12,
+    marginBottom: 6,
+    color: "#111827",
+  },
+  heading3: {
+    fontSize: 17,
+    fontWeight: "700",
+    marginTop: 10,
+    marginBottom: 4,
+    color: "#111827",
+  },
+  heading4: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginTop: 8,
+    marginBottom: 4,
+    color: "#111827",
+  },
   paragraph: { marginTop: 0, marginBottom: 10, color: "#111827" },
   strong: { fontWeight: "700" },
   em: { fontStyle: "italic" },
@@ -339,7 +371,12 @@ const styles = StyleSheet.create({
     borderBottomColor: "#D1D5DB",
     backgroundColor: "#fff",
   },
-  backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   title: {
     flex: 1,
     fontSize: 16,

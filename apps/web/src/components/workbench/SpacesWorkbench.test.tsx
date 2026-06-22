@@ -301,6 +301,38 @@ describe("SpacesWorkbench", () => {
     });
   });
 
+  it("normalizes /skill-creator into message command metadata for new threads", async () => {
+    render(<SpacesWorkbench />);
+
+    setComposerText("/skill-creator build a support triage skill");
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    await waitFor(() => {
+      expect(createThread).toHaveBeenCalledWith({
+        input: expect.objectContaining({
+          title: "build a support triage skill",
+        }),
+      });
+    });
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        input: {
+          threadId: "thread-1",
+          role: "USER",
+          content: "build a support triage skill",
+          mentions: [],
+          metadata: JSON.stringify({
+            command: {
+              type: "skill_creator",
+              source: "slash_command",
+              command: "/skill-creator",
+            },
+          }),
+        },
+      });
+    });
+  });
+
   it("waits for the first managed send before routing to the created thread", async () => {
     let resolveSend:
       | ((value: { data: { sendMessage: { id: string } } }) => void)

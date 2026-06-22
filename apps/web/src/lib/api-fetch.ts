@@ -46,6 +46,7 @@ export class ApiError extends Error {
 
 export interface ApiFetchOptions extends RequestInit {
   extraHeaders?: Record<string, string>;
+  baseUrl?: string;
 }
 
 /**
@@ -60,8 +61,8 @@ export async function apiFetch<T = unknown>(
   path: string,
   options: ApiFetchOptions = {},
 ): Promise<T> {
-  const { extraHeaders, headers: callerHeaders, ...rest } = options;
-  const apiUrl = readRuntimeEnv("VITE_API_URL");
+  const { baseUrl, extraHeaders, headers: callerHeaders, ...rest } = options;
+  const apiUrl = baseUrl || readRuntimeEnv("VITE_API_URL");
   const token = await getIdToken();
   if (!token) throw new NotReadyError();
 
