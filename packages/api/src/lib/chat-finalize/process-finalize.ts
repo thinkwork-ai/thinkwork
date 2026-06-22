@@ -32,6 +32,7 @@ import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   artifacts,
+  messages,
   pendingUserQuestions,
   threadTurns,
   threads,
@@ -226,11 +227,16 @@ export async function processFinalize(
 
   if (status === "completed") {
     try {
+      const skillCreatorRequesterUserId =
+        costOwnerUserId ??
+        (payload.skill_creator_command
+          ? await resolveSkillCreatorRequesterUserId({ tenantId, threadId })
+          : null);
       const skillDraftRegistration = await autoSubmitSkillCreatorDraft({
         tenantId,
         threadId,
         threadTurnId: turnId,
-        requesterUserId: costOwnerUserId,
+        requesterUserId: skillCreatorRequesterUserId,
         userMessage,
         skillCreatorCommand: payload.skill_creator_command,
         reconcileReport,
@@ -1880,6 +1886,25 @@ async function recordWorkspaceReconcileStatus(
       )}::jsonb, true)`,
     })
     .where(eq(threadTurns.id, turnId));
+}
+
+async function resolveSkillCreatorRequesterUserId(input: {
+  tenantId: string;
+  threadId: string;
+}): Promise<string | null> {
+  const [message] = await db
+    .select({ senderId: messages.sender_id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, input.tenantId),
+        eq(messages.thread_id, input.threadId),
+        eq(messages.sender_type, "user"),
+      ),
+    )
+    .orderBy(desc(messages.created_at), desc(messages.id))
+    .limit(1);
+  return message?.senderId ?? null;
 }
 
 async function markTurnFinalized(turnId: string): Promise<void> {

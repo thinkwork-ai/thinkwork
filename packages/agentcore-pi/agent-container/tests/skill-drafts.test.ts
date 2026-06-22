@@ -50,6 +50,8 @@ describe("skill creator runtime command context", () => {
     expect(block).toContain("The user invoked /skill-creator");
     expect(block).toContain(SKILL_CREATOR_WORKSPACE_SKILL_SLUG);
     expect(block).toContain("skills/<skill-slug>/");
+    expect(block).toContain("YAML frontmatter");
+    expect(block).toContain("name: <skill-slug>");
     expect(block).toContain("register the changed skill folder");
     expect(block).toContain("Do not ask the user for skillDraftId");
     expect(block).toContain("until the user approves it");
