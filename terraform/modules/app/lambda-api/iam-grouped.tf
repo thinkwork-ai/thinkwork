@@ -481,6 +481,10 @@ locals {
           # before AgentCore so Pi can opt into the rendered
           # per-(agent, Space, user) workspace prefix.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-renderer",
+          # skill-trust-runner: graphql-http's publishSkillDraft mutation
+          # invokes this with RequestResponse so SkillSpector completion is a
+          # server-side publish gate, not just an operator UI affordance.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-skill-trust-runner",
         ]
       },
       # (was standalone managed policy "workspace_renderer_invoke")

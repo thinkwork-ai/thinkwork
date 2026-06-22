@@ -126,6 +126,7 @@ jobs:
               - 'packages/pi-aws/**'
               - 'packages/pi-extensions/**'
               - 'packages/pi-runtime-core/**'
+              - 'packages/skill-trust-runner/**'
               # Build config changes count as container changes — a
               # platform or base-image tweak must rebuild even if no
               # Python source moved.
@@ -162,6 +163,7 @@ jobs:
             packages/pi-aws \
             packages/pi-extensions \
             packages/pi-runtime-core \
+            packages/skill-trust-runner \
             .github/workflows/deploy.yml)
           echo "sha=$PI_SHA" >> "$GITHUB_OUTPUT"
           echo "pi_sha=$PI_SHA" >> "$GITHUB_OUTPUT"
@@ -244,7 +246,7 @@ jobs:
     # Multi-arch QEMU builds are 3-5x slower than single-arch native.
     # 30 is comfortable headroom; 20 was already tight for the old
     # amd64-only build with playwright installed.
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -311,6 +313,36 @@ jobs:
           cache-from: type=gha,scope=pi-arm64
           cache-to: type=gha,scope=pi-arm64,mode=max
           provenance: false
+
+      - name: Build and push Skill Trust runner amd64 (Lambda)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/skill-trust-runner/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-skill-trust-runner
+            ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:skill-trust-runner-latest
+          cache-from: type=gha,scope=skill-trust-runner-amd64
+          cache-to: type=gha,scope=skill-trust-runner-amd64,mode=max
+          provenance: false
+
+      - name: Update Skill Trust runner Lambda function code
+        run: |
+          if aws lambda get-function \
+            --function-name thinkwork-${{ env.STAGE }}-skill-trust-runner \
+            --region ${{ env.AWS_REGION }} >/dev/null 2>&1; then
+            aws lambda update-function-code \
+              --function-name thinkwork-${{ env.STAGE }}-skill-trust-runner \
+              --image-uri ${{ steps.ecr.outputs.registry }}/thinkwork-${{ env.STAGE }}-agentcore:${{ github.sha }}-skill-trust-runner \
+              --region ${{ env.AWS_REGION }}
+            aws lambda wait function-updated \
+              --function-name thinkwork-${{ env.STAGE }}-skill-trust-runner \
+              --region ${{ env.AWS_REGION }}
+          else
+            echo "Skill Trust runner Lambda function not found yet; terraform apply will create it from skill-trust-runner-latest."
+          fi
 
       - name: Update Pi Lambda function code (x86_64)
         run: |

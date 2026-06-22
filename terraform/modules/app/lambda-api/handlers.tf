@@ -368,6 +368,30 @@ locals {
   }
 }
 
+resource "aws_lambda_function" "skill_trust_runner" {
+  count = local.deploy_lambda_handlers && trimspace(var.ecr_repository_url) != "" ? 1 : 0
+
+  function_name = "thinkwork-${var.stage}-skill-trust-runner"
+  role          = aws_iam_role.lambda.arn
+  package_type  = "Image"
+  image_uri     = "${var.ecr_repository_url}:skill-trust-runner-latest"
+  timeout       = 60
+  memory_size   = 1024
+  architectures = ["x86_64"]
+
+  environment {
+    variables = {
+      SKILLSPECTOR_LOG_LEVEL       = "WARNING"
+      SKILLSPECTOR_TIMEOUT_SECONDS = "45"
+    }
+  }
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-skill-trust-runner"
+    Handler = "skill-trust-runner"
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Helper: creates Lambda functions from a local zip directory or release S3 keys
 # ---------------------------------------------------------------------------
