@@ -826,5 +826,6 @@ PR:
 
 - All planned units U1-U8 are implemented and merged.
 - Merged PRs: #2854, #2859, #2861, #2867, #2868, #2869, #2872, #2874,
-  #2876.
-- Final status-doc closeout PR is the only remaining bookkeeping step.
+  #2876, #2878.
+- Final status closeout, Linear completion, and branch/worktree cleanup are
+  complete.
