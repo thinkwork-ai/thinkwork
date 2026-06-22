@@ -15,11 +15,10 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U7 Chat Skill Creator Registration Fix.
-- Current branch: `codex/thnk-11-u7-registration-fix`.
-- Current worktree: `.Codex/worktrees/thnk-11-u7-registration-fix`.
-- Current pull request:
-  [#2830](https://github.com/thinkwork-ai/thinkwork/pull/2830).
+- Current unit: U8 Deployed SkillSpector Runner.
+- Current branch: `codex/thnk-11-u8-skillspector-runner`.
+- Current worktree: `.Codex/worktrees/thnk-11-u8-skillspector-runner`.
+- Current pull request: [#2831](https://github.com/thinkwork-ai/thinkwork/pull/2831).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -96,6 +95,26 @@ status: in_progress
     when finalize lacks a cost owner, and strengthen the runtime prompt so
     generated `SKILL.md` files include required YAML frontmatter before the
     draft is submitted.
+  - U7 PR [#2830](https://github.com/thinkwork-ai/thinkwork/pull/2830)
+    passed required CI, squash merged as
+    `14566a0419eeae96a3c19c1292dffd14b65b4a4e`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
+  - U7 deployment completed successfully in GitHub run `27929412342`,
+    including Terraform Apply, workspace layout migration, AgentCore runtime
+    update, and Deploy Summary.
+  - Localhost E2E after U7 deploy used `http://localhost:5175` only. Chat
+    thread `88ea75a6-f2bf-4eef-92ca-78fcd4f55f02` created
+    `codex-e2e-skill-20260622b`; Skill Library -> Drafts showed the generated
+    draft as `submitted`, requested by Eric, and linked to that thread. The
+    operator Publish action failed closed because deployed SkillSpector was not
+    configured.
+  - U8 started from a clean isolated worktree created from `origin/main` after
+    U7 merge/deploy. Scope: provision a deployed SkillSpector runner that uses
+    the actual NVIDIA SkillSpector CLI and have both draft publishing and
+    on-demand Skill Detail trust runs invoke it.
+  - U8 PR [#2831](https://github.com/thinkwork-ai/thinkwork/pull/2831)
+    opened after local verification passed.
 - Local verification:
   - U2 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
@@ -283,7 +302,32 @@ status: in_progress
     `@thinkwork/api` (564 files passed, 3 skipped; 5263 tests passed, 9
     skipped), `@thinkwork/web` (187 files, 1427 tests), release tests, and
     plugin-source-boundary tests.
+  - U8 `pnpm install --frozen-lockfile --offline` completed in the fresh
+    worktree; local Node 25 logged the existing optional `canvas@2.11.2`
+    native fallback/missing `pkg-config` warning, but pnpm returned success.
+  - U8 focused verification passed:
+    `pnpm --filter @thinkwork/api test -- src/lib/skill-trust/skillspector.test.ts`
+    (5 tests);
+    `uv run --with pytest pytest packages/skill-trust-runner/tests/test_handler.py`
+    (6 tests); and
+    `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf terraform/modules/app/lambda-api/iam-grouped.tf`.
+  - U8 actual SkillSpector smoke passed outside Docker: installed pinned
+    upstream commit `a5092dd9b9521ff57a9b53612bb129ce78019002` into a temporary
+    Python environment and ran `skillspector scan <fixture> --no-llm --format json -o report.json`;
+    the generated report contained `components`, `issues`, `metadata`,
+    `risk_assessment`, and `skill`, with SkillSpector version `2.2.3`.
+  - U8 Docker build could not be run locally because the Docker daemon is not
+    running on this machine; the deploy workflow now builds and pushes the
+    runner image before Terraform apply.
+  - U8 broader gates passed: `pnpm lint`, `pnpm typecheck`, targeted Prettier
+    3.8.2 check for touched files, `git diff --check`, and full `pnpm test`.
+    The first full test run hit the known local Electron extraction race
+    (`EEXIST: ... Electron Framework`); removing the generated Electron
+    `dist`/`path.txt` artifact and rerunning Electron's installer repaired the
+    local package, after which `pnpm --filter @thinkwork/desktop test` and full
+    `pnpm test` passed.
 - PR / CI:
+  - U8 PR: pending.
   - U7 PR: [#2830](https://github.com/thinkwork-ai/thinkwork/pull/2830).
   - U7 CI passed on first PR run: CLA, lint, verify, typecheck, and test.
   - U6 PR: [#2829](https://github.com/thinkwork-ai/thinkwork/pull/2829).

@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { TextDecoder } from "node:util";
 import type {
   SkillSpectorReportSummary,
   SkillTrustFinding,
@@ -17,6 +18,11 @@ export async function runSkillSpectorForFiles(input: {
   slug: string;
   files: SkillTrustInputFile[];
 }): Promise<SkillSpectorRunResult> {
+  const runnerFunctionName = resolveSkillTrustRunnerFunctionName();
+  if (runnerFunctionName) {
+    return runSkillSpectorWithRunner(runnerFunctionName, input);
+  }
+
   const bin = process.env.SKILLSPECTOR_BIN?.trim();
   if (!bin) {
     return {
@@ -90,6 +96,86 @@ export async function runSkillSpectorForFiles(input: {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+
+function resolveSkillTrustRunnerFunctionName(): string {
+  const explicit = process.env.SKILL_TRUST_RUNNER_FUNCTION_NAME?.trim();
+  if (explicit) return explicit;
+  const stage = process.env.STAGE?.trim();
+  if (stage && process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return `thinkwork-${stage}-skill-trust-runner`;
+  }
+  return "";
+}
+
+async function runSkillSpectorWithRunner(
+  runnerFunctionName: string,
+  input: { slug: string; files: SkillTrustInputFile[] },
+): Promise<SkillSpectorRunResult> {
+  try {
+    const { InvokeCommand, LambdaClient } =
+      await import("@aws-sdk/client-lambda");
+    const lambda = new LambdaClient({});
+    const response = await lambda.send(
+      new InvokeCommand({
+        FunctionName: runnerFunctionName,
+        InvocationType: "RequestResponse",
+        Payload: Buffer.from(
+          JSON.stringify({
+            slug: input.slug,
+            files: input.files.map((file) => ({
+              path: file.path,
+              contentBase64: file.content.toString("base64"),
+            })),
+          }),
+        ),
+      }),
+    );
+
+    const payloadText = decodeLambdaPayload(response.Payload);
+    const payload = payloadText
+      ? (JSON.parse(payloadText) as Record<string, unknown>)
+      : {};
+    if (response.FunctionError) {
+      return {
+        scanner: {
+          status: "failed",
+          error: stringValue(payload.error) ?? response.FunctionError,
+        },
+        findings: [],
+      };
+    }
+
+    if (payload.report && typeof payload.report === "object") {
+      return parseSkillSpectorJson(JSON.stringify(payload.report));
+    }
+
+    return {
+      scanner: {
+        status: "failed",
+        error:
+          stringValue(payload.error) ??
+          "SkillSpector runner did not return a JSON report.",
+      },
+      findings: [],
+    };
+  } catch (error) {
+    return {
+      scanner: {
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      },
+      findings: [],
+    };
+  }
+}
+
+function decodeLambdaPayload(payload: unknown): string {
+  if (!payload) return "";
+  if (typeof payload === "string") return payload;
+  if (payload instanceof Uint8Array) return new TextDecoder().decode(payload);
+  if (Buffer.isBuffer(payload)) return payload.toString("utf8");
+  return "";
 }
 
 function parseSkillSpectorJson(raw: string): SkillSpectorRunResult {

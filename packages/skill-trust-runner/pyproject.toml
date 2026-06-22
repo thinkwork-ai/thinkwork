@@ -1,0 +1,16 @@
+[project]
+name = "thinkwork-skill-trust-runner"
+version = "0.1.0"
+description = "AWS Lambda runner for ThinkWork SkillSpector trust scans."
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=9.0.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
