@@ -189,6 +189,25 @@ vi.mock("@/components/LoadingShimmer", () => ({
   LoadingShimmer: () => <div />,
 }));
 
+vi.mock("@/components/ai-elements/response", () => ({
+  Response: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+    <div {...props}>
+      {String(children)
+        .split(/\n+/)
+        .filter(Boolean)
+        .map((line) => {
+          if (line.startsWith("# ")) {
+            return <h1 key={line}>{line.slice(2)}</h1>;
+          }
+          if (line.startsWith("## ")) {
+            return <h2 key={line}>{line.slice(3)}</h2>;
+          }
+          return <p key={line}>{line}</p>;
+        })}
+    </div>
+  ),
+}));
+
 const startRunMock = vi.fn();
 const applyUpdateMock = vi.fn();
 const publishDraftMock = vi.fn();
@@ -543,6 +562,11 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(
       screen.getByText(/Summarizes what the skill does for operators/i),
     ).toBeTruthy();
+    expect(screen.getByTestId("skill-card-markdown")).toBeTruthy();
+    expect(screen.queryByText(/^# Web Research Skill Card$/)).toBeNull();
+    expect(
+      screen.getByTestId("skill-card-markdown").querySelector("pre"),
+    ).toBeNull();
     expect(screen.getByText("c".repeat(64))).toBeTruthy();
   });
 
