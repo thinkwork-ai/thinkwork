@@ -156,6 +156,8 @@ export const BRAIN_ARTIFACT_MANIFEST_KINDS = [
   "migration_snapshot",
   "vault_projection",
   "export",
+  "okf_bundle",
+  "okf_current_manifest",
 ] as const;
 
 export type BrainArtifactManifestKind =
@@ -536,7 +538,7 @@ export const brainArtifactManifests = brain.table(
     ),
     check(
       "brain_artifact_manifests_kind_allowed",
-      sql`${table.manifest_kind} IN ('source_artifact','ingestion_manifest','migration_snapshot','vault_projection','export')`,
+      sql`${table.manifest_kind} IN ('source_artifact','ingestion_manifest','migration_snapshot','vault_projection','export','okf_bundle','okf_current_manifest')`,
     ),
     check(
       "brain_artifact_manifests_tier_allowed",
@@ -548,7 +550,7 @@ export const brainArtifactManifests = brain.table(
     ),
     check(
       "brain_artifact_manifests_source_kind_allowed",
-      sql`${table.source_kind} IS NULL OR ${table.source_kind} IN ('thread','wiki','brain','observations')`,
+      sql`${table.source_kind} IS NULL OR ${table.source_kind} IN ('thread','wiki','brain','observations','okf')`,
     ),
     check(
       "brain_artifact_manifests_object_nonneg",

@@ -190,6 +190,8 @@ describe("migration 0166 — Company Brain substrate contract", () => {
       "migration_snapshot",
       "vault_projection",
       "export",
+      "okf_bundle",
+      "okf_current_manifest",
     ]);
     expect(BRAIN_ARTIFACT_MANIFEST_STATUSES).toEqual([
       "active",

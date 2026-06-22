@@ -11,7 +11,16 @@ export type BrainArtifactManifestKind =
   | "ingestion_manifest"
   | "migration_snapshot"
   | "vault_projection"
-  | "export";
+  | "export"
+  | "okf_bundle"
+  | "okf_current_manifest";
+
+export type BrainArtifactSourceKind =
+  | "thread"
+  | "wiki"
+  | "brain"
+  | "observations"
+  | "okf";
 
 type BrainArtifactS3Client = Pick<S3Client, "send">;
 
@@ -78,6 +87,8 @@ const ARTIFACT_ROOTS: Record<BrainArtifactManifestKind, string> = {
   migration_snapshot: "migration-snapshots",
   vault_projection: "vault-projections",
   export: "exports",
+  okf_bundle: "okf-bundles",
+  okf_current_manifest: "okf-current-manifests",
 };
 
 export async function writeKnowledgeGraphIngestArtifacts(
@@ -295,7 +306,7 @@ export function redactArtifactError(error: unknown): string {
   return message
     .replace(/s3:\/\/[^\s"'`]+/g, "s3://[redacted]")
     .replace(
-      /\b(?:source-artifacts|ingestion-manifests|migration-snapshots|vault-projections|exports)\/[^\s"'`,}]+/g,
+      /\b(?:source-artifacts|ingestion-manifests|migration-snapshots|vault-projections|exports|okf-bundles|okf-current-manifests)\/[^\s"'`,}]+/g,
       "[redacted-s3-key]",
     )
     .replace(/\b[a-z0-9.-]*brain-artifacts[a-z0-9.-]*\b/gi, "[redacted-bucket]")
@@ -351,7 +362,7 @@ async function upsertArtifactManifestRecord(args: {
   db: Database;
   tenantId: string;
   ingestRunId: string | null;
-  sourceKind: "thread" | "wiki" | "brain" | "observations";
+  sourceKind: BrainArtifactSourceKind;
   sourceType: string;
   sourceIds: string[];
   sourceIdHash: string;

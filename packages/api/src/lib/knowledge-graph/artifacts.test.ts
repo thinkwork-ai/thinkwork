@@ -172,15 +172,16 @@ describe("Company Brain artifact helpers", () => {
   it("redacts bucket names, object keys, and source identifiers from errors", () => {
     const redacted = redactArtifactError(
       new Error(
-        "AccessDenied bucket thinkwork-dev-brain-artifacts key ingestion-manifests/tenant-1/source-id-secret/manifest.json sourceRef=connector-secret",
+        "AccessDenied bucket thinkwork-dev-brain-artifacts key ingestion-manifests/tenant-1/source-id-secret/manifest.json okf-bundles/tenant-1/current/manifest.json sourceRef=connector-secret",
       ),
     );
 
     expect(redacted).toContain("[redacted-bucket]");
-    expect(redacted).toContain("[redacted-s3-key]");
+    expect(redacted.match(/\[redacted-s3-key\]/g)).toHaveLength(2);
     expect(redacted).toContain("sourceRef=[redacted]");
     expect(redacted).not.toContain("thinkwork-dev-brain-artifacts");
     expect(redacted).not.toContain("source-id-secret");
+    expect(redacted).not.toContain("okf-bundles/tenant-1");
     expect(redacted).not.toContain("connector-secret");
   });
 
