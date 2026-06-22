@@ -2,6 +2,8 @@
 
 This runbook verifies THNK-63 U7: DB wiki, OKF traversal, hybrid DB+OKF, raw
 memory, and knowledge graph retrieval are compared before any routing cutover.
+Read `docs/src/content/docs/concepts/knowledge/okf-wiki-navigator.mdx` for the
+projection and runtime boundary.
 
 Dry-run is safe and does not mutate a stage:
 

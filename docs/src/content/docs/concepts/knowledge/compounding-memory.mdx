@@ -3,7 +3,7 @@ title: Compiled Memory Pages
 description: What happens when an agent keeps learning — scattered memories become durable pages about the people, places, topics, and decisions that matter.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
 Ask your agent about a place it's been helping you think about for months. In most systems, it answers by pulling twenty different memory snippets and summarizing them on the fly — new summary every time, never the same twice.
 
@@ -18,6 +18,8 @@ Three things change when memory compounds into pages.
 **You can actually see what your agent knows.** Pages are markdown. They have titles, sections, and links to each other. You can browse them. You can export them.
 
 **Context gets precise.** When the agent needs to answer "what restaurants do I like in Lisbon?", it reads one page instead of re-reading fifty memories.
+
+**Agents can traverse the page graph when it is explicitly enabled.** The [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) projects compiled pages into a read-only linked markdown filesystem so a Pi runtime can search, read, and follow links with trace evidence. That projection is rebuildable output, not the source of truth.
 
 ## The three kinds of pages
 
@@ -55,7 +57,7 @@ Compounding happens in the background. Here's the shape of it without the plumbi
 
 Step 4 is deliberately conservative. Your agent won't create a page the first time it sees a new name. It holds that name as an **unresolved mention** and waits until it sees the same thing a few more times before giving it a real page. This keeps the wiki from filling up with noise.
 
-Step 6 is what makes memory *compound* instead of just piling up. As you mention Austin restaurants over and over, the Austin page's rollup section grows. When it's dense enough, it becomes its own page — and that page can then grow its own sections which eventually promote again. Recursive, grounded, self-organizing.
+Step 6 is what makes memory _compound_ instead of just piling up. As you mention Austin restaurants over and over, the Austin page's rollup section grows. When it's dense enough, it becomes its own page — and that page can then grow its own sections which eventually promote again. Recursive, grounded, self-organizing.
 
 ## What your agent does vs. what you see
 
@@ -76,6 +78,7 @@ This is deliberate. Shared wikis across a team raise real questions — who sees
 
 - [Memory Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how a memory actually becomes a page
 - [Memory Page Model](/concepts/knowledge/compounding-memory-pages/) — the full data model
+- [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) — read-only filesystem traversal over compiled pages
 - [Operating Compiled Memory Pages](/guides/compounding-memory-operations/) — turning it on, troubleshooting
 - [Compiled Pages API](/api/compounding-memory/) — GraphQL reference
 - [Retained Memory](/concepts/knowledge/memory/) — the raw memory compiled pages sit on top of
@@ -87,6 +90,10 @@ This is deliberate. Shared wikis across a team raise real questions — who sees
 ### What's really happening
 
 Raw long-term memory (Hindsight or AgentCore) stays the canonical record. The wiki is a derived, rebuildable view — every page can be reconstructed by replaying the compile pipeline over the same memory records.
+
+The OKF filesystem view adds one more derived layer. S3 holds versioned OKF
+bundles and current manifests for audit; EFS holds the currently mounted,
+read-only projection for Pi traversal. Neither layer should be edited directly.
 
 ### Where scope lives
 
