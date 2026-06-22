@@ -26,9 +26,11 @@ import { SettingsSkillDetail } from "./SettingsSkillDetail";
 
 const mocks = vi.hoisted(() => ({
   exportSkillArchive: vi.fn(),
+  fixSkillTrustEvidence: vi.fn(),
   runSkillTrustPipeline: vi.fn(),
   setHeader: vi.fn(),
   toastError: vi.fn(),
+  toastInfo: vi.fn(),
   toastSuccess: vi.fn(),
   workspaceFileEditor: vi.fn(),
   createObjectURL: vi.fn(),
@@ -72,6 +74,7 @@ vi.mock("@/lib/workspace-files-api", async (importOriginal) => {
   return {
     ...actual,
     exportSkillArchive: mocks.exportSkillArchive,
+    fixSkillTrustEvidence: mocks.fixSkillTrustEvidence,
     runSkillTrustPipeline: mocks.runSkillTrustPipeline,
   };
 });
@@ -88,6 +91,7 @@ vi.mock("@/lib/utils", async (importOriginal) => {
 vi.mock("sonner", () => ({
   toast: {
     error: mocks.toastError,
+    info: mocks.toastInfo,
     success: mocks.toastSuccess,
   },
 }));
@@ -96,6 +100,7 @@ vi.mock("@thinkwork/workspace-editor", () => ({
   WorkspaceFileEditor: (props: {
     defaultOpenFile?: string;
     target?: { skill?: string };
+    targetKey?: string;
   }) => {
     mocks.workspaceFileEditor(props);
     return (
@@ -103,6 +108,7 @@ vi.mock("@thinkwork/workspace-editor", () => ({
         data-testid="skill-file-editor"
         data-default-open-file={props.defaultOpenFile}
         data-skill={props.target?.skill}
+        data-target-key={props.targetKey}
       />
     );
   },
@@ -292,8 +298,52 @@ beforeEach(() => {
       evals: [],
     },
   });
+  mocks.fixSkillTrustEvidence.mockReset();
+  mocks.fixSkillTrustEvidence.mockResolvedValue({
+    slug: "web-research",
+    fixedStep: {
+      step: "skillCard",
+      status: "generated",
+      message: "Generated skill-card.md.",
+    },
+    artifactPath: "skill-card.md",
+    trustReport: {
+      slug: "web-research",
+      contentHash: "b".repeat(64),
+      generatedAt: "2026-06-22T00:00:00.000Z",
+      status: "review",
+      summary: "Skill card evidence generated.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "not_configured" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "starter_generated",
+        evalDataset: "missing",
+        benchmark: "missing",
+        signature: "missing",
+      },
+      artifactPaths: {
+        skillCard: "skill-card.md",
+        evals: [],
+      },
+    },
+  });
   mocks.setHeader.mockReset();
   mocks.toastError.mockReset();
+  mocks.toastInfo.mockReset();
   mocks.toastSuccess.mockReset();
   mocks.workspaceFileEditor.mockReset();
   mocks.createObjectURL.mockReset();
@@ -570,6 +620,384 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Skill trust pipeline completed.",
     );
+  });
+
+  it("opens a trust step detail from a clickable evidence row", async () => {
+    render(<SettingsSkillDetail />);
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+    await screen.findByText("Pipeline status");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Skill card trust step/i }),
+    );
+
+    expect(screen.getByTestId("skill-trust-step-detail")).toBeTruthy();
+    expect(
+      screen.getByText(/Documents what the skill does, who owns it/i),
+    ).toBeTruthy();
+    expect(screen.getByText("skill-card.md")).toBeTruthy();
+    expect(screen.getByText("Current state")).toBeTruthy();
+  });
+
+  it("generates a missing skill card and refreshes the trust report", async () => {
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-21T00:00:00.000Z",
+      status: "review",
+      summary: "Missing skill card.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "missing",
+        evalDataset: "present",
+        benchmark: "present",
+        signature: "verified",
+      },
+      artifactPaths: {
+        evals: ["evals/smoke.json"],
+        benchmark: "BENCHMARK.md",
+        signature: "skill.oms.sig",
+      },
+    });
+    render(<SettingsSkillDetail />);
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+    await screen.findByRole("button", {
+      name: /Skill card trust step: missing/i,
+    });
+    fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
+
+    await waitFor(() =>
+      expect(mocks.fixSkillTrustEvidence).toHaveBeenCalledWith(
+        "web-research",
+        "skillCard",
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText("starter generated").length).toBeGreaterThan(
+        0,
+      ),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Generated skill-card.md.");
+  });
+
+  it("shows the signing prerequisite instead of offering a fake signature", async () => {
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-21T00:00:00.000Z",
+      status: "passed",
+      summary: "Signing is not configured.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "present",
+        evalDataset: "present",
+        benchmark: "present",
+        signature: "missing_signing_config",
+      },
+      artifactPaths: {
+        skillCard: "skill-card.md",
+        evals: ["evals/smoke.json"],
+        benchmark: "BENCHMARK.md",
+      },
+    });
+    render(<SettingsSkillDetail />);
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+    await screen.findByRole("button", {
+      name: /Signature trust step: missing signing config/i,
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Signature trust step: missing signing config/i,
+      }),
+    );
+
+    expect(
+      screen.getByText(/Signing is not configured for this environment/i),
+    ).toBeTruthy();
+    expect(screen.queryByTestId("skill-trust-fix-step")).toBeNull();
+    expect(mocks.fixSkillTrustEvidence).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the editor target key after generating benchmark evidence", async () => {
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-21T00:00:00.000Z",
+      status: "review",
+      summary: "Missing benchmark.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "present",
+        evalDataset: "present",
+        benchmark: "missing",
+        signature: "missing",
+      },
+      artifactPaths: {
+        skillCard: "skill-card.md",
+        evals: ["evals/smoke.json"],
+      },
+    });
+    mocks.fixSkillTrustEvidence.mockResolvedValueOnce({
+      slug: "web-research",
+      fixedStep: {
+        step: "benchmark",
+        status: "generated",
+        message: "Generated BENCHMARK.md.",
+      },
+      artifactPath: "BENCHMARK.md",
+      trustReport: {
+        slug: "web-research",
+        contentHash: "c".repeat(64),
+        generatedAt: "2026-06-22T00:00:00.000Z",
+        status: "passed",
+        summary: "Benchmark evidence generated.",
+        spec: {
+          status: "passed",
+          name: "web-research",
+          description: "Researches the web.",
+          allowedTools: ["web_search"],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "present",
+          evalDataset: "present",
+          benchmark: "starter_generated",
+          signature: "missing",
+        },
+        artifactPaths: {
+          skillCard: "skill-card.md",
+          evals: ["evals/smoke.json"],
+          benchmark: "BENCHMARK.md",
+        },
+      },
+    });
+    render(<SettingsSkillDetail />);
+    const initialKey =
+      mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.targetKey;
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+    await screen.findByRole("button", {
+      name: /Benchmark trust step: missing/i,
+    });
+    fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
+
+    await waitFor(() =>
+      expect(mocks.fixSkillTrustEvidence).toHaveBeenCalledWith(
+        "web-research",
+        "benchmark",
+      ),
+    );
+    await waitFor(() => {
+      const latestKey =
+        mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.targetKey;
+      expect(latestKey).not.toBe(initialKey);
+      expect(latestKey).toBe("skill:web-research:1");
+    });
+  });
+
+  it("keeps the refreshed report visible with a catalog reindex warning", async () => {
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-21T00:00:00.000Z",
+      status: "review",
+      summary: "Missing skill card.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "missing",
+        evalDataset: "present",
+        benchmark: "present",
+        signature: "missing",
+      },
+      artifactPaths: {
+        evals: ["evals/smoke.json"],
+        benchmark: "BENCHMARK.md",
+      },
+    });
+    mocks.fixSkillTrustEvidence.mockResolvedValueOnce({
+      slug: "web-research",
+      fixedStep: {
+        step: "skillCard",
+        status: "generated",
+        message: "Generated skill-card.md.",
+      },
+      artifactPath: "skill-card.md",
+      indexWarning: "Skill catalog index not updated.",
+      trustReport: {
+        slug: "web-research",
+        contentHash: "b".repeat(64),
+        generatedAt: "2026-06-22T00:00:00.000Z",
+        status: "review",
+        summary: "Generated with warning.",
+        spec: {
+          status: "passed",
+          name: "web-research",
+          description: "Researches the web.",
+          allowedTools: ["web_search"],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "starter_generated",
+          evalDataset: "present",
+          benchmark: "present",
+          signature: "missing",
+        },
+        artifactPaths: {
+          skillCard: "skill-card.md",
+          evals: ["evals/smoke.json"],
+          benchmark: "BENCHMARK.md",
+        },
+      },
+    });
+    render(<SettingsSkillDetail />);
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+    await screen.findByRole("button", {
+      name: /Skill card trust step: missing/i,
+    });
+    fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
+
+    expect(
+      await screen.findByText("Skill catalog index not updated."),
+    ).toBeTruthy();
+    expect(screen.getAllByText("starter generated").length).toBeGreaterThan(0);
+  });
+
+  it("surfaces trust evidence fix failures without clearing the report", async () => {
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-21T00:00:00.000Z",
+      status: "review",
+      summary: "Missing benchmark.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "present",
+        evalDataset: "present",
+        benchmark: "missing",
+        signature: "missing",
+      },
+      artifactPaths: {
+        skillCard: "skill-card.md",
+        evals: ["evals/smoke.json"],
+      },
+    });
+    mocks.fixSkillTrustEvidence.mockRejectedValueOnce(new Error("writer down"));
+    render(<SettingsSkillDetail />);
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+    await screen.findByRole("button", {
+      name: /Benchmark trust step: missing/i,
+    });
+    fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Could not fix the trust step: writer down",
+      ),
+    );
+    expect(screen.getAllByText("missing").length).toBeGreaterThan(0);
   });
 
   it("surfaces Skill Trust pipeline failures", async () => {

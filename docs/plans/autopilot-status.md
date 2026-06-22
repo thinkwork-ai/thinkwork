@@ -14,12 +14,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U2 - Expose catalog evidence fixes through workspace-files.
-- Current branch: `codex/thnk-11-u2-workspace-files-fixes`.
+- Current unit: U3 - Add clickable trust step detail UI.
+- Current branch: `codex/thnk-11-u3-trust-step-ui`.
 - Current worktree:
-  `.Codex/worktrees/thnk-11-u2-workspace-files-fixes`.
+  `.Codex/worktrees/thnk-11-u3-trust-step-ui`.
 - Current pull request:
-  [#2838](https://github.com/thinkwork-ai/thinkwork/pull/2838).
+  [#2839](https://github.com/thinkwork-ai/thinkwork/pull/2839).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -41,6 +41,19 @@ status: in_progress
     helper so the UI can generate individual trust evidence artifacts.
   - 2026-06-22: U2 PR
     [#2838](https://github.com/thinkwork-ai/thinkwork/pull/2838) opened and
+    CI monitoring started.
+  - 2026-06-22: U2 PR
+    [#2838](https://github.com/thinkwork-ai/thinkwork/pull/2838) passed
+    required CI, squash merged as
+    `a9234e2cb7ebb49d9a7a589e12a9c8c43a64e255`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U3 started from a clean isolated worktree created from
+    `origin/main` after U2 merge. Scope: make trust pipeline rows clickable,
+    add a step detail pane with purpose/current state/artifact evidence, and
+    wire missing evidence steps to the workspace-files fix action.
+  - 2026-06-22: U3 PR
+    [#2839](https://github.com/thinkwork-ai/thinkwork/pull/2839) opened and
     CI monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
@@ -76,6 +89,12 @@ status: in_progress
     `pnpm dlx prettier@3.8.2 --check ...`.
   - U2 `git diff --check` passed.
   - U2 pre-PR review pass completed with no blocking findings.
+  - U3 focused Skill Detail component tests passed:
+    `pnpm --dir apps/web exec vitest run src/components/settings/SettingsSkillDetail.test.tsx`
+    (18 tests).
+  - U3 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U3 full web test suite passed: `pnpm --filter @thinkwork/web test` (187
+    files passed; 1438 tests passed).
 
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 
