@@ -68,6 +68,7 @@ type TurnSeed = {
   systemPrompt: string | null;
   /** Raw ThreadTurn.contextSnapshot — carries workspace_projection (U9). */
   contextSnapshot?: unknown;
+  usageJson?: unknown;
 };
 
 function makeTurn(seed: TurnSeed) {
@@ -81,12 +82,14 @@ function makeTurn(seed: TurnSeed) {
     runtimeType: "Pi",
     invocationSource: "chat_message",
     resultJson: null,
-    usageJson: JSON.stringify({
-      model: "kimi-k2.5",
-      input_tokens: 100,
-      output_tokens: 20,
-      duration_ms: 1000,
-    }),
+    usageJson:
+      seed.usageJson ??
+      JSON.stringify({
+        model: "kimi-k2.5",
+        input_tokens: 100,
+        output_tokens: 20,
+        duration_ms: 1000,
+      }),
     systemPrompt: seed.systemPrompt,
     contextSnapshot: seed.contextSnapshot,
   };
@@ -188,6 +191,58 @@ describe("ExecutionTrace — Agent step system prompt", () => {
 });
 
 describe("ExecutionTrace — non-redundant turn metadata", () => {
+  it("renders wiki context tool invocations as wiki timeline rows", () => {
+    mockUrql([
+      makeTurn({
+        id: "turn-wiki",
+        systemPrompt: null,
+        usageJson: JSON.stringify({
+          model: "kimi-k2.5",
+          input_tokens: 100,
+          output_tokens: 20,
+          tool_invocations: [
+            {
+              id: "tool-wiki",
+              tool_name: "query_wiki_context",
+              input_preview: '{"query":"Acme renewal"}',
+              result: {
+                details: {
+                  wiki_context: {
+                    query: "Acme renewal",
+                    retrieval_mode: "db",
+                    status: "ok",
+                    result_count: 3,
+                    top_pages: [
+                      {
+                        id: "page-1",
+                        title: "Acme Renewal",
+                        slug: "acme-renewal",
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        }),
+      }),
+    ]);
+    const { container } = render(
+      <ExecutionTrace threadId="thread-1" tenantId="tenant-1" />,
+    );
+
+    expect(screen.getByText("Wiki: 3 pages")).toBeTruthy();
+    const wikiRow = Array.from(
+      container.querySelectorAll('[data-timeline-event-type="tool_call"]'),
+    ).find((row) => row.textContent?.includes("Wiki: 3 pages"));
+    expect(wikiRow).toBeTruthy();
+
+    fireEvent.click(wikiRow as HTMLElement);
+    expect(screen.getByText("Wiki Context")).toBeTruthy();
+    expect(screen.getByText(/Query: Acme renewal/)).toBeTruthy();
+    expect(screen.getByText(/Top pages: Acme Renewal/)).toBeTruthy();
+  });
+
   it("drops the entire expanded metadata block (ID/Started/Finished/Source/Runtime)", () => {
     mockUrql([makeTurn({ id: "turn-meta", systemPrompt: "P" })]);
     const { container } = render(

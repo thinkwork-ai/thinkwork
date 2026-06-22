@@ -161,8 +161,8 @@ describe("U7 capability extensions", () => {
     expect((result.content?.[0] as { text: string }).text).toContain(
       "Open Opportunity Value by Owner",
     );
-    const analyticsProps = (result.details as any).threadGenUI.data.spec.elements
-      .analytics.props;
+    const analyticsProps = (result.details as any).threadGenUI.data.spec
+      .elements.analytics.props;
     expect(analyticsProps.spec.columns).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: "open_value", label: "Open Value" }),
@@ -547,6 +547,93 @@ describe("U7 capability extensions", () => {
     expect((result.content?.[0] as { text: string }).text).toBe(
       "brain shortlist",
     );
+  });
+
+  it("context-engine adds structured wiki context metadata to wiki lookup results", async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        result: {
+          content: [{ type: "text", text: "1. [wiki] Acme Renewal" }],
+          structuredContent: {
+            query: "Acme renewal",
+            mode: "results",
+            scope: "auto",
+            depth: "quick",
+            hits: [
+              {
+                id: "wiki:page-1",
+                title: "Acme Renewal",
+                family: "wiki",
+                score: 0.92,
+                scope: "auto",
+                metadata: {
+                  page: {
+                    id: "page-1",
+                    slug: "acme-renewal",
+                    type: "entity",
+                  },
+                },
+              },
+            ],
+            providers: [
+              {
+                providerId: "wiki",
+                displayName: "Company Brain Pages",
+                state: "ok",
+                hitCount: 1,
+                durationMs: 12,
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(
+      createContextEngineExtension({
+        enabled: true,
+        apiUrl: "https://api.example.com",
+        apiSecret: "secret",
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        fetchImpl,
+      }),
+      {},
+    )(api);
+
+    const result = await getTool(tools, "query_wiki_context").execute(
+      "call-1",
+      { query: "Acme renewal", limit: 3 },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    expect((result.details as any).wiki_context).toMatchObject({
+      surface: "query_wiki_context",
+      retrieval_mode: "db",
+      query: "Acme renewal",
+      result_count: 1,
+      answered_from_db: true,
+      top_pages: [
+        {
+          id: "page-1",
+          context_id: "wiki:page-1",
+          title: "Acme Renewal",
+          slug: "acme-renewal",
+          type: "entity",
+        },
+      ],
+      provider_states: [
+        {
+          provider_id: "wiki",
+          state: "ok",
+          hit_count: 1,
+          duration_ms: 12,
+        },
+      ],
+    });
   });
 
   it("context-engine keeps disabled and empty Brain query behavior explicit", async () => {
