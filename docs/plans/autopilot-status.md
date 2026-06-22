@@ -16,7 +16,8 @@ status: in_progress
 - Current unit: U3 - AgentLoop dispatcher and scheduled firing.
 - Current branch: `codex/agent-loop-u3-dispatcher`.
 - Current worktree: `.Codex/worktrees/agent-loop-u3-dispatcher`.
-- Current pull request: not opened yet.
+- Current pull request:
+  [#2850](https://github.com/thinkwork-ai/thinkwork/pull/2850).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -144,6 +145,9 @@ status: in_progress
     `pnpm dlx prettier@3.6.2 --check <touched files>`; root
     `pnpm format:check` remains locally blocked by the missing root/local
     Prettier binary.
+  - 2026-06-22: U3 PR
+    [#2850](https://github.com/thinkwork-ai/thinkwork/pull/2850) opened and CI
+    monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 
