@@ -73,6 +73,13 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   while U3 starts.
 - 2026-06-22T17:40:12Z: Added Linear U3 PR-opened comment
   `e7920909-f22d-45d6-8ac1-b1079e79b1c2`; monitoring PR CI.
+- 2026-06-22T18:36:18Z: Added Linear U3 merged/cleanup comment
+  `bda47046-22a9-48a9-90ae-b708f39a75ae`; THNK-63 remains `In Progress`
+  while U4 starts.
+- 2026-06-22T18:42:45Z: Added Linear U4 start comment
+  `e8491d45-e3ea-439d-9548-2f50dda76099`.
+- 2026-06-22T19:07:37Z: Added Linear U4 PR-opened comment
+  `7d832401-8102-42a2-b510-3aed830bc51e`; monitoring PR #2867 CI.
 
 ## Unit Log
 
@@ -356,3 +363,95 @@ Local verification:
 PR:
 
 - Opened: https://github.com/thinkwork-ai/thinkwork/pull/2861
+- Merged: 2026-06-22T18:35:00Z.
+- Merge commit: `472a57a407a38d0b02089594cf4116c379dddde3`.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Cleanup: remote branch was deleted by GitHub; local U3 worktree and branch
+  were removed before U4 continued from current `origin/main`.
+
+### U4: Implement Bounded OKF Filesystem Provider
+
+Objective: add the shared OKF wiki navigator provider interface and host-side
+AgentCore Pi filesystem implementation that safely lists, searches, reads, and
+inspects links under the mounted tenant current OKF tree, rejecting traversal,
+symlink escapes, hidden/binary/unsupported files, cross-tenant paths, and
+oversized reads with bounded diagnostics before any model-facing tools exist.
+
+Branch/worktree:
+
+- Branch: `codex/thnk-63-u4-okf-provider`
+- Worktree: `.Codex/worktrees/thnk-63-u4-okf-provider`
+- Base: `origin/main` at `472a57a40`.
+
+Local verification:
+
+- 2026-06-22T18:46Z: Focused Pi runtime core OKF navigator contract test
+  passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- test/okf-wiki-navigator.test.ts`
+  (1 file, 2 tests).
+- 2026-06-22T18:46Z: Focused AgentCore Pi filesystem provider test first caught
+  backlink scanning over a binary markdown fixture; after fixing discovered-file
+  skipping, the provider test passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/okf-wiki-provider.test.ts`
+  (1 file, 8 tests).
+- 2026-06-22T18:46Z: Package typechecks passed:
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck` and
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+- 2026-06-22T18:49Z: Touched-file whitespace and formatting checks passed:
+  `git diff --check` and
+  `pnpm dlx prettier@3.8.2 --check docs/plans/autopilot/THNK-63-status.md packages/pi-runtime-core/src/index.ts packages/pi-runtime-core/src/types.ts packages/pi-runtime-core/src/okf-wiki-navigator.ts packages/pi-runtime-core/test/okf-wiki-navigator.test.ts packages/agentcore-pi/agent-container/src/runtime/providers/okf-wiki-provider.ts packages/agentcore-pi/agent-container/tests/okf-wiki-provider.test.ts`.
+- 2026-06-22T18:49Z: Full package tests passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test` (13 files, 113 tests) and
+  `pnpm --filter @thinkwork/agentcore-pi test` (34 files, 602 passed, 5 todo).
+- 2026-06-22T18:50Z: Broad repo gates passed:
+  `pnpm lint` and `pnpm typecheck`.
+- 2026-06-22T18:53Z: Broad `pnpm test` passed, including release and
+  plugin-source-boundary tests.
+- 2026-06-22T18:53Z: Root `pnpm format:check` failed because no root
+  `prettier` executable was installed; it printed
+  `sh: prettier: command not found`. The pinned touched-file Prettier check
+  above passed.
+- 2026-06-22T18:56Z: After normalizing the status doc and provider test with
+  Prettier, reran `git diff --check`, the pinned touched-file Prettier check,
+  and the focused AgentCore Pi provider test; all passed.
+- 2026-06-22T19:01Z: Repaired a worktree-local Electron binary extraction race
+  under `node_modules` and reran the desktop suite; it passed afterward.
+- 2026-06-22T19:01Z: Root `pnpm test` passed after the Electron local install
+  repair, including release and plugin-source-boundary tests.
+- 2026-06-22T19:01Z: Compound review pass added fatal UTF-8 decoding so
+  malformed markdown is rejected as `binary_file` instead of returned with
+  replacement characters; the provider regression fixture now covers invalid
+  UTF-8.
+- 2026-06-22T19:01Z: Post-review verification passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/okf-wiki-provider.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+  `pnpm --filter @thinkwork/pi-runtime-core test`,
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi test`, `git diff --check`, and the
+  pinned touched-file Prettier check. Current package totals:
+  `@thinkwork/pi-runtime-core` 13 files / 113 tests; `@thinkwork/agentcore-pi`
+  34 files / 604 passed / 5 todo.
+- 2026-06-22T19:02Z: Root `pnpm lint` and `pnpm typecheck` passed again on
+  the post-review tree.
+- 2026-06-22T19:06Z: Rebased U4 onto `origin/main` at `0d3e72de3` after PR
+  #2867 reported `BEHIND`; post-rebase `git diff --check`, pinned touched-file
+  Prettier check, focused AgentCore Pi provider test, and focused Pi runtime
+  core contract test passed.
+
+PR:
+
+- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2867
+- Linear PR-opened comment:
+  `7d832401-8102-42a2-b510-3aed830bc51e`.
+- Current state: CI running after rebase and forced update to current
+  `origin/main`.
+- 2026-06-22T19:03Z: Rebased U4 onto current `origin/main`; focused
+  post-rebase checks passed:
+  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/okf-wiki-provider.test.ts`,
+  `pnpm --filter @thinkwork/pi-runtime-core test -- test/okf-wiki-navigator.test.ts`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and
+  `pnpm --filter @thinkwork/pi-runtime-core typecheck`.
+
+PR:
+
+- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2867
