@@ -15,10 +15,10 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U8 Deployed SkillSpector Runner.
-- Current branch: `codex/thnk-11-u8-skillspector-runner`.
-- Current worktree: `.Codex/worktrees/thnk-11-u8-skillspector-runner`.
-- Current pull request: [#2831](https://github.com/thinkwork-ai/thinkwork/pull/2831).
+- Current unit: U8 Deployed SkillSpector Runner deploy hotfix.
+- Current branch: `codex/thnk-11-u8-runner-dockerfix`.
+- Current worktree: `.Codex/worktrees/thnk-11-u8-runner-dockerfix`.
+- Current pull request: pending.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -114,7 +114,18 @@ status: in_progress
     the actual NVIDIA SkillSpector CLI and have both draft publishing and
     on-demand Skill Detail trust runs invoke it.
   - U8 PR [#2831](https://github.com/thinkwork-ai/thinkwork/pull/2831)
-    opened after local verification passed.
+    passed required CI, squash merged as
+    `f51b19a971469715327646e020abd86a88e8eeef`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
+  - U8 post-merge Deploy run
+    [27931232620](https://github.com/thinkwork-ai/thinkwork/actions/runs/27931232620)
+    failed in Build Container while building the Skill Trust runner image:
+    the Dockerfile was built with repository root as context but copied
+    `src/handler.py` relative to the package directory.
+  - U8 hotfix started from a clean isolated worktree created from `origin/main`
+    after the deploy failure. Scope: fix the Skill Trust runner Dockerfile
+    `COPY` path so CI/deploy can build the Lambda image.
 - Local verification:
   - U2 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
