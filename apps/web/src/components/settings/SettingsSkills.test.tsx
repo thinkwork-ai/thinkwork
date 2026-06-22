@@ -216,6 +216,37 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsSkills import", () => {
+  it("registers route-backed header tabs without rendering in-page tabs", async () => {
+    mocks.draftsQueryState.data = {
+      skillDrafts: [submittedDraft()],
+    };
+
+    render(<SettingsSkills />);
+    await screen.findByPlaceholderText("Search skills…");
+
+    const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
+    expect(headerConfig?.title).toBe("Skill Library");
+    expect(headerConfig?.tabs).toEqual([
+      { to: "/settings/skills", label: "Published" },
+      { to: "/settings/skills/drafts", label: "Drafts (1)" },
+    ]);
+    expect(screen.queryByRole("button", { name: /^Published$/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Drafts/ })).toBeNull();
+  });
+
+  it("renders the published search input and update gate on one toolbar row", async () => {
+    render(<SettingsSkills />);
+    const search = await screen.findByPlaceholderText("Search skills…");
+
+    const toolbar = screen.getByTestId("skill-published-toolbar");
+    const actions = screen.getByTestId("skill-published-toolbar-actions");
+    const gate = screen.getByRole("button", { name: /Update gate:/ });
+
+    expect(toolbar.contains(search)).toBe(true);
+    expect(toolbar.contains(gate)).toBe(true);
+    expect(actions.contains(gate)).toBe(true);
+  });
+
   it("registers import as a muted header action", async () => {
     render(<SettingsSkills />);
     await screen.findByPlaceholderText("Search skills…");
@@ -390,10 +421,7 @@ describe("SettingsSkills drafts", () => {
       },
     });
 
-    render(<SettingsSkills />);
-    await screen.findByPlaceholderText("Search skills…");
-
-    fireEvent.click(screen.getByRole("button", { name: /Drafts/ }));
+    render(<SettingsSkills tab="drafts" />);
     expect(await screen.findByText("Customer Brief")).toBeTruthy();
     expect(screen.getByText("submitted")).toBeTruthy();
 
@@ -440,10 +468,7 @@ describe("SettingsSkills drafts", () => {
         },
       });
 
-    render(<SettingsSkills />);
-    await screen.findByPlaceholderText("Search skills…");
-
-    fireEvent.click(screen.getByRole("button", { name: /Drafts/ }));
+    render(<SettingsSkills tab="drafts" />);
     fireEvent.click(await screen.findByRole("button", { name: "Publish" }));
 
     expect((await screen.findByRole("dialog")).textContent).toContain(

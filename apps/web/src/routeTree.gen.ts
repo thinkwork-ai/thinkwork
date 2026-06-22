@@ -64,6 +64,7 @@ import { Route as AuthedSettingsWorkflowsWorkflowIdRouteImport } from "./routes/
 import { Route as AuthedSettingsWebhooksWebhookIdRouteImport } from "./routes/_authed/settings.webhooks.$webhookId";
 import { Route as AuthedSettingsUsersUserIdRouteImport } from "./routes/_authed/settings.users.$userId";
 import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authed/settings.spaces.$spaceId";
+import { Route as AuthedSettingsSkillsDraftsRouteImport } from "./routes/_authed/settings.skills.drafts";
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
 import { Route as AuthedSettingsPluginsN8nRouteImport } from "./routes/_authed/settings.plugins.n8n";
@@ -405,6 +406,12 @@ const AuthedSettingsSpacesSpaceIdRoute =
     path: "/spaces/$spaceId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsSkillsDraftsRoute =
+  AuthedSettingsSkillsDraftsRouteImport.update({
+    id: "/skills/drafts",
+    path: "/skills/drafts",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsSkillsSkillSlugRoute =
   AuthedSettingsSkillsSkillSlugRouteImport.update({
     id: "/skills/$skillSlug",
@@ -704,6 +711,7 @@ export interface FileRoutesByFullPath {
   "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
+  "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
@@ -795,6 +803,7 @@ export interface FileRoutesByTo {
   "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
+  "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRoute;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
@@ -894,6 +903,7 @@ export interface FileRoutesById {
   "/_authed/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
+  "/_authed/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRoute;
   "/_authed/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/_authed/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/_authed/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
@@ -992,6 +1002,7 @@ export interface FileRouteTypes {
     | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
+    | "/settings/skills/drafts"
     | "/settings/spaces/$spaceId"
     | "/settings/users/$userId"
     | "/settings/webhooks/$webhookId"
@@ -1083,6 +1094,7 @@ export interface FileRouteTypes {
     | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
+    | "/settings/skills/drafts"
     | "/settings/spaces/$spaceId"
     | "/settings/users/$userId"
     | "/settings/webhooks/$webhookId"
@@ -1181,6 +1193,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/plugins/n8n"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
+    | "/_authed/settings/skills/drafts"
     | "/_authed/settings/spaces/$spaceId"
     | "/_authed/settings/users/$userId"
     | "/_authed/settings/webhooks/$webhookId"
@@ -1617,6 +1630,13 @@ declare module "@tanstack/react-router" {
       path: "/spaces/$spaceId";
       fullPath: "/settings/spaces/$spaceId";
       preLoaderRoute: typeof AuthedSettingsSpacesSpaceIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/skills/drafts": {
+      id: "/_authed/settings/skills/drafts";
+      path: "/skills/drafts";
+      fullPath: "/settings/skills/drafts";
+      preLoaderRoute: typeof AuthedSettingsSkillsDraftsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/skills/$skillSlug": {
@@ -2115,6 +2135,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsPluginsN8nRoute: typeof AuthedSettingsPluginsN8nRouteWithChildren;
   AuthedSettingsRoutinesRoutineIdRoute: typeof AuthedSettingsRoutinesRoutineIdRoute;
   AuthedSettingsSkillsSkillSlugRoute: typeof AuthedSettingsSkillsSkillSlugRoute;
+  AuthedSettingsSkillsDraftsRoute: typeof AuthedSettingsSkillsDraftsRoute;
   AuthedSettingsSpacesSpaceIdRoute: typeof AuthedSettingsSpacesSpaceIdRoute;
   AuthedSettingsUsersUserIdRoute: typeof AuthedSettingsUsersUserIdRoute;
   AuthedSettingsWebhooksWebhookIdRoute: typeof AuthedSettingsWebhooksWebhookIdRoute;
@@ -2172,6 +2193,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsPluginsN8nRoute: AuthedSettingsPluginsN8nRouteWithChildren,
   AuthedSettingsRoutinesRoutineIdRoute: AuthedSettingsRoutinesRoutineIdRoute,
   AuthedSettingsSkillsSkillSlugRoute: AuthedSettingsSkillsSkillSlugRoute,
+  AuthedSettingsSkillsDraftsRoute: AuthedSettingsSkillsDraftsRoute,
   AuthedSettingsSpacesSpaceIdRoute: AuthedSettingsSpacesSpaceIdRoute,
   AuthedSettingsUsersUserIdRoute: AuthedSettingsUsersUserIdRoute,
   AuthedSettingsWebhooksWebhookIdRoute: AuthedSettingsWebhooksWebhookIdRoute,

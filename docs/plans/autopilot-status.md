@@ -14,12 +14,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U4 - Connect catalog and editor refresh behavior.
-- Current branch: `codex/thnk-11-u4-trust-refresh`.
+- Current unit: U5 - Polish Skill Library header tabs and toolbar.
+- Current branch: `codex/thnk-11-u5-skill-library-tabs`.
 - Current worktree:
-  `.Codex/worktrees/thnk-11-u4-trust-refresh`.
+  `.Codex/worktrees/thnk-11-u5-skill-library-tabs`.
 - Current pull request:
-  [#2840](https://github.com/thinkwork-ai/thinkwork/pull/2840).
+  [#2842](https://github.com/thinkwork-ai/thinkwork/pull/2842).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -67,6 +67,19 @@ status: in_progress
     current open file/edit state.
   - 2026-06-22: U4 PR
     [#2840](https://github.com/thinkwork-ai/thinkwork/pull/2840) opened and
+    CI monitoring started.
+  - 2026-06-22: U4 PR
+    [#2840](https://github.com/thinkwork-ai/thinkwork/pull/2840) passed
+    required CI, squash merged as
+    `8399a5666fd2e164dacd9d4201104cc4bde7c1c6`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U5 started from a clean isolated worktree created from
+    `origin/main` after U4 merge. Scope: move Skill Library Published/Drafts
+    navigation into route-backed header tabs and align the update gate with
+    the published skill search row.
+  - 2026-06-22: U5 PR
+    [#2842](https://github.com/thinkwork-ai/thinkwork/pull/2842) opened and
     CI monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
@@ -127,6 +140,21 @@ status: in_progress
     `packages/workspace-editor` is not a package script and failed on existing
     `@thinkwork/ui` `ImportMeta.env` typing; the imported web path is covered
     by the passing web typecheck above.
+  - U4 CI passed on PR
+    [#2840](https://github.com/thinkwork-ai/thinkwork/pull/2840): CLA, lint,
+    test, typecheck, and verify.
+  - U5 `pnpm install --frozen-lockfile --offline` completed in the worktree;
+    local Node 25 logged the existing optional `canvas@2.11.2`
+    native-fallback/missing `pkg-config` warning, but pnpm exited
+    successfully.
+  - U5 focused Skill Library component tests passed:
+    `pnpm --dir apps/web exec vitest run src/components/settings/SettingsSkills.test.tsx`
+    (11 tests).
+  - U5 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U5 full web test suite passed: `pnpm --filter @thinkwork/web test` (187
+    files passed; 1441 tests passed).
+  - U5 targeted Prettier check and `git diff --check` passed for touched
+    web/status files.
 
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 
