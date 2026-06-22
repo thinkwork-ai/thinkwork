@@ -63,6 +63,11 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
 - 2026-06-22T16:06:04Z: Added Linear U1 PR-opened comment
   `47f82b21-ed7e-4afb-9468-5ff65eb7ab23`; no unit child issue or `Review`
   status exists, so THNK-63 remained `In Progress`.
+- 2026-06-22T16:26:29Z: Added Linear U1 merged/cleanup comment
+  `f2bdc121-9d8d-4c3c-b823-5e12871c2c55`.
+- 2026-06-22T16:45:56Z: Added Linear U2 PR-opened comment
+  `f550e25e-ffb9-49c9-bf3f-527358cbf185`; no unit child issue or `Review`
+  status exists, so THNK-63 remained `In Progress`.
 
 ## Unit Log
 
@@ -98,3 +103,54 @@ Local verification:
 PR:
 
 - Opened: https://github.com/thinkwork-ai/thinkwork/pull/2854
+- Merged: 2026-06-22T16:24:36Z.
+- Merge commit: `1d2e9e6c16a9d1375f79e9bac9ffed6eee8917c3`.
+- Final CI after rebase: CLA, lint, migration drift precheck, supply-chain
+  verify, typecheck, and test passed.
+- Cleanup: remote branch deleted by merge; local U1 worktree and branch removed.
+
+### U2: Build OKF Materializer And S3 Publication Path
+
+Objective: add a dedicated OKF materializer and publisher that render governed
+wiki/Brain/provenance state into a validated OKF bundle, write versioned bundle
+objects before publishing the current pointer, and record artifact manifest
+evidence without changing existing wiki export behavior.
+
+Branch/worktree:
+
+- Branch: `codex/thnk-63-u2-okf-materializer`
+- Worktree: `.Codex/worktrees/thnk-63-u2-okf-materializer`
+- Base: `origin/main` at `1d2e9e6c1`; rebased before commit onto
+  `origin/main` at `ffe6b02027`; rebased again after U1 trace-card merge onto
+  `origin/main` at `c35be86f3`.
+
+Decisions:
+
+- U2 keeps OKF materialization tenant-scoped and excludes user-scoped wiki rows
+  by default. A future auth-aware unit can broaden projection scope only after
+  role/user filtering and redaction policy are explicit.
+- OKF bundle artifact-manifest rows store the checksum and byte length for the
+  uploaded `.thinkwork/manifest.json` object because that is the recorded
+  `manifest_uri`; the bundle-level checksum/byte/object counts are preserved in
+  sanitized metadata.
+
+Local verification:
+
+- 2026-06-22T16:44:27Z: Focused API tests passed after rebase and review fixes:
+  `pnpm --filter @thinkwork/api test -- src/lib/okf/materializer.test.ts src/lib/okf/publisher.test.ts src/lib/okf/page-profile.test.ts src/lib/okf/bundle-contract.test.ts src/lib/knowledge-graph/artifacts.test.ts`
+  (5 files, 24 tests).
+- 2026-06-22T16:44:27Z: API typecheck passed:
+  `pnpm --filter @thinkwork/api typecheck`.
+- 2026-06-22T16:44:27Z: Lambda build passed:
+  `bash scripts/build-lambdas.sh okf-materialize`; produced
+  `dist/lambdas/okf-materialize.zip`.
+- 2026-06-22T16:44:27Z: Terraform formatting and whitespace checks passed:
+  `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf terraform/modules/app/lambda-api/iam-grouped.tf`
+  and `git diff --check`.
+- 2026-06-22T16:51:05Z: Rebased onto current `origin/main` after the wiki
+  context trace-card PR merged. Focused API tests, API typecheck, Lambda build,
+  Terraform formatting, and `git diff --check` passed again.
+
+PR:
+
+- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2859
