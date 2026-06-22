@@ -463,6 +463,306 @@ export const SettingsWorkflowRunQuery = gql`
   }
 `;
 
+export const SettingsAgentLoopsQuery = gql`
+  query SettingsAgentLoops(
+    $tenantId: ID!
+    $lifecycleStatus: AgentLoopLifecycleStatus
+    $enabled: Boolean
+    $limit: Int
+    $cursor: String
+  ) {
+    agentLoops(
+      tenantId: $tenantId
+      lifecycleStatus: $lifecycleStatus
+      enabled: $enabled
+      limit: $limit
+      cursor: $cursor
+    ) {
+      id
+      tenantId
+      name
+      slug
+      description
+      lifecycleStatus
+      enabled
+      ownerUserId
+      ownerAgentId
+      primaryTriggerFamily
+      currentVersionId
+      currentVersionNumber
+      lastRunId
+      lastRunStatus
+      lastRunAt
+      lastRunSummary
+      acceptedRunCount
+      rejectedRunCount
+      escalatedRunCount
+      totalCostUsdCents
+      costPerAcceptedRunUsdCents
+      currentVersion {
+        id
+        versionNumber
+        versionStatus
+        triggerSpec
+        goalSpec
+        workerSpec
+        judgeSpec
+        loopPolicy
+        evidencePolicy
+        sourceMetadata
+        publishedAt
+        createdAt
+      }
+      runs(limit: 1) {
+        id
+        status
+        triggerFamily
+        triggerSource
+        currentIteration
+        terminalReason
+        startedAt
+        finishedAt
+        lastEventAt
+        errorCode
+        errorMessage
+        totalCostUsdCents
+        createdAt
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const SettingsAgentLoopQuery = gql`
+  query SettingsAgentLoop($id: ID!, $runLimit: Int) {
+    agentLoop(id: $id) {
+      id
+      tenantId
+      name
+      slug
+      description
+      lifecycleStatus
+      enabled
+      ownerUserId
+      ownerAgentId
+      primaryTriggerFamily
+      currentVersionId
+      currentVersionNumber
+      lastRunId
+      lastRunStatus
+      lastRunAt
+      lastRunSummary
+      acceptedRunCount
+      rejectedRunCount
+      escalatedRunCount
+      totalCostUsdCents
+      costPerAcceptedRunUsdCents
+      currentVersion {
+        id
+        versionNumber
+        versionStatus
+        triggerSpec
+        goalSpec
+        workerSpec
+        judgeSpec
+        loopPolicy
+        evidencePolicy
+        sourceMetadata
+        publishedAt
+        createdAt
+      }
+      runs(limit: $runLimit) {
+        id
+        status
+        triggerFamily
+        triggerSource
+        scheduledJobId
+        actorType
+        actorId
+        correlationId
+        currentIteration
+        terminalReason
+        inputSummary
+        outputSummary
+        startedAt
+        finishedAt
+        lastEventAt
+        errorCode
+        errorMessage
+        totalCostUsdCents
+        createdAt
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const SettingsAgentLoopRunQuery = gql`
+  query SettingsAgentLoopRun($id: ID!) {
+    agentLoopRun(id: $id) {
+      id
+      tenantId
+      agentLoopId
+      agentLoop {
+        id
+        name
+        slug
+      }
+      agentLoopVersionId
+      agentLoopVersion {
+        id
+        versionNumber
+        versionStatus
+        triggerSpec
+        goalSpec
+        workerSpec
+        judgeSpec
+        loopPolicy
+        evidencePolicy
+        sourceMetadata
+      }
+      status
+      triggerFamily
+      triggerSource
+      scheduledJobId
+      actorType
+      actorId
+      idempotencyKey
+      correlationId
+      currentIteration
+      terminalReason
+      policySnapshot
+      inputSummary
+      outputSummary
+      startedAt
+      finishedAt
+      lastEventAt
+      errorCode
+      errorMessage
+      totalCostUsdCents
+      iterations {
+        id
+        iterationNumber
+        status
+        goalModeAction
+        agentWakeupRequestId
+        threadTurnId
+        inputSummary
+        outputSummary
+        startedAt
+        finishedAt
+        errorCode
+        errorMessage
+        totalCostUsdCents
+        judgments {
+          id
+          judgeMode
+          outcome
+          confidence
+          rationale
+          terminalReason
+          structuredOutput
+          createdAt
+        }
+        evidence {
+          id
+          evidenceType
+          sourceSystem
+          sourceId
+          uri
+          summary
+          redactionState
+          sensitivity
+          retentionExpiresAt
+          createdAt
+        }
+        createdAt
+        updatedAt
+      }
+      judgments {
+        id
+        agentLoopIterationId
+        judgeMode
+        outcome
+        confidence
+        rationale
+        terminalReason
+        structuredOutput
+        createdAt
+      }
+      evidence {
+        id
+        agentLoopIterationId
+        agentLoopJudgmentId
+        evidenceType
+        sourceSystem
+        sourceId
+        uri
+        summary
+        redactionState
+        sensitivity
+        retentionExpiresAt
+        createdAt
+      }
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const SettingsSaveAgentLoopMutation = gql`
+  mutation SettingsSaveAgentLoop($input: SaveAgentLoopInput!) {
+    saveAgentLoop(input: $input) {
+      id
+      tenantId
+      name
+      slug
+      description
+      lifecycleStatus
+      enabled
+      primaryTriggerFamily
+      currentVersionNumber
+      currentVersion {
+        id
+        versionNumber
+        triggerSpec
+        goalSpec
+        workerSpec
+        judgeSpec
+        loopPolicy
+        evidencePolicy
+        sourceMetadata
+      }
+      updatedAt
+    }
+  }
+`;
+
+export const SettingsDeleteAgentLoopMutation = gql`
+  mutation SettingsDeleteAgentLoop($id: ID!) {
+    deleteAgentLoop(id: $id) {
+      id
+      ok
+    }
+  }
+`;
+
+export const SettingsTriggerAgentLoopRunMutation = gql`
+  mutation SettingsTriggerAgentLoopRun($input: TriggerAgentLoopRunInput!) {
+    triggerAgentLoopRun(input: $input) {
+      id
+      agentLoopId
+      status
+      triggerFamily
+      triggerSource
+      currentIteration
+      createdAt
+    }
+  }
+`;
+
 export const NewThreadMentionTargetsQuery = gql`
   query NewThreadMentionTargets($tenantId: ID!) {
     tenantMentionTargets(tenantId: $tenantId) {
