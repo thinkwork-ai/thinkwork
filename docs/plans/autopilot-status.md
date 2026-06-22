@@ -125,6 +125,10 @@ status: in_progress
     event message from raw tool ids to readable action verbs.
   - 2026-06-22: Added Linear U6 local-verification comment
     `a191c6cd-375e-414b-94ff-f7483299938d`; preparing PR.
+  - 2026-06-22: U6 PR opened:
+    [#2872](https://github.com/thinkwork-ai/thinkwork/pull/2872).
+  - 2026-06-22: Added Linear U6 PR-opened comment
+    `f6368f31-7c32-4107-b571-4bf342421020`.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 

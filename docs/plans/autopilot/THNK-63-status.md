@@ -660,3 +660,6 @@ Local verification:
   from raw tool ids such as `wiki_rg` to readable action verbs such as `search`.
 - Linear local-verification comment:
   `a191c6cd-375e-414b-94ff-f7483299938d`.
+- PR opened: https://github.com/thinkwork-ai/thinkwork/pull/2872.
+- Linear PR-opened comment:
+  `f6368f31-7c32-4107-b571-4bf342421020`.
