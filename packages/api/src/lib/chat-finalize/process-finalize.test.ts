@@ -581,6 +581,27 @@ describe("processFinalize reconcile seam", () => {
       },
       reconcileReport,
     });
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      THREAD_ID,
+      TENANT_ID,
+      AGENT_ID,
+      "draft created",
+      [],
+      undefined,
+      {
+        skillDraft: {
+          id: "draft-1",
+          slug: "codex-e2e",
+          status: "submitted",
+          source: "skill_creator",
+          sourceThreadId: THREAD_ID,
+          sourceTurnId: TURN_ID,
+          fileCount: 1,
+          currentContentHash: "sha256:test",
+        },
+      },
+    );
+    expect(mocks.updateSets).toContainEqual({ source_message_id: "msg-1" });
   });
 
   it("falls back to the latest user message sender when the finalize payload has no cost owner", async () => {
@@ -1637,6 +1658,7 @@ describe("processFinalize asking-turn behavior (plan 2026-06-09-005 U3)", () => 
       "Here is the review.",
       expect.any(Array),
       [persistedPart],
+      undefined,
     );
   });
 });

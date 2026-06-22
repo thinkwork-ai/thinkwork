@@ -34,6 +34,7 @@ import {
   artifacts,
   messages,
   pendingUserQuestions,
+  skillDrafts,
   threadTurns,
   threads,
 } from "@thinkwork/database-pg/schema";
@@ -225,6 +226,9 @@ export async function processFinalize(
     throw err;
   }
 
+  let skillDraftRegistration: Awaited<
+    ReturnType<typeof autoSubmitSkillCreatorDraft>
+  > | null = null;
   if (status === "completed") {
     try {
       const skillCreatorRequesterUserId =
@@ -232,7 +236,7 @@ export async function processFinalize(
         (payload.skill_creator_command
           ? await resolveSkillCreatorRequesterUserId({ tenantId, threadId })
           : null);
-      const skillDraftRegistration = await autoSubmitSkillCreatorDraft({
+      skillDraftRegistration = await autoSubmitSkillCreatorDraft({
         tenantId,
         threadId,
         threadTurnId: turnId,
@@ -605,7 +609,31 @@ export async function processFinalize(
         displayResponse,
         toolInvocations,
         invokeResult.ui_message_parts,
+        skillDraftMessageMetadata(skillDraftRegistration, threadId, turnId),
       );
+
+  if (
+    assistantMsg &&
+    skillDraftRegistration &&
+    skillDraftRegistration.status !== "skipped"
+  ) {
+    try {
+      await db
+        .update(skillDrafts)
+        .set({ source_message_id: assistantMsg.id })
+        .where(
+          and(
+            eq(skillDrafts.id, skillDraftRegistration.draftId),
+            eq(skillDrafts.tenant_id, tenantId),
+          ),
+        );
+    } catch (err) {
+      console.error(
+        "[chat-finalize] Failed to link /skill-creator draft to assistant message:",
+        err,
+      );
+    }
+  }
 
   // 7a. Link orphan artifacts created during this turn to the thread + message.
   if (assistantMsg && !computerThreadResponse?.responseMessageId) {
@@ -751,6 +779,29 @@ export function goalRunProjectionFromFinalizePayload(
   const candidate = response?.goal_run ?? payload.usage?.goal_run;
   if (candidate == null) return null;
   return normalizeGoalRunProjection(candidate);
+}
+
+function skillDraftMessageMetadata(
+  registration: Awaited<ReturnType<typeof autoSubmitSkillCreatorDraft>> | null,
+  threadId: string,
+  threadTurnId: string,
+): Record<string, unknown> | undefined {
+  if (!registration || registration.status === "skipped") return undefined;
+  return {
+    skillDraft: {
+      id: registration.draftId,
+      slug: registration.slug,
+      status: registration.status,
+      source: "skill_creator",
+      sourceThreadId: threadId,
+      sourceTurnId: threadTurnId,
+      fileCount: registration.fileCount,
+      currentContentHash: registration.currentContentHash,
+      ...(registration.failureMessage
+        ? { failureMessage: registration.failureMessage }
+        : {}),
+    },
+  };
 }
 
 /**

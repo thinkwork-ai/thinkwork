@@ -168,6 +168,74 @@ describe("TaskThreadView", () => {
     expect(screen.queryByText("Computer planned the response.")).toBeNull();
   });
 
+  it("renders skill creator draft status metadata in the transcript", () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Create a skill",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "I submitted the draft for review.",
+              metadata: {
+                skillDraft: {
+                  id: "draft-1",
+                  slug: "customer-brief",
+                  displayName: "Customer Brief",
+                  status: "submitted",
+                  currentContentHash: "sha256:test",
+                  fileCount: 2,
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Skill draft")).toBeTruthy();
+    expect(screen.getByText("Customer Brief")).toBeTruthy();
+    expect(screen.getByText("customer-brief")).toBeTruthy();
+    expect(screen.getByText("Submitted")).toBeTruthy();
+    expect(screen.getByText("Submitted for operator review.")).toBeTruthy();
+    expect(screen.getByText("Ready for trust review")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Review draft/ })).toBeNull();
+  });
+
+  it("links operators from a skill draft status card to the draft queue", () => {
+    tenantMock.isOperator = true;
+
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Create a skill",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: "Draft registered.",
+              metadata: {
+                skillDraft: {
+                  id: "draft-1",
+                  slug: "customer-brief",
+                  status: "submitted",
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const reviewLink = screen.getByRole("link", { name: /Review draft/ });
+    expect(reviewLink.getAttribute("href")).toBe("/settings/skills");
+  });
+
   it("renders persisted data-genui parts through the shared Thread renderer", () => {
     render(
       <TaskThreadView

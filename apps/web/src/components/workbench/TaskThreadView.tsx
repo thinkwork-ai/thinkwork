@@ -123,6 +123,10 @@ import {
   GeneratedArtifactPreview,
   type GeneratedArtifact,
 } from "@/components/workbench/GeneratedArtifactCard";
+import {
+  SkillDraftStatusCard,
+  type SkillDraftStatusData,
+} from "@/components/workbench/SkillDraftStatusCard";
 import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import { StreamingMessageBuffer } from "@/components/workbench/StreamingMessageBuffer";
 import {
@@ -398,6 +402,7 @@ export function TaskThreadView({
   infoPanelState,
   onFlagTurn,
 }: TaskThreadViewProps) {
+  const { isOperator } = useTenant();
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const [composerBottomInsetPx, setComposerBottomInsetPx] = useState(
     DEFAULT_COMPOSER_BOTTOM_INSET_PX,
@@ -550,6 +555,7 @@ export function TaskThreadView({
                       currentUser={currentUser}
                       mentionTargets={mentionTargets}
                       skillCatalog={skillCatalog}
+                      viewerIsOperator={isOperator}
                       onFlagTurn={onFlagTurn}
                     />
                   );
@@ -1584,6 +1590,49 @@ function isTaskQueueAssistantMessage(message: TaskThreadMessage) {
   );
 }
 
+function skillDraftStatusFromMessage(
+  message: TaskThreadMessage,
+): SkillDraftStatusData | null {
+  if (message.role.toUpperCase() === "USER") return null;
+  const metadata = parseRecord(message.metadata);
+  const draft = parseRecord(metadata.skillDraft ?? metadata.skill_draft);
+  const id = stringValue(draft.id);
+  const slug = stringValue(draft.slug);
+  const status = stringValue(draft.status);
+  if (!id && !slug && !status) return null;
+  const trust = parseRecord(draft.trust ?? draft.trustReport);
+  const severityCounts = parseRecord(
+    draft.severityCounts ?? trust.severityCounts ?? trust.severity_counts,
+  );
+
+  return {
+    id,
+    slug,
+    displayName: stringValue(draft.displayName ?? draft.display_name),
+    title: stringValue(draft.title),
+    summary: stringValue(draft.summary),
+    status,
+    trustStatus: stringValue(
+      draft.trustStatus ?? draft.trust_status ?? trust.status,
+    ),
+    failureMessage: stringValue(draft.failureMessage ?? draft.failure_message),
+    fileCount: numberValue(draft.fileCount ?? draft.file_count),
+    currentContentHash: stringValue(
+      draft.currentContentHash ?? draft.current_content_hash,
+    ),
+    publishedCatalogSlug: stringValue(
+      draft.publishedCatalogSlug ?? draft.published_catalog_slug,
+    ),
+    severityCounts: {
+      critical: numberValue(severityCounts.critical),
+      high: numberValue(severityCounts.high),
+      medium: numberValue(severityCounts.medium),
+      low: numberValue(severityCounts.low),
+      info: numberValue(severityCounts.info),
+    },
+  };
+}
+
 function TranscriptSegment({
   message,
   turn,
@@ -1600,6 +1649,7 @@ function TranscriptSegment({
   currentUser,
   mentionTargets,
   skillCatalog,
+  viewerIsOperator,
   onFlagTurn,
 }: {
   message: TaskThreadMessage;
@@ -1625,6 +1675,7 @@ function TranscriptSegment({
   currentUser?: CurrentUserIdentity | null;
   mentionTargets?: MentionTarget[];
   skillCatalog?: SkillOption[];
+  viewerIsOperator?: boolean;
   onFlagTurn?: (turn: TaskThreadTurn) => void;
 }) {
   // Plan-012 U14: when typed UIMessage parts are flowing for this turn,
@@ -1633,6 +1684,7 @@ function TranscriptSegment({
   // wire still produces {text} envelopes (non-Computer agents and
   // pre-U6 historical messages).
   const hasTypedParts = streamState != null && streamState.parts.length > 0;
+  const skillDraft = skillDraftStatusFromMessage(message);
   return (
     <>
       <TranscriptMessage
@@ -1647,6 +1699,12 @@ function TranscriptSegment({
         mentionTargets={mentionTargets}
         skillCatalog={skillCatalog}
       />
+      {skillDraft ? (
+        <SkillDraftStatusCard
+          draft={skillDraft}
+          viewerIsOperator={viewerIsOperator}
+        />
+      ) : null}
       {turn ? (
         <ThreadTurnActivity
           turn={turn}
