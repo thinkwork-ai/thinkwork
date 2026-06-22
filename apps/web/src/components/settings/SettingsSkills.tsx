@@ -48,6 +48,7 @@ import {
 import { formatPassRatePct } from "@/lib/skill-eval-format";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 
 interface PendingReplace {
   slug: string;
@@ -60,6 +61,8 @@ interface PendingDraftReplace {
 }
 
 type SkillsView = "published" | "drafts";
+const SKILL_LIBRARY_PUBLISHED_ROUTE = "/settings/skills";
+const SKILL_LIBRARY_DRAFTS_ROUTE = "/settings/skills/drafts";
 
 /**
  * Per-skill score cell (U9). Each row reads its own `skillEvalScore` — urql
@@ -216,11 +219,11 @@ function SkillEvalGateControl() {
   );
 }
 
-export function SettingsSkills() {
+export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [view, setView] = useState<SkillsView>("published");
+  const view = tab;
   const [search, setSearch] = useState("");
   const [skills, setSkills] = useState<SkillSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -239,7 +242,7 @@ export function SettingsSkills() {
     refetchDrafts,
   ] = useQuery({
     query: SettingsSkillDraftsQuery,
-    pause: view !== "drafts",
+    pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
   const [{ fetching: publishingDraft }, publishDraftMutation] = useMutation(
@@ -397,6 +400,28 @@ export function SettingsSkills() {
     </Button>
   );
 
+  usePageHeaderActions({
+    title: "Skill Library",
+    breadcrumbs: [{ label: "Skill Library" }],
+    tabs: [
+      { to: SKILL_LIBRARY_PUBLISHED_ROUTE, label: "Published" },
+      {
+        to: SKILL_LIBRARY_DRAFTS_ROUTE,
+        label:
+          submittedDraftCount > 0
+            ? `Drafts (${submittedDraftCount})`
+            : "Drafts",
+      },
+    ],
+    action: importAction,
+    actionKey: [
+      "skill-library",
+      view,
+      importing ? "importing" : "idle",
+      submittedDraftCount,
+    ].join(":"),
+  });
+
   const publishDraft = useCallback(
     async (
       draft: Pick<SkillDraftSummary, "id" | "slug">,
@@ -450,61 +475,41 @@ export function SettingsSkills() {
           ? !skills && !error
           : loadingDrafts && !draftData && !draftError
       }
-      headerActions={importAction}
-      headerActionKey={`skill-import:${importing ? "importing" : "idle"}`}
+      embedded
       toolbar={
-        <div className="flex w-full flex-wrap items-center justify-between gap-3">
-          <div className="inline-flex rounded-md border border-border bg-background p-0.5">
-            <Button
-              type="button"
-              variant={view === "published" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-8 rounded-sm"
-              onClick={() => setView("published")}
+        view === "published" ? (
+          <div
+            className="flex w-full flex-wrap items-center gap-3"
+            data-testid="skill-published-toolbar"
+          >
+            {error ? (
+              <p className="text-sm text-destructive">{error}</p>
+            ) : (
+              <Input
+                placeholder="Search skills…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="min-w-[240px] max-w-sm flex-1"
+              />
+            )}
+            <div
+              className="ml-auto flex shrink-0 items-center gap-2"
+              data-testid="skill-published-toolbar-actions"
             >
-              Published
-            </Button>
-            <Button
-              type="button"
-              variant={view === "drafts" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-8 rounded-sm gap-2"
-              onClick={() => setView("drafts")}
-            >
-              Drafts
-              {submittedDraftCount > 0 ? (
-                <Badge variant="outline">{submittedDraftCount}</Badge>
-              ) : null}
-            </Button>
+              <SkillEvalGateControl />
+            </div>
           </div>
-          {view === "published" && error ? (
-            <p className="text-sm text-destructive">{error}</p>
-          ) : view === "published" ? (
-            <Input
-              placeholder="Search skills…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-sm"
-            />
-          ) : draftError ? (
-            <p className="text-sm text-destructive">
-              Could not load skill drafts: {draftError.message}
-            </p>
-          ) : null}
-          <div className="flex shrink-0 items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".zip,application/zip"
-              className="sr-only"
-              data-testid="skill-import-input"
-              onChange={handleImportFile}
-            />
-            <SkillEvalGateControl />
-          </div>
-        </div>
+        ) : null
       }
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".zip,application/zip"
+        className="sr-only"
+        data-testid="skill-import-input"
+        onChange={handleImportFile}
+      />
       {view === "published" ? (
         <DataTable
           columns={columns}
@@ -527,6 +532,13 @@ export function SettingsSkills() {
             </div>
           }
         />
+      ) : draftError ? (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/40 p-4 text-sm text-destructive"
+        >
+          Could not load skill drafts: {draftError.message}
+        </div>
       ) : (
         <SkillDraftList
           drafts={draftRows}

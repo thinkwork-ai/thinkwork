@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { OperatorGuard } from "@/components/settings/OperatorGuard";
 import { SettingsSkills } from "@/components/settings/SettingsSkills";
 
-export const Route = createFileRoute("/_authed/settings/skills/")({
+export const Route = createFileRoute("/_authed/settings/skills/drafts")({
   component: () => (
     <OperatorGuard>
-      <SettingsSkills tab="published" />
+      <SettingsSkills tab="drafts" />
     </OperatorGuard>
   ),
 });
