@@ -231,7 +231,6 @@ type TimelineEvent = {
   routeRuleSource?: unknown;
   routeMatch?: unknown;
   routeUnavailableReason?: string;
-  wikiContext?: Record<string, unknown> | null;
   // Agent Profile fields
   profileRunId?: string;
   profileId?: string;
@@ -545,57 +544,8 @@ function timelineToolEvent(ti: Record<string, unknown>): TimelineEvent {
       stringValue(ti.input_preview) ?? stringValue(ti.inputPreview) ?? "",
     toolOutput:
       stringValue(ti.output_preview) ?? stringValue(ti.outputPreview) ?? "",
-    wikiContext: wikiContextFromRecord(ti),
     ...extractToolModelEvidence(record),
   };
-}
-
-function wikiContextFromRecord(
-  record: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  if (!record) return null;
-  if (
-    record.result_count !== undefined ||
-    record.top_pages !== undefined ||
-    record.surface === "query_wiki_context"
-  ) {
-    return record;
-  }
-  const direct = modelRoutingRecord(record.wiki_context ?? record.wikiContext);
-  if (Object.keys(direct).length > 0) return direct;
-
-  const details = modelRoutingRecord(record.details);
-  const detailWiki = modelRoutingRecord(
-    details.wiki_context ?? details.wikiContext,
-  );
-  if (Object.keys(detailWiki).length > 0) return detailWiki;
-
-  const result = modelRoutingRecord(record.result);
-  const resultDetails = modelRoutingRecord(result.details);
-  const resultWiki = modelRoutingRecord(
-    result.wiki_context ?? result.wikiContext ?? resultDetails.wiki_context,
-  );
-  return Object.keys(resultWiki).length > 0 ? resultWiki : null;
-}
-
-function wikiContextSummaryLines(wiki: Record<string, unknown>): string[] {
-  const query = stringValue(wiki.query);
-  const count = numberValue(wiki.result_count) ?? 0;
-  const pageTitles = arrayOfRecords(wiki.top_pages)
-    .map((page) => stringValue(page.title) ?? stringValue(page.slug))
-    .filter((title): title is string => Boolean(title))
-    .slice(0, 3);
-  return [
-    query ? `Query: ${query}` : null,
-    `Results: ${count}`,
-    pageTitles.length > 0 ? `Top pages: ${pageTitles.join(", ")}` : null,
-    stringValue(wiki.retrieval_mode)
-      ? `Mode: ${stringValue(wiki.retrieval_mode)}`
-      : null,
-    stringValue(wiki.status)
-      ? `Status: ${stringValue(wiki.status)?.replace(/_/g, " ")}`
-      : null,
-  ].filter((line): line is string => Boolean(line));
 }
 
 function aggregateProfileRunTokens(
@@ -1118,10 +1068,10 @@ function mergeRouteEvidence(
 function hasConcreteRouteEvidence(event: TimelineEvent): boolean {
   return Boolean(
     event.routeModelId ||
-      event.routeStatus ||
-      event.routeInputTokens != null ||
-      event.routeOutputTokens != null ||
-      event.routeCostUsd != null,
+    event.routeStatus ||
+    event.routeInputTokens != null ||
+    event.routeOutputTokens != null ||
+    event.routeCostUsd != null,
   );
 }
 
@@ -1956,14 +1906,11 @@ function ExecutionTimeline({
             const isSub = ev.toolType === "sub_agent";
             const skillName = extractSkillName(ev.toolName, ev.toolInput);
             const isSkill = skillName !== null;
-            const isWikiContext = Boolean(ev.wikiContext);
             icon = isSub ? (
               <Bot
                 className="h-3.5 w-3.5"
                 style={{ color: branch?.color || "rgb(168, 85, 247)" }}
               />
-            ) : isWikiContext ? (
-              <Brain className="h-3.5 w-3.5 text-sky-500" />
             ) : (
               <Zap className="h-3.5 w-3.5 text-amber-400" />
             );
@@ -1972,13 +1919,7 @@ function ExecutionTimeline({
               ? `Skill: ${skillName}`
               : isSub
                 ? `Sub-Agent: ${baseName}`
-                : isWikiContext
-                  ? `Wiki: ${numberValue(ev.wikiContext?.result_count) ?? 0} page${
-                      (numberValue(ev.wikiContext?.result_count) ?? 0) === 1
-                        ? ""
-                        : "s"
-                    }`
-                  : `Tool: ${baseName}`;
+                : `Tool: ${baseName}`;
 
             if (isSub && branch) {
               const branchEvents = branch.eventIndices
@@ -2026,33 +1967,19 @@ function ExecutionTimeline({
               ? "Sub-Agent"
               : isSkill
                 ? "Skill"
-                : isWikiContext
-                  ? "Wiki Context"
-                  : "MCP Tool";
+                : "MCP Tool";
             const detailName = isSkill ? skillName : ev.toolName;
             parts.push(`${detailHeader}  ·  ${detailName}`);
-            if (ev.wikiContext) {
-              parts.push(
-                `── WIKI RESULT ──\n\n${wikiContextSummaryLines(ev.wikiContext).join("\n")}`,
-              );
-            }
             parts.push(
               `── MODEL ROUTING ──\n\n${routeEvidenceLines(ev, modelDisplayNames).join("\n")}`,
             );
             if (ev.toolInput) parts.push(`── INPUT ──\n\n${ev.toolInput}`);
             if (ev.toolOutput) parts.push(`── OUTPUT ──\n\n${ev.toolOutput}`);
-            if (ev.wikiContext) {
-              parts.push(
-                `── WIKI METADATA ──\n\n${JSON.stringify(ev.wikiContext, null, 2)}`,
-              );
-            }
             clickTitle = isSkill
               ? `Skill: ${skillName}`
               : isSub
                 ? `Sub-Agent: ${baseName}`
-                : isWikiContext
-                  ? "Wiki Context"
-                  : `Tool: ${baseName}`;
+                : `Tool: ${baseName}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "response") {
             icon = (

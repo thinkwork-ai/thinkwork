@@ -30,6 +30,28 @@ vi.mock("@/context/PageHeaderContext", () => ({
 
 import { WorkflowInventory } from "./WorkflowInventory";
 
+function mockWorkflowInventoryQueries({
+  workflows,
+  pluginCatalog = [],
+}: {
+  workflows: unknown[];
+  pluginCatalog?: unknown[];
+}) {
+  useQueryMock
+    .mockReturnValueOnce([
+      {
+        fetching: false,
+        data: { workflows },
+      },
+    ])
+    .mockReturnValueOnce([
+      {
+        fetching: false,
+        data: { pluginCatalog },
+      },
+    ]);
+}
+
 beforeEach(() => {
   navigateMock.mockReset();
   useQueryMock.mockReset();
@@ -39,55 +61,50 @@ afterEach(cleanup);
 
 describe("WorkflowInventory", () => {
   it("shows ready and blocked workflows from multiple sources", () => {
-    useQueryMock.mockReturnValue([
-      {
-        fetching: false,
-        data: {
-          workflows: [
+    mockWorkflowInventoryQueries({
+      workflows: [
+        {
+          id: "workflow-step",
+          name: "Nightly customer sync",
+          description: "Step Functions routine",
+          lifecycleStatus: "active",
+          primaryTriggerFamily: "schedule",
+          currentVersionNumber: 3,
+          readinessState: "ready",
+          readinessReasons: [],
+          bindings: [
             {
-              id: "workflow-step",
-              name: "Nightly customer sync",
-              description: "Step Functions routine",
-              lifecycleStatus: "active",
-              primaryTriggerFamily: "schedule",
-              currentVersionNumber: 3,
-              readinessState: "ready",
-              readinessReasons: [],
-              bindings: [
-                {
-                  id: "binding-step",
-                  bindingType: "step_functions_routine",
-                  bindingStatus: "ready",
-                  routineId: "routine-1",
-                },
-              ],
-              triggers: [],
-              lastRunAt: "2026-06-20T12:00:00.000Z",
-            },
-            {
-              id: "workflow-n8n",
-              name: "Invoice bridge",
-              description: "Imported from n8n",
-              lifecycleStatus: "active",
-              primaryTriggerFamily: "n8n",
-              currentVersionNumber: 1,
-              readinessState: "blocked_not_ready",
-              readinessReasons: [{ code: "missing_secret" }],
-              bindings: [
-                {
-                  id: "binding-n8n",
-                  bindingType: "n8n_bridge",
-                  bindingStatus: "blocked_not_ready",
-                  externalWorkflowName: "Invoice bridge",
-                },
-              ],
-              triggers: [],
-              lastRunAt: null,
+              id: "binding-step",
+              bindingType: "step_functions_routine",
+              bindingStatus: "ready",
+              routineId: "routine-1",
             },
           ],
+          triggers: [],
+          lastRunAt: "2026-06-20T12:00:00.000Z",
         },
-      },
-    ]);
+        {
+          id: "workflow-n8n",
+          name: "Invoice bridge",
+          description: "Imported from n8n",
+          lifecycleStatus: "active",
+          primaryTriggerFamily: "n8n",
+          currentVersionNumber: 1,
+          readinessState: "blocked_not_ready",
+          readinessReasons: [{ code: "missing_secret" }],
+          bindings: [
+            {
+              id: "binding-n8n",
+              bindingType: "n8n_bridge",
+              bindingStatus: "blocked_not_ready",
+              externalWorkflowName: "Invoice bridge",
+            },
+          ],
+          triggers: [],
+          lastRunAt: null,
+        },
+      ],
+    });
 
     render(<WorkflowInventory />);
 
@@ -99,5 +116,43 @@ describe("WorkflowInventory", () => {
     expect(screen.queryByText("Step Functions routine")).toBeNull();
     expect(screen.queryByText("Version")).toBeNull();
     expect(screen.queryByText("Last run")).toBeNull();
+  });
+
+  it("links n8n bridge source badges to n8n workflows when no direct workflow id exists", () => {
+    mockWorkflowInventoryQueries({
+      workflows: [
+        {
+          id: "workflow-n8n",
+          name: "Webhook bridge",
+          description: "Manually bridged from n8n",
+          lifecycleStatus: "active",
+          primaryTriggerFamily: "webhook",
+          readinessState: "ready",
+          readinessReasons: [],
+          bindings: [
+            {
+              id: "binding-n8n",
+              bindingType: "n8n_bridge",
+              bindingStatus: "ready",
+              externalWorkflowName: "Webhook bridge",
+            },
+          ],
+          triggers: [],
+        },
+      ],
+      pluginCatalog: [
+        {
+          pluginKey: "n8n",
+          launchUrl: "https://n8n.example.test",
+          install: { id: "install-n8n" },
+        },
+      ],
+    });
+
+    render(<WorkflowInventory />);
+
+    expect(
+      screen.getByText("n8n bridge").closest("a")?.getAttribute("href"),
+    ).toBe("/settings/plugins/n8n/workflows");
   });
 });

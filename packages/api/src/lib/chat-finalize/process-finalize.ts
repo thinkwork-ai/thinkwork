@@ -297,8 +297,8 @@ export async function processFinalize(
   const invokeResult = payload.response ?? {};
   const modelRoutedToolCalls = collectModelRoutedToolCalls(invokeResult);
   const agentProfileRuns = collectAgentProfileRuns(payload);
-  const toolInvocations = enrichToolInvocationsWithWikiContext(
-    enrichToolInvocationsWithModelRouting(invokeResult.tool_invocations ?? []),
+  const toolInvocations = enrichToolInvocationsWithModelRouting(
+    invokeResult.tool_invocations ?? [],
   );
   const capturedSystemPrompt = capturedSystemPromptFromFinalizePayload(payload);
   const responseRuntimeType =
@@ -412,12 +412,6 @@ export async function processFinalize(
     outputTokens: usage.outputTokens,
     cachedReadTokens: usage.cachedReadTokens,
     costUsd: parentCostUsd,
-  });
-  await recordWikiContextResultEvidence({
-    tenantId,
-    agentId,
-    turnId,
-    toolInvocations,
   });
 
   // 3. Record Hindsight phase costs
@@ -1526,98 +1520,6 @@ export function enrichToolInvocationsWithModelRouting(
       model_routing: invocation.model_routing ?? routing,
     };
   });
-}
-
-export function enrichToolInvocationsWithWikiContext(
-  toolInvocations: Array<Record<string, unknown>>,
-): Array<Record<string, unknown>> {
-  return toolInvocations.map((invocation) => {
-    const wikiContext = wikiContextFromToolInvocation(invocation);
-    if (!wikiContext) return invocation;
-    return { ...invocation, wiki_context: wikiContext };
-  });
-}
-
-function wikiContextFromToolInvocation(
-  invocation: Record<string, unknown>,
-): Record<string, unknown> | null {
-  const direct = readRecord(invocation.wiki_context ?? invocation.wikiContext);
-  if (Object.keys(direct).length > 0) return direct;
-
-  const details = readRecord(invocation.details);
-  const detailsWiki = readRecord(details.wiki_context ?? details.wikiContext);
-  if (Object.keys(detailsWiki).length > 0) return detailsWiki;
-
-  const result = readRecord(invocation.result);
-  const resultWiki = readRecord(
-    result.wiki_context ??
-      result.wikiContext ??
-      readRecord(result.details).wiki_context,
-  );
-  if (Object.keys(resultWiki).length > 0) return resultWiki;
-
-  const toolName =
-    stringValue(invocation.tool_name) ??
-    stringValue(invocation.toolName) ??
-    stringValue(invocation.name);
-  if (toolName !== "query_wiki_context") return null;
-
-  const args = readRecord(invocation.args);
-  const query = stringValue(args.query);
-  return {
-    provider: "thinkwork-context",
-    surface: "query_wiki_context",
-    retrieval_mode: "db",
-    status: invocation.is_error ? "error" : "unknown",
-    ...(query ? { query } : {}),
-    result_count: 0,
-    top_pages: [],
-    answered_from_db: true,
-  };
-}
-
-async function recordWikiContextResultEvidence(input: {
-  tenantId: string;
-  agentId: string;
-  turnId: string;
-  toolInvocations: Array<Record<string, unknown>>;
-}): Promise<void> {
-  for (const invocation of input.toolInvocations) {
-    const wikiContext = wikiContextFromToolInvocation(invocation);
-    if (!wikiContext) continue;
-
-    const query = stringValue(wikiContext.query) ?? "(unknown query)";
-    const count = numberValue(wikiContext.result_count) ?? 0;
-    try {
-      await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
-        tenantId: input.tenantId,
-        runId: input.turnId,
-        agentId: input.agentId,
-        eventType: "wiki_context_result",
-        stream: "step",
-        level: "info",
-        color: count > 0 ? "blue" : "amber",
-        message: `Wiki returned ${count} page${count === 1 ? "" : "s"} for "${query}"`,
-        payload: {
-          tool_call_id:
-            stringValue(invocation.id) ??
-            stringValue(invocation.tool_call_id) ??
-            stringValue(invocation.toolCallId),
-          tool_name:
-            stringValue(invocation.tool_name) ??
-            stringValue(invocation.toolName) ??
-            stringValue(invocation.name) ??
-            "query_wiki_context",
-          ...wikiContext,
-        },
-      });
-    } catch (eventErr) {
-      console.error(
-        "[chat-finalize] Wiki context event recording failed:",
-        eventErr,
-      );
-    }
-  }
 }
 
 function applyModelRoutedToolCosts(
