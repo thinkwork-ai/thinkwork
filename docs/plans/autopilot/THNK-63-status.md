@@ -129,6 +129,13 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   `f783b5ab7d0b5dba5bcab48de2948e5abfe1c6e3`; final CI passed.
 - 2026-06-22T21:31:22Z: Added Linear U8 merged/final-bookkeeping comment
   `d39e37be-3f52-4746-a076-59f22e8299ee`.
+- 2026-06-22T21:41:34Z: Final status-doc closeout PR #2878 merged at
+  `416518d885b5e3bb117f56720a97b590e009ee50`; final CI passed.
+- 2026-06-22T21:45:37Z: Final Linear evidence comment could not be added from
+  this session because Linear MCP returned HTTP 401 `token_revoked` for
+  `codex_apps/linear.list_comments` after a `_save_comment` retry failed.
+  GitHub cleanup evidence confirmed no remote or local `codex/thnk-63*`
+  branches/worktrees remain.
 
 ## Unit Log
 
@@ -827,4 +834,9 @@ PR:
 - All planned units U1-U8 are implemented and merged.
 - Merged PRs: #2854, #2859, #2861, #2867, #2868, #2869, #2872, #2874,
   #2876.
-- Final status-doc closeout PR is the only remaining bookkeeping step.
+- Final status-doc closeout PR #2878 is merged at
+  `416518d885b5e3bb117f56720a97b590e009ee50`.
+- Local and remote `codex/thnk-63*` branches/worktrees are cleaned up.
+- Blocker: final Linear evidence comment could not be posted because the Linear
+  MCP OAuth token is revoked. Refresh Linear OAuth before any further Linear
+  updates for THNK-63.

@@ -196,6 +196,12 @@ status: in_progress
     merged/final-bookkeeping comment `d39e37be-3f52-4746-a076-59f22e8299ee`.
   - 2026-06-22: All THNK-63 implementation units U1-U8 are merged. Remaining
     closeout is status-doc PR and final branch/worktree cleanup.
+  - 2026-06-22: Final status-doc closeout PR
+    [#2878](https://github.com/thinkwork-ai/thinkwork/pull/2878) squash
+    merged as `416518d8`; required checks passed.
+  - 2026-06-22: Final Git cleanup found no remote or local
+    `codex/thnk-63*` branches/worktrees. Final Linear evidence comment is
+    blocked because the Linear MCP returned HTTP 401 `token_revoked`.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 
