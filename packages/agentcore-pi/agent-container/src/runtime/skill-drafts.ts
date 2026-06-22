@@ -53,6 +53,8 @@ export function formatSkillCreatorCommandContext(
     `Read and follow the ${SKILL_CREATOR_WORKSPACE_SKILL_SLUG} workspace skill before drafting or editing a skill.`,
     "Help the user create or improve a ThinkWork skill through an interview-driven workflow.",
     "Persist candidate skill files in the workspace under skills/<skill-slug>/ with a complete SKILL.md.",
+    "The SKILL.md must begin with YAML frontmatter containing at least name and description, for example: ---\\nname: <skill-slug>\\ndescription: <one clear sentence>\\n---.",
+    "Put the skill operating instructions after the frontmatter; do not rely on manifest.json as a substitute for SKILL.md frontmatter.",
     "When the user asks to submit, review, approve, register, or publish the skill, ThinkWork will register the changed skill folder as a Skill Library draft during turn finalization.",
     "Do not ask the user for skillDraftId, API endpoint URLs, tenant IDs, or other internal registration details.",
     "A skill should not be published to the Skill Library until the user approves it.",

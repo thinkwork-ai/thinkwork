@@ -15,11 +15,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U6 Chat Skill Creator Draft Registration Bridge.
-- Current branch: `codex/thnk-11-u6-chat-draft-registration`.
-- Current worktree: `.Codex/worktrees/thnk-11-u6-chat-draft-registration`.
+- Current unit: U7 Chat Skill Creator Registration Fix.
+- Current branch: `codex/thnk-11-u7-registration-fix`.
+- Current worktree: `.Codex/worktrees/thnk-11-u7-registration-fix`.
 - Current pull request:
-  [#2829](https://github.com/thinkwork-ai/thinkwork/pull/2829).
+  [#2830](https://github.com/thinkwork-ai/thinkwork/pull/2830).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -77,6 +77,25 @@ status: in_progress
     U4/U5 merge. Scope: bridge `/skill-creator` generated workspace skill files
     into the Skill Library draft approval queue without asking the user for
     internal IDs or endpoint details, then rerun the full localhost E2E.
+  - U6 PR [#2829](https://github.com/thinkwork-ai/thinkwork/pull/2829)
+    passed required CI, squash merged as
+    `e402cf1121b900563eaee8b03080593bb228ccd5`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
+  - U6 deployment completed successfully in GitHub run `27927665115`; the
+    deploy summary verified the updated AgentCore runtime image.
+  - U6 localhost E2E used `http://localhost:5175` so the authenticated Cognito
+    app origin was preserved. Chat thread
+    `04dcf96d-ea01-472b-ac51-fd0a289f7993` generated
+    `skills/codex-e2e-skill-20260622a/SKILL.md` and `manifest.json`, but no
+    `skill_drafts` row was created. Database inspection showed the finalize
+    payload did not carry `cost_owner_user_id`; the user message still held the
+    requester identity and `/skill-creator` command metadata.
+  - U7 started from a clean isolated worktree created from `origin/main` after
+    U6 merge/deploy. Scope: recover the requester from the latest user message
+    when finalize lacks a cost owner, and strengthen the runtime prompt so
+    generated `SKILL.md` files include required YAML frontmatter before the
+    draft is submitted.
 - Local verification:
   - U2 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
@@ -241,7 +260,32 @@ status: in_progress
     `pnpm format:check` remains unavailable in this checkout because the root
     package does not install a `prettier` binary; touched files were checked via
     `pnpm dlx prettier@3.8.2 --check ...`.
+  - U7 install completed with
+    `pnpm install --frozen-lockfile --offline`; local Node 25 logged the
+    existing optional `canvas@2.11.2` native fallback/missing `pkg-config`
+    warning, but pnpm returned success.
+  - U7 focused verification passed:
+    `pnpm --filter @thinkwork/api test -- src/lib/chat-finalize/process-finalize.test.ts`
+    (39 tests) and
+    `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/skill-drafts.test.ts`
+    (3 tests).
+  - U7 touched-package typechecks passed:
+    `pnpm --filter @thinkwork/api typecheck` and
+    `pnpm --filter @thinkwork/agentcore-pi typecheck`.
+  - U7 broader gates passed: targeted Prettier 3.8.2 check for touched files,
+    `git diff --check`, `pnpm lint`, and monorepo `pnpm typecheck`.
+  - First U7 full `pnpm test` hit the known local Electron extraction race
+    (`EEXIST: ... Electron Framework`). Removing the generated Electron
+    `dist`/`path.txt` artifact and rerunning Electron's installer repaired the
+    local package; `pnpm --filter @thinkwork/desktop test` then passed (15
+    files, 105 tests).
+  - Rerunning full U7 `pnpm test` passed across the workspace, including
+    `@thinkwork/api` (564 files passed, 3 skipped; 5263 tests passed, 9
+    skipped), `@thinkwork/web` (187 files, 1427 tests), release tests, and
+    plugin-source-boundary tests.
 - PR / CI:
+  - U7 PR: [#2830](https://github.com/thinkwork-ai/thinkwork/pull/2830).
+  - U7 CI passed on first PR run: CLA, lint, verify, typecheck, and test.
   - U6 PR: [#2829](https://github.com/thinkwork-ai/thinkwork/pull/2829).
   - U4/U5 PR: [#2828](https://github.com/thinkwork-ai/thinkwork/pull/2828).
   - U3 PR: [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827).

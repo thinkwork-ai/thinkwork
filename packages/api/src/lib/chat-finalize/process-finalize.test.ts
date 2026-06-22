@@ -583,6 +583,62 @@ describe("processFinalize reconcile seam", () => {
     });
   });
 
+  it("falls back to the latest user message sender when the finalize payload has no cost owner", async () => {
+    const requesterUserId = "77777777-7777-7777-7777-777777777777";
+    const reconcileReport = {
+      status: "complete" as const,
+      files: [
+        {
+          path: "skills/codex-e2e/SKILL.md",
+          op: "create" as const,
+          owner: "agent" as const,
+          status: "written" as const,
+          sourceKey: "tenants/acme/agents/default/skills/codex-e2e/SKILL.md",
+          etag: "etag-1",
+        },
+      ],
+    };
+    mocks.selectRows = [{ senderId: requesterUserId }];
+    mocks.reconcileChangedFiles.mockResolvedValueOnce(reconcileReport);
+    mocks.autoSubmitSkillCreatorDraft.mockResolvedValueOnce({
+      status: "submitted",
+      draftId: "draft-1",
+      slug: "codex-e2e",
+      fileCount: 1,
+      currentContentHash: "sha256:test",
+    });
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        user_message:
+          "/skill-creator create codex-e2e and submit it for review",
+        duration_ms: 25,
+        status: "completed",
+        skill_creator_command: {
+          type: "skill_creator",
+          source: "slash_command",
+          command: "/skill-creator",
+        },
+        response: { content: "draft created" },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.autoSubmitSkillCreatorDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requesterUserId,
+        skillCreatorCommand: {
+          type: "skill_creator",
+          source: "slash_command",
+          command: "/skill-creator",
+        },
+      }),
+    );
+  });
+
   it("passes the runtime cost owner user id to cost recording and subscriptions", async () => {
     mocks.updateReturning = [
       [
