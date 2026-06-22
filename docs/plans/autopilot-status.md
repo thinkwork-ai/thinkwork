@@ -6,6 +6,51 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
+
+- Plan: `docs/plans/2026-06-22-001-feat-agent-loop-foundation-plan.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: In progress.
+- Current unit: U1 - AgentLoop schema and shared contracts.
+- Current branch: `codex/agent-loop-u1-schema`.
+- Current worktree: `.Codex/worktrees/agent-loop-u1-schema`.
+- Current pull request: pending.
+- Progress:
+  - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
+    AgentLoop foundation plan.
+  - 2026-06-22: U1 started from a clean isolated worktree created from
+    `origin/main`; copied the plan, brainstorm, and ideation docs into the
+    worktree because the plan artifacts were repo-local and not yet on
+    `origin/main`.
+  - 2026-06-22: Added AgentLoop contract package, database schema, canonical
+    GraphQL types, manual migration with drift markers, and U1 tests.
+  - 2026-06-22: Local verification passed:
+    `pnpm --dir packages/agent-loops-core test`,
+    `pnpm --dir packages/agent-loops-core typecheck`,
+    `pnpm --dir packages/agent-loops-core build`,
+    `pnpm --dir packages/database-pg typecheck`,
+    `pnpm --dir packages/database-pg exec vitest run __tests__/agent-loops-schema.test.ts __tests__/migration-0182-agent-loops.test.ts`,
+    and `pnpm --dir packages/database-pg test`.
+  - 2026-06-22: Local formatting used
+    `pnpm dlx prettier@3.6.2 --write <touched files>` because root
+    `prettier` is not installed in the workspace lockfile.
+  - 2026-06-22: Broader verification passed: `pnpm typecheck`,
+    `pnpm lint`, and `pnpm test`. The first `pnpm test` run failed in
+    `apps/desktop` because the fresh worktree's local Electron binary payload
+    was incomplete after install; removing only the generated Electron
+    `node_modules` payload and rerunning `node .../electron/install.js`
+    repaired it, then `pnpm --dir apps/desktop test` and the full rerun of
+    `pnpm test` passed.
+  - 2026-06-22: `pnpm format:check` is blocked locally because the repo script
+    references `prettier` but no root/local `prettier` binary is installed.
+    Equivalent touched-file check passed with
+    `pnpm dlx prettier@3.6.2 --check <touched formatted files>`.
+  - 2026-06-22: Pre-PR review pass completed with no blocking findings; U1
+    remains scoped to shared contracts, persistence schema, GraphQL type
+    declarations, migration markers, and tests.
+
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 
 - Plan:
