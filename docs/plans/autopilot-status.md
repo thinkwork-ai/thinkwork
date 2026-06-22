@@ -116,12 +116,11 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: In progress.
-- Current unit: U7 - Operational rollout and migration cleanup.
-- Current branch: `codex/agent-loop-u7-rollout-cleanup`.
-- Current worktree: `.Codex/worktrees/agent-loop-u7-rollout-cleanup`.
-- Current pull request:
-  [#2865](https://github.com/thinkwork-ai/thinkwork/pull/2865).
+- Status: Complete.
+- Current unit: None.
+- Current branch: None.
+- Current worktree: None.
+- Current pull request: None.
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -400,6 +399,14 @@ status: in_progress
     focused web test to wait for `Password set.`, then verified
     `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUserDetail.test.tsx -t "sets a permanent password"`
     and touched-file Prettier check.
+  - 2026-06-22: U7 PR
+    [#2865](https://github.com/thinkwork-ai/thinkwork/pull/2865) passed
+    required CI after rebasing onto moving `main`, squash merged as
+    `21d6f64ffdff5a16c5622f9980b92200cbe4858e`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: All planned AgentLoop foundation implementation units U1-U7 are
+    merged into `main`.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 
