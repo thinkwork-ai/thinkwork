@@ -60,6 +60,10 @@ export interface WorkspaceFileEditorProps<TTarget> {
   title?: ReactNode;
   description?: ReactNode;
   defaultOpenFile?: string;
+  /** Refetch the visible file tree without changing the target or resetting the
+   *  currently open file/editor content. Hosts can bump this after external
+   *  writes, such as generated catalog evidence. */
+  refreshKey?: string | number;
   readOnly?: boolean;
   className?: string;
   /** Draw the outer border + rounded corners around the tree/editor split.
@@ -87,6 +91,7 @@ export function WorkspaceFileEditor<TTarget>({
   title,
   description,
   defaultOpenFile,
+  refreshKey,
   readOnly = false,
   className,
   bordered = true,
@@ -120,6 +125,7 @@ export function WorkspaceFileEditor<TTarget>({
   const openFileRef = useRef<string | null>(null);
   const fileListRequestId = useRef(0);
   const loadRequestId = useRef(0);
+  const lastRefreshKeyRef = useRef<typeof refreshKey>(refreshKey);
   // Expand the top-level source roots once per target, the first time files
   // load. A ref (not state) so a user collapsing a root afterwards sticks.
   const didAutoExpandRef = useRef(false);
@@ -189,6 +195,16 @@ export function WorkspaceFileEditor<TTarget>({
   useEffect(() => {
     void fetchFiles({ showLoading: true });
   }, [fetchFiles]);
+
+  useEffect(() => {
+    if (refreshKey === undefined) return;
+    if (lastRefreshKeyRef.current === refreshKey) {
+      lastRefreshKeyRef.current = refreshKey;
+      return;
+    }
+    lastRefreshKeyRef.current = refreshKey;
+    void fetchFiles({ showLoading: false });
+  }, [fetchFiles, refreshKey]);
 
   const tree = useMemo(() => buildWorkspaceTree(files), [files]);
   const folderPaths = useMemo(

@@ -14,12 +14,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U3 - Add clickable trust step detail UI.
-- Current branch: `codex/thnk-11-u3-trust-step-ui`.
+- Current unit: U4 - Connect catalog and editor refresh behavior.
+- Current branch: `codex/thnk-11-u4-trust-refresh`.
 - Current worktree:
-  `.Codex/worktrees/thnk-11-u3-trust-step-ui`.
+  `.Codex/worktrees/thnk-11-u4-trust-refresh`.
 - Current pull request:
-  [#2839](https://github.com/thinkwork-ai/thinkwork/pull/2839).
+  [#2840](https://github.com/thinkwork-ai/thinkwork/pull/2840).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -54,6 +54,19 @@ status: in_progress
     wire missing evidence steps to the workspace-files fix action.
   - 2026-06-22: U3 PR
     [#2839](https://github.com/thinkwork-ai/thinkwork/pull/2839) opened and
+    CI monitoring started.
+  - 2026-06-22: U3 PR
+    [#2839](https://github.com/thinkwork-ai/thinkwork/pull/2839) passed
+    required CI, squash merged as
+    `0be0db04ae5aebbec5b3d4425bed162083fe78bf`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U4 started from a clean isolated worktree created from
+    `origin/main` after U3 merge. Scope: keep generated trust evidence
+    coherent in the file tree without remounting the editor or clearing the
+    current open file/edit state.
+  - 2026-06-22: U4 PR
+    [#2840](https://github.com/thinkwork-ai/thinkwork/pull/2840) opened and
     CI monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
@@ -95,6 +108,25 @@ status: in_progress
   - U3 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
   - U3 full web test suite passed: `pnpm --filter @thinkwork/web test` (187
     files passed; 1438 tests passed).
+  - U3 CI passed on PR
+    [#2839](https://github.com/thinkwork-ai/thinkwork/pull/2839): CLA, lint,
+    test, typecheck, and verify.
+  - U4 `pnpm install --frozen-lockfile --offline` completed in the worktree;
+    local Node 25 logged the existing optional `canvas@2.11.2`
+    native-fallback/missing `pkg-config` warning, but pnpm exited
+    successfully.
+  - U4 focused Skill Detail component tests passed:
+    `pnpm --dir apps/web exec vitest run src/components/settings/SettingsSkillDetail.test.tsx`
+    (19 tests).
+  - U4 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U4 full web test suite passed: `pnpm --filter @thinkwork/web test` (187
+    files passed; 1439 tests passed).
+  - U4 targeted Prettier check and `git diff --check` passed for touched
+    web/editor/status files.
+  - U4 exploratory direct `tsc --noEmit` inside
+    `packages/workspace-editor` is not a package script and failed on existing
+    `@thinkwork/ui` `ImportMeta.env` typing; the imported web path is covered
+    by the passing web typecheck above.
 
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 

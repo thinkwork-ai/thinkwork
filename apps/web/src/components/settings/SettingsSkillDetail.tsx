@@ -1063,7 +1063,8 @@ export function SettingsSkillDetail() {
       <div className="min-h-0 flex-1">
         <WorkspaceFileEditor
           target={{ skill: skillSlug }}
-          targetKey={`skill:${skillSlug}:${editorRefreshVersion}`}
+          targetKey={`skill:${skillSlug}`}
+          refreshKey={editorRefreshVersion}
           client={skillCatalogClient}
           defaultOpenFile="SKILL.md"
           bordered={false}
