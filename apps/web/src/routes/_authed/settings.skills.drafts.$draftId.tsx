@@ -2,15 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { OperatorGuard } from "@/components/settings/OperatorGuard";
 import { SettingsSkillDetail } from "@/components/settings/SettingsSkillDetail";
 
-export const Route = createFileRoute("/_authed/settings/skills/$skillSlug")({
-  component: SkillCatalogDetailRoute,
+export const Route = createFileRoute(
+  "/_authed/settings/skills/drafts/$draftId",
+)({
+  component: SkillDraftDetailRoute,
 });
 
-function SkillCatalogDetailRoute() {
-  const { skillSlug } = Route.useParams();
+function SkillDraftDetailRoute() {
+  const { draftId } = Route.useParams();
   return (
     <OperatorGuard>
-      <SettingsSkillDetail skillSlug={skillSlug} />
+      <SettingsSkillDetail mode="draft" draftId={draftId} />
     </OperatorGuard>
   );
 }

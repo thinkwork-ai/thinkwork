@@ -21,10 +21,15 @@ import {
   EvalDatasetsQuery,
   SkillEvalScoreDetailQuery,
 } from "@/lib/evaluation-queries";
+import {
+  PublishSkillDraftMutation,
+  SettingsSkillDraftsQuery,
+} from "@/lib/skill-creator-queries";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { SettingsSkillDetail } from "./SettingsSkillDetail";
 
 const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
   exportSkillArchive: vi.fn(),
   fixSkillTrustEvidence: vi.fn(),
   runSkillTrustPipeline: vi.fn(),
@@ -56,7 +61,7 @@ vi.mock("@tanstack/react-router", async () => {
     Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
       <a href={to}>{children}</a>
     ),
-    useParams: () => ({ skillSlug: "web-research" }),
+    useNavigate: () => mocks.navigate,
   };
 });
 
@@ -100,7 +105,7 @@ vi.mock("@thinkwork/workspace-editor", () => ({
   WorkspaceFileEditor: (props: {
     defaultOpenFile?: string;
     refreshKey?: string | number;
-    target?: { skill?: string };
+    target?: { skill?: string; skillDraftId?: string };
     targetKey?: string;
   }) => {
     mocks.workspaceFileEditor(props);
@@ -110,6 +115,7 @@ vi.mock("@thinkwork/workspace-editor", () => ({
         data-default-open-file={props.defaultOpenFile}
         data-refresh-key={props.refreshKey}
         data-skill={props.target?.skill}
+        data-skill-draft-id={props.target?.skillDraftId}
         data-target-key={props.targetKey}
       />
     );
@@ -174,9 +180,11 @@ vi.mock("@/components/LoadingShimmer", () => ({
 
 const startRunMock = vi.fn();
 const applyUpdateMock = vi.fn();
+const publishDraftMock = vi.fn();
 
 let scoreData: unknown;
 let datasetsData: unknown;
+let draftData: unknown;
 const agentData = { agent: { id: "agent-1" } };
 
 function renderLatestHeaderAction() {
@@ -203,17 +211,28 @@ async function openTrustSheet() {
   await screen.findByRole("dialog");
 }
 
+async function openTrustStepDetail(name: RegExp) {
+  const row = await screen.findByRole("button", { name });
+  fireEvent.click(row);
+  await screen.findByTestId("skill-trust-step-detail");
+}
+
 function setupMocks() {
   vi.mocked(useQuery).mockImplementation((args) => {
     let data: unknown = undefined;
     if (args.query === SkillEvalScoreDetailQuery) data = scoreData;
     else if (args.query === EvalDatasetsQuery) data = datasetsData;
     else if (args.query === SettingsTenantAgentQuery) data = agentData;
+    else if (args.query === SettingsSkillDraftsQuery) data = draftData;
     return [{ data, fetching: false, stale: false }, vi.fn()] as never;
   });
   vi.mocked(useMutation).mockImplementation((doc) => {
     const fn =
-      doc === ApplySkillUpdateMutation ? applyUpdateMock : startRunMock;
+      doc === ApplySkillUpdateMutation
+        ? applyUpdateMock
+        : doc === PublishSkillDraftMutation
+          ? publishDraftMock
+          : startRunMock;
     return [{ fetching: false, stale: false }, fn] as never;
   });
   vi.mocked(useSubscription).mockReturnValue([
@@ -223,6 +242,7 @@ function setupMocks() {
 }
 
 beforeEach(() => {
+  mocks.navigate.mockReset();
   scoreData = {
     skillEvalScore: {
       skillSlug: "web-research",
@@ -238,6 +258,34 @@ beforeEach(() => {
     },
   };
   datasetsData = { evalDatasets: [] };
+  draftData = {
+    skillDrafts: [
+      {
+        id: "draft-1",
+        tenantId: "tenant-1",
+        slug: "customer-brief",
+        title: "Customer Brief",
+        displayName: "Customer Brief",
+        summary: "Creates a concise customer briefing.",
+        status: "submitted",
+        currentContentHash: "sha",
+        inboxItemId: null,
+        submittedAt: "2026-06-21T12:00:00Z",
+        createdAt: "2026-06-21T12:00:00Z",
+        updatedAt: "2026-06-21T12:00:00Z",
+        requester: {
+          id: "user-1",
+          name: "Eric",
+          email: "eric@example.com",
+        },
+        source: {
+          kind: "thread",
+          threadId: "thread-1",
+          messageId: "message-1",
+        },
+      },
+    ],
+  };
   startRunMock.mockReset();
   startRunMock.mockResolvedValue({ data: { startEvalRun: { id: "run-2" } } });
   applyUpdateMock.mockReset();
@@ -251,6 +299,21 @@ beforeEach(() => {
         overridden: true,
         passRate: 0.5,
         threshold: 0.8,
+      },
+    },
+  });
+  publishDraftMock.mockReset();
+  publishDraftMock.mockResolvedValue({
+    data: {
+      publishSkillDraft: {
+        id: "draft-1",
+        slug: "customer-brief",
+        displayName: "Customer Brief",
+        status: "published",
+        currentContentHash: "sha",
+        publishedCatalogSlug: "customer-brief",
+        publishedContentHash: "sha",
+        updatedAt: "2026-06-21T12:00:00Z",
       },
     },
   });
@@ -391,7 +454,7 @@ describe("SettingsSkillDetail eval panel", () => {
         return element;
       }) as typeof document.createElement);
 
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     const { getByRole } = renderLatestHeaderAction();
 
     fireEvent.click(getByRole("button", { name: "Export skill archive" }));
@@ -411,7 +474,7 @@ describe("SettingsSkillDetail eval panel", () => {
 
   it("shows export failures and does not create a download", async () => {
     mocks.exportSkillArchive.mockRejectedValueOnce(new Error("archive failed"));
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     const { getByRole } = renderLatestHeaderAction();
 
     fireEvent.click(getByRole("button", { name: "Export skill archive" }));
@@ -425,7 +488,7 @@ describe("SettingsSkillDetail eval panel", () => {
   });
 
   it("opens the source editor on SKILL.md for the selected skill", () => {
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
 
     expect(
       screen
@@ -443,8 +506,86 @@ describe("SettingsSkillDetail eval panel", () => {
     );
   });
 
+  it("opens a draft editor on SKILL.md with a publish header action instead of evals", () => {
+    render(<SettingsSkillDetail mode="draft" draftId="draft-1" />);
+
+    const editor = screen.getByTestId("skill-file-editor");
+    expect(editor.getAttribute("data-default-open-file")).toBe("SKILL.md");
+    expect(editor.getAttribute("data-skill-draft-id")).toBe("draft-1");
+    expect(editor.getAttribute("data-target-key")).toBe("skill-draft:draft-1");
+    expect(mocks.workspaceFileEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultOpenFile: "SKILL.md",
+        target: { skillDraftId: "draft-1" },
+      }),
+    );
+
+    const { getByRole, queryByRole } = renderLatestHeaderAction();
+    expect(getByRole("button", { name: "Publish skill draft" })).toBeTruthy();
+    expect(queryByRole("button", { name: "Skill evals" })).toBeNull();
+    expect(queryByRole("button", { name: "Export skill archive" })).toBeNull();
+  });
+
+  it("publishes a draft detail and navigates to the catalog skill", async () => {
+    render(<SettingsSkillDetail mode="draft" draftId="draft-1" />);
+    const { getByRole } = renderLatestHeaderAction();
+
+    fireEvent.click(getByRole("button", { name: "Publish skill draft" }));
+
+    await waitFor(() =>
+      expect(publishDraftMock).toHaveBeenCalledWith({
+        input: { id: "draft-1", confirmReplace: false },
+      }),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill draft published.");
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/settings/skills/$skillSlug",
+      params: { skillSlug: "customer-brief" },
+    });
+  });
+
+  it("confirms before publishing a draft detail over an existing catalog skill", async () => {
+    publishDraftMock
+      .mockResolvedValueOnce({
+        error: {
+          message: "Catalog skill 'customer-brief' already exists.",
+          graphQLErrors: [{ extensions: { reason: "skill_exists" } }],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          publishSkillDraft: {
+            id: "draft-1",
+            slug: "customer-brief",
+            displayName: "Customer Brief",
+            status: "published",
+            currentContentHash: "sha",
+            publishedCatalogSlug: "customer-brief",
+            publishedContentHash: "sha",
+            updatedAt: "2026-06-21T12:00:00Z",
+          },
+        },
+      });
+    render(<SettingsSkillDetail mode="draft" draftId="draft-1" />);
+    const { getByRole } = renderLatestHeaderAction();
+
+    fireEvent.click(getByRole("button", { name: "Publish skill draft" }));
+
+    expect((await screen.findByRole("dialog")).textContent).toContain(
+      "customer-brief",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+
+    await waitFor(() =>
+      expect(publishDraftMock).toHaveBeenLastCalledWith({
+        input: { id: "draft-1", confirmReplace: true },
+      }),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill draft published.");
+  });
+
   it("renders a scored skill's pass rate and enables 'run evals now' in the evals sheet", async () => {
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openEvalsSheet();
 
     expect(screen.getByTestId("skill-eval-score").textContent).toBe("80%");
@@ -463,7 +604,7 @@ describe("SettingsSkillDetail eval panel", () => {
       },
     };
     setupMocks();
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openEvalsSheet();
 
     expect(screen.getByText("Regression")).toBeTruthy();
@@ -485,7 +626,7 @@ describe("SettingsSkillDetail eval panel", () => {
       },
     };
     setupMocks();
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openEvalsSheet();
 
     expect(screen.getByTestId("skill-eval-score").textContent).toBe("Unrated");
@@ -513,7 +654,7 @@ describe("SettingsSkillDetail eval panel", () => {
       },
     };
     setupMocks();
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openEvalsSheet();
 
     expect(
@@ -525,7 +666,7 @@ describe("SettingsSkillDetail eval panel", () => {
   });
 
   it("dispatches an on-demand run against the skill dataset", async () => {
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openEvalsSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-evals"));
@@ -563,7 +704,7 @@ describe("SettingsSkillDetail eval panel", () => {
       },
     });
     setupMocks();
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openEvalsSheet();
 
     expect(screen.getByTestId("skill-held-update")).toBeTruthy();
@@ -592,7 +733,7 @@ describe("SettingsSkillDetail eval panel", () => {
   });
 
   it("moves catalog source guidance into the info sheet", async () => {
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
 
     expect(
       screen.queryByText(/Installed agent copies keep running/i),
@@ -606,7 +747,7 @@ describe("SettingsSkillDetail eval panel", () => {
   });
 
   it("opens the trust sheet and runs the Skill Trust pipeline for the current skill", async () => {
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
@@ -625,15 +766,15 @@ describe("SettingsSkillDetail eval panel", () => {
   });
 
   it("opens a trust step detail from a clickable evidence row", async () => {
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
     await screen.findByText("Pipeline status");
-    fireEvent.click(
-      screen.getByRole("button", { name: /Skill card trust step/i }),
-    );
+    expect(screen.queryByTestId("skill-trust-step-detail")).toBeNull();
+    await openTrustStepDetail(/Skill card trust step/i);
 
+    expect(screen.getAllByRole("dialog")).toHaveLength(2);
     expect(screen.getByTestId("skill-trust-step-detail")).toBeTruthy();
     expect(
       screen.getByText(/Documents what the skill does, who owns it/i),
@@ -677,13 +818,11 @@ describe("SettingsSkillDetail eval panel", () => {
         signature: "skill.oms.sig",
       },
     });
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
-    await screen.findByRole("button", {
-      name: /Skill card trust step: missing/i,
-    });
+    await openTrustStepDetail(/Skill card trust step: missing/i);
     fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
 
     await waitFor(() =>
@@ -735,18 +874,11 @@ describe("SettingsSkillDetail eval panel", () => {
         benchmark: "BENCHMARK.md",
       },
     });
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
-    await screen.findByRole("button", {
-      name: /Signature trust step: missing signing config/i,
-    });
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /Signature trust step: missing signing config/i,
-      }),
-    );
+    await openTrustStepDetail(/Signature trust step: missing signing config/i);
 
     expect(
       screen.getByText(/Signing is not configured for this environment/i),
@@ -832,7 +964,7 @@ describe("SettingsSkillDetail eval panel", () => {
         },
       },
     });
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     const initialTargetKey =
       mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.targetKey;
     const initialRefreshKey =
@@ -840,9 +972,7 @@ describe("SettingsSkillDetail eval panel", () => {
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
-    await screen.findByRole("button", {
-      name: /Benchmark trust step: missing/i,
-    });
+    await openTrustStepDetail(/Benchmark trust step: missing/i);
     fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
 
     await waitFor(() =>
@@ -902,15 +1032,13 @@ describe("SettingsSkillDetail eval panel", () => {
       },
     });
     mocks.fixSkillTrustEvidence.mockRejectedValueOnce(new Error("writer down"));
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     const initialRefreshKey =
       mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.refreshKey;
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
-    await screen.findByRole("button", {
-      name: /Benchmark trust step: missing/i,
-    });
+    await openTrustStepDetail(/Benchmark trust step: missing/i);
     fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
 
     await waitFor(() =>
@@ -1008,13 +1136,11 @@ describe("SettingsSkillDetail eval panel", () => {
         },
       },
     });
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
-    await screen.findByRole("button", {
-      name: /Skill card trust step: missing/i,
-    });
+    await openTrustStepDetail(/Skill card trust step: missing/i);
     fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
 
     expect(
@@ -1099,13 +1225,11 @@ describe("SettingsSkillDetail eval panel", () => {
       },
     });
     mocks.fixSkillTrustEvidence.mockRejectedValueOnce(new Error("writer down"));
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
-    await screen.findByRole("button", {
-      name: /Benchmark trust step: missing/i,
-    });
+    await openTrustStepDetail(/Benchmark trust step: missing/i);
     fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
 
     await waitFor(() =>
@@ -1118,7 +1242,7 @@ describe("SettingsSkillDetail eval panel", () => {
 
   it("surfaces Skill Trust pipeline failures", async () => {
     mocks.runSkillTrustPipeline.mockRejectedValueOnce(new Error("runner down"));
-    render(<SettingsSkillDetail />);
+    render(<SettingsSkillDetail skillSlug="web-research" />);
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));

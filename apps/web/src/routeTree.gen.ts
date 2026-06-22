@@ -95,6 +95,7 @@ import { Route as AuthedShellActivityThreadIdRouteImport } from "./routes/_authe
 import { Route as AuthedSettingsEvaluationsStudioIndexRouteImport } from "./routes/_authed/settings.evaluations.studio.index";
 import { Route as AuthedSettingsEvaluationsReplayToolsIndexRouteImport } from "./routes/_authed/settings.evaluations.replay-tools.index";
 import { Route as AuthedSettingsEvaluationsDatasetsIndexRouteImport } from "./routes/_authed/settings.evaluations.datasets.index";
+import { Route as AuthedSettingsSkillsDraftsDraftIdRouteImport } from "./routes/_authed/settings.skills.drafts.$draftId";
 import { Route as AuthedSettingsPluginsN8nWorkflowsRouteImport } from "./routes/_authed/settings.plugins.n8n.workflows";
 import { Route as AuthedSettingsPluginsN8nSettingsRouteImport } from "./routes/_authed/settings.plugins.n8n.settings";
 import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes/_authed/settings.evaluations.studio.new";
@@ -587,6 +588,12 @@ const AuthedSettingsEvaluationsDatasetsIndexRoute =
     path: "/evaluations/datasets/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsSkillsDraftsDraftIdRoute =
+  AuthedSettingsSkillsDraftsDraftIdRouteImport.update({
+    id: "/$draftId",
+    path: "/$draftId",
+    getParentRoute: () => AuthedSettingsSkillsDraftsRoute,
+  } as any);
 const AuthedSettingsPluginsN8nWorkflowsRoute =
   AuthedSettingsPluginsN8nWorkflowsRouteImport.update({
     id: "/workflows",
@@ -711,7 +718,7 @@ export interface FileRoutesByFullPath {
   "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
-  "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRoute;
+  "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
@@ -742,6 +749,7 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
   "/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
   "/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
+  "/settings/skills/drafts/$draftId": typeof AuthedSettingsSkillsDraftsDraftIdRoute;
   "/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
@@ -803,7 +811,7 @@ export interface FileRoutesByTo {
   "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
-  "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRoute;
+  "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
   "/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
@@ -834,6 +842,7 @@ export interface FileRoutesByTo {
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
   "/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
   "/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
+  "/settings/skills/drafts/$draftId": typeof AuthedSettingsSkillsDraftsDraftIdRoute;
   "/settings/evaluations/datasets": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/settings/evaluations/replay-tools": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/settings/evaluations/studio": typeof AuthedSettingsEvaluationsStudioIndexRoute;
@@ -903,7 +912,7 @@ export interface FileRoutesById {
   "/_authed/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
-  "/_authed/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRoute;
+  "/_authed/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
   "/_authed/settings/spaces/$spaceId": typeof AuthedSettingsSpacesSpaceIdRoute;
   "/_authed/settings/users/$userId": typeof AuthedSettingsUsersUserIdRoute;
   "/_authed/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
@@ -934,6 +943,7 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
   "/_authed/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
   "/_authed/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
+  "/_authed/settings/skills/drafts/$draftId": typeof AuthedSettingsSkillsDraftsDraftIdRoute;
   "/_authed/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/_authed/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
   "/_authed/settings/evaluations/studio/": typeof AuthedSettingsEvaluationsStudioIndexRoute;
@@ -1033,6 +1043,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/studio/new"
     | "/settings/plugins/n8n/settings"
     | "/settings/plugins/n8n/workflows"
+    | "/settings/skills/drafts/$draftId"
     | "/settings/evaluations/datasets/"
     | "/settings/evaluations/replay-tools/"
     | "/settings/evaluations/studio/"
@@ -1125,6 +1136,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/studio/new"
     | "/settings/plugins/n8n/settings"
     | "/settings/plugins/n8n/workflows"
+    | "/settings/skills/drafts/$draftId"
     | "/settings/evaluations/datasets"
     | "/settings/evaluations/replay-tools"
     | "/settings/evaluations/studio"
@@ -1224,6 +1236,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/studio/new"
     | "/_authed/settings/plugins/n8n/settings"
     | "/_authed/settings/plugins/n8n/workflows"
+    | "/_authed/settings/skills/drafts/$draftId"
     | "/_authed/settings/evaluations/datasets/"
     | "/_authed/settings/evaluations/replay-tools/"
     | "/_authed/settings/evaluations/studio/"
@@ -1849,6 +1862,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsEvaluationsDatasetsIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/skills/drafts/$draftId": {
+      id: "/_authed/settings/skills/drafts/$draftId";
+      path: "/$draftId";
+      fullPath: "/settings/skills/drafts/$draftId";
+      preLoaderRoute: typeof AuthedSettingsSkillsDraftsDraftIdRouteImport;
+      parentRoute: typeof AuthedSettingsSkillsDraftsRoute;
+    };
     "/_authed/settings/plugins/n8n/workflows": {
       id: "/_authed/settings/plugins/n8n/workflows";
       path: "/workflows";
@@ -2107,6 +2127,21 @@ const AuthedSettingsPluginsN8nRouteWithChildren =
     AuthedSettingsPluginsN8nRouteChildren,
   );
 
+interface AuthedSettingsSkillsDraftsRouteChildren {
+  AuthedSettingsSkillsDraftsDraftIdRoute: typeof AuthedSettingsSkillsDraftsDraftIdRoute;
+}
+
+const AuthedSettingsSkillsDraftsRouteChildren: AuthedSettingsSkillsDraftsRouteChildren =
+  {
+    AuthedSettingsSkillsDraftsDraftIdRoute:
+      AuthedSettingsSkillsDraftsDraftIdRoute,
+  };
+
+const AuthedSettingsSkillsDraftsRouteWithChildren =
+  AuthedSettingsSkillsDraftsRoute._addFileChildren(
+    AuthedSettingsSkillsDraftsRouteChildren,
+  );
+
 interface AuthedSettingsRouteChildren {
   AuthedSettingsActivityRoute: typeof AuthedSettingsActivityRouteWithChildren;
   AuthedSettingsAnalyticsRoute: typeof AuthedSettingsAnalyticsRoute;
@@ -2135,7 +2170,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsPluginsN8nRoute: typeof AuthedSettingsPluginsN8nRouteWithChildren;
   AuthedSettingsRoutinesRoutineIdRoute: typeof AuthedSettingsRoutinesRoutineIdRoute;
   AuthedSettingsSkillsSkillSlugRoute: typeof AuthedSettingsSkillsSkillSlugRoute;
-  AuthedSettingsSkillsDraftsRoute: typeof AuthedSettingsSkillsDraftsRoute;
+  AuthedSettingsSkillsDraftsRoute: typeof AuthedSettingsSkillsDraftsRouteWithChildren;
   AuthedSettingsSpacesSpaceIdRoute: typeof AuthedSettingsSpacesSpaceIdRoute;
   AuthedSettingsUsersUserIdRoute: typeof AuthedSettingsUsersUserIdRoute;
   AuthedSettingsWebhooksWebhookIdRoute: typeof AuthedSettingsWebhooksWebhookIdRoute;
@@ -2193,7 +2228,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsPluginsN8nRoute: AuthedSettingsPluginsN8nRouteWithChildren,
   AuthedSettingsRoutinesRoutineIdRoute: AuthedSettingsRoutinesRoutineIdRoute,
   AuthedSettingsSkillsSkillSlugRoute: AuthedSettingsSkillsSkillSlugRoute,
-  AuthedSettingsSkillsDraftsRoute: AuthedSettingsSkillsDraftsRoute,
+  AuthedSettingsSkillsDraftsRoute: AuthedSettingsSkillsDraftsRouteWithChildren,
   AuthedSettingsSpacesSpaceIdRoute: AuthedSettingsSpacesSpaceIdRoute,
   AuthedSettingsUsersUserIdRoute: AuthedSettingsUsersUserIdRoute,
   AuthedSettingsWebhooksWebhookIdRoute: AuthedSettingsWebhooksWebhookIdRoute,

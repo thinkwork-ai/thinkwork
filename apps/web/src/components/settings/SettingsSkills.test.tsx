@@ -402,87 +402,35 @@ describe("SettingsSkills import", () => {
 });
 
 describe("SettingsSkills drafts", () => {
-  it("publishes a submitted skill draft and opens the catalog detail", async () => {
+  it("opens a draft detail editor when a draft row is clicked", async () => {
     mocks.draftsQueryState.data = {
       skillDrafts: [submittedDraft()],
     };
-    mocks.publishSkillDraft.mockResolvedValue({
-      data: {
-        publishSkillDraft: {
-          id: "draft-1",
-          slug: "customer-brief",
-          displayName: "Customer Brief",
-          status: "published",
-          currentContentHash: "sha",
-          publishedCatalogSlug: "customer-brief",
-          publishedContentHash: "sha",
-          updatedAt: "2026-06-21T12:00:00Z",
-        },
-      },
-    });
 
     render(<SettingsSkills tab="drafts" />);
-    expect(await screen.findByText("Customer Brief")).toBeTruthy();
-    expect(screen.getByText("submitted")).toBeTruthy();
+    const row = await screen.findByRole("button", { name: /Customer Brief/ });
 
-    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
-
-    await waitFor(() => {
-      expect(mocks.publishSkillDraft).toHaveBeenCalledWith({
-        input: { id: "draft-1", confirmReplace: false },
-      });
-    });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill draft published.");
-    expect(mocks.refetchDrafts).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
+    fireEvent.click(row);
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/settings/skills/$skillSlug",
-      params: { skillSlug: "customer-brief" },
+      to: "/settings/skills/drafts/$draftId",
+      params: { draftId: "draft-1" },
     });
   });
 
-  it("confirms before publishing a draft over an existing catalog skill", async () => {
+  it("shows requested-by and status columns without an action column", async () => {
     mocks.draftsQueryState.data = {
-      skillDrafts: [submittedDraft({ slug: "existing-skill" })],
+      skillDrafts: [submittedDraft()],
     };
-    mocks.publishSkillDraft
-      .mockResolvedValueOnce({
-        error: {
-          message: "Catalog skill 'existing-skill' already exists.",
-          graphQLErrors: [{ extensions: { reason: "skill_exists" } }],
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          publishSkillDraft: {
-            id: "draft-1",
-            slug: "existing-skill",
-            displayName: "Customer Brief",
-            status: "published",
-            currentContentHash: "sha",
-            publishedCatalogSlug: "existing-skill",
-            publishedContentHash: "sha",
-            updatedAt: "2026-06-21T12:00:00Z",
-          },
-        },
-      });
 
     render(<SettingsSkills tab="drafts" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Publish" }));
+    expect(await screen.findByText("Customer Brief")).toBeTruthy();
 
-    expect((await screen.findByRole("dialog")).textContent).toContain(
-      "existing-skill",
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
-
-    await waitFor(() => {
-      expect(mocks.publishSkillDraft).toHaveBeenLastCalledWith({
-        input: { id: "draft-1", confirmReplace: true },
-      });
-    });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill draft published.");
+    expect(screen.getByText("Requested by")).toBeTruthy();
+    expect(screen.getByText("Eric")).toBeTruthy();
+    expect(screen.getByText("Status")).toBeTruthy();
+    expect(screen.getByText("submitted")).toBeTruthy();
+    expect(screen.queryByText("Action")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   });
 });
 

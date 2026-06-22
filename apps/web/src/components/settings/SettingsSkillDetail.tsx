@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { RefObject } from "react";
-import { Link, useParams } from "@tanstack/react-router";
-import { Download, Info, ShieldCheck } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Download, Info, ShieldCheck, UploadCloud } from "lucide-react";
 import { IconFlask } from "@tabler/icons-react";
 import { useMutation, useQuery, useSubscription } from "urql";
 import { toast } from "sonner";
@@ -24,6 +23,7 @@ import {
   fixSkillTrustEvidence,
   runSkillTrustPipeline,
   skillCatalogClient,
+  spacesWorkspaceFilesClient,
   type SkillTrustEvidenceFixStepId,
   type SkillTrustEvidenceFixResult,
   type SkillTrustReport,
@@ -35,6 +35,10 @@ import {
   SkillEvalScoreDetailQuery,
   StartEvalRunMutation,
 } from "@/lib/evaluation-queries";
+import {
+  PublishSkillDraftMutation,
+  SettingsSkillDraftsQuery,
+} from "@/lib/skill-creator-queries";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { formatPassRatePct } from "@/lib/skill-eval-format";
 import {
@@ -346,33 +350,23 @@ function SkillTrustSheetContent({
   const [selectedStepId, setSelectedStepId] = useState<SkillTrustStepId | null>(
     null,
   );
-  const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const statusVariant =
     report?.status === "blocked" || report?.status === "failed"
       ? "destructive"
       : "secondary";
   const counts = report?.severityCounts;
   const steps = report ? buildSkillTrustSteps(report) : [];
-  const fallbackStep = firstActionableTrustStep(steps) ?? steps[0] ?? null;
-  const selectedStep =
-    steps.find((step) => step.id === selectedStepId) ?? fallbackStep;
+  const selectedStep = steps.find((step) => step.id === selectedStepId) ?? null;
 
   useEffect(() => {
     if (!report) {
       setSelectedStepId(null);
       return;
     }
-    const next = firstActionableTrustStep(steps) ?? steps[0] ?? null;
     setSelectedStepId((current) =>
-      current && steps.some((step) => step.id === current)
-        ? current
-        : (next?.id ?? null),
+      current && steps.some((step) => step.id === current) ? current : null,
     );
   }, [report?.contentHash]);
-
-  useEffect(() => {
-    if (selectedStep) detailHeadingRef.current?.focus();
-  }, [selectedStep?.id]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-6 pt-2">
@@ -414,31 +408,43 @@ function SkillTrustSheetContent({
 
       {report ? (
         <>
-          <div className="grid min-h-[360px] gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <div className="space-y-1.5 text-sm" data-testid="skill-trust-list">
-              {steps.map((step) => (
-                <TrustEvidenceRow
-                  key={step.id}
-                  step={step}
-                  selected={step.id === selectedStep?.id}
-                  fixing={fixingStep === step.id}
-                  onSelect={() => setSelectedStepId(step.id)}
-                />
-              ))}
-            </div>
-
-            {selectedStep ? (
-              <TrustStepDetail
-                skillSlug={skillSlug}
-                step={selectedStep}
-                contentHash={report.contentHash}
-                fixing={fixingStep === selectedStep.id}
-                fixWarning={fixWarning}
-                headingRef={detailHeadingRef}
-                onFix={onFix}
+          <div className="space-y-1.5 text-sm" data-testid="skill-trust-list">
+            {steps.map((step) => (
+              <TrustEvidenceRow
+                key={step.id}
+                step={step}
+                selected={step.id === selectedStep?.id}
+                fixing={fixingStep === step.id}
+                onSelect={() => setSelectedStepId(step.id)}
               />
-            ) : null}
+            ))}
           </div>
+
+          <Sheet
+            open={Boolean(selectedStep)}
+            onOpenChange={(open) => {
+              if (!open) setSelectedStepId(null);
+            }}
+          >
+            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(460px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+              <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+                <SheetTitle>{selectedStep?.label ?? "Trust step"}</SheetTitle>
+                <SheetDescription>
+                  Purpose, current evidence state, and available fix action.
+                </SheetDescription>
+              </SheetHeader>
+              {selectedStep ? (
+                <TrustStepDetail
+                  skillSlug={skillSlug}
+                  step={selectedStep}
+                  contentHash={report.contentHash}
+                  fixing={fixingStep === selectedStep.id}
+                  fixWarning={fixWarning}
+                  onFix={onFix}
+                />
+              ) : null}
+            </SheetContent>
+          </Sheet>
 
           <div className="rounded-md border border-border/70 p-3">
             <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
@@ -584,7 +590,6 @@ function TrustStepDetail({
   contentHash,
   fixing,
   fixWarning,
-  headingRef,
   onFix,
 }: {
   skillSlug: string;
@@ -592,26 +597,13 @@ function TrustStepDetail({
   contentHash: string;
   fixing: boolean;
   fixWarning: string | null;
-  headingRef: RefObject<HTMLHeadingElement | null>;
   onFix: (step: SkillTrustEvidenceFixStepId) => void;
 }) {
   const canFix = Boolean(step.fixStep && !step.disabledReason);
   return (
-    <section
-      className="rounded-md border border-border/70 bg-background/35 p-4"
-      data-testid="skill-trust-step-detail"
-    >
+    <section className="px-6 pb-6 pt-4" data-testid="skill-trust-step-detail">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3
-            ref={headingRef}
-            tabIndex={-1}
-            className="text-base font-semibold focus:outline-none"
-          >
-            {step.label}
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">{step.purpose}</p>
-        </div>
+        <p className="min-w-0 text-sm text-muted-foreground">{step.purpose}</p>
         <Badge
           variant="outline"
           className={cn(
@@ -870,11 +862,29 @@ function toastTrustFixResult(result: SkillTrustEvidenceFixResult) {
   );
 }
 
-export function SettingsSkillDetail() {
-  const { skillSlug } = useParams({
-    from: "/_authed/settings/skills/$skillSlug",
-  });
+function isSkillDraftExistsError(error: {
+  graphQLErrors?: readonly { extensions?: Record<string, unknown> }[];
+}): boolean {
+  return (
+    error.graphQLErrors?.some((graphQLError) => {
+      const reason = graphQLError.extensions?.reason;
+      return reason === "skill_exists";
+    }) ?? false
+  );
+}
+
+type SettingsSkillDetailProps =
+  | { mode?: "catalog"; skillSlug: string }
+  | { mode: "draft"; draftId: string };
+
+export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
+  const navigate = useNavigate();
+  const isDraft = props.mode === "draft";
+  const draftId = isDraft ? props.draftId : null;
+  const catalogSkillSlug = isDraft ? null : props.skillSlug;
   const [exporting, setExporting] = useState(false);
+  const [publishingDraft, setPublishingDraft] = useState(false);
+  const [pendingDraftReplace, setPendingDraftReplace] = useState(false);
   const [evalSheetOpen, setEvalSheetOpen] = useState(false);
   const [trustSheetOpen, setTrustSheetOpen] = useState(false);
   const [trustRunning, setTrustRunning] = useState(false);
@@ -885,11 +895,29 @@ export function SettingsSkillDetail() {
   const [editorRefreshVersion, setEditorRefreshVersion] = useState(0);
   const trustInFlightRef = useRef(false);
   const [infoSheetOpen, setInfoSheetOpen] = useState(false);
+  const [{ data: draftData, fetching: loadingDrafts }, refetchDrafts] =
+    useQuery({
+      query: SettingsSkillDraftsQuery,
+      pause: !isDraft,
+      requestPolicy: "cache-and-network",
+    });
+  const [, publishDraftMutation] = useMutation(PublishSkillDraftMutation);
+
+  const draft = isDraft
+    ? draftData?.skillDrafts.find((candidate) => candidate.id === draftId)
+    : null;
+  const draftTitle =
+    draft?.displayName?.trim() ||
+    draft?.title?.trim() ||
+    draft?.slug ||
+    "Skill draft";
+  const detailTitle = isDraft ? draftTitle : catalogSkillSlug!;
 
   async function exportSkill() {
+    if (!catalogSkillSlug) return;
     setExporting(true);
     try {
-      const archive = await exportSkillArchive(skillSlug);
+      const archive = await exportSkillArchive(catalogSkillSlug);
       downloadArchive(archive.blob, archive.filename);
       toast.success("Skill archive exported.");
     } catch (err) {
@@ -902,11 +930,12 @@ export function SettingsSkillDetail() {
   }
 
   async function runTrust() {
+    if (!catalogSkillSlug) return;
     if (trustInFlightRef.current) return;
     trustInFlightRef.current = true;
     setTrustRunning(true);
     try {
-      const report = await runSkillTrustPipeline(skillSlug);
+      const report = await runSkillTrustPipeline(catalogSkillSlug);
       setTrustReport(report);
       setTrustFixWarning(null);
       toast.success("Skill trust pipeline completed.");
@@ -921,11 +950,12 @@ export function SettingsSkillDetail() {
   }
 
   async function fixTrustStep(step: SkillTrustEvidenceFixStepId) {
+    if (!catalogSkillSlug) return;
     if (trustFixingStep) return;
     setTrustFixingStep(step);
     setTrustFixWarning(null);
     try {
-      const result = await fixSkillTrustEvidence(skillSlug, step);
+      const result = await fixSkillTrustEvidence(catalogSkillSlug, step);
       setTrustReport(result.trustReport);
       if (result.artifactPath) {
         setEditorRefreshVersion((version) => version + 1);
@@ -943,46 +973,107 @@ export function SettingsSkillDetail() {
     }
   }
 
+  async function publishDraft(confirmReplace = false) {
+    if (!isDraft || !draftId || !draft) return;
+    setPublishingDraft(true);
+    try {
+      const result = await publishDraftMutation({
+        input: { id: draftId, confirmReplace },
+      });
+      if (result.error) {
+        if (isSkillDraftExistsError(result.error)) {
+          setPendingDraftReplace(true);
+          return;
+        }
+        toast.error(`Could not publish skill draft: ${result.error.message}`);
+        return;
+      }
+
+      const publishedSlug =
+        result.data?.publishSkillDraft.publishedCatalogSlug ??
+        result.data?.publishSkillDraft.slug ??
+        draft.slug;
+      setPendingDraftReplace(false);
+      toast.success("Skill draft published.");
+      refetchDrafts({ requestPolicy: "network-only" });
+      navigate({
+        to: "/settings/skills/$skillSlug",
+        params: { skillSlug: publishedSlug },
+      });
+    } finally {
+      setPublishingDraft(false);
+    }
+  }
+
   // Title + back navigation relocate to the settings header bar: the "Skill
   // Library" crumb links back to the list, and the sidebar's back button also works.
   usePageHeaderActions({
-    title: skillSlug,
+    title: detailTitle,
     breadcrumbs: [
-      { label: "Skill Library", href: "/settings/skills" },
-      { label: skillSlug },
+      {
+        label: "Skill Library",
+        href: isDraft ? "/settings/skills/drafts" : "/settings/skills",
+      },
+      { label: detailTitle },
     ],
     action: (
       <div className={cn("flex items-center", desktopToolbarGapClassName)}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className={
-            evalSheetOpen
-              ? desktopToolbarActiveButtonClassName
-              : desktopToolbarButtonClassName
-          }
-          aria-label="Skill evals"
-          title="Skill evals"
-          onClick={() => setEvalSheetOpen(true)}
-        >
-          <IconFlask className="size-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className={
-            trustSheetOpen
-              ? desktopToolbarActiveButtonClassName
-              : desktopToolbarButtonClassName
-          }
-          aria-label="Skill trust"
-          title="Skill trust"
-          onClick={() => setTrustSheetOpen(true)}
-        >
-          <ShieldCheck className="size-4" />
-        </Button>
+        {isDraft ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className={desktopToolbarButtonClassName}
+            aria-label="Publish skill draft"
+            title="Publish skill draft"
+            disabled={
+              publishingDraft ||
+              loadingDrafts ||
+              !draft ||
+              draft.status !== "submitted"
+            }
+            onClick={() => void publishDraft()}
+          >
+            {publishingDraft ? (
+              <Spinner className="size-4" />
+            ) : (
+              <UploadCloud className="size-4" />
+            )}
+          </Button>
+        ) : (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={
+                evalSheetOpen
+                  ? desktopToolbarActiveButtonClassName
+                  : desktopToolbarButtonClassName
+              }
+              aria-label="Skill evals"
+              title="Skill evals"
+              onClick={() => setEvalSheetOpen(true)}
+            >
+              <IconFlask className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={
+                trustSheetOpen
+                  ? desktopToolbarActiveButtonClassName
+                  : desktopToolbarButtonClassName
+              }
+              aria-label="Skill trust"
+              title="Skill trust"
+              onClick={() => setTrustSheetOpen(true)}
+            >
+              <ShieldCheck className="size-4" />
+            </Button>
+          </>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -998,40 +1089,44 @@ export function SettingsSkillDetail() {
         >
           <Info className="size-4" />
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className={desktopToolbarButtonClassName}
-          aria-label="Export skill archive"
-          title="Export skill archive"
-          disabled={exporting}
-          onClick={() => void exportSkill()}
-        >
-          {exporting ? (
-            <Spinner className="size-4" />
-          ) : (
-            <Download className="size-4" />
-          )}
-        </Button>
+        {!isDraft ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className={desktopToolbarButtonClassName}
+            aria-label="Export skill archive"
+            title="Export skill archive"
+            disabled={exporting}
+            onClick={() => void exportSkill()}
+          >
+            {exporting ? (
+              <Spinner className="size-4" />
+            ) : (
+              <Download className="size-4" />
+            )}
+          </Button>
+        ) : null}
       </div>
     ),
-    actionKey: `skill-actions:${skillSlug}:${exporting ? "exporting" : "idle"}:${evalSheetOpen ? "evals" : "evals-closed"}:${trustSheetOpen ? "trust" : "trust-closed"}:${trustRunning ? "trust-running" : "trust-idle"}:${infoSheetOpen ? "info" : "info-closed"}`,
+    actionKey: `skill-actions:${isDraft ? `draft:${draftId}` : `catalog:${catalogSkillSlug}`}:${exporting ? "exporting" : "idle"}:${publishingDraft ? "publishing" : "publish-idle"}:${draft?.status ?? "no-draft"}:${evalSheetOpen ? "evals" : "evals-closed"}:${trustSheetOpen ? "trust" : "trust-closed"}:${trustRunning ? "trust-running" : "trust-idle"}:${infoSheetOpen ? "info" : "info-closed"}`,
   });
 
   return (
     <div className="flex h-full flex-col">
-      <Sheet open={evalSheetOpen} onOpenChange={setEvalSheetOpen}>
-        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(480px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
-          <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
-            <SheetTitle>Skill evals</SheetTitle>
-            <SheetDescription>
-              Score, run, and apply held updates for this catalog skill.
-            </SheetDescription>
-          </SheetHeader>
-          <SkillEvalSheetContent skillSlug={skillSlug} />
-        </SheetContent>
-      </Sheet>
+      {!isDraft ? (
+        <Sheet open={evalSheetOpen} onOpenChange={setEvalSheetOpen}>
+          <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(480px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+            <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+              <SheetTitle>Skill evals</SheetTitle>
+              <SheetDescription>
+                Score, run, and apply held updates for this catalog skill.
+              </SheetDescription>
+            </SheetHeader>
+            <SkillEvalSheetContent skillSlug={catalogSkillSlug!} />
+          </SheetContent>
+        </Sheet>
+      ) : null}
       <Sheet open={infoSheetOpen} onOpenChange={setInfoSheetOpen}>
         <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(480px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
           <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
@@ -1041,36 +1136,84 @@ export function SettingsSkillDetail() {
           <SkillInfoSheetContent />
         </SheetContent>
       </Sheet>
-      <Sheet open={trustSheetOpen} onOpenChange={setTrustSheetOpen}>
-        <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
-          <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
-            <SheetTitle>Skill trust</SheetTitle>
+      {!isDraft ? (
+        <Sheet open={trustSheetOpen} onOpenChange={setTrustSheetOpen}>
+          <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+            <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
+              <SheetTitle>Skill trust</SheetTitle>
+              <SheetDescription>
+                SkillSpector scan, release evidence, and signature status.
+              </SheetDescription>
+            </SheetHeader>
+            <SkillTrustSheetContent
+              skillSlug={catalogSkillSlug!}
+              report={trustReport}
+              running={trustRunning}
+              fixingStep={trustFixingStep}
+              fixWarning={trustFixWarning}
+              onRun={() => void runTrust()}
+              onFix={(step) => void fixTrustStep(step)}
+            />
+          </SheetContent>
+        </Sheet>
+      ) : null}
+      <Sheet
+        open={pendingDraftReplace}
+        onOpenChange={(open) => {
+          if (!open && !publishingDraft) setPendingDraftReplace(false);
+        }}
+      >
+        <SheetContent className="flex w-full flex-col gap-4 overflow-y-auto p-6 data-[side=right]:w-[min(420px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+          <SheetHeader>
+            <SheetTitle>Replace existing skill?</SheetTitle>
             <SheetDescription>
-              SkillSpector scan, release evidence, and signature status.
+              {draft
+                ? `A catalog skill named ${draft.slug} already exists. Replace it with this approved draft?`
+                : "A catalog skill with this slug already exists."}
             </SheetDescription>
           </SheetHeader>
-          <SkillTrustSheetContent
-            skillSlug={skillSlug}
-            report={trustReport}
-            running={trustRunning}
-            fixingStep={trustFixingStep}
-            fixWarning={trustFixWarning}
-            onRun={() => void runTrust()}
-            onFix={(step) => void fixTrustStep(step)}
-          />
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={publishingDraft}
+              onClick={() => setPendingDraftReplace(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={publishingDraft || !draft}
+              onClick={() => void publishDraft(true)}
+            >
+              {publishingDraft ? <Spinner className="size-3.5" /> : "Replace"}
+            </Button>
+          </div>
         </SheetContent>
       </Sheet>
       <div className="min-h-0 flex-1">
-        <WorkspaceFileEditor
-          target={{ skill: skillSlug }}
-          targetKey={`skill:${skillSlug}`}
-          refreshKey={editorRefreshVersion}
-          client={skillCatalogClient}
-          defaultOpenFile="SKILL.md"
-          bordered={false}
-          className="h-full"
-          loadingSlot={<LoadingShimmer />}
-        />
+        {isDraft ? (
+          <WorkspaceFileEditor
+            target={{ skillDraftId: draftId! }}
+            targetKey={`skill-draft:${draftId}`}
+            client={spacesWorkspaceFilesClient}
+            defaultOpenFile="SKILL.md"
+            bordered={false}
+            className="h-full"
+            loadingSlot={<LoadingShimmer />}
+          />
+        ) : (
+          <WorkspaceFileEditor
+            target={{ skill: catalogSkillSlug! }}
+            targetKey={`skill:${catalogSkillSlug}`}
+            refreshKey={editorRefreshVersion}
+            client={skillCatalogClient}
+            defaultOpenFile="SKILL.md"
+            bordered={false}
+            className="h-full"
+            loadingSlot={<LoadingShimmer />}
+          />
+        )}
       </div>
     </div>
   );
