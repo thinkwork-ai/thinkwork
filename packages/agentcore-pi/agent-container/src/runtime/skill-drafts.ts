@@ -47,15 +47,14 @@ export function formatSkillCreatorCommandContext(
   command: RuntimeSkillCreatorCommandPayload | null,
 ): string {
   if (!command) return "";
-  const target = command.draftApi?.target ?? "skillDraftId";
-  const workspaceFilesApi =
-    command.draftApi?.workspaceFilesApi ?? "/api/workspaces/files";
   return [
     "<skill_creator_command>",
     "The user invoked /skill-creator for this turn.",
     `Read and follow the ${SKILL_CREATOR_WORKSPACE_SKILL_SLUG} workspace skill before drafting or editing a skill.`,
     "Help the user create or improve a ThinkWork skill through an interview-driven workflow.",
-    `When persisting draft files, use the ThinkWork workspace files API (${workspaceFilesApi}) with target ${target}; do not write directly to tenant S3.`,
+    "Persist candidate skill files in the workspace under skills/<skill-slug>/ with a complete SKILL.md.",
+    "When the user asks to submit, review, approve, register, or publish the skill, ThinkWork will register the changed skill folder as a Skill Library draft during turn finalization.",
+    "Do not ask the user for skillDraftId, API endpoint URLs, tenant IDs, or other internal registration details.",
     "A skill should not be published to the Skill Library until the user approves it.",
     "</skill_creator_command>",
   ].join("\n");

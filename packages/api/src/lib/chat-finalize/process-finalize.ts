@@ -56,6 +56,7 @@ import {
   mergeWorkspaceProjectionReconcileSummary,
 } from "../workspace-projection-snapshot.js";
 import { finalizeN8nAgentStepRun } from "../n8n-agent-step/finalize.js";
+import { autoSubmitSkillCreatorDraft } from "../skill-creator/auto-submit-draft.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
   GENERIC_AGENT_ERROR_MESSAGE,
@@ -221,6 +222,30 @@ export async function processFinalize(
       error: err instanceof Error ? err.message : String(err),
     });
     throw err;
+  }
+
+  if (status === "completed") {
+    try {
+      const skillDraftRegistration = await autoSubmitSkillCreatorDraft({
+        tenantId,
+        threadId,
+        threadTurnId: turnId,
+        requesterUserId: costOwnerUserId,
+        userMessage,
+        skillCreatorCommand: payload.skill_creator_command,
+        reconcileReport,
+      });
+      if (skillDraftRegistration.status !== "skipped") {
+        console.log(
+          `[chat-finalize] /skill-creator ${skillDraftRegistration.status} draft ${skillDraftRegistration.draftId} (${skillDraftRegistration.slug})`,
+        );
+      }
+    } catch (err) {
+      console.error(
+        "[chat-finalize] /skill-creator draft registration failed (finalize proceeds):",
+        err,
+      );
+    }
   }
 
   if (status === "failed") {
