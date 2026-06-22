@@ -287,6 +287,36 @@ output "brain_artifacts_bucket_arn" {
   value       = module.api.brain_artifacts_bucket_arn
 }
 
+output "okf_wiki_efs_enabled" {
+  description = "Whether the OKF Wiki Navigator EFS current-view substrate is provisioned and wired."
+  value       = var.okf_wiki_efs_enabled
+}
+
+output "okf_wiki_efs_file_system_id" {
+  description = "EFS file system ID for the OKF wiki current view, or null when disabled."
+  value       = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].id : null
+}
+
+output "okf_wiki_refresh_access_point_arn" {
+  description = "EFS access point ARN used by the okf-efs-refresh hydrator, or null when disabled."
+  value       = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : null
+}
+
+output "okf_wiki_pi_read_access_point_arn" {
+  description = "EFS access point ARN mounted by Pi for read-only OKF wiki traversal, or null when disabled."
+  value       = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : null
+}
+
+output "okf_efs_refresh_fn_name" {
+  description = "OKF EFS refresh Lambda function name."
+  value       = module.api.okf_efs_refresh_fn_name
+}
+
+output "okf_efs_refresh_fn_arn" {
+  description = "OKF EFS refresh Lambda ARN."
+  value       = module.api.okf_efs_refresh_fn_arn
+}
+
 output "cognee_storage_file_system_id" {
   description = "EFS file system ID backing Cognee writable data/system directories (null when enable_cognee = false)"
   value       = local.cognee_enabled ? module.cognee[0].cognee_storage_file_system_id : null

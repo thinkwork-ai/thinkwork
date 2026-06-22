@@ -375,6 +375,22 @@ locals {
         }
       },
     ] : [],
+    var.okf_efs_file_system_arn != "" && var.okf_efs_refresh_access_point_arn != "" ? [
+      {
+        Sid    = "OkfEfsHydratorMountWrite"
+        Effect = "Allow"
+        Action = [
+          "elasticfilesystem:ClientMount",
+          "elasticfilesystem:ClientWrite",
+        ]
+        Resource = var.okf_efs_file_system_arn
+        Condition = {
+          StringEquals = {
+            "elasticfilesystem:AccessPointArn" = var.okf_efs_refresh_access_point_arn
+          }
+        }
+      },
+    ] : [],
   )
 
   # ---------------------------------------------------------------------------

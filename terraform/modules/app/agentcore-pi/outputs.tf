@@ -21,3 +21,18 @@ output "agentcore_pi_log_group_name" {
   description = "CloudWatch log group name for the Pi Lambda. Useful for log scrubbing and operator inspection."
   value       = aws_cloudwatch_log_group.agentcore_pi.name
 }
+
+output "okf_wiki_mount_enabled" {
+  description = "Whether the OKF wiki EFS view is mounted into the Pi Lambda."
+  value       = local.okf_efs_mount_enabled
+}
+
+output "okf_wiki_mount_path" {
+  description = "Pi local mount path for the OKF wiki EFS view."
+  value       = var.okf_efs_mount_path
+}
+
+output "okf_wiki_read_access_point_arn" {
+  description = "EFS access point ARN mounted by Pi for read-only OKF wiki traversal."
+  value       = var.okf_efs_read_access_point_arn
+}

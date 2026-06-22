@@ -21,6 +21,20 @@ locals {
   memory_retain_fn_name = "thinkwork-${var.stage}-api-memory-retain"
   memory_retain_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.memory_retain_fn_name}"
   pi_image_uri          = "${var.ecr_repository_url}:pi-latest"
+  okf_efs_mount_enabled = var.okf_efs_enabled && var.okf_efs_file_system_arn != "" && var.okf_efs_read_access_point_arn != "" && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
+  okf_efs_iam_statements = local.okf_efs_mount_enabled ? [
+    {
+      Sid      = "OkfWikiEfsReadOnlyMount"
+      Effect   = "Allow"
+      Action   = ["elasticfilesystem:ClientMount"]
+      Resource = var.okf_efs_file_system_arn
+      Condition = {
+        StringEquals = {
+          "elasticfilesystem:AccessPointArn" = var.okf_efs_read_access_point_arn
+        }
+      }
+    },
+  ] : []
 }
 
 ################################################################################
@@ -50,7 +64,7 @@ resource "aws_iam_role_policy" "agentcore_pi" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid    = "S3Access"
         Effect = "Allow"
@@ -259,8 +273,15 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork-${var.stage}-*"
       },
-    ]
+    ], local.okf_efs_iam_statements)
   })
+}
+
+resource "aws_iam_role_policy_attachment" "agentcore_pi_vpc_access" {
+  count = local.okf_efs_mount_enabled ? 1 : 0
+
+  role       = aws_iam_role.agentcore_pi.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy" "agentcore_pi_dlq_send" {
@@ -349,8 +370,28 @@ resource "aws_lambda_function" "agentcore_pi" {
       # Pi's SessionData blobs against threads.session_data. Empty during
       # the first greenfield apply (DB cluster doesn't exist yet); the
       # constructor fail-closes if either is missing at runtime.
-      DB_CLUSTER_ARN = var.db_cluster_arn
-      DB_SECRET_ARN  = var.db_secret_arn
+      DB_CLUSTER_ARN             = var.db_cluster_arn
+      DB_SECRET_ARN              = var.db_secret_arn
+      OKF_WIKI_NAVIGATOR_ENABLED = tostring(local.okf_efs_mount_enabled)
+      OKF_WIKI_ROOT              = var.okf_efs_mount_path
+    }
+  }
+
+  dynamic "vpc_config" {
+    for_each = local.okf_efs_mount_enabled ? [1] : []
+
+    content {
+      subnet_ids         = var.okf_efs_subnet_ids
+      security_group_ids = var.okf_efs_security_group_ids
+    }
+  }
+
+  dynamic "file_system_config" {
+    for_each = local.okf_efs_mount_enabled ? [1] : []
+
+    content {
+      arn              = var.okf_efs_read_access_point_arn
+      local_mount_path = var.okf_efs_mount_path
     }
   }
 

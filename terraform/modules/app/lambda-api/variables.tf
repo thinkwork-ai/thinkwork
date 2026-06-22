@@ -278,6 +278,36 @@ variable "cognee_worker_security_group_ids" {
   default     = []
 }
 
+variable "okf_efs_subnet_ids" {
+  description = "Subnet IDs for the OKF EFS hydrator Lambda VPC attachment. Leave empty to deploy the hydrator without an EFS mount."
+  type        = list(string)
+  default     = []
+}
+
+variable "okf_efs_security_group_ids" {
+  description = "Security group IDs for the OKF EFS hydrator Lambda VPC attachment. Leave empty to deploy the hydrator without an EFS mount."
+  type        = list(string)
+  default     = []
+}
+
+variable "okf_efs_file_system_arn" {
+  description = "EFS file system ARN for the OKF wiki current view. Empty disables EFS IAM grants."
+  type        = string
+  default     = ""
+}
+
+variable "okf_efs_refresh_access_point_arn" {
+  description = "EFS access point ARN mounted by the okf-efs-refresh Lambda. Empty disables the mount."
+  type        = string
+  default     = ""
+}
+
+variable "okf_efs_mount_path" {
+  description = "Local Lambda mount path for the OKF wiki EFS view. Must be under /mnt."
+  type        = string
+  default     = "/mnt/thinkwork-okf"
+}
+
 variable "observation_classifier_model_id" {
   description = "Bedrock model id for the observations promotion-gate classifier. Empty uses the API default (pinned Haiku)."
   type        = string
