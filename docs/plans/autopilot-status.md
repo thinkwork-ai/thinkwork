@@ -18,7 +18,8 @@ status: in_progress
 - Current branch: `codex/thnk-11-u2-workspace-files-fixes`.
 - Current worktree:
   `.Codex/worktrees/thnk-11-u2-workspace-files-fixes`.
-- Current pull request: none yet.
+- Current pull request:
+  [#2838](https://github.com/thinkwork-ai/thinkwork/pull/2838).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -38,6 +39,9 @@ status: in_progress
     `origin/main` after U1 merge. Scope: add the catalog
     `fix-skill-trust-evidence` workspace-files action and matching web client
     helper so the UI can generate individual trust evidence artifacts.
+  - 2026-06-22: U2 PR
+    [#2838](https://github.com/thinkwork-ai/thinkwork/pull/2838) opened and
+    CI monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
     local Node 25 logged the existing optional `canvas@2.11.2`
