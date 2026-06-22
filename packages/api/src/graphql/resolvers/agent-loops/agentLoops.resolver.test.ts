@@ -45,7 +45,11 @@ vi.mock("../../utils.js", () => ({
                       updated_at: new Date("2026-06-22T00:00:00Z"),
                     },
                   ]
-                : [],
+                : insertCall === 2
+                  ? [{ id: "iteration-1" }]
+                  : insertCall === 3
+                    ? [{ id: "wakeup-1" }]
+                    : [],
             ),
         };
       },
@@ -62,17 +66,27 @@ vi.mock("../../utils.js", () => ({
   agentLoops: {
     id: "agent_loops.id",
     tenant_id: "agent_loops.tenant_id",
+    name: "agent_loops.name",
+    enabled: "agent_loops.enabled",
+    lifecycle_status: "agent_loops.lifecycle_status",
   },
   agentLoopVersions: {
     id: "agent_loop_versions.id",
+    version_status: "agent_loop_versions.version_status",
+    goal_spec: "agent_loop_versions.goal_spec",
+    worker_spec: "agent_loop_versions.worker_spec",
+    judge_spec: "agent_loop_versions.judge_spec",
+    loop_policy: "agent_loop_versions.loop_policy",
   },
   agentLoopRuns: {
     id: "agent_loop_runs.id",
+    status: "agent_loop_runs.status",
     tenant_id: "agent_loop_runs.tenant_id",
     agent_loop_id: "agent_loop_runs.agent_loop_id",
     idempotency_key: "agent_loop_runs.idempotency_key",
   },
   agentLoopIterations: {},
+  agentWakeupRequests: { id: "agent_wakeup_requests.id" },
   and: vi.fn((...conditions: unknown[]) => ({ op: "and", conditions })),
   eq: vi.fn((left: unknown, right: unknown) => ({ op: "eq", left, right })),
   snakeToCamel: (row: Record<string, unknown>) =>
@@ -151,16 +165,51 @@ describe("AgentLoop resolvers", () => {
           {
             id: "loop-1",
             tenant_id: "tenant-1",
+            name: "Loop",
+            enabled: true,
+            lifecycle_status: "active",
             current_version_id: "version-1",
           },
         ];
       }
-      if (call === 2) return [];
-      if (call === 3) {
+      if (call === 2) {
         return [
           {
             id: "version-1",
+            version_status: "active",
+            goal_spec: {
+              objective: "Do the thing",
+              completionCriteria: ["Thing is done"],
+            },
+            worker_spec: {
+              type: "agent",
+              id: "agent-1",
+              toolHints: [],
+              config: {},
+            },
+            judge_spec: {
+              mode: "self_check",
+              criteria: [],
+              config: {},
+            },
             loop_policy: { maxIterations: 1 },
+          },
+        ];
+      }
+      if (call === 3) return [];
+      if (call === 4) {
+        return [
+          {
+            id: "run-1",
+            tenant_id: "tenant-1",
+            agent_loop_id: "loop-1",
+            agent_loop_version_id: "version-1",
+            status: "queued",
+            trigger_family: "manual",
+            current_iteration: 1,
+            policy_snapshot: {},
+            created_at: new Date("2026-06-22T00:00:00Z"),
+            updated_at: new Date("2026-06-22T00:00:00Z"),
           },
         ];
       }
@@ -212,6 +261,27 @@ describe("AgentLoop resolvers", () => {
         agent_loop_run_id: "run-1",
         iteration_number: 1,
         status: "queued",
+      }),
+    );
+    expect(mocks.insertValues).toHaveBeenNthCalledWith(
+      3,
+      3,
+      expect.objectContaining({
+        tenant_id: "tenant-1",
+        agent_id: "agent-1",
+        source: "agent_loop",
+        idempotency_key: "agent-loop:run-1:iteration:1",
+        payload: expect.objectContaining({
+          goalMode: expect.objectContaining({
+            enabled: true,
+            action: "start",
+            goalRunId: "run-1",
+          }),
+          agentLoop: expect.objectContaining({
+            loopId: "loop-1",
+            iterationId: "iteration-1",
+          }),
+        }),
       }),
     );
     expect(mocks.updateValues).toHaveBeenCalledWith(

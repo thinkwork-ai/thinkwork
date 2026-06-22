@@ -17,10 +17,10 @@ describe("goal mode dispatch payload boundary", () => {
     expect(chatAgentInvokeSource).toContain("goal_mode: event.goalMode");
   });
 
-  it("maps fallback chat-message wakeups into AgentCore goal_mode", () => {
+  it("maps fallback chat-message and AgentLoop wakeups into AgentCore goal_mode", () => {
     expect(wakeupProcessorSource).toContain("toRuntimeGoalModePayload");
     expect(wakeupProcessorSource).toContain(
-      'wakeup.source === "chat_message" && payload?.goalMode',
+      'wakeup.source === "chat_message" || wakeup.source === "agent_loop"',
     );
     expect(wakeupProcessorSource).toContain(
       "goal_mode: toRuntimeGoalModePayload",

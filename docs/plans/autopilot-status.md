@@ -13,11 +13,10 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U2 - AgentLoop GraphQL API and schedule binding.
-- Current branch: `codex/agent-loop-u2-graphql`.
-- Current worktree: `.Codex/worktrees/agent-loop-u2-graphql`.
-- Current pull request:
-  [#2847](https://github.com/thinkwork-ai/thinkwork/pull/2847).
+- Current unit: U3 - AgentLoop dispatcher and scheduled firing.
+- Current branch: `codex/agent-loop-u3-dispatcher`.
+- Current worktree: `.Codex/worktrees/agent-loop-u3-dispatcher`.
+- Current pull request: not opened yet.
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -105,6 +104,46 @@ status: in_progress
   - 2026-06-22: U2 PR
     [#2847](https://github.com/thinkwork-ai/thinkwork/pull/2847) opened and CI
     monitoring started.
+  - 2026-06-22: U2 PR
+    [#2847](https://github.com/thinkwork-ai/thinkwork/pull/2847) passed
+    required CI after rebasing onto current `main`, squash merged as
+    `bddeca6dd2bb77b52b24d16fe119eac44939d930`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U3 started from a clean isolated worktree created from
+    `origin/main` after U2 merge. Scope: shared AgentLoop dispatcher/run
+    ledger, manual and scheduled loop dispatch, scheduled idempotency, and
+    wakeup-processor AgentLoop metadata/goal-mode parity.
+  - 2026-06-22: U3 implementation added the pure
+    `@thinkwork/agent-loops-core` dispatcher, moved manual GraphQL starts onto
+    the shared dispatcher, added an `agent_loop_schedule` job-trigger branch,
+    and taught wakeup-processor to create AgentLoop turns, forward `goal_mode`,
+    and link/complete/fail the loop iteration ledger.
+  - 2026-06-22: U3 focused verification passed:
+    `pnpm --dir packages/agent-loops-core test`,
+    `pnpm --dir packages/api exec vitest run src/graphql/resolvers/agent-loops/agentLoops.resolver.test.ts src/handlers/wakeup-processor.dispatch-parity.test.ts`,
+    `pnpm --dir packages/lambda exec vitest run __tests__/job-trigger.skill-run.test.ts`,
+    `pnpm --dir packages/agent-loops-core typecheck`,
+    `pnpm --dir packages/api typecheck`, and
+    `pnpm --dir packages/lambda typecheck`.
+  - 2026-06-22: U3 broader local verification passed:
+    `pnpm typecheck`, `pnpm lint`, and `pnpm test`. During broad-test
+    hardening, the first full `pnpm test` attempts exposed a generated
+    Electron payload issue in the fresh worktree and then an accidental
+    lockfile formatting change that tripped the AgentCore Pi supply-chain
+    verifier; repaired only the generated Electron install payload, restored
+    the lockfile to the minimal workspace dependency delta, and verified
+    `pnpm --dir apps/desktop test` plus
+    `pnpm --dir packages/agentcore-pi exec vitest run agent-container/tests/verify-supply-chain.test.ts`.
+  - 2026-06-22: U3 final root `pnpm test` also caught the old
+    `goal-mode.dispatch.test.ts` source-boundary assertion that only allowed
+    `chat_message` wakeups; patched it to cover AgentLoop wakeups carrying
+    `goalMode` into AgentCore `goal_mode`, then the full root `pnpm test`
+    passed including `test:release` and `test:plugin-source-boundary`.
+  - 2026-06-22: U3 local formatting verification passed for touched files with
+    `pnpm dlx prettier@3.6.2 --check <touched files>`; root
+    `pnpm format:check` remains locally blocked by the missing root/local
+    Prettier binary.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 
