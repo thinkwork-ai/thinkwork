@@ -12,7 +12,7 @@ import { SettingsSkills } from "./SettingsSkills";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   listSkillSummaries: vi.fn(),
-  importSkillArchive: vi.fn(),
+  importSkillArchiveAsDraft: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   toastWarning: vi.fn(),
@@ -75,7 +75,7 @@ vi.mock("@/lib/workspace-files-api", async (importOriginal) => {
   return {
     ...actual,
     listSkillSummaries: mocks.listSkillSummaries,
-    importSkillArchive: mocks.importSkillArchive,
+    importSkillArchiveAsDraft: mocks.importSkillArchiveAsDraft,
   };
 });
 
@@ -190,7 +190,7 @@ vi.mock("@/components/LoadingShimmer", () => ({
 beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.listSkillSummaries.mockReset();
-  mocks.importSkillArchive.mockReset();
+  mocks.importSkillArchiveAsDraft.mockReset();
   mocks.toastError.mockReset();
   mocks.toastSuccess.mockReset();
   mocks.toastWarning.mockReset();
@@ -258,11 +258,13 @@ describe("SettingsSkills import", () => {
     expect(getByRole("button", { name: "Import skill archive" })).toBeTruthy();
   });
 
-  it("imports a ZIP archive, refreshes the list, and opens the imported skill", async () => {
-    mocks.importSkillArchive.mockResolvedValue({
+  it("imports a ZIP archive as a draft, refetches drafts, and opens the draft detail", async () => {
+    mocks.importSkillArchiveAsDraft.mockResolvedValue({
+      draftId: "draft-import-1",
       slug: "new-skill",
-      status: "created",
+      status: "submitted",
       generatedWiring: true,
+      currentContentHash: "sha256:abc",
     });
 
     render(<SettingsSkills />);
@@ -271,17 +273,18 @@ describe("SettingsSkills import", () => {
     uploadArchive("skill.zip", Uint8Array.from([0x50, 0x4b, 0x00, 0xff]));
 
     await waitFor(() => {
-      expect(mocks.importSkillArchive).toHaveBeenCalledWith("UEsA/w==", {
-        confirmReplace: false,
-      });
+      expect(mocks.importSkillArchiveAsDraft).toHaveBeenCalledWith("UEsA/w==");
     });
-    await waitFor(() => {
-      expect(mocks.listSkillSummaries).toHaveBeenCalledTimes(2);
+    expect(mocks.refetchDrafts).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill imported.");
+    expect(mocks.listSkillSummaries).toHaveBeenCalledTimes(1);
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Skill draft imported for review.",
+    );
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/settings/skills/$skillSlug",
-      params: { skillSlug: "new-skill" },
+      to: "/settings/skills/drafts/$draftId",
+      params: { draftId: "draft-import-1" },
     });
   });
 
@@ -291,7 +294,7 @@ describe("SettingsSkills import", () => {
 
     uploadArchive("skill.txt", Uint8Array.from([0x50, 0x4b]), "text/plain");
 
-    expect(mocks.importSkillArchive).not.toHaveBeenCalled();
+    expect(mocks.importSkillArchiveAsDraft).not.toHaveBeenCalled();
     expect(mocks.toastError).toHaveBeenCalledWith(
       "Choose a .zip skill archive.",
     );
@@ -305,77 +308,39 @@ describe("SettingsSkills import", () => {
       target: { files: [] },
     });
 
-    expect(mocks.importSkillArchive).not.toHaveBeenCalled();
+    expect(mocks.importSkillArchiveAsDraft).not.toHaveBeenCalled();
     expect(mocks.toastError).not.toHaveBeenCalled();
   });
 
-  it("confirms before replacing an existing skill", async () => {
-    mocks.importSkillArchive
-      .mockRejectedValueOnce(
-        new ApiError(409, {
-          ok: false,
-          code: "skill_exists",
-          slug: "existing-skill",
-          error: "Catalog skill 'existing-skill' already exists.",
-        }),
-      )
-      .mockResolvedValueOnce({
-        slug: "existing-skill",
-        status: "updated",
-        generatedWiring: false,
-      });
+  it("imports same-slug archives as drafts without replacing catalog skills", async () => {
+    mocks.importSkillArchiveAsDraft.mockResolvedValueOnce({
+      draftId: "draft-existing-1",
+      slug: "existing-skill",
+      status: "submitted",
+      generatedWiring: false,
+      currentContentHash: "sha256:def",
+    });
 
     render(<SettingsSkills />);
     await screen.findByPlaceholderText("Search skills…");
 
     uploadArchive("existing-skill.zip", Uint8Array.from([0x50, 0x4b]));
 
-    expect((await screen.findByRole("dialog")).textContent).toContain(
-      "existing-skill",
-    );
-    expect(mocks.importSkillArchive).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
-
     await waitFor(() => {
-      expect(mocks.importSkillArchive).toHaveBeenLastCalledWith("UEs=", {
-        confirmReplace: true,
-      });
+      expect(mocks.importSkillArchiveAsDraft).toHaveBeenCalledWith("UEs=");
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill updated.");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Skill draft imported for review.",
+    );
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/settings/skills/$skillSlug",
-      params: { skillSlug: "existing-skill" },
+      to: "/settings/skills/drafts/$draftId",
+      params: { draftId: "draft-existing-1" },
     });
-  });
-
-  it("cancels replacement without resubmitting", async () => {
-    mocks.importSkillArchive.mockRejectedValueOnce(
-      new ApiError(409, {
-        ok: false,
-        code: "skill_exists",
-        slug: "existing-skill",
-        error: "Catalog skill 'existing-skill' already exists.",
-      }),
-    );
-
-    render(<SettingsSkills />);
-    await screen.findByPlaceholderText("Search skills…");
-
-    uploadArchive("existing-skill.zip", Uint8Array.from([0x50, 0x4b]));
-
-    expect(await screen.findByRole("dialog")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
-    expect(mocks.importSkillArchive).toHaveBeenCalledTimes(1);
-    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("surfaces API validation failures without navigating", async () => {
-    mocks.importSkillArchive.mockRejectedValueOnce(
+    mocks.importSkillArchiveAsDraft.mockRejectedValueOnce(
       new ApiError(
         400,
         {

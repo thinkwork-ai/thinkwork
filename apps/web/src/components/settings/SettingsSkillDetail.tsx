@@ -426,7 +426,7 @@ function SkillTrustSheetContent({
               if (!open) setSelectedStepId(null);
             }}
           >
-            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(460px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+            <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
               <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
                 <SheetTitle>{selectedStep?.label ?? "Trust step"}</SheetTitle>
                 <SheetDescription>

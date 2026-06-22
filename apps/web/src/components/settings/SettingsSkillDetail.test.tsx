@@ -150,8 +150,13 @@ vi.mock("@thinkwork/ui", () => ({
     ),
   Sheet: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
     open ? <div role="dialog">{children}</div> : null,
-  SheetContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+  SheetContent: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement>) => (
+    <div data-testid="sheet-content" {...props}>
+      {children}
+    </div>
   ),
   SheetDescription: ({ children }: { children: React.ReactNode }) => (
     <p>{children}</p>
@@ -776,6 +781,13 @@ describe("SettingsSkillDetail eval panel", () => {
 
     expect(screen.getAllByRole("dialog")).toHaveLength(2);
     expect(screen.getByTestId("skill-trust-step-detail")).toBeTruthy();
+    expect(
+      screen
+        .getAllByTestId("sheet-content")
+        .some((sheet) =>
+          sheet.className.includes("w-[min(520px,calc(100vw-2rem))]"),
+        ),
+    ).toBe(true);
     expect(
       screen.getByText(/Documents what the skill does, who owns it/i),
     ).toBeTruthy();

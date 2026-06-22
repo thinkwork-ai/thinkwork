@@ -68,12 +68,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U6 - Make draft skills open in a detail editor.
-- Current branch: `codex/thnk-11-u6-draft-detail`.
+- Current unit: U7 - Route uploaded skill archives into drafts.
+- Current branch: `codex/thnk-11-u7-import-drafts`.
 - Current worktree:
-  `.Codex/worktrees/thnk-11-u6-draft-detail`.
+  `.Codex/worktrees/thnk-11-u7-import-drafts`.
 - Current pull request:
-  [#2843](https://github.com/thinkwork-ai/thinkwork/pull/2843).
+  [#2846](https://github.com/thinkwork-ai/thinkwork/pull/2846).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -147,6 +147,20 @@ status: in_progress
     Action column with requested-by metadata.
   - 2026-06-22: U6 PR
     [#2843](https://github.com/thinkwork-ai/thinkwork/pull/2843) opened and
+    CI monitoring started.
+  - 2026-06-22: U6 PR
+    [#2843](https://github.com/thinkwork-ai/thinkwork/pull/2843) passed
+    required CI, squash merged as
+    `b4c35c25e60473e898248f05e41cbc211e94ee56`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U7 started from a clean isolated worktree created from
+    `origin/main` after U6 merge. Scope: route uploaded skill archives into
+    submitted draft review records instead of writing directly to the published
+    catalog; keep the legacy direct catalog import path available for explicit
+    recovery use.
+  - 2026-06-22: U7 PR
+    [#2846](https://github.com/thinkwork-ai/thinkwork/pull/2846) opened and
     CI monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
@@ -241,6 +255,33 @@ status: in_progress
     a second side sheet. Re-verified focused Skill Library/Skill Detail tests
     (33 tests), web typecheck, full web tests (187 files; 1444 tests), targeted
     Prettier, and `git diff --check`.
+  - U6 CI passed on PR
+    [#2843](https://github.com/thinkwork-ai/thinkwork/pull/2843): CLA, lint,
+    test, typecheck, and verify.
+  - U7 `pnpm install` completed in the worktree; local Node 25 logged the
+    existing optional `canvas@2.11.2` native-fallback/missing `pkg-config`
+    warning, but pnpm exited successfully.
+  - U7 focused web tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/lib/workspace-files-api.test.ts src/components/settings/SettingsSkills.test.tsx`
+    (33 tests).
+  - U7 focused API workspace-files handler tests passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/__tests__/workspace-files-handler.test.ts --testNamePattern "import-skill-draft|import-skill action"`
+    (13 tests, 172 skipped by name filter).
+  - U7 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U7 API typecheck passed: `pnpm --filter @thinkwork/api typecheck`.
+  - U7 full API workspace-files handler suite passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/__tests__/workspace-files-handler.test.ts`
+    (185 tests).
+  - U7 full web test suite passed: `pnpm --filter @thinkwork/web test` (187
+    files passed; 1445 tests passed).
+  - U7 targeted Prettier check and `git diff --check` passed for touched
+    API/web/status files.
+  - U7 local dev server started from the worktree at
+    `http://localhost:5175/` using the copied ignored `apps/web/.env`.
+    In-app browser automation was unable to complete a smoke pass because the
+    browser layer rejected the localhost route under its URL policy after a
+    navigation timeout; the Vite server remained running for manual operator
+    verification.
 
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 

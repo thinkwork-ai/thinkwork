@@ -39,6 +39,7 @@
  *     diff-preview flows that write a new override after accepting.
  */
 
+import { randomUUID } from "node:crypto";
 import { getConfig } from "@thinkwork/runtime-config";
 import {
   CopyObjectCommand,
@@ -84,6 +85,7 @@ import {
   eq,
   sql,
   spaces,
+  skillDraftEvents,
   skillDrafts,
   tenantMembers,
   tenants,
@@ -719,6 +721,7 @@ const WRITE_ACTIONS = new Set([
   "fix-skill-trust-evidence",
   "run-skill-trust",
   "install-skill",
+  "import-skill-draft",
   "import-skill",
   "reinstall-skill",
   "uninstall-skill",
@@ -762,6 +765,7 @@ async function callerIsTenantAdmin(
 interface HandlerDeps {
   auth: AuthResult;
   tenantId: string;
+  userId: string | null;
   target: Target;
 }
 
@@ -1249,6 +1253,131 @@ async function handleImportSkill(
     generatedWiring: parsed.generatedWiring,
     ...(indexWarning ? { indexWarning } : {}),
     ...evalOutcome,
+  });
+}
+
+async function handleImportSkillDraft(
+  deps: HandlerDeps,
+  archiveBase64: string | undefined,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId, userId } = deps;
+  if (target.kind !== "catalog") {
+    return json(400, {
+      ok: false,
+      code: "unsupported_target",
+      error: "import-skill-draft requires the skill catalog target",
+    });
+  }
+  if (!userId) {
+    return json(403, {
+      ok: false,
+      code: "draft_requester_required",
+      error: "A resolved user is required to import a skill draft.",
+    });
+  }
+  if (typeof archiveBase64 !== "string" || archiveBase64.length === 0) {
+    return json(400, {
+      ok: false,
+      code: "archive_required",
+      error: "archiveBase64 is required for import-skill-draft",
+    });
+  }
+
+  const parsed = await parseCatalogSkillArchive(
+    Buffer.from(archiveBase64, "base64"),
+  );
+  if (!parsed.ok) {
+    return json(400, {
+      ok: false,
+      code: "invalid_skill_archive",
+      error: "Skill archive is invalid.",
+      errors: parsed.errors,
+    });
+  }
+  const validation = validateSkillDraftFiles(parsed.files);
+  if (!validation.ok) {
+    return json(400, {
+      ok: false,
+      code: "invalid_skill_archive",
+      error: "Skill archive is invalid.",
+      errors: validation.errors,
+    });
+  }
+
+  const draftId = randomUUID();
+  const now = new Date();
+  const prefix = skillDraftPrefix(target.tenantSlug, draftId);
+  const writtenKeys: string[] = [];
+
+  try {
+    for (const file of validation.files) {
+      const key = `${prefix}${file.path}`;
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket(),
+          Key: key,
+          Body: file.content,
+          ContentType: contentTypeForSkillDraftPath(file.path),
+          IfNoneMatch: "*",
+        }),
+      );
+      writtenKeys.push(key);
+    }
+
+    await db.insert(skillDrafts).values({
+      id: draftId,
+      tenant_id: tenantId,
+      requested_by_user_id: userId,
+      source_thread_id: null,
+      source_message_id: null,
+      slug: validation.slug,
+      title: validation.slug,
+      display_name: null,
+      summary: null,
+      source_kind: "archive",
+      status: "submitted",
+      current_content_hash: validation.currentContentHash,
+      draft_s3_prefix: prefix,
+      submitted_at: now,
+      created_at: now,
+      updated_at: now,
+    });
+
+    await db.insert(skillDraftEvents).values({
+      id: randomUUID(),
+      tenant_id: tenantId,
+      draft_id: draftId,
+      actor_user_id: userId,
+      event_type: "submitted",
+      message: "Skill draft imported from archive and submitted for review.",
+      payload: {
+        sourceKind: "archive",
+        generatedWiring: parsed.generatedWiring,
+        currentContentHash: validation.currentContentHash,
+      },
+      created_at: now,
+    });
+  } catch (err) {
+    await Promise.allSettled(
+      writtenKeys.map((key) =>
+        s3.send(new DeleteObjectCommand({ Bucket: bucket(), Key: key })),
+      ),
+    );
+    return json(500, {
+      ok: false,
+      code: "skill_draft_import_failed",
+      error: `Skill draft import failed: ${errorMessage(err)}`,
+      slug: validation.slug,
+    });
+  }
+
+  return json(200, {
+    ok: true,
+    draftId,
+    slug: validation.slug,
+    status: "submitted",
+    generatedWiring: parsed.generatedWiring,
+    currentContentHash: validation.currentContentHash,
   });
 }
 
@@ -3914,7 +4043,7 @@ interface RequestBody {
   contextContent?: string;
   /** For `install-skill`: selected WIRING.md suggestion id. */
   wiring_choice?: string;
-  /** For catalog `import-skill`: base64-encoded single-skill ZIP archive. */
+  /** For catalog `import-skill` / `import-skill-draft`: base64-encoded single-skill ZIP archive. */
   archiveBase64?: string;
   /** For catalog `import-skill`: explicitly replace an existing catalog slug. */
   confirmReplace?: boolean;
@@ -4055,7 +4184,7 @@ export async function handler(
     }
   }
 
-  const deps: HandlerDeps = { auth, tenantId, target };
+  const deps: HandlerDeps = { auth, tenantId, userId, target };
 
   if (
     target.kind === "catalog" &&
@@ -4066,6 +4195,7 @@ export async function handler(
       "delete",
       "export-skill",
       "fix-skill-trust-evidence",
+      "import-skill-draft",
       "import-skill",
       "run-skill-trust",
     ].includes(action)
@@ -4156,6 +4286,9 @@ export async function handler(
           body.archiveBase64,
           body.confirmReplace === true,
         );
+      }
+      case "import-skill-draft": {
+        return await handleImportSkillDraft(deps, body.archiveBase64);
       }
       case "export-skill": {
         return await handleExportSkill(deps, body.slug);
