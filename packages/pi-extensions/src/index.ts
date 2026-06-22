@@ -8,6 +8,7 @@ export * from "./delegation.js";
 export * from "./fetch-workspace-source.js";
 export * from "./knowledge-graph.js";
 export * from "./memory.js";
+export * from "./okf-wiki-navigator.js";
 export * from "./send-email.js";
 export * from "./skills.js";
 export * from "./system-prompt.js";

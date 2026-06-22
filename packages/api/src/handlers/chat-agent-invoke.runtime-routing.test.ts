@@ -231,6 +231,7 @@ describe("chat-agent-invoke runtime routing", () => {
       computer_task_id: "task-1",
       computer_response_mode: "thread_turn",
       browser_automation_enabled: true,
+      okf_wiki_navigator_enabled: true,
       thread_turn_id: "turn-pi-1",
       finalize_callback_url:
         "https://api.example.com/api/threads/thread-1/finalize",
@@ -835,6 +836,7 @@ describe("chat-agent-invoke runtime routing", () => {
     expect(body.web_search_config).toBeUndefined();
     expect(body.send_email_config).toBeUndefined();
     expect(body.context_engine_config).toBeUndefined();
+    expect(body.okf_wiki_navigator_enabled).toBeUndefined();
     expect(body.browser_automation_enabled).toBeUndefined();
     expect(body.skills).toEqual([
       {

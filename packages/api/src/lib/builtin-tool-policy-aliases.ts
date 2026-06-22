@@ -13,10 +13,25 @@ const KNOWLEDGE_GRAPH_ALIASES = [
   "knowledge_graph",
 ] as const;
 
+const OKF_WIKI_NAVIGATOR_ALIASES = [
+  "okf_wiki_navigator",
+  "okf-wiki-navigator",
+  "wiki_ls",
+  "wiki_rg",
+  "wiki_read",
+  "wiki_links",
+] as const;
+
 const TOOL_POLICY_ALIASES: Record<string, readonly string[]> = {
   knowledge_graph_search: KNOWLEDGE_GRAPH_ALIASES,
   "knowledge-graph": KNOWLEDGE_GRAPH_ALIASES,
   knowledge_graph: KNOWLEDGE_GRAPH_ALIASES,
+  okf_wiki_navigator: OKF_WIKI_NAVIGATOR_ALIASES,
+  "okf-wiki-navigator": OKF_WIKI_NAVIGATOR_ALIASES,
+  wiki_ls: OKF_WIKI_NAVIGATOR_ALIASES,
+  wiki_rg: OKF_WIKI_NAVIGATOR_ALIASES,
+  wiki_read: OKF_WIKI_NAVIGATOR_ALIASES,
+  wiki_links: OKF_WIKI_NAVIGATOR_ALIASES,
   "web-search": ["web-search", "web_search"],
   web_search: ["web-search", "web_search"],
   "web-extract": ["web-extract", "web_extract"],

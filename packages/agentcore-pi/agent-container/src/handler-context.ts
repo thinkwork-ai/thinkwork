@@ -151,6 +151,8 @@ export interface RuntimeEnvSnapshot {
   workspaceDir: string;
   piAgentDir: string;
   gitSha: string;
+  okfWikiNavigatorEnabled?: boolean;
+  okfWikiRoot?: string;
 }
 
 /**
@@ -179,6 +181,9 @@ export function snapshotRuntimeEnv(
     workspaceDir: env.WORKSPACE_DIR || "/workspace",
     piAgentDir: env.THINKWORK_PI_AGENT_DIR || "/tmp/thinkwork-pi-agent",
     gitSha: env.THINKWORK_GIT_SHA || "unknown",
+    okfWikiNavigatorEnabled:
+      (env.OKF_WIKI_NAVIGATOR_ENABLED || "").toLowerCase() === "true",
+    okfWikiRoot: env.OKF_WIKI_ROOT || "",
   };
 }
 

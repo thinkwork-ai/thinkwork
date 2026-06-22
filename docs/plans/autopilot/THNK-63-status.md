@@ -80,6 +80,12 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   `e8491d45-e3ea-439d-9548-2f50dda76099`.
 - 2026-06-22T19:07:37Z: Added Linear U4 PR-opened comment
   `7d832401-8102-42a2-b510-3aed830bc51e`; monitoring PR #2867 CI.
+- 2026-06-22T19:17:38Z: Added Linear U4 merged/cleanup comment
+  `1b941406-45ba-49f4-a216-3fdcb86f20f3`.
+- 2026-06-22T19:19:46Z: Added Linear U5 start comment
+  `cb559d3c-f0df-4556-9e5b-951f486f4467`.
+- 2026-06-22T19:35:33Z: Added Linear U5 PR-opened comment
+  `bd51380a-a70a-4483-af07-123167f87295`; monitoring PR #2868 CI.
 
 ## Unit Log
 
@@ -441,17 +447,62 @@ Local verification:
 PR:
 
 - Opened: https://github.com/thinkwork-ai/thinkwork/pull/2867
-- Linear PR-opened comment:
-  `7d832401-8102-42a2-b510-3aed830bc51e`.
-- Current state: CI running after rebase and forced update to current
-  `origin/main`.
-- 2026-06-22T19:03Z: Rebased U4 onto current `origin/main`; focused
-  post-rebase checks passed:
-  `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/okf-wiki-provider.test.ts`,
-  `pnpm --filter @thinkwork/pi-runtime-core test -- test/okf-wiki-navigator.test.ts`,
-  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and
-  `pnpm --filter @thinkwork/pi-runtime-core typecheck`.
+- Merged: 2026-06-22T19:17:08Z.
+- Merge commit: `2aa7e158fc1a359f75a4d9a4fbeb9001b16c379c`.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Cleanup: remote branch was already deleted by GitHub; local U4 worktree and
+  branch were removed before U5 continued from current `origin/main`.
+
+### U5: Expose Pi OKF Navigator Tools And Runtime Policy Gates
+
+Objective: register first-party `wiki_ls`, `wiki_rg`, `wiki_read`, and
+`wiki_links` tools only when OKF navigator runtime enablement and tool policy
+allow them, while keeping tool schemas free of tenant ids, absolute roots, S3
+keys, backend ids, and write flags.
+
+Branch/worktree:
+
+- Branch: `codex/thnk-63-u5-okf-tools`
+- Worktree: `.Codex/worktrees/thnk-63-u5-okf-tools`
+- Base: `origin/main` at `2aa7e158f`.
+
+Implementation:
+
+- Added the first-party Pi extension for `wiki_ls`, `wiki_rg`, `wiki_read`,
+  and `wiki_links`, backed only by the host-supplied OKF wiki provider.
+- Added API tool-policy aliases so `okf_wiki_navigator` and each individual
+  `wiki_*` tool slug behave as one policy group.
+- Threaded `okf_wiki_navigator_enabled` through chat and wakeup dispatch when
+  the effective tool policy permits it.
+- Added Pi runtime gates requiring non-eval mode, API opt-in, runtime env
+  enablement, tenant slug, OKF root, and an accessible tenant `current`
+  directory before tools enter the extension allowlist.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/pi-extensions test -- test/okf-wiki-navigator.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/server.test.ts agent-container/tests/handler-context.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api test -- src/lib/builtin-tool-policy-aliases.test.ts src/handlers/chat-agent-invoke.runtime-routing.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/pi-extensions typecheck` passed.
+- `pnpm --filter @thinkwork/agentcore-pi typecheck` passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/pi-extensions test` passed: 126 tests.
+- `pnpm --filter @thinkwork/agentcore-pi test` passed: 607 passed, 5 todo.
+- `pnpm --filter @thinkwork/api test` passed: 5,347 passed, 9 skipped.
+- `pnpm lint` passed.
+- `pnpm typecheck` passed.
+- `git diff --check` passed.
+- `pnpm dlx prettier@3.8.2 --check <changed files>` passed. The root
+  `prettier` binary is not installed in this worktree; one-off `pnpm dlx`
+  used the lockfile version.
 
 PR:
 
-- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2867
+- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2868
+- Linear PR-opened comment:
+  `bd51380a-a70a-4483-af07-123167f87295`.
+- Current state: PR CI queued/running; no unit child issue exists, so THNK-63
+  remains `In Progress`.
