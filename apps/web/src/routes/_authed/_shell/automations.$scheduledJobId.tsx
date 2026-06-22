@@ -1,20 +1,12 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ScheduledJobDetail } from "@/components/scheduled-jobs/ScheduledJobDetail";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute(
   "/_authed/_shell/automations/$scheduledJobId",
 )({
-  component: ScheduledJobDetailPage,
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/settings/automations/$scheduledJobId",
+      params,
+    });
+  },
 });
-
-function ScheduledJobDetailPage() {
-  const { scheduledJobId } = Route.useParams();
-  const navigate = useNavigate();
-  return (
-    <ScheduledJobDetail
-      scheduledJobId={scheduledJobId}
-      backHref="/automations"
-      onDeleted={() => navigate({ to: "/automations" })}
-    />
-  );
-}

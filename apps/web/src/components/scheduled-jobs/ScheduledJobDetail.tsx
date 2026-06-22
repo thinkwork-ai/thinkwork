@@ -62,12 +62,9 @@ async function apiFetch<T>(
 }
 
 /**
- * Scheduled-job (automation) detail, shared between the main-nav Automations
- * shell and the Settings → Automations shell. The hosting route supplies the
- * job id, the back/breadcrumb target, and the post-delete navigation so the
- * view stays within whichever shell opened it. The edit agent is the tenant
- * platform agent (the per-Computer source agent was removed with the Computer
- * concept).
+ * Scheduled-job compatibility detail. AgentLoops are the product surface; this
+ * view remains so old scheduled-job deep links and internal scheduler rows can
+ * still be inspected without reviving Automations as a parallel product.
  */
 export function ScheduledJobDetail({
   scheduledJobId,
@@ -329,7 +326,7 @@ export function ScheduledJobDetail({
     subtitle: headerSubtitle,
     backHref,
     breadcrumbs: [
-      { label: "Automations", href: backHref },
+      { label: "Scheduled jobs", href: backHref },
       { label: job?.name ?? "Scheduled Job" },
     ],
     action: headerActions,

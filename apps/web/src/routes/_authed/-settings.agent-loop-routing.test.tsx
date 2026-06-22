@@ -38,4 +38,18 @@ describe("AgentLoop settings routing", () => {
     expect(route).toContain('redirect({ to: "/settings/agent-loops" })');
     expect(route).not.toContain("SettingsAutomations");
   });
+
+  it("keeps Settings scheduled-job detail as a compatibility inspector", () => {
+    const route = source(
+      "src/routes/_authed/settings.automations.$scheduledJobId.tsx",
+    );
+    const detail = source(
+      "src/components/scheduled-jobs/ScheduledJobDetail.tsx",
+    );
+
+    expect(route).toContain("ScheduledJobDetail");
+    expect(route).toContain('backHref="/settings/agent-loops"');
+    expect(detail).toContain("Scheduled-job compatibility detail");
+    expect(detail).toContain('label: "Scheduled jobs"');
+  });
 });

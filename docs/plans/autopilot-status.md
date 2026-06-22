@@ -117,11 +117,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U6 - GraphQL/codegen, CLI/mobile parity, and docs.
-- Current branch: `codex/agent-loop-u6-codegen-docs`.
-- Current worktree: `.Codex/worktrees/agent-loop-u6-codegen-docs`.
+- Current unit: U7 - Operational rollout and migration cleanup.
+- Current branch: `codex/agent-loop-u7-rollout-cleanup`.
+- Current worktree: `.Codex/worktrees/agent-loop-u7-rollout-cleanup`.
 - Current pull request:
-  [#2862](https://github.com/thinkwork-ai/thinkwork/pull/2862).
+  [#2865](https://github.com/thinkwork-ai/thinkwork/pull/2865).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -358,6 +358,48 @@ status: in_progress
   - 2026-06-22: U6 PR
     [#2862](https://github.com/thinkwork-ai/thinkwork/pull/2862) opened and CI
     monitoring started.
+  - 2026-06-22: U6 PR
+    [#2862](https://github.com/thinkwork-ai/thinkwork/pull/2862) passed
+    required CI after rebasing onto moving `main`, squash merged as
+    `ba842febfce5e0a3d0ca9c585d37bbff63885ae9`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U7 started from a clean isolated worktree created from
+    `origin/main` after U6 merge. Scope: retire the user-facing Automations
+    shell, preserve scheduled-job compatibility/detail access, keep
+    scheduled-job REST/Terraform plumbing intact for internal jobs, and document
+    rollout/migration ordering.
+  - 2026-06-22: U7 implementation redirected the old `/automations` shell to
+    AgentLoops, redirected old `/automations/:scheduledJobId` deep links to the
+    Settings scheduled-job compatibility detail, changed the app sidebar action
+    to AgentLoops, reframed the scheduled-job detail breadcrumbs as scheduled
+    jobs rather than Automations, and updated admin docs with AgentLoop rollout
+    and scheduler-plumbing guidance.
+  - 2026-06-22: U7 focused verification passed:
+    `pnpm --dir apps/web exec vitest run src/components/shell/ChatSidebar.test.tsx src/routes/_authed/-settings.agent-loop-routing.test.tsx 'src/routes/_authed/_shell/-automations.$scheduledJobId.test.tsx' src/components/settings/settings-nav.test.ts`,
+    `pnpm --dir packages/api exec vitest run src/__tests__/admin-rest-auth-bridge.test.ts`,
+    `pnpm --filter @thinkwork/docs build`, and
+    `pnpm --filter @thinkwork/web typecheck`.
+  - 2026-06-22: U7 broader local verification passed:
+    `git diff --check`, touched-file Prettier verification with
+    `pnpm dlx prettier@3.6.2 --check`, `pnpm --filter @thinkwork/web test`
+    (191 files, 1460 tests), `pnpm lint`, `pnpm typecheck`, and full
+    `pnpm test` including `test:release` and `test:plugin-source-boundary`.
+    The first full `pnpm test` run hit the known fresh-worktree Electron
+    generated-payload issue in `apps/desktop`; removing only the generated
+    Electron payload and rerunning
+    `node node_modules/.pnpm/electron@42.2.0/node_modules/electron/install.js`
+    repaired it, then `pnpm --dir apps/desktop test` and the full root
+    `pnpm test` rerun passed.
+  - 2026-06-22: U7 PR
+    [#2865](https://github.com/thinkwork-ai/thinkwork/pull/2865) opened and CI
+    monitoring started.
+  - 2026-06-22: U7 CI first run passed CLA, lint, verify, and typecheck; test
+    failed in an unrelated `SettingsUserDetail` password-toast assertion that
+    waited for the mutation call but not the async success message. Hardened the
+    focused web test to wait for `Password set.`, then verified
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsUserDetail.test.tsx -t "sets a permanent password"`
+    and touched-file Prettier check.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 
