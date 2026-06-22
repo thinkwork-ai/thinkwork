@@ -118,7 +118,8 @@ status: in_progress
 - Current branch: `codex/thnk-11-u8-skill-card-doc`.
 - Current worktree:
   `.Codex/worktrees/thnk-11-u8-skill-card-doc`.
-- Current pull request: pending.
+- Current pull request:
+  [#2849](https://github.com/thinkwork-ai/thinkwork/pull/2849).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -218,6 +219,9 @@ status: in_progress
     Skill Detail header, route missing cards into the Skill Card trust fix
     path, and keep the nested trust-step side sheet the same width as the
     Skill Trust sheet.
+  - 2026-06-22: U8 PR
+    [#2849](https://github.com/thinkwork-ai/thinkwork/pull/2849) opened and CI
+    monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
     local Node 25 logged the existing optional `canvas@2.11.2`
