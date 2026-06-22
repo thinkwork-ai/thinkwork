@@ -1,3 +1,5 @@
+import { OKF_WIKI_NAVIGATOR_TOOL_NAMES } from "@thinkwork/pi-runtime-core";
+
 const CONTEXT_ENGINE_ALIASES = [
   "query_context",
   "context_engine",
@@ -16,10 +18,7 @@ const KNOWLEDGE_GRAPH_ALIASES = [
 const OKF_WIKI_NAVIGATOR_ALIASES = [
   "okf_wiki_navigator",
   "okf-wiki-navigator",
-  "wiki_ls",
-  "wiki_rg",
-  "wiki_read",
-  "wiki_links",
+  ...OKF_WIKI_NAVIGATOR_TOOL_NAMES,
 ] as const;
 
 const TOOL_POLICY_ALIASES: Record<string, readonly string[]> = {

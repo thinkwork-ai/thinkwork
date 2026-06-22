@@ -1998,7 +1998,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       context_engine_enabled: effectiveContextEngineEnabled || undefined,
       context_engine_config: effectiveContextEngineConfig,
       knowledge_graph_enabled: effectiveKnowledgeGraphEnabled || undefined,
-      okf_wiki_navigator_enabled: effectiveOkfWikiNavigatorEnabled || undefined,
       runtime_type: runtimeType,
       model: agentModel,
       skills:
@@ -2040,6 +2039,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               spaceSlug: renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
             }
           : null,
+        okfWikiNavigatorEnabled: effectiveOkfWikiNavigatorEnabled,
         includeFinalizeCallback: false,
       }),
     };
@@ -2624,8 +2624,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             context_engine_config: effectiveContextEngineConfig,
             knowledge_graph_enabled:
               effectiveKnowledgeGraphEnabled || undefined,
-            okf_wiki_navigator_enabled:
-              effectiveOkfWikiNavigatorEnabled || undefined,
             runtime_type: runtimeType,
             model: agentModel,
             skills:
@@ -2668,6 +2666,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                       renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
                   }
                 : null,
+              okfWikiNavigatorEnabled: effectiveOkfWikiNavigatorEnabled,
               includeFinalizeCallback: false,
             }),
           },

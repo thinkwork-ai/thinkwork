@@ -40,6 +40,7 @@ function baseArgs(
     modelRoutingPolicy: undefined,
     approvedModelIds: undefined,
     renderedWorkspacePrefix: "spaces/research/thread-1",
+    okfWikiNavigatorEnabled: true,
     turnContext: {
       spaceId: "space-1",
       tenantSlug: "acme",
@@ -240,6 +241,22 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
       baseArgs({ apiAuthSecret: "" }),
     );
     expect(withoutSecret.fetch_workspace_source_enabled).toBe(false);
+  });
+
+  it("carries the OKF wiki navigator gate through the shared dispatch helper", () => {
+    const enabled = buildAgentDispatchControlFields(
+      baseArgs({ okfWikiNavigatorEnabled: true }),
+    );
+    expect(enabled.okf_wiki_navigator_enabled).toBe(true);
+
+    const disabled = buildAgentDispatchControlFields(
+      baseArgs({ okfWikiNavigatorEnabled: false }),
+    );
+    const wire = JSON.parse(JSON.stringify(disabled)) as Record<
+      string,
+      unknown
+    >;
+    expect("okf_wiki_navigator_enabled" in wire).toBe(false);
   });
 
   it("ships neither model_routing_policy nor approved_model_ids on the wire when both are omitted (system-actor wakeups)", () => {

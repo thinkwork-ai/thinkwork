@@ -1452,11 +1452,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"))
           ? true
           : undefined,
-      okf_wiki_navigator_enabled: isAnyToolAllowed(
-        ...toolPolicyAliases("okf_wiki_navigator"),
-      )
-        ? true
-        : undefined,
       runtime_type: runtimeType,
       model: agentModel,
       requested_agent_profile_slug: event.requestedProfileSlug || undefined,
@@ -1530,6 +1525,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               spaceSlug: renderedWorkspace.activeSpace?.slug ?? spaceSlug,
             }
           : null,
+        okfWikiNavigatorEnabled: isAnyToolAllowed(
+          ...toolPolicyAliases("okf_wiki_navigator"),
+        ),
         includeFinalizeCallback: true,
       }),
     } as Record<string, unknown>;
