@@ -655,6 +655,78 @@ describe("runAgentLoop", () => {
     ]);
   });
 
+  it("emits OKF wiki context trace activity from navigator tool results", async () => {
+    const session = makeFakeSession({
+      messages: [assistantMessage("done")],
+      events: [
+        {
+          type: "tool_execution_start",
+          toolCallId: "wiki-call-1",
+          toolName: "wiki_rg",
+          args: { query: "Acme", path: "topics" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "wiki-call-1",
+          toolName: "wiki_rg",
+          result: {
+            content: [{ type: "text", text: "OKF wiki matches" }],
+            details: {
+              okfWikiTrace: {
+                surface: "okf_efs",
+                tool: "wiki_rg",
+                query: "Acme",
+                path: "topics",
+                matchCount: 1,
+                entries: [{ path: "topics/acme.md", title: "Acme" }],
+                bounds: {
+                  maxResults: 5,
+                  maxDepth: 2,
+                  maxBytes: 128_000,
+                  truncated: false,
+                },
+                redaction: {
+                  source: "okf_navigator",
+                  policy: "cite_or_summarize_only",
+                },
+              },
+            },
+          },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+    });
+    const emitted: Array<{
+      eventType: string;
+      message: string;
+      payload?: Record<string, unknown>;
+    }> = [];
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({ session, modelId: "m" }),
+      emitActivity: (event) => emitted.push(event),
+    });
+
+    expect(result.toolInvocations[0].okf_wiki_trace).toMatchObject({
+      tool_call_id: "wiki-call-1",
+      tool: "wiki_rg",
+      query: "Acme",
+      matchCount: 1,
+    });
+    expect(emitted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "wiki_context_trace",
+          message: 'OKF wiki search returned 1 item for "Acme"',
+          payload: expect.objectContaining({
+            tool_call_id: "wiki-call-1",
+            tool: "wiki_rg",
+            query: "Acme",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("emits and returns Thread GenUI parts from tool results", async () => {
     const fixture = createTaskReviewGenUIFixture();
     const session = makeFakeSession({

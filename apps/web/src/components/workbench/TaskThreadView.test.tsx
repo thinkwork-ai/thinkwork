@@ -3580,6 +3580,140 @@ describe("TaskThreadView", () => {
     expect(rows[0]?.detail).toContain("Results: 0");
   });
 
+  it("renders OKF wiki navigator traces from usage and dedupes matching events", () => {
+    const rows = actionRowsForTurn(
+      {
+        id: "turn-okf-wiki",
+        status: "succeeded",
+        invocationSource: "chat_message",
+        events: [
+          {
+            id: "event-okf-wiki",
+            eventType: "wiki_context_trace",
+            payload: {
+              surface: "okf_efs",
+              tool: "wiki_rg",
+              tool_call_id: "tool-okf-wiki",
+              query: "Acme renewal",
+              path: ".",
+              matchCount: 2,
+              entries: [
+                {
+                  path: "topics/acme-renewal.md",
+                  title: "Acme Renewal",
+                  line: 12,
+                  snippet: "Renewal depends on pricing approval.",
+                },
+              ],
+              bounds: {
+                maxResults: 50,
+                maxDepth: 8,
+                maxBytes: 128000,
+                truncated: false,
+              },
+              redaction: {
+                source: "okf_navigator",
+                policy: "cite_or_summarize_only",
+              },
+            },
+          },
+        ],
+      },
+      {
+        tool_invocations: [
+          {
+            id: "tool-okf-wiki",
+            tool_name: "wiki_rg",
+            okf_wiki_trace: {
+              surface: "okf_efs",
+              tool: "wiki_rg",
+              tool_call_id: "tool-okf-wiki",
+              query: "Acme renewal",
+              path: ".",
+              matchCount: 2,
+              entries: [
+                {
+                  path: "topics/acme-renewal.md",
+                  title: "Acme Renewal",
+                  line: 12,
+                  snippet:
+                    "Renewal depends on s3://thinkwork-okf/tenants/acme/private.md",
+                },
+              ],
+              bounds: {
+                maxResults: 50,
+                maxDepth: 8,
+                maxBytes: 128000,
+                truncated: false,
+              },
+              redaction: {
+                source: "okf_navigator",
+                policy: "cite_or_summarize_only",
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      title: "OKF wiki returned 2 items",
+      kind: "source",
+    });
+    expect(rows[0]?.detail).toContain("Tool: wiki_rg");
+    expect(rows[0]?.detail).toContain("Query: Acme renewal");
+    expect(rows[0]?.detail).toContain("Path: .");
+    expect(rows[0]?.detail).toContain("Pages:");
+    expect(rows[0]?.detail).toContain("topics/acme-renewal.md");
+    expect(rows[0]?.detail).toContain("line 12");
+    expect(rows[0]?.detail).toContain("maxResults=50");
+    expect(rows[0]?.detail).toContain("Redaction: cite_or_summarize_only");
+    expect(rows[0]?.detail).not.toContain("s3://");
+  });
+
+  it("renders OKF wiki context trace events after finalized replay", () => {
+    const rows = actionRowsForTurn(
+      {
+        id: "turn-okf-wiki-event",
+        status: "succeeded",
+        invocationSource: "chat_message",
+        events: [
+          {
+            id: "event-okf-wiki",
+            eventType: "wiki_context_trace",
+            payload: {
+              surface: "okf_efs",
+              tool: "wiki_read",
+              tool_call_id: "tool-okf-read",
+              path: "topics/acme-renewal.md",
+              bytesRead: 4096,
+              startLine: 10,
+              endLine: 40,
+              truncated: true,
+              redaction: {
+                source: "okf_navigator",
+                policy: "cite_or_summarize_only",
+              },
+            },
+          },
+        ],
+      },
+      {},
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      title: "OKF wiki returned 0 items",
+      kind: "source",
+    });
+    expect(rows[0]?.detail).toContain("Tool: wiki_read");
+    expect(rows[0]?.detail).toContain("Path: topics/acme-renewal.md");
+    expect(rows[0]?.detail).toContain("Lines: 10-40");
+    expect(rows[0]?.detail).toContain("Bytes: offset 0, read 4096");
+    expect(rows[0]?.detail).toContain('"truncated": true');
+  });
+
   it("surfaces an agent profile row while a mentioned profile turn is running", () => {
     const rows = actionRowsForTurn(
       {

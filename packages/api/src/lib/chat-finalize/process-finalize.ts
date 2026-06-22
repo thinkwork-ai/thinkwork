@@ -31,6 +31,11 @@
 import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
+  OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,
+  okfWikiContextTraceFromToolInvocation,
+  okfWikiContextTraceMessage,
+} from "@thinkwork/pi-runtime-core";
+import {
   artifacts,
   messages,
   pendingUserQuestions,
@@ -298,7 +303,11 @@ export async function processFinalize(
   const modelRoutedToolCalls = collectModelRoutedToolCalls(invokeResult);
   const agentProfileRuns = collectAgentProfileRuns(payload);
   const toolInvocations = enrichToolInvocationsWithWikiContext(
-    enrichToolInvocationsWithModelRouting(invokeResult.tool_invocations ?? []),
+    enrichToolInvocationsWithOkfWikiTrace(
+      enrichToolInvocationsWithModelRouting(
+        invokeResult.tool_invocations ?? [],
+      ),
+    ),
   );
   const capturedSystemPrompt = capturedSystemPromptFromFinalizePayload(payload);
   const responseRuntimeType =
@@ -414,6 +423,12 @@ export async function processFinalize(
     costUsd: parentCostUsd,
   });
   await recordWikiContextResultEvidence({
+    tenantId,
+    agentId,
+    turnId,
+    toolInvocations,
+  });
+  await recordOkfWikiContextTraceEvidence({
     tenantId,
     agentId,
     turnId,
@@ -1538,6 +1553,47 @@ export function enrichToolInvocationsWithWikiContext(
   });
 }
 
+export function enrichToolInvocationsWithOkfWikiTrace(
+  toolInvocations: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return toolInvocations.map((invocation) => {
+    const okfWikiTrace = okfWikiContextTraceFromToolInvocation(invocation);
+    if (!okfWikiTrace) return invocation;
+    const sanitizedInvocation = replaceOkfWikiTraceEchoes(
+      invocation,
+      okfWikiTrace,
+    );
+    return { ...sanitizedInvocation, okf_wiki_trace: okfWikiTrace };
+  });
+}
+
+function replaceOkfWikiTraceEchoes(
+  value: unknown,
+  trace: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitized = replaceOkfWikiTraceEchoValue(value, trace);
+  return readRecord(sanitized);
+}
+
+function replaceOkfWikiTraceEchoValue(
+  value: unknown,
+  trace: Record<string, unknown>,
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => replaceOkfWikiTraceEchoValue(item, trace));
+  }
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => [
+      key,
+      key === "okfWikiTrace" || key === "okf_wiki_trace"
+        ? trace
+        : replaceOkfWikiTraceEchoValue(child, trace),
+    ]),
+  );
+}
+
 function wikiContextFromToolInvocation(
   invocation: Record<string, unknown>,
 ): Record<string, unknown> | null {
@@ -1614,6 +1670,37 @@ async function recordWikiContextResultEvidence(input: {
     } catch (eventErr) {
       console.error(
         "[chat-finalize] Wiki context event recording failed:",
+        eventErr,
+      );
+    }
+  }
+}
+
+async function recordOkfWikiContextTraceEvidence(input: {
+  tenantId: string;
+  agentId: string;
+  turnId: string;
+  toolInvocations: Array<Record<string, unknown>>;
+}): Promise<void> {
+  for (const invocation of input.toolInvocations) {
+    const trace = okfWikiContextTraceFromToolInvocation(invocation);
+    if (!trace) continue;
+
+    try {
+      await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
+        tenantId: input.tenantId,
+        runId: input.turnId,
+        agentId: input.agentId,
+        eventType: OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,
+        stream: "step",
+        level: "info",
+        color: trace.truncated ? "amber" : "blue",
+        message: okfWikiContextTraceMessage(trace),
+        payload: trace,
+      });
+    } catch (eventErr) {
+      console.error(
+        "[chat-finalize] OKF wiki trace event recording failed:",
         eventErr,
       );
     }

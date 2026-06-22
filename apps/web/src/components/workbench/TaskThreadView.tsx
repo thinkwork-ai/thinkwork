@@ -80,6 +80,13 @@ import {
   goalRunFromTurnEvidence,
   type GoalRunEvidence,
 } from "@/components/workbench/GoalRunCard";
+import {
+  formatWikiContextTraceDetail,
+  WikiContextTraceCard,
+  wikiContextTraceFromRecord,
+  wikiContextTraceKey,
+  wikiContextTraceTitle,
+} from "@/components/workbench/WikiContextTraceCard";
 import { IconCircleCheckFilled, IconPaperclip } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -1883,6 +1890,7 @@ function ThreadTurnActivity({
               key={`${turn.id}-${index}-${row.title}`}
               title={row.title}
               detail={row.detail}
+              content={row.content}
               kind={row.kind}
               hideIcon={row.hideIcon}
               childrenRows={row.children}
@@ -3456,12 +3464,14 @@ function ThinkingRow({
 function ActionRow({
   title,
   detail,
+  content,
   kind,
   hideIcon = false,
   childrenRows = [],
 }: {
   title: string;
   detail?: string;
+  content?: ReactNode;
   kind: "thinking" | "tool" | "source" | "code";
   hideIcon?: boolean;
   childrenRows?: ActionRowData[];
@@ -3486,6 +3496,11 @@ function ActionRow({
           {detail}
         </pre>
       ) : null}
+      {content ? (
+        <div className="ml-7 mt-2 max-w-[calc(100%-1.75rem)] min-w-0">
+          {content}
+        </div>
+      ) : null}
       {childrenRows.length > 0 ? (
         <div className="ml-7 mt-2 grid min-w-0 max-w-[calc(100%-1.75rem)] gap-2 border-l border-white/10 pl-3">
           {childrenRows.map((child, index) => (
@@ -3493,6 +3508,7 @@ function ActionRow({
               key={`${title}-child-${index}-${child.title}`}
               title={child.title}
               detail={child.detail}
+              content={child.content}
               kind={child.kind}
               hideIcon={child.hideIcon}
               childrenRows={child.children}
@@ -3757,10 +3773,13 @@ function questionCardAnswerContent(
 interface ActionRowData {
   title: string;
   detail?: string;
+  content?: ReactNode;
   kind: "thinking" | "tool" | "source" | "code";
   hideIcon?: boolean;
   children?: ActionRowData[];
 }
+
+const OKF_WIKI_TRACE_EVENT_TYPE = "wiki_context_trace";
 
 // Exported for convergence testing (plan 2026-06-03-001 R1): live step events
 // and the finalized usage.tool_invocations must collapse to one row set.
@@ -3835,6 +3854,14 @@ export function actionRowsForTurn(
       );
       continue;
     }
+    const okfWikiRow = okfWikiContextTraceActionRow(record);
+    if (okfWikiRow) {
+      const key = `okf_wiki_trace:${wikiContextTraceKey(record)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(okfWikiRow);
+      continue;
+    }
     const wikiRow = wikiContextActionRow(record);
     if (wikiRow) {
       const key = `wiki_context:${wikiContextKey(record)}`;
@@ -3877,6 +3904,15 @@ export function actionRowsForTurn(
       const payload = parseRecord(event.payload);
       const profileKey = profileKeyFromAgentProfileRun(payload);
       if (seen.has(`agent_profile:${profileKey.toLowerCase()}`)) continue;
+    }
+    if (stringValue(event.eventType) === OKF_WIKI_TRACE_EVENT_TYPE) {
+      const key = `okf_wiki_trace:${wikiContextTraceKey(parseRecord(event.payload))}`;
+      if (seen.has(key)) continue;
+      const row = actionRowForEvent(event);
+      if (!row) continue;
+      seen.add(key);
+      rows.push(row);
+      continue;
     }
     const row = actionRowForEvent(event);
     if (!row) continue;
@@ -4223,6 +4259,15 @@ function actionRowForEvent(event: TaskThreadEvent) {
       }
     );
   }
+  if (eventType === "wiki_context_trace") {
+    return (
+      okfWikiContextTraceActionRow(payload) ?? {
+        title: "OKF wiki trace",
+        detail,
+        kind: "source" as const,
+      }
+    );
+  }
   if (eventType === "browser_automation_started") {
     return { title: "Opening browser", detail, kind: "source" as const };
   }
@@ -4280,11 +4325,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-      stringValue(payload.profileSlug) ||
-      stringValue(payload.profile_name) ||
-      stringValue(payload.profileName) ||
-      stringValue(payload.profile_run_id) ||
-      stringValue(payload.profileRunId),
+    stringValue(payload.profileSlug) ||
+    stringValue(payload.profile_name) ||
+    stringValue(payload.profileName) ||
+    stringValue(payload.profile_run_id) ||
+    stringValue(payload.profileRunId),
   );
 }
 
@@ -4768,7 +4813,8 @@ function toolKind(name: string): "tool" | "source" | "code" {
   if (
     normalized.includes("search") ||
     normalized.includes("source") ||
-    normalized.includes("crm")
+    normalized.includes("crm") ||
+    normalized.startsWith("wiki_")
   ) {
     return "source";
   }
@@ -4779,6 +4825,9 @@ function toolActionTitle(name: string) {
   const normalized = name.toLowerCase();
   if (normalized === "query_wiki_context") {
     return "Checking wiki";
+  }
+  if (normalized.startsWith("wiki_")) {
+    return `Checking OKF wiki ${name.replace(/^wiki_/, "").replace(/_/g, " ")}`;
   }
   if (normalized.includes("web_search") || normalized.includes("search")) {
     return "Finding sources";
@@ -4802,6 +4851,19 @@ function wikiContextKey(record: Record<string, unknown>) {
   return [id, query, numberValue(wiki?.result_count) ?? 0]
     .filter((part) => part !== null && part !== undefined && part !== "")
     .join(":");
+}
+
+function okfWikiContextTraceActionRow(
+  record: Record<string, unknown>,
+): ActionRowData | null {
+  const trace = wikiContextTraceFromRecord(record);
+  if (!trace) return null;
+  return {
+    title: wikiContextTraceTitle(trace),
+    detail: formatWikiContextTraceDetail(trace),
+    content: <WikiContextTraceCard trace={trace} />,
+    kind: "source",
+  };
 }
 
 function wikiContextActionRow(
@@ -4866,6 +4928,9 @@ function wikiContextFromRecord(
 }
 
 function toolInvocationDetail(record: Record<string, unknown>) {
+  const okfWikiRow = okfWikiContextTraceActionRow(record);
+  if (okfWikiRow?.detail) return okfWikiRow.detail;
+
   const wikiRow = wikiContextActionRow(record);
   if (wikiRow?.detail) return wikiRow.detail;
 
