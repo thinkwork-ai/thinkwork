@@ -14,12 +14,11 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: Complete pending merge of the final ledger-only closeout PR.
-- Current unit: U11 Final THNK-11 closeout ledger.
-- Current branch: `codex/thnk-11-u11-closeout`.
-- Current worktree: `.Codex/worktrees/thnk-11-u11-closeout`.
-- Current pull request:
-  [#2835](https://github.com/thinkwork-ai/thinkwork/pull/2835).
+- Status: Complete.
+- Current unit: none.
+- Current branch: none.
+- Current worktree: none.
+- Current pull request: none.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -210,6 +209,11 @@ status: in_progress
   - U11 started from a clean isolated worktree created from `origin/main` after
     U10 merge. Scope: close the THNK-11 autopilot ledger and record that all
     explicit implementation units from the plan have shipped.
+  - U11 PR [#2835](https://github.com/thinkwork-ai/thinkwork/pull/2835)
+    passed required CI, squash merged as
+    `7946833d4b337fde66e8f3876d9b842cfd43fbbf`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
   - Final THNK-11 localhost E2E evidence remains the U8 vertical slice:
     `http://localhost:5175` created, approved, published, and then invoked
     `codex-e2e-skill-20260622c`, returning
