@@ -14,12 +14,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U5 - Polish Skill Library header tabs and toolbar.
-- Current branch: `codex/thnk-11-u5-skill-library-tabs`.
+- Current unit: U6 - Make draft skills open in a detail editor.
+- Current branch: `codex/thnk-11-u6-draft-detail`.
 - Current worktree:
-  `.Codex/worktrees/thnk-11-u5-skill-library-tabs`.
+  `.Codex/worktrees/thnk-11-u6-draft-detail`.
 - Current pull request:
-  [#2842](https://github.com/thinkwork-ai/thinkwork/pull/2842).
+  [#2843](https://github.com/thinkwork-ai/thinkwork/pull/2843).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -80,6 +80,19 @@ status: in_progress
     the published skill search row.
   - 2026-06-22: U5 PR
     [#2842](https://github.com/thinkwork-ai/thinkwork/pull/2842) opened and
+    CI monitoring started.
+  - 2026-06-22: U5 PR
+    [#2842](https://github.com/thinkwork-ai/thinkwork/pull/2842) passed
+    required CI after a clean rebase onto current `main`, squash merged as
+    `33c283fe79c55131064d786b1350c148b21ed4b5`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U6 started from a clean isolated worktree created from
+    `origin/main` after U5 merge. Scope: make draft rows open a draft detail
+    editor, move publish into draft detail header, and replace the Drafts table
+    Action column with requested-by metadata.
+  - 2026-06-22: U6 PR
+    [#2843](https://github.com/thinkwork-ai/thinkwork/pull/2843) opened and
     CI monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
@@ -155,6 +168,25 @@ status: in_progress
     files passed; 1441 tests passed).
   - U5 targeted Prettier check and `git diff --check` passed for touched
     web/status files.
+  - U5 CI passed on PR
+    [#2842](https://github.com/thinkwork-ai/thinkwork/pull/2842): CLA, lint,
+    test, typecheck, and verify.
+  - U6 `pnpm install --frozen-lockfile --offline` completed in the worktree;
+    local Node 25 logged the existing optional `canvas@2.11.2`
+    native-fallback/missing `pkg-config` warning, but pnpm exited
+    successfully.
+  - U6 focused Skill Library and Skill Detail component tests passed:
+    `pnpm --dir apps/web exec vitest run src/components/settings/SettingsSkills.test.tsx src/components/settings/SettingsSkillDetail.test.tsx`
+    (33 tests).
+  - U6 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U6 full web test suite passed: `pnpm --filter @thinkwork/web test` (187
+    files passed; 1444 tests passed).
+  - U6 targeted Prettier check and `git diff --check` passed for touched
+    web/status files.
+  - U6 post-review UI polish moved trust step detail from an inline panel into
+    a second side sheet. Re-verified focused Skill Library/Skill Detail tests
+    (33 tests), web typecheck, full web tests (187 files; 1444 tests), targeted
+    Prettier, and `git diff --check`.
 
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 
