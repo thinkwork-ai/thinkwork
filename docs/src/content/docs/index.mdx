@@ -3,7 +3,7 @@ title: ThinkWork
 description: The open Agent Harness for Business — production-grade AI work, on the AWS account you own.
 template: splash
 hero:
-  tagline: ThinkWork is the open Agent Harness for Business — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap either with services. Agents do the work, Spaces frame the work, Threads carry the record, Memory carries context, integrations bring in the world, automations time the work, and controls keep it accountable — all inside the AWS account your team already runs.
+  tagline: ThinkWork is the open Agent Harness for Business — Reliability, Efficiency, Security, and Traceability built into the runtime, not bolted on. Self-host on your AWS, run it with us, or wrap either with services. Agents do the work, Spaces frame the work, Threads carry the record, Memory carries context, integrations bring in the world, AgentLoops time recurring work, and controls keep it accountable — all inside the AWS account your team already runs.
   actions:
     - text: Getting Started
       link: /getting-started/
@@ -19,7 +19,7 @@ import { Card, CardGrid } from "@astrojs/starlight/components";
 
 ## What ThinkWork is
 
-ThinkWork is **the open Agent Harness for Business** — a Terraform module that stands up a production-grade agent runtime inside your VPC, keyed to your Cognito, running on your Bedrock endpoint, with agent state in your Aurora cluster. The harness — Agents, Spaces, Threads, Memory, Integrations, Automations, Control — is what's opinionated; the infrastructure is yours. Reliability, Efficiency, Security, and Traceability are built into the runtime, not bolted on as an afterthought.
+ThinkWork is **the open Agent Harness for Business** — a Terraform module that stands up a production-grade agent runtime inside your VPC, keyed to your Cognito, running on your Bedrock endpoint, with agent state in your Aurora cluster. The harness — Agents, Spaces, Threads, Memory, Integrations, AgentLoops, Control — is what's opinionated; the infrastructure is yours. Reliability, Efficiency, Security, and Traceability are built into the runtime, not bolted on as an afterthought.
 
 If ThinkWork the company disappears tomorrow, your deployment keeps working.
 
@@ -58,7 +58,7 @@ These docs are organized into four branches, each answering a different question
   </Card>
   <Card title="Components" icon="puzzle">
     The core components of the harness — Agents, Spaces, Threads, Memory,
-    Integrations, Automations, and Control. Each page follows the same skeleton:
+    Integrations, AgentLoops, and Control. Each page follows the same skeleton:
     why, what, how to configure, common patterns. [Read more
     →](/concepts/threads/)
   </Card>
@@ -105,10 +105,10 @@ Every concept page in these docs follows the same skeleton: **why** the componen
     GitHub, Google Workspace integrations plus MCP tools for remote
     capabilities. [Read more →](/concepts/integrations)
   </Card>
-  <Card title="Automations" icon="setting">
-    The harness's scheduled-trigger surface. Scheduled jobs, event-driven
-    triggers, and workflows on your schedule. Step Functions under the hood.
-    [Read more →](/concepts/automations/)
+  <Card title="AgentLoops" icon="setting">
+    The harness's durable automation surface. Goal-driven loops run manually or
+    on schedules, with judgments, policy limits, and run evidence. Scheduler and
+    EventBridge stay under the hood. [Read more →](/concepts/automations/)
   </Card>
   <Card title="Control" icon="approve-check">
     The harness's governance layer — the four operating guarantees enforced in

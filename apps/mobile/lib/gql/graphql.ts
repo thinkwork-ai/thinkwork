@@ -376,6 +376,7 @@ export enum AgentLoopJudgeMode {
 export type AgentLoopJudgment = {
   __typename?: "AgentLoopJudgment";
   agentLoopIterationId?: Maybe<Scalars["ID"]["output"]>;
+  agentLoopRun?: Maybe<AgentLoopRun>;
   agentLoopRunId: Scalars["ID"]["output"];
   confidence?: Maybe<Scalars["Int"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
