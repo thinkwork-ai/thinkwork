@@ -534,6 +534,9 @@ build_handler "wiki-export" \
 build_handler "okf-materialize" \
   "$REPO_ROOT/packages/api/src/handlers/okf-materialize.ts"
 
+build_handler "okf-efs-refresh" \
+  "$REPO_ROOT/packages/api/src/handlers/okf-efs-refresh.ts"
+
 build_handler "wiki-bootstrap-import" \
   "$REPO_ROOT/packages/api/src/handlers/wiki-bootstrap-import.ts"
 

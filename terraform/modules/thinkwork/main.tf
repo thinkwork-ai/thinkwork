@@ -76,6 +76,31 @@ locals {
     ? module.vpc.private_subnet_ids
     : module.vpc.public_subnet_ids
   )
+  okf_wiki_subnet_ids = (
+    length(module.vpc.private_subnet_ids) > 0
+    ? module.vpc.private_subnet_ids
+    : module.vpc.public_subnet_ids
+  )
+  okf_wiki_route_table_ids = concat(
+    module.vpc.private_route_table_ids,
+    module.vpc.public_route_table_ids,
+  )
+  okf_wiki_interface_endpoint_services = toset(concat(
+    [
+      "bedrock",
+      "bedrock-agentcore",
+      "bedrock-agentcore-control",
+      "bedrock-agentcore.gateway",
+      "lambda",
+      "logs",
+      "rds-data",
+      "secretsmanager",
+      "ssm",
+      "sts",
+      "xray",
+    ],
+    local.cognee_enabled ? [] : ["bedrock-runtime"],
+  ))
 
   # Canonical long-term memory engine for this deployment. Exactly one engine
   # is active per deployment for recall/inspect/export. Auto-selects from
@@ -324,6 +349,28 @@ resource "terraform_data" "cognee_configuration_guardrails" {
         length(var.cognee_bedrock_model_resource_arns) > 0
       )
       error_message = "Bedrock Cognee providers require explicit cognee_bedrock_model_resource_arns."
+    }
+  }
+}
+
+resource "terraform_data" "okf_wiki_efs_guardrails" {
+  count = var.okf_wiki_efs_enabled ? 1 : 0
+
+  input = {
+    subnet_count      = length(local.okf_wiki_subnet_ids)
+    route_table_count = length(local.okf_wiki_route_table_ids)
+    create_endpoints  = var.okf_wiki_create_vpc_endpoints
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(local.okf_wiki_subnet_ids) > 0
+      error_message = "okf_wiki_efs_enabled requires at least one VPC subnet."
+    }
+
+    precondition {
+      condition     = !var.okf_wiki_create_vpc_endpoints || length(local.okf_wiki_route_table_ids) > 0
+      error_message = "okf_wiki_create_vpc_endpoints requires route table IDs so the S3 gateway endpoint can be attached. For BYO VPC, set existing_public_route_table_ids and/or existing_private_route_table_ids."
     }
   }
 }
@@ -740,6 +787,172 @@ resource "aws_vpc_endpoint" "bedrock_runtime" {
   tags = { Name = "thinkwork-${var.stage}-bedrock-runtime-vpce" }
 }
 
+resource "aws_security_group" "okf_wiki_lambda" {
+  count = var.okf_wiki_efs_enabled ? 1 : 0
+
+  name_prefix = "thinkwork-${var.stage}-okf-wiki-lambda-"
+  description = "OKF wiki EFS clients for hydrator and Pi"
+  vpc_id      = module.vpc.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "thinkwork-${var.stage}-okf-wiki-lambda-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_security_group" "okf_wiki_efs" {
+  count = var.okf_wiki_efs_enabled ? 1 : 0
+
+  name_prefix = "thinkwork-${var.stage}-okf-wiki-efs-"
+  description = "NFS ingress for OKF wiki current-view EFS"
+  vpc_id      = module.vpc.vpc_id
+
+  tags = { Name = "thinkwork-${var.stage}-okf-wiki-efs-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_security_group" "okf_wiki_vpc_endpoint" {
+  count = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints ? 1 : 0
+
+  name_prefix = "thinkwork-${var.stage}-okf-wiki-vpce-"
+  description = "HTTPS endpoints for OKF wiki VPC-attached Lambdas"
+  vpc_id      = module.vpc.vpc_id
+
+  tags = { Name = "thinkwork-${var.stage}-okf-wiki-vpce-sg" }
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_security_group_rule" "okf_wiki_vpce_from_lambda" {
+  count = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.okf_wiki_lambda[0].id
+  security_group_id        = aws_security_group.okf_wiki_vpc_endpoint[0].id
+}
+
+resource "aws_vpc_endpoint" "okf_wiki_interface" {
+  for_each = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints ? local.okf_wiki_interface_endpoint_services : toset([])
+
+  vpc_id              = module.vpc.vpc_id
+  service_name        = "com.amazonaws.${var.region}.${each.key}"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.okf_wiki_subnet_ids
+  security_group_ids  = [aws_security_group.okf_wiki_vpc_endpoint[0].id]
+  private_dns_enabled = true
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-okf-wiki-${each.key}-vpce"
+    Purpose = "okf-wiki-private-egress"
+  }
+}
+
+resource "aws_vpc_endpoint" "okf_wiki_s3" {
+  count = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints && length(local.okf_wiki_route_table_ids) > 0 ? 1 : 0
+
+  vpc_id            = module.vpc.vpc_id
+  service_name      = "com.amazonaws.${var.region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = local.okf_wiki_route_table_ids
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-okf-wiki-s3-vpce"
+    Purpose = "okf-wiki-private-egress"
+  }
+}
+
+resource "aws_security_group_rule" "okf_wiki_efs_from_lambda" {
+  count = var.okf_wiki_efs_enabled ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 2049
+  to_port                  = 2049
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.okf_wiki_lambda[0].id
+  security_group_id        = aws_security_group.okf_wiki_efs[0].id
+}
+
+resource "aws_efs_file_system" "okf_wiki" {
+  count = var.okf_wiki_efs_enabled ? 1 : 0
+
+  creation_token = "thinkwork-${var.stage}-okf-wiki"
+  encrypted      = true
+
+  lifecycle_policy {
+    transition_to_ia = "AFTER_30_DAYS"
+  }
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-okf-wiki"
+    Purpose = "okf-wiki-current-view"
+  }
+}
+
+resource "aws_efs_mount_target" "okf_wiki" {
+  count = var.okf_wiki_efs_enabled ? length(local.okf_wiki_subnet_ids) : 0
+
+  file_system_id  = aws_efs_file_system.okf_wiki[0].id
+  subnet_id       = local.okf_wiki_subnet_ids[count.index]
+  security_groups = [aws_security_group.okf_wiki_efs[0].id]
+}
+
+resource "aws_efs_access_point" "okf_wiki_refresh" {
+  count = var.okf_wiki_efs_enabled ? 1 : 0
+
+  file_system_id = aws_efs_file_system.okf_wiki[0].id
+
+  posix_user {
+    uid = 1000
+    gid = 1000
+  }
+
+  root_directory {
+    path = "/okf"
+    creation_info {
+      owner_uid   = 1000
+      owner_gid   = 1000
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-okf-wiki-refresh-ap"
+    Purpose = "okf-wiki-hydrator-write"
+  }
+}
+
+resource "aws_efs_access_point" "okf_wiki_pi_read" {
+  count = var.okf_wiki_efs_enabled ? 1 : 0
+
+  file_system_id = aws_efs_file_system.okf_wiki[0].id
+
+  posix_user {
+    uid = 2000
+    gid = 2000
+  }
+
+  root_directory {
+    path = "/okf"
+    creation_info {
+      owner_uid   = 1000
+      owner_gid   = 1000
+      permissions = "0755"
+    }
+  }
+
+  tags = {
+    Name    = "thinkwork-${var.stage}-okf-wiki-pi-read-ap"
+    Purpose = "okf-wiki-pi-read"
+  }
+}
+
 ################################################################################
 # Foundation Tier
 ################################################################################
@@ -747,11 +960,14 @@ resource "aws_vpc_endpoint" "bedrock_runtime" {
 module "vpc" {
   source = "../foundation/vpc"
 
-  stage                       = var.stage
-  create_vpc                  = var.create_vpc
-  existing_vpc_id             = var.existing_vpc_id
-  existing_public_subnet_ids  = var.existing_public_subnet_ids
-  existing_private_subnet_ids = var.existing_private_subnet_ids
+  stage                            = var.stage
+  create_vpc                       = var.create_vpc
+  existing_vpc_id                  = var.existing_vpc_id
+  existing_public_subnet_ids       = var.existing_public_subnet_ids
+  existing_private_subnet_ids      = var.existing_private_subnet_ids
+  existing_public_route_table_ids  = var.existing_public_route_table_ids
+  existing_private_route_table_ids = var.existing_private_route_table_ids
+  enable_nat_gateway               = var.okf_wiki_efs_enabled && var.okf_wiki_create_nat_gateway
 }
 
 module "kms" {
@@ -1083,6 +1299,10 @@ module "api" {
   cognee_service_name                           = local.cognee_enabled ? module.cognee[0].cognee_service_name : ""
   cognee_worker_subnet_ids                      = local.cognee_enabled ? local.cognee_worker_subnet_ids : []
   cognee_worker_security_group_ids              = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
+  okf_efs_subnet_ids                            = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
+  okf_efs_security_group_ids                    = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
+  okf_efs_file_system_arn                       = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
+  okf_efs_refresh_access_point_arn              = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
   twenty_provisioned                            = local.twenty_provisioned
   twenty_runtime_enabled                        = local.twenty_runtime_enabled
   twenty_url                                    = local.twenty_provisioned ? module.twenty[0].twenty_url : ""
@@ -1189,6 +1409,12 @@ module "agentcore_pi" {
   # graphql-http hit the same cluster + same credential rotation surface.
   db_cluster_arn = module.database.db_cluster_arn
   db_secret_arn  = module.database.graphql_db_secret_arn
+
+  okf_efs_enabled               = var.okf_wiki_efs_enabled
+  okf_efs_subnet_ids            = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
+  okf_efs_security_group_ids    = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
+  okf_efs_file_system_arn       = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
+  okf_efs_read_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : ""
 }
 
 # Runtime identity rename: the former dedicated Flue module is now the Pi

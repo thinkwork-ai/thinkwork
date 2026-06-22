@@ -117,6 +117,24 @@ variable "platform_operator_emails" {
   default     = ""
 }
 
+variable "okf_wiki_efs_enabled" {
+  description = "Provision the OKF Wiki Navigator EFS current-view substrate and mount it into the okf-efs-refresh Lambda plus Pi."
+  type        = bool
+  default     = true
+}
+
+variable "okf_wiki_create_vpc_endpoints" {
+  description = "Create private AWS service VPC endpoints required by VPC-attached OKF hydrator and Pi Lambdas. Disable only when equivalent NAT or endpoints already exist."
+  type        = bool
+  default     = true
+}
+
+variable "okf_wiki_create_nat_gateway" {
+  description = "Create NAT egress for private subnets when OKF EFS attaches Pi to the VPC. Disable only when equivalent public egress already exists."
+  type        = bool
+  default     = true
+}
+
 variable "enable_deployment_control_plane" {
   description = "Enable the AWS-native deployment control plane used for GitHub-free customer deployments."
   type        = bool
@@ -252,6 +270,18 @@ variable "existing_public_subnet_ids" {
 variable "existing_private_subnet_ids" {
   type    = list(string)
   default = []
+}
+
+variable "existing_public_route_table_ids" {
+  description = "Route table IDs for existing_public_subnet_ids when create_vpc = false. Used by gateway endpoints such as OKF S3 access."
+  type        = list(string)
+  default     = []
+}
+
+variable "existing_private_route_table_ids" {
+  description = "Route table IDs for existing_private_subnet_ids when create_vpc = false. Used by gateway endpoints such as OKF S3 access."
+  type        = list(string)
+  default     = []
 }
 
 variable "create_cognito" {

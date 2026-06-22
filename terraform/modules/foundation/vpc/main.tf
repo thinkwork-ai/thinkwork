@@ -6,9 +6,12 @@
 ################################################################################
 
 locals {
-  vpc_id             = var.create_vpc ? aws_vpc.main[0].id : var.existing_vpc_id
-  public_subnet_ids  = var.create_vpc ? [aws_subnet.public[0].id, aws_subnet.public[1].id] : var.existing_public_subnet_ids
-  private_subnet_ids = var.create_vpc ? [aws_subnet.private[0].id, aws_subnet.private[1].id] : var.existing_private_subnet_ids
+  vpc_id                  = var.create_vpc ? aws_vpc.main[0].id : var.existing_vpc_id
+  public_subnet_ids       = var.create_vpc ? [aws_subnet.public[0].id, aws_subnet.public[1].id] : var.existing_public_subnet_ids
+  private_subnet_ids      = var.create_vpc ? [aws_subnet.private[0].id, aws_subnet.private[1].id] : var.existing_private_subnet_ids
+  public_route_table_ids  = var.create_vpc ? aws_route_table.public[*].id : var.existing_public_route_table_ids
+  private_route_table_ids = var.create_vpc ? aws_route_table.private[*].id : var.existing_private_route_table_ids
+  nat_gateway_enabled     = var.enable_nat_gateway && length(local.public_subnet_ids) > 0 && length(local.private_route_table_ids) > 0
 }
 
 ################################################################################
@@ -120,6 +123,41 @@ resource "aws_route_table_association" "private" {
 
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private[count.index].id
+}
+
+################################################################################
+# Optional NAT Gateway
+################################################################################
+
+resource "aws_eip" "nat" {
+  count = local.nat_gateway_enabled ? 1 : 0
+
+  domain = "vpc"
+
+  tags = {
+    Name = "thinkwork-${var.stage}-nat-eip"
+  }
+}
+
+resource "aws_nat_gateway" "main" {
+  count = local.nat_gateway_enabled ? 1 : 0
+
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = local.public_subnet_ids[0]
+
+  tags = {
+    Name = "thinkwork-${var.stage}-nat"
+  }
+
+  depends_on = [aws_internet_gateway.main]
+}
+
+resource "aws_route" "private_nat" {
+  for_each = local.nat_gateway_enabled ? toset(local.private_route_table_ids) : toset([])
+
+  route_table_id         = each.key
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.main[0].id
 }
 
 ################################################################################

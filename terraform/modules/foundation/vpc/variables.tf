@@ -27,6 +27,24 @@ variable "existing_private_subnet_ids" {
   default     = []
 }
 
+variable "existing_public_route_table_ids" {
+  description = "IDs of existing public route tables (recommended when create_vpc = false)"
+  type        = list(string)
+  default     = []
+}
+
+variable "existing_private_route_table_ids" {
+  description = "IDs of existing private route tables (recommended when create_vpc = false)"
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_nat_gateway" {
+  description = "Create a NAT Gateway and default routes from private route tables for private subnet egress."
+  type        = bool
+  default     = false
+}
+
 variable "cidr_block" {
   description = "CIDR block for the VPC (only used when create_vpc = true)"
   type        = string
