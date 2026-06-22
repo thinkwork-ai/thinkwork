@@ -182,6 +182,7 @@ type AgentLoopJudgment {
   id: ID!
   tenantId: ID!
   agentLoopRunId: ID!
+  agentLoopRun: AgentLoopRun
   agentLoopIterationId: ID
   judgeMode: AgentLoopJudgeMode!
   outcome: AgentLoopJudgmentOutcome!
