@@ -18,7 +18,8 @@ status: in_progress
 - Current unit: U7 Chat Skill Creator Registration Fix.
 - Current branch: `codex/thnk-11-u7-registration-fix`.
 - Current worktree: `.Codex/worktrees/thnk-11-u7-registration-fix`.
-- Current pull request: Pending.
+- Current pull request:
+  [#2830](https://github.com/thinkwork-ai/thinkwork/pull/2830).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -283,7 +284,8 @@ status: in_progress
     skipped), `@thinkwork/web` (187 files, 1427 tests), release tests, and
     plugin-source-boundary tests.
 - PR / CI:
-  - U7 PR: Pending.
+  - U7 PR: [#2830](https://github.com/thinkwork-ai/thinkwork/pull/2830).
+  - U7 CI passed on first PR run: CLA, lint, verify, typecheck, and test.
   - U6 PR: [#2829](https://github.com/thinkwork-ai/thinkwork/pull/2829).
   - U4/U5 PR: [#2828](https://github.com/thinkwork-ai/thinkwork/pull/2828).
   - U3 PR: [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827).
