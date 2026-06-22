@@ -1,139 +1,146 @@
 ---
-title: Automations
-description: How ThinkWork runs agent work without a human chat message — schedules, webhooks, and Step Functions-backed workflows, observable end-to-end via Workflow runs, routine_executions adapter evidence, step events, or AUTO threads.
+title: AgentLoops
+description: How ThinkWork runs durable autonomous agent work - AgentLoops for goal/policy loops, Workflows for explicit orchestration, Evaluations for scoring, and scheduled_jobs as internal plumbing.
 ---
 
 import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
-Automations are how ThinkWork starts agent work from outside a chat conversation — a daily digest at 9am, a webhook that triages new tickets, a multi-step workflow that fetches data, classifies it, drafts a reply, waits for human approval, and sends. The harness exposes three primitives: **workflows** (multi-step orchestration, currently backed by the Step Functions Routine adapter), **schedules** (cron + rate triggers via AWS Scheduler), and **webhooks** (public HTTPS endpoints with shared-secret tokens). All three live behind the automation and workflow operator surfaces; all three flow through the same Step Functions substrate when the work is non-trivial.
+AgentLoops are ThinkWork's v1 automation primitive. An AgentLoop is a durable
+contract for autonomous work: trigger, goal, worker, judge, loop policy, run
+state, and evidence. A weekly account check-in, a recurring quality review, or a
+manual "run this loop now" action should be modeled as an AgentLoop, not as a
+bare schedule or prompt.
 
-The important architectural choice is that ThinkWork has two parallel observability surfaces depending on the shape of the work:
+The old "Automations" noun now describes an implementation family, not the
+product object. `scheduled_jobs`, AWS Scheduler, and EventBridge are plumbing.
+The product surfaces operators inspect are AgentLoop runs, Workflow runs,
+threads, and evaluation runs.
 
-- **Single-turn agent work** (a scheduled "send the morning digest" prompt to an agent) lands as a `thread_turns` row attached to an `AUTO-` thread — the same audit + cost + memory surface as a chat-initiated turn.
-- **Multi-step workflows** land as a Workflow run with Step Functions adapter evidence in `routine_executions` and `routine_step_events` — observable through the run-detail graph rather than a chat timeline.
-
-Both surfaces share Aurora for storage, Bedrock AgentCore for any agent invocation, and the same tenant + cost accounting. The shape of the work determines which surface the operator opens to debug; the platform doesn't make the operator pick when authoring.
-
-## Why two surfaces
-
-The alternative — a single execution model that handles both single-turn and multi-step work — is what early agent platforms tend to build. It collapses the audit story but blurs the abstraction:
-
-- Single-turn agent work is a conversation. The natural debugger is a chat timeline. A `thread_turns` row carries every tool call, every memory read, every guardrail activation in narrative order.
-- Multi-step workflows are state machines. The natural debugger is a graph with status overlays. A Workflow run plus Step Functions adapter evidence carries timing and structural shape that doesn't fit a linear timeline.
-
-ThinkWork lets each shape have the surface that fits. A scheduled `agent_invoke`-only workflow still gets Step Functions adapter evidence (the SFN substrate is uniform), but operators tend to debug through the agent's thread when something goes wrong at the agent level; they reach for the SFN execution view when the failure is at the state-machine level (a step timed out, retries exhausted, a branch routed wrong).
-
-## What automations give you
+## Product Taxonomy
 
 <CardGrid>
-  <Card title="Scheduled and Event-driven" icon="time">
-    Cron-like schedules ("every weekday at 9am") and event triggers (webhooks,
-    integration events). Backed by AWS Scheduler + EventBridge. Both can target
-    a workflow or a single agent invocation.
+  <Card title="AgentLoops" icon="time">
+    Autonomous goal/policy loops. Use them when work repeats or can be rerun,
+    completion can be judged, and the operator needs run evidence explaining why
+    the loop completed, continued, failed, or escalated.
   </Card>
-  <Card title="Workflows and Execution Model" icon="gear">
-    Multi-step work backed by Step Functions — branching, retries,
-    human-in-the-loop waits, parallel fan-out, and failure handling, all
-    composed from a small fixed catalog of recipes that the chat builder agent
-    emits as ASL.
+  <Card title="Workflows" icon="gear">
+    Explicit multi-step orchestration. Use them for known sequences with
+    branching, retries, human-in-the-loop waits, and app or data operations that
+    should render as a graph.
+  </Card>
+  <Card title="Evaluations" icon="approve-check">
+    Test and scoring suites. Use them to measure agent behavior against datasets
+    or rubrics. They may share judgment primitives with AgentLoops, but they are
+    not how operators create recurring automation.
   </Card>
 </CardGrid>
 
-## Two entry points, one execution path
+## Loop Suitability Gate
 
-ThinkWork distinguishes between **scheduled** and **event-driven** automations at the entry point:
+Before enabling a recurring AgentLoop, check that the work is actually
+loop-worthy:
 
-- **Scheduled.** Something needs to run at 9am every weekday. AWS Scheduler fires. See [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/).
-- **Event-driven.** A webhook arrives, a GitHub issue opens, a customer responds. EventBridge or the webhook handler routes the event. Same page, second half.
+- The task repeats often enough to justify automation, usually weekly or more.
+- Bad output can be rejected by a test, hard rule, measurable condition,
+  self-check criteria, or human-escalation gate.
+- The worker can complete the job end to end with available tools and
+  connectors.
+- "Done" is objective enough to express as completion criteria, not only taste.
 
-Both paths converge on either a thread-based agent invocation or a Step Functions execution depending on the trigger's target. The distinction matters for configuration and for debugging (scheduled runs have predictable times; event-driven runs don't), but the downstream model is uniform.
+If a task fails that gate, keep it as a manual run, an ordinary prompt, or a
+Workflow. Recurrence without a judge is only a schedule.
 
-## Single-turn vs. multi-step
+## Manual Run First
 
-A scheduled "every weekday at 9am, ask the agent for the morning digest" is single-turn: AWS Scheduler fires, the `job-trigger` Lambda invokes the agent through the chat path, the result lands in an `AUTO-` thread. The thread debugger is the right view.
+New scheduled loops should prove themselves with a manual run before the
+operator trusts the cadence. The expected first-use path is:
 
-A scheduled "every overnight, fetch new emails, classify each, draft urgent replies, require approval before sending" is multi-step: AWS Scheduler fires, `job-trigger` starts the Step Functions-backed workflow through the Routine adapter, Step Functions starts an execution, every step transition writes a `routine_step_events` row, and the Workflow run-detail UI renders the graph in real time.
+1. Open Settings -> AgentLoops.
+2. Start from the `Weekly Agent Check-In` preset.
+3. Choose the worker agent or profile.
+4. Write goal intent and explicit completion criteria.
+5. Save the loop, run it now, and inspect the AgentLoopRun evidence.
+6. Enable or keep the schedule only after the manual run explains its outcome.
 
-The chat builder picks the shape automatically. If the operator's intent decomposes into multiple discrete steps with branching or HITL, the agent emits a workflow. If it's a single agent invocation against a configured prompt, the agent emits a `scheduled_jobs` row pointing at an agent.
+The run inspector is the durable debugger. It shows trigger source, goal/policy
+snapshot, iterations, judgments, evidence pointers, cost, and terminal reason.
 
-## Workflows: composed from a fixed recipe catalog
+## How Schedules Fit
 
-A Step Functions-backed workflow is composed from a small vocabulary of recipes — `http_request`, `aurora_query`, `slack_send`, `email_send`, `inbox_approval`, `python`, `agent_invoke`, `tool_invoke`, `routine_invoke`, plus the ASL primitives `choice`, `wait`, `map`, `sequence`, `fail`. Each recipe has a JSON Schema for its arguments and an ASL emitter the validator runs at publish time. The catalog stays small on purpose so the chat builder can keep the surface area human-readable; new recipes are added as real integration demand surfaces.
+AWS Scheduler still wakes scheduled loops, but it is not the source of truth.
+ThinkWork stores schedule plumbing in `scheduled_jobs`; when a scheduled
+AgentLoop fires, the trigger path creates an AgentLoopRun and iteration, then
+dispatches the worker through the same goal-mode path as a manual run.
 
-`python` is the escape hatch for behavior no recipe covers. It runs in an AgentCore code-interpreter sandbox with an explicit env-var allowlist; the `routine-task-python` wrapper offloads stdout/stderr to S3 with a 4KB inline preview so a 10MB python step doesn't blow Step Functions' 256KB state-payload limit.
+That separation matters:
 
-## The run shape — single-turn
+- Operators query and audit AgentLoop state through GraphQL and Settings.
+- EventBridge/Scheduler rows can be reconciled without changing run history.
+- Manual and scheduled runs share one dispatcher and one evidence model.
+- Future event-driven or n8n-authored loops can trigger AgentLoops without
+  owning AgentLoop identity, judgment, or state.
+
+## AgentLoop Run Shape
 
 ```
-AWS Scheduler fires (or webhook arrives)
-        │
-        ▼
-job-trigger Lambda (or webhook handler)
-        │
-        ▼
-Agent wakeup → AgentCore Pi runtime
-        │
-        ▼
-ThinkWork creates AUTO- thread in Aurora
-        │
-        ▼
-Agent loop runs — tools, memory, response
-        │
-        ▼
-thread_turns row recorded; thread marked succeeded or failed
+Manual Run Now or AWS Scheduler fires
+        |
+        v
+AgentLoop dispatcher
+        |
+        v
+AgentLoopRun + first iteration row
+        |
+        v
+Agent wakeup -> AgentCore Pi goal-mode runtime
+        |
+        v
+Worker result + goal_run evidence
+        |
+        v
+AgentLoop judgment projection
+        |
+        v
+Complete, continue, fail, budget-stop, or escalate
 ```
 
-## The run shape — multi-step workflow
+Phase 1 executable judge modes are self-check and human-approval escalation.
+Model judges and reviewer-agent judges are reserved in the shared contract for
+later verification loops, but are not selectable as working Phase 1 behavior.
 
-```
-AWS Scheduler fires (or webhook arrives, or operator clicks Run Now)
-        │
-        ▼
-triggerRoutineRun mutation
-        │
-        ▼
-SFN.StartExecution against the workflow version's Routine adapter ARN
-        │
-        ▼
-routine_executions row inserted (status=running)
-        │
-        ▼
-For each step in the ASL:
-  Task wrapper Lambda (or direct AWS SDK integration) executes
-        │
-        ▼
-  routine-step-callback POST → routine_step_events row
-        │
-        ▼
-HITL? → inbox_approval pauses on task token; operator decides; bridge resumes
-        │
-        ▼
-EventBridge SFN-state-change → routine-execution-callback updates
-routine_executions.status to terminal value
-```
+## Workflows Still Matter
 
-Every step in the Step Functions adapter path is observable via `routine_step_events`. The Workflow run-detail UI polls every 5s while the execution is non-terminal and renders the latest event per node as a graph dot.
+A scheduled "every overnight, fetch new emails, classify each, draft urgent
+replies, wait for approval, then send" is better as a Workflow: it is a known
+state machine with visible steps. The Workflow run-detail graph shows step
+status, input/output, cost, and Step Functions adapter evidence.
 
-## Debugging a failed automation
+An AgentLoop can later trigger, contain, or be triggered by a Workflow, but the
+two should not collapse into one table or one UI. AgentLoops answer "is this
+autonomous goal making progress under policy?" Workflows answer "which explicit
+step of this process ran or failed?"
 
-Three complementary views depending on the shape:
+## Debugging
 
-- **For thread-based runs (single-turn agent work).** Open the AUTO thread in the admin app. See the conversation, tool calls, memory reads, and any guardrail activations inline.
-- **For workflow runs (multi-step).** Open the Workflow run detail at `/settings/workflows/:workflowId/runs/:runId`. The graph shows the state shape; the step-detail panel shows input/output/cost/duration per step; the markdown summary names HITL anchor points.
-- **For state-machine-level failures.** Open the Step Functions execution in the AWS console. See which state failed, how many retries were attempted, what the state-machine input and output look like at each step. The right view when the failure is structural rather than agent-level.
-
-For agent-level failures inside a workflow, the run-detail UI's step panel surfaces the agent turn directly. For state-machine-level failures (a step timed out, retries exhausted, a branch routed wrong), the SFN execution view is the one to open.
+- **AgentLoop behavior.** Open Settings -> AgentLoops -> run detail. Read the
+  judgment, evidence, policy snapshot, and terminal reason.
+- **Workflow structure.** Open Settings -> Workflows -> run detail. Use the graph
+  and step-detail panel.
+- **Underlying schedule plumbing.** Check `scheduled_jobs`, the
+  job-schedule-manager, and AWS Scheduler only when the loop never fired.
+- **Agent-level execution.** Follow the linked thread turn or Activity evidence
+  from the AgentLoopRun when the worker ran but produced the wrong outcome.
 
 <Aside type="tip">
-  A common pitfall: thinking a "failed automation" means the agent did the wrong
-  thing. Often it means the state machine couldn't *reach* the agent — a step
-  that fetches input data failed, a trigger misfired, or a scheduler
-  configuration was wrong. For workflows, always check the run-detail step graph
-  before drilling into a specific step's agent turn.
+  A common pitfall is debugging a scheduled AgentLoop as if the schedule were
+  the product. First ask whether an AgentLoopRun exists. If it does, debug the
+  run evidence. If it does not, debug the scheduler plumbing.
 </Aside>
 
 ## Related pages
 
-- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — the two entry points in detail
-- [Admin: Automations](/applications/admin/automations/) — the operator UI for schedules and webhooks; active workflow inventory lives in Settings → Workflows
-- [Architecture](/architecture/) — where EventBridge, Scheduler, and Step Functions fit in the deploy
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) - how schedule and event plumbing reaches AgentLoops and Workflows.
+- [Workflows and Execution Model](/concepts/automations/workflows-and-execution/) - explicit multi-step orchestration.
+- [Evaluations](/guides/evaluations/) - scoring and replay suites that remain distinct from AgentLoop authoring.
+- [Architecture](/architecture/) - where EventBridge, Scheduler, Step Functions, and AgentCore fit in the deploy.

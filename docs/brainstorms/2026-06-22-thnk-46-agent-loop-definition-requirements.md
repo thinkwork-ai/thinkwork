@@ -279,3 +279,24 @@ flowchart TB
 ## Next Steps
 
 -> /ce-plan for structured implementation planning of Phase 1.
+
+---
+
+## Phase 1 Implementation Notes
+
+Phase 1 now treats AgentLoop as the v1 automation product object in code and
+operator-facing copy. Manual and scheduled triggers share the same run ledger:
+AgentLoop definition/version, AgentLoopRun, iteration, judgment, and evidence.
+`scheduled_jobs`, AWS Scheduler, and EventBridge are implementation plumbing,
+not the durable source of truth for loop identity or judgment.
+
+The web surface starts at Settings -> AgentLoops. Operators can create the
+`Weekly Agent Check-In` preset, run it manually, inspect the AgentLoopRun, and
+then trust or adjust the schedule. The loop-suitability gate remains part of
+the product contract: recurring loops should have repeatable work, objective
+completion criteria, available tools, and a judge or escalation path.
+
+Phase 1 executable judge modes are self-check and human-approval escalation.
+Model and reviewer-agent judges remain in the shared JudgeSpec vocabulary for
+Phase 2 verification loops, but should not be exposed as working Phase 1
+behavior.

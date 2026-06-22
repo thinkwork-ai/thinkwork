@@ -117,10 +117,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U5 - AgentLoop web builder and run inspector.
-- Current branch: `codex/agent-loop-u5-web-builder`.
-- Current worktree: `.Codex/worktrees/agent-loop-u5-web-builder`.
-- Current pull request: Not opened yet.
+- Current unit: U6 - GraphQL/codegen, CLI/mobile parity, and docs.
+- Current branch: `codex/agent-loop-u6-codegen-docs`.
+- Current worktree: `.Codex/worktrees/agent-loop-u6-codegen-docs`.
+- Current pull request:
+  [#2862](https://github.com/thinkwork-ai/thinkwork/pull/2862).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -325,6 +326,37 @@ status: in_progress
     tests, `test:release`, and `test:plugin-source-boundary`.
   - 2026-06-22: U5 PR
     [#2860](https://github.com/thinkwork-ai/thinkwork/pull/2860) opened and CI
+    monitoring started.
+  - 2026-06-22: U5 PR
+    [#2860](https://github.com/thinkwork-ai/thinkwork/pull/2860) passed CI
+    after rebasing onto current `main`, squash merged as
+    `681a41659e9b39452098a08f897baa085fc400af`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U6 started from a clean isolated worktree created from
+    `origin/main` after U5 merge. Scope: regenerate AgentLoop GraphQL/schema
+    artifacts, keep CLI/mobile generated clients aligned without exposing new
+    mobile/CLI operations yet, and update the product taxonomy/docs trail.
+  - 2026-06-22: U6 implementation regenerated the AppSync subscription schema
+    and CLI/web/mobile GraphQL client types, reframed Automations docs around
+    first-class AgentLoops, documented the AgentLoop/Workflow/Evaluation
+    taxonomy, added loop-suitability and manual-run-first operator guidance,
+    and captured the reusable AgentLoop foundation pattern in
+    `docs/solutions/architecture-patterns/agent-loop-foundation-2026-06-22.md`.
+  - 2026-06-22: U6 focused verification passed: schema build; CLI, web, and
+    mobile codegen; the API GraphQL contract suite; docs build; CLI and web
+    typecheck; and the mobile test suite.
+  - 2026-06-22: U6 broader local verification passed: `git diff --check`,
+    touched-file Prettier verification with `pnpm dlx prettier@3.6.2 --check`,
+    `pnpm lint`, `pnpm typecheck`, and full `pnpm test`. The first full
+    `pnpm test` run hit the known fresh-worktree Electron generated-payload
+    issue in `apps/desktop`; removing only the generated Electron payload and
+    rerunning `node node_modules/.pnpm/electron@42.2.0/node_modules/electron/install.js`
+    repaired it, then `pnpm --dir apps/desktop test` and the full root
+    `pnpm test` rerun passed including `test:release` and
+    `test:plugin-source-boundary`.
+  - 2026-06-22: U6 PR
+    [#2862](https://github.com/thinkwork-ai/thinkwork/pull/2862) opened and CI
     monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22

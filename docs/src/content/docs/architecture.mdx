@@ -17,7 +17,7 @@ Every resource lives in your AWS account. There is no shared infrastructure, no 
 
 ## The harness mechanics
 
-A model alone is a wild horse. The harness is what turns its motion into useful work — direction, control, recovery, accountability. Every concept in the rest of this page (Agents, Spaces, Threads, Memory, Integrations, Automations, Control) earns its place by implementing one or more pieces of that harness. This section names the mechanics directly.
+A model alone is a wild horse. The harness is what turns its motion into useful work — direction, control, recovery, accountability. Every concept in the rest of this page (Agents, Spaces, Threads, Memory, Integrations, AgentLoops, Control) earns its place by implementing one or more pieces of that harness. This section names the mechanics directly.
 
 <Aside type="tip">
   The "harness" framing comes from the [Definitive Guide to Harness
@@ -46,13 +46,13 @@ flowchart LR
 - **Action.** Tool calls fire (with capability gating), sandbox code executes (with isolation), replies emit (through integrations). Every action is captured as it happens.
 - **Feedback.** The turn closes with a durable record: tokens, cost, tool outcomes, guardrail decisions, evaluator scores. That feedback is what the _next_ turn perceives — and what an operator reads after the fact.
 
-The four phases are why the docs structure the components the way it does: Threads + Memory + Integrations are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). Automations time the loop's entry from the outside.
+The four phases are why the docs structure the components the way it does: Threads + Memory + Integrations are the perception substrate; Agents are the planning + action layer; Control is the feedback layer (audit, cost, evaluation). AgentLoops time recurring or manually rerunnable goal work from the outside.
 
 ### The four operating guarantees
 
 Beyond the loop, the harness has four operational properties it commits to delivering on every turn — the **operating guarantees**. These are the four promises a buyer or operator can grab onto and the four dimensions an evaluator can measure:
 
-- **Reliability.** Fault recovery from checkpoints, idempotent writes, behavior consistent under the same inputs. Implemented in: thread durability + RLS, AgentCore retry semantics, Step Functions for automations.
+- **Reliability.** Fault recovery from checkpoints, idempotent writes, behavior consistent under the same inputs. Implemented in: thread durability + RLS, AgentCore retry semantics, AgentLoop run ledgers, and Step Functions for Workflows.
 - **Efficiency.** Token budgets and Space/tenant spend caps, low-latency interactive paths, throughput that scales with usage. Implemented in: Control's budget enforcement, AppSync for streaming, the cost ledger.
 - **Security.** Per-agent capability grants, sandboxed execution, I/O filtering for prompt injection and PII. Implemented in: Templates, AgentCore code sandbox, Bedrock Guardrails (`content_filters`), and runtime-level tool gating.
 - **Traceability.** End-to-end traces per turn, explainable decisions, auditable state. Implemented in: the turn record, the append-only audit log on S3, evaluator scores per turn.
@@ -69,7 +69,7 @@ That separation is what makes turns reproducible (re-run a turn against a differ
 
 ### The conceptual model maps onto the harness
 
-The conceptual model below — Agents, Spaces, Threads, Memory, Integrations, Automations, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem (state, perception, planning, action, feedback, governance), not floating in isolation.
+The conceptual model below — Agents, Spaces, Threads, Memory, Integrations, AgentLoops, Control — is what most of the rest of this site documents. Reading the components against the harness mechanics keeps the picture coherent: every component is solving a piece of the harness problem (state, perception, planning, action, feedback, governance), not floating in isolation.
 
 ## System model
 
@@ -89,7 +89,7 @@ Integrations and responses back out
 
 ### Threads
 
-Threads are the durable record of work. User chats, integration events, emails, and automations all become threads with history, status, metadata, and auditability.
+Threads are the durable record of work. User chats, integration events, emails, and AgentLoop worker turns all become threads with history, status, metadata, and auditability.
 
 See [Threads](/concepts/threads/).
 
@@ -165,15 +165,15 @@ The foundation tier provides identity, networking, and encryption. It changes ra
 
 The data tier holds all persistent state. It depends on the foundation tier for network access and KMS encryption.
 
-| Resource               | Purpose                                                                                                                                                                  |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Aurora Postgres        | Primary data store: agents, threads, messages, automations, integrations, users. Also hosts the `pgvector` index used by Bedrock Knowledge Bases — no separate vector DB |
-| S3 — skill catalog     | `skills/catalog/*.md` — skill packs loaded at invoke time                                                                                                                |
-| S3 — knowledge docs    | Source documents for Bedrock Knowledge Bases                                                                                                                             |
-| S3 — audit logs        | Append-only log of every agent invoke (NDJSON, partitioned by date)                                                                                                      |
-| S3 — assets            | Admin and end-user app static files                                                                                                                                      |
-| Bedrock Knowledge Base | Vector-indexed document store for inline RAG, backed by Aurora `pgvector`                                                                                                |
-| Secrets Manager        | DB credentials, OAuth client secrets                                                                                                                                     |
+| Resource               | Purpose                                                                                                                                                                            |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Aurora Postgres        | Primary data store: agents, threads, messages, AgentLoops, Workflows, integrations, users. Also hosts the `pgvector` index used by Bedrock Knowledge Bases — no separate vector DB |
+| S3 — skill catalog     | `skills/catalog/*.md` — skill packs loaded at invoke time                                                                                                                          |
+| S3 — knowledge docs    | Source documents for Bedrock Knowledge Bases                                                                                                                                       |
+| S3 — audit logs        | Append-only log of every agent invoke (NDJSON, partitioned by date)                                                                                                                |
+| S3 — assets            | Admin and end-user app static files                                                                                                                                                |
+| Bedrock Knowledge Base | Vector-indexed document store for inline RAG, backed by Aurora `pgvector`                                                                                                          |
+| Secrets Manager        | DB credentials, OAuth client secrets                                                                                                                                               |
 
 ### App tier
 
@@ -185,8 +185,8 @@ The app tier is where computation happens. It depends on both lower tiers.
 | API Gateway v2           | HTTP queries and mutations, integration webhook ingress                                                    |
 | AgentCore runtime        | Container-based Pi managed runtime on Bedrock AgentCore                                                    |
 | Integration Lambdas      | One per integration (GitHub, Google) — handles inbound events                                              |
-| Step Functions           | Automation runner, Workflow execution adapter                                                              |
-| EventBridge              | Triggers for scheduled automations                                                                         |
+| Step Functions           | Workflow execution adapter                                                                                 |
+| EventBridge              | Trigger plumbing for scheduled AgentLoops, Workflows, and internal cron jobs                               |
 | Bedrock AgentCore Memory | Always on — automatic per-turn retention into four strategies (semantic, preferences, summaries, episodes) |
 | ECS Fargate (optional)   | Hindsight memory add-on (if `enable_hindsight = true`)                                                     |
 | CloudFront               | CDN for web app static files                                                                               |
