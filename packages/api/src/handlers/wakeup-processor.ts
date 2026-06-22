@@ -2117,10 +2117,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
     }
 
-    if (
-      (wakeup.source === "chat_message" || wakeup.source === "agent_loop") &&
-      payload?.goalMode
-    ) {
+    if (wakeup.source === "chat_message" && payload?.goalMode) {
       Object.assign(agentCorePayload, {
         goal_mode: toRuntimeGoalModePayload(
           payload.goalMode as RuntimeGoalMode,
