@@ -209,3 +209,52 @@ type AgentLoopEvidence {
   retentionExpiresAt: AWSDateTime
   createdAt: AWSDateTime!
 }
+
+input SaveAgentLoopInput {
+  id: ID
+  tenantId: ID!
+  name: String!
+  slug: String
+  description: String
+  lifecycleStatus: AgentLoopLifecycleStatus
+  enabled: Boolean
+  ownerUserId: ID
+  ownerAgentId: ID
+  triggerSpec: AWSJSON!
+  goalSpec: AWSJSON!
+  workerSpec: AWSJSON!
+  judgeSpec: AWSJSON!
+  loopPolicy: AWSJSON
+  evidencePolicy: AWSJSON
+  sourceMetadata: AWSJSON
+}
+
+type DeleteAgentLoopResult {
+  id: ID!
+  ok: Boolean!
+}
+
+input TriggerAgentLoopRunInput {
+  agentLoopId: ID!
+  idempotencyKey: String
+  correlationId: String
+  inputSummary: AWSJSON
+}
+
+extend type Query {
+  agentLoops(
+    tenantId: ID!
+    lifecycleStatus: AgentLoopLifecycleStatus
+    enabled: Boolean
+    limit: Int
+    cursor: String
+  ): [AgentLoop!]!
+  agentLoop(id: ID!): AgentLoop
+  agentLoopRun(id: ID!): AgentLoopRun
+}
+
+extend type Mutation {
+  saveAgentLoop(input: SaveAgentLoopInput!): AgentLoop!
+  deleteAgentLoop(id: ID!): DeleteAgentLoopResult!
+  triggerAgentLoopRun(input: TriggerAgentLoopRunInput!): AgentLoopRun!
+}
