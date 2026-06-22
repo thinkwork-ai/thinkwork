@@ -86,6 +86,12 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   `cb559d3c-f0df-4556-9e5b-951f486f4467`.
 - 2026-06-22T19:35:33Z: Added Linear U5 PR-opened comment
   `bd51380a-a70a-4483-af07-123167f87295`; monitoring PR #2868 CI.
+- 2026-06-22T19:45:57Z: PR #2868 merged at
+  `f6677e61a53d6ecb5d404cbab8ff04e328bd2ff7`.
+- 2026-06-22T19:49:00Z: Opened a U5 follow-up branch for review-hardening
+  fixes that were identified locally after #2868 had already merged.
+- 2026-06-22T19:50:42Z: Added Linear U5 follow-up PR-opened comment
+  `3c5d671e-cb6b-460e-aa05-35ee6d260e04`; monitoring PR #2869 CI.
 
 ## Unit Log
 
@@ -504,5 +510,70 @@ PR:
 - Opened: https://github.com/thinkwork-ai/thinkwork/pull/2868
 - Linear PR-opened comment:
   `bd51380a-a70a-4483-af07-123167f87295`.
-- Current state: PR CI queued/running; no unit child issue exists, so THNK-63
-  remains `In Progress`.
+- Merged: 2026-06-22T19:45:57Z.
+- Merge commit: `f6677e61a53d6ecb5d404cbab8ff04e328bd2ff7`.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Cleanup: follow-up review-hardening branch opened because #2868 merged before
+  the local CE review hardening patch was incorporated.
+
+#### U5 Follow-Up: Review Hardening
+
+Objective: preserve the merged U5 behavior while tightening the review findings
+around wakeup parity, provider-bound limits, and runtime evidence that the OKF
+tool registration path can execute through the real filesystem-backed provider.
+
+Branch/worktree:
+
+- Branch: `codex/thnk-63-u5-okf-hardening`
+- Worktree: `.Codex/worktrees/thnk-63-u5-okf-hardening`
+- Base: `origin/main` at `f6677e61a`.
+
+Implementation:
+
+- Added shared OKF navigator tool-name and limit constants to
+  `@thinkwork/pi-runtime-core` for API policy aliases and host provider bounds.
+- Moved `okf_wiki_navigator_enabled` into the shared agent dispatch control
+  field helper so chat and wakeup payloads stay in parity.
+- Extended Pi server tests to execute `wiki_ls` through the registered OKF
+  extension and real provider fixture, not just assert tool names.
+- Added regression coverage for blank `wiki_links.path` and wakeup dispatch
+  helper propagation.
+
+Local verification:
+
+- 2026-06-22T19:45Z: Before extracting the follow-up branch from merged #2868,
+  focused typechecks and tests passed in the U5 worktree:
+  `@thinkwork/pi-runtime-core`, `@thinkwork/pi-extensions`,
+  `@thinkwork/agentcore-pi`, and `@thinkwork/api`.
+- 2026-06-22T19:45Z: Before extracting the follow-up branch, package suites
+  passed in the U5 worktree:
+  `pnpm --filter @thinkwork/pi-extensions test` (126 tests),
+  `pnpm --filter @thinkwork/agentcore-pi test` (607 passed, 5 todo), and
+  `pnpm --filter @thinkwork/api test` (5,348 passed, 9 skipped).
+- 2026-06-22T19:45Z: Before extracting the follow-up branch, repo-wide
+  `pnpm -r --if-present typecheck` passed.
+- 2026-06-22T19:49Z: Fresh follow-up worktree initially lacked
+  `node_modules`, so package typecheck commands failed with `tsc: command not
+found`; `pnpm install` then completed with exit 0. The install logged an
+  optional `canvas` native build fallback on Node 25 because `pkg-config` is not
+  present.
+- 2026-06-22T19:50Z: Fresh follow-up worktree focused typechecks and tests
+  passed for `@thinkwork/pi-runtime-core`, `@thinkwork/pi-extensions`,
+  `@thinkwork/agentcore-pi`, and `@thinkwork/api`.
+- 2026-06-22T19:50Z: Fresh follow-up worktree repo-wide
+  `pnpm -r --if-present typecheck` passed.
+- 2026-06-22T19:49Z: Fresh follow-up worktree `pnpm lint` passed.
+- 2026-06-22T19:49Z: Fresh follow-up worktree `git diff --check` passed.
+- 2026-06-22T19:49Z:
+  `pnpm dlx prettier@3.8.2 --check <full PR file set>` passed.
+- 2026-06-22T19:44Z: Root `pnpm format:check` failed locally because the root
+  `prettier` binary is not installed in this worktree (`sh: prettier: command
+not found`). The changed-file `pnpm dlx prettier@3.8.2 --check` pass is the
+  formatting evidence for this branch.
+
+PR:
+
+- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2869
+- Linear PR-opened comment:
+  `3c5d671e-cb6b-460e-aa05-35ee6d260e04`.
+- Current state: monitoring required CI.

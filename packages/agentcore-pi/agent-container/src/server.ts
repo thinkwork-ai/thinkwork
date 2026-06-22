@@ -78,6 +78,7 @@ import { LambdaClient } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   BUILTIN_TOOL_NAMES,
+  OKF_WIKI_NAVIGATOR_LIMITS,
   collectToolCosts,
   createActivityEmitter,
   type ActivityEmitEvent,
@@ -1414,6 +1415,9 @@ export async function buildInvocationResources(
         {
           okfWiki: createOkfWikiProvider({
             currentRoot,
+            maxResults: OKF_WIKI_NAVIGATOR_LIMITS.maxResults,
+            maxBytes: OKF_WIKI_NAVIGATOR_LIMITS.maxBytes,
+            maxDepth: OKF_WIKI_NAVIGATOR_LIMITS.maxDepth,
           }),
         },
       );

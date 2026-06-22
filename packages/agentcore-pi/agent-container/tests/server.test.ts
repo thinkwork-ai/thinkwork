@@ -3079,6 +3079,22 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       expect.arrayContaining(["wiki_ls", "wiki_rg", "wiki_read", "wiki_links"]),
     );
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("wiki_read");
+
+    const { api, tools } = makeFakeExtensionApi();
+    for (const factory of bundle.extensionFactories) {
+      await factory(api as never);
+    }
+    const result = await getTool(tools, "wiki_ls").execute(
+      "call-1",
+      {},
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect((result.content?.[0] as { text: string }).text).toContain(
+      "index.md",
+    );
+    expect((result.details as any).okfWikiTrace.surface).toBe("okf_efs");
   });
 
   it("does not register OKF wiki navigator tools when disabled, eval-mode, or mount metadata is missing", async () => {

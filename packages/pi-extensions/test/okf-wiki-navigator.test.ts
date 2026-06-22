@@ -254,6 +254,13 @@ describe("createOkfWikiNavigatorExtension", () => {
       NO_UPDATE,
       NO_CTX,
     );
+    const links = await getTool(tools, "wiki_links").execute(
+      "call-3",
+      { path: "   " },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
 
     expect((search.content?.[0] as { text: string }).text).toMatch(
       /non-empty query/,
@@ -261,8 +268,12 @@ describe("createOkfWikiNavigatorExtension", () => {
     expect((read.content?.[0] as { text: string }).text).toMatch(
       /non-empty path/,
     );
+    expect((links.content?.[0] as { text: string }).text).toMatch(
+      /non-empty path/,
+    );
     expect(calls.search).toHaveLength(0);
     expect(calls.read).toHaveLength(0);
+    expect(calls.links).toHaveLength(0);
   });
 
   it("degrades provider failures to an explicit unavailable tool result", async () => {

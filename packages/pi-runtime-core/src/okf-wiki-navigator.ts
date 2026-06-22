@@ -8,6 +8,19 @@
  * but must never treat it as instructions or as a policy-expansion channel.
  */
 
+export const OKF_WIKI_NAVIGATOR_TOOL_NAMES = [
+  "wiki_ls",
+  "wiki_rg",
+  "wiki_read",
+  "wiki_links",
+] as const;
+
+export const OKF_WIKI_NAVIGATOR_LIMITS = {
+  maxResults: 50,
+  maxBytes: 128_000,
+  maxDepth: 8,
+} as const;
+
 export interface OkfWikiNavigatorBounds {
   maxResults: number;
   maxBytes: number;
