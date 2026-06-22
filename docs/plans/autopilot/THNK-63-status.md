@@ -750,3 +750,52 @@ PR:
 - CI: Restarted after rebase onto `6ce4ed2b`.
 - Linear PR-refresh comment:
   `39799016-80ac-48c6-963d-e0e0b75e0674`.
+- Merged: 2026-06-22T21:18:19Z.
+- Merge commit: `d5e102be4183a32eef46ecdb086df8a4c92de48c`.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Linear merged/cleanup comment:
+  `b7148962-0364-4ebc-aaab-438e27a04bd0`.
+- Cleanup: remote branch deleted by GitHub; local U7 worktree removed before U8
+  continued from fresh `origin/main`.
+
+### U8: Docs And Operator Runbook
+
+Objective: document the OKF projection contract, runtime boundary, and
+verification playbook for implementers and operators without implying raw
+backend access or a default routing cutover.
+
+Branch/worktree:
+
+- Branch: `codex/thnk-63-u8-docs-runbook`
+- Worktree: `.Codex/worktrees/thnk-63-u8-docs-runbook`
+- Base: `origin/main` at `d5e102be4183a32eef46ecdb086df8a4c92de48c`.
+
+Implementation:
+
+- Updated `docs/src/content/docs/api/context-engine.mdx` with the OKF Wiki
+  Navigator Context Engine boundary, S3/EFS roles, read-only traversal
+  contract, untrusted markdown policy, sanitized trace evidence, and
+  eval-gated routing posture.
+- Updated `docs/src/content/docs/concepts/knowledge/compounding-memory.mdx` to
+  replace the stale one-agent/one-wiki scope text with owner-scoped and
+  tenant-shared page boundaries plus OKF projection semantics.
+- Added `docs/src/content/docs/concepts/knowledge/okf-wiki-navigator.mdx` and
+  linked it from the Memory overview and docs sidebar.
+- Expanded `docs/verification/okf-wiki-navigator-e2e.md` into the operator
+  live-smoke checklist with optional controls, pass criteria, report review,
+  failure handling, and rollback.
+- Linear start comment:
+  `5c9ad49d-a49e-4713-b971-3e5ac547b23d`.
+
+Local verification:
+
+- 2026-06-22T21:24Z: `pnpm --filter @thinkwork/docs build` passed after
+  installing dependencies in the fresh worktree. `pnpm install` completed with
+  the known local Node 25 optional `canvas` native build warning.
+- 2026-06-22T21:25Z: touched-file Prettier check and `git diff --check`
+  passed.
+- 2026-06-22T21:25Z: review pass confirmed docs keep OKF behind Context
+  Engine, forbid Pi raw backend access, identify S3 as canonical and EFS as
+  serving cache, and require evaluation evidence before routing cutover.
+- 2026-06-22T21:25Z: `pnpm lint` passed.
+- 2026-06-22T21:25Z: `pnpm typecheck` passed.

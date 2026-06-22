@@ -66,11 +66,10 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U7 - Retrieval comparison and deployed smoke validation.
-- Current branch: `codex/thnk-63-u7-retrieval-smoke`.
-- Current worktree: `.Codex/worktrees/thnk-63-u7-retrieval-smoke`.
-- Current pull request:
-  [#2874](https://github.com/thinkwork-ai/thinkwork/pull/2874).
+- Current unit: U8 - Docs and operator runbook.
+- Current branch: `codex/thnk-63-u8-docs-runbook`.
+- Current worktree: `.Codex/worktrees/thnk-63-u8-docs-runbook`.
+- Current pull request: pending.
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     OKF Wiki Navigator plan from the main checkout.
@@ -171,6 +170,25 @@ status: in_progress
   - 2026-06-22: Added Linear U7 PR-refresh comment
     `39799016-80ac-48c6-963d-e0e0b75e0674`; refreshed CI monitoring on PR
     head `30384739`.
+  - 2026-06-22: U7 PR
+    [#2874](https://github.com/thinkwork-ai/thinkwork/pull/2874) passed
+    required CI and was squash merged as `d5e102be`.
+  - 2026-06-22: Added Linear U7 merged/cleanup comment
+    `b7148962-0364-4ebc-aaab-438e27a04bd0`; the U7 remote branch was deleted
+    and the local U7 worktree was removed.
+  - 2026-06-22: U8 started from `origin/main` at `d5e102be` in
+    `.Codex/worktrees/thnk-63-u8-docs-runbook`. Objective: document the OKF
+    projection contract, S3/EFS/runtime boundaries, read-only navigator tools,
+    untrusted markdown policy, eval-gated routing, and rollback path.
+  - 2026-06-22: Added Linear U8 start comment
+    `5c9ad49d-a49e-4713-b971-3e5ac547b23d`.
+  - 2026-06-22: U8 implementation updated Context Engine API docs, compiled
+    page scope docs, Memory overview/sidebar links, the new OKF Wiki Navigator
+    concept page, and the deployed verification runbook.
+  - 2026-06-22: U8 local verification passed: docs build, touched-file
+    Prettier check, `git diff --check`, `pnpm lint`, and `pnpm typecheck`.
+    Review confirmed the docs do not imply raw backend access or a default OKF
+    routing cutover.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 

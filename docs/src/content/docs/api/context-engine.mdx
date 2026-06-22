@@ -29,6 +29,8 @@ Every response includes normalized hits plus provider statuses. Provider failure
 - `mcp`: tenant-approved, read-only, search-safe MCP tools.
 - `sub-agent`: legacy provider id for read-only folder-specialist providers, when enabled by the Memory v0 work.
 
+OKF Wiki Navigator is an evaluated traversal mode behind `wiki` and `brain`, not a raw storage family. It reads a generated Open Knowledge Format projection when enabled, but callers still use Context Engine tools and receive provider-local statuses, citations, and sanitized trace evidence.
+
 ## Brain Provider
 
 The `brain` family is the business/domain memory provider. It searches active Company Brain substrate state through Context Engine policy, then reads tenant-shared pages and facets materialized from approved [Business Ontology](/concepts/knowledge/business-ontology/) definitions. Use it for customers, opportunities, commitments, risks, stakeholders, products, and other durable business concepts.
@@ -40,6 +42,19 @@ If the active Company Brain substrate is not installed, disabled, failed, or mis
 `query_brain_context` accepts the normal `query`, `mode`, `scope`, `depth`, and `limit` fields plus optional source filters used by the dogfood proof: `sourceKind`, `sourceType`, `datasetId`, `nodeSetIds`, `topK`, and `onlyContext`. These options are provider-scoped hints; they do not grant direct access to Cognee, Neptune, or S3.
 
 Brain responses are progressive by default. The first call returns an indexed shortlist with stable hit ids, concise descriptions, and provenance/status hints rather than dumping every matching Brain snippet. To expand source details, call `query_brain_context` again with the same query/filter arguments plus selected `detailIds` or `detailIndexes`; the detail response expands only those selected Brain hits and reports missing selectors explicitly.
+
+## OKF Wiki Navigator
+
+The OKF Wiki Navigator lets the `wiki` and `brain` paths compare ordinary DB-backed retrieval with progressive traversal over a generated markdown projection. The projection is rebuildable from canonical ThinkWork state: retained memory, compiled pages, Brain artifacts, ontology versions, graph evidence, provenance, ACLs, and redaction posture remain the source of truth.
+
+The storage contract has two layers:
+
+- S3 is the canonical artifact and audit plane. Bundle manifests record source counts, checksums, ontology version, freshness, and the current bundle pointer.
+- EFS is a read-only current view for runtime traversal. It is a cache/serving surface, not canonical storage.
+
+Navigator tools can list pages, search text, read bounded snippets, inspect links/backlinks, and return traversal trace metadata. They cannot mutate markdown, canonical memory, ontology definitions, graph state, Brain artifacts, or source storage. Retrieved markdown is always untrusted source data: it can be cited or summarized, but it cannot change system/developer policy, broaden tool access, or make the model call raw backends.
+
+Runtime traffic does not default to OKF traversal just because a bundle exists. Use the comparison smoke in `docs/verification/okf-wiki-navigator-e2e.md` to compare DB wiki, OKF navigator, hybrid DB+OKF, raw memory, and knowledge graph results before changing routing. The hybrid path should cite both DB wiki evidence and OKF traversal evidence when it succeeds.
 
 ## Company Brain Substrate Posture
 
@@ -85,6 +100,8 @@ When Context Engine is enabled for a first-party Pi runtime, the Pi Context Engi
 
 `query_brain_context` should be the model's first choice for governed tenant-shared business/domain context such as customers, opportunities, commitments, risks, stakeholders, products, relationships, and cited provenance. Use `query_memory_context` for raw Hindsight Memory and `query_wiki_context` for compiled page/entity/topic lookup. Raw ontology admin APIs, raw Cognee, Neptune, S3, and storage backends are not runtime tools.
 
+When OKF navigation is enabled, Pi still calls `query_wiki_context` or `query_brain_context`; it does not mount EFS, read S3, or receive storage credentials. OKF traversal evidence appears as sanitized `okf_wiki_trace` / `wiki_context_trace` metadata for debugging and review.
+
 Use `plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs` after deploy to verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path. Use `plugins/company-brain/smoke/company-brain-operations-smoke.mjs` to verify the GraphQL operations posture and redaction contract; it is read-only unless `SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1` is explicitly set.
 
 ## Admin Verification
@@ -98,5 +115,7 @@ Admin operators verify source routing from **Memory → Sources**. The test harn
 - inspect provider statuses, latency, partial failures, top hits, and the full structured response.
 
 Provider failures are expected to be partial. A Hindsight timeout, skipped Bedrock KB, unavailable MCP adapter, or empty Brain result should appear as provider-local status while successful providers still return hits.
+
+For OKF Wiki Navigator verification, use the deployed smoke runbook rather than the Sources tab alone. The runbook proves materialization, EFS hydration, Pi tool use, durable trace evidence, and the five-provider retrieval comparison before any routing cutover.
 
 `act_on_context` is reserved for future mutation support and is not callable in v0.

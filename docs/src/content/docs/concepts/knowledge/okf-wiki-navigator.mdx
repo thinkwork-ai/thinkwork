@@ -1,0 +1,120 @@
+---
+title: OKF Wiki Navigator
+description: How ThinkWork projects governed Memory and Brain state into read-only Open Knowledge Format bundles for progressive agent traversal.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+OKF Wiki Navigator is a read-only traversal layer over compiled ThinkWork knowledge. It turns governed Memory, Brain, ontology, graph, and provenance state into an inspectable Open Knowledge Format markdown bundle, then lets a bounded navigator search and read that bundle through Context Engine.
+
+It is not a new source of truth. The canonical state remains ThinkWork-owned: retained memory records, compiled page tables, Brain artifact manifests, approved ontology definitions, graph evidence, ACLs, and redaction metadata. OKF is the generated projection agents can inspect like a wiki.
+
+<Aside type="note">
+  OKF navigation is evaluated before routing changes. A tenant can have a
+  current OKF bundle while runtime traffic still uses DB-backed wiki and Brain
+  retrieval by default.
+</Aside>
+
+## What the bundle contains
+
+Generated OKF pages are ordinary markdown files with YAML frontmatter. ThinkWork uses OKF's required `type` field and puts platform governance metadata under `x-thinkwork`.
+
+The first page profile covers:
+
+- **Entity pages** for ontology-backed customers, accounts, products, projects, people, risks, commitments, and other durable business objects.
+- **Topic pages** for rollups that collect related entities, memories, or decisions.
+- **Decision pages** for durable choices, rationale, follow-ups, and citations.
+- **Source/reference pages** when a redacted source deserves a navigable page of its own.
+
+Every generated page should make scope and provenance visible: title, description, ThinkWork URI, tags, timestamp, tenant scope, page kind, ontology version, lifecycle status, redaction posture, relationship links, and redacted provenance references.
+
+Recommended paths:
+
+```text
+entities/<entity_type>/<slug>.md
+topics/<slug>.md
+decisions/<slug>.md
+sources/<source_kind>/<redacted_source_ref>.md
+index.md
+log.md
+```
+
+`index.md` files are progressive-disclosure entrypoints. `log.md` files are operator-facing generation history when a bundle or subtree needs it.
+
+## Storage boundary
+
+OKF has two storage roles:
+
+| Layer            | Role                                      | Runtime meaning                                                                                                      |
+| ---------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| S3               | Canonical bundle artifact and audit plane | Stores versioned bundle manifests, checksums, source counts, ontology version, freshness, and current-bundle pointer |
+| EFS current view | Read-only serving surface                 | Hydrates the current complete bundle for filesystem-style traversal by the navigator                                 |
+
+S3 is the durable record. EFS is a read-only current view for runtime traversal. If EFS is stale or damaged, operators rebuild it from the S3 bundle rather than treating the filesystem as source data.
+
+Publication is atomic from the navigator's perspective. A navigation run sees one complete bundle version: either the previous current bundle or the new current bundle, never a half-written mix.
+
+## Runtime boundary
+
+Pi does not mount EFS, read S3, call raw Cognee/Neptune/ontology APIs, or receive storage credentials. It calls Context Engine tools such as `query_wiki_context` or `query_brain_context`.
+
+Context Engine owns:
+
+- provider eligibility and runtime policy;
+- tenant and owner scope;
+- provider-local skipped/degraded/error statuses;
+- redacted provenance and citation formatting;
+- traversal budgets such as max pages, max depth, max bytes, and timeout;
+- sanitized `okf_wiki_trace` / `wiki_context_trace` evidence.
+
+Navigator tools are read-only. They can list pages, search text, read bounded snippets, inspect links/backlinks, and explain which pages were inspected. They cannot mutate markdown, Memory, Brain, ontology definitions, graph state, source artifacts, or runtime policy.
+
+## Source-data policy
+
+Generated markdown is source data, not instructions. Page bodies may contain user text, imported document excerpts, or prompt-injection strings. The navigator can cite or summarize that content, but page text cannot:
+
+- override system or developer instructions;
+- request new tools or storage credentials;
+- expand allowed path prefixes;
+- make Pi call raw storage or admin APIs;
+- change provider routing by itself.
+
+Trace evidence should name page ids, redacted provenance handles, provider statuses, and traversal decisions. It should not expose raw S3 object keys, filesystem roots, private source ids, or backend endpoints.
+
+## Evaluation and cutover
+
+OKF navigation is valuable only if it improves answers, citations, or debugging. Compare it before defaulting any runtime path.
+
+The standard comparison matrix is:
+
+| Retrieval path  | What it proves                                                                  |
+| --------------- | ------------------------------------------------------------------------------- |
+| DB wiki / Brain | Baseline deterministic lookup, citations, latency, and existing UI/API behavior |
+| OKF navigator   | Progressive traversal over files, links, backlinks, and page bodies             |
+| Hybrid DB + OKF | DB ranking chooses promising pages, then OKF traversal expands context          |
+| Raw memory      | Fresh episodic recall that may not have compiled yet                            |
+| Knowledge graph | Relationship-shaped evidence for graph questions                                |
+
+The comparison report should cover relevance, citation correctness, freshness, latency, trace completeness, prompt-injection isolation, and failure posture. Hybrid rows must cite both DB wiki and OKF evidence when they succeed.
+
+Use the repo runbook at `docs/verification/okf-wiki-navigator-e2e.md` for deploy-stage proof. The dry-run is safe; live mode mutates a target stage by materializing OKF, refreshing EFS, creating Pi turns, and writing the report.
+
+## Rollback
+
+Rollback does not require deleting canonical Memory or Brain state.
+
+Use the smallest rollback that matches the failure:
+
+- Disable OKF navigator runtime config or tool policy so `query_wiki_context` / `query_brain_context` stay on DB-backed retrieval.
+- Stop materializer or EFS-refresh schedules if bundle publication is producing bad projections.
+- Move the current bundle pointer back to the last known-good S3 bundle.
+- Rebuild the EFS current view from S3 if the serving surface is stale or corrupt.
+- Leave DB wiki / Brain routing unchanged until comparison evidence supports a new default.
+
+## Related pages
+
+- [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) - the page layer OKF projects from
+- [Memory Context API](/api/context-engine/) - Context Engine runtime boundary
+- [Business Ontology](/concepts/knowledge/business-ontology/) - governed tenant vocabulary
+- [Memory Graph Direction](/concepts/knowledge/knowledge-graph/) - graph and relationship direction
+- [Source Routing](/concepts/knowledge/retrieval-and-context/) - how Memory assembles turn context
