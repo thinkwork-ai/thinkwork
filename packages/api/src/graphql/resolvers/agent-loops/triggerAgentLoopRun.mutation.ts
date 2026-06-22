@@ -1,16 +1,19 @@
 import {
   dispatchAgentLoop,
+  workerAgentId,
   type AgentLoopDispatchLedger,
 } from "@thinkwork/agent-loops-core";
 import { and, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import {
   agentWakeupRequests,
+  agents,
   agentLoopIterations,
   agentLoopRuns,
   agentLoopVersions,
   agentLoops,
   db,
+  spaces,
 } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
@@ -18,6 +21,7 @@ import {
   parseAwsJsonObject,
   requireAgentLoopAdmin,
 } from "./types.js";
+import { ensureThreadForWork } from "../../../lib/thread-helpers.js";
 
 type TriggerAgentLoopRunArgs = {
   input: {
@@ -48,6 +52,39 @@ export async function triggerAgentLoopRun(
   const actorId = await resolveCallerUserId(ctx);
   const inputSummary = parseAwsJsonObject(args.input.inputSummary);
   const now = new Date();
+  const idempotencyKey = args.input.idempotencyKey ?? null;
+  const existingIdempotentRun = idempotencyKey
+    ? await findRunByIdempotencyKey(loop.tenant_id, idempotencyKey)
+    : null;
+  if (existingIdempotentRun) {
+    const [run] = await db
+      .select()
+      .from(agentLoopRuns)
+      .where(eq(agentLoopRuns.id, existingIdempotentRun.id))
+      .limit(1);
+    if (!run) {
+      throw new Error(
+        `AgentLoop run ${existingIdempotentRun.id} not found after idempotency lookup`,
+      );
+    }
+    return agentLoopRowToGraphql(run);
+  }
+
+  const workerId = workerAgentId(version?.worker_spec ?? null);
+  const defaultSpaceId = workerId
+    ? await loadAgentDefaultSpaceId(loop.tenant_id, workerId)
+    : null;
+  const executionThread =
+    workerId && loop.lifecycle_status === "active"
+      ? await ensureThreadForWork({
+          tenantId: loop.tenant_id,
+          agentId: workerId,
+          spaceId: defaultSpaceId ?? undefined,
+          userId: actorId ?? undefined,
+          title: `Automation: ${loop.name}`,
+          channel: "schedule",
+        })
+      : null;
 
   const result = await dispatchAgentLoop(
     {
@@ -74,7 +111,9 @@ export async function triggerAgentLoopRun(
         source: "manual_run",
         actorType: actorId ? "user" : "system",
         actorId,
-        idempotencyKey: args.input.idempotencyKey ?? null,
+        threadId: executionThread?.threadId ?? null,
+        spaceId: defaultSpaceId,
+        idempotencyKey,
         correlationId: args.input.correlationId ?? null,
         inputSummary,
       },
@@ -97,6 +136,56 @@ export async function triggerAgentLoopRun(
   }
 
   return agentLoopRowToGraphql(run);
+}
+
+async function findRunByIdempotencyKey(
+  tenantId: string,
+  idempotencyKey: string,
+) {
+  const [row] = await db
+    .select({ id: agentLoopRuns.id, status: agentLoopRuns.status })
+    .from(agentLoopRuns)
+    .where(
+      and(
+        eq(agentLoopRuns.tenant_id, tenantId),
+        eq(agentLoopRuns.idempotency_key, idempotencyKey),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function loadAgentDefaultSpaceId(
+  tenantId: string,
+  agentId: string,
+): Promise<string | null> {
+  const [agent] = await db
+    .select({ runtimeConfig: agents.runtime_config })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)))
+    .limit(1);
+  const defaultSpaceId = defaultSpaceIdFromRuntimeConfig(agent?.runtimeConfig);
+  if (!defaultSpaceId) return null;
+  const [space] = await db
+    .select({ id: spaces.id })
+    .from(spaces)
+    .where(
+      and(
+        eq(spaces.id, defaultSpaceId),
+        eq(spaces.tenant_id, tenantId),
+        eq(spaces.status, "active"),
+      ),
+    )
+    .limit(1);
+  return space?.id ?? null;
+}
+
+function defaultSpaceIdFromRuntimeConfig(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const defaultSpaceId = (value as { defaultSpaceId?: unknown }).defaultSpaceId;
+  return typeof defaultSpaceId === "string" && defaultSpaceId.trim()
+    ? defaultSpaceId
+    : null;
 }
 
 async function loadCurrentVersion(id?: string | null) {

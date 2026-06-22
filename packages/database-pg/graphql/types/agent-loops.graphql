@@ -129,6 +129,7 @@ type AgentLoopRun {
   agentLoop: AgentLoop
   agentLoopVersionId: ID
   agentLoopVersion: AgentLoopVersion
+  threadId: ID
   status: AgentLoopRunStatus!
   triggerFamily: AgentLoopTriggerFamily!
   triggerSource: String
@@ -165,6 +166,7 @@ type AgentLoopIteration {
   goalModeAction: String
   agentWakeupRequestId: ID
   threadTurnId: ID
+  threadId: ID
   inputSummary: AWSJSON
   outputSummary: AWSJSON
   startedAt: AWSDateTime

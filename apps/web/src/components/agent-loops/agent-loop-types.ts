@@ -156,6 +156,7 @@ export interface AgentLoopIteration {
   goalModeAction?: string | null;
   agentWakeupRequestId?: string | null;
   threadTurnId?: string | null;
+  threadId?: string | null;
   inputSummary?: unknown;
   outputSummary?: unknown;
   startedAt?: string | null;
@@ -175,6 +176,7 @@ export interface AgentLoopRunDetail {
   agentLoopId: string;
   agentLoop?: Pick<AgentLoopRow, "id" | "name" | "slug"> | null;
   agentLoopVersionId?: string | null;
+  threadId?: string | null;
   agentLoopVersion?: AgentLoopVersionSummary | null;
   status: string;
   triggerFamily: string;

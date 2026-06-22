@@ -189,7 +189,7 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("AgentLoopInventory", () => {
-  it("opens AgentLoop rows through the AgentLoop detail route", async () => {
+  it("opens automation rows through the AgentLoop detail route", async () => {
     render(<AgentLoopInventory />);
 
     fireEvent.click(await screen.findByText("Weekly Agent Check-In"));
@@ -199,13 +199,13 @@ describe("AgentLoopInventory", () => {
     });
   });
 
-  it("creates AgentLoops and navigates to the created loop", async () => {
+  it("creates automations and navigates to the created loop", async () => {
     saveMutationMock.mockResolvedValue({
       data: { saveAgentLoop: { id: "loop-new" } },
     });
 
     render(<AgentLoopInventory />);
-    fireEvent.click(screen.getByRole("button", { name: /New AgentLoop/ }));
+    fireEvent.click(screen.getByRole("button", { name: /New Automation/ }));
     fireEvent.click(await screen.findByText("Save mocked loop"));
 
     await waitFor(() => expect(saveMutationMock).toHaveBeenCalled());
@@ -213,6 +213,30 @@ describe("AgentLoopInventory", () => {
       to: "/settings/agent-loops/$agentLoopId",
       params: { agentLoopId: "loop-new" },
     });
+  });
+
+  it("hides archived automations from the active inventory", async () => {
+    useQueryMock.mockImplementation(() => [
+      {
+        data: {
+          agentLoops: [
+            loop(),
+            loop({
+              id: "loop-archived",
+              name: "Archived loop",
+              lifecycleStatus: "archived",
+            }),
+          ],
+        },
+        fetching: false,
+      },
+      refetchMock,
+    ]);
+
+    render(<AgentLoopInventory />);
+
+    expect(await screen.findByText("Weekly Agent Check-In")).toBeTruthy();
+    expect(screen.queryByText("Archived loop")).toBeNull();
   });
 
   it("builds Phase 1 worker choices from default Agent plus enabled profiles", () => {

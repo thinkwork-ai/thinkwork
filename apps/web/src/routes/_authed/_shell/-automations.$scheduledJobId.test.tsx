@@ -9,7 +9,7 @@ function source(path: string): string {
 }
 
 describe("retired Automations shell routes", () => {
-  it("redirects the old main Automations surface to AgentLoops", () => {
+  it("redirects the old main Automations surface to the AgentLoop route", () => {
     const route = source("src/routes/_authed/_shell/automations.index.tsx");
 
     expect(route).toContain('redirect({ to: "/settings/agent-loops" })');

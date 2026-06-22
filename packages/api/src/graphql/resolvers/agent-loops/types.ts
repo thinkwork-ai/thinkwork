@@ -1,6 +1,7 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import {
+  agentWakeupRequests,
   agentLoopEvidence,
   agentLoopIterations,
   agentLoopJudgments,
@@ -9,6 +10,7 @@ import {
   agentLoops,
   db,
   snakeToCamel,
+  threadTurns,
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
@@ -37,6 +39,8 @@ type AgentLoopRunParent = TenantScoped & {
 type AgentLoopIterationParent = TenantScoped & {
   id?: string;
   agentLoopRunId?: string | null;
+  agentWakeupRequestId?: string | null;
+  threadTurnId?: string | null;
 };
 
 type AgentLoopJudgmentParent = TenantScoped & {
@@ -176,6 +180,11 @@ export const agentLoopRunTypeResolvers = {
     return row ? agentLoopRowToGraphql(row) : null;
   },
 
+  threadId: async (run: AgentLoopRunParent) => {
+    if (!run.id) return null;
+    return resolveAgentLoopRunThreadId(run.id);
+  },
+
   iterations: async (run: AgentLoopRunParent) => {
     if (!run.id) return [];
     const rows = await db
@@ -221,6 +230,13 @@ export const agentLoopIterationTypeResolvers = {
     return row ? agentLoopRowToGraphql(row) : null;
   },
 
+  threadId: async (iteration: AgentLoopIterationParent) =>
+    resolveAgentLoopIterationThreadId({
+      tenantId: iteration.tenantId ?? iteration.tenant_id ?? null,
+      threadTurnId: iteration.threadTurnId ?? null,
+      wakeupId: iteration.agentWakeupRequestId ?? null,
+    }),
+
   judgments: async (iteration: AgentLoopIterationParent) => {
     if (!iteration.id) return [];
     const rows = await db
@@ -243,6 +259,57 @@ export const agentLoopIterationTypeResolvers = {
     return rows.map(agentLoopRowToGraphql);
   },
 };
+
+async function resolveAgentLoopRunThreadId(runId: string): Promise<string | null> {
+  const [iteration] = await db
+    .select({
+      tenantId: agentLoopIterations.tenant_id,
+      threadTurnId: agentLoopIterations.thread_turn_id,
+      wakeupId: agentLoopIterations.agent_wakeup_request_id,
+    })
+    .from(agentLoopIterations)
+    .where(eq(agentLoopIterations.agent_loop_run_id, runId))
+    .orderBy(agentLoopIterations.iteration_number)
+    .limit(1);
+  if (!iteration) return null;
+  return resolveAgentLoopIterationThreadId(iteration);
+}
+
+async function resolveAgentLoopIterationThreadId(input: {
+  tenantId?: string | null;
+  threadTurnId?: string | null;
+  wakeupId?: string | null;
+}): Promise<string | null> {
+  if (input.threadTurnId) {
+    const conditions = [eq(threadTurns.id, input.threadTurnId)];
+    if (input.tenantId) conditions.push(eq(threadTurns.tenant_id, input.tenantId));
+    const [turn] = await db
+      .select({ threadId: threadTurns.thread_id })
+      .from(threadTurns)
+      .where(and(...conditions))
+      .limit(1);
+    if (turn?.threadId) return turn.threadId;
+  }
+
+  if (!input.wakeupId) return null;
+  const conditions = [eq(agentWakeupRequests.id, input.wakeupId)];
+  if (input.tenantId) {
+    conditions.push(eq(agentWakeupRequests.tenant_id, input.tenantId));
+  }
+  const [wakeup] = await db
+    .select({ payload: agentWakeupRequests.payload })
+    .from(agentWakeupRequests)
+    .where(and(...conditions))
+    .limit(1);
+  const payload =
+    wakeup?.payload && typeof wakeup.payload === "object"
+      ? (wakeup.payload as Record<string, unknown>)
+      : null;
+  const threadId = payload?.threadId;
+  return typeof threadId === "string" && threadId.trim()
+    ? threadId.trim()
+    : null;
+}
 
 export const agentLoopJudgmentTypeResolvers = {
   agentLoopRun: async (judgment: AgentLoopJudgmentParent) => {

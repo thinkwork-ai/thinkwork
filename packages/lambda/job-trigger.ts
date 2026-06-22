@@ -16,12 +16,14 @@ import { getApiAuthSecret } from "@thinkwork/runtime-config";
 import {
   AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
   dispatchAgentLoop,
+  workerAgentId,
   type AgentLoopDispatchLedger,
 } from "@thinkwork/agent-loops-core";
 import { createHash, randomBytes } from "node:crypto";
-import { getDb } from "@thinkwork/database-pg";
+import { ensureThreadForWork, getDb } from "@thinkwork/database-pg";
 import {
   agentWakeupRequests,
+  agents,
   agentLoopIterations,
   agentLoopRuns,
   agentLoopVersions,
@@ -39,6 +41,7 @@ import {
   threadIdleLearningRuns,
   threadIdleLearningState,
   threadTurns,
+  spaces,
   users,
   workflowEngineBindings,
   workflowEvidence,
@@ -581,6 +584,58 @@ function scheduledAgentLoopIdempotencyKey(event: JobTriggerEvent): string {
   return `${AGENT_LOOP_SCHEDULE_TRIGGER_TYPE}:${event.triggerId}:${fireId}`;
 }
 
+async function findAgentLoopRunByIdempotencyKey(
+  db: JobTriggerDb,
+  tenantId: string,
+  idempotencyKey: string,
+): Promise<{ id: string; status: string } | null> {
+  const [row] = await db
+    .select({ id: agentLoopRuns.id, status: agentLoopRuns.status })
+    .from(agentLoopRuns)
+    .where(
+      and(
+        eq(agentLoopRuns.tenant_id, tenantId),
+        eq(agentLoopRuns.idempotency_key, idempotencyKey),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function loadAgentDefaultSpaceId(
+  db: JobTriggerDb,
+  tenantId: string,
+  agentId: string,
+): Promise<string | null> {
+  const [agent] = await db
+    .select({ runtimeConfig: agents.runtime_config })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.tenant_id, tenantId)))
+    .limit(1);
+  const defaultSpaceId = defaultSpaceIdFromRuntimeConfig(agent?.runtimeConfig);
+  if (!defaultSpaceId) return null;
+  const [space] = await db
+    .select({ id: spaces.id })
+    .from(spaces)
+    .where(
+      and(
+        eq(spaces.id, defaultSpaceId),
+        eq(spaces.tenant_id, tenantId),
+        eq(spaces.status, "active"),
+      ),
+    )
+    .limit(1);
+  return space?.id ?? null;
+}
+
+function defaultSpaceIdFromRuntimeConfig(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const defaultSpaceId = (value as { defaultSpaceId?: unknown }).defaultSpaceId;
+  return typeof defaultSpaceId === "string" && defaultSpaceId.trim()
+    ? defaultSpaceId
+    : null;
+}
+
 async function handleAgentLoopSchedule(input: {
   db: JobTriggerDb;
   event: JobTriggerEvent;
@@ -660,6 +715,41 @@ async function handleAgentLoopSchedule(input: {
           .limit(1)
       )[0]
     : null;
+  const idempotencyKey = scheduledAgentLoopIdempotencyKey(event);
+  const existingIdempotentRun = await findAgentLoopRunByIdempotencyKey(
+    db,
+    tenantId,
+    idempotencyKey,
+  );
+  if (existingIdempotentRun) {
+    await db
+      .update(scheduledJobs)
+      .set({
+        last_run_at: now,
+        updated_at: now,
+      })
+      .where(eq(scheduledJobs.id, triggerId));
+    console.log(
+      `[job-trigger] agent_loop_schedule ${triggerId} reused run ${existingIdempotentRun.id}`,
+    );
+    return;
+  }
+
+  const workerId = workerAgentId(version?.worker_spec ?? null);
+  const defaultSpaceId = workerId
+    ? await loadAgentDefaultSpaceId(db, tenantId, workerId)
+    : null;
+  const executionThread =
+    workerId && loop.lifecycle_status === "active"
+      ? await ensureThreadForWork({
+          tenantId,
+          agentId: workerId,
+          userId: input.actorId ?? undefined,
+          spaceId: defaultSpaceId ?? undefined,
+          title: `Automation: ${loop.name}`,
+          channel: "schedule",
+        })
+      : null;
 
   const result = await dispatchAgentLoop(
     {
@@ -686,8 +776,10 @@ async function handleAgentLoopSchedule(input: {
         source: AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
         actorType: input.actorId ? "user" : "system",
         actorId: input.actorId,
+        threadId: executionThread?.threadId ?? null,
+        spaceId: defaultSpaceId,
         scheduledJobId: triggerId,
-        idempotencyKey: scheduledAgentLoopIdempotencyKey(event),
+        idempotencyKey,
         correlationId: `${AGENT_LOOP_SCHEDULE_TRIGGER_TYPE}:${triggerId}`,
         inputSummary: {
           scheduleName: event.scheduleName ?? null,

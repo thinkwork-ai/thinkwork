@@ -1136,6 +1136,7 @@ export const SettingsTenantAgentQuery = graphql(`
       tenantId
       name
       runtime
+      runtimeConfig
       model
       blockedTools
       sandbox
@@ -1326,6 +1327,7 @@ export const SettingsUpdateTenantAgentMutation = graphql(`
     updateTenantAgent(tenantId: $tenantId, input: $input) {
       id
       runtime
+      runtimeConfig
       model
       updatedAt
     }

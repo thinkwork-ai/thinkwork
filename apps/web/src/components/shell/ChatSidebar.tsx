@@ -397,9 +397,9 @@ export function ChatSidebar() {
       markThreadRead(routeThreadId);
       persistThreadRead(routeThreadId);
     } else {
-      // Any non-thread route (New thread, AgentLoops, Settings, ...) has no
+      // Any non-thread route (New thread, Automations, Settings, ...) has no
       // active thread — clear the selection so a stale highlight doesn't linger
-      // on a pinned/recent row while viewing AgentLoops. Clicking a row
+      // on a pinned/recent row while viewing Automations. Clicking a row
       // sets selectedThreadId optimistically and navigates in the same tick, so
       // this never clears a just-clicked thread (its route is already active).
       setSelectedThreadId(undefined);
@@ -853,11 +853,11 @@ export function ChatSidebar() {
               <SidebarMenuButton
                 asChild
                 isActive={isAgentLoopsRoute}
-                tooltip="AgentLoops"
+                tooltip="Automations"
               >
                 <Link to="/settings/agent-loops">
                   <Clock />
-                  <span>AgentLoops</span>
+                  <span>Automations</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -137,14 +137,14 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("AgentLoop name"), {
+    fireEvent.change(screen.getByLabelText("Automation name"), {
       target: { value: "Manual review loop" },
     });
 
     expect(
       (
         screen.getByRole("button", {
-          name: "Create AgentLoop",
+          name: "Create Automation",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -167,7 +167,7 @@ describe("AgentLoopForm", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Weekly Agent Check-In/ }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Create AgentLoop" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Automation" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(

@@ -56,6 +56,8 @@ export interface AgentLoopTriggerContext {
   source: string;
   actorType?: string | null;
   actorId?: string | null;
+  threadId?: string | null;
+  spaceId?: string | null;
   scheduledJobId?: string | null;
   idempotencyKey?: string | null;
   correlationId?: string | null;
@@ -137,6 +139,8 @@ export interface AgentLoopEnqueueWakeupInput {
 
 export interface AgentLoopWakeupPayload {
   message: string;
+  threadId?: string | null;
+  spaceId?: string | null;
   goalMode: {
     enabled: true;
     action: "start" | "resume";
@@ -236,6 +240,8 @@ export function buildAgentLoopWakeupPayload(input: {
     input.version.loopPolicy.maxTokens ?? DEFAULT_AGENT_LOOP_GOAL_TOKEN_BUDGET;
   return {
     message: input.version.goalSpec.objective,
+    threadId: input.trigger.threadId ?? null,
+    spaceId: input.trigger.spaceId ?? null,
     goalMode: {
       enabled: true,
       action: input.goalModeAction ?? "start",
