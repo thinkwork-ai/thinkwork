@@ -167,7 +167,9 @@ export function ChatSidebar() {
     enabled: threadNotificationsEnabled,
   });
   const isNewThreadRoute = location.pathname === "/new";
-  const isAutomationsRoute = location.pathname === "/automations";
+  const isAgentLoopsRoute = location.pathname.startsWith(
+    "/settings/agent-loops",
+  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
@@ -395,9 +397,9 @@ export function ChatSidebar() {
       markThreadRead(routeThreadId);
       persistThreadRead(routeThreadId);
     } else {
-      // Any non-thread route (New thread, Automations, Settings, …) has no
+      // Any non-thread route (New thread, AgentLoops, Settings, ...) has no
       // active thread — clear the selection so a stale highlight doesn't linger
-      // on a pinned/recent row while viewing e.g. Automations. Clicking a row
+      // on a pinned/recent row while viewing AgentLoops. Clicking a row
       // sets selectedThreadId optimistically and navigates in the same tick, so
       // this never clears a just-clicked thread (its route is already active).
       setSelectedThreadId(undefined);
@@ -850,12 +852,12 @@ export function ChatSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
-                isActive={isAutomationsRoute}
-                tooltip="Automations"
+                isActive={isAgentLoopsRoute}
+                tooltip="AgentLoops"
               >
-                <Link to="/automations">
+                <Link to="/settings/agent-loops">
                   <Clock />
-                  <span>Automations</span>
+                  <span>AgentLoops</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
