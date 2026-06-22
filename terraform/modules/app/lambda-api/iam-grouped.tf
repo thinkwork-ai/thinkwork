@@ -109,8 +109,9 @@ locals {
       },
       # Canonical Company Brain artifacts: durable source artifacts,
       # ingestion manifests, migration snapshots, vault projections, and
-      # exports. Tenant-visible APIs redact object keys; Lambdas need object
-      # read/write for replay and list access for migration enumeration.
+      # exports, and OKF Wiki Navigator bundles/current manifests.
+      # Tenant-visible APIs redact object keys; Lambdas need object read/write
+      # for replay and list access for migration enumeration.
       {
         Effect = "Allow"
         Action = [
