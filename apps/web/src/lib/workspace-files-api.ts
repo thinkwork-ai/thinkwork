@@ -41,6 +41,11 @@ export interface ExportSkillArchiveResult {
 }
 
 export type SkillTrustStatus = "passed" | "review" | "blocked" | "failed";
+export type SkillTrustEvidenceFixStepId =
+  | "skillCard"
+  | "evalDataset"
+  | "benchmark"
+  | "signature";
 
 export interface SkillTrustFinding {
   id: string;
@@ -53,6 +58,7 @@ export interface SkillTrustFinding {
 export interface SkillTrustReport {
   slug: string;
   contentHash: string;
+  signedPayloadHash?: string;
   generatedAt: string;
   status: SkillTrustStatus;
   summary: string;
@@ -74,10 +80,16 @@ export interface SkillTrustReport {
   severityCounts: Record<SkillTrustFinding["severity"], number>;
   findings: SkillTrustFinding[];
   evidence: {
-    skillCard: "present" | "missing";
-    evalDataset: "present" | "missing";
-    benchmark: "present" | "missing";
-    signature: "verified" | "present_unverified" | "missing";
+    skillCard: "present" | "missing" | "starter_generated";
+    evalDataset: "present" | "missing" | "starter_generated";
+    benchmark: "present" | "missing" | "starter_generated";
+    signature:
+      | "verified"
+      | "present_unverified"
+      | "missing"
+      | "missing_signing_config"
+      | "stale"
+      | "invalid";
   };
   artifactPaths: {
     skillCard?: string;
@@ -85,6 +97,24 @@ export interface SkillTrustReport {
     benchmark?: string;
     signature?: string;
   };
+}
+
+export interface SkillTrustEvidenceFixResult {
+  slug: string;
+  trustReport: SkillTrustReport;
+  fixedStep: {
+    step: SkillTrustEvidenceFixStepId;
+    status:
+      | "generated"
+      | "existing_artifact"
+      | "prerequisite_missing"
+      | "invalid_skill";
+    message: string;
+  };
+  artifactPath?: string;
+  prerequisite?: string;
+  signedPayloadHash?: string;
+  indexWarning?: string;
 }
 
 export interface ImportSkillArchiveResult {
@@ -122,6 +152,10 @@ interface WorkspaceFilesResponse {
   indexWarning?: string;
   evalDatasetWarning?: string;
   trustReport?: SkillTrustReport;
+  fixedStep?: SkillTrustEvidenceFixResult["fixedStep"];
+  artifactPath?: string;
+  prerequisite?: string;
+  signedPayloadHash?: string;
 }
 
 async function request(
@@ -293,6 +327,36 @@ export async function runSkillTrustPipeline(
     throw new Error("Skill trust response was missing a report.");
   }
   return data.trustReport;
+}
+
+export async function fixSkillTrustEvidence(
+  slug: string,
+  step: SkillTrustEvidenceFixStepId,
+): Promise<SkillTrustEvidenceFixResult> {
+  const skillTrustApiUrl = readRuntimeEnv("VITE_SKILL_TRUST_API_URL");
+  const data = await request(
+    {
+      action: "fix-skill-trust-evidence",
+      catalog: true,
+      slug,
+      step,
+    },
+    skillTrustApiUrl ? { baseUrl: skillTrustApiUrl } : {},
+  );
+  if (!data.trustReport || !data.fixedStep) {
+    throw new Error("Skill trust fix response was missing fix metadata.");
+  }
+  return {
+    slug: data.slug ?? slug,
+    trustReport: data.trustReport,
+    fixedStep: data.fixedStep,
+    ...(data.artifactPath ? { artifactPath: data.artifactPath } : {}),
+    ...(data.prerequisite ? { prerequisite: data.prerequisite } : {}),
+    ...(data.signedPayloadHash
+      ? { signedPayloadHash: data.signedPayloadHash }
+      : {}),
+    ...(data.indexWarning ? { indexWarning: data.indexWarning } : {}),
+  };
 }
 
 export async function importSkillArchive(

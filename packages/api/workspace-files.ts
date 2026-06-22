@@ -129,6 +129,10 @@ import {
   validateSkillDraftPath,
 } from "./src/lib/skill-drafts/files.js";
 import { buildCatalogSkillTrustReport } from "./src/lib/skill-trust/catalog-report.js";
+import {
+  fixSkillTrustEvidence,
+  type SkillTrustEvidenceFixStepId,
+} from "./src/lib/skill-trust/evidence-fixes.js";
 import { runSkillSpectorForFiles } from "./src/lib/skill-trust/skillspector.js";
 import {
   CATALOG_SKILL_ARCHIVE_LIMITS,
@@ -712,6 +716,7 @@ const WRITE_ACTIONS = new Set([
   "rename",
   "create-sub-agent",
   "export-skill",
+  "fix-skill-trust-evidence",
   "run-skill-trust",
   "install-skill",
   "import-skill",
@@ -1360,55 +1365,13 @@ async function handleRunSkillTrust(
     });
   }
 
-  const skillPrefix = `${target.prefix}${slug}/`;
-  const relativePaths = await listAllObjectsUnfiltered(skillPrefix);
-  if (relativePaths.length === 0) {
-    return json(404, {
-      ok: false,
-      code: "skill_not_found",
-      error: `Catalog skill '${slug}' was not found.`,
-      slug,
-    });
-  }
-  if (!relativePaths.includes("SKILL.md")) {
-    return json(404, {
-      ok: false,
-      code: "skill_md_not_found",
-      error: `Catalog skill '${slug}' is missing SKILL.md and cannot be scanned.`,
-      slug,
-    });
-  }
-  if (relativePaths.length > EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries) {
-    return exportLimitExceeded(
-      slug,
-      `Catalog skill '${slug}' has ${relativePaths.length} files; max scannable files is ${EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries}.`,
-    );
-  }
+  const loaded = await loadCatalogSkillTrustFiles(target, slug);
+  if (!loaded.ok) return loaded.response;
 
-  let totalBytes = 0;
-  const files: { path: string; content: Buffer }[] = [];
-  for (const filePath of relativePaths) {
-    const object = await readCatalogObject(`${skillPrefix}${filePath}`);
-    if (object.content.byteLength > EXPORT_SKILL_ARCHIVE_LIMITS.maxFileBytes) {
-      return exportLimitExceeded(
-        slug,
-        `Catalog skill file '${filePath}' is too large to scan.`,
-      );
-    }
-    totalBytes += object.content.byteLength;
-    if (totalBytes > EXPORT_SKILL_ARCHIVE_LIMITS.maxTotalBytes) {
-      return exportLimitExceeded(
-        slug,
-        `Catalog skill '${slug}' is too large to scan.`,
-      );
-    }
-    files.push({ path: filePath, content: object.content });
-  }
-
-  const scan = await runSkillSpectorForFiles({ slug, files });
+  const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
   const trustReport = buildCatalogSkillTrustReport({
     slug,
-    files,
+    files: loaded.files,
     scanner: scan.scanner,
     scannerFindings: scan.findings,
   });
@@ -1418,6 +1381,269 @@ async function handleRunSkillTrust(
     slug,
     trustReport,
   });
+}
+
+async function handleFixSkillTrustEvidence(
+  deps: HandlerDeps,
+  slug: string | undefined,
+  stepInput: string | undefined,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+  if (target.kind !== "catalog") {
+    return json(400, {
+      ok: false,
+      code: "unsupported_target",
+      error: "fix-skill-trust-evidence requires the skill catalog target",
+    });
+  }
+  if (!isCatalogArchiveSlug(slug)) {
+    return json(400, {
+      ok: false,
+      code: "invalid_skill_slug",
+      error:
+        "slug is required for fix-skill-trust-evidence and must be a portable Agent Skills name.",
+    });
+  }
+
+  const step = parseSkillTrustEvidenceFixStep(stepInput);
+  if (!step) {
+    return json(400, {
+      ok: false,
+      code: "invalid_skill_trust_step",
+      error:
+        "step is required and must be one of: skillCard, evalDataset, benchmark, signature.",
+    });
+  }
+
+  const loaded = await loadCatalogSkillTrustFiles(target, slug);
+  if (!loaded.ok) return loaded.response;
+
+  const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
+  const result = await fixSkillTrustEvidence({
+    slug,
+    files: loaded.files,
+    step,
+    scanner: scan.scanner,
+    scannerFindings: scan.findings,
+  });
+
+  if (result.status === "invalid_skill") {
+    return json(422, {
+      ok: false,
+      code: "invalid_skill_md",
+      error: result.message,
+      slug,
+      trustReport: result.trustReport,
+      fixedStep: serializeSkillTrustEvidenceFix(result),
+      ...(result.prerequisite ? { prerequisite: result.prerequisite } : {}),
+    });
+  }
+
+  if (!result.artifact) {
+    return json(200, {
+      ok: true,
+      slug,
+      trustReport: result.trustReport,
+      fixedStep: serializeSkillTrustEvidenceFix(result),
+      ...(result.artifactPath ? { artifactPath: result.artifactPath } : {}),
+      ...(result.prerequisite ? { prerequisite: result.prerequisite } : {}),
+      ...(result.signedPayloadHash
+        ? { signedPayloadHash: result.signedPayloadHash }
+        : {}),
+    });
+  }
+
+  const artifactKey = `${loaded.skillPrefix}${result.artifact.path}`;
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: artifactKey,
+        Body: result.artifact.content,
+        ContentType:
+          result.artifact.contentType ??
+          contentTypeForCatalogSkillPath(result.artifact.path),
+        IfNoneMatch: "*",
+      }),
+    );
+  } catch (err) {
+    if (isPreconditionFailed(err)) {
+      const refreshed = await buildSkillTrustReportFromCatalog(target, slug);
+      if (!refreshed.ok) return refreshed.response;
+      return json(200, {
+        ok: true,
+        slug,
+        trustReport: refreshed.trustReport,
+        fixedStep: {
+          step,
+          status: "existing_artifact",
+          message: `${labelForSkillTrustEvidenceStep(step)} already exists at ${result.artifact.path}.`,
+        },
+        artifactPath: result.artifact.path,
+      });
+    }
+    return json(500, {
+      ok: false,
+      code: "skill_trust_fix_failed",
+      error: `Could not write ${result.artifact.path}: ${errorMessage(err)}`,
+      slug,
+      fixedStep: serializeSkillTrustEvidenceFix(result),
+      artifactPath: result.artifact.path,
+    });
+  }
+
+  const indexWarning = await reindexCatalogAfterMutation(
+    target,
+    tenantId,
+    slug,
+    "fix-skill-trust-evidence",
+  );
+
+  return json(200, {
+    ok: true,
+    slug,
+    trustReport: result.trustReport,
+    fixedStep: serializeSkillTrustEvidenceFix(result),
+    artifactPath: result.artifact.path,
+    ...(result.signedPayloadHash
+      ? { signedPayloadHash: result.signedPayloadHash }
+      : {}),
+    ...(indexWarning ? { indexWarning } : {}),
+  });
+}
+
+type CatalogTrustFilesLoaded =
+  | {
+      ok: true;
+      skillPrefix: string;
+      files: { path: string; content: Buffer }[];
+    }
+  | { ok: false; response: APIGatewayProxyResult };
+
+async function loadCatalogSkillTrustFiles(
+  target: CatalogTarget,
+  slug: string,
+): Promise<CatalogTrustFilesLoaded> {
+  const skillPrefix = `${target.prefix}${slug}/`;
+  const relativePaths = await listAllObjectsUnfiltered(skillPrefix);
+  if (relativePaths.length === 0) {
+    return {
+      ok: false,
+      response: json(404, {
+        ok: false,
+        code: "skill_not_found",
+        error: `Catalog skill '${slug}' was not found.`,
+        slug,
+      }),
+    };
+  }
+  if (!relativePaths.includes("SKILL.md")) {
+    return {
+      ok: false,
+      response: json(404, {
+        ok: false,
+        code: "skill_md_not_found",
+        error: `Catalog skill '${slug}' is missing SKILL.md and cannot be scanned.`,
+        slug,
+      }),
+    };
+  }
+  if (relativePaths.length > EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries) {
+    return {
+      ok: false,
+      response: exportLimitExceeded(
+        slug,
+        `Catalog skill '${slug}' has ${relativePaths.length} files; max scannable files is ${EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries}.`,
+      ),
+    };
+  }
+
+  let totalBytes = 0;
+  const files: { path: string; content: Buffer }[] = [];
+  for (const filePath of relativePaths) {
+    const object = await readCatalogObject(`${skillPrefix}${filePath}`);
+    if (object.content.byteLength > EXPORT_SKILL_ARCHIVE_LIMITS.maxFileBytes) {
+      return {
+        ok: false,
+        response: exportLimitExceeded(
+          slug,
+          `Catalog skill file '${filePath}' is too large to scan.`,
+        ),
+      };
+    }
+    totalBytes += object.content.byteLength;
+    if (totalBytes > EXPORT_SKILL_ARCHIVE_LIMITS.maxTotalBytes) {
+      return {
+        ok: false,
+        response: exportLimitExceeded(
+          slug,
+          `Catalog skill '${slug}' is too large to scan.`,
+        ),
+      };
+    }
+    files.push({ path: filePath, content: object.content });
+  }
+
+  return { ok: true, skillPrefix, files };
+}
+
+async function buildSkillTrustReportFromCatalog(
+  target: CatalogTarget,
+  slug: string,
+) {
+  const loaded = await loadCatalogSkillTrustFiles(target, slug);
+  if (!loaded.ok) return loaded;
+  const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
+  return {
+    ok: true as const,
+    trustReport: buildCatalogSkillTrustReport({
+      slug,
+      files: loaded.files,
+      scanner: scan.scanner,
+      scannerFindings: scan.findings,
+    }),
+  };
+}
+
+function parseSkillTrustEvidenceFixStep(
+  step: string | undefined,
+): SkillTrustEvidenceFixStepId | null {
+  switch (step) {
+    case "skillCard":
+    case "evalDataset":
+    case "benchmark":
+    case "signature":
+      return step;
+    default:
+      return null;
+  }
+}
+
+function serializeSkillTrustEvidenceFix(result: {
+  step: SkillTrustEvidenceFixStepId;
+  status: string;
+  message: string;
+}) {
+  return {
+    step: result.step,
+    status: result.status,
+    message: result.message,
+  };
+}
+
+function labelForSkillTrustEvidenceStep(
+  step: SkillTrustEvidenceFixStepId,
+): string {
+  switch (step) {
+    case "skillCard":
+      return "Skill card";
+    case "evalDataset":
+      return "Eval dataset";
+    case "benchmark":
+      return "Benchmark";
+    case "signature":
+      return "Signature";
+  }
 }
 
 function exportLimitExceeded(
@@ -3682,6 +3908,8 @@ interface RequestBody {
   value?: string;
   /** For `create-sub-agent` / catalog skill actions: selected slug. */
   slug?: string;
+  /** For catalog `fix-skill-trust-evidence`: selected trust evidence step. */
+  step?: string;
   /** For `create-sub-agent`: seeded {slug}/CONTEXT.md content. */
   contextContent?: string;
   /** For `install-skill`: selected WIRING.md suggestion id. */
@@ -3837,6 +4065,7 @@ export async function handler(
       "put",
       "delete",
       "export-skill",
+      "fix-skill-trust-evidence",
       "import-skill",
       "run-skill-trust",
     ].includes(action)
@@ -3930,6 +4159,9 @@ export async function handler(
       }
       case "export-skill": {
         return await handleExportSkill(deps, body.slug);
+      }
+      case "fix-skill-trust-evidence": {
+        return await handleFixSkillTrustEvidence(deps, body.slug, body.step);
       }
       case "run-skill-trust": {
         return await handleRunSkillTrust(deps, body.slug);
