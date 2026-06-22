@@ -277,6 +277,90 @@ describe("setManagedApplicationDeployment", () => {
     );
   });
 
+  it("enables n8n by setting n8n deployment variables", async () => {
+    mockSend.mockResolvedValueOnce({ SecretString: "plain-token" });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await managedMod.setManagedApplicationDeployment(
+      null,
+      { input: { key: "n8n", action: "ENABLE" } },
+      operatorCtx,
+    );
+
+    expect(result).toMatchObject({
+      key: "n8n",
+      action: "ENABLE",
+      desiredEnabled: true,
+      provisioned: true,
+      runtimeEnabled: true,
+      message: "n8n enable deployment queued.",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/N8N_PROVISIONED",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "N8N_PROVISIONED", value: "true" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/N8N_RUNTIME_ENABLED",
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: "N8N_RUNTIME_ENABLED",
+          value: "true",
+        }),
+      }),
+    );
+  });
+
+  it("parks Plane by setting Plane deployment variables", async () => {
+    mockSend.mockResolvedValueOnce({ SecretString: "plain-token" });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204))
+      .mockResolvedValueOnce(response(204));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await managedMod.setManagedApplicationDeployment(
+      null,
+      { input: { key: "plane", action: "PARK" } },
+      operatorCtx,
+    );
+
+    expect(result).toMatchObject({
+      key: "plane",
+      action: "PARK",
+      desiredEnabled: false,
+      provisioned: true,
+      runtimeEnabled: false,
+    });
+    expect(result.message).toMatch(/Plane runtime park/i);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/PLANE_PROVISIONED",
+      expect.objectContaining({
+        body: JSON.stringify({ name: "PLANE_PROVISIONED", value: "true" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/PLANE_RUNTIME_ENABLED",
+      expect.objectContaining({
+        body: JSON.stringify({
+          name: "PLANE_RUNTIME_ENABLED",
+          value: "false",
+        }),
+      }),
+    );
+  });
+
   it("rejects non-platform operators before updating managed apps", async () => {
     await expect(
       managedMod.setManagedApplicationDeployment(
