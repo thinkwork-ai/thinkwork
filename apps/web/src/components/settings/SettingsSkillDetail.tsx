@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { Download, Info, ShieldCheck } from "lucide-react";
 import { IconFlask } from "@tabler/icons-react";
@@ -20,8 +21,11 @@ import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
 import {
   exportSkillArchive,
+  fixSkillTrustEvidence,
   runSkillTrustPipeline,
   skillCatalogClient,
+  type SkillTrustEvidenceFixStepId,
+  type SkillTrustEvidenceFixResult,
   type SkillTrustReport,
 } from "@/lib/workspace-files-api";
 import {
@@ -323,19 +327,52 @@ function SkillInfoSheetContent() {
 }
 
 function SkillTrustSheetContent({
+  skillSlug,
   report,
   running,
+  fixingStep,
+  fixWarning,
   onRun,
+  onFix,
 }: {
+  skillSlug: string;
   report: SkillTrustReport | null;
   running: boolean;
+  fixingStep: SkillTrustEvidenceFixStepId | null;
+  fixWarning: string | null;
   onRun: () => void;
+  onFix: (step: SkillTrustEvidenceFixStepId) => void;
 }) {
+  const [selectedStepId, setSelectedStepId] = useState<SkillTrustStepId | null>(
+    null,
+  );
+  const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const statusVariant =
     report?.status === "blocked" || report?.status === "failed"
       ? "destructive"
       : "secondary";
   const counts = report?.severityCounts;
+  const steps = report ? buildSkillTrustSteps(report) : [];
+  const fallbackStep = firstActionableTrustStep(steps) ?? steps[0] ?? null;
+  const selectedStep =
+    steps.find((step) => step.id === selectedStepId) ?? fallbackStep;
+
+  useEffect(() => {
+    if (!report) {
+      setSelectedStepId(null);
+      return;
+    }
+    const next = firstActionableTrustStep(steps) ?? steps[0] ?? null;
+    setSelectedStepId((current) =>
+      current && steps.some((step) => step.id === current)
+        ? current
+        : (next?.id ?? null),
+    );
+  }, [report?.contentHash]);
+
+  useEffect(() => {
+    if (selectedStep) detailHeadingRef.current?.focus();
+  }, [selectedStep?.id]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pb-6 pt-2">
@@ -377,22 +414,30 @@ function SkillTrustSheetContent({
 
       {report ? (
         <>
-          <div className="space-y-1.5 text-sm" data-testid="skill-trust-list">
-            <TrustEvidence label="Spec" value={report.spec.status} />
-            <TrustEvidence label="SkillSpector" value={report.scanner.status} />
-            <TrustEvidence
-              label="Skill card"
-              value={report.evidence.skillCard}
-            />
-            <TrustEvidence label="Evals" value={report.evidence.evalDataset} />
-            <TrustEvidence
-              label="Benchmark"
-              value={report.evidence.benchmark}
-            />
-            <TrustEvidence
-              label="Signature"
-              value={report.evidence.signature}
-            />
+          <div className="grid min-h-[360px] gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="space-y-1.5 text-sm" data-testid="skill-trust-list">
+              {steps.map((step) => (
+                <TrustEvidenceRow
+                  key={step.id}
+                  step={step}
+                  selected={step.id === selectedStep?.id}
+                  fixing={fixingStep === step.id}
+                  onSelect={() => setSelectedStepId(step.id)}
+                />
+              ))}
+            </div>
+
+            {selectedStep ? (
+              <TrustStepDetail
+                skillSlug={skillSlug}
+                step={selectedStep}
+                contentHash={report.contentHash}
+                fixing={fixingStep === selectedStep.id}
+                fixWarning={fixWarning}
+                headingRef={detailHeadingRef}
+                onFix={onFix}
+              />
+            ) : null}
           </div>
 
           <div className="rounded-md border border-border/70 p-3">
@@ -477,18 +522,48 @@ function SkillTrustSheetContent({
   );
 }
 
-function TrustEvidence({ label, value }: { label: string; value: string }) {
-  const tone = trustEvidenceTone(value);
-  const displayValue = value.replace(/_/g, " ");
+type SkillTrustStepId = "spec" | "scanner" | SkillTrustEvidenceFixStepId;
+
+type SkillTrustStep = {
+  id: SkillTrustStepId;
+  label: string;
+  status: string;
+  purpose: string;
+  currentState: string;
+  artifactPath?: string;
+  fixStep?: SkillTrustEvidenceFixStepId;
+  fixLabel?: string;
+  disabledReason?: string;
+};
+
+function TrustEvidenceRow({
+  step,
+  selected,
+  fixing,
+  onSelect,
+}: {
+  step: SkillTrustStep;
+  selected: boolean;
+  fixing: boolean;
+  onSelect: () => void;
+}) {
+  const tone = trustEvidenceTone(step.status);
+  const displayValue = displayTrustStatus(step.status);
   return (
-    <div
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={`${step.label} trust step: ${displayValue}`}
+      data-testid={`skill-trust-step-${step.id}`}
       className={cn(
-        "flex items-center justify-between gap-3 rounded-md border bg-background/30 px-3 py-2",
+        "flex min-h-11 w-full items-center justify-between gap-3 rounded-md border bg-background/30 px-3 py-2 text-left transition hover:bg-muted/30 focus:outline-none focus:ring-2 focus:ring-ring",
         tone.row,
+        selected && "bg-muted/40",
       )}
+      onClick={onSelect}
     >
       <div className="min-w-0 truncate text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
+        {step.label}
       </div>
       <Badge
         variant="outline"
@@ -497,10 +572,258 @@ function TrustEvidence({ label, value }: { label: string; value: string }) {
           tone.badge,
         )}
       >
-        {displayValue}
+        {fixing ? "Generating" : displayValue}
       </Badge>
+    </button>
+  );
+}
+
+function TrustStepDetail({
+  skillSlug,
+  step,
+  contentHash,
+  fixing,
+  fixWarning,
+  headingRef,
+  onFix,
+}: {
+  skillSlug: string;
+  step: SkillTrustStep;
+  contentHash: string;
+  fixing: boolean;
+  fixWarning: string | null;
+  headingRef: RefObject<HTMLHeadingElement | null>;
+  onFix: (step: SkillTrustEvidenceFixStepId) => void;
+}) {
+  const canFix = Boolean(step.fixStep && !step.disabledReason);
+  return (
+    <section
+      className="rounded-md border border-border/70 bg-background/35 p-4"
+      data-testid="skill-trust-step-detail"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3
+            ref={headingRef}
+            tabIndex={-1}
+            className="text-base font-semibold focus:outline-none"
+          >
+            {step.label}
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">{step.purpose}</p>
+        </div>
+        <Badge
+          variant="outline"
+          className={cn(
+            "shrink-0 border px-2 py-0.5 text-[11px] font-medium capitalize",
+            trustEvidenceTone(step.status).badge,
+          )}
+        >
+          {displayTrustStatus(step.status)}
+        </Badge>
+      </div>
+
+      <div className="mt-4 space-y-3 text-sm">
+        <TrustDetailRow label="Skill" value={skillSlug} />
+        <TrustDetailRow label="Current state" value={step.currentState} />
+        <TrustDetailRow
+          label="Artifact"
+          value={step.artifactPath ?? "No artifact detected"}
+        />
+        <TrustDetailRow label="Content hash" value={contentHash} monospace />
+      </div>
+
+      {step.disabledReason ? (
+        <p className="mt-4 rounded-md border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+          {step.disabledReason}
+        </p>
+      ) : null}
+
+      {fixWarning ? (
+        <p className="mt-4 rounded-md border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+          {fixWarning}
+        </p>
+      ) : null}
+
+      {step.fixStep ? (
+        <Button
+          type="button"
+          size="sm"
+          className="mt-4"
+          data-testid="skill-trust-fix-step"
+          disabled={!canFix || fixing}
+          onClick={() => onFix(step.fixStep!)}
+        >
+          {fixing ? (
+            <Spinner className="size-3.5" />
+          ) : (
+            (step.fixLabel ?? "Generate missing component")
+          )}
+        </Button>
+      ) : null}
+    </section>
+  );
+}
+
+function TrustDetailRow({
+  label,
+  value,
+  monospace,
+}: {
+  label: string;
+  value: string;
+  monospace?: boolean;
+}) {
+  return (
+    <div className="grid gap-1">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "break-words text-sm",
+          monospace && "font-mono text-xs text-muted-foreground",
+        )}
+      >
+        {value}
+      </div>
     </div>
   );
+}
+
+function buildSkillTrustSteps(report: SkillTrustReport): SkillTrustStep[] {
+  const fixedSteps: SkillTrustStep[] = [
+    {
+      id: "skillCard",
+      label: "Skill card",
+      status: report.evidence.skillCard,
+      purpose:
+        "Documents what the skill does, who owns it, intended use, declared tools, and review notes for operators.",
+      currentState: releaseEvidenceState(report.evidence.skillCard),
+      artifactPath: report.artifactPaths.skillCard,
+      fixStep:
+        report.evidence.skillCard === "missing" ? "skillCard" : undefined,
+      fixLabel: "Generate missing component",
+    },
+    {
+      id: "evalDataset",
+      label: "Evals",
+      status: report.evidence.evalDataset,
+      purpose:
+        "Provides starter cases that exercise the skill behavior before operators rely on it in production.",
+      currentState: releaseEvidenceState(report.evidence.evalDataset),
+      artifactPath: report.artifactPaths.evals[0],
+      fixStep:
+        report.evidence.evalDataset === "missing" ? "evalDataset" : undefined,
+      fixLabel: "Generate missing component",
+    },
+    {
+      id: "benchmark",
+      label: "Benchmark",
+      status: report.evidence.benchmark,
+      purpose:
+        "Records benchmark readiness and measurement expectations without inventing unmeasured pass rates.",
+      currentState: releaseEvidenceState(report.evidence.benchmark),
+      artifactPath: report.artifactPaths.benchmark,
+      fixStep:
+        report.evidence.benchmark === "missing" ? "benchmark" : undefined,
+      fixLabel: "Generate missing component",
+    },
+    {
+      id: "signature",
+      label: "Signature",
+      status: report.evidence.signature,
+      purpose:
+        "Verifies the catalog contents were signed as release evidence after review and scanning.",
+      currentState: signatureEvidenceState(report.evidence.signature),
+      artifactPath: report.artifactPaths.signature,
+      fixStep:
+        report.evidence.signature === "missing" ||
+        report.evidence.signature === "stale" ||
+        report.evidence.signature === "invalid"
+          ? "signature"
+          : undefined,
+      fixLabel: "Generate signature",
+      disabledReason:
+        report.evidence.signature === "missing_signing_config"
+          ? "Signing is not configured for this environment, so ThinkWork cannot generate a real skill.oms.sig file."
+          : undefined,
+    },
+  ];
+  return [
+    {
+      id: "spec",
+      label: "Spec",
+      status: report.spec.status,
+      purpose:
+        "Validates SKILL.md frontmatter, required metadata, and the catalog slug contract.",
+      currentState:
+        report.spec.status === "passed"
+          ? "SKILL.md satisfies the required skill specification checks."
+          : report.spec.errors.join(" ") ||
+            "SKILL.md does not satisfy the required skill specification checks.",
+    },
+    {
+      id: "scanner",
+      label: "SkillSpector",
+      status: report.scanner.status,
+      purpose:
+        "Runs the NVIDIA SkillSpector scan and normalizes risk findings into the trust report.",
+      currentState:
+        report.scanner.status === "completed"
+          ? "SkillSpector completed for this catalog snapshot."
+          : report.scanner.status === "not_configured"
+            ? "SkillSpector is not configured for this environment."
+            : (report.scanner.error ??
+              "SkillSpector did not complete successfully for this catalog snapshot."),
+    },
+    ...fixedSteps
+      .slice()
+      .sort(
+        (a, b) =>
+          Number(isTrustStepSatisfied(a)) - Number(isTrustStepSatisfied(b)),
+      ),
+  ];
+}
+
+function firstActionableTrustStep(steps: SkillTrustStep[]) {
+  return steps.find(
+    (step) =>
+      step.fixStep && !step.disabledReason && !isTrustStepSatisfied(step),
+  );
+}
+
+function isTrustStepSatisfied(step: SkillTrustStep) {
+  return ["passed", "completed", "present", "verified"].includes(step.status);
+}
+
+function releaseEvidenceState(status: string) {
+  if (status === "present") return "Evidence artifact is present.";
+  if (status === "starter_generated") {
+    return "Starter evidence generated by ThinkWork is present and should be reviewed.";
+  }
+  return "No release evidence artifact was detected for this step.";
+}
+
+function signatureEvidenceState(status: string) {
+  switch (status) {
+    case "verified":
+      return "A signature is present and verified for this catalog snapshot.";
+    case "present_unverified":
+      return "A signature file is present, but this session has not verified it.";
+    case "missing_signing_config":
+      return "Signing configuration is missing, so no real signature can be generated here.";
+    case "stale":
+      return "The signature is stale for the current signed payload hash.";
+    case "invalid":
+      return "The signature did not verify for the current signed payload hash.";
+    default:
+      return "No signature evidence was detected for this skill.";
+  }
+}
+
+function displayTrustStatus(value: string) {
+  return value.replace(/_/g, " ");
 }
 
 function trustEvidenceTone(value: string) {
@@ -508,7 +831,8 @@ function trustEvidenceTone(value: string) {
     value === "passed" ||
     value === "completed" ||
     value === "present" ||
-    value === "verified"
+    value === "verified" ||
+    value === "starter_generated"
   ) {
     return {
       row: "border-emerald-500/35",
@@ -529,6 +853,23 @@ function trustEvidenceTone(value: string) {
   };
 }
 
+function toastTrustFixResult(result: SkillTrustEvidenceFixResult) {
+  if (result.fixedStep.status === "prerequisite_missing") {
+    toast.info?.(result.fixedStep.message);
+    if (!toast.info) toast.success(result.fixedStep.message);
+    return;
+  }
+  if (result.fixedStep.status === "existing_artifact") {
+    toast.success(result.fixedStep.message);
+    return;
+  }
+  toast.success(
+    result.artifactPath
+      ? `Generated ${result.artifactPath}.`
+      : result.fixedStep.message,
+  );
+}
+
 export function SettingsSkillDetail() {
   const { skillSlug } = useParams({
     from: "/_authed/settings/skills/$skillSlug",
@@ -538,6 +879,10 @@ export function SettingsSkillDetail() {
   const [trustSheetOpen, setTrustSheetOpen] = useState(false);
   const [trustRunning, setTrustRunning] = useState(false);
   const [trustReport, setTrustReport] = useState<SkillTrustReport | null>(null);
+  const [trustFixingStep, setTrustFixingStep] =
+    useState<SkillTrustEvidenceFixStepId | null>(null);
+  const [trustFixWarning, setTrustFixWarning] = useState<string | null>(null);
+  const [editorRefreshVersion, setEditorRefreshVersion] = useState(0);
   const trustInFlightRef = useRef(false);
   const [infoSheetOpen, setInfoSheetOpen] = useState(false);
 
@@ -563,6 +908,7 @@ export function SettingsSkillDetail() {
     try {
       const report = await runSkillTrustPipeline(skillSlug);
       setTrustReport(report);
+      setTrustFixWarning(null);
       toast.success("Skill trust pipeline completed.");
     } catch (err) {
       const message =
@@ -571,6 +917,29 @@ export function SettingsSkillDetail() {
     } finally {
       trustInFlightRef.current = false;
       setTrustRunning(false);
+    }
+  }
+
+  async function fixTrustStep(step: SkillTrustEvidenceFixStepId) {
+    if (trustFixingStep) return;
+    setTrustFixingStep(step);
+    setTrustFixWarning(null);
+    try {
+      const result = await fixSkillTrustEvidence(skillSlug, step);
+      setTrustReport(result.trustReport);
+      if (result.artifactPath) {
+        setEditorRefreshVersion((version) => version + 1);
+      }
+      if (result.indexWarning) {
+        setTrustFixWarning(result.indexWarning);
+      }
+      toastTrustFixResult(result);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unknown trust evidence failure.";
+      toast.error(`Could not fix the trust step: ${message}`);
+    } finally {
+      setTrustFixingStep(null);
     }
   }
 
@@ -681,16 +1050,20 @@ export function SettingsSkillDetail() {
             </SheetDescription>
           </SheetHeader>
           <SkillTrustSheetContent
+            skillSlug={skillSlug}
             report={trustReport}
             running={trustRunning}
+            fixingStep={trustFixingStep}
+            fixWarning={trustFixWarning}
             onRun={() => void runTrust()}
+            onFix={(step) => void fixTrustStep(step)}
           />
         </SheetContent>
       </Sheet>
       <div className="min-h-0 flex-1">
         <WorkspaceFileEditor
           target={{ skill: skillSlug }}
-          targetKey={`skill:${skillSlug}`}
+          targetKey={`skill:${skillSlug}:${editorRefreshVersion}`}
           client={skillCatalogClient}
           defaultOpenFile="SKILL.md"
           bordered={false}
