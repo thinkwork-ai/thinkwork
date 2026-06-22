@@ -655,6 +655,18 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
 
+  packages/agent-loops-core:
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.1
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@25.6.0)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0)
+
   packages/agentcore-pi:
     dependencies:
       '@aws-sdk/client-bedrock-agentcore':
@@ -1049,6 +1061,9 @@ importers:
 
   packages/database-pg:
     dependencies:
+      '@thinkwork/agent-loops-core':
+        specifier: workspace:*
+        version: link:../agent-loops-core
       '@thinkwork/runtime-config':
         specifier: workspace:*
         version: link:../runtime-config
