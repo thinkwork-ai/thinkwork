@@ -60,6 +60,9 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
 - 2026-06-22T15:58:53Z: Moved THNK-63 back to `In Progress` for active U1
   implementation and added Linear continuation comment
   `9cfe22f4-c2a4-4ba8-9243-7081244adbd1`.
+- 2026-06-22T16:06:04Z: Added Linear U1 PR-opened comment
+  `47f82b21-ed7e-4afb-9468-5ff65eb7ab23`; no unit child issue or `Review`
+  status exists, so THNK-63 remained `In Progress`.
 
 ## Unit Log
 
@@ -91,3 +94,7 @@ Local verification:
 - 2026-06-22T16:04:12Z: API focused tests passed again after CE review
   fixes for freshness/traversal/operator-summary contract coverage.
 - 2026-06-22T16:04:18Z: API typecheck passed again after review fixes.
+
+PR:
+
+- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2854
