@@ -6,6 +6,44 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
+
+- Plan:
+  `docs/plans/2026-06-22-001-feat-skill-trust-evidence-fixes-plan.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: In progress.
+- Current unit: U1 - Add trust evidence fix domain service.
+- Current branch: `codex/thnk-11-u1-trust-evidence-fixes`.
+- Current worktree:
+  `.Codex/worktrees/thnk-11-u1-trust-evidence-fixes`.
+- Current pull request:
+  [#2837](https://github.com/thinkwork-ai/thinkwork/pull/2837).
+- Progress:
+  - 2026-06-22: U1 started from a clean isolated worktree created from
+    `origin/main`.
+  - 2026-06-22: Re-read `AGENTS.md`, the U1 plan, the THNK-11 trust pipeline
+    runbook, the tenant-admin mutation guidance, and the skill eval state
+    guidance before implementation.
+  - 2026-06-22: U1 PR
+    [#2837](https://github.com/thinkwork-ai/thinkwork/pull/2837) opened and
+    CI monitoring started.
+- Local verification:
+  - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
+    local Node 25 logged the existing optional `canvas@2.11.2`
+    native-fallback/missing `pkg-config` warning, but pnpm exited
+    successfully.
+  - U1 focused API tests passed:
+    `pnpm --dir packages/api exec vitest run src/lib/skill-trust/catalog-report.test.ts src/lib/skill-trust/evidence-fixes.test.ts`
+    (17 tests).
+  - U1 API typecheck passed: `pnpm --filter @thinkwork/api typecheck`.
+  - U1 full API test suite passed: `pnpm --filter @thinkwork/api test` (565
+    files passed, 3 skipped; 5280 tests passed, 9 skipped).
+  - U1 targeted Prettier check passed for touched plan/status/API files using
+    `pnpm dlx prettier@3.8.2 --check ...`.
+  - U1 `git diff --check` passed.
+
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 
 - Plan: `docs/plans/2026-06-21-003-feat-skill-creator-system-plan.md`.
