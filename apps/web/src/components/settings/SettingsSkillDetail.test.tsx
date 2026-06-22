@@ -26,12 +26,14 @@ import {
   SettingsSkillDraftsQuery,
 } from "@/lib/skill-creator-queries";
 import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
+import { ApiError } from "@/lib/api-fetch";
 import { SettingsSkillDetail } from "./SettingsSkillDetail";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   exportSkillArchive: vi.fn(),
   fixSkillTrustEvidence: vi.fn(),
+  getSkillCatalogFile: vi.fn(),
   runSkillTrustPipeline: vi.fn(),
   setHeader: vi.fn(),
   toastError: vi.fn(),
@@ -81,6 +83,10 @@ vi.mock("@/lib/workspace-files-api", async (importOriginal) => {
     exportSkillArchive: mocks.exportSkillArchive,
     fixSkillTrustEvidence: mocks.fixSkillTrustEvidence,
     runSkillTrustPipeline: mocks.runSkillTrustPipeline,
+    skillCatalogClient: {
+      ...actual.skillCatalogClient,
+      getFile: mocks.getSkillCatalogFile,
+    },
   };
 });
 
@@ -411,6 +417,13 @@ beforeEach(() => {
       },
     },
   });
+  mocks.getSkillCatalogFile.mockReset();
+  mocks.getSkillCatalogFile.mockResolvedValue({
+    content:
+      "# Web Research Skill Card\n\nSummarizes what the skill does for operators.",
+    source: "catalog",
+    sha256: "c".repeat(64),
+  });
   mocks.setHeader.mockReset();
   mocks.toastError.mockReset();
   mocks.toastInfo.mockReset();
@@ -511,6 +524,82 @@ describe("SettingsSkillDetail eval panel", () => {
     );
   });
 
+  it("opens the published skill card from the header document action", async () => {
+    render(<SettingsSkillDetail skillSlug="web-research" />);
+    const { getByRole } = renderLatestHeaderAction();
+
+    fireEvent.click(getByRole("button", { name: "Skill card" }));
+
+    await waitFor(() =>
+      expect(mocks.getSkillCatalogFile).toHaveBeenCalledWith(
+        { skill: "web-research" },
+        "skill-card.md",
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Skill card" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Web Research Skill Card/i)).toBeTruthy();
+    expect(
+      screen.getByText(/Summarizes what the skill does for operators/i),
+    ).toBeTruthy();
+    expect(screen.getByText("c".repeat(64))).toBeTruthy();
+  });
+
+  it("routes missing skill cards to the trust Skill Card detail generator", async () => {
+    mocks.getSkillCatalogFile.mockRejectedValueOnce(
+      new ApiError(404, { message: "not found" }),
+    );
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-21T00:00:00.000Z",
+      status: "review",
+      summary: "Missing skill card.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "missing",
+        evalDataset: "present",
+        benchmark: "present",
+        signature: "verified",
+      },
+      artifactPaths: {
+        evals: ["evals/smoke.json"],
+        benchmark: "BENCHMARK.md",
+        signature: "skill.oms.sig",
+      },
+    });
+    render(<SettingsSkillDetail skillSlug="web-research" />);
+    const { getByRole } = renderLatestHeaderAction();
+
+    fireEvent.click(getByRole("button", { name: "Skill card" }));
+
+    await waitFor(() =>
+      expect(mocks.runSkillTrustPipeline).toHaveBeenCalledWith("web-research"),
+    );
+    await screen.findByTestId("skill-trust-step-detail");
+    expect(screen.getByRole("heading", { name: "Skill card" })).toBeTruthy();
+    expect(
+      screen.getByText(/Documents what the skill does, who owns it/i),
+    ).toBeTruthy();
+    expect(screen.getByTestId("skill-trust-fix-step")).toBeTruthy();
+  });
+
   it("opens a draft editor on SKILL.md with a publish header action instead of evals", () => {
     render(<SettingsSkillDetail mode="draft" draftId="draft-1" />);
 
@@ -527,6 +616,7 @@ describe("SettingsSkillDetail eval panel", () => {
 
     const { getByRole, queryByRole } = renderLatestHeaderAction();
     expect(getByRole("button", { name: "Publish skill draft" })).toBeTruthy();
+    expect(queryByRole("button", { name: "Skill card" })).toBeNull();
     expect(queryByRole("button", { name: "Skill evals" })).toBeNull();
     expect(queryByRole("button", { name: "Export skill archive" })).toBeNull();
   });
@@ -784,10 +874,10 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(
       screen
         .getAllByTestId("sheet-content")
-        .some((sheet) =>
+        .filter((sheet) =>
           sheet.className.includes("w-[min(520px,calc(100vw-2rem))]"),
-        ),
-    ).toBe(true);
+        ).length,
+    ).toBe(2);
     expect(
       screen.getByText(/Documents what the skill does, who owns it/i),
     ).toBeTruthy();
