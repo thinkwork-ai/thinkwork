@@ -166,8 +166,11 @@ status: in_progress
   - 2026-06-22: U7 rebased onto `origin/main` at `6ce4ed2b` after PR #2873
     merged.
   - 2026-06-22: Rebased U7 sanity checks passed: focused corpus test, API
-    typecheck, dry-run smoke, touched-file Prettier check, and `git diff
---check`.
+    typecheck, dry-run smoke, touched-file Prettier check, and whitespace
+    check.
+  - 2026-06-22: Added Linear U7 PR-refresh comment
+    `39799016-80ac-48c6-963d-e0e0b75e0674`; refreshed CI monitoring on PR
+    head `30384739`.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 
