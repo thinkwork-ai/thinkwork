@@ -15,11 +15,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U9 Thread skill-draft status card.
-- Current branch: `codex/thnk-11-u9-thread-draft-status`.
-- Current worktree: `.Codex/worktrees/thnk-11-u9-thread-draft-status`.
+- Current unit: U10 Operations and refresh runbook docs.
+- Current branch: `codex/thnk-11-u10-runbook-docs`.
+- Current worktree: `.Codex/worktrees/thnk-11-u10-runbook-docs`.
 - Current pull request:
-  [#2833](https://github.com/thinkwork-ai/thinkwork/pull/2833).
+  [#2834](https://github.com/thinkwork-ai/thinkwork/pull/2834).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -185,7 +185,25 @@ status: in_progress
     the status-card rendering itself is covered by the focused web transcript
     test until this branch deploys.
   - U9 PR [#2833](https://github.com/thinkwork-ai/thinkwork/pull/2833)
+    passed required CI, squash merged as
+    `548ddc9ee047194955cc5021510b8c4cdd668010`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
+  - U10 `pnpm install` completed in the worktree; local Node 25 logged the
+    existing optional `canvas@2.11.2` native fallback/missing `pkg-config`
+    warning, but pnpm exited successfully.
+  - U10 targeted Prettier check passed for the new runbook and status ledger:
+    `pnpm dlx prettier@3.8.2 --check docs/solutions/architecture-patterns/skill-creator-draft-publish-trust-pipeline.md docs/plans/autopilot-status.md`.
+  - U10 `git diff --check` passed.
+  - U10 docs build passed:
+    `pnpm --filter @thinkwork/docs build`. Astro logged existing
+    Starlight/Pagefind/sitemap warnings.
+  - U10 PR [#2834](https://github.com/thinkwork-ai/thinkwork/pull/2834)
     opened against `main`.
+  - U10 started from a clean isolated worktree created from `origin/main` after
+    U9 merge. Scope: document the implemented draft-vs-catalog publish boundary,
+    trust pipeline operations, failed-run recovery paths, upstream
+    skill-creator refresh workflow, and THNK-11 verification runbook.
   - U3 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
     `pkg-config` warning, but pnpm returned success.
