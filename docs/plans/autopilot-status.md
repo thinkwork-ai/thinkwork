@@ -66,11 +66,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U6 - Record and render OKF wiki context trace cards.
-- Current branch: `codex/thnk-63-u6-wiki-trace`.
-- Current worktree: `.Codex/worktrees/thnk-63-u6-wiki-trace`.
+- Current unit: U7 - Retrieval comparison and deployed smoke validation.
+- Current branch: `codex/thnk-63-u7-retrieval-smoke`.
+- Current worktree: `.Codex/worktrees/thnk-63-u7-retrieval-smoke`.
 - Current pull request:
-  [#2872](https://github.com/thinkwork-ai/thinkwork/pull/2872).
+  [#2874](https://github.com/thinkwork-ai/thinkwork/pull/2874).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     OKF Wiki Navigator plan from the main checkout.
@@ -133,6 +133,41 @@ status: in_progress
   - 2026-06-22: PR #2872 CI started; initial `cla`, `lint`, and
     supply-chain `verify` checks passed while `typecheck` and `test` remained
     in progress.
+  - 2026-06-22: U6 PR
+    [#2872](https://github.com/thinkwork-ai/thinkwork/pull/2872) passed
+    required CI and was squash merged as `7c2cf40f`.
+  - 2026-06-22: Added Linear U6 merged/cleanup comment
+    `7df32238-cf4a-4e3d-967e-4bccdc7f28f0`; the U6 remote branch was deleted
+    by GitHub and the local U6 worktree was removed.
+  - 2026-06-22: U7 started from `origin/main` at `7c2cf40f` in
+    `.Codex/worktrees/thnk-63-u7-retrieval-smoke`. Objective: add the shared
+    retrieval comparison corpus and deployed smoke harness for DB wiki, OKF
+    traversal, hybrid DB+OKF, raw memory, and knowledge graph evidence.
+  - 2026-06-22: Added Linear U7 start comment
+    `32820aec-dba5-4c78-9d41-d86b626a46bb`.
+  - 2026-06-22: U7 implementation added the OKF wiki navigator comparison
+    corpus/report builder under `packages/api/src/lib/evals`, dry-run/live
+    deployed smoke orchestrator, and verification runbook.
+  - 2026-06-22: Focused U7 verification passed:
+    `pnpm --filter @thinkwork/api test -- src/lib/evals/okf-wiki-navigator-corpus.test.ts`,
+    `pnpm --filter @thinkwork/api typecheck`, and
+    `node scripts/smoke/okf-wiki-navigator-smoke.mjs`.
+  - 2026-06-22: U7 broader API verification passed:
+    `pnpm --filter @thinkwork/api test` (575 files passed, 3 skipped; 5,355
+    tests passed, 9 skipped).
+  - 2026-06-22: U7 diff hygiene passed: `git diff --check` and touched-file
+    Prettier check.
+  - 2026-06-22: U7 repo-level gates passed: `pnpm lint` and `pnpm typecheck`.
+  - 2026-06-22: Added Linear U7 local-verification comment
+    `bb9b3fad-395c-417c-a87d-74ab30e652ea`.
+  - 2026-06-22: U7 PR opened:
+    [#2874](https://github.com/thinkwork-ai/thinkwork/pull/2874); added Linear
+    PR-opened comment `9bc124bb-db93-4a05-bd9f-92326885c9eb`.
+  - 2026-06-22: U7 rebased onto `origin/main` at `6ce4ed2b` after PR #2873
+    merged.
+  - 2026-06-22: Rebased U7 sanity checks passed: focused corpus test, API
+    typecheck, dry-run smoke, touched-file Prettier check, and `git diff
+--check`.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 

@@ -105,6 +105,14 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   `a191c6cd-375e-414b-94ff-f7483299938d`; preparing PR.
 - 2026-06-22T20:35Z: Added Linear U6 PR-opened comment
   `f6368f31-7c32-4107-b571-4bf342421020`; PR #2872 CI is running.
+- 2026-06-22T20:45:45Z: PR #2872 merged at
+  `7c2cf40f9ff8674fda8db97a3320c5d8300fdd97`; final CI passed.
+- 2026-06-22T20:46:13Z: Added Linear U6 merged/cleanup comment
+  `7df32238-cf4a-4e3d-967e-4bccdc7f28f0`.
+- 2026-06-22T20:50:22Z: Added Linear U7 start comment
+  `32820aec-dba5-4c78-9d41-d86b626a46bb`; THNK-63 remains `In Progress`.
+- 2026-06-22T21:05:51Z: Added Linear U7 PR-opened comment
+  `9bc124bb-db93-4a05-bd9f-92326885c9eb`; PR #2874 CI monitoring started.
 
 ## Unit Log
 
@@ -668,3 +676,75 @@ Local verification:
 - 2026-06-22T20:35Z: PR #2872 CI started; initial `cla`, `lint`, and
   supply-chain `verify` checks passed while `typecheck` and `test` remained in
   progress.
+- Merged: 2026-06-22T20:45:45Z.
+- Merge commit: `7c2cf40f9ff8674fda8db97a3320c5d8300fdd97`.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Linear merged/cleanup comment:
+  `7df32238-cf4a-4e3d-967e-4bccdc7f28f0`.
+- Cleanup: remote branch deleted by GitHub; local U6 worktree removed before U7
+  continued from fresh `origin/main`.
+
+### U7: Retrieval Comparison And Deployed Smoke Validation
+
+Objective: add the shared OKF Wiki Navigator retrieval comparison corpus and a
+deployed smoke harness that compares DB wiki, OKF traversal, hybrid DB+OKF, raw
+memory, and knowledge graph evidence before any routing cutover.
+
+Branch/worktree:
+
+- Branch: `codex/thnk-63-u7-retrieval-smoke`
+- Worktree: `.Codex/worktrees/thnk-63-u7-retrieval-smoke`
+- Base: `origin/main` at `7c2cf40f9ff8674fda8db97a3320c5d8300fdd97`;
+  rebased after PR open onto `origin/main` at
+  `6ce4ed2bc9afd16576acde85db2d9bbee79dec95`.
+
+Implementation:
+
+- Added `packages/api/src/lib/evals/okf-wiki-navigator-corpus.json` and
+  `packages/api/src/lib/evals/okf-wiki-navigator-corpus.ts` with the shared
+  retrieval comparison corpus, five-provider matrix, seven scoring criteria,
+  and comparison-report builder.
+- Added `scripts/smoke/okf-wiki-navigator-smoke.mjs`, which dry-runs safely by
+  default and live-orchestrates OKF materialization, EFS refresh, DB wiki/raw
+  memory/graph comparison reads, Pi OKF tool turns, durable
+  `wiki_context_trace` evidence checks, and report writing.
+- Added `docs/verification/okf-wiki-navigator-e2e.md` with the deployed
+  evidence checklist and report schema.
+- Linear start comment:
+  `32820aec-dba5-4c78-9d41-d86b626a46bb`.
+
+Local verification:
+
+- 2026-06-22T20:52Z:
+  `pnpm --filter @thinkwork/api test -- src/lib/evals/okf-wiki-navigator-corpus.test.ts`
+  passed (5 tests).
+- 2026-06-22T20:52Z: `pnpm --filter @thinkwork/api typecheck` passed.
+- 2026-06-22T20:52Z: `node scripts/smoke/okf-wiki-navigator-smoke.mjs`
+  passed in dry-run mode and printed the deployed live-mode prerequisites.
+- 2026-06-22T20:54Z: Ran `pnpm dlx prettier@3.8.2 --write` for the U7
+  touched files.
+- 2026-06-22T20:55Z:
+  `pnpm --filter @thinkwork/api test -- src/lib/evals/okf-wiki-navigator-corpus.test.ts`
+  passed after formatting (5 tests).
+- 2026-06-22T20:55Z: `pnpm --filter @thinkwork/api typecheck` passed after
+  formatting.
+- 2026-06-22T20:55Z: `node scripts/smoke/okf-wiki-navigator-smoke.mjs` passed
+  in dry-run mode after formatting.
+- 2026-06-22T21:00Z: `pnpm --filter @thinkwork/api test` passed (575 files
+  passed, 3 skipped; 5,355 tests passed, 9 skipped).
+- 2026-06-22T20:55Z: `git diff --check` and touched-file Prettier check
+  passed.
+- 2026-06-22T20:57Z: `pnpm lint` passed.
+- 2026-06-22T20:58Z: `pnpm typecheck` passed.
+- 2026-06-22T21:07Z: After rebase onto `6ce4ed2b`, focused corpus test, API
+  typecheck, dry-run smoke, touched-file Prettier check, and `git diff --check`
+  passed.
+- Linear local-verification comment:
+  `bb9b3fad-395c-417c-a87d-74ab30e652ea`.
+
+PR:
+
+- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2874
+- Linear PR-opened comment:
+  `9bc124bb-db93-4a05-bd9f-92326885c9eb`.
+- CI: Restarted after rebase onto `6ce4ed2b`.
