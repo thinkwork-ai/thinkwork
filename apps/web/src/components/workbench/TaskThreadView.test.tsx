@@ -3949,7 +3949,7 @@ describe("TaskThreadView", () => {
     });
   });
 
-  it("submits follow-up goal mode from the icon toggle", async () => {
+  it("opens a Goal dialog for follow-up goal mode", async () => {
     const onSendFollowUp = vi.fn();
     render(
       <TaskThreadView
@@ -3971,15 +3971,36 @@ describe("TaskThreadView", () => {
     ).toBe("false");
 
     const goalToggle = screen.getByRole("button", { name: "Goal mode" });
+    expect((goalToggle as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect((goalToggle as HTMLButtonElement).disabled).toBe(false);
+
     fireEvent.click(goalToggle);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Goal"), {
+      target: { value: "Finish the migration" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start Goal" }));
+
+    await waitFor(() => {
+      expect(followUpValue(screen.getByLabelText("Follow up"))).toContain(
+        "/goal Finish the migration",
+      );
+    });
     expect(goalToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(goalToggle.textContent).toBe("");
     expect(
       screen
         .getByRole("button", { name: "Send to agent" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
 
-    setFollowUpText(screen.getByLabelText("Follow up"), "Finish the migration");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
@@ -3997,6 +4018,64 @@ describe("TaskThreadView", () => {
         },
       );
     });
+  });
+
+  it("selects Goal from the follow-up slash menu", async () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Slash menu Goal thread",
+          lifecycleStatus: "IDLE",
+          messages: [{ id: "message-1", role: "USER", content: "Start" }],
+        }}
+      />,
+    );
+
+    setFollowUpText(screen.getByLabelText("Follow up"), "/go");
+    fireEvent.click(screen.getByRole("option", { name: /Goal/ }));
+
+    await waitFor(() => {
+      expect(followUpValue(screen.getByLabelText("Follow up"))).toContain(
+        "/goal",
+      );
+    });
+  });
+
+  it("disables the follow-up Goal slash option while agent handling is off", async () => {
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Disabled slash menu Goal thread",
+          lifecycleStatus: "IDLE",
+          messages: [
+            {
+              id: "message-1",
+              role: "USER",
+              content: "Start",
+              sender: { type: "user", id: "user-current" },
+            },
+            {
+              id: "message-2",
+              role: "USER",
+              content: "Joining",
+              sender: { type: "user", id: "user-scott" },
+            },
+          ],
+        }}
+        currentUser={{ id: "user-current", name: "Eric Odom" }}
+      />,
+    );
+
+    const agentButton = screen.getByRole("button", { name: "Send to agent" });
+    expect(agentButton.getAttribute("aria-pressed")).toBe("false");
+    setFollowUpText(screen.getByLabelText("Follow up"), "/go");
+
+    const option = screen.getByRole("option", { name: /Goal/ });
+    expect(option.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(option);
+    expect(followUpValue(screen.getByLabelText("Follow up"))).toContain("/go");
   });
 
   it("submits /goal follow-up shorthand as stripped goal content", async () => {
@@ -4056,8 +4135,7 @@ describe("TaskThreadView", () => {
     );
 
     const goalToggle = screen.getByRole("button", { name: "Goal mode" });
-    fireEvent.click(goalToggle);
-    setFollowUpText(screen.getByLabelText("Follow up"), "Do the thing");
+    setFollowUpText(screen.getByLabelText("Follow up"), "/goal Do the thing");
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {

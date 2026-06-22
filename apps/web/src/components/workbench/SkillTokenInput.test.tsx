@@ -35,6 +35,13 @@ describe("parseValueToSegments", () => {
     ]);
   });
 
+  it("renders reserved /goal as a Goal pill outside the skill catalog", () => {
+    expect(parseValueToSegments("/goal reconcile invoices", catalog)).toEqual([
+      { type: "goal" },
+      { type: "text", text: " reconcile invoices" },
+    ]);
+  });
+
   it("handles multiple skill pills", () => {
     const segs = parseValueToSegments(
       "/crm-dashboard then /invoice-parser",
@@ -118,6 +125,12 @@ describe("renderSegments + serializeEditor round-trip", () => {
     expect(roundTrip("use /crm-dashboard now")).toBe("use /crm-dashboard now");
   });
 
+  it("serializes a Goal pill back to its /goal token", () => {
+    expect(roundTrip("/goal reconcile invoices")).toBe(
+      "/goal reconcile invoices",
+    );
+  });
+
   it("serializes a mention pill back to its @name token", () => {
     expect(roundTrip("hi @Brett Odom there")).toBe("hi @Brett Odom there");
   });
@@ -150,6 +163,19 @@ describe("renderSegments + serializeEditor round-trip", () => {
     expect(pill).toBeTruthy();
     expect(pill.getAttribute("contenteditable")).toBe("false");
     expect(pill.textContent).toContain("CRM Dashboard");
+  });
+
+  it("renders a Goal pill as a non-editable element with the TargetArrow icon and label", () => {
+    const el = document.createElement("div");
+    renderSegments(
+      el,
+      parseValueToSegments("/goal reconcile invoices", catalog),
+    );
+    const pill = el.querySelector("[data-goal]") as HTMLElement;
+    expect(pill).toBeTruthy();
+    expect(pill.getAttribute("contenteditable")).toBe("false");
+    expect(pill.textContent).toContain("Goal");
+    expect(pill.innerHTML).toContain("M15 6v3h3l3 -3h-3v-3l-3 3");
   });
 
   it("renders a mention pill as a non-editable element with the name", () => {

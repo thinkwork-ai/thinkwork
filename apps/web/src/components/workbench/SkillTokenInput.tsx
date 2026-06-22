@@ -17,7 +17,7 @@ import type { SkillOption } from "@/components/spaces/SkillMenu";
  * when `value` changes from OUTSIDE (a pill insert, a clear), never on keystroke.
  */
 
-// Inline-token icons (lucide paths). Shared wrapper keeps every token's icon on
+// Inline-token icons. Shared wrapper keeps every token's icon on
 // the text baseline at the same size — this is the seam for future taggable
 // resource kinds (plugins, knowledge bases, …).
 const ICON_ATTRS =
@@ -25,6 +25,7 @@ const ICON_ATTRS =
 const SPARKLES_SVG = `<svg ${ICON_ATTRS}><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>`;
 const USER_SVG = `<svg ${ICON_ATTRS}><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>`;
 const BOT_SVG = `<svg ${ICON_ATTRS}><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`;
+const TARGET_ARROW_SVG = `<svg ${ICON_ATTRS}><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/><path d="M12 7a5 5 0 1 0 5 5"/><path d="M13 3.055a9 9 0 1 0 7.941 7.945"/><path d="M15 6v3h3l3 -3h-3v-3l-3 3"/><path d="M15 9l-3 3"/></svg>`;
 
 /** A committed mention the editor should render as an inline pill. */
 export interface TokenMention {
@@ -34,7 +35,7 @@ export interface TokenMention {
 }
 
 interface SkillTokenSegment {
-  type: "text" | "skill" | "mention";
+  type: "text" | "skill" | "mention" | "goal";
   text?: string;
   slug?: string;
   label?: string;
@@ -67,6 +68,17 @@ export function parseValueToSegments(
   let match: RegExpExecArray | null;
   while ((match = slugRe.exec(value))) {
     const slug = match[2]!;
+    if (slug === "goal") {
+      const start = match.index + match[1]!.length;
+      spans.push({
+        start,
+        end: start + 1 + slug.length,
+        seg: {
+          type: "goal",
+        },
+      });
+      continue;
+    }
     if (!bySlug.has(slug)) continue;
     const start = match.index + match[1]!.length;
     spans.push({
@@ -149,6 +161,15 @@ function makeSkillPill(slug: string, label: string): HTMLElement {
   return span;
 }
 
+function makeGoalPill(): HTMLElement {
+  const span = document.createElement("span");
+  span.setAttribute("contenteditable", "false");
+  span.dataset.goal = "true";
+  span.className = `goal-pill ${TOKEN_CLASS}`;
+  span.innerHTML = `${TARGET_ARROW_SVG}<span>Goal</span>`;
+  return span;
+}
+
 function makeMentionPill(
   displayName: string,
   targetType: "USER" | "AGENT" | "AGENT_PROFILE",
@@ -174,7 +195,9 @@ export function renderSegments(
 ): void {
   el.replaceChildren();
   for (const seg of segments) {
-    if (seg.type === "skill") {
+    if (seg.type === "goal") {
+      el.appendChild(makeGoalPill());
+    } else if (seg.type === "skill") {
       el.appendChild(makeSkillPill(seg.slug!, seg.label!));
     } else if (seg.type === "mention") {
       el.appendChild(
@@ -200,6 +223,8 @@ export function serializeEditor(el: HTMLElement): string {
       } else if (child instanceof HTMLElement) {
         if (child.dataset.slug) {
           out += `/${child.dataset.slug}`;
+        } else if (child.dataset.goal) {
+          out += "/goal";
         } else if (child.dataset.mention) {
           out += `${child.dataset.mentionTrigger ?? "@"}${child.dataset.mention}`;
         } else if (child.tagName === "BR") {

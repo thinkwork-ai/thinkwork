@@ -67,7 +67,10 @@ import {
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
-import { GoalModeToggle } from "@/components/workbench/GoalModeControls";
+import {
+  GoalModeDialog,
+  GoalModeToggle,
+} from "@/components/workbench/GoalModeControls";
 import {
   resolveStartGoalModeSubmission,
   type ComposerGoalModeIntent,
@@ -2586,11 +2589,6 @@ function FollowUpComposer({
   const composer = useComposerState(null);
   const textareaRef = useRef<SkillTokenInputHandle | null>(null);
   const [mentions, setMentions] = useState<ComposerMention[]>([]);
-  const skillPins = useComposerSkillPins({
-    value: composer.text,
-    onChange: composer.setText,
-    catalog: skillCatalog,
-  });
   const agentDefaultOn = useMemo(
     () =>
       deriveAgentDefault({
@@ -2613,6 +2611,7 @@ function FollowUpComposer({
   // persists until the thread changes (which clears it).
   const agentOverriddenRef = useRef(false);
   const [goalModeEnabled, setGoalModeEnabled] = useState(false);
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const prefillText = prefill?.text;
   const prefillToken = prefill?.token;
   const mentionQuery = useMemo(
@@ -2657,8 +2656,15 @@ function FollowUpComposer({
     () => resolveStartGoalModeSubmission(composer.text, goalModeEnabled),
     [composer.text, goalModeEnabled],
   );
-  const effectiveAgentEnabled =
-    goalModeSubmission.requested || agentForcedOn || agentEnabled;
+  const effectiveAgentEnabled = agentForcedOn || agentEnabled;
+  const goalModeBlocked =
+    goalModeSubmission.requested && !effectiveAgentEnabled;
+  const skillPins = useComposerSkillPins({
+    value: composer.text,
+    onChange: composer.setText,
+    catalog: skillCatalog,
+    goalDisabled: !effectiveAgentEnabled,
+  });
   const modelSelectionBlocked =
     approvedModels !== undefined &&
     (approvedModels.length === 0 || !selectedModelId);
@@ -2667,7 +2673,8 @@ function FollowUpComposer({
       (composer.files.length > 0 && !goalModeSubmission.requested)) &&
     !disabled &&
     !isSending &&
-    !modelSelectionBlocked;
+    !modelSelectionBlocked &&
+    !goalModeBlocked;
 
   useEffect(() => {
     if (agentForcedOn) setAgentEnabled(true);
@@ -2747,6 +2754,9 @@ function FollowUpComposer({
     try {
       if (goalModeSubmission.requested && !goalModeSubmission.goalMode) {
         throw new Error("Goal mode needs an objective.");
+      }
+      if (goalModeBlocked) {
+        throw new Error("Turn on agent handling to use Goal.");
       }
       // PromptInput emits FileUIPart entries with blob URLs. Fetch the
       // blob and rebuild File objects so the route's upload helper can
@@ -2842,6 +2852,12 @@ function FollowUpComposer({
     if (target.targetType === "AGENT" && target.isDefaultAgent) {
       setAgentEnabled(true);
     }
+  }
+
+  function applyGoalObjective(objective: string) {
+    composer.setText(`/goal ${objective}`);
+    setGoalModeEnabled(false);
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -2952,7 +2968,7 @@ function FollowUpComposer({
               <button
                 type="button"
                 onClick={() => {
-                  if (!agentForcedOn && !goalModeSubmission.requested) {
+                  if (!agentForcedOn) {
                     agentOverriddenRef.current = true;
                     setAgentEnabled((value) => !value);
                   }
@@ -2960,12 +2976,7 @@ function FollowUpComposer({
                 aria-label="Send to agent"
                 aria-pressed={effectiveAgentEnabled}
                 title={agentToggleTitle}
-                disabled={
-                  disabled ||
-                  isSending ||
-                  agentForcedOn ||
-                  goalModeSubmission.requested
-                }
+                disabled={disabled || isSending || agentForcedOn}
                 className={cn(
                   "flex size-8 shrink-0 items-center justify-center rounded-lg text-white/60 transition-opacity hover:opacity-80 disabled:pointer-events-none disabled:opacity-80",
                   effectiveAgentEnabled && "text-[#54a9ff]",
@@ -2974,10 +2985,11 @@ function FollowUpComposer({
                 <Bot className="size-5" />
               </button>
               <GoalModeToggle
-                enabled={goalModeSubmission.requested}
-                disabled={disabled || isSending}
+                enabled={goalModeSubmission.requested && effectiveAgentEnabled}
+                objective={goalModeSubmission.content}
+                disabled={disabled || isSending || !effectiveAgentEnabled}
                 tone="dark"
-                onToggle={() => setGoalModeEnabled((value) => !value)}
+                onClick={() => setGoalDialogOpen(true)}
               />
               <ComposerModelPicker
                 models={approvedModels}
@@ -3009,6 +3021,15 @@ function FollowUpComposer({
       {composer.error ? (
         <p className="text-sm text-destructive">{composer.error}</p>
       ) : null}
+      <GoalModeDialog
+        open={goalDialogOpen}
+        initialObjective={
+          goalModeSubmission.content ||
+          (composer.text.startsWith("/") ? "" : composer.text)
+        }
+        onOpenChange={setGoalDialogOpen}
+        onSubmit={applyGoalObjective}
+      />
     </div>
   );
 }

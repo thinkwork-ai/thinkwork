@@ -379,15 +379,9 @@ describe("SpacesComposer", () => {
     });
   });
 
-  it("submits goal mode from the icon toggle and forces agent dispatch", async () => {
+  it("opens a Goal dialog from the target icon and forces agent dispatch", async () => {
     const onSubmit = vi.fn();
-    render(
-      <SpacesComposer
-        value="Reconcile the customer list"
-        onChange={() => {}}
-        onSubmit={onSubmit}
-      />,
-    );
+    render(<ControlledComposer onSubmit={onSubmit} />);
 
     const goalToggle = screen.getByRole("button", { name: "Goal mode" });
     expect(goalToggle.getAttribute("aria-pressed")).toBe("false");
@@ -399,9 +393,28 @@ describe("SpacesComposer", () => {
         .getByRole("button", { name: "Send to agent" })
         .getAttribute("aria-pressed"),
     ).toBe("false");
+    expect((goalToggle as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Send to agent" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect((goalToggle as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(goalToggle);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Goal"), {
+      target: { value: "Reconcile the customer list" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start Goal" }));
+
+    await waitFor(() => {
+      expect(composerText()).toBe("/goal Reconcile the customer list");
+    });
     expect(goalToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(goalToggle.textContent).toBe("");
     expect(
       screen
         .getByRole("button", { name: "Send to agent" })
@@ -416,6 +429,30 @@ describe("SpacesComposer", () => {
         objective: "Reconcile the customer list",
       });
     });
+  });
+
+  it("selects Goal from the slash menu as a reserved command", async () => {
+    render(<ControlledComposer onSubmit={() => {}} />);
+
+    setComposerText("/go");
+    const option = screen.getByRole("option", { name: /Goal/ });
+    fireEvent.click(option);
+
+    await waitFor(() => {
+      expect(composerText()).toBe("/goal ");
+    });
+  });
+
+  it("disables the Goal slash option while agent handling is off", async () => {
+    render(<ControlledComposer onSubmit={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to agent" }));
+    setComposerText("/go");
+
+    const option = screen.getByRole("option", { name: /Goal/ });
+    expect(option.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(option);
+    expect(composerText()).toBe("/go");
   });
 
   it("submits /goal shorthand as a stripped goal objective", async () => {
@@ -439,19 +476,12 @@ describe("SpacesComposer", () => {
     });
   });
 
-  it("removes goal metadata when Goal mode is toggled back off", async () => {
+  it("does not send goal metadata after deleting the /goal command", async () => {
     const onSubmit = vi.fn();
-    render(
-      <SpacesComposer
-        value="Send normally"
-        onChange={() => {}}
-        onSubmit={onSubmit}
-      />,
-    );
+    render(<ControlledComposer onSubmit={onSubmit} />);
 
-    const goalToggle = screen.getByRole("button", { name: "Goal mode" });
-    fireEvent.click(goalToggle);
-    fireEvent.click(goalToggle);
+    setComposerText("/goal Send normally");
+    setComposerText("Send normally");
     fireEvent.click(screen.getByRole("button", { name: /start/i }));
 
     await waitFor(() => {

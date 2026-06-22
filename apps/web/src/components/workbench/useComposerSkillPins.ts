@@ -6,6 +6,13 @@ import {
   type SkillOption,
 } from "@/components/spaces/SkillMenu";
 
+export const GOAL_SLASH_OPTION: SkillOption = {
+  slug: "goal",
+  displayName: "Goal",
+  description: "Start a Goal run",
+  reserved: "goal",
+};
+
 /**
  * Extract force-pinned skill slugs from composer text (plan 2026-06-04-004
  * U5/U6). Skills are inline `/slug` tokens — the same model as `@`-mentions —
@@ -22,7 +29,7 @@ export function extractPinnedSkillSlugs(
   const slugs: string[] = [];
   for (const match of value.matchAll(/(?:^|\s)\/([\w.'-]+)/gu)) {
     const slug = match[1];
-    if (slug && known.has(slug) && !seen.has(slug)) {
+    if (slug && slug !== "goal" && known.has(slug) && !seen.has(slug)) {
       seen.add(slug);
       slugs.push(slug);
     }
@@ -45,12 +52,27 @@ export function useComposerSkillPins(params: {
   value: string;
   onChange: (value: string) => void;
   catalog: SkillOption[];
+  goalDisabled?: boolean;
 }) {
-  const { value, onChange, catalog } = params;
+  const { value, onChange, catalog, goalDisabled = false } = params;
   const slashQuery = useMemo(() => currentSlashQuery(value), [value]);
+  const slashOptions = useMemo(
+    () => [
+      {
+        ...GOAL_SLASH_OPTION,
+        disabled: goalDisabled,
+        disabledReason: goalDisabled
+          ? "Turn on agent handling to use Goal"
+          : undefined,
+      },
+      ...catalog.filter((skill) => skill.slug !== GOAL_SLASH_OPTION.slug),
+    ],
+    [catalog, goalDisabled],
+  );
   const options = useMemo(
-    () => (slashQuery === null ? [] : filterSkillCatalog(catalog, slashQuery)),
-    [slashQuery, catalog],
+    () =>
+      slashQuery === null ? [] : filterSkillCatalog(slashOptions, slashQuery),
+    [slashQuery, slashOptions],
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const [dismissed, setDismissed] = useState(false);
@@ -93,7 +115,7 @@ export function useComposerSkillPins(params: {
         event.preventDefault();
         const skill =
           options[Math.min(activeIndex, Math.max(options.length - 1, 0))];
-        if (skill) selectSkill(skill);
+        if (skill && !skill.disabled) selectSkill(skill);
         return true;
       }
       if (event.key === "Escape") {
