@@ -69,7 +69,8 @@ status: in_progress
 - Current unit: U6 - Record and render OKF wiki context trace cards.
 - Current branch: `codex/thnk-63-u6-wiki-trace`.
 - Current worktree: `.Codex/worktrees/thnk-63-u6-wiki-trace`.
-- Current pull request: Not opened yet.
+- Current pull request:
+  [#2872](https://github.com/thinkwork-ai/thinkwork/pull/2872).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     OKF Wiki Navigator plan from the main checkout.
@@ -129,6 +130,9 @@ status: in_progress
     [#2872](https://github.com/thinkwork-ai/thinkwork/pull/2872).
   - 2026-06-22: Added Linear U6 PR-opened comment
     `f6368f31-7c32-4107-b571-4bf342421020`.
+  - 2026-06-22: PR #2872 CI started; initial `cla`, `lint`, and
+    supply-chain `verify` checks passed while `typecheck` and `test` remained
+    in progress.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 

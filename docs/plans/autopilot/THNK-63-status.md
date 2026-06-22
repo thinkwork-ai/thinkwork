@@ -103,6 +103,8 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   `f8ca5b09-6737-475b-9ee0-81158af9fad1`; THNK-63 remains `In Progress`.
 - 2026-06-22T20:29:05Z: Added Linear U6 local-verification comment
   `a191c6cd-375e-414b-94ff-f7483299938d`; preparing PR.
+- 2026-06-22T20:35Z: Added Linear U6 PR-opened comment
+  `f6368f31-7c32-4107-b571-4bf342421020`; PR #2872 CI is running.
 
 ## Unit Log
 
@@ -663,3 +665,6 @@ Local verification:
 - PR opened: https://github.com/thinkwork-ai/thinkwork/pull/2872.
 - Linear PR-opened comment:
   `f6368f31-7c32-4107-b571-4bf342421020`.
+- 2026-06-22T20:35Z: PR #2872 CI started; initial `cla`, `lint`, and
+  supply-chain `verify` checks passed while `typecheck` and `test` remained in
+  progress.
