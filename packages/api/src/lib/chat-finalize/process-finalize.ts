@@ -58,6 +58,7 @@ import {
   mergeWorkspaceProjectionReconcileSummary,
 } from "../workspace-projection-snapshot.js";
 import { finalizeN8nAgentStepRun } from "../n8n-agent-step/finalize.js";
+import { projectAgentLoopFinalize } from "../agent-loops/finalize-projection.js";
 import { autoSubmitSkillCreatorDraft } from "../skill-creator/auto-submit-draft.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
@@ -269,6 +270,15 @@ export async function processFinalize(
       errorMessage,
       systemPrompt: capturedSystemPromptFromFinalizePayload(payload),
       suppressAssistantMessage: hiddenDesktopDelegation,
+    });
+    await projectAgentLoopFinalizeSafely({
+      tenantId,
+      threadTurnId: turnId,
+      contextSnapshot: claimed[0]?.contextSnapshot,
+      goalRun: goalRunProjectionFromFinalizePayload(payload),
+      responseText: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
+      turnStatus: "failed",
+      errorMessage,
     });
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
@@ -542,6 +552,15 @@ export async function processFinalize(
   } catch (turnErr) {
     console.error(`[chat-finalize] Failed to update thread_turn:`, turnErr);
   }
+
+  await projectAgentLoopFinalizeSafely({
+    tenantId,
+    threadTurnId: turnId,
+    contextSnapshot: claimed[0]?.contextSnapshot,
+    goalRun,
+    responseText,
+    turnStatus: "completed",
+  });
 
   // Early exit on empty response (legacy behavior — no message inserted)
   if (!responseText || responseText === "{}") {
@@ -826,6 +845,16 @@ async function finalizeN8nAgentStepRunSafely(
     await finalizeN8nAgentStepRun(input);
   } catch (err) {
     console.error("[chat-finalize] n8n bridge finalization failed:", err);
+  }
+}
+
+async function projectAgentLoopFinalizeSafely(
+  input: Parameters<typeof projectAgentLoopFinalize>[0],
+): Promise<void> {
+  try {
+    await projectAgentLoopFinalize(input);
+  } catch (err) {
+    console.error("[chat-finalize] AgentLoop finalize projection failed:", err);
   }
 }
 

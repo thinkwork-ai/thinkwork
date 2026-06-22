@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   promoteNextDeferredWakeup: vi.fn(),
   mergeWorkspaceProjectionReconcileSummary: vi.fn(),
   finalizeN8nAgentStepRun: vi.fn(),
+  projectAgentLoopFinalize: vi.fn(),
   autoSubmitSkillCreatorDraft: vi.fn(),
 }));
 
@@ -113,6 +114,10 @@ vi.mock("../n8n-agent-step/finalize.js", () => ({
   finalizeN8nAgentStepRun: mocks.finalizeN8nAgentStepRun,
 }));
 
+vi.mock("../agent-loops/finalize-projection.js", () => ({
+  projectAgentLoopFinalize: mocks.projectAgentLoopFinalize,
+}));
+
 vi.mock("../skill-creator/auto-submit-draft.js", () => ({
   autoSubmitSkillCreatorDraft: mocks.autoSubmitSkillCreatorDraft,
 }));
@@ -192,6 +197,11 @@ beforeEach(() => {
     action: "no_run",
     runId: null,
     status: null,
+  });
+  mocks.projectAgentLoopFinalize.mockReset();
+  mocks.projectAgentLoopFinalize.mockResolvedValue({
+    status: "skipped",
+    reason: "not_agent_loop_turn",
   });
   mocks.autoSubmitSkillCreatorDraft.mockReset();
   mocks.autoSubmitSkillCreatorDraft.mockResolvedValue({
@@ -760,6 +770,87 @@ describe("processFinalize reconcile seam", () => {
     expect(succeededUpdate.usage_json.goal_run).toEqual(
       succeededUpdate.result_json.goal_run,
     );
+  });
+
+  it("projects AgentLoop finalization from normalized goal-run evidence", async () => {
+    mocks.updateReturning = [
+      [
+        {
+          id: TURN_ID,
+          runtimeType: "pi",
+          contextSnapshot: {
+            agentLoop: {
+              runId: "run-1",
+              iterationId: "iteration-1",
+            },
+          },
+        },
+      ],
+    ];
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "Goal complete.",
+          goal_run: {
+            goal_id: "goal-1",
+            status: "completed",
+            completion_summary: "All criteria passed.",
+          },
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 100,
+          output_tokens: 10,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.projectAgentLoopFinalize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        threadTurnId: TURN_ID,
+        contextSnapshot: {
+          agentLoop: {
+            runId: "run-1",
+            iterationId: "iteration-1",
+          },
+        },
+        goalRun: expect.objectContaining({
+          source: "pi_goal",
+          status: "completed",
+          completion_summary: "All criteria passed.",
+        }),
+        responseText: "Goal complete.",
+        turnStatus: "completed",
+      }),
+    );
+  });
+
+  it("does not fail normal finalization when AgentLoop projection fails", async () => {
+    mocks.projectAgentLoopFinalize.mockRejectedValueOnce(
+      new Error("projection unavailable"),
+    );
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "Still finalize the turn.",
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
   });
 
   it("records child LLM cost and durable event evidence for routed tool models", async () => {
