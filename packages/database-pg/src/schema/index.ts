@@ -44,6 +44,7 @@ export * from "./agent-templates";
 export * from "./activity-log";
 export * from "./quick-actions";
 export * from "./workflow-configs";
+export * from "./agent-loops";
 export * from "./workflows";
 export * from "./workflow-bindings";
 export * from "./workflow-runs";

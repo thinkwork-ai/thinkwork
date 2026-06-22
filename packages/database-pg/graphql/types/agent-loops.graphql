@@ -1,0 +1,211 @@
+# First-class AgentLoop product API.
+#
+# AgentLoops are the user-facing automation primitive for autonomous
+# goal/policy loops. scheduled_jobs remains internal EventBridge plumbing.
+
+enum AgentLoopLifecycleStatus {
+  draft
+  active
+  paused
+  archived
+}
+
+enum AgentLoopVersionStatus {
+  draft
+  active
+  superseded
+  archived
+}
+
+enum AgentLoopTriggerFamily {
+  manual
+  schedule
+  api
+  webhook
+  app_event
+  n8n
+}
+
+enum AgentLoopRunStatus {
+  queued
+  running
+  waiting_for_human
+  completed
+  failed
+  budget_stopped
+  escalated
+  canceled
+  skipped
+}
+
+enum AgentLoopIterationStatus {
+  queued
+  running
+  completed
+  failed
+  budget_stopped
+  waiting_for_human
+  canceled
+}
+
+enum AgentLoopJudgeMode {
+  self_check
+  human_approval
+  model_judge
+  reviewer_agent
+  eval_threshold
+  external_callback
+}
+
+enum AgentLoopJudgmentOutcome {
+  complete
+  continue
+  failed
+  budget_stopped
+  needs_human_approval
+  escalated
+}
+
+enum AgentLoopEvidenceRedactionState {
+  summary_only
+  redacted
+  offloaded
+  raw_allowed
+}
+
+type AgentLoop {
+  id: ID!
+  tenantId: ID!
+  name: String!
+  slug: String!
+  description: String
+  lifecycleStatus: AgentLoopLifecycleStatus!
+  enabled: Boolean!
+  ownerUserId: ID
+  ownerAgentId: ID
+  primaryTriggerFamily: AgentLoopTriggerFamily!
+  currentVersionId: ID
+  currentVersionNumber: Int
+  currentVersion: AgentLoopVersion
+  lastRunId: ID
+  lastRunStatus: AgentLoopRunStatus
+  lastRunAt: AWSDateTime
+  lastRunSummary: AWSJSON!
+  acceptedRunCount: Int!
+  rejectedRunCount: Int!
+  escalatedRunCount: Int!
+  totalCostUsdCents: Int!
+  costPerAcceptedRunUsdCents: Int
+  versions: [AgentLoopVersion!]!
+  runs(limit: Int, cursor: String, status: AgentLoopRunStatus): [AgentLoopRun!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentLoopVersion {
+  id: ID!
+  tenantId: ID!
+  agentLoopId: ID!
+  agentLoop: AgentLoop
+  versionNumber: Int!
+  versionStatus: AgentLoopVersionStatus!
+  triggerSpec: AWSJSON!
+  goalSpec: AWSJSON!
+  workerSpec: AWSJSON!
+  judgeSpec: AWSJSON!
+  loopPolicy: AWSJSON!
+  evidencePolicy: AWSJSON!
+  sourceMetadata: AWSJSON!
+  createdByActorType: String
+  createdByActorId: ID
+  publishedAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
+
+type AgentLoopRun {
+  id: ID!
+  tenantId: ID!
+  agentLoopId: ID!
+  agentLoop: AgentLoop
+  agentLoopVersionId: ID
+  agentLoopVersion: AgentLoopVersion
+  status: AgentLoopRunStatus!
+  triggerFamily: AgentLoopTriggerFamily!
+  triggerSource: String
+  scheduledJobId: ID
+  actorType: String
+  actorId: ID
+  idempotencyKey: String
+  correlationId: String
+  currentIteration: Int!
+  terminalReason: String
+  policySnapshot: AWSJSON!
+  inputSummary: AWSJSON
+  outputSummary: AWSJSON
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  lastEventAt: AWSDateTime
+  errorCode: String
+  errorMessage: String
+  totalCostUsdCents: Int
+  iterations: [AgentLoopIteration!]!
+  judgments: [AgentLoopJudgment!]!
+  evidence: [AgentLoopEvidence!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentLoopIteration {
+  id: ID!
+  tenantId: ID!
+  agentLoopRunId: ID!
+  agentLoopRun: AgentLoopRun
+  iterationNumber: Int!
+  status: AgentLoopIterationStatus!
+  goalModeAction: String
+  agentWakeupRequestId: ID
+  threadTurnId: ID
+  inputSummary: AWSJSON
+  outputSummary: AWSJSON
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+  errorCode: String
+  errorMessage: String
+  totalCostUsdCents: Int
+  judgments: [AgentLoopJudgment!]!
+  evidence: [AgentLoopEvidence!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type AgentLoopJudgment {
+  id: ID!
+  tenantId: ID!
+  agentLoopRunId: ID!
+  agentLoopIterationId: ID
+  judgeMode: AgentLoopJudgeMode!
+  outcome: AgentLoopJudgmentOutcome!
+  confidence: Int
+  rationale: String
+  terminalReason: String
+  structuredOutput: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
+type AgentLoopEvidence {
+  id: ID!
+  tenantId: ID!
+  agentLoopId: ID!
+  agentLoopRunId: ID
+  agentLoopIterationId: ID
+  agentLoopJudgmentId: ID
+  evidenceType: String!
+  sourceSystem: String!
+  sourceId: String
+  uri: String
+  summary: AWSJSON!
+  redactionState: AgentLoopEvidenceRedactionState!
+  sensitivity: String
+  retentionExpiresAt: AWSDateTime
+  createdAt: AWSDateTime!
+}
