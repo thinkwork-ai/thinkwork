@@ -41,10 +41,13 @@ const {
   resetEqCalls,
   dbUpdateCalls,
   resetDbUpdateCalls,
+  dbInsertCalls,
+  resetDbInsertCalls,
 } = vi.hoisted(() => {
   const queue: unknown[][] = [];
   const calls: { col: unknown; value: unknown }[] = [];
   const updates: unknown[] = [];
+  const inserts: Array<{ table: unknown; values: unknown }> = [];
   return {
     dbQueue: queue,
     pushDbRows: (rows: unknown[]) => queue.push(rows),
@@ -58,6 +61,10 @@ const {
     dbUpdateCalls: updates,
     resetDbUpdateCalls: () => {
       updates.length = 0;
+    },
+    dbInsertCalls: inserts,
+    resetDbInsertCalls: () => {
+      inserts.length = 0;
     },
   };
 });
@@ -99,6 +106,12 @@ vi.mock("../graphql/utils.js", () => {
           return {
             where: vi.fn().mockResolvedValue([]),
           };
+        }),
+      })),
+      insert: vi.fn().mockImplementation((table: unknown) => ({
+        values: vi.fn().mockImplementation((values: unknown) => {
+          dbInsertCalls.push({ table, values });
+          return Promise.resolve([]);
         }),
       })),
     },
@@ -143,6 +156,14 @@ vi.mock("../graphql/utils.js", () => {
       published_catalog_slug: tableCol("skill_drafts.published_catalog_slug"),
       published_content_hash: tableCol("skill_drafts.published_content_hash"),
       updated_at: tableCol("skill_drafts.updated_at"),
+    },
+    skillDraftEvents: {
+      id: tableCol("skill_draft_events.id"),
+      tenant_id: tableCol("skill_draft_events.tenant_id"),
+      draft_id: tableCol("skill_draft_events.draft_id"),
+      actor_user_id: tableCol("skill_draft_events.actor_user_id"),
+      event_type: tableCol("skill_draft_events.event_type"),
+      created_at: tableCol("skill_draft_events.created_at"),
     },
     tenants: {
       id: tableCol("tenants.id"),
@@ -554,6 +575,7 @@ beforeEach(() => {
   resetDbQueue();
   resetEqCalls();
   resetDbUpdateCalls();
+  resetDbInsertCalls();
   authMockImpl.mockReset();
   reindexCatalogSkillMock.mockReset();
   reindexCatalogSkillMock.mockResolvedValue({ slug: "", action: "upserted" });
@@ -1860,6 +1882,145 @@ describe("catalog write-through (U3)", () => {
 
     expect(res.statusCode).toBe(200);
     expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("catalog import-skill-draft action", () => {
+  it("imports a skill archive into a submitted draft without mutating the published catalog", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill-draft",
+          catalog: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+            {
+              path: "references/guide.md",
+              content: Buffer.from("# Guide\n"),
+            },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "imported-skill",
+      status: "submitted",
+      generatedWiring: true,
+    });
+    expect(typeof res.body.draftId).toBe("string");
+    expect(res.body.currentContentHash).toMatch(/^sha256:/);
+
+    const draftPrefix = `tenants/acme/skill-drafts/${res.body.draftId}/`;
+    const putKeys = s3Mock
+      .commandCalls(PutObjectCommand)
+      .map((call) => call.args[0].input.Key)
+      .sort();
+    expect(putKeys).toEqual([
+      `${draftPrefix}SKILL.md`,
+      `${draftPrefix}WIRING.md`,
+      `${draftPrefix}references/guide.md`,
+    ]);
+    expect(putKeys.every((key) => String(key).includes("/skill-drafts/"))).toBe(
+      true,
+    );
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+    expect(ensureSkillDatasetSeededMock).not.toHaveBeenCalled();
+
+    expect(dbInsertCalls).toHaveLength(2);
+    expect(dbInsertCalls[0]?.values).toMatchObject({
+      tenant_id: TENANT_A,
+      requested_by_user_id: USER_ID,
+      slug: "imported-skill",
+      source_kind: "archive",
+      status: "submitted",
+      draft_s3_prefix: draftPrefix,
+      current_content_hash: res.body.currentContentHash,
+    });
+    expect(dbInsertCalls[1]?.values).toMatchObject({
+      tenant_id: TENANT_A,
+      draft_id: res.body.draftId,
+      actor_user_id: USER_ID,
+      event_type: "submitted",
+      message: "Skill draft imported from archive and submitted for review.",
+    });
+  });
+
+  it("returns validation errors for invalid draft archives without mutating S3 or DB", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill-draft",
+          catalog: true,
+          archiveBase64: Buffer.from("not a zip").toString("base64"),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe("invalid_skill_archive");
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+    expect(dbInsertCalls).toHaveLength(0);
+    expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+  });
+
+  it("allows same-slug draft imports because collisions are resolved at publish time", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: "tenants/acme/skill-catalog/imported-skill/",
+      })
+      .resolves({
+        Contents: [
+          { Key: "tenants/acme/skill-catalog/imported-skill/SKILL.md" },
+        ],
+      });
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "import-skill-draft",
+          catalog: true,
+          archiveBase64: await archiveBase64("imported-skill", [
+            { path: "SKILL.md", content: skillMd("imported-skill") },
+          ]),
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      slug: "imported-skill",
+      status: "submitted",
+    });
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
+    expect(
+      s3Mock
+        .commandCalls(PutObjectCommand)
+        .map((call) => String(call.args[0].input.Key)),
+    ).toEqual(
+      expect.arrayContaining([
+        `tenants/acme/skill-drafts/${res.body.draftId}/SKILL.md`,
+      ]),
+    );
+    expect(dbInsertCalls[0]?.values).toMatchObject({
+      slug: "imported-skill",
+      source_kind: "archive",
+      status: "submitted",
+    });
   });
 });
 

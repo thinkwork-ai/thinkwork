@@ -125,6 +125,14 @@ export interface ImportSkillArchiveResult {
   evalDatasetWarning?: string;
 }
 
+export interface ImportSkillArchiveDraftResult {
+  draftId: string;
+  slug: string;
+  status: "submitted";
+  generatedWiring: boolean;
+  currentContentHash: string;
+}
+
 export interface ValidateSkillDraftResult {
   slug: string;
   generatedWiring: boolean;
@@ -140,11 +148,12 @@ interface WorkspaceFilesResponse {
   source?: WorkspaceFileSource;
   sha256?: string;
   destPath?: string;
+  draftId?: string;
   slug?: string;
   filename?: string;
   contentType?: string;
   archiveBase64?: string;
-  status?: "created" | "updated";
+  status?: "created" | "updated" | "submitted";
   generatedWiring?: boolean;
   currentContentHash?: string;
   validationErrors?: unknown[];
@@ -380,6 +389,31 @@ export async function importSkillArchive(
     ...(data.evalDatasetWarning
       ? { evalDatasetWarning: data.evalDatasetWarning }
       : {}),
+  };
+}
+
+export async function importSkillArchiveAsDraft(
+  archiveBase64: string,
+): Promise<ImportSkillArchiveDraftResult> {
+  const data = await request({
+    action: "import-skill-draft",
+    catalog: true,
+    archiveBase64,
+  });
+  if (
+    !data.draftId ||
+    !data.slug ||
+    data.status !== "submitted" ||
+    !data.currentContentHash
+  ) {
+    throw new Error("Skill draft import response was missing draft metadata.");
+  }
+  return {
+    draftId: data.draftId,
+    slug: data.slug,
+    status: data.status,
+    generatedWiring: data.generatedWiring === true,
+    currentContentHash: data.currentContentHash,
   };
 }
 

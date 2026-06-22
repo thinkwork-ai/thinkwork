@@ -16,12 +16,6 @@ import {
   Badge,
   Button,
   DataTable,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   Input,
   Label,
   Popover,
@@ -32,7 +26,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import { ApiError } from "@/lib/api-fetch";
 import {
-  importSkillArchive,
+  importSkillArchiveAsDraft,
   listSkillSummaries,
   type SkillSummary,
 } from "@/lib/workspace-files-api";
@@ -46,11 +40,6 @@ import { formatPassRatePct } from "@/lib/skill-eval-format";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-
-interface PendingReplace {
-  slug: string;
-  archiveBase64: string;
-}
 
 type SkillsView = "published" | "drafts";
 const SKILL_LIBRARY_PUBLISHED_ROUTE = "/settings/skills";
@@ -220,16 +209,15 @@ export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
   const [skills, setSkills] = useState<SkillSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
-  const [pendingReplace, setPendingReplace] = useState<PendingReplace | null>(
-    null,
-  );
 
-  const [{ data: draftData, fetching: loadingDrafts, error: draftError }] =
-    useQuery({
-      query: SettingsSkillDraftsQuery,
-      pause: !tenantId,
-      requestPolicy: "cache-and-network",
-    });
+  const [
+    { data: draftData, fetching: loadingDrafts, error: draftError },
+    refetchDrafts,
+  ] = useQuery({
+    query: SettingsSkillDraftsQuery,
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
 
   const loadSkills = useCallback(
     async (cancelled?: () => boolean) => {
@@ -259,48 +247,24 @@ export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
   }, []);
 
   const runImport = useCallback(
-    async (archiveBase64: string, confirmReplace = false) => {
+    async (archiveBase64: string) => {
       setImporting(true);
       try {
-        const result = await importSkillArchive(archiveBase64, {
-          confirmReplace,
-        });
-        try {
-          await loadSkills();
-        } catch (refreshError) {
-          toast.warning(
-            `Skill ${result.status === "updated" ? "updated" : "imported"}, but the list could not refresh: ${importErrorMessage(refreshError)}`,
-          );
-        }
-        setPendingReplace(null);
-        toast.success(
-          result.status === "updated" ? "Skill updated." : "Skill imported.",
-        );
-        for (const warning of [
-          result.indexWarning,
-          result.evalDatasetWarning,
-        ]) {
-          if (warning) toast.warning(warning);
-        }
+        const result = await importSkillArchiveAsDraft(archiveBase64);
+        refetchDrafts({ requestPolicy: "network-only" });
+        toast.success("Skill draft imported for review.");
         navigate({
-          to: "/settings/skills/$skillSlug",
-          params: { skillSlug: result.slug },
+          to: "/settings/skills/drafts/$draftId",
+          params: { draftId: result.draftId },
         });
       } catch (e) {
-        if (isSkillExistsError(e)) {
-          setPendingReplace({
-            slug: String(e.body.slug),
-            archiveBase64,
-          });
-          return;
-        }
         toast.error(importErrorMessage(e));
       } finally {
         setImporting(false);
         resetFileInput();
       }
     },
-    [loadSkills, navigate, resetFileInput],
+    [navigate, refetchDrafts, resetFileInput],
   );
 
   const handleImportFile = useCallback(
@@ -488,43 +452,6 @@ export function SettingsSkills({ tab = "published" }: { tab?: SkillsView }) {
           }
         />
       )}
-      <Dialog
-        open={Boolean(pendingReplace)}
-        onOpenChange={(open) => {
-          if (!open && !importing) setPendingReplace(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Replace existing skill?</DialogTitle>
-            <DialogDescription>
-              {pendingReplace
-                ? `A catalog skill named ${pendingReplace.slug} already exists. Replace it with this archive?`
-                : "A catalog skill with this slug already exists."}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={importing}
-              onClick={() => setPendingReplace(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={importing || !pendingReplace}
-              onClick={() => {
-                if (!pendingReplace) return;
-                void runImport(pendingReplace.archiveBase64, true);
-              }}
-            >
-              {importing ? <Spinner className="size-3.5" /> : "Replace"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </SettingsTablePane>
   );
 }
@@ -628,15 +555,6 @@ async function fileToBase64(file: File): Promise<string> {
     );
   }
   return btoa(binary);
-}
-
-function isSkillExistsError(error: unknown): error is ApiError & {
-  body: { code: "skill_exists"; slug: string };
-} {
-  if (!(error instanceof ApiError) || error.status !== 409) return false;
-  if (typeof error.body !== "object" || error.body === null) return false;
-  const body = error.body as { code?: unknown; slug?: unknown };
-  return body.code === "skill_exists" && typeof body.slug === "string";
 }
 
 function importErrorMessage(error: unknown): string {

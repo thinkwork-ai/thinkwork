@@ -12,6 +12,7 @@ import {
   exportSkillArchive,
   fixSkillTrustEvidence,
   importSkillArchive,
+  importSkillArchiveAsDraft,
   runSkillTrustPipeline,
   spacesWorkspaceFilesClient,
   validateSkillDraft,
@@ -490,6 +491,46 @@ describe("importSkillArchive", () => {
 
     await expect(importSkillArchive("UEsDBAo=")).rejects.toThrow(
       "missing import metadata",
+    );
+  });
+});
+
+describe("importSkillArchiveAsDraft", () => {
+  it("submits a catalog skill archive as a draft", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      draftId: "draft-1",
+      slug: "pdf-processing",
+      status: "submitted",
+      generatedWiring: true,
+      currentContentHash: "sha256:abc",
+    });
+
+    const result = await importSkillArchiveAsDraft("UEsDBAo=");
+
+    expect(lastBody()).toEqual({
+      action: "import-skill-draft",
+      catalog: true,
+      archiveBase64: "UEsDBAo=",
+    });
+    expect(result).toEqual({
+      draftId: "draft-1",
+      slug: "pdf-processing",
+      status: "submitted",
+      generatedWiring: true,
+      currentContentHash: "sha256:abc",
+    });
+  });
+
+  it("fails loudly when the draft import response omits metadata", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "missing-draft-id",
+      status: "submitted",
+    });
+
+    await expect(importSkillArchiveAsDraft("UEsDBAo=")).rejects.toThrow(
+      "missing draft metadata",
     );
   });
 });
