@@ -10,6 +10,7 @@ export * from "./knowledge-graph-provider.js";
 export * from "./memory-provider.js";
 export * from "./model-provider.js";
 export * from "./model-routing-policy.js";
+export * from "./okf-wiki-navigator.js";
 export * from "./tool-costs.js";
 export * from "./types.js";
 export * from "./workspace-provider.js";
