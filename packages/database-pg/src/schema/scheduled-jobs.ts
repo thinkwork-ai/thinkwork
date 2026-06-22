@@ -49,6 +49,7 @@ export const scheduledJobs = pgTable(
     space_id: uuid("space_id").references(() => spaces.id),
     computer_id: uuid("computer_id"),
     routine_id: uuid("routine_id").references(() => routines.id),
+    agent_loop_id: uuid("agent_loop_id"),
     name: text("name").notNull(),
     description: text("description"),
     prompt: text("prompt"), // null for heartbeats; set for reminders/scheduled
@@ -81,6 +82,7 @@ export const scheduledJobs = pgTable(
     index("idx_scheduled_jobs_agent").on(table.agent_id),
     index("idx_scheduled_jobs_computer").on(table.tenant_id, table.computer_id),
     index("idx_scheduled_jobs_routine").on(table.routine_id),
+    index("idx_scheduled_jobs_agent_loop").on(table.agent_loop_id),
     index("idx_scheduled_jobs_enabled").on(table.tenant_id, table.enabled),
     index("idx_scheduled_jobs_budget_paused").on(
       table.tenant_id,
