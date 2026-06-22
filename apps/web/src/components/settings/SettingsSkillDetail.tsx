@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Download,
@@ -61,8 +61,11 @@ import { cn } from "@/lib/utils";
 const liveDatasetSlug = (skillSlug: string) => `skill-${skillSlug}`;
 const candidateDatasetSlug = (skillSlug: string) =>
   `skill-${skillSlug}-candidate`;
-const SKILL_TRUST_SHEET_WIDTH_CLASS =
-  "data-[side=right]:w-[min(520px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none";
+const SKILL_TRUST_SHEET_WIDTH_CLASS = "data-[side=right]:max-w-none";
+const SKILL_TRUST_SHEET_STYLE: CSSProperties = {
+  width: "min(520px, calc(100vw - 2rem))",
+  maxWidth: "none",
+};
 
 function downloadArchive(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -474,6 +477,7 @@ function SkillTrustSheetContent({
                 "flex w-full flex-col gap-0 overflow-y-auto",
                 SKILL_TRUST_SHEET_WIDTH_CLASS,
               )}
+              style={SKILL_TRUST_SHEET_STYLE}
             >
               <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
                 <SheetTitle>{selectedStep?.label ?? "Trust step"}</SheetTitle>
@@ -1277,6 +1281,7 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
               "flex w-full flex-col gap-0 overflow-y-auto",
               SKILL_TRUST_SHEET_WIDTH_CLASS,
             )}
+            style={SKILL_TRUST_SHEET_STYLE}
           >
             <SheetHeader className="border-b border-border/70 px-6 py-5 pr-14">
               <SheetTitle>Skill trust</SheetTitle>

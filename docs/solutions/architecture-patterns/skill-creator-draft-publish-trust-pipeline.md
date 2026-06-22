@@ -122,6 +122,21 @@ in the current implementation. Missing release evidence such as `skillCard`,
 Today publish readiness is primarily enforced by spec validity, SkillSpector
 completion, and blocking severity counts.
 
+Catalog detail pages also expose recovery controls for missing release
+evidence. Open Settings -> Skill Library -> a published skill -> shield button,
+run the pipeline, then click any trust row. The row opens a second side sheet
+with the step purpose, current state, detected artifact path, content hash, and
+the available fix action. Missing skill card, eval dataset, and benchmark
+evidence can be generated from this sheet. Signature generation is only enabled
+when signing configuration is present; otherwise the sheet must explain that no
+real `skill.oms.sig` can be produced in the current environment.
+
+The published Skill Detail header also has a document icon for the skill card.
+If `skill-card.md` exists, it opens as a read-focused side sheet so operators
+can understand the skill without hunting through the file tree. If it is
+missing, the icon routes the operator into the Skill Card trust step and runs
+the pipeline first when no report has been generated in the current session.
+
 ## Evidence And Recovery
 
 When publish fails, start with the error code returned by
@@ -151,6 +166,19 @@ packages/workspace-defaults/src/index.ts
 
 Recovery paths:
 
+- **Missing skill card:** From the Skill Detail document icon or shield sheet,
+  open the Skill Card trust detail and generate the missing component. The
+  generated `skill-card.md` is the human-readable operator summary artifact:
+  summary first, then ownership, intended use, declared tools, and review notes.
+- **Missing eval dataset:** Open the Evals trust detail and generate the starter
+  eval artifact. Treat these as smoke coverage that must be reviewed and
+  expanded before relying on the skill in production.
+- **Missing benchmark:** Open the Benchmark trust detail and generate the
+  benchmark readiness artifact. This records measurement expectations without
+  inventing pass rates.
+- **Missing signature:** Generate only when signing is configured. In local/dev
+  stacks without a signer, the Signature trust detail should show the missing
+  signing prerequisite instead of offering a fake signature.
 - **`skillspector_required`:** Confirm the deploy includes
   `thinkwork-<stage>-skill-trust-runner`. In Terraform state the function lives
   at
@@ -223,6 +251,16 @@ An end-to-end THNK-11 verification should prove:
 7. The Skill Detail shield side sheet can run the trust pipeline for an
    existing catalog skill from `http://localhost:<port>` using the authenticated
    `localhost` origin, not `127.0.0.1`.
+8. A missing trust row opens the step-detail side sheet and can generate at
+   least one non-signature artifact, then a refreshed report shows the step as
+   present or starter-generated.
+9. The published Skill Detail document icon opens `skill-card.md`; when the
+   card is missing, it routes to the Skill Card trust detail and generation
+   path.
+10. Archive upload/import places the submitted files in Drafts first; it must
+    not automatically register the archive in the published catalog.
+11. A Drafts row opens the draft detail editor, and the draft detail header uses
+    the publish icon as the governed publish path.
 
 For local web validation in a worktree, copy the ignored env file first:
 
@@ -234,6 +272,28 @@ pnpm --dir apps/web exec vite --host 127.0.0.1 --port 5175
 Open the app as `http://localhost:5175/...`. Cognito callback URLs are
 origin-sensitive; `127.0.0.1` can land on sign-in even when `localhost` is
 already authenticated.
+
+Suggested local validation route:
+
+1. Open
+   `http://localhost:5175/settings/skills/account-health-review`.
+2. Click the shield icon, run the trust pipeline, and confirm the parent Skill
+   Trust side sheet opens.
+3. Click a missing non-signature row such as Skill Card, Evals, or Benchmark.
+   Confirm the step-detail side sheet opens at the same width as the parent
+   Skill Trust sheet.
+4. Click **Generate missing component**, then confirm the refreshed report shows
+   that step as `present` or `starter generated`.
+5. Click the Signature row. In an unsigned local stack, confirm the detail sheet
+   explains that signing configuration is missing and does not offer a fake
+   signature.
+6. Click the document icon in the published Skill Detail header. Confirm it
+   opens `skill-card.md` when present, or routes to the Skill Card trust detail
+   when absent.
+7. From Skill Library, switch to Drafts, click a draft row, and confirm it opens
+   the draft detail editor with a publish icon in the header.
+8. Upload/import a skill archive and confirm the result appears under Drafts
+   rather than Published until an operator publishes it.
 
 ## When To Apply
 

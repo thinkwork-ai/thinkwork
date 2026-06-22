@@ -157,12 +157,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U8 - Expose skill cards in the published catalog.
-- Current branch: `codex/thnk-11-u8-skill-card-doc`.
+- Current unit: U9 - Update docs and local validation coverage.
+- Current branch: `codex/thnk-11-u9-local-validation`.
 - Current worktree:
-  `.Codex/worktrees/thnk-11-u8-skill-card-doc`.
+  `.Codex/worktrees/thnk-11-u9-local-validation`.
 - Current pull request:
-  [#2849](https://github.com/thinkwork-ai/thinkwork/pull/2849).
+  [#2852](https://github.com/thinkwork-ai/thinkwork/pull/2852).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -264,6 +264,22 @@ status: in_progress
     Skill Trust sheet.
   - 2026-06-22: U8 PR
     [#2849](https://github.com/thinkwork-ai/thinkwork/pull/2849) opened and CI
+    monitoring started.
+  - 2026-06-22: U8 PR
+    [#2849](https://github.com/thinkwork-ai/thinkwork/pull/2849) passed
+    required CI after two clean rebases onto current `main`, squash merged as
+    `bfea31c98972bf77fae3542932fa6cdfe1fd79f3`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U9 started from a clean isolated worktree created from
+    `origin/main` after U8 merge. Scope: update the trust-gated skill creator
+    runbook and validate the local operator flow on `http://localhost:5175`.
+  - 2026-06-22: U9 local UI review found the nested trust step side sheet was
+    still visually capped by the shared sheet max-width. Patched Skill Trust
+    and trust step sheets to use the same explicit width style so their
+    rendered right-sheet rectangles match.
+  - 2026-06-22: U9 PR
+    [#2852](https://github.com/thinkwork-ai/thinkwork/pull/2852) opened and CI
     monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
@@ -399,6 +415,29 @@ status: in_progress
     web/status files.
   - U8 package-scoped lint command was checked; `@thinkwork/web` does not
     define a `lint` script.
+  - U9 `pnpm install --frozen-lockfile --offline` completed in the worktree;
+    local Node 25 logged the existing optional `canvas@2.11.2`
+    native-fallback/missing `pkg-config` warning, but pnpm exited
+    successfully.
+  - U9 local dev server started from the worktree at
+    `http://localhost:5175/` using the copied ignored `apps/web/.env`.
+  - U9 localhost validation on
+    `http://localhost:5175/settings/skills/account-health-review` confirmed:
+    the Skill Detail document icon opens `skill-card.md`; the shield icon runs
+    the trust pipeline; the Evals trust step detail opens as a second side
+    sheet; generating the missing Evals component creates `evals/smoke.json`
+    and refreshes the report to `starter generated`.
+  - U9 follow-up width validation measured the rendered Skill Trust parent
+    sheet and Evals step side sheet in the in-app browser. Both dialogs
+    rendered at `520px` wide, with identical `left=760` and `right=1280`
+    bounds in the `1280x720` localhost viewport.
+  - U9 focused Skill Detail component tests passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsSkillDetail.test.tsx`
+    (24 tests).
+  - U9 Drafts route validation remains blocked on the deployed GraphQL HTTP
+    route returning `[Network] No Content` for `skillDrafts` after U8 deployed
+    successfully; this prevented live-browser validation of draft row editor
+    navigation and upload-to-draft behavior on `localhost:5175`.
 
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 
