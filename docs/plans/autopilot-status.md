@@ -66,11 +66,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U7 - Retrieval comparison and deployed smoke validation.
-- Current branch: `codex/thnk-63-u7-retrieval-smoke`.
-- Current worktree: `.Codex/worktrees/thnk-63-u7-retrieval-smoke`.
+- Current unit: U8 - Documentation and operator runbook.
+- Current branch: `codex/thnk-63-u8-docs`.
+- Current worktree: `.Codex/worktrees/thnk-63-u8-docs`.
 - Current pull request:
-  [#2874](https://github.com/thinkwork-ai/thinkwork/pull/2874).
+  [#2876](https://github.com/thinkwork-ai/thinkwork/pull/2876).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     OKF Wiki Navigator plan from the main checkout.
@@ -171,6 +171,26 @@ status: in_progress
   - 2026-06-22: Added Linear U7 PR-refresh comment
     `39799016-80ac-48c6-963d-e0e0b75e0674`; refreshed CI monitoring on PR
     head `30384739`.
+  - 2026-06-22: U7 PR
+    [#2874](https://github.com/thinkwork-ai/thinkwork/pull/2874) passed
+    required CI on head `69c7868f`; added Linear CI-passed comment
+    `3f93d377-ba06-4596-8e63-bf50a35c157e`.
+  - 2026-06-22: U7 PR #2874 squash merged as `d5e102be`; added Linear
+    merged/cleanup comment `45b20e37-c801-4f62-9464-914b5bac3f0e`; remote
+    branch was deleted and local U7 worktree was removed.
+  - 2026-06-22: U8 started from `origin/main` at `d5e102be` in
+    `.Codex/worktrees/thnk-63-u8-docs`; added Linear start comment
+    `3f5a418e-e190-4cfe-a9e0-462c80a8d6c0`.
+  - 2026-06-22: U8 implementation added the docs-site OKF Wiki Navigator
+    concept page, sidebar entry, Context Engine/Memory/Compiled Pages/Source
+    Routing updates, and E2E runbook link-back.
+  - 2026-06-22: U8 local verification passed: `pnpm install --frozen-lockfile`,
+    touched-file Prettier write, `git diff --check`, and
+    `pnpm --filter @thinkwork/docs build`; added Linear local-verification
+    comment `ccf2923e-36dc-449b-a4ca-e59db125fc8b`.
+  - 2026-06-22: U8 PR opened:
+    [#2876](https://github.com/thinkwork-ai/thinkwork/pull/2876); added Linear
+    PR-opened comment `b169f612-faa1-423f-953f-843c00e68a7d`.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 

@@ -113,6 +113,14 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   `32820aec-dba5-4c78-9d41-d86b626a46bb`; THNK-63 remains `In Progress`.
 - 2026-06-22T21:05:51Z: Added Linear U7 PR-opened comment
   `9bc124bb-db93-4a05-bd9f-92326885c9eb`; PR #2874 CI monitoring started.
+- 2026-06-22T21:18:10Z: Added Linear U7 CI-passed comment
+  `3f93d377-ba06-4596-8e63-bf50a35c157e`.
+- 2026-06-22T21:18:19Z: PR #2874 merged at
+  `d5e102be4183a32eef46ecdb086df8a4c92de48c`; final CI passed.
+- 2026-06-22T21:18:49Z: Added Linear U7 merged/cleanup comment
+  `45b20e37-c801-4f62-9464-914b5bac3f0e`.
+- 2026-06-22T21:19:45Z: Added Linear U8 start comment
+  `3f5a418e-e190-4cfe-a9e0-462c80a8d6c0`; THNK-63 remains `In Progress`.
 
 ## Unit Log
 
@@ -750,3 +758,52 @@ PR:
 - CI: Restarted after rebase onto `6ce4ed2b`.
 - Linear PR-refresh comment:
   `39799016-80ac-48c6-963d-e0e0b75e0674`.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Linear CI-passed comment:
+  `3f93d377-ba06-4596-8e63-bf50a35c157e`.
+- Merged: 2026-06-22T21:18:19Z.
+- Merge commit: `d5e102be4183a32eef46ecdb086df8a4c92de48c`.
+- Linear merged/cleanup comment:
+  `45b20e37-c801-4f62-9464-914b5bac3f0e`.
+- Cleanup: remote branch deleted by GitHub; local U7 worktree removed before U8
+  continued from fresh `origin/main`.
+
+### U8: Documentation And Operator Runbook
+
+Objective: document the OKF projection contract, runtime boundary, and
+operator verification playbook for implementers and operators.
+
+Branch/worktree:
+
+- Branch: `codex/thnk-63-u8-docs`
+- Worktree: `.Codex/worktrees/thnk-63-u8-docs`
+- Base: `origin/main` at `d5e102be4183a32eef46ecdb086df8a4c92de48c`.
+
+Implementation:
+
+- Added docs-site OKF Wiki Navigator concept page.
+- Updated Context Engine, Memory, Compiled Pages, and Source Routing docs with
+  the projection/runtime boundary and links.
+- Linked the repository verification runbook back to the concept page.
+- Linear start comment:
+  `3f5a418e-e190-4cfe-a9e0-462c80a8d6c0`.
+
+Local verification:
+
+- 2026-06-22T21:22Z: `pnpm install --frozen-lockfile` completed in the U8
+  worktree. Optional `canvas` native build warning occurred under local Node
+  25/pkg-config, but install completed successfully.
+- 2026-06-22T21:22Z:
+  `pnpm dlx prettier@3.8.2 --write --ignore-unknown <U8 touched files>` passed.
+- 2026-06-22T21:22Z: `git diff --check` passed.
+- 2026-06-22T21:23Z: `pnpm --filter @thinkwork/docs build` passed and
+  generated `/concepts/knowledge/okf-wiki-navigator/`.
+- Linear local-verification comment:
+  `ccf2923e-36dc-449b-a4ca-e59db125fc8b`.
+
+PR:
+
+- Opened: https://github.com/thinkwork-ai/thinkwork/pull/2876
+- Linear PR-opened comment:
+  `b169f612-faa1-423f-953f-843c00e68a7d`.
+- CI: Monitoring started.

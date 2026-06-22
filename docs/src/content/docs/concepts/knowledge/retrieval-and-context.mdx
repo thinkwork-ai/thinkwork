@@ -15,6 +15,9 @@ Any given turn can draw from:
 - **Knowledge bases.** Chunks retrieved from assigned Bedrock Knowledge Bases, based on semantic similarity to the user's message.
 - **Memory.** Facts and preferences recalled from the memory adapter (Hindsight or AgentCore Memory). These are carry-forward learnings, not chat history.
 - **Compiled pages.** Relevant entity, topic, and decision pages produced by the Memory compile pipeline.
+- **OKF wiki traversal.** Explicitly enabled Pi runtimes can browse a generated
+  read-only OKF projection with bounded wiki tools. This is traceable
+  traversal, not the default compiled-page provider.
 - **Workspace files.** Files in the relevant agent, template, or tenant-default workspace.
 - **Approved MCP tools.** Search-safe external tools that an admin has made eligible.
 
@@ -103,6 +106,7 @@ Long-term memory should never masquerade as the thread record. If an operator as
 - [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — the authored retrieval source
 - [Retained Memory](/concepts/knowledge/memory/) — the recall source
 - [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the compiled page source
+- [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) — explicit read-only filesystem traversal over compiled pages
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — where assembly sits in the invocation flow
 
 ## Under the hood

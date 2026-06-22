@@ -23,7 +23,10 @@ Every response includes normalized hits plus provider statuses. Provider failure
 
 - `memory`: user-scoped Hindsight/managed memory recall.
 - `brain`: tenant-shared ontology-shaped memory pages and facets.
-- `wiki`: compiled memory pages.
+- `wiki`: compiled memory pages. The database-backed wiki provider remains the
+  baseline for `query_wiki_context`; the OKF Wiki Navigator is a generated
+  filesystem projection used by explicitly enabled Pi runtimes, not a raw
+  backend provider exposed through normal routing.
 - `workspace`: permissioned workspace files for the active target.
 - `knowledge-base`: tenant/agent Bedrock Knowledge Bases.
 - `mcp`: tenant-approved, read-only, search-safe MCP tools.
@@ -84,6 +87,14 @@ Pi registers `query_context` as a platform-owned built-in tool. The tool calls t
 When Context Engine is enabled for a first-party Pi runtime, the Pi Context Engine extension exposes specialized split tools: `query_memory_context`, `query_brain_context`, and `query_wiki_context`. These are still Context Engine tools at the API layer: Hindsight memory, ontology-shaped Brain, and compiled pages remain providers behind the Context Engine boundary rather than separate peer tools in normal agent configuration.
 
 `query_brain_context` should be the model's first choice for governed tenant-shared business/domain context such as customers, opportunities, commitments, risks, stakeholders, products, relationships, and cited provenance. Use `query_memory_context` for raw Hindsight Memory and `query_wiki_context` for compiled page/entity/topic lookup. Raw ontology admin APIs, raw Cognee, Neptune, S3, and storage backends are not runtime tools.
+
+The [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) is separate
+from `query_wiki_context`. When a Pi runtime is explicitly configured for OKF
+navigation, it can receive bounded `wiki_ls`, `wiki_rg`, `wiki_read`, and
+`wiki_links` tools over a read-only EFS projection of compiled pages. Those
+tools are for progressive traversal and trace evidence; they do not replace the
+database wiki provider or change default `query_context` routing until an eval
+report supports that decision.
 
 Use `plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs` after deploy to verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path. Use `plugins/company-brain/smoke/company-brain-operations-smoke.mjs` to verify the GraphQL operations posture and redaction contract; it is read-only unless `SMOKE_ENABLE_COMPANY_BRAIN_OPERATIONS_MUTATION=1` is explicitly set.
 

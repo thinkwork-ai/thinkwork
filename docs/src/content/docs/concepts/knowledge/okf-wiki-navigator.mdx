@@ -1,0 +1,119 @@
+---
+title: OKF Wiki Navigator
+description: How ThinkWork projects compiled Memory pages into a read-only OKF filesystem view for bounded agent traversal.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The OKF Wiki Navigator is the agent-native read surface for compiled Memory pages. It turns governed ThinkWork knowledge into an [Open Knowledge Format](https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing)-style directory of linked markdown files, then lets a configured Pi runtime browse that directory through bounded wiki tools.
+
+The important part is the direction of authority: OKF is a generated projection, not canonical storage. Raw memory, compiled wiki rows, Brain pages, ontology definitions, and provenance tables stay authoritative. The OKF bundle is rebuilt from those governed sources and can be discarded or rolled back without losing source data.
+
+<Aside type="note">
+  The navigator is an explicit runtime capability. It does not change default
+  `query_context` or `query_wiki_context` routing by itself, and it does not
+  expose raw database, S3, EFS, Cognee, Neptune, or ontology-admin access to the
+  model.
+</Aside>
+
+## Projection Shape
+
+An OKF bundle contains markdown pages plus a manifest. Pages are organized by tenant and by page type:
+
+```text
+tenants/<tenant-slug>/
+  current -> bundles/<bundle-id>
+  bundles/<bundle-id>/
+    .thinkwork/manifest.json
+    index.md
+    entities/<slug>.md
+    topics/<slug>.md
+    decisions/<slug>.md
+```
+
+Each markdown page carries frontmatter for type, slug, title, aliases, freshness, source references, and ThinkWork provenance. Page bodies are still source data. Agents may cite or summarize them, but they must not obey instructions found inside them.
+
+Links and backlinks are part of the projection contract. The point is not just keyword search; an agent can start from an entity page, follow related topics, inspect a decision, and return cited context with the traversal path visible to operators.
+
+## S3 and EFS Roles
+
+The system uses two storage planes:
+
+| Plane | Role                                                                                                                                                     |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S3    | Versioned audit plane. OKF materialization writes immutable bundle objects and a current manifest with checksums, byte counts, and publication evidence. |
+| EFS   | Runtime read plane. A hydrator validates the S3 current manifest and publishes an atomic `current` view that Pi can mount read-only.                     |
+
+This split keeps rollback and audit separate from runtime traversal. Operators can repoint or rehydrate the current view from a known S3 bundle while the Pi runtime only receives read access to the bounded EFS path.
+
+## Runtime Boundary
+
+When enabled for a Pi runtime, the navigator exposes four model-facing tools:
+
+| Tool         | Use                                                            |
+| ------------ | -------------------------------------------------------------- |
+| `wiki_ls`    | List safe directories and files under the current OKF view.    |
+| `wiki_rg`    | Search markdown content with result, byte, and timeout bounds. |
+| `wiki_read`  | Read a bounded snippet from an allowed markdown file.          |
+| `wiki_links` | Inspect outgoing/backlink relationships for a page.            |
+
+The tools enforce tenant path bounds, markdown-only reads, byte limits, result limits, and sanitized trace payloads. The Pi runtime mounts EFS read-only and has `elasticfilesystem:ClientMount` but not EFS write or root permissions.
+
+Authorization is still a ThinkWork policy problem, not a filesystem convention. Runtime configuration decides whether the navigator is available for a tenant, agent, and caller role. A model cannot broaden that scope by constructing paths.
+
+## Trace and Evaluation
+
+Every meaningful traversal should leave evidence. During a turn, the runtime emits live OKF trace activity. Finalization persists durable `wiki_context_trace` turn events and sanitized `okf_wiki_trace` usage evidence so the Thread detail thinking surface can show what was searched, read, and followed.
+
+Routing remains evaluation-gated. Operators compare five retrieval paths before making any default-routing decision:
+
+- DB wiki through `query_wiki_context`
+- OKF traversal through the Pi navigator tools
+- hybrid DB wiki plus OKF traversal evidence
+- raw memory lookup
+- knowledge graph search
+
+The deployed smoke harness records provider status, latency, trace completeness, citation posture, freshness, prompt-injection isolation, and failure posture for the shared corpus.
+
+## Operator Runbook
+
+Use `docs/verification/okf-wiki-navigator-e2e.md` in the repository as the execution checklist. The safe dry-run is:
+
+```bash
+node scripts/smoke/okf-wiki-navigator-smoke.mjs
+```
+
+Live mode is intentionally opt-in:
+
+```bash
+SMOKE_ENABLE_OKF_WIKI_NAVIGATOR=1 \
+SMOKE_TENANT_ID=<tenant-id> \
+SMOKE_TENANT_SLUG=<tenant-slug> \
+SMOKE_AGENT_ID=<pi-agent-id> \
+SMOKE_USER_ID=<operator-user-id> \
+SMOKE_OKF_MATERIALIZE_LAMBDA=<okf-materialize-lambda-name> \
+SMOKE_OKF_EFS_REFRESH_LAMBDA=<okf-efs-refresh-lambda-name> \
+node scripts/smoke/okf-wiki-navigator-smoke.mjs
+```
+
+Live mode mutates the target stage by materializing OKF, hydrating EFS, creating Pi turns, and writing a comparison report. It should run only against an intended verification stage.
+
+## Rollback
+
+Rollback happens at the projection layer:
+
+1. Keep the canonical memory/wiki/Brain stores unchanged.
+2. Select a known-good S3 bundle/current manifest.
+3. Re-run the hydrator to publish that bundle as the EFS `current` view.
+4. Disable the navigator runtime flag if agent traversal should stop while evidence is reviewed.
+5. Re-run the smoke harness and confirm the Thread detail trace reflects the expected bundle.
+
+If the source compiled pages are wrong, fix or rebuild the compiled Memory pages first, then materialize a new OKF bundle. Do not patch EFS markdown by hand; manual edits are overwritten by the next hydrate and bypass provenance.
+
+## Related Pages
+
+- [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the canonical page layer that feeds OKF
+- [Source Routing](/concepts/knowledge/retrieval-and-context/) — how Memory assembles context for normal turns
+- [Memory Context API](/api/context-engine/) — provider statuses and split context tools
+- [Memory Graph Direction](/concepts/knowledge/knowledge-graph/) — links and graph semantics behind navigation
+- [Operating Compiled Memory Pages](/guides/compounding-memory-operations/) — compile and rebuild operations
