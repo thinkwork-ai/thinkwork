@@ -59,6 +59,7 @@ type WorkflowsData = {
 };
 
 const ALL = "all";
+const N8N_WORKFLOWS_PATH = "/settings/plugins/n8n/workflows";
 
 function bindingFilterValue(row: WorkflowRow): string {
   return primaryBinding(row.bindings)?.bindingType ?? "unknown";
@@ -173,15 +174,15 @@ export function WorkflowInventory() {
         },
         cell: ({ row }) => {
           const binding = primaryBinding(row.original.bindings);
-          const sourceUrl = n8nWorkflowUiUrl(n8nLaunchUrl, binding);
+          const sourceLink = sourceLinkForBinding(n8nLaunchUrl, binding);
           const badge = <SourceBadge binding={binding} />;
-          return sourceUrl ? (
+          return sourceLink ? (
             <a
-              href={sourceUrl}
-              target="_blank"
-              rel="noreferrer"
+              href={sourceLink.href}
+              target={sourceLink.external ? "_blank" : undefined}
+              rel={sourceLink.external ? "noreferrer" : undefined}
               className="inline-flex transition-opacity hover:opacity-80"
-              title="Open n8n workflow"
+              title={sourceLink.title}
             >
               {badge}
             </a>
@@ -312,25 +313,43 @@ export function WorkflowInventory() {
   );
 }
 
-function n8nWorkflowUiUrl(
+function sourceLinkForBinding(
   launchUrl: string | null,
   binding: WorkflowBinding | null,
-): string | null {
-  if (
-    !launchUrl ||
-    !binding?.externalWorkflowId ||
-    (binding.bindingType !== "n8n_bridge" && binding.bindingType !== "n8n_import")
-  ) {
+): { href: string; external: boolean; title: string } | null {
+  if (!isN8nBinding(binding)) {
     return null;
   }
-  try {
-    return new URL(
-      `/workflow/${encodeURIComponent(binding.externalWorkflowId)}`,
-      new URL(launchUrl).origin,
-    ).toString();
-  } catch {
-    return null;
+
+  if (launchUrl && binding.externalWorkflowId) {
+    try {
+      return {
+        href: new URL(
+          `/workflow/${encodeURIComponent(binding.externalWorkflowId)}`,
+          new URL(launchUrl).origin,
+        ).toString(),
+        external: true,
+        title: "Open n8n workflow",
+      };
+    } catch {
+      // Fall through to the in-app n8n workflow inventory.
+    }
   }
+
+  return {
+    href: N8N_WORKFLOWS_PATH,
+    external: false,
+    title: "Open n8n workflows",
+  };
+}
+
+function isN8nBinding(
+  binding: WorkflowBinding | null,
+): binding is WorkflowBinding {
+  return (
+    binding?.bindingType === "n8n_bridge" ||
+    binding?.bindingType === "n8n_import"
+  );
 }
 
 function workflowTriggerLabel(row: WorkflowRow): string {
