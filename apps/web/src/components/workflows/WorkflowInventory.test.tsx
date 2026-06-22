@@ -33,9 +33,11 @@ import { WorkflowInventory } from "./WorkflowInventory";
 function mockWorkflowInventoryQueries({
   workflows,
   pluginCatalog = [],
+  managedApplications = [],
 }: {
   workflows: unknown[];
   pluginCatalog?: unknown[];
+  managedApplications?: unknown[];
 }) {
   useQueryMock
     .mockReturnValueOnce([
@@ -48,6 +50,16 @@ function mockWorkflowInventoryQueries({
       {
         fetching: false,
         data: { pluginCatalog },
+      },
+    ])
+    .mockReturnValueOnce([
+      {
+        fetching: false,
+        data: {
+          deploymentStatus: {
+            managedApplications,
+          },
+        },
       },
     ]);
 }
@@ -154,5 +166,52 @@ describe("WorkflowInventory", () => {
     expect(
       screen.getByText("n8n bridge").closest("a")?.getAttribute("href"),
     ).toBe("/settings/plugins/n8n/workflows");
+  });
+
+  it("deep-links n8n bridge source badges to the configured n8n workflow", () => {
+    mockWorkflowInventoryQueries({
+      workflows: [
+        {
+          id: "workflow-n8n",
+          name: "Invoice bridge",
+          description: "Connected from n8n",
+          lifecycleStatus: "active",
+          primaryTriggerFamily: "n8n",
+          readinessState: "ready",
+          readinessReasons: [],
+          bindings: [
+            {
+              id: "binding-n8n",
+              bindingType: "n8n_bridge",
+              bindingStatus: "ready",
+              externalWorkflowId: "workflow-from-n8n",
+              externalWorkflowName: "Invoice bridge",
+            },
+          ],
+          triggers: [],
+        },
+      ],
+      pluginCatalog: [
+        {
+          pluginKey: "n8n",
+          launchUrl: null,
+          install: { id: "install-n8n" },
+        },
+      ],
+      managedApplications: [
+        {
+          key: "n8n",
+          url: "https://n8n.example.test",
+        },
+      ],
+    });
+
+    render(<WorkflowInventory />);
+
+    const link = screen.getByText("n8n bridge").closest("a");
+    expect(link?.getAttribute("href")).toBe(
+      "https://n8n.example.test/workflow/workflow-from-n8n",
+    );
+    expect(link?.getAttribute("target")).toBe("_blank");
   });
 });

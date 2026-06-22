@@ -21,7 +21,10 @@ import {
 import { Search } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
 import { SettingsWorkflowsQuery } from "@/lib/graphql-queries";
-import { SettingsPluginCatalogQuery } from "@/lib/settings-queries";
+import {
+  SettingsDeploymentStatusQuery,
+  SettingsPluginCatalogQuery,
+} from "@/lib/settings-queries";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { N8nPluginWorkflows } from "@/components/settings/plugins/n8n/N8nPluginWorkflows";
 import {
@@ -108,6 +111,10 @@ export function WorkflowInventory() {
     query: SettingsPluginCatalogQuery,
     requestPolicy: "cache-and-network",
   });
+  const [deploymentResult] = useQuery({
+    query: SettingsDeploymentStatusQuery,
+    requestPolicy: "cache-and-network",
+  });
 
   const rows = useMemo(
     () => result.data?.workflows ?? [],
@@ -118,7 +125,11 @@ export function WorkflowInventory() {
       (candidate) => candidate.pluginKey === "n8n",
     ) ?? null;
   const n8nInstall = n8nCatalogEntry?.install ?? null;
-  const n8nLaunchUrl = n8nCatalogEntry?.launchUrl ?? null;
+  const n8nRuntime =
+    deploymentResult.data?.deploymentStatus.managedApplications.find(
+      (candidate) => candidate.key === "n8n",
+    );
+  const n8nLaunchUrl = n8nRuntime?.url ?? n8nCatalogEntry?.launchUrl ?? null;
   const canDiscoverN8n = Boolean(n8nInstall);
   const filteredRows = useMemo(
     () =>
@@ -302,7 +313,7 @@ export function WorkflowInventory() {
           <div className="min-h-0 flex-1 p-6">
             <N8nPluginWorkflows
               installId={n8nInstall?.id ?? null}
-              launchUrl={null}
+              launchUrl={n8nLaunchUrl}
               refreshNonce={0}
               onDiscoveryStateChange={ignoreDiscoveryState}
             />
@@ -356,7 +367,9 @@ function workflowTriggerLabel(row: WorkflowRow): string {
   const bindingType = primaryBinding(row.bindings)?.bindingType;
   if (bindingType === "n8n_bridge" || bindingType === "n8n_import") {
     const triggerTypes = row.triggers.flatMap((trigger) =>
-      stringArrayFromUnknown(recordFromUnknown(trigger.triggerConfig).triggerTypes),
+      stringArrayFromUnknown(
+        recordFromUnknown(trigger.triggerConfig).triggerTypes,
+      ),
     );
     if (triggerTypes.length) {
       return Array.from(new Set(triggerTypes.map(titleize))).join(", ");

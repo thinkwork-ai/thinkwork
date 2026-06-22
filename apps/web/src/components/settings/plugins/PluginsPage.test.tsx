@@ -25,6 +25,7 @@ const {
   },
   navigateMock: vi.fn(),
   queryDocs: {
+    SettingsDeploymentStatusQuery: Symbol("deploymentStatus"),
     SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
     SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
     SettingsRefreshPluginCatalogMutation: Symbol("refreshPluginCatalog"),
@@ -139,17 +140,20 @@ import { PluginsPage } from "./PluginsPage";
 
 const refreshCatalog = vi.fn();
 const refreshActivations = vi.fn();
+const refreshDeployment = vi.fn();
 
 function mockQueries({
   catalogError = false,
   catalogFetching = false,
   catalog = catalogEntries,
   activations = [] as Array<{ pluginKey: string; status: string }>,
+  runtimeApps = [],
 }: {
   catalogError?: boolean;
   catalogFetching?: boolean;
   catalog?: Array<(typeof catalogEntries)[number]>;
   activations?: Array<{ pluginKey: string; status: string }>;
+  runtimeApps?: Array<{ key: string; url: string | null }>;
 } = {}) {
   useQueryMock.mockImplementation(({ query }: { query: unknown }) => {
     if (query === queryDocs.SettingsPluginCatalogQuery) {
@@ -176,6 +180,19 @@ function mockQueries({
         refreshActivations,
       ];
     }
+    if (query === queryDocs.SettingsDeploymentStatusQuery) {
+      return [
+        {
+          data: {
+            deploymentStatus: {
+              managedApplications: runtimeApps,
+            },
+          },
+          fetching: false,
+        },
+        refreshDeployment,
+      ];
+    }
     return [{ fetching: false }, vi.fn()];
   });
 }
@@ -186,6 +203,7 @@ beforeEach(() => {
   refreshCatalogMutationMock.mockReset();
   refreshCatalog.mockReset();
   refreshActivations.mockReset();
+  refreshDeployment.mockReset();
   useQueryMock.mockReset();
   tenantState.isOperator = true;
   tenantState.roleResolved = true;
@@ -310,6 +328,9 @@ describe("PluginsPage", () => {
     expect(refreshActivations).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });
+    expect(refreshDeployment).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
   });
 
   it("does not spin the refresh icon during background catalog fetching", () => {
@@ -429,6 +450,31 @@ describe("PluginsPage", () => {
     expect(
       screen.queryByRole("button", { name: "Open Docs Sync application" }),
     ).toBeNull();
+
+    openMock.mockRestore();
+  });
+
+  it("launches configured n8n from managed application status", () => {
+    const openMock = vi.spyOn(window, "open").mockImplementation(() => null);
+    mockQueries({
+      catalog: [...catalogEntries, n8nCatalogEntry],
+      runtimeApps: [{ key: "n8n", url: "https://n8n.example.test" }],
+    });
+    render(<PluginsPage />);
+
+    const n8nRow = screen.getByRole("link", { name: "Open n8n" });
+    fireEvent.click(
+      within(n8nRow).getByRole("button", {
+        name: "Open n8n application",
+      }),
+    );
+
+    expect(openMock).toHaveBeenCalledWith(
+      "https://n8n.example.test",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(navigateMock).not.toHaveBeenCalled();
 
     openMock.mockRestore();
   });
