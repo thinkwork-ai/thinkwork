@@ -22,6 +22,7 @@ import {
   Spinner,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { Response } from "@/components/ai-elements/response";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -351,10 +352,12 @@ function SkillCardSheetContent({
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
-      <article className="rounded-md border border-border/70 bg-background/30 p-4">
-        <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-foreground">
-          {content.trim()}
-        </pre>
+      <article>
+        <div data-testid="skill-card-markdown">
+          <Response className="prose-invert text-sm leading-relaxed text-foreground prose-headings:mb-2 prose-headings:mt-4 prose-headings:font-semibold prose-p:my-3 prose-p:leading-6 prose-ul:my-2 prose-li:my-0 prose-blockquote:my-4 prose-blockquote:border-l-border prose-blockquote:text-muted-foreground prose-code:text-foreground prose-code:before:content-none prose-code:after:content-none [&_h1]:text-xl [&_h2]:text-base [&_h3]:text-sm [&_li>p]:my-0">
+            {content.trim()}
+          </Response>
+        </div>
       </article>
       {sha256 ? (
         <p className="mt-4 break-all font-mono text-[11px] text-muted-foreground">
