@@ -576,4 +576,49 @@ PR:
 - Opened: https://github.com/thinkwork-ai/thinkwork/pull/2869
 - Linear PR-opened comment:
   `3c5d671e-cb6b-460e-aa05-35ee6d260e04`.
-- Current state: monitoring required CI.
+- Final branch commit: `ebb75bfaa61e7cbb8edfe0ef09cd750d146d25ed`.
+- Merged: 2026-06-22T20:00:28Z.
+- Merge commit: `b3d58e8be7867b262be31d3d09aaa32ca91644ec`.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Cleanup: remote U5 branches were deleted/pruned; local U5 worktrees and
+  branches were removed.
+
+## Current Blocker
+
+Status: blocked at 2026-06-22T20:02Z before starting U6.
+
+Blocker: Linear connector credentials were invalidated while posting the U5
+follow-up merge/cleanup gate. The required Linear update failed with:
+`HTTP 401 token_revoked` and message `Encountered invalidated oauth token for
+user, failing request`.
+
+Why this stops autopilot: `AGENTS.md` requires the Linear issue to be updated at
+every material gate, including PR state, CI, merge, cleanup, blockers, and
+verification. The autopilot stop conditions include missing credentials or
+permissions. Continuing U6 without a working Linear connector would violate that
+issue-update gate.
+
+Current repo state:
+
+- PR #2869 is merged into `origin/main`.
+- The primary checkout at `/Users/ericodom/Projects/thinkwork` is intentionally
+  left untouched because it contains unrelated local AgentLoop changes.
+- The last synced code base is `origin/main` at
+  `b3d58e8be7867b262be31d3d09aaa32ca91644ec`.
+- A temporary status-only worktree was created at
+  `.Codex/worktrees/thnk-63-linear-token-blocker` to record this blocker without
+  modifying the dirty primary checkout.
+- Status artifact PR: https://github.com/thinkwork-ai/thinkwork/pull/2870
+
+Attempted command:
+
+- `linear.save_comment` on THNK-63 with the U5 follow-up merge/cleanup summary.
+- `linear.get_issue` on THNK-63 to verify whether the connector failure was
+  transient; it returned the same `HTTP 401 token_revoked` error.
+- No Linear blocker label or blocker comment could be added because all Linear
+  MCP calls fail before authorization.
+
+Next recommended action:
+
+- Re-authenticate or reconnect the Linear connector, then resume autopilot from
+  U6 using a fresh worktree based on current `origin/main`.
