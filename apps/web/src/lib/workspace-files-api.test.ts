@@ -10,6 +10,7 @@ vi.mock("@/lib/runtime-config", () => ({ readRuntimeEnv }));
 import {
   createPrefixedWorkspaceClient,
   exportSkillArchive,
+  fixSkillTrustEvidence,
   importSkillArchive,
   runSkillTrustPipeline,
   spacesWorkspaceFilesClient,
@@ -302,6 +303,133 @@ describe("runSkillTrustPipeline", () => {
     await expect(runSkillTrustPipeline("missing")).rejects.toThrow(
       "missing a report",
     );
+  });
+});
+
+describe("fixSkillTrustEvidence", () => {
+  it("requests a catalog evidence fix and returns the refreshed report", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "account-health-review",
+      fixedStep: {
+        step: "skillCard",
+        status: "generated",
+        message: "Generated skill-card.md.",
+      },
+      artifactPath: "skill-card.md",
+      indexWarning: "Rebuild the catalog index.",
+      trustReport: {
+        slug: "account-health-review",
+        contentHash: "a".repeat(64),
+        generatedAt: "2026-06-22T00:00:00.000Z",
+        status: "passed",
+        summary: "SkillSpector passed; all release evidence is present.",
+        spec: {
+          status: "passed",
+          allowedTools: [],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "starter_generated",
+          evalDataset: "missing",
+          benchmark: "missing",
+          signature: "missing",
+        },
+        artifactPaths: { skillCard: "skill-card.md", evals: [] },
+      },
+    });
+
+    const result = await fixSkillTrustEvidence(
+      "account-health-review",
+      "skillCard",
+    );
+
+    expect(lastBody()).toEqual({
+      action: "fix-skill-trust-evidence",
+      catalog: true,
+      slug: "account-health-review",
+      step: "skillCard",
+    });
+    expect(result.fixedStep).toEqual({
+      step: "skillCard",
+      status: "generated",
+      message: "Generated skill-card.md.",
+    });
+    expect(result.artifactPath).toBe("skill-card.md");
+    expect(result.indexWarning).toBe("Rebuild the catalog index.");
+    expect(result.trustReport.evidence.skillCard).toBe("starter_generated");
+  });
+
+  it("uses the narrow skill trust API override when configured", async () => {
+    readRuntimeEnv.mockImplementation((key?: string) =>
+      key === "VITE_SKILL_TRUST_API_URL" ? "http://localhost:8787" : "",
+    );
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "account-health-review",
+      fixedStep: {
+        step: "signature",
+        status: "prerequisite_missing",
+        message: "Signing is not configured.",
+      },
+      prerequisite: "signing_config",
+      trustReport: {
+        slug: "account-health-review",
+        contentHash: "a".repeat(64),
+        generatedAt: "2026-06-22T00:00:00.000Z",
+        status: "passed",
+        summary: "Signing config is missing.",
+        spec: {
+          status: "passed",
+          allowedTools: [],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "present",
+          evalDataset: "present",
+          benchmark: "present",
+          signature: "missing_signing_config",
+        },
+        artifactPaths: { evals: [] },
+      },
+    });
+
+    const result = await fixSkillTrustEvidence(
+      "account-health-review",
+      "signature",
+    );
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/workspaces/files",
+      expect.objectContaining({ baseUrl: "http://localhost:8787" }),
+    );
+    expect(result.prerequisite).toBe("signing_config");
+  });
+
+  it("fails loudly when the fix response omits fix metadata", async () => {
+    apiFetch.mockResolvedValueOnce({ ok: true });
+
+    await expect(
+      fixSkillTrustEvidence("account-health-review", "benchmark"),
+    ).rejects.toThrow("missing fix metadata");
   });
 });
 

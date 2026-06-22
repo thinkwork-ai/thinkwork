@@ -14,12 +14,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U1 - Add trust evidence fix domain service.
-- Current branch: `codex/thnk-11-u1-trust-evidence-fixes`.
+- Current unit: U2 - Expose catalog evidence fixes through workspace-files.
+- Current branch: `codex/thnk-11-u2-workspace-files-fixes`.
 - Current worktree:
-  `.Codex/worktrees/thnk-11-u1-trust-evidence-fixes`.
+  `.Codex/worktrees/thnk-11-u2-workspace-files-fixes`.
 - Current pull request:
-  [#2837](https://github.com/thinkwork-ai/thinkwork/pull/2837).
+  [#2838](https://github.com/thinkwork-ai/thinkwork/pull/2838).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
@@ -28,6 +28,19 @@ status: in_progress
     guidance before implementation.
   - 2026-06-22: U1 PR
     [#2837](https://github.com/thinkwork-ai/thinkwork/pull/2837) opened and
+    CI monitoring started.
+  - 2026-06-22: U1 PR
+    [#2837](https://github.com/thinkwork-ai/thinkwork/pull/2837) passed
+    required CI, squash merged as
+    `183180874fe9972dceb45b975e5690711478b2f7`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed.
+  - 2026-06-22: U2 started from a clean isolated worktree created from
+    `origin/main` after U1 merge. Scope: add the catalog
+    `fix-skill-trust-evidence` workspace-files action and matching web client
+    helper so the UI can generate individual trust evidence artifacts.
+  - 2026-06-22: U2 PR
+    [#2838](https://github.com/thinkwork-ai/thinkwork/pull/2838) opened and
     CI monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
@@ -43,6 +56,26 @@ status: in_progress
   - U1 targeted Prettier check passed for touched plan/status/API files using
     `pnpm dlx prettier@3.8.2 --check ...`.
   - U1 `git diff --check` passed.
+  - U2 `pnpm install --frozen-lockfile --offline` completed in the worktree;
+    local Node 25 logged the existing optional `canvas@2.11.2`
+    native-fallback/missing `pkg-config` warning, but pnpm exited
+    successfully.
+  - U2 focused API workspace-files handler test passed:
+    `pnpm --dir packages/api exec vitest run src/__tests__/workspace-files-handler.test.ts`
+    (182 tests).
+  - U2 focused web workspace-files client test passed:
+    `pnpm --dir apps/web exec vitest run src/lib/workspace-files-api.test.ts`
+    (21 tests).
+  - U2 API typecheck passed: `pnpm --filter @thinkwork/api typecheck`.
+  - U2 web typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+  - U2 full API test suite passed: `pnpm --filter @thinkwork/api test` (565
+    files passed, 3 skipped; 5286 tests passed, 9 skipped).
+  - U2 full web test suite passed: `pnpm --filter @thinkwork/web test` (187
+    files passed; 1432 tests passed).
+  - U2 targeted Prettier check passed for touched API/web/status files using
+    `pnpm dlx prettier@3.8.2 --check ...`.
+  - U2 `git diff --check` passed.
+  - U2 pre-PR review pass completed with no blocking findings.
 
 ## THNK-11 Skill Creator Autopilot - 2026-06-21
 
