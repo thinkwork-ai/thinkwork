@@ -69,7 +69,8 @@ status: in_progress
 - Current unit: U8 - Docs and operator runbook.
 - Current branch: `codex/thnk-63-u8-docs-runbook`.
 - Current worktree: `.Codex/worktrees/thnk-63-u8-docs-runbook`.
-- Current pull request: pending.
+- Current pull request:
+  [#2877](https://github.com/thinkwork-ai/thinkwork/pull/2877).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     OKF Wiki Navigator plan from the main checkout.
@@ -189,6 +190,9 @@ status: in_progress
     Prettier check, `git diff --check`, `pnpm lint`, and `pnpm typecheck`.
     Review confirmed the docs do not imply raw backend access or a default OKF
     routing cutover.
+  - 2026-06-22: U8 PR opened:
+    [#2877](https://github.com/thinkwork-ai/thinkwork/pull/2877); added Linear
+    PR-opened comment `b715449f-9de0-4c83-a8bf-85c6a5ffba37`.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 
