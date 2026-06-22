@@ -65,12 +65,11 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: In progress.
-- Current unit: U8 - Documentation and operator runbook.
-- Current branch: `codex/thnk-63-u8-docs`.
-- Current worktree: `.Codex/worktrees/thnk-63-u8-docs`.
-- Current pull request:
-  [#2876](https://github.com/thinkwork-ai/thinkwork/pull/2876).
+- Status: Complete.
+- Current unit: None.
+- Current branch: None.
+- Current worktree: None.
+- Current pull request: None.
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     OKF Wiki Navigator plan from the main checkout.
@@ -191,6 +190,12 @@ status: in_progress
   - 2026-06-22: U8 PR opened:
     [#2876](https://github.com/thinkwork-ai/thinkwork/pull/2876); added Linear
     PR-opened comment `b169f612-faa1-423f-953f-843c00e68a7d`.
+  - 2026-06-22: U8 PR #2876 passed required CI on head `949ff5c9`; added
+    Linear CI-passed comment `106f704e-a720-4ce1-93d7-9c11025409d0`.
+  - 2026-06-22: U8 PR #2876 squash merged as `f783b5ab`; added Linear
+    merged/final-bookkeeping comment `d39e37be-3f52-4746-a076-59f22e8299ee`.
+  - 2026-06-22: All THNK-63 implementation units U1-U8 are merged. Remaining
+    closeout is status-doc PR and final branch/worktree cleanup.
 
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 

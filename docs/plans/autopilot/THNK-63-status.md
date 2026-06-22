@@ -3,7 +3,7 @@ linear_issue: THNK-63
 dispatcher_marker: "dispatcher:THNK-63:Ready to Work:Codex"
 plan: docs/plans/2026-06-22-002-feat-okf-wiki-navigator-plan.md
 requirements: docs/brainstorms/2026-06-22-okf-backed-wiki-navigator-requirements.md
-status: active
+status: complete
 started_at: 2026-06-22T15:46:40Z
 ---
 
@@ -121,6 +121,14 @@ The dependency order is serial: U1 -> U2 -> U3 -> U4 -> U5 -> U6 -> U7 -> U8.
   `45b20e37-c801-4f62-9464-914b5bac3f0e`.
 - 2026-06-22T21:19:45Z: Added Linear U8 start comment
   `3f5a418e-e190-4cfe-a9e0-462c80a8d6c0`; THNK-63 remains `In Progress`.
+- 2026-06-22T21:24:14Z: Added Linear U8 PR-opened comment
+  `b169f612-faa1-423f-953f-843c00e68a7d`.
+- 2026-06-22T21:30:47Z: Added Linear U8 CI-passed comment
+  `106f704e-a720-4ce1-93d7-9c11025409d0`.
+- 2026-06-22T21:31:00Z: PR #2876 merged at
+  `f783b5ab7d0b5dba5bcab48de2948e5abfe1c6e3`; final CI passed.
+- 2026-06-22T21:31:22Z: Added Linear U8 merged/final-bookkeeping comment
+  `d39e37be-3f52-4746-a076-59f22e8299ee`.
 
 ## Unit Log
 
@@ -806,4 +814,17 @@ PR:
 - Opened: https://github.com/thinkwork-ai/thinkwork/pull/2876
 - Linear PR-opened comment:
   `b169f612-faa1-423f-953f-843c00e68a7d`.
-- CI: Monitoring started.
+- Final CI: CLA, lint, supply-chain verify, typecheck, and test passed.
+- Linear CI-passed comment:
+  `106f704e-a720-4ce1-93d7-9c11025409d0`.
+- Merged: 2026-06-22T21:31:00Z.
+- Merge commit: `f783b5ab7d0b5dba5bcab48de2948e5abfe1c6e3`.
+- Linear merged/final-bookkeeping comment:
+  `d39e37be-3f52-4746-a076-59f22e8299ee`.
+
+## Final State
+
+- All planned units U1-U8 are implemented and merged.
+- Merged PRs: #2854, #2859, #2861, #2867, #2868, #2869, #2872, #2874,
+  #2876.
+- Final status-doc closeout PR is the only remaining bookkeeping step.
