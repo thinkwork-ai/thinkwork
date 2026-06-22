@@ -46,6 +46,7 @@ import {
   appendGoalModeMetadata,
   type ComposerGoalModeIntent,
 } from "@/components/workbench/goal-mode";
+import { normalizeSkillCreatorCommandContent } from "@/lib/skill-creator-command";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -1651,8 +1652,11 @@ export function SpacesThreadDetailRoute({
         requestedModelId,
         goalMode,
       ) => {
+        const skillCreatorCommand =
+          normalizeSkillCreatorCommandContent(content);
+        const normalizedContent = skillCreatorCommand.content;
         setOptimisticMessage({
-          content,
+          content: normalizedContent,
           expectAssistantResponse: agentRequested !== false,
           startedAt: new Date().toISOString(),
           // Show the attached file on the user message immediately, before the
@@ -1728,12 +1732,15 @@ export function SpacesThreadDetailRoute({
         } = {
           threadId,
           role: "USER",
-          content,
+          content: normalizedContent,
         };
         let metadata: Record<string, unknown> = {};
         if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
         if (pinnedSkills.length > 0) {
           metadata.skills = pinnedSkills.map((slug) => ({ slug }));
+        }
+        if (skillCreatorCommand.command) {
+          metadata.command = skillCreatorCommand.command;
         }
         const turnModelId = requestedModelId ?? selectedModelId;
         if (turnModelId) {

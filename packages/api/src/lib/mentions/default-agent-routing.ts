@@ -16,6 +16,11 @@ import {
 import { resolveDispatchPinnedSkills } from "../skills/message-pinned-skills.js";
 import type { PendingQuestionAnswersPayload } from "../user-questions/runtime-payload.js";
 import type { RuntimeGoalMode } from "../goal-mode.js";
+import type {
+  RuntimeSkillCreatorCommandPayload,
+  SkillCreatorCommandMetadata,
+} from "../skill-creator/command-metadata.js";
+import { toRuntimeSkillCreatorCommandPayload } from "../skill-creator/command-metadata.js";
 
 export interface DefaultAgentTurnWakeup {
   tenantId: string;
@@ -56,6 +61,7 @@ export interface DispatchDefaultAgentTurnInput {
   requestedModelId?: string | null;
   requestedProfileSlug?: string | null;
   goalMode?: RuntimeGoalMode | null;
+  skillCreatorCommand?: SkillCreatorCommandMetadata | null;
   /**
    * ask_user_question (plan 2026-06-09-005 U3): when the dispatching
    * message CAS-consumed the thread's pending question batch (plain-reply
@@ -98,6 +104,7 @@ export interface DefaultAgentChatInvoke {
   requestedModelId?: string;
   requestedProfileSlug?: string;
   goalMode?: RuntimeGoalMode;
+  skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
 }
 
 export interface DefaultAgentChatExecutor {
@@ -192,6 +199,13 @@ export async function dispatchDefaultAgentChatTurn(
       ? { requestedProfileSlug: input.requestedProfileSlug }
       : {}),
     ...(input.goalMode ? { goalMode: input.goalMode } : {}),
+    ...(input.skillCreatorCommand
+      ? {
+          skillCreatorCommand: toRuntimeSkillCreatorCommandPayload(
+            input.skillCreatorCommand,
+          ),
+        }
+      : {}),
   });
   if (directInvoked) {
     return {
@@ -295,6 +309,13 @@ export function buildDefaultAgentTurnWakeup(
         ? { requestedProfileSlug: input.requestedProfileSlug }
         : {}),
       ...(input.goalMode ? { goalMode: input.goalMode } : {}),
+      ...(input.skillCreatorCommand
+        ? {
+            skillCreatorCommand: toRuntimeSkillCreatorCommandPayload(
+              input.skillCreatorCommand,
+            ),
+          }
+        : {}),
       // Reply-consumed answer context must survive the wakeup fallback
       // path too — the consume already committed, so dropping it here
       // would orphan the answers (plan 2026-06-09-005 U3).

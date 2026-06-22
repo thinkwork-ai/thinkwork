@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }));
+const { apiFetch, readRuntimeEnv } = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  readRuntimeEnv: vi.fn((_key?: string) => ""),
+}));
 vi.mock("@/lib/api-fetch", () => ({ apiFetch }));
+vi.mock("@/lib/runtime-config", () => ({ readRuntimeEnv }));
 
 import {
   createPrefixedWorkspaceClient,
   exportSkillArchive,
   importSkillArchive,
+  runSkillTrustPipeline,
   spacesWorkspaceFilesClient,
   validateSkillDraft,
 } from "./workspace-files-api";
@@ -18,6 +23,7 @@ function lastBody(): Record<string, unknown> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  readRuntimeEnv.mockReturnValue("");
   apiFetch.mockResolvedValue({ ok: true, files: [] });
 });
 
@@ -197,6 +203,104 @@ describe("exportSkillArchive", () => {
 
     await expect(exportSkillArchive("missing")).rejects.toThrow(
       "missing archive data",
+    );
+  });
+});
+
+describe("runSkillTrustPipeline", () => {
+  it("requests a catalog trust run and returns the report", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      trustReport: {
+        slug: "account-health-review",
+        contentHash: "a".repeat(64),
+        generatedAt: "2026-06-21T00:00:00.000Z",
+        status: "review",
+        summary: "SkillSpector is not configured.",
+        spec: {
+          status: "passed",
+          allowedTools: [],
+          errors: [],
+        },
+        scanner: { status: "not_configured" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "missing",
+          evalDataset: "missing",
+          benchmark: "missing",
+          signature: "missing",
+        },
+        artifactPaths: { evals: [] },
+      },
+    });
+
+    const report = await runSkillTrustPipeline("account-health-review");
+
+    expect(lastBody()).toEqual({
+      action: "run-skill-trust",
+      catalog: true,
+      slug: "account-health-review",
+    });
+    expect(report.slug).toBe("account-health-review");
+    expect(report.scanner.status).toBe("not_configured");
+  });
+
+  it("uses the narrow skill trust API override when configured", async () => {
+    readRuntimeEnv.mockImplementation((key?: string) =>
+      key === "VITE_SKILL_TRUST_API_URL" ? "http://127.0.0.1:8787" : "",
+    );
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      trustReport: {
+        slug: "account-health-review",
+        contentHash: "a".repeat(64),
+        generatedAt: "2026-06-21T00:00:00.000Z",
+        status: "passed",
+        summary: "SkillSpector passed.",
+        spec: {
+          status: "passed",
+          allowedTools: [],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "missing",
+          evalDataset: "missing",
+          benchmark: "missing",
+          signature: "missing",
+        },
+        artifactPaths: { evals: [] },
+      },
+    });
+
+    await runSkillTrustPipeline("account-health-review");
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/workspaces/files",
+      expect.objectContaining({ baseUrl: "http://127.0.0.1:8787" }),
+    );
+  });
+
+  it("fails loudly when the trust response omits the report", async () => {
+    apiFetch.mockResolvedValueOnce({ ok: true });
+
+    await expect(runSkillTrustPipeline("missing")).rejects.toThrow(
+      "missing a report",
     );
   });
 });

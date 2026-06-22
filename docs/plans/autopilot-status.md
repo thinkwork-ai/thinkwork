@@ -15,12 +15,12 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U2 Draft File Storage, Spec Validation, and Catalog Publish
-  Reuse.
-- Current branch: `codex/thnk-11-u2-draft-files`.
-- Current worktree: `.Codex/worktrees/thnk-11-u2-draft-files`.
+- Current unit: U3 Seed Upstream Skill Creator Assets and Wire
+  `/skill-creator` Dispatch.
+- Current branch: `codex/thnk-11-u3-skill-creator-dispatch`.
+- Current worktree: `.Codex/worktrees/thnk-11-u3-skill-creator-dispatch`.
 - Current pull request:
-  [#2825](https://github.com/thinkwork-ai/thinkwork/pull/2825).
+  [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -44,6 +44,13 @@ status: in_progress
     `tenants/<tenant-slug>/skill-drafts/<draft-id>/`, limited to the draft
     requester or service-auth, locked for non-editable statuses, and recompute
     `current_content_hash` while clearing prior publish markers.
+  - U2 PR [#2825](https://github.com/thinkwork-ai/thinkwork/pull/2825)
+    passed required CI, squash merged as
+    `7d8e9b93c74ec8d671119286ed8565f8dc579a2d`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
+  - U3 started from a clean isolated worktree created from `origin/main` after
+    U2 merge.
 - Local verification:
   - U2 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
@@ -64,6 +71,9 @@ status: in_progress
     `pnpm --filter @thinkwork/web test` (186 files passed; 1403 tests passed).
   - U2 `git diff --check` passed.
   - U2 targeted Prettier check passed for touched API/web/status files.
+  - U3 `pnpm install --frozen-lockfile --offline` completed; local Node 25
+    logged the existing optional `canvas@2.11.2` native fallback/missing
+    `pkg-config` warning, but pnpm returned success.
   - `pnpm install --frozen-lockfile --offline` completed; local Node 25 logged
     the existing optional `canvas@2.11.2` native fallback/missing `pkg-config`
     warning, but pnpm returned success.
@@ -89,7 +99,53 @@ status: in_progress
     were left in `graphql-codegen` output format because applying Prettier
     3.8.2 to those files would rewrite tens of thousands of unrelated
     generated lines.
+  - U3 chat dispatch validation gap recorded after operator check-in: the
+    current branch has not passed the full chat E2E of `/skill-creator` creating
+    a new skill, operator approval publishing it to the Skill Library, and a
+    follow-up chat invoking the newly published skill. The current U3 scope wires
+    command metadata and draft affordances only; the complete loop depends on
+    U4 trust evidence, U5 operator publish, and U6 thread status surfaces.
+  - U3/U4 focused verification after the gap review passed:
+    `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsSkillDetail.test.tsx src/lib/workspace-files-api.test.ts src/lib/skill-creator-command.test.ts src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/components/workbench/useComposerSkillPins.test.tsx`
+    (6 files, 92 tests);
+    `pnpm --filter @thinkwork/api test -- src/lib/skill-creator/command-metadata.test.ts src/lib/skill-creator/upstream-sources.test.ts src/lib/mentions/default-agent-routing.test.ts src/__tests__/workspace-files-handler.test.ts`
+    (4 files, 200 tests); and
+    `pnpm --filter @thinkwork/agentcore-pi test -- tests/skill-drafts.test.ts`
+    (1 file, 3 tests).
+  - Skill Trust adapter hardening passed:
+    `pnpm --filter @thinkwork/api test -- src/lib/skill-trust/catalog-report.test.ts src/lib/skill-trust/skillspector.test.ts`
+    (2 files, 5 tests). The adapter now parses the actual SkillSpector 2.2.3
+    JSON shape (`risk_assessment`, `issues`, `metadata.skillspector_version`) and
+    preserves emitted reports even when SkillSpector exits non-zero for a risky
+    skill.
+  - Post-hardening checks passed: `pnpm --filter @thinkwork/api typecheck`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/react-native-sdk typecheck`,
+    `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+    `pnpm --filter @thinkwork/workspace-defaults typecheck`,
+    `pnpm --filter @thinkwork/web test -- src/lib/workspace-files-api.test.ts`,
+    `pnpm --filter @thinkwork/mobile test` (32 files, 154 tests),
+    `pnpm dlx prettier@3.8.2 --check ...` for the touched trust/web/status
+    files, and `git diff --check`.
+  - The mobile workspace has no `typecheck` script; package-level validation was
+    covered with its Vitest suite.
+  - Rebase onto latest `origin/main` had one conflict in
+    `apps/web/src/components/workbench/useComposerSkillPins.ts` because main
+    added the reserved `/goal` slash option in the same hook. Resolution kept
+    `/goal` in the slash menu and suppressed the menu for reserved
+    `/skill-creator`; focused verification passed:
+    `pnpm --filter @thinkwork/web test -- src/components/workbench/useComposerSkillPins.test.tsx`
+    (17 tests).
+  - Post-rebase verification passed:
+    `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsSkillDetail.test.tsx src/lib/workspace-files-api.test.ts src/lib/skill-creator-command.test.ts src/components/workbench/SpacesWorkbench.test.tsx src/components/workbench/SpacesThreadDetailRoute.test.tsx src/components/workbench/useComposerSkillPins.test.tsx`
+    (6 files, 96 tests);
+    `pnpm --filter @thinkwork/api test -- src/lib/skill-creator/command-metadata.test.ts src/lib/skill-creator/upstream-sources.test.ts src/lib/skill-trust/catalog-report.test.ts src/lib/skill-trust/skillspector.test.ts src/lib/mentions/default-agent-routing.test.ts src/__tests__/workspace-files-handler.test.ts`
+    (6 files, 205 tests);
+    `pnpm --filter @thinkwork/agentcore-pi test -- tests/skill-drafts.test.ts`
+    (3 tests); `pnpm --filter @thinkwork/api typecheck`;
+    `pnpm --filter @thinkwork/web typecheck`; and `git diff --check`.
 - PR / CI:
+  - U3 PR: [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827).
   - U2 PR: [#2825](https://github.com/thinkwork-ai/thinkwork/pull/2825).
   - U1 PR: [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).
   - CI passed so far: CLA, lint, verify, typecheck.

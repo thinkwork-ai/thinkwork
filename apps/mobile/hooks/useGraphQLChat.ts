@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
+  normalizeSkillCreatorCommandContent,
   useCreateThread,
   useNewMessageSubscription,
   useSendMessage,
@@ -284,13 +285,21 @@ export function useGraphQLChat(
         "agentId:",
         agentId,
       );
+      const skillCreatorCommand = normalizeSkillCreatorCommandContent(
+        content.trim(),
+      );
+      const submittedContent = skillCreatorCommand.content;
+      const metadata = skillCreatorCommand.command
+        ? { command: skillCreatorCommand.command }
+        : undefined;
+      const sendOptions = metadata ? { metadata } : undefined;
 
       // Optimistic: show message + typing indicator immediately
       const submitStart = Date.now();
       const optimisticMsg: ChatMessage = {
         id: `optimistic-${Date.now()}`,
         role: "user",
-        content: content.trim(),
+        content: submittedContent,
         timestamp: Date.now(),
         isStreaming: false,
       };
@@ -314,18 +323,23 @@ export function useGraphQLChat(
             title: "Chat",
             channel: "CHAT",
             createdByType: "user",
-            firstMessage: content,
           };
           if (agentId) input.agentId = agentId;
+          if (!metadata) input.firstMessage = submittedContent;
           const thread = await createThread(input);
           setLocalThreadId(thread.id);
+          if (metadata) {
+            await sdkSendMessage(thread.id, submittedContent, sendOptions);
+          }
           logClientPhase({
             source: "mobile-client",
             phase: "client.submit",
             status: "completed",
             threadId: thread.id,
             durationMs: Date.now() - submitStart,
-            detail: "create_thread_first_message",
+            detail: metadata
+              ? "create_thread_send_message"
+              : "create_thread_first_message",
           });
           console.log(
             "[GraphQLChat] Auto-created thread with firstMessage:",
@@ -371,7 +385,7 @@ export function useGraphQLChat(
 
       // Thread already exists — just send.
       try {
-        await sdkSendMessage(activeThreadId, content);
+        await sdkSendMessage(activeThreadId, submittedContent, sendOptions);
         logClientPhase({
           source: "mobile-client",
           phase: "client.submit",

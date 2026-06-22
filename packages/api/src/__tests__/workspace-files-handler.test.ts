@@ -2448,6 +2448,76 @@ describe("catalog export-skill action", () => {
     expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
   });
 
+  it("runs a read-only trust report for a catalog skill", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    const prefix = "tenants/acme/skill-catalog/account-health-review/";
+    const skill = `---
+name: account-health-review
+description: Reviews account health signals and produces a health report.
+allowed-tools:
+  - crm_account_summary
+---
+
+# Account Health Review
+`;
+    s3Mock
+      .on(ListObjectsV2Command, {
+        Prefix: prefix,
+      })
+      .resolves({
+        Contents: [
+          { Key: `${prefix}SKILL.md` },
+          { Key: `${prefix}skill-card.md` },
+          { Key: `${prefix}evals/evals.json` },
+          { Key: `${prefix}BENCHMARK.md` },
+        ],
+      });
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}SKILL.md` })
+      .resolves(body(skill));
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}skill-card.md` })
+      .resolves(body("# Skill card\n"));
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}evals/evals.json` })
+      .resolves(body("[]"));
+    s3Mock
+      .on(GetObjectCommand, { Key: `${prefix}BENCHMARK.md` })
+      .resolves(body("# Benchmark\n"));
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "run-skill-trust",
+          catalog: true,
+          slug: "account-health-review",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.trustReport).toMatchObject({
+      slug: "account-health-review",
+      status: "review",
+      spec: {
+        status: "passed",
+        name: "account-health-review",
+        allowedTools: ["crm_account_summary"],
+      },
+      scanner: { status: "not_configured" },
+      evidence: {
+        skillCard: "present",
+        evalDataset: "present",
+        benchmark: "present",
+        signature: "missing",
+      },
+    });
+    expect(res.body.trustReport.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+    expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
   it("rejects export-skill for non-catalog targets without reading S3", async () => {
     authMockImpl.mockResolvedValue(authOk());
     queueAdminAgentTargetRows();

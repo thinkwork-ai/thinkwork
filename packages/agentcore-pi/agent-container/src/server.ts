@@ -185,6 +185,11 @@ import {
   parsePinnedSkillRefs,
 } from "./runtime/pinned-skills.js";
 import {
+  SKILL_CREATOR_WORKSPACE_SKILL_SLUG,
+  formatSkillCreatorCommandContext,
+  parseSkillCreatorCommandPayload,
+} from "./runtime/skill-drafts.js";
+import {
   formatUserQuestionAnswerContext,
   parsePendingUserQuestions,
   resumeDelegationContextDetails,
@@ -2134,6 +2139,23 @@ export async function handleInvocation(
       emphasized: [...pinnedEmphasizedSlugs],
     });
   }
+  const skillCreatorCommand = parseSkillCreatorCommandPayload(
+    args.payload.skill_creator_command,
+  );
+  if (
+    skillCreatorCommand &&
+    workspaceSkills.some(
+      (skill) => skill.slug === SKILL_CREATOR_WORKSPACE_SKILL_SLUG,
+    )
+  ) {
+    pinnedEmphasizedSlugs.add(SKILL_CREATOR_WORKSPACE_SKILL_SLUG);
+    logStructured({
+      level: "info",
+      event: "skill_creator_command_loaded",
+      tenantId: identity.tenantId,
+      threadId: identity.threadId,
+    });
+  }
 
   // Plan §006 U4 — read mcp.json from the bootstrapped workspace. A
   // malformed file aborts the invocation with a structured 500 (same
@@ -2401,8 +2423,16 @@ export async function handleInvocation(
   const questionAnswerBlock = pendingQuestionContext
     ? formatUserQuestionAnswerContext(pendingQuestionContext)
     : "";
+  const skillCreatorCommandBlock =
+    formatSkillCreatorCommandContext(skillCreatorCommand);
   const withQuestionAnswerContext = (message: string): string =>
     questionAnswerBlock ? `${questionAnswerBlock}\n\n${message}` : message;
+  const withTurnCommandContext = (message: string): string =>
+    withQuestionAnswerContext(
+      skillCreatorCommandBlock
+        ? `${skillCreatorCommandBlock}\n\n${message}`
+        : message,
+    );
   const agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
   const profileChildExtensionFactories = [...bundle.extensionFactories];
   // The current invocation's model id is what pi-ai's Agent will use
@@ -2611,7 +2641,7 @@ export async function handleInvocation(
         // orchestration composes (it owns the final parent prompt); mention
         // detection and baseTask derivation above stay on the raw
         // userMessage so the block never perturbs profile routing.
-        wrapParentMessage: withQuestionAnswerContext,
+        wrapParentMessage: withTurnCommandContext,
         parentRunInput: {
           message: parentProfileChainMessage({
             originalMessage: userMessage,
@@ -2638,7 +2668,7 @@ export async function handleInvocation(
     } else {
       runResult = await runLoop(
         {
-          message: withQuestionAnswerContext(runtimeUserMessage),
+          message: withTurnCommandContext(runtimeUserMessage),
           history: parentHistory,
           // U6 — no prebuilt system prompt; the system-prompt extension's
           // before_agent_start hook composes and sets it for the turn.

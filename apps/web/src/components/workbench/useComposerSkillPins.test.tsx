@@ -96,6 +96,12 @@ describe("useComposerSkillPins", () => {
     expect(result.current.menuOpen).toBe(false);
   });
 
+  it("reserves /skill-creator instead of opening the catalog menu", () => {
+    const { result } = setup("/skill-cre");
+    expect(result.current.menuOpen).toBe(false);
+    expect(result.current.options).toEqual([]);
+  });
+
   it("selecting a skill replaces the /query with an inline /slug token", () => {
     const { result, onChange } = setup("find me /cr");
     act(() => result.current.selectSkill(catalog[0]!));

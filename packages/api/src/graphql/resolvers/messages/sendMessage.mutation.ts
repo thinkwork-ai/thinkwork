@@ -50,6 +50,7 @@ import {
   resolveTenantGoalTokenBudget,
   toRuntimeGoalMode,
 } from "../../../lib/goal-mode.js";
+import { parseSkillCreatorCommandMetadata } from "../../../lib/skill-creator/command-metadata.js";
 
 export const sendMessage = async (
   _parent: any,
@@ -200,6 +201,8 @@ export const sendMessage = async (
         await resolveTenantGoalTokenBudget(db, thread.tenant_id),
       )
     : null;
+  const skillCreatorCommand =
+    parseSkillCreatorCommandMetadata(canonicalMetadata);
   const mentionTargets = await loadThreadMentionTargets({
     tenantId: thread.tenant_id,
     threadId: i.threadId,
@@ -458,6 +461,7 @@ export const sendMessage = async (
         requestedModelId,
         requestedProfileSlug,
         ...(resolvedGoalMode ? { goalMode: resolvedGoalMode } : {}),
+        ...(skillCreatorCommand ? { skillCreatorCommand } : {}),
         ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
         sender: { type: senderType, id: senderId },
       });

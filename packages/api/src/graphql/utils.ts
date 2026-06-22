@@ -380,6 +380,7 @@ export async function invokeChatAgent(payload: {
   pendingQuestionAnswers?: import("../lib/user-questions/runtime-payload.js").PendingQuestionAnswersPayload;
   requestedModelId?: string;
   goalMode?: import("../lib/goal-mode.js").RuntimeGoalMode;
+  skillCreatorCommand?: import("../lib/skill-creator/command-metadata.js").RuntimeSkillCreatorCommandPayload;
 }): Promise<boolean> {
   try {
     const fnArn = await getChatAgentInvokeFnArn();

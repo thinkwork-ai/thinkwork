@@ -2097,6 +2097,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       });
     }
 
+    if (wakeup.source === "chat_message" && payload?.skillCreatorCommand) {
+      Object.assign(agentCorePayload, {
+        skill_creator_command: payload.skillCreatorCommand,
+      });
+    }
+
     if (wakeup.source === "workspace_event" && workspacePayload) {
       Object.assign(agentCorePayload, {
         workspace_run_id: workspacePayload.workspaceRunId,

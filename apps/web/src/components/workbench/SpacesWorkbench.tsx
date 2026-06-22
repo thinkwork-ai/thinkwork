@@ -26,6 +26,7 @@ import {
   appendGoalModeMetadata,
   type ComposerGoalModeIntent,
 } from "@/components/workbench/goal-mode";
+import { normalizeSkillCreatorCommandContent } from "@/lib/skill-creator-command";
 import { useTenant } from "@/context/TenantContext";
 import {
   CreateThreadMutation,
@@ -325,10 +326,12 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     requestedModelId?: string,
     goalMode?: ComposerGoalModeIntent,
   ) {
-    const trimmed =
+    const rawTrimmed =
       goalMode?.action === "start" && goalMode.objective
         ? goalMode.objective.trim()
         : prompt.trim();
+    const skillCreatorCommand = normalizeSkillCreatorCommandContent(rawTrimmed);
+    const trimmed = skillCreatorCommand.content;
     if (!trimmed && files.length === 0) return;
     const targetSpaceId = selectedSpace?.id ?? defaultSpaceId ?? undefined;
     if (!tenantId || (!computerId && !targetSpaceId)) {
@@ -414,6 +417,9 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
       if (pinnedSkills.length > 0) {
         metadata.skills = pinnedSkills.map((slug) => ({ slug }));
+      }
+      if (skillCreatorCommand.command) {
+        metadata.command = skillCreatorCommand.command;
       }
       const turnModelId = requestedModelId ?? selectedModelId;
       if (turnModelId) {

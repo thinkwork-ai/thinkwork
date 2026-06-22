@@ -1,5 +1,6 @@
 type RuntimeEnvKey =
   | "VITE_API_URL"
+  | "VITE_SKILL_TRUST_API_URL"
   | "VITE_GRAPHQL_HTTP_URL"
   | "VITE_GRAPHQL_URL"
   | "VITE_GRAPHQL_WS_URL"
