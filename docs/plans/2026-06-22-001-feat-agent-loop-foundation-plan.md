@@ -1,7 +1,7 @@
 ---
 title: "feat: Add AgentLoop foundation"
 type: feat
-status: active
+status: completed
 date: 2026-06-22
 origin: docs/brainstorms/2026-06-22-thnk-46-agent-loop-definition-requirements.md
 linear_issue: THNK-46
