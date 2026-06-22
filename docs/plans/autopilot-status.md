@@ -6,6 +6,59 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-63 OKF Wiki Navigator Autopilot - 2026-06-22
+
+- Plan:
+  `docs/plans/2026-06-22-002-feat-okf-wiki-navigator-plan.md` (local
+  execution authority in the main checkout until the plan doc is committed).
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: In progress.
+- Current unit: U1 - Surface current wiki retrieval in thread thinking.
+- Current branch: `codex/thnk-63-u1-wiki-trace`.
+- Current worktree: `.Codex/worktrees/thnk-63-u1-wiki-trace`.
+- Current pull request:
+  [#2857](https://github.com/thinkwork-ai/thinkwork/pull/2857).
+- Progress:
+  - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
+    OKF Wiki Navigator plan from the main checkout.
+  - 2026-06-22: U1 started from a clean isolated worktree created from
+    `origin/main` at `16846810a011c6b53b1efbadcacaf5713eb787d0`.
+  - 2026-06-22: Reviewed prior Context Engine/wiki solution notes for governed
+    provider boundaries and wiki section consistency before implementation.
+  - 2026-06-22: U1 implementation added structured
+    `details.wiki_context` metadata to `query_wiki_context`, normalized that
+    metadata into finalized `usage_json.tool_invocations`, appended
+    `wiki_context_result` thread turn events, and rendered wiki result cards in
+    both thread thinking and Settings execution trace.
+  - 2026-06-22: Focused verification passed:
+    `pnpm --dir packages/pi-extensions exec vitest run test/capabilities.test.ts`,
+    `pnpm --dir packages/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts`,
+    `pnpm --filter @thinkwork/web exec vitest run src/components/workbench/TaskThreadView.test.tsx src/components/settings/SettingsActivityExecutionTrace.test.tsx`,
+    `pnpm --dir packages/pi-extensions typecheck`,
+    `pnpm --dir packages/api typecheck`, and
+    `pnpm --filter @thinkwork/web typecheck`.
+  - 2026-06-22: Local formatting used
+    `pnpm dlx prettier@3.6.2 --write <touched files>` because this worktree
+    has no root `prettier` binary available to `pnpm exec prettier`.
+  - 2026-06-22: U1 broader verification passed: `pnpm lint`,
+    `pnpm typecheck`, `git diff --check`, and touched-file formatting
+    verification with `pnpm dlx prettier@3.6.2 --check <touched files>`.
+    `pnpm format:check` remains locally blocked because the repo script calls
+    `prettier`, but this worktree has no root/local `prettier` binary.
+  - 2026-06-22: U1 root `pnpm test` ran the broad suite and exposed a fresh
+    worktree Electron payload issue first; repaired only the generated Electron
+    install payload, then `pnpm --dir apps/desktop test` passed. The rerun of
+    root `pnpm test` completed nearly all suites but one unrelated
+    `artifact-resolvers-payloads` test timed out under broad-suite load; the
+    isolated regression rerun
+    `pnpm --dir packages/api exec vitest run src/__tests__/artifact-resolvers-payloads.test.ts`
+    passed immediately afterward.
+  - 2026-06-22: U1 PR
+    [#2857](https://github.com/thinkwork-ai/thinkwork/pull/2857) opened and CI
+    monitoring started.
+
 ## THNK-46 AgentLoop Foundation Autopilot - 2026-06-22
 
 - Plan: `docs/plans/2026-06-22-001-feat-agent-loop-foundation-plan.md`.
