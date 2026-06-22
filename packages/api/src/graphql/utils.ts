@@ -127,6 +127,12 @@ import {
   linkedTasks,
   linkedTaskEvents,
   goals,
+  agentLoops,
+  agentLoopVersions,
+  agentLoopRuns,
+  agentLoopIterations,
+  agentLoopJudgments,
+  agentLoopEvidence,
 } from "@thinkwork/database-pg/schema";
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
@@ -229,6 +235,12 @@ export {
   linkedTasks,
   linkedTaskEvents,
   goals,
+  agentLoops,
+  agentLoopVersions,
+  agentLoopRuns,
+  agentLoopIterations,
+  agentLoopJudgments,
+  agentLoopEvidence,
   checkAndFireUnblockWakeups,
   generateSlug,
 };

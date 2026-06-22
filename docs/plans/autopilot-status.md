@@ -13,11 +13,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U1 - AgentLoop schema and shared contracts.
-- Current branch: `codex/agent-loop-u1-schema`.
-- Current worktree: `.Codex/worktrees/agent-loop-u1-schema`.
+- Current unit: U2 - AgentLoop GraphQL API and schedule binding.
+- Current branch: `codex/agent-loop-u2-graphql`.
+- Current worktree: `.Codex/worktrees/agent-loop-u2-graphql`.
 - Current pull request:
-  [#2844](https://github.com/thinkwork-ai/thinkwork/pull/2844).
+  [#2847](https://github.com/thinkwork-ai/thinkwork/pull/2847).
 - Progress:
   - 2026-06-22: Read `AGENTS.md`, Compound workflow instructions, and the
     AgentLoop foundation plan.
@@ -59,6 +59,52 @@ status: in_progress
     migration to the dev database with `psql -v ON_ERROR_STOP=1`, then verified
     the scoped drift reporter passed:
     `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0182_agent_loops.sql`.
+  - 2026-06-22: U1 PR
+    [#2844](https://github.com/thinkwork-ai/thinkwork/pull/2844) passed CI on
+    the rebased head, squash merged as
+    `039c7dbe2fd4d9d3ed12501496e812d7af656e07`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `origin/main`.
+  - 2026-06-22: U2 started from a clean isolated worktree created from
+    `origin/main` after U1 merge. Scope: AgentLoop GraphQL CRUD/list/detail,
+    schedule binding through `scheduled_jobs`, and manual run ledger creation.
+  - 2026-06-22: U2 implementation added AgentLoop GraphQL queries/mutations,
+    resolver type mappings, schedule binding helper, manual run ledger creation,
+    generated client GraphQL types, and focused API tests.
+  - 2026-06-22: U2 schedule binding review found a stale-worker edge in the
+    shared job-schedule-manager PUT path. Patched the manager to persist
+    updated `agentId` values and refresh the EventBridge target payload with the
+    effective worker id; added a focused Lambda regression test.
+  - 2026-06-22: U2 codegen passed:
+    `pnpm schema:build`, `pnpm --filter @thinkwork/web codegen`,
+    `pnpm --filter @thinkwork/mobile codegen`, and
+    `pnpm --filter thinkwork-cli codegen`. The attempted
+    `pnpm --filter @thinkwork/cli codegen` filter matched no workspace because
+    the CLI package is named `thinkwork-cli`.
+  - 2026-06-22: U2 focused tests passed:
+    `pnpm --dir packages/api exec vitest run src/lib/agent-loops/schedule-binding.test.ts src/graphql/resolvers/agent-loops/agentLoops.resolver.test.ts src/__tests__/graphql-contract.test.ts`
+    (143 tests) and
+    `pnpm --dir packages/lambda exec vitest run __tests__/job-schedule-manager.test.ts`
+    (1 test).
+  - 2026-06-22: U2 broader local verification passed:
+    `pnpm --dir packages/api typecheck`,
+    `pnpm --dir packages/lambda typecheck`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter thinkwork-cli typecheck`,
+    `pnpm --filter @thinkwork/mobile test`,
+    `pnpm --dir packages/api test`, `pnpm typecheck`, `pnpm lint`, and
+    `pnpm test`. The first full `pnpm test` run exposed an unrelated
+    `src/__tests__/applets-resolvers.test.ts` broad-run timeout/mock-isolation
+    failure; the isolated suite passed immediately afterward and the full root
+    test rerun passed.
+  - 2026-06-22: U2 local formatting verification: `pnpm format:check` remains
+    blocked in this worktree because the root script references `prettier` but
+    no root/local `prettier` binary is installed; `git diff --check` passed,
+    and targeted touched-file Prettier verification passed with
+    `pnpm dlx prettier@3.6.2`.
+  - 2026-06-22: U2 PR
+    [#2847](https://github.com/thinkwork-ai/thinkwork/pull/2847) opened and CI
+    monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 

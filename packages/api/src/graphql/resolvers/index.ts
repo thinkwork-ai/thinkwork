@@ -110,6 +110,15 @@ import {
   linkedTaskTypeResolvers,
 } from "./linked-tasks/index.js";
 import {
+  agentLoopIterationTypeResolvers,
+  agentLoopJudgmentTypeResolvers,
+  agentLoopMutations,
+  agentLoopQueries,
+  agentLoopRunTypeResolvers,
+  agentLoopTypeResolvers,
+  agentLoopVersionTypeResolvers,
+} from "./agent-loops/index.js";
+import {
   spaceChecklistTemplateTypeResolvers,
   spaceMemberTypeResolvers,
   spaceMcpServerTypeResolvers,
@@ -163,6 +172,7 @@ export const queryResolvers: Record<string, any> = {
   ...n8nAgentStepRunQueries,
   ...spaceQueries,
   ...linkedTaskQueries,
+  ...agentLoopQueries,
 };
 
 export const mutationResolvers: Record<string, any> = {
@@ -208,6 +218,7 @@ export const mutationResolvers: Record<string, any> = {
   ...ontologyMutations,
   ...spaceMutations,
   ...linkedTaskMutations,
+  ...agentLoopMutations,
 };
 
 import { agentTypeResolvers } from "./tenant-agent/types.js";
@@ -246,4 +257,9 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   SpaceChecklistTemplate: spaceChecklistTemplateTypeResolvers,
   SpaceMcpServer: spaceMcpServerTypeResolvers,
   LinkedTask: linkedTaskTypeResolvers,
+  AgentLoop: agentLoopTypeResolvers,
+  AgentLoopVersion: agentLoopVersionTypeResolvers,
+  AgentLoopRun: agentLoopRunTypeResolvers,
+  AgentLoopIteration: agentLoopIterationTypeResolvers,
+  AgentLoopJudgment: agentLoopJudgmentTypeResolvers,
 };

@@ -38,6 +38,7 @@
     "@aws-sdk/client-ssm": "^3.917.0",
     "@graphql-yoga/plugin-disable-introspection": "^2.22.0",
     "@smithy/node-http-handler": "^4.5.2",
+    "@thinkwork/agent-loops-core": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/deployment-runner": "workspace:*",
     "@thinkwork/evals-core": "workspace:*",

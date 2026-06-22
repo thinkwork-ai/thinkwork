@@ -92,6 +92,7 @@ interface UpdateJobBody {
   name?: string;
   description?: string;
   prompt?: string;
+  agentId?: string | null;
   spaceId?: string | null;
   config?: Record<string, unknown>;
   scheduleExpression?: string;
@@ -298,6 +299,7 @@ async function updateJob(
   if (body.name !== undefined) updates.name = body.name;
   if (body.description !== undefined) updates.description = body.description;
   if (body.prompt !== undefined) updates.prompt = body.prompt;
+  if (body.agentId !== undefined) updates.agent_id = body.agentId;
   if (body.spaceId !== undefined) updates.space_id = body.spaceId;
   if (body.config !== undefined) updates.config = body.config;
   if (body.timezone !== undefined) updates.timezone = body.timezone;
@@ -319,6 +321,8 @@ async function updateJob(
   // Determine effective enabled state after this update
   const isEnabled = body.enabled !== undefined ? body.enabled : current.enabled;
   const wasEnabled = current.enabled;
+  const effectiveAgentId =
+    body.agentId !== undefined ? body.agentId : current.agent_id;
 
   if (!isEnabled && wasEnabled && current.eb_schedule_name) {
     // Disabling: delete the EB schedule entirely so it stops firing (and stops costing)
@@ -351,7 +355,7 @@ async function updateJob(
         triggerId: current.id,
         triggerType: current.trigger_type,
         tenantId: current.tenant_id,
-        agentId: current.agent_id,
+        agentId: effectiveAgentId,
         spaceId: body.spaceId !== undefined ? body.spaceId : current.space_id,
         routineId: current.routine_id,
         prompt: body.prompt !== undefined ? body.prompt : current.prompt,
@@ -401,7 +405,7 @@ async function updateJob(
         triggerId: current.id,
         triggerType: current.trigger_type,
         tenantId: current.tenant_id,
-        agentId: current.agent_id,
+        agentId: effectiveAgentId,
         spaceId: body.spaceId !== undefined ? body.spaceId : current.space_id,
         routineId: current.routine_id,
         prompt: body.prompt !== undefined ? body.prompt : current.prompt,
@@ -437,7 +441,7 @@ async function updateJob(
         triggerId: current.id,
         triggerType: current.trigger_type,
         tenantId: current.tenant_id,
-        agentId: current.agent_id,
+        agentId: effectiveAgentId,
         spaceId: body.spaceId !== undefined ? body.spaceId : current.space_id,
         routineId: current.routine_id,
         prompt: body.prompt !== undefined ? body.prompt : current.prompt,
