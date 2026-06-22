@@ -15,10 +15,10 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U4/U5 Trust-Gated Publish Backend and Operator Review Surface.
-- Current branch: `codex/thnk-11-u4-trust-runner`.
-- Current worktree: `.Codex/worktrees/thnk-11-u4-trust-runner`.
-- Current pull request: [#2828](https://github.com/thinkwork-ai/thinkwork/pull/2828).
+- Current unit: U6 Chat Skill Creator Draft Registration Bridge.
+- Current branch: `codex/thnk-11-u6-chat-draft-registration`.
+- Current worktree: `.Codex/worktrees/thnk-11-u6-chat-draft-registration`.
+- Current pull request: not opened yet.
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -56,6 +56,26 @@ status: in_progress
     were removed after syncing `main`.
   - U4/U5 started from a clean isolated worktree created from `origin/main`
     after U3 merge.
+  - U4/U5 PR [#2828](https://github.com/thinkwork-ai/thinkwork/pull/2828)
+    passed required CI, squash merged as
+    `d681c959f9d01f19959437e01bfc6c990901fa7e`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
+  - U4/U5 deployment apply completed successfully in GitHub run
+    `27926057677`; follow-on deploy jobs were still running when U6 started.
+  - Localhost E2E after U4/U5 merge/deploy apply used
+    `http://localhost:5175` (not `127.0.0.1`, which does not share the
+    authenticated app origin). Chat thread
+    `71b21242-3bb4-4a0d-9255-be530219a19a` created
+    `codex-e2e-skill-20260621` workspace files, but did not register a Skill
+    Library submitted draft. A follow-up request to submit the draft asked for
+    internal `skillDraftId` and API URL, proving the full create -> register ->
+    publish -> follow-up invocation E2E is still failing at the chat-to-draft
+    handoff.
+  - U6 started from a clean isolated worktree created from `origin/main` after
+    U4/U5 merge. Scope: bridge `/skill-creator` generated workspace skill files
+    into the Skill Library draft approval queue without asking the user for
+    internal IDs or endpoint details, then rerun the full localhost E2E.
 - Local verification:
   - U2 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
@@ -195,6 +215,31 @@ status: in_progress
   - Full chat E2E is still pending as of this entry: create a new skill from
     chat, publish/register it through the Skill Library, then invoke it in a
     follow-up chat and confirm the generated skill was selected.
+  - U6 chat draft registration bridge implemented in
+    `codex/thnk-11-u6-chat-draft-registration`: Pi finalize callbacks now carry
+    `/skill-creator` metadata, `processFinalize` best-effort registers a single
+    changed `skills/<slug>/SKILL.md` folder as a Skill Library draft when the
+    user asked to submit/review, and the runtime prompt no longer asks the
+    agent to obtain `skillDraftId` or API endpoint details.
+  - U6 focused verification passed:
+    `pnpm --filter @thinkwork/api test -- src/lib/skill-creator/auto-submit-draft.test.ts src/lib/chat-finalize/process-finalize.test.ts`
+    (2 files, 41 tests),
+    `pnpm --filter @thinkwork/pi-runtime-core test -- test/finalize-client.test.ts`
+    (5 tests), and
+    `pnpm --filter @thinkwork/agentcore-pi test -- agent-container/tests/skill-drafts.test.ts`
+    (3 tests). U6 touched-package typechecks passed for
+    `@thinkwork/api`, `@thinkwork/pi-runtime-core`, and
+    `@thinkwork/agentcore-pi`.
+  - U6 broader local gates passed: `pnpm lint`, `pnpm typecheck`,
+    `git diff --check`, targeted Prettier 3.8.2 check for touched files, and
+    full `pnpm test`. The first full test run hit the known local Electron
+    extraction race (`EEXIST: ... Electron Framework`); deleting the generated
+    Electron `dist`/`path.txt` artifact and running Electron's installer
+    serially fixed the local package, after which `pnpm --filter
+@thinkwork/desktop test` and full `pnpm test` passed. Root
+    `pnpm format:check` remains unavailable in this checkout because the root
+    package does not install a `prettier` binary; touched files were checked via
+    `pnpm dlx prettier@3.8.2 --check ...`.
 - PR / CI:
   - U4/U5 PR: [#2828](https://github.com/thinkwork-ai/thinkwork/pull/2828).
   - U3 PR: [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827).

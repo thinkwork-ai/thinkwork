@@ -112,6 +112,8 @@ export interface FinalizePayload {
   error_message?: string;
   /** Text workspace file changes captured by the runtime after the turn. */
   changed_files?: ChangedFilePayload[];
+  /** Slash-command metadata carried through Pi finalize for /skill-creator turns. */
+  skill_creator_command?: unknown;
   /** Composed runtime system prompt captured for this turn, when available. */
   composed_system_prompt?: string | null;
   /** Computer task / event context for tasks that originated from the Computer surface. */

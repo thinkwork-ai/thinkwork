@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   promoteNextDeferredWakeup: vi.fn(),
   mergeWorkspaceProjectionReconcileSummary: vi.fn(),
   finalizeN8nAgentStepRun: vi.fn(),
+  autoSubmitSkillCreatorDraft: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -112,6 +113,10 @@ vi.mock("../n8n-agent-step/finalize.js", () => ({
   finalizeN8nAgentStepRun: mocks.finalizeN8nAgentStepRun,
 }));
 
+vi.mock("../skill-creator/auto-submit-draft.js", () => ({
+  autoSubmitSkillCreatorDraft: mocks.autoSubmitSkillCreatorDraft,
+}));
+
 vi.mock("../workspace-projection-snapshot.js", async (importOriginal) => {
   const actual =
     await importOriginal<
@@ -187,6 +192,11 @@ beforeEach(() => {
     action: "no_run",
     runId: null,
     status: null,
+  });
+  mocks.autoSubmitSkillCreatorDraft.mockReset();
+  mocks.autoSubmitSkillCreatorDraft.mockResolvedValue({
+    status: "skipped",
+    reason: "not_skill_creator_turn",
   });
 });
 
@@ -508,6 +518,71 @@ describe("model routed tool evidence helpers", () => {
 });
 
 describe("processFinalize reconcile seam", () => {
+  it("offers reconciled /skill-creator turns to the draft registration bridge", async () => {
+    const reconcileReport = {
+      status: "complete" as const,
+      files: [
+        {
+          path: "skills/codex-e2e/SKILL.md",
+          op: "create" as const,
+          owner: "agent" as const,
+          status: "written" as const,
+          sourceKey: "tenants/acme/agents/default/skills/codex-e2e/SKILL.md",
+          etag: "etag-1",
+        },
+      ],
+    };
+    mocks.reconcileChangedFiles.mockResolvedValueOnce(reconcileReport);
+    mocks.autoSubmitSkillCreatorDraft.mockResolvedValueOnce({
+      status: "submitted",
+      draftId: "draft-1",
+      slug: "codex-e2e",
+      fileCount: 1,
+      currentContentHash: "sha256:test",
+    });
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        cost_owner_user_id: "55555555-5555-5555-5555-555555555555",
+        user_message:
+          "/skill-creator create codex-e2e and submit it for review",
+        duration_ms: 25,
+        status: "completed",
+        changed_files: [
+          {
+            path: "skills/codex-e2e/SKILL.md",
+            op: "create",
+            content: "---\nname: codex-e2e\ndescription: Test.\n---\n",
+          },
+        ],
+        skill_creator_command: {
+          type: "skill_creator",
+          source: "slash_command",
+          command: "/skill-creator",
+        },
+        response: { content: "draft created" },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.autoSubmitSkillCreatorDraft).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      threadTurnId: TURN_ID,
+      requesterUserId: "55555555-5555-5555-5555-555555555555",
+      userMessage: "/skill-creator create codex-e2e and submit it for review",
+      skillCreatorCommand: {
+        type: "skill_creator",
+        source: "slash_command",
+        command: "/skill-creator",
+      },
+      reconcileReport,
+    });
+  });
+
   it("passes the runtime cost owner user id to cost recording and subscriptions", async () => {
     mocks.updateReturning = [
       [

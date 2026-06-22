@@ -141,6 +141,30 @@ describe("buildFinalizeBody", () => {
       },
     });
   });
+
+  it("carries /skill-creator command metadata into the finalize payload", () => {
+    const command = {
+      type: "skill_creator",
+      source: "slash_command",
+      command: "/skill-creator",
+    };
+
+    const body = buildFinalizeBody({
+      payload: {
+        thread_turn_id: "turn-1",
+        message: "/skill-creator create and submit a test skill",
+        skill_creator_command: command,
+      },
+      identity,
+      result: { status: "ok", runResult, latencyMs: 123 },
+      fetchImpl: fetch,
+    });
+
+    expect(body).toMatchObject({
+      user_message: "/skill-creator create and submit a test skill",
+      skill_creator_command: command,
+    });
+  });
 });
 
 describe("postFinalizeCallback", () => {

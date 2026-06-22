@@ -76,6 +76,12 @@ export function buildFinalizeBody(
     status: result.status === "ok" ? "completed" : "failed",
     error_message: errorMessage,
     changed_files: args.changedFiles ?? [],
+    skill_creator_command:
+      payload.skill_creator_command &&
+      typeof payload.skill_creator_command === "object" &&
+      !Array.isArray(payload.skill_creator_command)
+        ? payload.skill_creator_command
+        : undefined,
     computer_id: asString(payload.computer_id) || null,
     computer_task_id: asString(payload.computer_task_id) || null,
     usage: {
