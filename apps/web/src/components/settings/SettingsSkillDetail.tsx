@@ -28,6 +28,7 @@ import { useTenant } from "@/context/TenantContext";
 import {
   exportSkillArchive,
   fixSkillTrustEvidence,
+  getSkillTrustReport,
   runSkillTrustPipeline,
   skillCatalogClient,
   spacesWorkspaceFilesClient,
@@ -372,6 +373,8 @@ function SkillTrustSheetContent({
   skillSlug,
   report,
   running,
+  loadingCached,
+  cacheStale,
   fixingStep,
   fixWarning,
   requestedStepId,
@@ -382,6 +385,8 @@ function SkillTrustSheetContent({
   skillSlug: string;
   report: SkillTrustReport | null;
   running: boolean;
+  loadingCached: boolean;
+  cacheStale: boolean;
   fixingStep: SkillTrustEvidenceFixStepId | null;
   fixWarning: string | null;
   requestedStepId?: SkillTrustStepId | null;
@@ -430,12 +435,24 @@ function SkillTrustSheetContent({
             ) : null}
           </div>
           {report ? (
+            <>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {report.summary}
+              </p>
+              {cacheStale ? (
+                <p className="mt-1 text-xs text-amber-400">
+                  Cached report is stale. Run the pipeline to refresh it for the
+                  current skill contents.
+                </p>
+              ) : null}
+            </>
+          ) : loadingCached ? (
             <p className="mt-1 text-sm text-muted-foreground">
-              {report.summary}
+              Loading cached trust report...
             </p>
           ) : (
             <p className="mt-1 text-sm text-muted-foreground">
-              No trust report has been generated in this session.
+              No cached trust report has been generated yet.
             </p>
           )}
         </div>
@@ -790,7 +807,7 @@ function buildSkillTrustSteps(report: SkillTrustReport): SkillTrustStep[] {
         report.evidence.signature === "invalid"
           ? "signature"
           : undefined,
-      fixLabel: "Generate signature",
+      fixLabel: "Approve and sign",
       disabledReason:
         report.evidence.signature === "missing_signing_config"
           ? "Signing is not configured for this environment, so ThinkWork cannot generate a real skill.oms.sig file."
@@ -951,6 +968,8 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
   const [evalSheetOpen, setEvalSheetOpen] = useState(false);
   const [trustSheetOpen, setTrustSheetOpen] = useState(false);
   const [trustRunning, setTrustRunning] = useState(false);
+  const [trustCacheLoading, setTrustCacheLoading] = useState(false);
+  const [trustCacheStale, setTrustCacheStale] = useState(false);
   const [trustReport, setTrustReport] = useState<SkillTrustReport | null>(null);
   const [requestedTrustStepId, setRequestedTrustStepId] =
     useState<SkillTrustStepId | null>(null);
@@ -978,6 +997,36 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
     "Skill draft";
   const detailTitle = isDraft ? draftTitle : catalogSkillSlug!;
 
+  useEffect(() => {
+    if (!trustSheetOpen || !catalogSkillSlug || trustReport || trustRunning) {
+      return;
+    }
+    let cancelled = false;
+    setTrustCacheLoading(true);
+    void getSkillTrustReport(catalogSkillSlug)
+      .then((cached) => {
+        if (cancelled) return;
+        if (cached.trustReport) {
+          setTrustReport(cached.trustReport);
+          setTrustCacheStale(cached.stale);
+        } else {
+          setTrustCacheStale(false);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const message =
+          err instanceof Error ? err.message : "Unknown trust cache failure.";
+        toast.error(`Could not load the cached trust report: ${message}`);
+      })
+      .finally(() => {
+        if (!cancelled) setTrustCacheLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogSkillSlug, trustReport, trustRunning, trustSheetOpen]);
+
   async function exportSkill() {
     if (!catalogSkillSlug) return;
     setExporting(true);
@@ -1002,6 +1051,7 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
     try {
       const report = await runSkillTrustPipeline(catalogSkillSlug);
       setTrustReport(report);
+      setTrustCacheStale(false);
       setTrustFixWarning(null);
       if (requestedStepId) {
         setRequestedTrustStepId(requestedStepId);
@@ -1062,6 +1112,7 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
     try {
       const result = await fixSkillTrustEvidence(catalogSkillSlug, step);
       setTrustReport(result.trustReport);
+      setTrustCacheStale(false);
       if (result.artifactPath) {
         setEditorRefreshVersion((version) => version + 1);
       }
@@ -1296,6 +1347,8 @@ export function SettingsSkillDetail(props: SettingsSkillDetailProps) {
               skillSlug={catalogSkillSlug!}
               report={trustReport}
               running={trustRunning}
+              loadingCached={trustCacheLoading}
+              cacheStale={trustCacheStale}
               fixingStep={trustFixingStep}
               fixWarning={trustFixWarning}
               requestedStepId={requestedTrustStepId}

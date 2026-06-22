@@ -117,6 +117,17 @@ export interface SkillTrustEvidenceFixResult {
   indexWarning?: string;
 }
 
+export interface SkillTrustCacheResult {
+  slug: string;
+  trustReport: SkillTrustReport | null;
+  cached: boolean;
+  stale: boolean;
+  trustReportContentSha?: string;
+  trustReportPipelineVersion?: string;
+  currentContentSha?: string;
+  updatedAt?: string;
+}
+
 export interface ImportSkillArchiveResult {
   slug: string;
   status: "created" | "updated";
@@ -160,7 +171,13 @@ interface WorkspaceFilesResponse {
   code?: string;
   indexWarning?: string;
   evalDatasetWarning?: string;
-  trustReport?: SkillTrustReport;
+  trustReport?: SkillTrustReport | null;
+  cached?: boolean;
+  stale?: boolean;
+  trustReportContentSha?: string;
+  trustReportPipelineVersion?: string;
+  currentContentSha?: string;
+  updatedAt?: string;
   fixedStep?: SkillTrustEvidenceFixResult["fixedStep"];
   artifactPath?: string;
   prerequisite?: string;
@@ -336,6 +353,36 @@ export async function runSkillTrustPipeline(
     throw new Error("Skill trust response was missing a report.");
   }
   return data.trustReport;
+}
+
+export async function getSkillTrustReport(
+  slug: string,
+): Promise<SkillTrustCacheResult> {
+  const skillTrustApiUrl = readRuntimeEnv("VITE_SKILL_TRUST_API_URL");
+  const data = await request(
+    {
+      action: "get-skill-trust",
+      catalog: true,
+      slug,
+    },
+    skillTrustApiUrl ? { baseUrl: skillTrustApiUrl } : {},
+  );
+  return {
+    slug: data.slug ?? slug,
+    trustReport: data.trustReport ?? null,
+    cached: data.cached === true,
+    stale: data.stale === true,
+    ...(data.trustReportContentSha
+      ? { trustReportContentSha: data.trustReportContentSha }
+      : {}),
+    ...(data.trustReportPipelineVersion
+      ? { trustReportPipelineVersion: data.trustReportPipelineVersion }
+      : {}),
+    ...(data.currentContentSha
+      ? { currentContentSha: data.currentContentSha }
+      : {}),
+    ...(data.updatedAt ? { updatedAt: data.updatedAt } : {}),
+  };
 }
 
 export async function fixSkillTrustEvidence(

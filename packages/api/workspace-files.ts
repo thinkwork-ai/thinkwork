@@ -85,6 +85,7 @@ import {
   eq,
   sql,
   spaces,
+  skillCatalog,
   skillDraftEvents,
   skillDrafts,
   tenantMembers,
@@ -107,7 +108,10 @@ import {
   CatalogUninstallError,
   uninstallCatalogSkill,
 } from "./src/lib/catalog-uninstall.js";
-import { computeCatalogSkillShaBySlug } from "./src/lib/catalog-skill-sha.js";
+import {
+  computeCatalogSkillSha,
+  computeCatalogSkillShaBySlug,
+} from "./src/lib/catalog-skill-sha.js";
 import {
   archiveSkillCandidateDataset,
   archiveSkillDatasetIfExists,
@@ -130,11 +134,19 @@ import {
   validateSkillDraftFiles,
   validateSkillDraftPath,
 } from "./src/lib/skill-drafts/files.js";
-import { buildCatalogSkillTrustReport } from "./src/lib/skill-trust/catalog-report.js";
+import {
+  buildCatalogSkillTrustReport,
+  type SkillTrustInputFile,
+  type SkillTrustPipelineReport,
+} from "./src/lib/skill-trust/catalog-report.js";
 import {
   fixSkillTrustEvidence,
   type SkillTrustEvidenceFixStepId,
 } from "./src/lib/skill-trust/evidence-fixes.js";
+import {
+  createConfiguredSkillTrustSigner,
+  signatureStatusForFiles,
+} from "./src/lib/skill-trust/signing.js";
 import { runSkillSpectorForFiles } from "./src/lib/skill-trust/skillspector.js";
 import {
   CATALOG_SKILL_ARCHIVE_LIMITS,
@@ -193,6 +205,8 @@ const CORS_HEADERS = {
     "Content-Type, Authorization, x-api-key, x-tenant-id, x-principal-id",
   "Access-Control-Max-Age": "3600",
 };
+
+const SKILL_TRUST_PIPELINE_VERSION = "thinkwork-skill-trust-v1";
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResult {
   return {
@@ -1477,7 +1491,7 @@ async function handleRunSkillTrust(
   deps: HandlerDeps,
   slug: string | undefined,
 ): Promise<APIGatewayProxyResult> {
-  const { target } = deps;
+  const { target, tenantId } = deps;
   if (target.kind !== "catalog") {
     return json(400, {
       ok: false,
@@ -1498,17 +1512,79 @@ async function handleRunSkillTrust(
   if (!loaded.ok) return loaded.response;
 
   const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
+  const signer = createConfiguredSkillTrustSigner();
   const trustReport = buildCatalogSkillTrustReport({
     slug,
     files: loaded.files,
     scanner: scan.scanner,
     scannerFindings: scan.findings,
+    signature: await signatureStatusForFiles({
+      slug,
+      files: loaded.files,
+      signer,
+    }),
+  });
+  const catalogContentSha = catalogContentShaForTrustFiles(loaded.files);
+  await persistSkillTrustReport({
+    tenantId,
+    slug,
+    report: trustReport,
+    catalogContentSha,
+    signedByUserId: deps.userId,
   });
 
   return json(200, {
     ok: true,
     slug,
     trustReport,
+    cached: false,
+    stale: false,
+    trustReportContentSha: catalogContentSha,
+    trustReportPipelineVersion: SKILL_TRUST_PIPELINE_VERSION,
+  });
+}
+
+async function handleGetSkillTrust(
+  deps: HandlerDeps,
+  slug: string | undefined,
+): Promise<APIGatewayProxyResult> {
+  const { target, tenantId } = deps;
+  if (target.kind !== "catalog") {
+    return json(400, {
+      ok: false,
+      code: "unsupported_target",
+      error: "get-skill-trust requires the skill catalog target",
+    });
+  }
+  if (!isCatalogArchiveSlug(slug)) {
+    return json(400, {
+      ok: false,
+      code: "invalid_skill_slug",
+      error:
+        "slug is required for get-skill-trust and must be a portable Agent Skills name.",
+    });
+  }
+
+  const cached = await loadCachedSkillTrustReport(tenantId, slug);
+  if (!cached) {
+    return json(200, {
+      ok: true,
+      slug,
+      trustReport: null,
+      cached: false,
+      stale: false,
+    });
+  }
+  return json(200, {
+    ok: true,
+    slug,
+    trustReport: cached.trustReport,
+    cached: true,
+    stale: cached.stale,
+    trustReportContentSha: cached.trustReportContentSha,
+    trustReportPipelineVersion: cached.trustReportPipelineVersion,
+    currentContentSha: cached.currentContentSha,
+    updatedAt: cached.updatedAt,
   });
 }
 
@@ -1548,15 +1624,24 @@ async function handleFixSkillTrustEvidence(
   if (!loaded.ok) return loaded.response;
 
   const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
+  const signer = createConfiguredSkillTrustSigner();
   const result = await fixSkillTrustEvidence({
     slug,
     files: loaded.files,
     step,
     scanner: scan.scanner,
     scannerFindings: scan.findings,
+    signer,
   });
 
   if (result.status === "invalid_skill") {
+    await persistSkillTrustReport({
+      tenantId,
+      slug,
+      report: result.trustReport,
+      catalogContentSha: catalogContentShaForTrustFiles(loaded.files),
+      signedByUserId: deps.userId,
+    });
     return json(422, {
       ok: false,
       code: "invalid_skill_md",
@@ -1569,6 +1654,13 @@ async function handleFixSkillTrustEvidence(
   }
 
   if (!result.artifact) {
+    await persistSkillTrustReport({
+      tenantId,
+      slug,
+      report: result.trustReport,
+      catalogContentSha: catalogContentShaForTrustFiles(loaded.files),
+      signedByUserId: deps.userId,
+    });
     return json(200, {
       ok: true,
       slug,
@@ -1599,6 +1691,13 @@ async function handleFixSkillTrustEvidence(
     if (isPreconditionFailed(err)) {
       const refreshed = await buildSkillTrustReportFromCatalog(target, slug);
       if (!refreshed.ok) return refreshed.response;
+      await persistSkillTrustReport({
+        tenantId,
+        slug,
+        report: refreshed.trustReport,
+        catalogContentSha: refreshed.catalogContentSha,
+        signedByUserId: deps.userId,
+      });
       return json(200, {
         ok: true,
         slug,
@@ -1627,6 +1726,16 @@ async function handleFixSkillTrustEvidence(
     slug,
     "fix-skill-trust-evidence",
   );
+  await persistSkillTrustReport({
+    tenantId,
+    slug,
+    report: result.trustReport,
+    catalogContentSha: catalogContentShaForTrustFiles([
+      ...loaded.files,
+      { path: result.artifact.path, content: result.artifact.content },
+    ]),
+    signedByUserId: deps.userId,
+  });
 
   return json(200, {
     ok: true,
@@ -1722,16 +1831,98 @@ async function buildSkillTrustReportFromCatalog(
 ) {
   const loaded = await loadCatalogSkillTrustFiles(target, slug);
   if (!loaded.ok) return loaded;
+  const signer = createConfiguredSkillTrustSigner();
   const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
   return {
     ok: true as const,
+    catalogContentSha: catalogContentShaForTrustFiles(loaded.files),
     trustReport: buildCatalogSkillTrustReport({
       slug,
       files: loaded.files,
       scanner: scan.scanner,
       scannerFindings: scan.findings,
+      signature: await signatureStatusForFiles({
+        slug,
+        files: loaded.files,
+        signer,
+      }),
     }),
   };
+}
+
+function catalogContentShaForTrustFiles(files: SkillTrustInputFile[]): string {
+  return computeCatalogSkillSha(
+    files.map((file) => ({ relativePath: file.path, content: file.content })),
+  );
+}
+
+async function loadCachedSkillTrustReport(tenantId: string, slug: string) {
+  const [row] = await db
+    .select({
+      contentSha: skillCatalog.content_sha,
+      trustReport: skillCatalog.trust_report,
+      trustReportContentSha: skillCatalog.trust_report_content_sha,
+      trustReportPipelineVersion: skillCatalog.trust_report_pipeline_version,
+      trustReportUpdatedAt: skillCatalog.trust_report_updated_at,
+    })
+    .from(skillCatalog)
+    .where(
+      and(eq(skillCatalog.tenant_id, tenantId), eq(skillCatalog.slug, slug)),
+    )
+    .limit(1);
+  if (!row?.trustReport || !row.trustReportContentSha) return null;
+  const stale =
+    row.contentSha !== row.trustReportContentSha ||
+    row.trustReportPipelineVersion !== SKILL_TRUST_PIPELINE_VERSION;
+  return {
+    trustReport: row.trustReport as SkillTrustPipelineReport,
+    stale,
+    currentContentSha: row.contentSha,
+    trustReportContentSha: row.trustReportContentSha,
+    trustReportPipelineVersion: row.trustReportPipelineVersion,
+    updatedAt:
+      row.trustReportUpdatedAt instanceof Date
+        ? row.trustReportUpdatedAt.toISOString()
+        : row.trustReportUpdatedAt,
+  };
+}
+
+async function persistSkillTrustReport(input: {
+  tenantId: string;
+  slug: string;
+  report: SkillTrustPipelineReport;
+  catalogContentSha: string;
+  signedByUserId: string | null;
+}) {
+  const signatureVerified = input.report.evidence.signature === "verified";
+  await db
+    .update(skillCatalog)
+    .set({
+      trust_report: input.report,
+      trust_report_content_sha: input.catalogContentSha,
+      trust_report_pipeline_version: SKILL_TRUST_PIPELINE_VERSION,
+      trust_report_updated_at: sql`now()`,
+      signature_status: input.report.evidence.signature,
+      signature_payload: {
+        artifactPath: input.report.artifactPaths.signature ?? null,
+        signedPayloadHash: input.report.signedPayloadHash ?? null,
+        status: input.report.evidence.signature,
+      },
+      signed_content_sha: signatureVerified ? input.catalogContentSha : null,
+      signed_payload_hash: signatureVerified
+        ? (input.report.signedPayloadHash ?? null)
+        : null,
+      signed_at: signatureVerified ? sql`now()` : null,
+      signed_by_user_id:
+        signatureVerified && input.signedByUserId ? input.signedByUserId : null,
+      updated_at: sql`now()`,
+    })
+    .where(
+      and(
+        eq(skillCatalog.tenant_id, input.tenantId),
+        eq(skillCatalog.slug, input.slug),
+      ),
+    );
 }
 
 function parseSkillTrustEvidenceFixStep(
@@ -4195,6 +4386,7 @@ export async function handler(
       "delete",
       "export-skill",
       "fix-skill-trust-evidence",
+      "get-skill-trust",
       "import-skill-draft",
       "import-skill",
       "run-skill-trust",
@@ -4295,6 +4487,9 @@ export async function handler(
       }
       case "fix-skill-trust-evidence": {
         return await handleFixSkillTrustEvidence(deps, body.slug, body.step);
+      }
+      case "get-skill-trust": {
+        return await handleGetSkillTrust(deps, body.slug);
       }
       case "run-skill-trust": {
         return await handleRunSkillTrust(deps, body.slug);

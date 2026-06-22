@@ -98,6 +98,21 @@ export const skillCatalog = pgTable(
     tags: text("tags").array(),
     /** computeCatalogSkillSha() of the skill's catalog files. Display-only. */
     content_sha: text("content_sha").notNull(),
+    /** Cached trust pipeline report for the content_sha that produced it. */
+    trust_report: jsonb("trust_report"),
+    trust_report_content_sha: text("trust_report_content_sha"),
+    trust_report_pipeline_version: text("trust_report_pipeline_version"),
+    trust_report_updated_at: timestamp("trust_report_updated_at", {
+      withTimezone: true,
+    }),
+    signature_status: text("signature_status"),
+    signature_payload: jsonb("signature_payload"),
+    signed_content_sha: text("signed_content_sha"),
+    signed_payload_hash: text("signed_payload_hash"),
+    signed_at: timestamp("signed_at", { withTimezone: true }),
+    signed_by_user_id: uuid("signed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

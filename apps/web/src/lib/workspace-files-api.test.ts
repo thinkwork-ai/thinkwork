@@ -11,6 +11,7 @@ import {
   createPrefixedWorkspaceClient,
   exportSkillArchive,
   fixSkillTrustEvidence,
+  getSkillTrustReport,
   importSkillArchive,
   importSkillArchiveAsDraft,
   runSkillTrustPipeline,
@@ -304,6 +305,73 @@ describe("runSkillTrustPipeline", () => {
     await expect(runSkillTrustPipeline("missing")).rejects.toThrow(
       "missing a report",
     );
+  });
+});
+
+describe("getSkillTrustReport", () => {
+  it("requests the cached catalog trust report", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "account-health-review",
+      cached: true,
+      stale: false,
+      trustReportContentSha: "catalog-sha",
+      trustReportPipelineVersion: "thinkwork-skill-trust-v1",
+      trustReport: {
+        slug: "account-health-review",
+        contentHash: "a".repeat(64),
+        generatedAt: "2026-06-21T00:00:00.000Z",
+        status: "passed",
+        summary: "Cached report.",
+        spec: {
+          status: "passed",
+          allowedTools: [],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "present",
+          evalDataset: "present",
+          benchmark: "present",
+          signature: "missing",
+        },
+        artifactPaths: { evals: [] },
+      },
+    });
+
+    const result = await getSkillTrustReport("account-health-review");
+
+    expect(lastBody()).toEqual({
+      action: "get-skill-trust",
+      catalog: true,
+      slug: "account-health-review",
+    });
+    expect(result.cached).toBe(true);
+    expect(result.stale).toBe(false);
+    expect(result.trustReport?.summary).toBe("Cached report.");
+  });
+
+  it("returns an empty cache result without a report", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "missing",
+      cached: false,
+      stale: false,
+      trustReport: null,
+    });
+
+    const result = await getSkillTrustReport("missing");
+
+    expect(result.trustReport).toBeNull();
+    expect(result.cached).toBe(false);
   });
 });
 

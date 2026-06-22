@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   exportSkillArchive: vi.fn(),
   fixSkillTrustEvidence: vi.fn(),
+  getSkillTrustReport: vi.fn(),
   getSkillCatalogFile: vi.fn(),
   runSkillTrustPipeline: vi.fn(),
   setHeader: vi.fn(),
@@ -82,6 +83,7 @@ vi.mock("@/lib/workspace-files-api", async (importOriginal) => {
     ...actual,
     exportSkillArchive: mocks.exportSkillArchive,
     fixSkillTrustEvidence: mocks.fixSkillTrustEvidence,
+    getSkillTrustReport: mocks.getSkillTrustReport,
     runSkillTrustPipeline: mocks.runSkillTrustPipeline,
     skillCatalogClient: {
       ...actual.skillCatalogClient,
@@ -392,6 +394,13 @@ beforeEach(() => {
       skillCard: "skill-card.md",
       evals: [],
     },
+  });
+  mocks.getSkillTrustReport.mockReset();
+  mocks.getSkillTrustReport.mockResolvedValue({
+    slug: "web-research",
+    trustReport: null,
+    cached: false,
+    stale: false,
   });
   mocks.fixSkillTrustEvidence.mockReset();
   mocks.fixSkillTrustEvidence.mockResolvedValue({
@@ -911,6 +920,59 @@ describe("SettingsSkillDetail eval panel", () => {
     ).toBeTruthy();
     expect(screen.getByText("skill-card.md")).toBeTruthy();
     expect(screen.getByText("Current state")).toBeTruthy();
+  });
+
+  it("loads a stale cached trust report when the trust sheet opens", async () => {
+    mocks.getSkillTrustReport.mockResolvedValueOnce({
+      slug: "web-research",
+      cached: true,
+      stale: true,
+      trustReportContentSha: "old-sha",
+      currentContentSha: "new-sha",
+      trustReport: {
+        slug: "web-research",
+        contentHash: "a".repeat(64),
+        generatedAt: "2026-06-21T00:00:00.000Z",
+        status: "passed",
+        summary: "Cached SkillSpector passed.",
+        spec: {
+          status: "passed",
+          name: "web-research",
+          description: "Researches the web.",
+          allowedTools: ["web_search"],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "present",
+          evalDataset: "present",
+          benchmark: "present",
+          signature: "missing",
+        },
+        artifactPaths: {
+          skillCard: "skill-card.md",
+          evals: ["evals/smoke.json"],
+          benchmark: "BENCHMARK.md",
+        },
+      },
+    });
+    render(<SettingsSkillDetail skillSlug="web-research" />);
+    await openTrustSheet();
+
+    await waitFor(() =>
+      expect(mocks.getSkillTrustReport).toHaveBeenCalledWith("web-research"),
+    );
+    expect(screen.getByText("Cached SkillSpector passed.")).toBeTruthy();
+    expect(screen.getByText(/Cached report is stale/i)).toBeTruthy();
+    expect(mocks.runSkillTrustPipeline).not.toHaveBeenCalled();
   });
 
   it("generates a missing skill card and refreshes the trust report", async () => {

@@ -6,6 +6,57 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
+
+- Plan: `docs/plans/2026-06-22-001-feat-skill-trust-evidence-fixes-plan.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: In progress.
+- Current unit: Trust report cache + configured signing.
+- Current branch: `codex/skill-trust-cache-signing`.
+- Current worktree: `.Codex/worktrees/skill-trust-cache-signing`.
+- Current pull request:
+  [#2863](https://github.com/thinkwork-ai/thinkwork/pull/2863).
+- Progress:
+  - 2026-06-22: Added `skill_catalog` trust report cache and signature
+    metadata columns plus manual migration
+    `packages/database-pg/drizzle/0184_skill_catalog_trust_cache.sql`.
+  - 2026-06-22: Applied migration `0184_skill_catalog_trust_cache.sql` to the
+    dev Aurora database with `psql -v ON_ERROR_STOP=1`; verified all new trust
+    and signature columns are present on `public.skill_catalog`.
+  - 2026-06-22: Added configured signing support gated by
+    `SKILL_TRUST_SIGNING_SECRET`. Without signing configuration the Signature
+    step reports `missing_signing_config`; with configuration the operator
+    action writes a verifiable `skill.oms.sig` artifact and persists signature
+    metadata.
+  - 2026-06-22: Added `get-skill-trust` to return cached reports without
+    rerunning SkillSpector and mark reports stale when catalog content or
+    pipeline version changes.
+  - 2026-06-22: Updated Skill Detail trust sheet to load cached reports when
+    opened, show stale cache messaging, and present Signature action as
+    "Approve and sign".
+  - 2026-06-22: Focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/skill-trust/evidence-fixes.test.ts src/lib/skill-trust/catalog-report.test.ts src/__tests__/workspace-files-handler.test.ts`,
+    `pnpm --filter @thinkwork/web exec vitest run src/lib/workspace-files-api.test.ts src/components/settings/SettingsSkillDetail.test.tsx`,
+    `pnpm --filter @thinkwork/api typecheck`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/database-pg typecheck`,
+    targeted Prettier check, and `git diff --check`.
+  - 2026-06-22: Local dev is running for manual verification:
+    web at `http://localhost:5175` and local trust API wrapper at
+    `http://127.0.0.1:8787` with
+    `VITE_SKILL_TRUST_API_URL=http://127.0.0.1:8787`.
+  - 2026-06-22: Direct authenticated cURL validation is blocked because the
+    local CLI cached Cognito ID token expired at `2026-06-22 11:38:37 CDT`.
+    Browser automation also crashed opening the local page. Next action is to
+    refresh browser auth on `localhost:5175`, run the trust pipeline, close and
+    reopen the trust sheet to confirm cached report loading, then click
+    Signature -> "Approve and sign" to verify signature generation.
+  - 2026-06-22: PR
+    [#2863](https://github.com/thinkwork-ai/thinkwork/pull/2863) opened and CI
+    monitoring started.
+
 ## THNK-63 OKF Wiki Navigator Autopilot - 2026-06-22
 
 - Plan:

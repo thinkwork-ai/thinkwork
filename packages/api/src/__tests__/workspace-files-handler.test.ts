@@ -165,6 +165,28 @@ vi.mock("../graphql/utils.js", () => {
       event_type: tableCol("skill_draft_events.event_type"),
       created_at: tableCol("skill_draft_events.created_at"),
     },
+    skillCatalog: {
+      tenant_id: tableCol("skill_catalog.tenant_id"),
+      slug: tableCol("skill_catalog.slug"),
+      content_sha: tableCol("skill_catalog.content_sha"),
+      trust_report: tableCol("skill_catalog.trust_report"),
+      trust_report_content_sha: tableCol(
+        "skill_catalog.trust_report_content_sha",
+      ),
+      trust_report_pipeline_version: tableCol(
+        "skill_catalog.trust_report_pipeline_version",
+      ),
+      trust_report_updated_at: tableCol(
+        "skill_catalog.trust_report_updated_at",
+      ),
+      signature_status: tableCol("skill_catalog.signature_status"),
+      signature_payload: tableCol("skill_catalog.signature_payload"),
+      signed_content_sha: tableCol("skill_catalog.signed_content_sha"),
+      signed_payload_hash: tableCol("skill_catalog.signed_payload_hash"),
+      signed_at: tableCol("skill_catalog.signed_at"),
+      signed_by_user_id: tableCol("skill_catalog.signed_by_user_id"),
+      updated_at: tableCol("skill_catalog.updated_at"),
+    },
     tenants: {
       id: tableCol("tenants.id"),
       slug: tableCol("tenants.slug"),
@@ -2675,8 +2697,77 @@ allowed-tools:
       },
     });
     expect(res.body.trustReport.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(dbUpdateCalls.at(-1)).toMatchObject({
+      trust_report_content_sha: expect.stringMatching(/^[a-f0-9]{64}$/),
+      trust_report_pipeline_version: "thinkwork-skill-trust-v1",
+      signature_status: "missing",
+    });
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
     expect(s3Mock.commandCalls(DeleteObjectCommand)).toHaveLength(0);
+  });
+
+  it("returns a cached stale trust report without rerunning SkillSpector", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueAdminCatalogTargetRows();
+    pushDbRows([
+      {
+        contentSha: "new-catalog-sha",
+        trustReportContentSha: "old-catalog-sha",
+        trustReportPipelineVersion: "thinkwork-skill-trust-v1",
+        trustReportUpdatedAt: new Date("2026-06-22T12:00:00.000Z"),
+        trustReport: {
+          slug: "account-health-review",
+          contentHash: "a".repeat(64),
+          generatedAt: "2026-06-21T00:00:00.000Z",
+          status: "passed",
+          summary: "Cached report.",
+          spec: {
+            status: "passed",
+            allowedTools: [],
+            errors: [],
+          },
+          scanner: { status: "completed" },
+          severityCounts: {
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            info: 0,
+          },
+          findings: [],
+          evidence: {
+            skillCard: "present",
+            evalDataset: "present",
+            benchmark: "present",
+            signature: "missing",
+          },
+          artifactPaths: { evals: [] },
+        },
+      },
+    ]);
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "get-skill-trust",
+          catalog: true,
+          slug: "account-health-review",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      cached: true,
+      stale: true,
+      currentContentSha: "new-catalog-sha",
+      trustReportContentSha: "old-catalog-sha",
+      trustReport: {
+        summary: "Cached report.",
+      },
+    });
+    expect(s3Mock.commandCalls(ListObjectsV2Command)).toHaveLength(0);
   });
 
   it("generates missing skill card evidence for a catalog skill", async () => {
