@@ -611,6 +611,7 @@ export const SettingsAgentLoopRunQuery = gql`
         slug
       }
       agentLoopVersionId
+      threadId
       agentLoopVersion {
         id
         versionNumber
@@ -649,6 +650,7 @@ export const SettingsAgentLoopRunQuery = gql`
         goalModeAction
         agentWakeupRequestId
         threadTurnId
+        threadId
         inputSummary
         outputSummary
         startedAt
@@ -754,6 +756,7 @@ export const SettingsTriggerAgentLoopRunMutation = gql`
     triggerAgentLoopRun(input: $input) {
       id
       agentLoopId
+      threadId
       status
       triggerFamily
       triggerSource

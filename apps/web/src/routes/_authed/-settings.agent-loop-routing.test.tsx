@@ -26,14 +26,13 @@ describe("AgentLoop settings routing", () => {
     );
   });
 
-  it("moves Settings navigation from Automations to AgentLoops", () => {
+  it("keeps the Settings navigation label user-facing while using AgentLoop routes", () => {
     const nav = source("src/components/settings/settings-nav.tsx");
-    expect(nav).toContain('label: "AgentLoops"');
+    expect(nav).toContain('label: "Automations"');
     expect(nav).toContain('to: "/settings/agent-loops"');
-    expect(nav).not.toContain('label: "Automations"');
   });
 
-  it("redirects the retired Settings Automations index to AgentLoops", () => {
+  it("redirects the legacy Settings Automations index to the AgentLoop route", () => {
     const route = source("src/routes/_authed/settings.automations.index.tsx");
     expect(route).toContain('redirect({ to: "/settings/agent-loops" })');
     expect(route).not.toContain("SettingsAutomations");

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   updateValues: vi.fn(),
   requireAdminOrServiceCaller: vi.fn(),
   resolveCallerUserId: vi.fn(),
+  ensureThreadForWork: vi.fn(),
 }));
 
 let selectCall = 0;
@@ -70,6 +71,16 @@ vi.mock("../../utils.js", () => ({
     enabled: "agent_loops.enabled",
     lifecycle_status: "agent_loops.lifecycle_status",
   },
+  agents: {
+    id: "agents.id",
+    tenant_id: "agents.tenant_id",
+    runtime_config: "agents.runtime_config",
+  },
+  spaces: {
+    id: "spaces.id",
+    tenant_id: "spaces.tenant_id",
+    status: "spaces.status",
+  },
   agentLoopVersions: {
     id: "agent_loop_versions.id",
     version_status: "agent_loop_versions.version_status",
@@ -106,6 +117,10 @@ vi.mock("../core/resolve-auth-user.js", () => ({
   resolveCallerUserId: mocks.resolveCallerUserId,
 }));
 
+vi.mock("../../../lib/thread-helpers.js", () => ({
+  ensureThreadForWork: mocks.ensureThreadForWork,
+}));
+
 // eslint-disable-next-line import/first
 import { triggerAgentLoopRun } from "./triggerAgentLoopRun.mutation.js";
 
@@ -128,6 +143,11 @@ beforeEach(() => {
   mocks.updateValues.mockReset();
   mocks.requireAdminOrServiceCaller.mockReset();
   mocks.resolveCallerUserId.mockReset().mockResolvedValue("user-1");
+  mocks.ensureThreadForWork.mockReset().mockResolvedValue({
+    threadId: "thread-1",
+    identifier: "AUTO-1",
+    number: 1,
+  });
 });
 
 describe("AgentLoop resolvers", () => {
@@ -198,6 +218,13 @@ describe("AgentLoop resolvers", () => {
       }
       if (call === 3) return [];
       if (call === 4) {
+        return [{ runtimeConfig: { defaultSpaceId: "space-1" } }];
+      }
+      if (call === 5) {
+        return [{ id: "space-1" }];
+      }
+      if (call === 6) return [];
+      if (call === 7) {
         return [
           {
             id: "run-1",
@@ -272,6 +299,8 @@ describe("AgentLoop resolvers", () => {
         source: "agent_loop",
         idempotency_key: "agent-loop:run-1:iteration:1",
         payload: expect.objectContaining({
+          threadId: "thread-1",
+          spaceId: "space-1",
           goalMode: expect.objectContaining({
             enabled: true,
             action: "start",
@@ -284,6 +313,14 @@ describe("AgentLoop resolvers", () => {
         }),
       }),
     );
+    expect(mocks.ensureThreadForWork).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      spaceId: "space-1",
+      userId: "user-1",
+      title: "Automation: Loop",
+      channel: "schedule",
+    });
     expect(mocks.updateValues).toHaveBeenCalledWith(
       expect.objectContaining({
         last_run_id: "run-1",

@@ -283,7 +283,7 @@ export function SettingsAgents() {
         description="Configure the default Agent and reusable task profiles delegated through Pi subagents."
       />
 
-      <AgentConfigSection />
+      <AgentConfigSection spaces={(catalog?.spaces ?? []) as SpaceOption[]} />
 
       <SettingsSection
         label="Agent Profiles"
@@ -480,7 +480,7 @@ function ProfileWorkspaceSection({ profileSlug }: { profileSlug: string }) {
   );
 }
 
-function AgentConfigSection() {
+function AgentConfigSection({ spaces }: { spaces: SpaceOption[] }) {
   const { tenantId } = useTenant();
   const [agentResult] = useQuery({
     query: SettingsTenantAgentQuery,
@@ -504,6 +504,8 @@ function AgentConfigSection() {
 
   const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
   const [model, setModel] = useState<string | null>(null);
+  const [runtimeConfig, setRuntimeConfig] = useState<JsonRecord>({});
+  const [defaultSpaceId, setDefaultSpaceId] = useState<string | null>(null);
   const [goalTokenBudget, setGoalTokenBudget] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -511,8 +513,11 @@ function AgentConfigSection() {
 
   useEffect(() => {
     if (agent) {
+      const config = parseJson<JsonRecord>(agent.runtimeConfig, {});
       setRuntime(agent.runtime);
       setModel(agent.model ?? null);
+      setRuntimeConfig(config);
+      setDefaultSpaceId(stringOrNull(config.defaultSpaceId));
     }
   }, [agent]);
 
@@ -529,11 +534,22 @@ function AgentConfigSection() {
   async function persist(input: {
     runtime?: AgentRuntime;
     model?: string | null;
+    runtimeConfig?: JsonRecord;
   }) {
     if (!tenantId) return;
     setErrorMsg(null);
     const result = await save({ tenantId, input });
     if (result.error) setErrorMsg(result.error.message);
+  }
+
+  async function persistDefaultSpace(spaceId: string) {
+    const nextConfig = {
+      ...runtimeConfig,
+      defaultSpaceId: spaceId,
+    };
+    setDefaultSpaceId(spaceId);
+    setRuntimeConfig(nextConfig);
+    await persist({ runtimeConfig: nextConfig });
   }
 
   async function persistGoalBudget() {
@@ -587,6 +603,30 @@ function AgentConfigSection() {
             {RUNTIME_OPTIONS.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
                 {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </SettingsRow>
+
+      <SettingsRow
+        label="Default Space"
+        description="Space used for new default Agent and automation conversation threads."
+      >
+        <Select
+          value={defaultSpaceId ?? undefined}
+          onValueChange={(value) => void persistDefaultSpace(value)}
+          disabled={spaces.length === 0}
+        >
+          <SelectTrigger className="w-60">
+            <SelectValue
+              placeholder={spaces.length === 0 ? "No Spaces" : "Select Space"}
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {spaces.map((space) => (
+              <SelectItem key={space.id} value={space.id}>
+                {space.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -1324,6 +1364,10 @@ function parseJson<T>(value: unknown, fallback: T): T {
   }
   if (typeof value === "object") return value as T;
   return fallback;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function normalizeStringArray(value: unknown): string[] {

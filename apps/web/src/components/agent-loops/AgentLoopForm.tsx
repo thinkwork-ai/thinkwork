@@ -109,8 +109,8 @@ export function AgentLoopForm({
   return (
     <div>
       <SettingsPageTitle
-        title={mode === "edit" ? "Edit AgentLoop" : "New AgentLoop"}
-        description="Define how the loop starts, what done means, which worker runs it, and how judgments are recorded."
+        title={mode === "edit" ? "Edit Automation" : "New Automation"}
+        description="Define how the automation starts, what done means, which worker runs it, and how judgments are recorded."
       />
 
       {mode === "create" ? (
@@ -141,7 +141,7 @@ export function AgentLoopForm({
       <SettingsSection label="Loop">
         <SettingsRow label="Name" description="Operator-facing display name.">
           <Input
-            aria-label="AgentLoop name"
+            aria-label="Automation name"
             className="w-80"
             value={draft.name}
             onChange={(event) =>
@@ -155,7 +155,7 @@ export function AgentLoopForm({
           description="Short note shown in the inventory and detail view."
         >
           <Textarea
-            aria-label="AgentLoop description"
+            aria-label="Automation description"
             className="min-h-20 w-80"
             value={draft.description}
             onChange={(event) =>
@@ -172,7 +172,7 @@ export function AgentLoopForm({
           description="Paused or draft loops keep history but do not fire schedules."
         >
           <Switch
-            aria-label="AgentLoop active"
+            aria-label="Automation active"
             checked={draft.lifecycleStatus === "active" && draft.enabled}
             onCheckedChange={(checked) =>
               setDraft((current) => ({
@@ -509,8 +509,8 @@ export function AgentLoopForm({
           {saving
             ? "Saving..."
             : mode === "edit"
-              ? "Save AgentLoop"
-              : "Create AgentLoop"}
+              ? "Save Automation"
+              : "Create Automation"}
         </Button>
       </div>
     </div>

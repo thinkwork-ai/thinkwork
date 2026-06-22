@@ -132,10 +132,10 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
   );
 
   usePageHeaderActions({
-    title: loop?.name ?? "AgentLoop",
+    title: loop?.name ?? "Automation",
     breadcrumbs: [
-      { label: "AgentLoops", href: "/settings/agent-loops" },
-      { label: loop?.name ?? "AgentLoop" },
+      { label: "Automations", href: "/settings/agent-loops" },
+      { label: loop?.name ?? "Automation" },
     ],
     action: loop ? (
       <HeaderActions
@@ -160,7 +160,7 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
     if (result.error) throw result.error;
     setEditing(false);
     refetchLoop({ requestPolicy: "network-only" });
-    toast.success("AgentLoop saved");
+    toast.success("Automation saved");
   }
 
   async function runNow(row: AgentLoopRow) {
@@ -175,10 +175,20 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
         },
       });
       if (result.error) throw result.error;
-      const runId = (result.data as { triggerAgentLoopRun?: { id?: string } })
-        ?.triggerAgentLoopRun?.id;
-      toast.success("AgentLoop run queued");
-      if (runId) {
+      const triggeredRun = (
+        result.data as {
+          triggerAgentLoopRun?: { id?: string; threadId?: string | null };
+        }
+      )?.triggerAgentLoopRun;
+      const runId = triggeredRun?.id;
+      const threadId = triggeredRun?.threadId;
+      toast.success("Automation run queued");
+      if (threadId) {
+        navigate({
+          to: "/threads/$id",
+          params: { id: threadId },
+        });
+      } else if (runId) {
         navigate({
           to: "/settings/agent-loops/$agentLoopId/runs/$runId",
           params: { agentLoopId: row.id, runId },
@@ -215,7 +225,7 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
       });
       const result = await saveAgentLoop({ input: payload });
       if (result.error) throw result.error;
-      toast.success(nextActive ? "AgentLoop resumed" : "AgentLoop paused");
+      toast.success(nextActive ? "Automation resumed" : "Automation paused");
       refetchLoop({ requestPolicy: "network-only" });
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
@@ -231,7 +241,7 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
     try {
       const result = await deleteAgentLoop({ id: row.id });
       if (result.error) throw result.error;
-      toast.success("AgentLoop archived");
+      toast.success("Automation archived");
       navigate({ to: "/settings/agent-loops" });
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
@@ -317,10 +327,10 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
   if (loopResult.error || !loop) {
     return (
       <SettingsPane>
-        <InfoCard title="AgentLoop not found">
+        <InfoCard title="Automation not found">
           <p className="text-sm text-muted-foreground">
             {loopResult.error?.message ??
-              "This AgentLoop could not be loaded or no longer exists."}
+              "This automation could not be loaded or no longer exists."}
           </p>
         </InfoCard>
       </SettingsPane>
@@ -574,7 +584,7 @@ function HeaderActions({
           </Tooltip>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Archive this AgentLoop?</AlertDialogTitle>
+              <AlertDialogTitle>Archive this automation?</AlertDialogTitle>
               <AlertDialogDescription>
                 Archived loops stop firing schedules and disappear from the
                 active inventory. Run history is preserved.

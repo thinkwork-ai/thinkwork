@@ -8,7 +8,9 @@ import type {
   AgentLoopEnqueueWakeupInput,
 } from "./run-ledger";
 
-const baseInput = (): AgentLoopDispatchInput => ({
+const baseInput = (
+  overrides: Partial<AgentLoopDispatchInput> = {},
+): AgentLoopDispatchInput => ({
   tenantId: "tenant-1",
   loop: {
     id: "loop-1",
@@ -51,6 +53,7 @@ const baseInput = (): AgentLoopDispatchInput => ({
     inputSummary: { reason: "operator-test" },
   },
   now: new Date("2026-06-22T12:00:00Z"),
+  ...overrides,
 });
 
 function fakeLedger(): AgentLoopDispatchLedger & {
@@ -147,6 +150,26 @@ describe("dispatchAgentLoop", () => {
       iterationId: "iteration-1",
       wakeupId: "wakeup-1",
       now: new Date("2026-06-22T12:00:00Z"),
+    });
+  });
+
+  it("carries resolved Thread and Space context into the wakeup payload", async () => {
+    const ledger = fakeLedger();
+
+    await dispatchAgentLoop(
+      baseInput({
+        trigger: {
+          ...baseInput().trigger,
+          threadId: "thread-1",
+          spaceId: "space-1",
+        },
+      }),
+      ledger,
+    );
+
+    expect(ledger.wakeups[0]?.payload).toMatchObject({
+      threadId: "thread-1",
+      spaceId: "space-1",
     });
   });
 

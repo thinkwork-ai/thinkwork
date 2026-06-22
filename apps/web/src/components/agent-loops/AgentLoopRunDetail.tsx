@@ -1,6 +1,7 @@
 import { useEffect } from "react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "urql";
-import { Badge } from "@thinkwork/ui";
+import { Badge, Button } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -51,6 +52,10 @@ export function AgentLoopRunDetail({
 
   const run = result.data?.agentLoopRun ?? null;
   const terminal = run ? TERMINAL_STATUSES.has(run.status.toLowerCase()) : true;
+  const threadId =
+    run?.threadId ??
+    run?.iterations.find((iteration) => iteration.threadId)?.threadId ??
+    null;
 
   useEffect(() => {
     if (terminal) return;
@@ -62,11 +67,11 @@ export function AgentLoopRunDetail({
   }, [refetch, terminal]);
 
   usePageHeaderActions({
-    title: run?.agentLoop?.name ?? "AgentLoop run",
+    title: run?.agentLoop?.name ?? "Automation run",
     breadcrumbs: [
-      { label: "AgentLoops", href: "/settings/agent-loops" },
+      { label: "Automations", href: "/settings/agent-loops" },
       {
-        label: run?.agentLoop?.name ?? "AgentLoop",
+        label: run?.agentLoop?.name ?? "Automation",
         href: `/settings/agent-loops/${agentLoopId}`,
       },
       { label: `Run ${runId.slice(0, 8)}` },
@@ -88,10 +93,10 @@ export function AgentLoopRunDetail({
   if (result.error || !run || run.agentLoopId !== agentLoopId) {
     return (
       <div className="w-full max-w-[750px] px-6 pb-10 pt-6">
-        <InfoCard title="AgentLoop run not found">
+        <InfoCard title="Automation run not found">
           <p className="text-sm text-muted-foreground">
             {result.error?.message ??
-              "This run could not be loaded or does not belong to this AgentLoop."}
+              "This run could not be loaded or does not belong to this automation."}
           </p>
         </InfoCard>
       </div>
@@ -106,11 +111,26 @@ export function AgentLoopRunDetail({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto p-6">
+      {threadId ? (
+        <InfoCard title="Thread conversation">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              This automation run is executing in a Thread conversation.
+            </p>
+            <Button asChild type="button" variant="outline" size="sm">
+              <Link to="/threads/$id" params={{ id: threadId }}>
+                Open thread
+              </Link>
+            </Button>
+          </div>
+        </InfoCard>
+      ) : null}
+
       {waitingForHuman ? (
         <InfoCard title="Waiting for human approval">
           <p className="text-sm text-muted-foreground">
-            This Phase 1 inspector shows the escalation state and evidence.
-            Approval and resume controls are intentionally not exposed yet.
+            This run is paused for review. Approval and resume controls will
+            appear here when review gates are enabled.
           </p>
         </InfoCard>
       ) : null}
@@ -236,8 +256,20 @@ function IterationCard({ iteration }: { iteration: AgentLoopIteration }) {
         <div className="min-w-0 space-y-2">
           {iteration.threadTurnId ? (
             <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2">
-              <div className="text-xs font-medium text-muted-foreground">
-                Thread turn
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Thread turn
+                </div>
+                {iteration.threadId ? (
+                  <Button asChild type="button" variant="ghost" size="sm">
+                    <Link
+                      to="/threads/$id"
+                      params={{ id: iteration.threadId }}
+                    >
+                      Open thread
+                    </Link>
+                  </Button>
+                ) : null}
               </div>
               <div className="mt-1 break-all font-mono text-xs">
                 {iteration.threadTurnId}

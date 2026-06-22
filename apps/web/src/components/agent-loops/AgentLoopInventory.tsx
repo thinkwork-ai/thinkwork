@@ -87,7 +87,13 @@ export function AgentLoopInventory() {
     [agentResult.data?.agent, profilesResult.data?.agentProfiles],
   );
 
-  const rows = useMemo(() => loopsResult.data?.agentLoops ?? [], [loopsResult]);
+  const rows = useMemo(
+    () =>
+      (loopsResult.data?.agentLoops ?? []).filter(
+        (loop) => loop.lifecycleStatus !== "archived",
+      ),
+    [loopsResult.data?.agentLoops],
+  );
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return rows;
@@ -109,13 +115,10 @@ export function AgentLoopInventory() {
     () => [
       {
         accessorKey: "name",
-        header: "AgentLoop",
+        header: "Automation",
         cell: ({ row }) => (
           <div className="flex min-w-0 flex-col">
             <span className="truncate font-medium">{row.original.name}</span>
-            <span className="truncate text-xs text-muted-foreground">
-              {row.original.description ?? row.original.slug}
-            </span>
           </div>
         ),
       },
@@ -178,7 +181,7 @@ export function AgentLoopInventory() {
     if (result.error) throw result.error;
     const id = (result.data as { saveAgentLoop?: { id?: string } })
       ?.saveAgentLoop?.id;
-    toast.success("AgentLoop created");
+    toast.success("Automation created");
     setCreating(false);
     refetchLoops({ requestPolicy: "network-only" });
     if (id) {
@@ -214,19 +217,19 @@ export function AgentLoopInventory() {
 
   return (
     <SettingsTablePane
-      title="AgentLoops"
-      description="Build and inspect recurring or manual automation loops with explicit goals, workers, judges, and run evidence."
+      title="Automations"
+      description="Build and inspect recurring or manual automations with explicit goals, workers, judges, and run evidence."
       loading={loopsResult.fetching && !loopsResult.data}
       actions={
         <Button type="button" size="sm" onClick={() => setCreating(true)}>
           <Plus className="mr-2 size-4" />
-          New AgentLoop
+          New Automation
         </Button>
       }
       toolbar={
         <Input
           className="h-9 w-64"
-          placeholder="Search AgentLoops..."
+          placeholder="Search automations..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -243,7 +246,7 @@ export function AgentLoopInventory() {
           scrollable
           emptyState={
             <div className="py-12 text-center text-sm text-muted-foreground">
-              No AgentLoops found.
+              No automations found.
             </div>
           }
           onRowClick={(row) =>

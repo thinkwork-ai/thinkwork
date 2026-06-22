@@ -686,7 +686,7 @@ describe("ChatSidebar", () => {
     expect(screen.queryByRole("link", { name: /detail/i })).toBeNull();
     expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /settings/i })).toBeNull();
-    expect(screen.getByRole("link", { name: /agentloops/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /automations/i })).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: "New thread" })
@@ -698,7 +698,7 @@ describe("ChatSidebar", () => {
       screen
         .getByRole("button", { name: /^search/i })
         .compareDocumentPosition(
-          screen.getByRole("link", { name: /agentloops/i }),
+          screen.getByRole("link", { name: /automations/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Threads" })).toBeTruthy();

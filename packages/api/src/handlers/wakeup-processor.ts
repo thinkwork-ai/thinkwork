@@ -1792,6 +1792,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     const replyCtxId = payload?.replyTokenContextId as string | undefined;
     if (replyCtxId) resolvedThreadId = replyCtxId;
   }
+  if (!resolvedThreadId && runThreadId) {
+    resolvedThreadId = runThreadId;
+  }
 
   // Build MCP server list from agent's skills + defaults
   // Thinkwork tools route directly via MCP_BASE_URL.
@@ -3114,7 +3117,7 @@ async function completeAgentLoopIterationForWakeup(input: {
   responseText: string;
   now: Date;
 }): Promise<void> {
-  await db
+  const [iteration] = await db
     .update(agentLoopIterations)
     .set({
       status: "completed",
@@ -3124,7 +3127,29 @@ async function completeAgentLoopIterationForWakeup(input: {
       finished_at: input.now,
       updated_at: input.now,
     })
-    .where(eq(agentLoopIterations.agent_wakeup_request_id, input.wakeupId));
+    .where(eq(agentLoopIterations.agent_wakeup_request_id, input.wakeupId))
+    .returning({
+      runId: agentLoopIterations.agent_loop_run_id,
+      outputSummary: agentLoopIterations.output_summary,
+    });
+
+  if (!iteration?.runId) return;
+
+  await db
+    .update(agentLoopRuns)
+    .set({
+      status: "completed",
+      output_summary: iteration.outputSummary,
+      finished_at: input.now,
+      last_event_at: input.now,
+      updated_at: input.now,
+    })
+    .where(
+      and(
+        eq(agentLoopRuns.id, iteration.runId),
+        inArray(agentLoopRuns.status, ["queued", "running"]),
+      ),
+    );
 }
 
 async function failAgentLoopIterationForWakeup(input: {
@@ -3132,7 +3157,7 @@ async function failAgentLoopIterationForWakeup(input: {
   error: string;
   now: Date;
 }): Promise<void> {
-  await db
+  const [iteration] = await db
     .update(agentLoopIterations)
     .set({
       status: "failed",
@@ -3141,7 +3166,27 @@ async function failAgentLoopIterationForWakeup(input: {
       finished_at: input.now,
       updated_at: input.now,
     })
-    .where(eq(agentLoopIterations.agent_wakeup_request_id, input.wakeupId));
+    .where(eq(agentLoopIterations.agent_wakeup_request_id, input.wakeupId))
+    .returning({ runId: agentLoopIterations.agent_loop_run_id });
+
+  if (!iteration?.runId) return;
+
+  await db
+    .update(agentLoopRuns)
+    .set({
+      status: "failed",
+      error_code: "agentcore_invoke_failed",
+      error_message: input.error.slice(0, 1_000),
+      finished_at: input.now,
+      last_event_at: input.now,
+      updated_at: input.now,
+    })
+    .where(
+      and(
+        eq(agentLoopRuns.id, iteration.runId),
+        inArray(agentLoopRuns.status, ["queued", "running"]),
+      ),
+    );
 }
 
 async function failWakeup(wakeupId: string, error: string): Promise<void> {
