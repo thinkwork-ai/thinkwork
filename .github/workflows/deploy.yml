@@ -948,8 +948,24 @@ jobs:
             echo "TWENTY_CERTIFICATE_ARN=$TWENTY_CERTIFICATE_ARN_INPUT"
           } >> "$GITHUB_ENV"
 
-      - name: Resolve Plane deployment inputs
+      - name: Resolve n8n and Plane deployment inputs
         env:
+          N8N_PROVISIONED_INPUT: ${{ vars.N8N_PROVISIONED || '' }}
+          N8N_RUNTIME_ENABLED_INPUT: ${{ vars.N8N_RUNTIME_ENABLED || '' }}
+          N8N_IMAGE_URI_INPUT: ${{ vars.N8N_IMAGE_URI || '' }}
+          N8N_DB_USERNAME_INPUT: ${{ vars.N8N_DB_USERNAME || 'thinkwork_n8n' }}
+          N8N_DB_NAME_INPUT: ${{ vars.N8N_DB_NAME || 'thinkwork_n8n' }}
+          N8N_DATABASE_ADMIN_SECRET_ARN_INPUT: ${{ vars.N8N_DATABASE_ADMIN_SECRET_ARN || '' }}
+          N8N_DATABASE_URL_SECRET_ARN_INPUT: ${{ vars.N8N_DATABASE_URL_SECRET_ARN || '' }}
+          N8N_ENCRYPTION_KEY_SECRET_ARN_INPUT: ${{ vars.N8N_ENCRYPTION_KEY_SECRET_ARN || '' }}
+          N8N_OPERATOR_SECRET_ARN_INPUT: ${{ vars.N8N_OPERATOR_SECRET_ARN || '' }}
+          N8N_SERVICE_CREDENTIAL_SECRET_ARN_INPUT: ${{ vars.N8N_SERVICE_CREDENTIAL_SECRET_ARN || '' }}
+          N8N_STORAGE_BUCKET_NAME_INPUT: ${{ vars.N8N_STORAGE_BUCKET_NAME || '' }}
+          N8N_DOMAIN_INPUT: ${{ vars.N8N_DOMAIN || '' }}
+          N8N_PUBLIC_URL_INPUT: ${{ vars.N8N_PUBLIC_URL || '' }}
+          N8N_CERTIFICATE_ARN_INPUT: ${{ vars.N8N_CERTIFICATE_ARN || '' }}
+          N8N_CONTAINER_PORT_INPUT: ${{ vars.N8N_CONTAINER_PORT || '5678' }}
+          N8N_CACHE_ENGINE_INPUT: ${{ vars.N8N_CACHE_ENGINE || 'valkey' }}
           PLANE_PROVISIONED_INPUT: ${{ vars.PLANE_PROVISIONED || 'false' }}
           PLANE_RUNTIME_ENABLED_INPUT: ${{ vars.PLANE_RUNTIME_ENABLED || 'false' }}
           PLANE_IMAGE_URI_INPUT: ${{ vars.PLANE_IMAGE_URI || '' }}
@@ -969,6 +985,152 @@ jobs:
           PLANE_WEB_CONTAINER_PORT_INPUT: ${{ vars.PLANE_WEB_CONTAINER_PORT || '8080' }}
         run: |
           set -euo pipefail
+
+          state_json=""
+          if state_json=$(aws s3 cp "s3://thinkwork-terraform-state/env:/${STAGE}/thinkwork/${STAGE}/terraform.tfstate" - 2>/dev/null); then
+            :
+          else
+            state_json=""
+          fi
+
+          n8n_guardrail() {
+            local key="$1"
+            if [ -z "$state_json" ]; then
+              return 0
+            fi
+            jq -r --arg key "$key" '
+              [
+                .resources[]?
+                | select(.type == "terraform_data" and .name == "n8n_configuration_guardrails")
+                | .instances[]?.attributes.input.value[$key]
+              ][0] // empty
+            ' <<< "$state_json"
+          }
+
+          n8n_state_output() {
+            local key="$1"
+            if [ -z "$state_json" ]; then
+              return 0
+            fi
+            jq -r --arg key "$key" '.outputs[$key].value // empty' <<< "$state_json"
+          }
+
+          n8n_guardrail_exists="false"
+          if [ -n "$state_json" ] && jq -e '
+            any(.resources[]?; .type == "terraform_data" and .name == "n8n_configuration_guardrails" and ((.instances // []) | length > 0))
+          ' <<< "$state_json" >/dev/null; then
+            n8n_guardrail_exists="true"
+          fi
+
+          n8n_provisioned_source="${N8N_PROVISIONED_INPUT:-}"
+          if [ -z "$n8n_provisioned_source" ]; then
+            if [ "$n8n_guardrail_exists" = "true" ]; then
+              n8n_provisioned_source="true"
+            else
+              n8n_provisioned_source="$(n8n_state_output n8n_provisioned)"
+            fi
+          fi
+          n8n_runtime_enabled_source="${N8N_RUNTIME_ENABLED_INPUT:-}"
+          if [ -z "$n8n_runtime_enabled_source" ]; then
+            n8n_runtime_enabled_source="$(n8n_guardrail n8n_runtime_enabled)"
+          fi
+          if [ -z "$n8n_runtime_enabled_source" ]; then
+            n8n_runtime_enabled_source="$(n8n_state_output n8n_runtime_enabled)"
+          fi
+
+          n8n_provisioned=$(printf '%s' "$n8n_provisioned_source" | tr '[:upper:]' '[:lower:]')
+          n8n_runtime_enabled=$(printf '%s' "$n8n_runtime_enabled_source" | tr '[:upper:]' '[:lower:]')
+          n8n_provisioned="${n8n_provisioned:-false}"
+          n8n_runtime_enabled="${n8n_runtime_enabled:-false}"
+          for value_name in n8n_provisioned n8n_runtime_enabled; do
+            value="${!value_name}"
+            if [ "$value" != "true" ] && [ "$value" != "false" ]; then
+              echo "::error::${value_name^^} must be true or false."
+              exit 1
+            fi
+          done
+          if [ "$n8n_runtime_enabled" = "true" ] && [ "$n8n_provisioned" != "true" ]; then
+            echo "::error::N8N_RUNTIME_ENABLED=true requires N8N_PROVISIONED=true."
+            exit 1
+          fi
+
+          n8n_image_uri="${N8N_IMAGE_URI_INPUT:-$(n8n_guardrail n8n_image_uri)}"
+          n8n_db_username="${N8N_DB_USERNAME_INPUT:-$(n8n_guardrail n8n_database_username)}"
+          n8n_db_name="${N8N_DB_NAME_INPUT:-$(n8n_guardrail n8n_database_name)}"
+          n8n_database_admin_secret_arn="${N8N_DATABASE_ADMIN_SECRET_ARN_INPUT:-$(n8n_guardrail n8n_database_admin_secret_arn)}"
+          n8n_database_url_secret_arn="${N8N_DATABASE_URL_SECRET_ARN_INPUT:-$(n8n_guardrail n8n_database_url_secret_arn)}"
+          n8n_encryption_key_secret_arn="${N8N_ENCRYPTION_KEY_SECRET_ARN_INPUT:-$(n8n_guardrail n8n_encryption_key_secret_arn)}"
+          n8n_operator_secret_arn="${N8N_OPERATOR_SECRET_ARN_INPUT:-$(n8n_guardrail n8n_operator_secret_arn)}"
+          n8n_service_credential_secret_arn="${N8N_SERVICE_CREDENTIAL_SECRET_ARN_INPUT:-$(n8n_guardrail n8n_service_credential_secret_arn)}"
+          n8n_storage_bucket_name="${N8N_STORAGE_BUCKET_NAME_INPUT:-$(n8n_guardrail n8n_storage_bucket_name)}"
+          n8n_domain="${N8N_DOMAIN_INPUT:-$(n8n_guardrail n8n_public_url)}"
+          n8n_domain="${N8N_DOMAIN_INPUT:-${n8n_domain#https://}}"
+          n8n_domain="${n8n_domain#http://}"
+          n8n_domain="${n8n_domain%%/*}"
+          n8n_public_url="${N8N_PUBLIC_URL_INPUT:-$(n8n_guardrail n8n_public_url)}"
+          n8n_certificate_arn="${N8N_CERTIFICATE_ARN_INPUT:-$(n8n_guardrail n8n_certificate_arn)}"
+          n8n_container_port="${N8N_CONTAINER_PORT_INPUT:-$(n8n_guardrail n8n_container_port)}"
+          n8n_cache_engine="${N8N_CACHE_ENGINE_INPUT:-$(n8n_guardrail n8n_cache_engine)}"
+          n8n_db_username="${n8n_db_username:-thinkwork_n8n}"
+          n8n_db_name="${n8n_db_name:-thinkwork_n8n}"
+          n8n_container_port="${n8n_container_port:-5678}"
+          n8n_cache_engine="${n8n_cache_engine:-valkey}"
+
+          if [ "$n8n_provisioned" = "true" ]; then
+            if [[ ! "$n8n_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::N8N_IMAGE_URI must be pinned to an immutable sha256 digest when N8N_PROVISIONED=true."
+              exit 1
+            fi
+            for required_name in \
+              n8n_database_admin_secret_arn \
+              n8n_database_url_secret_arn \
+              n8n_encryption_key_secret_arn \
+              n8n_operator_secret_arn \
+              n8n_service_credential_secret_arn \
+              n8n_storage_bucket_name \
+              n8n_public_url \
+              n8n_certificate_arn; do
+              if [ -z "${!required_name}" ]; then
+                echo "::error::${required_name^^} is required when N8N_PROVISIONED=true."
+                exit 1
+              fi
+            done
+          fi
+          if [[ ! "$n8n_db_username" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
+            echo "::error::N8N_DB_USERNAME must be a valid PostgreSQL identifier."
+            exit 1
+          fi
+          if [[ ! "$n8n_db_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || [ "$n8n_db_name" = "thinkwork" ]; then
+            echo "::error::N8N_DB_NAME must be a valid PostgreSQL identifier distinct from thinkwork."
+            exit 1
+          fi
+          if [[ ! "$n8n_container_port" =~ ^[0-9]+$ ]] || [ "$n8n_container_port" -lt 1 ] || [ "$n8n_container_port" -gt 65535 ]; then
+            echo "::error::N8N_CONTAINER_PORT must be a valid TCP port."
+            exit 1
+          fi
+          if [ "$n8n_cache_engine" != "valkey" ] && [ "$n8n_cache_engine" != "redis" ]; then
+            echo "::error::N8N_CACHE_ENGINE must be valkey or redis."
+            exit 1
+          fi
+
+          {
+            echo "N8N_PROVISIONED=$n8n_provisioned"
+            echo "N8N_RUNTIME_ENABLED=$n8n_runtime_enabled"
+            echo "N8N_IMAGE_URI=$n8n_image_uri"
+            echo "N8N_DB_USERNAME=$n8n_db_username"
+            echo "N8N_DB_NAME=$n8n_db_name"
+            echo "N8N_DATABASE_ADMIN_SECRET_ARN=$n8n_database_admin_secret_arn"
+            echo "N8N_DATABASE_URL_SECRET_ARN=$n8n_database_url_secret_arn"
+            echo "N8N_ENCRYPTION_KEY_SECRET_ARN=$n8n_encryption_key_secret_arn"
+            echo "N8N_OPERATOR_SECRET_ARN=$n8n_operator_secret_arn"
+            echo "N8N_SERVICE_CREDENTIAL_SECRET_ARN=$n8n_service_credential_secret_arn"
+            echo "N8N_STORAGE_BUCKET_NAME=$n8n_storage_bucket_name"
+            echo "N8N_DOMAIN=$n8n_domain"
+            echo "N8N_PUBLIC_URL=$n8n_public_url"
+            echo "N8N_CERTIFICATE_ARN=$n8n_certificate_arn"
+            echo "N8N_CONTAINER_PORT=$n8n_container_port"
+            echo "N8N_CACHE_ENGINE=$n8n_cache_engine"
+          } >> "$GITHUB_ENV"
 
           plane_provisioned=$(printf '%s' "$PLANE_PROVISIONED_INPUT" | tr '[:upper:]' '[:lower:]')
           plane_runtime_enabled=$(printf '%s' "$PLANE_RUNTIME_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
@@ -1395,6 +1557,22 @@ jobs:
             -var "twenty_encryption_key_secret_arn=$TWENTY_ENCRYPTION_KEY_SECRET_ARN"
             -var "twenty_public_url=$TWENTY_PUBLIC_URL"
             -var "twenty_certificate_arn=$TWENTY_CERTIFICATE_ARN"
+            -var "n8n_provisioned=$N8N_PROVISIONED"
+            -var "n8n_runtime_enabled=$N8N_RUNTIME_ENABLED"
+            -var "n8n_image_uri=$N8N_IMAGE_URI"
+            -var "n8n_database_admin_secret_arn=$N8N_DATABASE_ADMIN_SECRET_ARN"
+            -var "n8n_database_url_secret_arn=$N8N_DATABASE_URL_SECRET_ARN"
+            -var "n8n_database_username=$N8N_DB_USERNAME"
+            -var "n8n_database_name=$N8N_DB_NAME"
+            -var "n8n_encryption_key_secret_arn=$N8N_ENCRYPTION_KEY_SECRET_ARN"
+            -var "n8n_operator_secret_arn=$N8N_OPERATOR_SECRET_ARN"
+            -var "n8n_service_credential_secret_arn=$N8N_SERVICE_CREDENTIAL_SECRET_ARN"
+            -var "n8n_storage_bucket_name=$N8N_STORAGE_BUCKET_NAME"
+            -var "n8n_domain=$N8N_DOMAIN"
+            -var "n8n_public_url=$N8N_PUBLIC_URL"
+            -var "n8n_certificate_arn=$N8N_CERTIFICATE_ARN"
+            -var "n8n_container_port=$N8N_CONTAINER_PORT"
+            -var "n8n_cache_engine=$N8N_CACHE_ENGINE"
             -var "plane_provisioned=$PLANE_PROVISIONED"
             -var "plane_runtime_enabled=$PLANE_RUNTIME_ENABLED"
             -var "plane_image_uri=$PLANE_IMAGE_URI"

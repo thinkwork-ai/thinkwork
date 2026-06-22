@@ -160,15 +160,33 @@ function deploymentVariablesFor(
 
   const enable = action === "ENABLE";
   const park = action === "PARK";
+  if (key === "twenty") {
+    return [
+      { name: "TWENTY_PROVISIONED", value: enable || park ? "true" : "false" },
+      {
+        name: "TWENTY_RUNTIME_ENABLED",
+        value: enable ? "true" : "false",
+      },
+      {
+        name: "TWENTY_DESTROY_DATA",
+        value: action === "DESTROY" ? "true" : "false",
+      },
+    ];
+  }
+  if (key === "plane") {
+    return [
+      { name: "PLANE_PROVISIONED", value: enable || park ? "true" : "false" },
+      {
+        name: "PLANE_RUNTIME_ENABLED",
+        value: enable ? "true" : "false",
+      },
+    ];
+  }
   return [
-    { name: "TWENTY_PROVISIONED", value: enable || park ? "true" : "false" },
+    { name: "N8N_PROVISIONED", value: enable || park ? "true" : "false" },
     {
-      name: "TWENTY_RUNTIME_ENABLED",
+      name: "N8N_RUNTIME_ENABLED",
       value: enable ? "true" : "false",
-    },
-    {
-      name: "TWENTY_DESTROY_DATA",
-      value: action === "DESTROY" ? "true" : "false",
     },
   ];
 }
@@ -194,11 +212,13 @@ function deploymentMessageFor(
   if (key === "cognee") {
     return `Knowledge Graph ${action === "ENABLE" ? "enable" : "disable"} deployment queued.`;
   }
+  const label =
+    key === "twenty" ? "Twenty CRM" : key === "plane" ? "Plane" : "n8n";
   if (action === "ENABLE") {
-    return "Twenty CRM enable deployment queued.";
+    return `${label} enable deployment queued.`;
   }
   if (action === "DESTROY") {
-    return "Twenty CRM destructive cleanup queued; runtime, storage, cache, secrets, and the dedicated database will be removed.";
+    return `${label} destructive cleanup queued; runtime, storage, cache, secrets, and dedicated app data will be removed.`;
   }
-  return "Twenty CRM runtime park deployment queued; CRM data and app secrets will be retained.";
+  return `${label} runtime park deployment queued; app data and secrets will be retained.`;
 }

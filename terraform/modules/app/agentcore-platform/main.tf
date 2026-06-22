@@ -34,11 +34,12 @@ resource "aws_ecr_lifecycle_policy" "agentcore" {
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Keep last 10 images"
+      description  = "Expire stale untagged images; retain tagged release/runtime pins"
       selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = 10
+        tagStatus   = "untagged"
+        countType   = "sinceImagePushed"
+        countUnit   = "days"
+        countNumber = 14
       }
       action = {
         type = "expire"
