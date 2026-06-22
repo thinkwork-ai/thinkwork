@@ -42,7 +42,7 @@
  */
 
 import http from "node:http";
-import { mkdir, readlink } from "node:fs/promises";
+import { mkdir, readlink, stat } from "node:fs/promises";
 import path from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
@@ -55,6 +55,7 @@ import {
   createKnowledgeGraphExtension,
   createSkillsExtension,
   createMemoryExtension,
+  createOkfWikiNavigatorExtension,
   createSendEmailExtension,
   createSystemPromptExtension,
   createTaskStatusExtension,
@@ -151,6 +152,7 @@ import { createScrubbingFetch } from "./scrubbing-fetch.js";
 import { buildMemoryTools } from "./tools/memory.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
+import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
 import {
   AuroraSessionStore,
   type AuroraSessionStoreOptions,
@@ -1076,6 +1078,11 @@ function activeSpaceFolderSegment(turnContext: unknown): string {
   return slug.replace(/^\/+|\/+$/g, "").replaceAll("/", "-");
 }
 
+async function isAccessibleDirectory(directory: string): Promise<boolean> {
+  const stats = await stat(directory).catch(() => null);
+  return stats?.isDirectory() === true;
+}
+
 /**
  * Build the per-invocation resource surface. The capability tools and prompt
  * policy now come from shared extensions; this helper only binds the host
@@ -1365,6 +1372,61 @@ export async function buildInvocationResources(
         hasApiUrl: Boolean(kgApiUrl),
         hasApiSecret: Boolean(kgApiSecret),
         hasTurnReference: Boolean(kgThreadTurnId || kgThreadId),
+      });
+    }
+  }
+
+  // OKF Wiki Navigator (THNK-63 U5) — direct read-only traversal of the
+  // tenant's materialized OKF wiki on EFS. The API must opt the turn in via
+  // tool policy, and this runtime must independently prove the mount/root and
+  // tenant slug before exposing any wiki_* tools to the model.
+  if (
+    args.payload.eval_mode !== true &&
+    args.payload.okf_wiki_navigator_enabled === true
+  ) {
+    const okfRoot = asString(args.env.okfWikiRoot);
+    const tenantSlug = asString(args.identity.tenantSlug);
+    const currentRoot =
+      okfRoot && tenantSlug
+        ? path.join(okfRoot, "tenants", tenantSlug, "current")
+        : "";
+    const hasCurrentRoot = currentRoot
+      ? await isAccessibleDirectory(currentRoot)
+      : false;
+    if (
+      args.env.okfWikiNavigatorEnabled === true &&
+      okfRoot &&
+      tenantSlug &&
+      hasCurrentRoot
+    ) {
+      addExtension(
+        createOkfWikiNavigatorExtension({
+          onError: (error, { phase }) =>
+            logStructured({
+              level: "warn",
+              event: "okf_wiki_navigator_failed",
+              phase,
+              tenantId: args.identity.tenantId,
+              threadId: args.identity.threadId,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+        }),
+        {
+          okfWiki: createOkfWikiProvider({
+            currentRoot,
+          }),
+        },
+      );
+    } else {
+      logStructured({
+        level: "warn",
+        event: "okf_wiki_navigator_skipped_missing_mount",
+        tenantId: args.identity.tenantId,
+        threadId: args.identity.threadId,
+        runtimeEnabled: args.env.okfWikiNavigatorEnabled,
+        hasRoot: Boolean(okfRoot),
+        hasTenantSlug: Boolean(tenantSlug),
+        hasCurrentRoot,
       });
     }
   }

@@ -223,9 +223,8 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -337,9 +336,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -1247,15 +1245,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -1779,6 +1774,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const effectiveKnowledgeGraphEnabled =
     (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true" &&
     isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"));
+  const effectiveOkfWikiNavigatorEnabled = isAnyToolAllowed(
+    ...toolPolicyAliases("okf_wiki_navigator"),
+  );
   const effectiveBrowserAutomationEnabled =
     browserAutomationEnabled &&
     isAnyToolAllowed("browser_automation", "browser");
@@ -2000,6 +1998,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       context_engine_enabled: effectiveContextEngineEnabled || undefined,
       context_engine_config: effectiveContextEngineConfig,
       knowledge_graph_enabled: effectiveKnowledgeGraphEnabled || undefined,
+      okf_wiki_navigator_enabled: effectiveOkfWikiNavigatorEnabled || undefined,
       runtime_type: runtimeType,
       model: agentModel,
       skills:
@@ -2625,6 +2624,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             context_engine_config: effectiveContextEngineConfig,
             knowledge_graph_enabled:
               effectiveKnowledgeGraphEnabled || undefined,
+            okf_wiki_navigator_enabled:
+              effectiveOkfWikiNavigatorEnabled || undefined,
             runtime_type: runtimeType,
             model: agentModel,
             skills:
@@ -2848,9 +2849,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

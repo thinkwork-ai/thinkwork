@@ -89,6 +89,17 @@ function getTool(tools: RegisteredTool[], name: string): RegisteredTool {
   return tool;
 }
 
+async function createOkfFixtureRoot(tenantSlug = "acme"): Promise<string> {
+  if (!defaultWorkspaceRoot) {
+    throw new Error("default workspace root was not initialized");
+  }
+  const okfRoot = path.join(defaultWorkspaceRoot, "okf-root");
+  const currentRoot = path.join(okfRoot, "tenants", tenantSlug, "current");
+  await mkdir(currentRoot, { recursive: true });
+  await writeFile(path.join(currentRoot, "index.md"), "# OKF Index\n");
+  return okfRoot;
+}
+
 // Stub out the env so MEMORY_ENGINE doesn't try to actually wire anything.
 beforeEach(async () => {
   delete process.env.MEMORY_ENGINE;
@@ -101,6 +112,8 @@ beforeEach(async () => {
   delete process.env.AGENTCORE_FILES_BUCKET;
   delete process.env.DB_CLUSTER_ARN;
   delete process.env.DB_SECRET_ARN;
+  delete process.env.OKF_WIKI_NAVIGATOR_ENABLED;
+  delete process.env.OKF_WIKI_ROOT;
   defaultWorkspaceRoot = await mkdtemp(
     path.join(tmpdir(), "agentcore-pi-default-workspace-"),
   );
@@ -3019,6 +3032,147 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       mcpRegistry: new McpToolRegistry(),
     });
     expect(evalMode.extensionToolNames).not.toContain("knowledge_graph_search");
+  });
+
+  it("registers OKF wiki navigator extension tools when policy and runtime mount gates are on", async () => {
+    const okfRoot = await createOkfFixtureRoot();
+    const bundle = await buildInvocationResources({
+      payload: {
+        okf_wiki_navigator_enabled: true,
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "acme",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+        okfWikiNavigatorEnabled: true,
+        okfWikiRoot: okfRoot,
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(bundle.extensionToolNames).toEqual(
+      expect.arrayContaining(["wiki_ls", "wiki_rg", "wiki_read", "wiki_links"]),
+    );
+    expect(bundle.tools.map((tool) => tool.name)).not.toContain("wiki_read");
+  });
+
+  it("does not register OKF wiki navigator tools when disabled, eval-mode, or mount metadata is missing", async () => {
+    const okfRoot = await createOkfFixtureRoot();
+    const baseArgs = {
+      payload: {
+        okf_wiki_navigator_enabled: true,
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "acme",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "",
+        hindsightEndpoint: "",
+        memoryEngine: "managed" as const,
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+        okfWikiNavigatorEnabled: true,
+        okfWikiRoot: okfRoot,
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      mcpJsonConfig: { directTools: [] },
+    };
+
+    const cases = [
+      {
+        ...baseArgs,
+        payload: {},
+      },
+      {
+        ...baseArgs,
+        payload: {
+          okf_wiki_navigator_enabled: true,
+          eval_mode: true,
+        },
+      },
+      {
+        ...baseArgs,
+        env: {
+          ...baseArgs.env,
+          okfWikiNavigatorEnabled: false,
+        },
+      },
+      {
+        ...baseArgs,
+        env: {
+          ...baseArgs.env,
+          okfWikiRoot: "",
+        },
+      },
+      {
+        ...baseArgs,
+        env: {
+          ...baseArgs.env,
+          okfWikiRoot: path.join(defaultWorkspaceRoot ?? "", "missing-okf"),
+        },
+      },
+      {
+        ...baseArgs,
+        identity: {
+          ...baseArgs.identity,
+          tenantSlug: "",
+        },
+      },
+    ];
+
+    for (const args of cases) {
+      const bundle = await buildInvocationResources({
+        ...args,
+        cleanup: [],
+        handleStore: new HandleStore(),
+        mcpRegistry: new McpToolRegistry(),
+      });
+      expect(bundle.extensionToolNames).not.toContain("wiki_ls");
+      expect(bundle.extensionToolNames).not.toContain("wiki_rg");
+      expect(bundle.extensionToolNames).not.toContain("wiki_read");
+      expect(bundle.extensionToolNames).not.toContain("wiki_links");
+    }
   });
 
   it("registers ask_user_question when identity + API wiring + turn id are present (allowlist contract)", async () => {
