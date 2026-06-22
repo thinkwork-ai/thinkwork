@@ -18,7 +18,8 @@ status: in_progress
 - Current unit: U6 Chat Skill Creator Draft Registration Bridge.
 - Current branch: `codex/thnk-11-u6-chat-draft-registration`.
 - Current worktree: `.Codex/worktrees/thnk-11-u6-chat-draft-registration`.
-- Current pull request: not opened yet.
+- Current pull request:
+  [#2829](https://github.com/thinkwork-ai/thinkwork/pull/2829).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -241,6 +242,7 @@ status: in_progress
     package does not install a `prettier` binary; touched files were checked via
     `pnpm dlx prettier@3.8.2 --check ...`.
 - PR / CI:
+  - U6 PR: [#2829](https://github.com/thinkwork-ai/thinkwork/pull/2829).
   - U4/U5 PR: [#2828](https://github.com/thinkwork-ai/thinkwork/pull/2828).
   - U3 PR: [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827).
   - U2 PR: [#2825](https://github.com/thinkwork-ai/thinkwork/pull/2825).
