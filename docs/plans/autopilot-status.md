@@ -54,6 +54,11 @@ status: in_progress
   - 2026-06-22: U1 PR
     [#2844](https://github.com/thinkwork-ai/thinkwork/pull/2844) opened and CI
     monitoring started.
+  - 2026-06-22: U1 CI drift precheck initially failed because manual migration
+    `0182_agent_loops.sql` was not yet applied to dev. Applied only that
+    migration to the dev database with `psql -v ON_ERROR_STOP=1`, then verified
+    the scoped drift reporter passed:
+    `bash scripts/db-migrate-manual.sh packages/database-pg/drizzle/0182_agent_loops.sql`.
 
 ## THNK-11 Skill Trust Evidence Fixes Autopilot - 2026-06-22
 
