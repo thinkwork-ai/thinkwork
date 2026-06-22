@@ -14,12 +14,12 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: In progress.
-- Current unit: U10 Operations and refresh runbook docs.
-- Current branch: `codex/thnk-11-u10-runbook-docs`.
-- Current worktree: `.Codex/worktrees/thnk-11-u10-runbook-docs`.
+- Status: Complete pending merge of the final ledger-only closeout PR.
+- Current unit: U11 Final THNK-11 closeout ledger.
+- Current branch: `codex/thnk-11-u11-closeout`.
+- Current worktree: `.Codex/worktrees/thnk-11-u11-closeout`.
 - Current pull request:
-  [#2834](https://github.com/thinkwork-ai/thinkwork/pull/2834).
+  [#2835](https://github.com/thinkwork-ai/thinkwork/pull/2835).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -199,11 +199,23 @@ status: in_progress
     `pnpm --filter @thinkwork/docs build`. Astro logged existing
     Starlight/Pagefind/sitemap warnings.
   - U10 PR [#2834](https://github.com/thinkwork-ai/thinkwork/pull/2834)
-    opened against `main`.
+    passed required CI, squash merged as
+    `da03b6d511c12577d27dcd8764b652e6c0314a42`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
   - U10 started from a clean isolated worktree created from `origin/main` after
     U9 merge. Scope: document the implemented draft-vs-catalog publish boundary,
     trust pipeline operations, failed-run recovery paths, upstream
     skill-creator refresh workflow, and THNK-11 verification runbook.
+  - U11 started from a clean isolated worktree created from `origin/main` after
+    U10 merge. Scope: close the THNK-11 autopilot ledger and record that all
+    explicit implementation units from the plan have shipped.
+  - Final THNK-11 localhost E2E evidence remains the U8 vertical slice:
+    `http://localhost:5175` created, approved, published, and then invoked
+    `codex-e2e-skill-20260622c`, returning
+    `E2E_SKILL_INVOKED_20260622C` in follow-up chat. Browser validation must
+    continue to use `localhost`, not `127.0.0.1`, because Cognito auth is
+    origin-sensitive.
   - U3 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
     `pkg-config` warning, but pnpm returned success.
