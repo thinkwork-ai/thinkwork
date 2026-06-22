@@ -182,7 +182,7 @@ export const skillDrafts = pgTable(
     uniqueIndex("uq_skill_drafts_tenant_id").on(table.tenant_id, table.id),
     check(
       "skill_drafts_status_check",
-      sql`${table.status} IN ('draft','submitted','rejected','failed')`,
+      sql`${table.status} IN ('draft','submitted','rejected','failed','published')`,
     ),
     check(
       "skill_drafts_source_kind_check",
@@ -224,7 +224,7 @@ export const skillDraftEvents = pgTable(
     ),
     check(
       "skill_draft_events_type_check",
-      sql`${table.event_type} IN ('created','updated','submitted','rejected','failed')`,
+      sql`${table.event_type} IN ('created','updated','submitted','rejected','failed','published')`,
     ),
   ],
 );

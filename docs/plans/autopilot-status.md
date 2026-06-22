@@ -15,12 +15,10 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U3 Seed Upstream Skill Creator Assets and Wire
-  `/skill-creator` Dispatch.
-- Current branch: `codex/thnk-11-u3-skill-creator-dispatch`.
-- Current worktree: `.Codex/worktrees/thnk-11-u3-skill-creator-dispatch`.
-- Current pull request:
-  [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827).
+- Current unit: U4/U5 Trust-Gated Publish Backend and Operator Review Surface.
+- Current branch: `codex/thnk-11-u4-trust-runner`.
+- Current worktree: `.Codex/worktrees/thnk-11-u4-trust-runner`.
+- Current pull request: [#2828](https://github.com/thinkwork-ai/thinkwork/pull/2828).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -51,6 +49,13 @@ status: in_progress
     were removed after syncing `main`.
   - U3 started from a clean isolated worktree created from `origin/main` after
     U2 merge.
+  - U3 PR [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827)
+    passed required CI, squash merged as
+    `f0408a8c4b3f36630fae00703df5daeea276cdde`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
+  - U4/U5 started from a clean isolated worktree created from `origin/main`
+    after U3 merge.
 - Local verification:
   - U2 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
@@ -144,7 +149,54 @@ status: in_progress
     `pnpm --filter @thinkwork/agentcore-pi test -- tests/skill-drafts.test.ts`
     (3 tests); `pnpm --filter @thinkwork/api typecheck`;
     `pnpm --filter @thinkwork/web typecheck`; and `git diff --check`.
+  - U4/U5 install completed with the known optional `canvas@2.11.2` native
+    fallback/missing `pkg-config` warning under local Node 25, but pnpm returned
+    success.
+  - U4/U5 backend publish substrate added a trust-gated
+    `publishSkillDraft` mutation and `published` draft/event statuses. Focused
+    verification passed:
+    `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts src/graphql/resolvers/skill-creator/skillDraft.lifecycle.test.ts src/graphql/resolvers/skill-creator/skillDrafts.query.test.ts src/graphql/resolvers/skill-creator/publishSkillDraft.mutation.test.ts src/lib/skill-drafts/publish-catalog.test.ts`
+    (5 files, 155 tests) and `pnpm --filter @thinkwork/api typecheck`.
+  - Schema/codegen passed after adding `publishSkillDraft`:
+    `pnpm schema:build`, `pnpm --filter @thinkwork/web codegen`,
+    `pnpm --filter @thinkwork/mobile codegen`, and
+    `pnpm --dir apps/cli codegen`. `@thinkwork/api` has no codegen script in
+    this checkout.
+  - U5 operator Drafts UI added to Settings -> Skill Library. The surface lists
+    submitted skill drafts with status badges, publishes trust-ready drafts with
+    `publishSkillDraft`, confirms catalog slug replacement before overwrite,
+    refreshes drafts/catalog data, and opens the published Skill Detail page.
+  - U5 focused web verification passed:
+    `pnpm --filter @thinkwork/web test -- src/components/settings/SettingsSkills.test.tsx`
+    (9 tests) and `pnpm --filter @thinkwork/web typecheck`.
+  - Post-format U4/U5 verification passed:
+    `pnpm --filter @thinkwork/api test -- src/__tests__/graphql-contract.test.ts src/graphql/resolvers/skill-creator/skillDraft.lifecycle.test.ts src/graphql/resolvers/skill-creator/skillDrafts.query.test.ts src/graphql/resolvers/skill-creator/publishSkillDraft.mutation.test.ts src/lib/skill-drafts/publish-catalog.test.ts`
+    (5 files, 155 tests), `pnpm --filter @thinkwork/api typecheck`, and
+    `pnpm --filter @thinkwork/database-pg typecheck`.
+  - Dev migration `packages/database-pg/drizzle/0181_skill_draft_publish_status.sql`
+    applied against dev Aurora after resolving credentials from the deployed
+    Terraform outputs/Secrets Manager. Scoped drift reporter confirmed
+    `public.skill_drafts.skill_drafts_status_check` and
+    `public.skill_draft_events.skill_draft_events_type_check` are present.
+  - Local browser validation on `localhost:5175` passed in the authenticated
+    Brave session: Skill Library rendered from the current U4/U5 worktree,
+    Published/Drafts switch was visible, and Drafts rendered the empty queue
+    state. The controlled in-app browser profile was unauthenticated, so visual
+    validation used Brave via Computer Use.
+  - Workspace gates passed: `pnpm lint`, `pnpm typecheck`, and `git diff --check`.
+  - First `pnpm test` hit the known local Electron extraction race
+    (`EEXIST: ... Electron Framework`). Removed the generated Electron
+    `node_modules` artifact, reran Electron's installer, and
+    `pnpm --filter @thinkwork/desktop test` passed (15 files, 105 tests).
+    Rerunning full `pnpm test` then passed across the workspace, including
+    `@thinkwork/api` (563 files passed, 3 skipped; 5258 tests passed, 9
+    skipped), `@thinkwork/web` (187 files, 1427 tests), release tests, and
+    plugin-source-boundary tests.
+  - Full chat E2E is still pending as of this entry: create a new skill from
+    chat, publish/register it through the Skill Library, then invoke it in a
+    follow-up chat and confirm the generated skill was selected.
 - PR / CI:
+  - U4/U5 PR: [#2828](https://github.com/thinkwork-ai/thinkwork/pull/2828).
   - U3 PR: [#2827](https://github.com/thinkwork-ai/thinkwork/pull/2827).
   - U2 PR: [#2825](https://github.com/thinkwork-ai/thinkwork/pull/2825).
   - U1 PR: [#2819](https://github.com/thinkwork-ai/thinkwork/pull/2819).

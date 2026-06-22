@@ -101,6 +101,11 @@ input RejectSkillDraftInput {
   rationale: String!
 }
 
+input PublishSkillDraftInput {
+  id: ID!
+  confirmReplace: Boolean = false
+}
+
 extend type Query {
   """
   List skill drafts for the caller tenant. Non-operators receive only drafts
@@ -125,4 +130,7 @@ extend type Mutation {
 
   "Tenant-operator rejection with rationale."
   rejectSkillDraft(input: RejectSkillDraftInput!): SkillDraft!
+
+  "Tenant-operator approval that publishes a trust-ready draft to the Skill Library."
+  publishSkillDraft(input: PublishSkillDraftInput!): SkillDraft!
 }

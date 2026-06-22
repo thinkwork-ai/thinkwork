@@ -17,7 +17,45 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastWarning: vi.fn(),
   setHeader: vi.fn(),
+  publishSkillDraft: vi.fn(),
+  refetchDrafts: vi.fn(),
+  draftsQueryState: {
+    data: undefined as
+      | {
+          skillDrafts: Array<{
+            id: string;
+            tenantId: string;
+            slug: string;
+            title: string;
+            displayName?: string | null;
+            summary?: string | null;
+            status: string;
+            currentContentHash?: string | null;
+            inboxItemId?: string | null;
+            submittedAt?: string | null;
+            createdAt: string;
+            updatedAt: string;
+            requester?: {
+              id: string;
+              name?: string | null;
+              email?: string | null;
+            } | null;
+            source: {
+              kind: string;
+              threadId?: string | null;
+              messageId?: string | null;
+            };
+          }>;
+        }
+      | undefined,
+    fetching: false,
+    error: undefined as { message: string } | undefined,
+  },
 }));
+
+type SkillDraftFixture = NonNullable<
+  (typeof mocks.draftsQueryState)["data"]
+>["skillDrafts"][number];
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mocks.navigate,
@@ -50,8 +88,8 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("urql", () => ({
-  useQuery: () => [{ data: undefined, fetching: false }, vi.fn()],
-  useMutation: () => [{ fetching: false }, vi.fn()],
+  useQuery: () => [mocks.draftsQueryState, mocks.refetchDrafts],
+  useMutation: () => [{ fetching: false }, mocks.publishSkillDraft],
 }));
 
 vi.mock("@thinkwork/ui", () => ({
@@ -157,6 +195,11 @@ beforeEach(() => {
   mocks.toastSuccess.mockReset();
   mocks.toastWarning.mockReset();
   mocks.setHeader.mockReset();
+  mocks.publishSkillDraft.mockReset();
+  mocks.refetchDrafts.mockReset();
+  mocks.draftsQueryState.data = undefined;
+  mocks.draftsQueryState.fetching = false;
+  mocks.draftsQueryState.error = undefined;
   mocks.listSkillSummaries.mockResolvedValue([
     {
       slug: "existing-skill",
@@ -327,6 +370,97 @@ describe("SettingsSkills import", () => {
   });
 });
 
+describe("SettingsSkills drafts", () => {
+  it("publishes a submitted skill draft and opens the catalog detail", async () => {
+    mocks.draftsQueryState.data = {
+      skillDrafts: [submittedDraft()],
+    };
+    mocks.publishSkillDraft.mockResolvedValue({
+      data: {
+        publishSkillDraft: {
+          id: "draft-1",
+          slug: "customer-brief",
+          displayName: "Customer Brief",
+          status: "published",
+          currentContentHash: "sha",
+          publishedCatalogSlug: "customer-brief",
+          publishedContentHash: "sha",
+          updatedAt: "2026-06-21T12:00:00Z",
+        },
+      },
+    });
+
+    render(<SettingsSkills />);
+    await screen.findByPlaceholderText("Search skills…");
+
+    fireEvent.click(screen.getByRole("button", { name: /Drafts/ }));
+    expect(await screen.findByText("Customer Brief")).toBeTruthy();
+    expect(screen.getByText("submitted")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+
+    await waitFor(() => {
+      expect(mocks.publishSkillDraft).toHaveBeenCalledWith({
+        input: { id: "draft-1", confirmReplace: false },
+      });
+    });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill draft published.");
+    expect(mocks.refetchDrafts).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: "/settings/skills/$skillSlug",
+      params: { skillSlug: "customer-brief" },
+    });
+  });
+
+  it("confirms before publishing a draft over an existing catalog skill", async () => {
+    mocks.draftsQueryState.data = {
+      skillDrafts: [submittedDraft({ slug: "existing-skill" })],
+    };
+    mocks.publishSkillDraft
+      .mockResolvedValueOnce({
+        error: {
+          message: "Catalog skill 'existing-skill' already exists.",
+          graphQLErrors: [{ extensions: { reason: "skill_exists" } }],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          publishSkillDraft: {
+            id: "draft-1",
+            slug: "existing-skill",
+            displayName: "Customer Brief",
+            status: "published",
+            currentContentHash: "sha",
+            publishedCatalogSlug: "existing-skill",
+            publishedContentHash: "sha",
+            updatedAt: "2026-06-21T12:00:00Z",
+          },
+        },
+      });
+
+    render(<SettingsSkills />);
+    await screen.findByPlaceholderText("Search skills…");
+
+    fireEvent.click(screen.getByRole("button", { name: /Drafts/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Publish" }));
+
+    expect((await screen.findByRole("dialog")).textContent).toContain(
+      "existing-skill",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+
+    await waitFor(() => {
+      expect(mocks.publishSkillDraft).toHaveBeenLastCalledWith({
+        input: { id: "draft-1", confirmReplace: true },
+      });
+    });
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("Skill draft published.");
+  });
+});
+
 function uploadArchive(
   name: string,
   bytes: Uint8Array,
@@ -341,4 +475,34 @@ function uploadArchive(
   fireEvent.change(screen.getByTestId("skill-import-input"), {
     target: { files: [file] },
   });
+}
+
+function submittedDraft(
+  overrides: Partial<SkillDraftFixture> = {},
+): SkillDraftFixture {
+  return {
+    id: "draft-1",
+    tenantId: "tenant-1",
+    slug: "customer-brief",
+    title: "Customer Brief",
+    displayName: "Customer Brief",
+    summary: "Creates a concise customer briefing.",
+    status: "submitted",
+    currentContentHash: "sha",
+    inboxItemId: null,
+    submittedAt: "2026-06-21T12:00:00Z",
+    createdAt: "2026-06-21T12:00:00Z",
+    updatedAt: "2026-06-21T12:00:00Z",
+    requester: {
+      id: "user-1",
+      name: "Eric",
+      email: "eric@example.com",
+    },
+    source: {
+      kind: "thread",
+      threadId: "thread-1",
+      messageId: "message-1",
+    },
+    ...overrides,
+  };
 }
