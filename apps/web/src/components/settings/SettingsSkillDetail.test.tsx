@@ -99,6 +99,7 @@ vi.mock("sonner", () => ({
 vi.mock("@thinkwork/workspace-editor", () => ({
   WorkspaceFileEditor: (props: {
     defaultOpenFile?: string;
+    refreshKey?: string | number;
     target?: { skill?: string };
     targetKey?: string;
   }) => {
@@ -107,6 +108,7 @@ vi.mock("@thinkwork/workspace-editor", () => ({
       <div
         data-testid="skill-file-editor"
         data-default-open-file={props.defaultOpenFile}
+        data-refresh-key={props.refreshKey}
         data-skill={props.target?.skill}
         data-target-key={props.targetKey}
       />
@@ -753,7 +755,7 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(mocks.fixSkillTrustEvidence).not.toHaveBeenCalled();
   });
 
-  it("refreshes the editor target key after generating benchmark evidence", async () => {
+  it("refreshes the editor file list without changing editor target after generating benchmark evidence", async () => {
     mocks.runSkillTrustPipeline.mockResolvedValueOnce({
       slug: "web-research",
       contentHash: "a".repeat(64),
@@ -831,8 +833,10 @@ describe("SettingsSkillDetail eval panel", () => {
       },
     });
     render(<SettingsSkillDetail />);
-    const initialKey =
+    const initialTargetKey =
       mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.targetKey;
+    const initialRefreshKey =
+      mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.refreshKey;
     await openTrustSheet();
 
     fireEvent.click(screen.getByTestId("skill-run-trust"));
@@ -848,11 +852,82 @@ describe("SettingsSkillDetail eval panel", () => {
       ),
     );
     await waitFor(() => {
-      const latestKey =
-        mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.targetKey;
-      expect(latestKey).not.toBe(initialKey);
-      expect(latestKey).toBe("skill:web-research:1");
+      const latestProps = mocks.workspaceFileEditor.mock.calls.at(-1)?.[0];
+      const latestTargetKey = latestProps?.targetKey;
+      const latestRefreshKey = latestProps?.refreshKey;
+      expect(latestTargetKey).toBe(initialTargetKey);
+      expect(latestTargetKey).toBe("skill:web-research");
+      expect(latestRefreshKey).not.toBe(initialRefreshKey);
+      expect(latestRefreshKey).toBe(1);
     });
+    expect(
+      screen
+        .getByTestId("skill-file-editor")
+        .getAttribute("data-default-open-file"),
+    ).toBe("SKILL.md");
+  });
+
+  it("does not refresh the editor file list or clear selected detail after a failed evidence fix", async () => {
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-21T00:00:00.000Z",
+      status: "review",
+      summary: "Missing benchmark.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "present",
+        evalDataset: "present",
+        benchmark: "missing",
+        signature: "missing",
+      },
+      artifactPaths: {
+        skillCard: "skill-card.md",
+        evals: ["evals/smoke.json"],
+      },
+    });
+    mocks.fixSkillTrustEvidence.mockRejectedValueOnce(new Error("writer down"));
+    render(<SettingsSkillDetail />);
+    const initialRefreshKey =
+      mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.refreshKey;
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+    await screen.findByRole("button", {
+      name: /Benchmark trust step: missing/i,
+    });
+    fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Could not fix the trust step: writer down",
+      ),
+    );
+    await waitFor(() => {
+      const latestTargetKey =
+        mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.targetKey;
+      expect(latestTargetKey).toBe("skill:web-research");
+    });
+    expect(mocks.workspaceFileEditor.mock.calls.at(-1)?.[0]?.refreshKey).toBe(
+      initialRefreshKey,
+    );
+    expect(screen.getByTestId("skill-trust-step-detail")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Benchmark" })).toBeTruthy();
   });
 
   it("keeps the refreshed report visible with a catalog reindex warning", async () => {
@@ -946,6 +1021,47 @@ describe("SettingsSkillDetail eval panel", () => {
       await screen.findByText("Skill catalog index not updated."),
     ).toBeTruthy();
     expect(screen.getAllByText("starter generated").length).toBeGreaterThan(0);
+
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "c".repeat(64),
+      generatedAt: "2026-06-22T00:05:00.000Z",
+      status: "passed",
+      summary: "Evidence refreshed.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "starter_generated",
+        evalDataset: "present",
+        benchmark: "present",
+        signature: "verified",
+      },
+      artifactPaths: {
+        skillCard: "skill-card.md",
+        evals: ["evals/smoke.json"],
+        benchmark: "BENCHMARK.md",
+        signature: "skill.oms.sig",
+      },
+    });
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Skill catalog index not updated.")).toBeNull(),
+    );
   });
 
   it("surfaces trust evidence fix failures without clearing the report", async () => {
