@@ -871,13 +871,17 @@ describe("SettingsSkillDetail eval panel", () => {
 
     expect(screen.getAllByRole("dialog")).toHaveLength(2);
     expect(screen.getByTestId("skill-trust-step-detail")).toBeTruthy();
-    expect(
-      screen
-        .getAllByTestId("sheet-content")
-        .filter((sheet) =>
-          sheet.className.includes("w-[min(520px,calc(100vw-2rem))]"),
-        ).length,
-    ).toBe(2);
+    const trustSheets = screen
+      .getAllByTestId("sheet-content")
+      .filter((sheet) =>
+        sheet.className.includes("data-[side=right]:max-w-none"),
+      );
+    expect(trustSheets).toHaveLength(2);
+    trustSheets.forEach((sheet) => {
+      expect(sheet.style.width).toContain("520px");
+      expect(sheet.style.width).toContain("calc(100vw - 2rem)");
+      expect(sheet.style.maxWidth).toBe("none");
+    });
     expect(
       screen.getByText(/Documents what the skill does, who owns it/i),
     ).toBeTruthy();
