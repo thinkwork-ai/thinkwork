@@ -15,10 +15,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: U8 Deployed SkillSpector Runner deploy hotfix.
-- Current branch: `codex/thnk-11-u8-runner-dockerfix`.
-- Current worktree: `.Codex/worktrees/thnk-11-u8-runner-dockerfix`.
-- Current pull request: pending.
+- Current unit: U9 Thread skill-draft status card.
+- Current branch: `codex/thnk-11-u9-thread-draft-status`.
+- Current worktree: `.Codex/worktrees/thnk-11-u9-thread-draft-status`.
+- Current pull request:
+  [#2833](https://github.com/thinkwork-ai/thinkwork/pull/2833).
 - Notes:
   - U1 started from a clean isolated worktree created from `origin/main`.
   - Planning artifacts were copied into the U1 branch because they were local
@@ -126,6 +127,25 @@ status: in_progress
   - U8 hotfix started from a clean isolated worktree created from `origin/main`
     after the deploy failure. Scope: fix the Skill Trust runner Dockerfile
     `COPY` path so CI/deploy can build the Lambda image.
+  - U8 hotfix PR [#2832](https://github.com/thinkwork-ai/thinkwork/pull/2832)
+    passed required CI, squash merged as
+    `2fb5ca79598a2e94e72abe011c40d7bf56578616`, and cleanup completed:
+    remote branch was deleted by GitHub merge flow; local worktree and branch
+    were removed after syncing `main`.
+  - U8 full deploy apply completed successfully in GitHub run `27932936186`.
+    Deployed evidence: `thinkwork-dev-skill-trust-runner` exists and is active;
+    Terraform state includes
+    `module.thinkwork.module.api.aws_lambda_function.skill_trust_runner[0]`.
+  - U8 localhost E2E used `http://localhost:5175` only, preserving the
+    authenticated Cognito app origin. Chat-created draft
+    `codex-e2e-skill-20260622c` was published from Skill Library Drafts, then a
+    new chat invoked `/codex-e2e-skill-20260622c marker check` and returned the
+    required marker `E2E_SKILL_INVOKED_20260622C`. Invocation thread:
+    `http://localhost:5175/threads/f5ac2b3d-c824-4585-b43b-4e2dca908b3f`.
+  - U9 started from a clean isolated worktree created from `origin/main` after
+    U8 deploy/E2E passed. Scope: add the author-facing thread transcript status
+    card for `/skill-creator` draft registration, persist draft metadata on the
+    assistant message, and link the `skill_drafts.source_message_id` breadcrumb.
 - Local verification:
   - U2 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
@@ -146,6 +166,26 @@ status: in_progress
     `pnpm --filter @thinkwork/web test` (186 files passed; 1403 tests passed).
   - U2 `git diff --check` passed.
   - U2 targeted Prettier check passed for touched API/web/status files.
+  - U9 `pnpm install` completed in the worktree; local Node 25 logged the
+    existing optional `canvas@2.11.2` native fallback/missing `pkg-config`
+    warning, but pnpm exited successfully.
+  - U9 focused API test passed:
+    `pnpm --dir packages/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts`
+    (39 tests).
+  - U9 focused web test passed:
+    `pnpm --dir apps/web exec vitest run src/components/workbench/TaskThreadView.test.tsx`
+    (112 tests).
+  - U9 package typechecks passed for `packages/api` and `apps/web`.
+  - U9 targeted Prettier check passed for touched API/web/status files using
+    `pnpm dlx prettier@3.8.2 --check ...`.
+  - U9 `git diff --check` passed.
+  - U9 localhost browser validation used `http://localhost:5175` only. The
+    worktree Vite server loaded the authenticated Skill Library Settings page;
+    the deployed API does not yet emit U9 assistant-message draft metadata, so
+    the status-card rendering itself is covered by the focused web transcript
+    test until this branch deploys.
+  - U9 PR [#2833](https://github.com/thinkwork-ai/thinkwork/pull/2833)
+    opened against `main`.
   - U3 `pnpm install --frozen-lockfile --offline` completed; local Node 25
     logged the existing optional `canvas@2.11.2` native fallback/missing
     `pkg-config` warning, but pnpm returned success.

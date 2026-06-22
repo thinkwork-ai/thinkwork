@@ -64,6 +64,7 @@ export async function insertAssistantMessage(
   content: string,
   toolInvocations?: Array<Record<string, unknown>>,
   uiMessageParts?: Array<Record<string, unknown>>,
+  extraMetadata?: Record<string, unknown>,
 ): Promise<{ id: string } | null> {
   try {
     // Extract GenUI data from tool invocations (typed JSON with _type field)
@@ -80,6 +81,24 @@ export async function insertAssistantMessage(
           "_type" in (item as Record<string, unknown>),
       );
 
+    const toolInvocationMetadata =
+      toolInvocations && toolInvocations.length > 0
+        ? {
+            tool_invocations: toolInvocations.map((inv) => {
+              const { genui_data: _, ...rest } = inv;
+              return rest;
+            }),
+          }
+        : {};
+    const metadata =
+      Object.keys(toolInvocationMetadata).length > 0 ||
+      (extraMetadata && Object.keys(extraMetadata).length > 0)
+        ? {
+            ...toolInvocationMetadata,
+            ...(extraMetadata ?? {}),
+          }
+        : undefined;
+
     const [row] = await db
       .insert(messages)
       .values({
@@ -91,15 +110,7 @@ export async function insertAssistantMessage(
         sender_id: agentId,
         parts: normalizeThreadGenUIParts(uiMessageParts) || undefined,
         tool_results: genuiResults.length > 0 ? genuiResults : undefined,
-        metadata:
-          toolInvocations && toolInvocations.length > 0
-            ? {
-                tool_invocations: toolInvocations.map((inv) => {
-                  const { genui_data: _, ...rest } = inv;
-                  return rest;
-                }),
-              }
-            : undefined,
+        metadata,
       })
       .returning({ id: messages.id });
 
