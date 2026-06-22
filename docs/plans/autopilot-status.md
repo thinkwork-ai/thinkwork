@@ -18,13 +18,17 @@ status: in_progress
 - Current branch: `codex/thnk-11-u1-trust-evidence-fixes`.
 - Current worktree:
   `.Codex/worktrees/thnk-11-u1-trust-evidence-fixes`.
-- Current pull request: none yet.
+- Current pull request:
+  [#2837](https://github.com/thinkwork-ai/thinkwork/pull/2837).
 - Progress:
   - 2026-06-22: U1 started from a clean isolated worktree created from
     `origin/main`.
   - 2026-06-22: Re-read `AGENTS.md`, the U1 plan, the THNK-11 trust pipeline
     runbook, the tenant-admin mutation guidance, and the skill eval state
     guidance before implementation.
+  - 2026-06-22: U1 PR
+    [#2837](https://github.com/thinkwork-ai/thinkwork/pull/2837) opened and
+    CI monitoring started.
 - Local verification:
   - U1 `pnpm install --frozen-lockfile --offline` completed in the worktree;
     local Node 25 logged the existing optional `canvas@2.11.2`
