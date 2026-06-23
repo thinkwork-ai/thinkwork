@@ -5,6 +5,15 @@ topic: thnk-46-agent-loop-definition
 
 # THNK-46 AgentLoop Definition
 
+## Supersession Note
+
+The 2026-06-23 prompt-first Automations plan supersedes the product-language
+portion of this brainstorm. The user-facing product noun is **Automation**.
+AgentLoop remains the internal runtime and GraphQL/database substrate. The
+current v1 product shape is prompt-first: Chat builder, Manual easy form,
+Advanced inspector, configured execution Space, hidden setup thread, and visible
+run thread.
+
 ## Problem Frame
 
 ThinkWork needs a first-class automation primitive for durable agent work. The

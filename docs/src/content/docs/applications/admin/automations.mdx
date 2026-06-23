@@ -46,10 +46,52 @@ An Automation should be used when:
 - operators need evidence explaining completion, continuation, failure, budget
   stop, or escalation.
 
-Phase 1 Automations support manual and scheduled triggers, worker goal-mode
-dispatch, self-check/human-approval judgment policy, and a run inspector backed
-by AgentLoop internals. Model/reviewer judges and event-driven triggers remain
-later phases.
+Phase 1 Automations support manual and scheduled triggers, prompt-first
+creation, worker goal-mode dispatch, self-check/human-approval judgment policy,
+and a run inspector backed by AgentLoop internals. Model/reviewer judges and
+event-driven triggers remain later phases.
+
+### Creating an Automation
+
+New Automations expose 3 modes:
+
+- **Chat**: the default. A hidden builder thread asks focused questions, drafts
+  a reviewable Automation, and saves only after confirmation.
+- **Manual**: the easy form. Operators provide prompt, Space, and trigger.
+  ThinkWork derives the goal, self-check judge, worker, and policy defaults.
+- **Advanced**: an inspector side panel for explicit criteria, judge settings,
+  policy limits, evidence retention, and raw runtime metadata.
+
+Every Automation must choose a Space. The form defaults to the Space configured
+in Agent settings, then persists the selected Space on the Automation. Manual
+and scheduled runs create their execution thread in that Space so operators see
+the result in the same conversation surface as ordinary agent work.
+
+### Builder and execution threads
+
+Chat creation uses a real setup thread in a lazily-created system-managed
+Automation Builder Space. The Space and its setup threads are hidden from normal
+navigation, search, and unread counts. Direct thread access still requires the
+creating user to be a participant, and the Automation detail page can link to
+the setup thread when context is needed.
+
+Setup threads are distinct from execution threads:
+
+- **Builder thread**: hidden setup conversation used to design the Automation.
+- **Execution thread**: visible run conversation created in the selected Space.
+
+### Automation Loop Designer skill
+
+The Chat builder seeds the hidden thread with the
+`automation-loop-designer` workspace skill. The skill emits a ThinkWork-native
+`AutomationDraft` containing prompt, Space, trigger, goal, judge, policy, and
+source metadata.
+
+The skill is adapted from Kevin Simback's
+[Looper](https://github.com/ksimback/looper) project under the MIT license. The
+ThinkWork seed keeps Looper's design-coaching ideas, including goal
+clarification, verification rubrics, stop guards, observability, and privacy
+boundaries, but ThinkWork remains the durable orchestrator.
 
 ## Workflows
 
@@ -97,7 +139,8 @@ The page polls every 5s while non-terminal. Subscription wiring (AppSync `OnRout
 Settings compatibility detail
 
 The `scheduled_jobs` substrate behavior is unchanged. It still carries internal
-scheduled work for evals, skill runs, idle-memory learning, AgentLoop schedules,
+scheduled work for evals, skill runs, idle-memory learning, Automation
+schedules,
 and Workflow triggers. The EventBridge -> `job-schedule-manager` ->
 `job-trigger` provisioning chain remains the operational wake path.
 
@@ -130,8 +173,11 @@ and evidence behind the product surface.
 
 ## Rollout Notes
 
-- Apply the AgentLoop database migration before deploying API/web code that
-  expects the Automation backing tables.
+- Apply the AgentLoop database migrations before deploying API/web code that
+  expects the Automation backing tables, including `agent_loops.space_id` for
+  configured execution Spaces.
+- The Automation Builder Space is created lazily per tenant. No tenant bootstrap
+  migration is required for builder setup history.
 - Keep `/api/scheduled-jobs` and `/api/job-schedules` routes deployed; internal
   jobs and compatibility details still use them.
 - Do not introduce new REST routes for Automations unless GraphQL is

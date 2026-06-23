@@ -1,28 +1,26 @@
 ---
-title: AgentLoops
-description: How ThinkWork runs durable autonomous agent work - AgentLoops for goal/policy loops, Workflows for explicit orchestration, Evaluations for scoring, and scheduled_jobs as internal plumbing.
+title: Automations
+description: How ThinkWork turns prompts into durable recurring or manually rerunnable agent work with Spaces, triggers, run threads, and inspectable evidence.
 ---
 
 import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
 
-AgentLoops are ThinkWork's v1 automation primitive. An AgentLoop is a durable
-contract for autonomous work: trigger, goal, worker, judge, loop policy, run
-state, and evidence. A weekly account check-in, a recurring quality review, or a
-manual "run this loop now" action should be modeled as an AgentLoop, not as a
-bare schedule or prompt.
+Automations are ThinkWork's prompt-first product surface for recurring or
+manually rerunnable agent work. An Automation owns the prompt, execution Space,
+trigger, run history, and evidence operators inspect.
 
-The old "Automations" noun now describes an implementation family, not the
-product object. `scheduled_jobs`, AWS Scheduler, and EventBridge are plumbing.
-The product surfaces operators inspect are AgentLoop runs, Workflow runs,
-threads, and evaluation runs.
+Internally, Automations are backed by the AgentLoop runtime. AgentLoop remains
+the durable contract for trigger, goal, worker, judge, policy, run ledger, and
+evidence. Users should not need to learn that name to create useful recurring
+work.
 
 ## Product Taxonomy
 
 <CardGrid>
-  <Card title="AgentLoops" icon="time">
-    Autonomous goal/policy loops. Use them when work repeats or can be rerun,
-    completion can be judged, and the operator needs run evidence explaining why
-    the loop completed, continued, failed, or escalated.
+  <Card title="Automations" icon="time">
+    Prompt-first autonomous work. Use them when work repeats or can be rerun, a
+    selected Space should receive the execution thread, and the operator needs
+    evidence explaining what happened.
   </Card>
   <Card title="Workflows" icon="gear">
     Explicit multi-step orchestration. Use them for known sequences with
@@ -31,14 +29,97 @@ threads, and evaluation runs.
   </Card>
   <Card title="Evaluations" icon="approve-check">
     Test and scoring suites. Use them to measure agent behavior against datasets
-    or rubrics. They may share judgment primitives with AgentLoops, but they are
-    not how operators create recurring automation.
+    or rubrics. They may share judgment primitives with Automations, but they
+    are not the recurring-work authoring surface.
   </Card>
 </CardGrid>
 
+## Creation Modes
+
+New Automations start from a prompt. The UI exposes 3 creation modes:
+
+1. **Chat**: the default path. A hidden builder thread asks focused questions,
+   creates a reviewable draft, and saves only after confirmation.
+2. **Manual**: the easy form. Provide a prompt, Space, and trigger; ThinkWork
+   derives the goal, self-check judge, worker, and policy defaults.
+3. **Advanced**: an inspector for operators who need explicit criteria, judge
+   settings, policy limits, evidence retention, or raw runtime metadata.
+
+The prompt remains the main artifact. Advanced settings explain or override the
+system's inferred goal and judge behavior, but they should not dominate the
+default authoring flow.
+
+## Spaces
+
+Every Automation runs in a Space. New Automations default to the Space selected
+in Agent settings, and the selected Space is persisted on the Automation.
+
+When an Automation runs, ThinkWork creates the execution thread in that Space so
+the result appears in the same conversation surface as ordinary agent work. For
+older Automation records that do not yet have a saved Space, the runtime falls
+back to the Agent default Space.
+
+## Builder Threads
+
+Chat creation uses a real setup thread, but that thread is hidden from normal
+navigation and search. ThinkWork creates or reuses a system-managed Automation
+Builder Space with hidden visibility and stores setup conversation history
+there.
+
+The builder thread is not the execution thread. It is setup history. The
+Automation detail page can link back to it when operators need to understand how
+the draft was produced.
+
+## Automation Loop Designer Skill
+
+The Chat builder is seeded with an `automation-loop-designer` workspace skill.
+It helps turn a fuzzy prompt into a reviewable `AutomationDraft`: prompt, Space,
+trigger, goal, judge, policy, and source metadata.
+
+The skill is adapted from Kevin Simback's
+[Looper](https://github.com/ksimback/looper) project under the MIT license. The
+ThinkWork version keeps Looper's design-coaching ideas, including goal
+clarification, verification rubrics, stop guards, observability, and privacy
+boundaries, but emits a ThinkWork-native draft instead of an external runner or
+slash command.
+
+## Run Shape
+
+```
+Manual Run Now or AWS Scheduler fires
+        |
+        v
+Automation dispatcher
+        |
+        v
+AgentLoopRun + first iteration row
+        |
+        v
+Execution thread in the selected Space
+        |
+        v
+Agent wakeup -> AgentCore Pi goal-mode runtime
+        |
+        v
+Worker reply + goal_run evidence
+        |
+        v
+Judgment and evidence projection
+        |
+        v
+Complete, continue, fail, budget-stop, or escalate
+```
+
+Manual and scheduled runs share the same dispatcher. That keeps local "Run now"
+validation aligned with recurring schedule behavior.
+
+Phase 1 executable judge modes are self-check and human-approval escalation.
+Model judges and reviewer-agent judges are reserved in the shared contract for
+later verification loops, but are not selectable as working Phase 1 behavior.
+
 ## Loop Suitability Gate
 
-Before enabling a recurring AgentLoop, check that the work is actually
+Before enabling a recurring Automation, check that the work is actually
 loop-worthy:
 
 - The task repeats often enough to justify automation, usually weekly or more.
@@ -46,101 +127,33 @@ loop-worthy:
   self-check criteria, or human-escalation gate.
 - The worker can complete the job end to end with available tools and
   connectors.
-- "Done" is objective enough to express as completion criteria, not only taste.
+- "Done" is objective enough to inspect, even when ThinkWork initially stores a
+  runtime-inferred fallback criterion.
 
 If a task fails that gate, keep it as a manual run, an ordinary prompt, or a
-Workflow. Recurrence without a judge is only a schedule.
-
-## Manual Run First
-
-New scheduled loops should prove themselves with a manual run before the
-operator trusts the cadence. The expected first-use path is:
-
-1. Open Settings -> AgentLoops.
-2. Start from the `Weekly Agent Check-In` preset.
-3. Choose the worker agent or profile.
-4. Write goal intent and explicit completion criteria.
-5. Save the loop, run it now, and inspect the AgentLoopRun evidence.
-6. Enable or keep the schedule only after the manual run explains its outcome.
-
-The run inspector is the durable debugger. It shows trigger source, goal/policy
-snapshot, iterations, judgments, evidence pointers, cost, and terminal reason.
-
-## How Schedules Fit
-
-AWS Scheduler still wakes scheduled loops, but it is not the source of truth.
-ThinkWork stores schedule plumbing in `scheduled_jobs`; when a scheduled
-AgentLoop fires, the trigger path creates an AgentLoopRun and iteration, then
-dispatches the worker through the same goal-mode path as a manual run.
-
-That separation matters:
-
-- Operators query and audit AgentLoop state through GraphQL and Settings.
-- EventBridge/Scheduler rows can be reconciled without changing run history.
-- Manual and scheduled runs share one dispatcher and one evidence model.
-- Future event-driven or n8n-authored loops can trigger AgentLoops without
-  owning AgentLoop identity, judgment, or state.
-
-## AgentLoop Run Shape
-
-```
-Manual Run Now or AWS Scheduler fires
-        |
-        v
-AgentLoop dispatcher
-        |
-        v
-AgentLoopRun + first iteration row
-        |
-        v
-Agent wakeup -> AgentCore Pi goal-mode runtime
-        |
-        v
-Worker result + goal_run evidence
-        |
-        v
-AgentLoop judgment projection
-        |
-        v
-Complete, continue, fail, budget-stop, or escalate
-```
-
-Phase 1 executable judge modes are self-check and human-approval escalation.
-Model judges and reviewer-agent judges are reserved in the shared contract for
-later verification loops, but are not selectable as working Phase 1 behavior.
-
-## Workflows Still Matter
-
-A scheduled "every overnight, fetch new emails, classify each, draft urgent
-replies, wait for approval, then send" is better as a Workflow: it is a known
-state machine with visible steps. The Workflow run-detail graph shows step
-status, input/output, cost, and Step Functions adapter evidence.
-
-An AgentLoop can later trigger, contain, or be triggered by a Workflow, but the
-two should not collapse into one table or one UI. AgentLoops answer "is this
-autonomous goal making progress under policy?" Workflows answer "which explicit
-step of this process ran or failed?"
+Workflow. Recurrence without judgment is only a schedule.
 
 ## Debugging
 
-- **AgentLoop behavior.** Open Settings -> AgentLoops -> run detail. Read the
-  judgment, evidence, policy snapshot, and terminal reason.
-- **Workflow structure.** Open Settings -> Workflows -> run detail. Use the graph
-  and step-detail panel.
+- **Automation behavior.** Open Settings -> Automations -> recent run. Prefer
+  the linked execution thread for the user-visible outcome, then inspect the run
+  evidence and terminal reason when needed.
+- **Setup questions.** Open the linked builder thread from the Automation detail
+  page when the saved draft needs context.
+- **Workflow structure.** Open Settings -> Workflows -> run detail. Use the
+  graph and step-detail panel.
 - **Underlying schedule plumbing.** Check `scheduled_jobs`, the
-  job-schedule-manager, and AWS Scheduler only when the loop never fired.
-- **Agent-level execution.** Follow the linked thread turn or Activity evidence
-  from the AgentLoopRun when the worker ran but produced the wrong outcome.
+  job-schedule-manager, and AWS Scheduler only when no Automation run exists.
 
 <Aside type="tip">
-  A common pitfall is debugging a scheduled AgentLoop as if the schedule were
-  the product. First ask whether an AgentLoopRun exists. If it does, debug the
-  run evidence. If it does not, debug the scheduler plumbing.
+  A common pitfall is debugging a scheduled Automation as if the schedule were
+  the product. First ask whether an Automation run exists. If it does, debug the
+  run thread and evidence. If it does not, debug the scheduler plumbing.
 </Aside>
 
-## Related pages
+## Related Pages
 
-- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) - how schedule and event plumbing reaches AgentLoops and Workflows.
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) - how schedule and event plumbing reaches Automations and Workflows.
 - [Workflows and Execution Model](/concepts/automations/workflows-and-execution/) - explicit multi-step orchestration.
-- [Evaluations](/guides/evaluations/) - scoring and replay suites that remain distinct from AgentLoop authoring.
+- [Evaluations](/guides/evaluations/) - scoring and replay suites that remain distinct from Automation authoring.
 - [Architecture](/architecture/) - where EventBridge, Scheduler, Step Functions, and AgentCore fit in the deploy.

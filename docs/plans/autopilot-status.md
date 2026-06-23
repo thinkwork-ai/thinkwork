@@ -14,9 +14,9 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: Unit 7 - Execution Thread Parity and End-to-End Validation.
-- Current branch: `codex/thnk-46-u7-execution-parity`.
-- Current worktree: `.Codex/worktrees/thnk-46-u7-execution-parity`.
+- Current unit: Unit 8 - Documentation, Codegen, and Release Readiness.
+- Current branch: `codex/thnk-46-u8-release-readiness`.
+- Current worktree: `.Codex/worktrees/thnk-46-u8-release-readiness`.
 - Current pull request: Not opened yet.
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
@@ -224,6 +224,54 @@ main` and HTTPS reachability both succeeded, then the U4 branch was pushed
     `[GraphQL] Cannot query field "spaceId" on type "AgentLoop"` because the
     local web env points at the currently deployed API, which does not yet have
     this PR's GraphQL schema.
+  - 2026-06-23: U7 PR
+    [#2892](https://github.com/thinkwork-ai/thinkwork/pull/2892) passed
+    required CI (`cla`, `lint`, `verify`, `typecheck`, `test`, and Migration
+    Drift Precheck) and was squash merged as
+    `e6110528de078f201b13a7dbb5759ebdd2f4660f`; the remote branch was deleted
+    by GitHub and the local U7 worktree/branch were removed. The first
+    Migration Drift Precheck failed because dev was missing
+    `agent_loops.space_id` and `agent_loops_tenant_space_idx`; applied
+    `0185_agent_loop_space.sql` to dev, reran the check, and it passed.
+  - 2026-06-23: U8 started from `origin/main` at `e6110528d` in
+    `.Codex/worktrees/thnk-46-u8-release-readiness`.
+  - 2026-06-23: U8 implementation in progress. Updated user and internal docs
+    so Automations are the product noun, AgentLoop is the backing runtime,
+    prompt-first Chat/Manual/Advanced creation is documented, the hidden
+    Automation Builder Space and visible run-thread model are explained, and
+    the `automation-loop-designer` skill includes Looper attribution. Regenerated
+    GraphQL clients for CLI, web, and mobile; retained meaningful CLI/mobile
+    generated type additions and dropped web format-only churn because web was
+    already current from U7.
+  - 2026-06-23: U8 local verification passed:
+    `pnpm --filter @thinkwork/docs build`,
+    `pnpm --filter thinkwork-cli typecheck`,
+    `pnpm --filter @thinkwork/workspace-defaults exec vitest run
+src/__tests__/automation-loop-designer.test.ts src/__tests__/parity.test.ts`,
+    `pnpm --filter thinkwork-cli test`, `pnpm --filter @thinkwork/mobile test`,
+    Prettier check for touched docs/generated files, and `git diff --check`.
+  - 2026-06-23: Fixed the New Automation advanced settings sheet layout after
+    browser review: constrained the drawer to an inspector width, restored body
+    padding, tightened labels and section rhythm, and made worker/judge controls
+    stack inside the drawer. Verified visually in the in-app browser at the
+    default viewport and a temporary 930px-wide viewport with no overflowing
+    drawer children; then reset the viewport. Focused web test and web
+    typecheck passed.
+  - 2026-06-23: Fixed the chat builder setup path after browser review. The
+    hidden Automation Builder Space now grants the requester muted Space
+    membership so private-space workspace rendering can resume the builder
+    turn. The seeded builder message now stores an intro text part plus a
+    validated `data-user-question` part and pending question row, so the
+    existing tabbed `UserQuestionCard` renders the setup questions instead of a
+    plain numbered markdown list. Focused API automation-builder tests and API
+    typecheck passed.
+  - 2026-06-23: U8 final local verification passed after the browser feedback
+    fixes: focused API automation-builder tests, focused web Automation form
+    tests, `pnpm --filter @thinkwork/api typecheck`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/api test` (583 files passed, 3 skipped; 5379
+    tests passed, 9 skipped), Prettier check over U8-touched files, and
+    `git diff --check`.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 

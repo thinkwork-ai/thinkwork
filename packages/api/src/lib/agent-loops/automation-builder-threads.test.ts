@@ -175,5 +175,16 @@ describe("createAutomationBuilderThread", () => {
       user_id: "user-1",
       source: "automation_builder",
     });
+
+    const memberInsert = insertValues.find(
+      (entry: any) => entry.table === spaceMembersTable,
+    ) as { values: Record<string, unknown> };
+    expect(memberInsert.values).toMatchObject({
+      tenant_id: "tenant-1",
+      space_id: "space-1",
+      user_id: "user-1",
+      role: "member",
+      notification_preference: "muted",
+    });
   });
 });

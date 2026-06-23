@@ -1,13 +1,13 @@
 ---
 title: Scheduled and Event-driven
-description: How ThinkWork schedule and event plumbing reaches AgentLoops and Workflows through AWS Scheduler, EventBridge, and scheduled_jobs.
+description: How ThinkWork schedule and event plumbing reaches Automations and Workflows through AWS Scheduler, EventBridge, and scheduled_jobs.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
 ThinkWork has two entry paths for background work: a schedule fires at a
 predetermined time, or an event arrives and triggers a run. In v1, recurring
-goal-driven agent work should surface as an **AgentLoop**. Explicit multi-step
+goal-driven agent work should surface as an **Automation**. Explicit multi-step
 orchestration should surface as a **Workflow**. AWS Scheduler, EventBridge, and
 `scheduled_jobs` are the plumbing that wakes those product records.
 
@@ -25,11 +25,11 @@ A schedule fires on a cron- or rate-like cadence: "every weekday at 9am," "every
 Every schedule in ThinkWork has:
 
 - A **cron or rate expression.**
-- A **target** — which AgentLoop, Workflow, or internal job the schedule should wake.
+- A **target** — which Automation, Workflow, or internal job the schedule should wake.
 - A **start and optional end window.**
 - A **tenant + Space scope** — schedules are tenant-scoped and usually run in a specific Space.
 
-AgentLoop schedules are created through Settings -> AgentLoops. Lower-level
+Automation schedules are created through Settings -> Automations. Lower-level
 schedule rows can still be managed by operator/admin surfaces or GraphQL when a
 feature owns the target contract.
 
@@ -42,7 +42,7 @@ crosses a threshold. Event-driven triggers in ThinkWork route through
 carries a `detail-type`, `source`, and `detail` payload; ThinkWork's event
 trigger rules match on those fields.
 
-Event-driven AgentLoops are later-phase work. When they arrive, EventBridge or
+Event-driven Automations are later-phase work. When they arrive, EventBridge or
 a workflow engine such as n8n may trigger or participate in a loop, but
 ThinkWork must still own AgentLoop identity, run state, judgment, and evidence.
 
@@ -58,7 +58,7 @@ Event-driven triggers in ThinkWork can be configured for:
 The non-obvious part is what happens between "user created a schedule in the admin app" and "a schedule actually fires." There's a provisioning chain:
 
 ```
-User creates scheduled AgentLoop or schedule-backed Workflow
+User creates scheduled Automation or schedule-backed Workflow
         │  GraphQL product mutation
         ▼
 scheduled_jobs row inserted in Aurora
@@ -72,10 +72,10 @@ AWS Scheduler: CreateSchedule (or UpdateSchedule)
         ▼
 When the schedule fires:
 AWS Scheduler → job-trigger Lambda
-        │  (resolves the job row; starts an AgentLoopRun OR
+        │  (resolves the job row; starts an Automation run OR
         │   starts a Workflow SFN execution)
         ▼
-For AgentLoop targets: AgentLoopRun -> worker wakeup -> AgentCore
+For Automation targets: AgentLoopRun -> worker wakeup -> AgentCore
 For Workflow targets:  Workflow run -> Routine adapter -> SFN.StartExecution
 ```
 
@@ -103,7 +103,7 @@ The admin app Scheduled Jobs form steers authors toward `cron()` expressions for
 
 When a scheduled automation doesn't run, work the chain:
 
-1. **Does an AgentLoopRun or Workflow run exist?** If yes, debug the product
+1. **Does an Automation run or Workflow run exist?** If yes, debug the product
    run first.
 2. **Did AWS Scheduler attempt to fire?** Check the Scheduler's history in the
    AWS console. A dead-letter entry tells you the target invocation failed.
@@ -112,7 +112,7 @@ When a scheduled automation doesn't run, work the chain:
 4. **Did it find the `scheduled_jobs` row?** If the Aurora row was deleted but
    the Scheduler entry was not reconciled, the trigger Lambda will log "no
    matching job."
-5. **Did AgentCore or Step Functions run?** AgentLoops dispatch an AgentCore
+5. **Did AgentCore or Step Functions run?** Automations dispatch an AgentCore
    worker wakeup; Workflows start Step Functions.
 
 Most missed runs are at step 1 or 2. Schedule drift between Aurora and Scheduler is the single most common class of bug, which is why the reconciler Lambda exists — but it's reconciler-based (eventual), not transactional.
@@ -134,8 +134,8 @@ For event-driven triggers:
 
 ## Related pages
 
-- [AgentLoops](/concepts/automations/) - the v1 automation product object
-- [Admin: Automations](/applications/admin/automations/) - legacy/operator schedule and webhook surfaces during transition
+- [Automations](/concepts/automations/) - the v1 automation product object
+- [Admin: Automations](/applications/admin/automations/) - the operator surface for prompt-first Automations
 - [Threads: Lifecycle and Types](/concepts/threads/lifecycle-and-types/) — where AUTO threads fit
 - [Integrations](/concepts/integrations) — how integration events become triggers
 
@@ -149,4 +149,4 @@ row at fire time and starts the owning product path.
 
 State machines, rule patterns, and the EventBridge custom bus are provisioned by
 the ThinkWork Terraform module. For goal-driven recurring agent work, use
-Settings -> AgentLoops.
+Settings -> Automations.

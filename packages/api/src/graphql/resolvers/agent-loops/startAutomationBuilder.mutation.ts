@@ -1,18 +1,29 @@
+import { randomUUID } from "node:crypto";
 import type { GraphQLContext } from "../../context.js";
 import {
   and,
   db,
   eq,
   messages,
+  threadTurns,
   threadParticipants,
   threads,
   threadToCamel,
 } from "../../utils.js";
+import { pendingUserQuestions } from "@thinkwork/database-pg/schema";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
   buildAutomationBuilderDraft,
+  buildAutomationBuilderIntroMessage,
   buildAutomationBuilderOpeningMessage,
+  buildAutomationBuilderQuestions,
 } from "../../../lib/agent-loops/automation-builder.js";
+import {
+  renderQuestionMarkdown,
+  userQuestionPart,
+  validateQuestionBatch,
+  type UserQuestionInput,
+} from "../../../lib/user-questions/question-message.js";
 import {
   createAutomationBuilderThread,
   ensureAutomationBuilderSpace,
@@ -97,25 +108,86 @@ async function seedBuilderThread(input: {
   const setupPrompt = buildAutomationBuilderOpeningMessage({
     prompt: input.prompt,
   });
-  await db.insert(messages).values({
-    tenant_id: input.tenantId,
-    thread_id: input.threadId,
-    role: "assistant",
-    content: setupPrompt,
-    sender_type: "system",
-    metadata: {
-      purpose: "automation_builder",
-      designerSkill: "automation-loop-designer",
-      messageKind: "builder_opening",
-    },
+  const intro = buildAutomationBuilderIntroMessage({ prompt: input.prompt });
+  const questions = buildAutomationBuilderQuestions();
+  assertBuilderQuestions(questions);
+  const questionId = randomUUID();
+
+  await db.transaction(async (tx) => {
+    const [turn] = await tx
+      .insert(threadTurns)
+      .values({
+        tenant_id: input.tenantId,
+        thread_id: input.threadId,
+        invocation_source: "automation_builder",
+        trigger_detail: "builder_opening_question",
+        status: "succeeded",
+        runtime_type: "automation_builder",
+        started_at: new Date(),
+        finished_at: new Date(),
+        result_json: {
+          purpose: "automation_builder",
+          messageKind: "builder_opening",
+        },
+      })
+      .returning({ id: threadTurns.id });
+
+    const [message] = await tx
+      .insert(messages)
+      .values({
+        tenant_id: input.tenantId,
+        thread_id: input.threadId,
+        role: "assistant",
+        content: setupPrompt,
+        parts: [
+          {
+            type: "text",
+            id: "automation-builder-intro",
+            text: intro,
+          },
+          userQuestionPart(questionId, questions),
+        ],
+        sender_type: "system",
+        metadata: {
+          purpose: "automation_builder",
+          designerSkill: "automation-loop-designer",
+          messageKind: "builder_opening",
+        },
+      })
+      .returning({ id: messages.id });
+
+    await tx.insert(pendingUserQuestions).values({
+      id: questionId,
+      tenant_id: input.tenantId,
+      thread_id: input.threadId,
+      message_id: message.id,
+      thread_turn_id: turn.id,
+      status: "pending",
+      questions,
+      delegation_context: {
+        purpose: "automation_builder",
+        designerSkill: "automation-loop-designer",
+      },
+    });
   });
+
   await db
     .update(threads)
     .set({
-      last_response_preview: setupPrompt.slice(0, 240),
+      last_response_preview: intro.slice(0, 240),
       updated_at: new Date(),
     })
     .where(eq(threads.id, input.threadId));
+}
+
+function assertBuilderQuestions(questions: UserQuestionInput[]) {
+  const validationError = validateQuestionBatch(questions, null);
+  if (validationError) {
+    throw new Error(`Invalid Automation builder questions: ${validationError}`);
+  }
+  if (!renderQuestionMarkdown(questions)) {
+    throw new Error("Automation builder questions did not render");
+  }
 }
 
 async function assertBuilderThread(input: {
