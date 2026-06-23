@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import type { ColumnDef } from "@tanstack/react-table";
 import {
   Archive,
   Loader2,
@@ -25,7 +24,6 @@ import {
   AlertDialogTrigger,
   Badge,
   Button,
-  DataTable,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -36,14 +34,9 @@ import {
   SettingsPageTitle,
   SettingsPane,
 } from "@/components/settings/SettingsContent";
-import { StatusBadge } from "@/components/StatusBadge";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
-import {
-  DefinitionList,
-  InfoCard,
-  JsonPreview,
-} from "@/components/workflows/workflow-ui";
+import { InfoCard } from "@/components/workflows/workflow-ui";
 import {
   SettingsAgentLoopQuery,
   SettingsDeleteAgentLoopMutation,
@@ -56,6 +49,9 @@ import {
 } from "@/lib/settings-queries";
 import { AgentLoopForm } from "./AgentLoopForm";
 import { buildWorkerOptions } from "./AgentLoopInventory";
+import { AutomationDetailAdvancedInspector } from "./AutomationDetailAdvancedInspector";
+import { AutomationRunsList } from "./AutomationRunsList";
+import { AutomationStatusRail } from "./AutomationStatusRail";
 import type {
   AgentLoopRow,
   AgentLoopRunSummary,
@@ -65,9 +61,6 @@ import type {
 import {
   draftFromVersion,
   draftToPayload,
-  formatCost,
-  formatDateTime,
-  formatDuration,
   jsonRecord,
   stringValue,
   titleize,
@@ -100,6 +93,7 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
   const [pendingAction, setPendingAction] = useState<
     "run" | "pause" | "archive" | "refresh" | null
   >(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [loopResult, refetchLoop] = useQuery<AgentLoopDetailData>({
@@ -250,70 +244,6 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
     }
   }
 
-  const runColumns = useMemo<ColumnDef<AgentLoopRunSummary>[]>(
-    () => [
-      {
-        accessorKey: "status",
-        header: "Status",
-        size: 140,
-        cell: ({ row }) => (
-          <StatusBadge status={row.original.status.toLowerCase()} size="sm" />
-        ),
-      },
-      {
-        id: "trigger",
-        header: "Trigger",
-        size: 120,
-        cell: ({ row }) => (
-          <Badge variant="outline" className="text-xs">
-            {titleize(row.original.triggerFamily)}
-          </Badge>
-        ),
-      },
-      {
-        id: "iteration",
-        header: "Iteration",
-        size: 110,
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {row.original.currentIteration}
-          </span>
-        ),
-      },
-      {
-        id: "started",
-        header: "Started",
-        size: 180,
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {formatDateTime(row.original.startedAt ?? row.original.createdAt)}
-          </span>
-        ),
-      },
-      {
-        id: "duration",
-        header: "Duration",
-        size: 110,
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {formatDuration(row.original.startedAt, row.original.finishedAt)}
-          </span>
-        ),
-      },
-      {
-        id: "cost",
-        header: "Cost",
-        size: 100,
-        cell: ({ row }) => (
-          <span className="text-muted-foreground">
-            {formatCost(row.original.totalCostUsdCents)}
-          </span>
-        ),
-      },
-    ],
-    [],
-  );
-
   if (loopResult.fetching && !loop) {
     return (
       <SettingsPane>
@@ -352,35 +282,66 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
     );
   }
 
+  return (
+    <AgentLoopDetailContent
+      loop={loop}
+      pendingAction={pendingAction}
+      actionError={actionError}
+      advancedOpen={advancedOpen}
+      onAdvancedOpenChange={setAdvancedOpen}
+      onRun={() => void runNow(loop)}
+      onToggle={() => void toggleActive(loop, workerOptions)}
+      onOpenRun={(run) =>
+        navigate({
+          to: "/settings/agent-loops/$agentLoopId/runs/$runId",
+          params: { agentLoopId: loop.id, runId: run.id },
+        })
+      }
+    />
+  );
+}
+
+export function AgentLoopDetailContent({
+  loop,
+  pendingAction,
+  actionError,
+  advancedOpen,
+  onAdvancedOpenChange,
+  onRun,
+  onToggle,
+  onOpenRun,
+}: {
+  loop: AgentLoopRow;
+  pendingAction: string | null;
+  actionError?: string | null;
+  advancedOpen: boolean;
+  onAdvancedOpenChange: (open: boolean) => void;
+  onRun: () => void;
+  onToggle: () => void;
+  onOpenRun: (run: AgentLoopRunSummary) => void;
+}) {
   const version = loop.currentVersion;
-  const trigger = jsonRecord(version?.triggerSpec);
-  const triggerConfig = jsonRecord(trigger.config);
   const goal = jsonRecord(version?.goalSpec);
-  const worker = jsonRecord(version?.workerSpec);
-  const judge = jsonRecord(version?.judgeSpec);
-  const policy = jsonRecord(version?.loopPolicy);
+  const sourceMetadata = jsonRecord(version?.sourceMetadata);
+  const builderThreadId = stringValue(sourceMetadata.builderThreadId);
+  const prompt = stringValue(goal.objective, loop.description ?? "");
+  const criteria = Array.isArray(goal.completionCriteria)
+    ? goal.completionCriteria.filter((entry) => typeof entry === "string")
+    : [];
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto p-6">
       <SettingsPageTitle
         title={loop.name}
-        description={loop.description ?? "No description provided."}
-        badge={<StatusBadge status={loop.lifecycleStatus} size="sm" />}
+        description={loop.description ?? undefined}
         actions={
           <Button
             type="button"
+            variant="outline"
             size="sm"
-            onClick={() => void runNow(loop)}
-            disabled={
-              pendingAction !== null || loop.lifecycleStatus !== "active"
-            }
+            onClick={() => onAdvancedOpenChange(true)}
           >
-            {pendingAction === "run" ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <Zap className="mr-2 size-4" />
-            )}
-            Run now
+            Advanced details
           </Button>
         }
       />
@@ -391,117 +352,66 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
         </div>
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-        <InfoCard title="Loop summary">
-          <DefinitionList
-            items={[
-              { label: "Slug", value: loop.slug },
-              { label: "Trigger", value: titleize(loop.primaryTriggerFamily) },
-              { label: "Version", value: loop.currentVersionNumber ?? "-" },
-              { label: "Last run", value: formatDateTime(loop.lastRunAt) },
-              { label: "Accepted", value: loop.acceptedRunCount },
-              { label: "Escalated", value: loop.escalatedRunCount },
-            ]}
-          />
-        </InfoCard>
-        <InfoCard title="Policy snapshot">
-          <DefinitionList
-            items={[
-              {
-                label: "Max iterations",
-                value: String(policy.maxIterations ?? "-"),
-              },
-              {
-                label: "Max runtime",
-                value: policy.maxRuntimeMs
-                  ? `${Math.round(Number(policy.maxRuntimeMs) / 60000)}m`
-                  : "-",
-              },
-              { label: "Max tokens", value: String(policy.maxTokens ?? "-") },
-              {
-                label: "Cost budget",
-                value: String(policy.costBudgetUsd ?? "-"),
-              },
-              {
-                label: "Fail behavior",
-                value: titleize(stringValue(policy.failBehavior)),
-              },
-              {
-                label: "Escalate",
-                value: policy.escalateOnFailure ? "Yes" : "No",
-              },
-            ]}
-          />
-        </InfoCard>
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <main className="min-w-0 space-y-8">
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                Prompt
+              </h2>
+              {builderThreadId ? (
+                <a
+                  className="text-sm text-primary hover:underline"
+                  href={`/threads/${builderThreadId}`}
+                >
+                  Setup thread
+                </a>
+              ) : null}
+            </div>
+            <div className="whitespace-pre-wrap rounded-md border border-border/70 bg-muted/20 p-5 text-base leading-7">
+              {prompt || "No prompt captured for this Automation."}
+            </div>
+          </section>
+
+          {criteria.length > 0 ? (
+            <section>
+              <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+                Done Means
+              </h2>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {criteria.map((criterion) => (
+                  <li
+                    key={criterion}
+                    className="rounded-md border border-border/70 px-3 py-2"
+                  >
+                    {criterion}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          <section>
+            <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+              Recent Runs
+            </h2>
+            <AutomationRunsList runs={loop.runs ?? []} onOpenRun={onOpenRun} />
+          </section>
+        </main>
+
+        <AutomationStatusRail
+          loop={loop}
+          pendingAction={pendingAction}
+          onRun={onRun}
+          onToggle={onToggle}
+        />
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <InfoCard title="Trigger">
-          <DefinitionList
-            items={[
-              { label: "Family", value: titleize(stringValue(trigger.family)) },
-              {
-                label: "Schedule",
-                value: stringValue(triggerConfig.scheduleExpression, "-"),
-              },
-              {
-                label: "Timezone",
-                value: stringValue(triggerConfig.timezone, "-"),
-              },
-            ]}
-          />
-        </InfoCard>
-        <InfoCard title="Worker and judge">
-          <DefinitionList
-            items={[
-              {
-                label: "Worker type",
-                value: titleize(stringValue(worker.type)),
-              },
-              {
-                label: "Worker",
-                value: stringValue(worker.label, stringValue(worker.id)),
-              },
-              { label: "Judge", value: titleize(stringValue(judge.mode)) },
-              {
-                label: "Criteria",
-                value: Array.isArray(judge.criteria)
-                  ? `${judge.criteria.length}`
-                  : "0",
-              },
-            ]}
-          />
-        </InfoCard>
-      </div>
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <InfoCard title="Goal">
-          <JsonPreview value={goal} />
-        </InfoCard>
-        <InfoCard title="Evidence policy">
-          <JsonPreview value={version?.evidencePolicy ?? null} />
-        </InfoCard>
-      </div>
-
-      <div className="mt-4">
-        <InfoCard title="Runs">
-          <DataTable
-            columns={runColumns}
-            data={loop.runs ?? []}
-            emptyState={
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                No runs recorded yet.
-              </div>
-            }
-            onRowClick={(run) =>
-              navigate({
-                to: "/settings/agent-loops/$agentLoopId/runs/$runId",
-                params: { agentLoopId: loop.id, runId: run.id },
-              })
-            }
-          />
-        </InfoCard>
-      </div>
+      <AutomationDetailAdvancedInspector
+        open={advancedOpen}
+        onOpenChange={onAdvancedOpenChange}
+        loop={loop}
+      />
     </div>
   );
 }
