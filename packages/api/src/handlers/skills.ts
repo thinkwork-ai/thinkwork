@@ -2740,8 +2740,9 @@ async function mcpListUserServers(
     await import("@thinkwork/database-pg/schema");
 
   // Find all agents paired with this user. Agent assignments describe runtime
-  // availability, but managed OAuth connectors still need to be user-visible
-  // so the user can authenticate before an agent invocation needs them.
+  // availability, but managed/plugin OAuth connectors still need to be
+  // user-visible so the user can authenticate before an agent invocation needs
+  // them.
   const userAgents = await db
     .select({ id: agents.id, name: agents.name })
     .from(agents)
@@ -2793,7 +2794,10 @@ async function mcpListUserServers(
     .where(
       and(
         eq(tenantMcpServers.tenant_id, tenantId),
-        eq(tenantMcpServers.management_source, "managed_application"),
+        or(
+          eq(tenantMcpServers.management_source, "managed_application"),
+          eq(tenantMcpServers.management_source, "plugin"),
+        ),
         eq(tenantMcpServers.enabled, true),
         eq(tenantMcpServers.status, "approved"),
       ),
