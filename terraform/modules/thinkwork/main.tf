@@ -838,6 +838,17 @@ resource "aws_security_group_rule" "okf_wiki_vpce_from_lambda" {
   security_group_id        = aws_security_group.okf_wiki_vpc_endpoint[0].id
 }
 
+resource "aws_security_group_rule" "okf_wiki_vpce_from_twenty" {
+  count = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints && local.twenty_provisioned ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = module.twenty[0].twenty_security_group_id
+  security_group_id        = aws_security_group.okf_wiki_vpc_endpoint[0].id
+}
+
 resource "aws_vpc_endpoint" "okf_wiki_interface" {
   for_each = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints ? local.okf_wiki_interface_endpoint_services : toset([])
 
