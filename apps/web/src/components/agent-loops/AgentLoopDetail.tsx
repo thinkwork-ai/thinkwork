@@ -24,6 +24,10 @@ import {
   AlertDialogTrigger,
   Badge,
   Button,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -383,60 +387,80 @@ export function AgentLoopDetailContent({
         </div>
       ) : null}
 
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <main className="min-w-0 space-y-8">
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-muted-foreground">
-                Prompt
-              </h2>
-              {builderThreadId ? (
-                <a
-                  className="text-sm text-primary hover:underline"
-                  href={`/threads/${builderThreadId}`}
-                >
-                  Setup thread
-                </a>
-              ) : null}
-            </div>
-            <div className="whitespace-pre-wrap rounded-md border border-border/70 bg-muted/20 p-5 text-base leading-7">
-              {prompt || "No prompt captured for this Automation."}
-            </div>
-          </section>
+      <Tabs defaultValue="definition" className="min-h-0 flex-1 gap-6">
+        <TabsList variant="line" className="w-full justify-start border-b">
+          <TabsTrigger value="definition" className="flex-none px-3">
+            Definition
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="flex-none px-3">
+            Activity
+          </TabsTrigger>
+        </TabsList>
 
-          {criteria.length > 0 ? (
-            <section>
-              <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
-                Done Means
-              </h2>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                {criteria.map((criterion) => (
-                  <li
-                    key={criterion}
-                    className="rounded-md border border-border/70 px-3 py-2"
-                  >
-                    {criterion}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+        <TabsContent value="definition" className="mt-0">
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <main className="min-w-0 space-y-8">
+              <section>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold text-muted-foreground">
+                    Prompt
+                  </h2>
+                  {builderThreadId ? (
+                    <a
+                      className="text-sm text-primary hover:underline"
+                      href={`/threads/${builderThreadId}`}
+                    >
+                      Setup thread
+                    </a>
+                  ) : null}
+                </div>
+                <div className="whitespace-pre-wrap rounded-md border border-border/70 bg-muted/20 p-5 text-base leading-7">
+                  {prompt || "No prompt captured for this Automation."}
+                </div>
+              </section>
 
+              <section>
+                <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+                  Done Means
+                </h2>
+                {criteria.length > 0 ? (
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    {criteria.map((criterion) => (
+                      <li
+                        key={criterion}
+                        className="rounded-md border border-border/70 px-3 py-2"
+                      >
+                        {criterion}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="rounded-md border border-border/70 px-3 py-2 text-sm text-muted-foreground">
+                    The worker should satisfy the prompt and record evidence in
+                    the run thread.
+                  </div>
+                )}
+              </section>
+            </main>
+
+            <AutomationStatusRail
+              loop={loop}
+              pendingAction={pendingAction}
+              onRun={onRun}
+              onToggle={onToggle}
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-0">
           <section>
             <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
               Recent Runs
             </h2>
             <AutomationRunsList runs={loop.runs ?? []} onOpenRun={onOpenRun} />
           </section>
-        </main>
-
-        <AutomationStatusRail
-          loop={loop}
-          pendingAction={pendingAction}
-          onRun={onRun}
-          onToggle={onToggle}
-        />
-      </div>
+        </TabsContent>
+      </Tabs>
 
       <AutomationDetailAdvancedInspector
         open={advancedOpen}

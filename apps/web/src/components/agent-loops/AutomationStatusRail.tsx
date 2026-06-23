@@ -3,7 +3,13 @@ import { Loader2, Pause, Play, Zap } from "lucide-react";
 import { Badge, Button } from "@thinkwork/ui";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { AgentLoopRow } from "./agent-loop-types";
-import { formatCost, formatDateTime, jsonRecord, stringValue, titleize } from "./agent-loop-utils";
+import {
+  formatCost,
+  formatDateTime,
+  jsonRecord,
+  stringValue,
+  titleize,
+} from "./agent-loop-utils";
 
 export function AutomationStatusRail({
   loop,
@@ -21,6 +27,8 @@ export function AutomationStatusRail({
   const trigger = jsonRecord(version?.triggerSpec);
   const triggerConfig = jsonRecord(trigger.config);
   const lastRun = loop.runs?.[0] ?? null;
+  const lastRunAt = lastRun?.startedAt ?? lastRun?.createdAt ?? loop.lastRunAt;
+  const lastRunStatus = lastRun?.status ?? loop.lastRunStatus;
 
   return (
     <aside className="border-l border-border/70 pl-6">
@@ -33,8 +41,14 @@ export function AutomationStatusRail({
         </div>
 
         <div className="grid gap-3 text-sm">
-          <RailRow label="Status" value={active ? "Active" : titleize(loop.lifecycleStatus)} />
-          <RailRow label="Trigger" value={titleize(loop.primaryTriggerFamily)} />
+          <RailRow
+            label="Status"
+            value={active ? "Active" : titleize(loop.lifecycleStatus)}
+          />
+          <RailRow
+            label="Trigger"
+            value={titleize(loop.primaryTriggerFamily)}
+          />
           <RailRow
             label="Schedule"
             value={stringValue(triggerConfig.scheduleExpression, "-")}
@@ -43,17 +57,20 @@ export function AutomationStatusRail({
             label="Timezone"
             value={stringValue(triggerConfig.timezone, "-")}
           />
-          <RailRow label="Last ran" value={formatDateTime(loop.lastRunAt)} />
+          <RailRow label="Last ran" value={formatDateTime(lastRunAt)} />
           <RailRow
             label="Last result"
-            value={loop.lastRunStatus ? titleize(loop.lastRunStatus) : "-"}
+            value={lastRunStatus ? titleize(lastRunStatus) : "-"}
           />
           <RailRow label="Cost" value={formatCost(loop.totalCostUsdCents)} />
           <RailRow
             label="Last thread"
             value={
               lastRun?.threadId ? (
-                <a className="text-primary hover:underline" href={`/threads/${lastRun.threadId}`}>
+                <a
+                  className="text-primary hover:underline"
+                  href={`/threads/${lastRun.threadId}`}
+                >
                   Open thread
                 </a>
               ) : (
@@ -97,13 +114,7 @@ export function AutomationStatusRail({
   );
 }
 
-function RailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
+function RailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>

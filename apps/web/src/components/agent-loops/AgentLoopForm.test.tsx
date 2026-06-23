@@ -131,9 +131,48 @@ vi.mock("@thinkwork/ui", () => ({
       onChange={(event) => onCheckedChange?.(event.target.checked)}
     />
   ),
+  Tabs: ({
+    children,
+    value: _value,
+    onValueChange: _onValueChange,
+    ...props
+  }: {
+    children: React.ReactNode;
+    value?: string;
+    onValueChange?: (value: string) => void;
+  }) => <div {...props}>{children}</div>,
+  TabsContent: ({
+    children,
+    value: _value,
+    ...props
+  }: {
+    children: React.ReactNode;
+    value?: string;
+  }) => <div {...props}>{children}</div>,
+  TabsList: ({
+    children,
+    variant: _variant,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement> & { variant?: string }) => (
+    <div {...props}>{children}</div>
+  ),
+  TabsTrigger: ({
+    children,
+    value,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { value?: string }) => (
+    <button {...props} type="button" data-value={value}>
+      {children}
+    </button>
+  ),
   Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
     <textarea {...props} />
   ),
+}));
+
+vi.mock("@/lib/utils", () => ({
+  cn: (...values: Array<string | false | null | undefined>) =>
+    values.filter(Boolean).join(" "),
 }));
 
 const workers: AgentLoopWorkerOption[] = [
@@ -162,7 +201,7 @@ describe("AgentLoopForm", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Create Automation",
+          name: "Create from Chat Draft",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -217,7 +256,8 @@ describe("AgentLoopForm", () => {
       draft: {
         creationMode: "chat",
         name: "Linear routing automation",
-        objective: "Route Linear issues to the right worker.",
+        objective:
+          "Every weekday morning, route Linear issues to the right worker.",
         triggerFamily: "manual",
         scheduleType: "rate",
         scheduleExpression: "rate(7 days)",
@@ -251,14 +291,30 @@ describe("AgentLoopForm", () => {
     ).toBe("true");
 
     fireEvent.change(screen.getByLabelText("Automation prompt"), {
-      target: { value: "Route Linear issues to the right worker." },
+      target: {
+        value:
+          "Every weekday morning, route Linear issues to the right worker.",
+      },
     });
     fireEvent.click(screen.getByRole("button", { name: "Start chat builder" }));
 
     await waitFor(() => expect(onStartBuilder).toHaveBeenCalledTimes(1));
     expect(screen.getByText("Open setup thread")).toBeTruthy();
+    expect(screen.getByTestId("automation-builder-questions")).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Create from Chat Draft",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Create Automation" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Apply builder answers" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create from Chat Draft" }),
+    );
 
     await waitFor(() => expect(onConfirmBuilderDraft).toHaveBeenCalledTimes(1));
     expect(onConfirmBuilderDraft).toHaveBeenCalledWith(
@@ -266,6 +322,12 @@ describe("AgentLoopForm", () => {
         tenantId: "tenant-1",
         name: "Linear routing automation",
         spaceId: "space-1",
+        triggerSpec: expect.objectContaining({
+          family: "schedule",
+          config: expect.objectContaining({
+            scheduleExpression: "cron(0 9 ? * MON-FRI *)",
+          }),
+        }),
         sourceMetadata: expect.objectContaining({
           creationMode: "chat",
           builderThreadId: "thread-1",
