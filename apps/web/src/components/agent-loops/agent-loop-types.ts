@@ -6,6 +6,7 @@ export type AgentLoopLifecycleStatus =
 
 export type AgentLoopTriggerFamily = "manual" | "schedule";
 export type AgentLoopJudgeMode = "self_check" | "human_approval";
+export type AgentLoopCreationMode = "advanced" | "chat" | "easy";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -212,6 +213,7 @@ export interface AgentLoopWorkerOption {
 }
 
 export interface AgentLoopDraft {
+  creationMode: AgentLoopCreationMode;
   name: string;
   description: string;
   lifecycleStatus: AgentLoopLifecycleStatus;

@@ -10,6 +10,7 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import type { GraphQLContext } from "../../context.js";
 import {
+  agents,
   agentLoopVersions,
   agentLoops,
   db,
@@ -22,6 +23,11 @@ import {
   parseAwsJsonObject,
   requireAgentLoopAdmin,
 } from "./types.js";
+import {
+  normalizeAutomationDraft,
+  promptFirstDraftNeedsDefaultWorker,
+  type DefaultAutomationWorker,
+} from "../../../lib/agent-loops/automation-draft.js";
 
 type SaveAgentLoopInput = {
   id?: string | null;
@@ -50,7 +56,7 @@ export async function saveAgentLoop(
   const input = args.input;
   await requireAgentLoopAdmin(ctx, input.tenantId, "save_agent_loop");
 
-  const normalized = normalizeSpecs(input);
+  const normalized = await normalizeSpecs(input);
   const actorId = await resolveCallerUserId(ctx);
 
   if (input.id) {
@@ -262,18 +268,77 @@ interface NormalizedAgentLoopSpecs {
   sourceMetadata: Record<string, unknown>;
 }
 
-function normalizeSpecs(input: SaveAgentLoopInput): NormalizedAgentLoopSpecs {
+async function normalizeSpecs(
+  input: SaveAgentLoopInput,
+): Promise<NormalizedAgentLoopSpecs> {
+  const triggerSpec = parseAwsJsonObject(input.triggerSpec);
+  const goalSpec = parseAwsJsonObject(input.goalSpec);
+  const workerSpec = parseAwsJsonObject(input.workerSpec);
+  const judgeSpec = parseAwsJsonObject(input.judgeSpec);
+  const sourceMetadata = parseAwsJsonObject(input.sourceMetadata);
+  const defaultWorker = promptFirstDraftNeedsDefaultWorker({
+    workerSpec,
+    sourceMetadata,
+  })
+    ? await loadDefaultAutomationWorker(input.tenantId)
+    : null;
+  const draft = normalizeAutomationDraft({
+    goalSpec,
+    workerSpec,
+    judgeSpec,
+    sourceMetadata,
+    defaultWorker,
+  });
+
   return {
-    triggerSpec: normalizeTriggerSpec(parseAwsJsonObject(input.triggerSpec)),
-    goalSpec: normalizeGoalSpec(parseAwsJsonObject(input.goalSpec)),
-    workerSpec: normalizeWorkerSpec(parseAwsJsonObject(input.workerSpec)),
-    judgeSpec: normalizeJudgeSpec(parseAwsJsonObject(input.judgeSpec)),
+    triggerSpec: normalizeTriggerSpec(triggerSpec),
+    goalSpec: normalizeGoalSpec(draft.goalSpec),
+    workerSpec: normalizeWorkerSpec(draft.workerSpec),
+    judgeSpec: normalizeJudgeSpec(draft.judgeSpec),
     loopPolicy: input.loopPolicy
       ? normalizeLoopPolicy(parseAwsJsonObject(input.loopPolicy))
       : DEFAULT_LOOP_POLICY,
     evidencePolicy: normalizeEvidencePolicy(input.evidencePolicy),
-    sourceMetadata: parseAwsJsonObject(input.sourceMetadata),
+    sourceMetadata: draft.sourceMetadata,
   };
+}
+
+async function loadDefaultAutomationWorker(
+  tenantId: string,
+): Promise<DefaultAutomationWorker | null> {
+  const [platformDefault] = await db
+    .select({
+      id: agents.id,
+      label: agents.name,
+    })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.tenant_id, tenantId),
+        eq(agents.type, "agent"),
+        eq(agents.is_platform_default, true),
+      ),
+    )
+    .limit(1);
+  if (platformDefault) {
+    return {
+      type: "agent",
+      id: platformDefault.id,
+      label: platformDefault.label,
+    };
+  }
+
+  const [fallback] = await db
+    .select({
+      id: agents.id,
+      label: agents.name,
+    })
+    .from(agents)
+    .where(and(eq(agents.tenant_id, tenantId), eq(agents.type, "agent")))
+    .limit(1);
+  return fallback
+    ? { type: "agent", id: fallback.id, label: fallback.label }
+    : null;
 }
 
 function normalizeEvidencePolicy(value: unknown): EvidencePolicy {

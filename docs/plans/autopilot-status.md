@@ -14,11 +14,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: Unit 1 - Product Language and Route Compatibility.
-- Current branch: `codex/thnk-46-u1-automation-language`.
-- Current worktree: `.Codex/worktrees/thnk-46-u1-automation-language`.
+- Current unit: Unit 2 - Prompt-First Draft Normalization.
+- Current branch: `codex/thnk-46-u2-draft-normalization`.
+- Current worktree: `.Codex/worktrees/thnk-46-u2-draft-normalization`.
 - Current pull request:
-  [#2886](https://github.com/thinkwork-ai/thinkwork/pull/2886).
+  [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887).
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
     workflow, and the prompt-first Automations plan.
@@ -42,6 +42,37 @@ status: in_progress
   - 2026-06-23: U1 PR
     [#2886](https://github.com/thinkwork-ai/thinkwork/pull/2886) opened and CI
     monitoring started.
+  - 2026-06-23: U1 PR
+    [#2886](https://github.com/thinkwork-ai/thinkwork/pull/2886) passed
+    required CI and was squash merged as
+    `079a63c36ce6a9dd07216114a107b5c1e0fb155e`; the remote branch was deleted
+    and the local worktree was removed.
+  - 2026-06-23: U2 started from `origin/main` at `079a63c36` in
+    `.Codex/worktrees/thnk-46-u2-draft-normalization`.
+  - 2026-06-23: U2 implementation in progress. Added server-side
+    prompt-first automation draft normalization so Easy/Chat drafts can infer
+    completion criteria, self-check judge criteria, and the tenant platform
+    default Agent while preserving strict Advanced saves. Updated web draft
+    metadata/validation so prompt-only Easy drafts can use the existing
+    `saveAgentLoop` path.
+  - 2026-06-23: U2 focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/agent-loops/automation-draft.test.ts src/graphql/resolvers/agent-loops/saveAgentLoop.mutation.test.ts`,
+    `pnpm --filter @thinkwork/web exec vitest run src/components/agent-loops/agent-loop-utils.test.ts src/components/agent-loops/AgentLoopForm.test.tsx`,
+    `pnpm --filter @thinkwork/api typecheck`, and
+    `pnpm --filter @thinkwork/web typecheck`.
+  - 2026-06-23: U2 PR
+    [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887) opened and CI
+    monitoring started.
+  - 2026-06-23: User identified
+    [`ksimback/looper`](https://github.com/ksimback/looper) as a likely loop
+    skill to pull into the Skill Library. Reviewed the repo at a high level:
+    MIT license, design-coach/rubric focus, and explicit scaffolder-not-runtime
+    boundary. Updated the prompt-first Automations plan so Unit 4 seeds a
+    ThinkWork-native Automation Loop Designer skill, adapted from Looper with
+    attribution, as the Chat-mode draft builder.
+  - 2026-06-23: U2 PR
+    [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887) passed
+    required CI: `cla`, `lint`, `test`, `typecheck`, and `verify`.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 

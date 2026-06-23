@@ -14,6 +14,8 @@ related:
   - docs/solutions/agent-profile-closed-loops-2026-06-08.md
   - docs/solutions/conventions/admin-trim-ui-preserve-backend-mutations-2026-05-13.md
   - docs/solutions/design-patterns/audit-existing-ui-and-data-model-before-parallel-build-2026-04-28.md
+external_references:
+  - https://github.com/ksimback/looper
 ---
 
 # Prompt-first Automations
@@ -104,6 +106,24 @@ The Automation detail page should not read like a serialized runtime object. It 
 - Right/status rail: active state, Space, trigger, next run, last run, last result, cost, and run button.
 - Secondary sections: recent runs, linked setup thread, linked run threads.
 - Advanced inspector: side panel for goal, judge, policy, evidence, and raw runtime metadata.
+
+### Loop Designer Skill
+
+Chat creation should use a ThinkWork-native loop-design skill rather than a one-off prompt hidden in application code.
+
+`ksimback/looper` is a useful reference and candidate source for the first curated skill-library entry. It is MIT licensed and focuses on the exact missing layer: coaching a fuzzy loop idea into a reviewable loop design before execution. The implementation should pull this into the Skill Library as an **Automation Loop Designer** skill, preserving attribution and license notices, but adapting the language and output contract to ThinkWork:
+
+- User-facing object: Automation.
+- Output artifact: structured `AutomationDraft`, not `loop.yaml` as the primary product contract.
+- Runtime target: existing AgentLoop save path and ThinkWork threads, not Looper's external Python runner.
+- Verification taxonomy: programmatic, judge, and human criteria mapped into `JudgeSpec`, `goalSpec`, `sourceMetadata`, and future advanced inspector fields.
+- Control rubric: max iterations, revision caps, no-progress stops, budget/time caps, and human checkpoints mapped into loop policy and source metadata.
+- Privacy rubric: explicit disclosure when a reviewer/judge model or external tool would receive workspace context.
+- Observability rubric: state/log expectations mapped to Automation run evidence and setup-thread history.
+
+The skill should power Chat mode's interview and draft review. Easy mode should remain deterministic and form-based, but can reuse the same normalization and inference vocabulary. Advanced mode should expose the generated criteria and control settings for inspection and editing.
+
+Do not vendor Looper's Claude-specific slash command as-is. The valuable part is the design rubric and artifact discipline; the ThinkWork integration should be a Skill Library seed that emits our draft contract.
 
 ## Scope Boundaries
 
@@ -358,9 +378,13 @@ Goal: make the default New Automation path a guided chat builder.
 
 Tasks:
 
+- Add a ThinkWork-native **Automation Loop Designer** skill to the Skill Library, adapted from `ksimback/looper` with MIT attribution and license preservation.
+- Convert Looper's goal, verification, council, control, privacy, and observability rubrics into the skill's interview and draft-generation instructions.
+- Make the skill emit a structured `AutomationDraft` payload that maps cleanly to `goalSpec`, `judgeSpec`, `loopPolicy`, `sourceMetadata`, and the selected Space/trigger.
+- Do not expose Looper's external Python runner as the primary path; ThinkWork remains the durable orchestrator.
 - Add a mutation or helper action to start/resume an Automation builder thread.
 - Add a web Chat mode shell that opens the builder thread and shows draft state.
-- Seed the builder thread with an Automation-builder system prompt.
+- Seed the builder thread with the Automation Loop Designer skill prompt.
 - Let the builder ask clarifying questions and collect answers in the thread.
 - Produce a reviewable draft with name, prompt, Space, trigger, inferred goal, and inferred judge settings.
 - Require confirmation before save.
@@ -372,9 +396,12 @@ Approach notes:
 - The review draft is the contract between chat and save. It should be serializable and testable without relying on UI-only state.
 - If the model cannot infer a crisp goal, the draft should say that explicitly and use runtime-inferred defaults.
 - Saving an Automation from Chat should not archive or delete the builder thread; it remains linked setup history from the detail page.
+- The imported skill is product scaffolding, not runtime orchestration. The durable execution path remains AgentLoop runs, scheduled jobs, and thread wakeups.
 
 Likely files:
 
+- `tenants/<tenant-slug>/skill-catalog/automation-loop-designer/SKILL.md`
+- `packages/system-workspace` skill-library seed files if the repo keeps curated seed skills there.
 - `packages/database-pg/graphql/types/agent-loops.graphql`
 - `packages/api/src/graphql/resolvers/agent-loops/startAutomationBuilder.mutation.ts`
 - `packages/api/src/graphql/resolvers/agent-loops/confirmAutomationDraft.mutation.ts`
@@ -388,6 +415,7 @@ Verification:
 
 - Web test proves New Automation defaults to Chat mode.
 - Web test proves Chat mode creates or resumes a hidden builder thread.
+- Skill-library test or snapshot proves the Automation Loop Designer skill is installed/seeded with preserved Looper attribution and emits the expected draft shape.
 - API test proves confirming a draft creates an Automation linked to the builder thread.
 - If GraphQL changes, run schema build and codegen for every affected consumer.
 
@@ -489,6 +517,7 @@ Goal: make the new product shape durable for users and future implementers.
 Tasks:
 
 - Update docs to describe Automations, Chat creation, Easy mode, Advanced inspector, Spaces, and run threads.
+- Document the Automation Loop Designer skill, including Looper attribution/license if the skill is derived from or vendors Looper content.
 - Update screenshots or descriptions that still show AgentLoops.
 - Rebuild GraphQL schemas and generated clients if schema changes are made.
 - Add migration notes if hidden builder Space is created lazily.

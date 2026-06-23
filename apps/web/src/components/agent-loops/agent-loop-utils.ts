@@ -88,6 +88,7 @@ export function defaultAgentLoopDraft(
   workerOptions: AgentLoopWorkerOption[],
 ): AgentLoopDraft {
   return {
+    creationMode: "advanced",
     name: "",
     description: "",
     lifecycleStatus: "active",
@@ -140,6 +141,7 @@ export function draftFromVersion(
 
   return {
     ...fallback,
+    creationMode: "advanced",
     name: loop.name,
     description: loop.description ?? "",
     lifecycleStatus: normalizeLifecycle(loop.lifecycleStatus),
@@ -258,8 +260,17 @@ export function draftToPayload(input: {
     loopPolicy,
     evidencePolicy,
     sourceMetadata: {
-      createdFrom: "settings.agent-loops",
+      createdFrom:
+        input.draft.creationMode === "advanced"
+          ? "settings.automations.advanced"
+          : `settings.automations.${input.draft.creationMode}`,
+      creationMode: input.draft.creationMode,
       phase: "phase_1",
+      prompt: input.draft.objective.trim(),
+      goalInference:
+        criteriaFromText(input.draft.completionCriteriaText).length === 0
+          ? "runtime_inferred"
+          : "explicit",
       suitabilityGoalStable: input.draft.suitabilityGoalStable,
       suitabilityEvidenceAvailable: input.draft.suitabilityEvidenceAvailable,
       suitabilityBudgeted: input.draft.suitabilityBudgeted,
@@ -270,10 +281,15 @@ export function draftToPayload(input: {
 export function validateDraft(draft: AgentLoopDraft): string | null {
   if (!draft.name.trim()) return "Name is required.";
   if (!draft.objective.trim()) return "Goal intent is required.";
-  if (criteriaFromText(draft.completionCriteriaText).length === 0) {
+  if (
+    draft.creationMode === "advanced" &&
+    criteriaFromText(draft.completionCriteriaText).length === 0
+  ) {
     return "At least one completion criterion is required.";
   }
-  if (!draft.workerId) return "Choose a worker.";
+  if (draft.creationMode === "advanced" && !draft.workerId) {
+    return "Choose a worker.";
+  }
   if (draft.triggerFamily === "schedule" && !draft.scheduleExpression.trim()) {
     return "Scheduled loops require a schedule expression.";
   }
