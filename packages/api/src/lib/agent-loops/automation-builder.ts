@@ -1,4 +1,8 @@
 import { RUNTIME_INFERRED_COMPLETION_CRITERION } from "./automation-draft.js";
+import {
+  renderQuestionMarkdown,
+  type UserQuestionInput,
+} from "../user-questions/question-message.js";
 
 export const AUTOMATION_LOOP_DESIGNER_SKILL_SLUG = "automation-loop-designer";
 
@@ -97,6 +101,16 @@ export function buildAutomationBuilderDraft(
 export function buildAutomationBuilderOpeningMessage(input: {
   prompt?: string | null;
 }): string {
+  const intro = buildAutomationBuilderIntroMessage(input);
+  const questionMarkdown = renderQuestionMarkdown(
+    buildAutomationBuilderQuestions(),
+  );
+  return `${intro}\n\n${questionMarkdown}`;
+}
+
+export function buildAutomationBuilderIntroMessage(input: {
+  prompt?: string | null;
+}): string {
   const prompt = stringValue(input.prompt);
   const promptLine = prompt
     ? `\n\nStarting prompt:\n${prompt}`
@@ -109,13 +123,69 @@ export function buildAutomationBuilderOpeningMessage(input: {
     "",
     "I will use the Automation Loop Designer skill, adapted from Looper's design-coaching pattern, to keep the loop reviewable before it runs.",
     promptLine,
-    "",
-    "Questions:",
-    "1. What should the Automation accomplish each time it runs?",
-    "2. Which Space should it run in?",
-    "3. Should it run manually or on a schedule?",
-    "4. What evidence or final response would convince you it is done?",
   ].join("\n");
+}
+
+export function buildAutomationBuilderQuestions(): UserQuestionInput[] {
+  return [
+    {
+      header: "Goal",
+      question: "What should the Automation accomplish each time it runs?",
+      options: [
+        {
+          label: "Use my prompt",
+          description: "Treat the prompt as the initial goal.",
+        },
+        {
+          label: "I'll explain",
+          description: "Answer with more detail in the composer.",
+        },
+      ],
+    },
+    {
+      header: "Space",
+      question: "Which Space should it run in?",
+      options: [
+        {
+          label: "Default Space",
+          description: "Use the Agent settings default Space.",
+        },
+        {
+          label: "I'll choose",
+          description: "Name the Space in my reply.",
+        },
+      ],
+    },
+    {
+      header: "Trigger",
+      question: "Should it run manually or on a schedule?",
+      options: [
+        {
+          label: "Manual",
+          description: "Run only when I start it.",
+        },
+        {
+          label: "Schedule",
+          description: "Run on a recurring cadence.",
+        },
+      ],
+    },
+    {
+      header: "Done",
+      question:
+        "What evidence or final response would convince you it is done?",
+      options: [
+        {
+          label: "Summary",
+          description: "A concise status summary is enough.",
+        },
+        {
+          label: "I'll define",
+          description: "Answer with explicit completion criteria.",
+        },
+      ],
+    },
+  ];
 }
 
 function titleFromPrompt(prompt: string): string {

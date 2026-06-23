@@ -40,20 +40,22 @@ export function AutomationAdvancedInspector({
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>Advanced settings</SheetTitle>
-          <SheetDescription>
+      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto data-[side=right]:w-[min(560px,calc(100vw-2rem))] data-[side=right]:sm:max-w-none">
+        <SheetHeader className="border-b border-border px-6 py-5 pr-14">
+          <SheetTitle className="text-lg font-semibold">
+            Advanced settings
+          </SheetTitle>
+          <SheetDescription className="text-sm">
             Goal, judge, policy, evidence, and runtime controls.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-8 pb-6">
+        <div className="divide-y divide-border">
           <InspectorSection label="Identity">
             <InspectorField label="Name">
               <Input
                 aria-label="Automation name"
-                className="w-full"
+                className="h-10 w-full"
                 value={draft.name}
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -67,7 +69,7 @@ export function AutomationAdvancedInspector({
             <InspectorField label="Description">
               <Textarea
                 aria-label="Automation description"
-                className="min-h-20 w-full"
+                className="min-h-20 w-full resize-y"
                 value={draft.description}
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -91,7 +93,7 @@ export function AutomationAdvancedInspector({
             >
               <Textarea
                 aria-label="Goal intent"
-                className="min-h-28 w-full"
+                className="min-h-24 w-full resize-y"
                 value={draft.objective}
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -105,7 +107,7 @@ export function AutomationAdvancedInspector({
             <InspectorField label="Completion criteria">
               <Textarea
                 aria-label="Completion criteria"
-                className="min-h-28 w-full"
+                className="min-h-24 w-full resize-y"
                 value={draft.completionCriteriaText}
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -118,7 +120,7 @@ export function AutomationAdvancedInspector({
           </InspectorSection>
 
           <InspectorSection label="Worker and judge">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4">
               <InspectorField
                 label={
                   <span className="inline-flex items-center gap-2">
@@ -180,7 +182,7 @@ export function AutomationAdvancedInspector({
             <InspectorField label="Judge criteria">
               <Textarea
                 aria-label="Judge criteria"
-                className="min-h-24 w-full"
+                className="min-h-20 w-full resize-y"
                 value={draft.judgeCriteriaText}
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -296,7 +298,7 @@ export function AutomationAdvancedInspector({
             />
           </InspectorSection>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end px-6 py-5">
             <Button type="button" onClick={() => onOpenChange(false)}>
               Done
             </Button>
@@ -315,9 +317,9 @@ function InspectorSection({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-4 border-t border-border pt-5 first:border-t-0 first:pt-0">
+    <section className="space-y-4 px-6 py-5">
       <h2 className="text-sm font-semibold text-foreground">{label}</h2>
-      <div className="space-y-4">{children}</div>
+      <div className="space-y-3">{children}</div>
     </section>
   );
 }
@@ -333,12 +335,10 @@ function InspectorField({
 }) {
   return (
     <div
-      className={["block min-w-0 space-y-2", className]
-        .filter(Boolean)
-        .join(" ")}
+      className={["grid min-w-0 gap-2", className].filter(Boolean).join(" ")}
     >
-      <span className="block text-sm font-medium text-foreground">{label}</span>
-      <div className="min-w-0 text-sm text-muted-foreground">{children}</div>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="min-w-0 text-sm text-foreground">{children}</div>
     </div>
   );
 }
@@ -370,7 +370,7 @@ function CompactNumberRow({
         type="number"
         inputMode="numeric"
         min={1}
-        className="w-40"
+        className="h-10 w-full"
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}

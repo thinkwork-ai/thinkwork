@@ -154,6 +154,17 @@ export async function createAutomationBuilderThread(input: {
     })
     .onConflictDoNothing();
 
+  await db
+    .insert(spaceMembers)
+    .values({
+      tenant_id: input.tenantId,
+      space_id: builderSpace.id,
+      user_id: input.userId,
+      role: "member",
+      notification_preference: "muted",
+    })
+    .onConflictDoNothing();
+
   return { threadId: thread.id, identifier, number, spaceId: builderSpace.id };
 }
 

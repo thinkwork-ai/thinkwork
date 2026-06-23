@@ -3,7 +3,9 @@ import {
   AUTOMATION_LOOP_DESIGNER_SKILL_SLUG,
   buildAutomationBuilderDraft,
   buildAutomationBuilderOpeningMessage,
+  buildAutomationBuilderQuestions,
 } from "./automation-builder.js";
+import { validateQuestionBatch } from "../user-questions/question-message.js";
 
 describe("automation builder", () => {
   it("builds a prompt-first chat draft linked to the setup thread", () => {
@@ -39,5 +41,18 @@ describe("automation builder", () => {
     expect(message).toContain("Watch failed deploys.");
     expect(message).toContain("What should the Automation accomplish");
     expect(message).toContain("What evidence or final response");
+  });
+
+  it("keeps builder questions compatible with the question-card contract", () => {
+    const questions = buildAutomationBuilderQuestions();
+
+    expect(validateQuestionBatch(questions, null)).toBeNull();
+    expect(questions).toHaveLength(4);
+    expect(questions.map((question) => question.header)).toEqual([
+      "Goal",
+      "Space",
+      "Trigger",
+      "Done",
+    ]);
   });
 });

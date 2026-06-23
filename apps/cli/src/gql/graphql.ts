@@ -292,6 +292,7 @@ export type AgentLoop = {
   rejectedRunCount: Scalars["Int"]["output"];
   runs: Array<AgentLoopRun>;
   slug: Scalars["String"]["output"];
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
   tenantId: Scalars["ID"]["output"];
   totalCostUsdCents: Scalars["Int"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
@@ -7058,6 +7059,7 @@ export type SaveAgentLoopInput = {
   ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
   slug?: InputMaybe<Scalars["String"]["input"]>;
   sourceMetadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
   tenantId: Scalars["ID"]["input"];
   triggerSpec: Scalars["AWSJSON"]["input"];
   workerSpec: Scalars["AWSJSON"]["input"];

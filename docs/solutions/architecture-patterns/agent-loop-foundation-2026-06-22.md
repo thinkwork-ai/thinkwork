@@ -36,6 +36,13 @@ judgment, and evidence contract. UI and docs should teach Automations while
 engineering code can continue to use AgentLoop names where they describe the
 backing substrate.
 
+The prompt-first Automations follow-up also changed the expected product shape:
+creation starts from Chat or Manual prompt flows, every Automation persists an
+execution Space, hidden builder threads live in a system-managed Automation
+Builder Space, and actual runs create ordinary execution threads in the selected
+Space. Advanced AgentLoop settings remain available through inspectors, not as
+the default authoring surface.
+
 ## Context
 
 THNK-46 landed AgentLoop as the first-class automation primitive for
@@ -132,7 +139,7 @@ Phase 1 can safely run independent verification loops.
 Use these boundaries in docs and UI copy:
 
 - **Automation:** user-facing autonomous work object with prompt, Space,
-  trigger, run state, and evidence.
+  trigger, run thread, setup history, run state, and evidence.
 - **AgentLoop:** internal autonomous goal/policy loop runtime with trigger,
   worker, judge, policy, run state, and evidence.
 - **Workflow:** explicit multi-step orchestration with a known graph of steps,
@@ -156,6 +163,10 @@ When touching AgentLoop foundations, verify:
   human approval escalation, and projection failure recovery.
 - UI/docs present Automations as the v1 product concept and avoid exposing
   AgentLoop as a competing user-facing product.
+- Creation UI defaults to Chat or Manual prompt-first flows, not the Advanced
+  AgentLoop inspector.
+- Manual and scheduled execution tests prove runs create threads in the
+  configured Automation Space.
 
 ## Extension Guidance
 
