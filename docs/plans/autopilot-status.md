@@ -70,6 +70,9 @@ status: in_progress
     boundary. Updated the prompt-first Automations plan so Unit 4 seeds a
     ThinkWork-native Automation Loop Designer skill, adapted from Looper with
     attribution, as the Chat-mode draft builder.
+  - 2026-06-23: U2 PR
+    [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887) passed
+    required CI: `cla`, `lint`, `test`, `typecheck`, and `verify`.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
