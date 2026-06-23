@@ -6,6 +6,7 @@ import {
 } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "./access.js";
 import { threadSearchPredicate } from "./search.js";
+import { visibleThreadListPredicate } from "./system-hidden.js";
 
 export const threads_query = async (
   _parent: any,
@@ -31,7 +32,10 @@ export const threads_query = async (
     if (!callerUserId) return [];
   }
 
-  const conditions = [eq(threads.tenant_id, args.tenantId)];
+  const conditions = [
+    eq(threads.tenant_id, args.tenantId),
+    visibleThreadListPredicate(),
+  ];
   if (args.status)
     conditions.push(eq(threads.status, args.status.toLowerCase()));
   if (args.channel) {

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   mockSelect,
   mockExecute,
+  sqlCalls,
   mockCanReadTenantSpaces,
   mockCanManageTenantSpaces,
   mockRequireTenantAdmin,
@@ -27,6 +28,7 @@ const {
     templateKey: row.template_key,
   })),
   mockUserAccessibleSpacePredicate: vi.fn(() => ({ type: "accessible" })),
+  sqlCalls: [] as Array<{ text: string; values: unknown[] }>,
 }));
 
 vi.mock("../../utils.js", () => ({
@@ -34,9 +36,15 @@ vi.mock("../../utils.js", () => ({
   db: { select: mockSelect, execute: mockExecute },
   eq: vi.fn((left: unknown, right: unknown) => ({ left, right })),
   sql: Object.assign(
-    (_strings: TemplateStringsArray, ..._values: unknown[]) => ({
-      type: "sql",
-    }),
+    (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const call = { text: strings.join("?"), values };
+      sqlCalls.push(call);
+      return {
+        type: "sql",
+        text: call.text,
+        values: call.values,
+      };
+    },
     {
       join: vi.fn(() => ({ type: "sql.join" })),
     },
@@ -45,6 +53,8 @@ vi.mock("../../utils.js", () => ({
     id: "spaces.id",
     tenant_id: "spaces.tenant_id",
     status: "spaces.status",
+    template_key: "spaces.template_key",
+    config: "spaces.config",
   },
   spaceMembers: {
     tenant_id: "space_members.tenant_id",
@@ -84,6 +94,7 @@ beforeEach(async () => {
   mockResolveCallerUserId.mockResolvedValue("user-1");
   mockToGraphqlSpace.mockClear();
   mockUserAccessibleSpacePredicate.mockClear();
+  sqlCalls.length = 0;
   resolver = await import("./spaces.query.js");
 });
 
@@ -138,6 +149,14 @@ describe("spaces", () => {
         lastActivityAt: "2026-05-19T18:00:00.000Z",
       },
     ]);
+    expect(
+      sqlCalls.some((call) =>
+        call.values.includes("system:automation_builder"),
+      ),
+    ).toBe(true);
+    expect(sqlCalls.some((call) => call.text.includes("systemHidden"))).toBe(
+      true,
+    );
   });
 
   it("returns an empty list instead of leaking cross-tenant Spaces", async () => {

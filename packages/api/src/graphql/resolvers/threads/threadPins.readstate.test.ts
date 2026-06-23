@@ -24,6 +24,8 @@ const {
     tenant_id: col("threads.tenant_id"),
     last_read_at: col("threads.last_read_at"),
     archived_at: col("threads.archived_at"),
+    metadata: col("threads.metadata"),
+    space_id: col("threads.space_id"),
   };
   const threadParticipants = {
     id: col("thread_participants.id"),
@@ -90,6 +92,10 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("./access.js", () => ({
   callerVisibleThreadPredicate: vi.fn(() => ({ __visible: true })),
+}));
+
+vi.mock("./system-hidden.js", () => ({
+  visibleThreadListPredicate: vi.fn(() => ({ __systemVisible: true })),
 }));
 
 import { loadPinnedThreads } from "./threadPins.shared.js";

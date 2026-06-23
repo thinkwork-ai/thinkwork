@@ -17,6 +17,7 @@ import {
 } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "./access.js";
 import { threadSearchPredicate } from "./search.js";
+import { visibleThreadListPredicate } from "./system-hidden.js";
 
 export const threadsPaged_query = async (
   _parent: any,
@@ -35,6 +36,7 @@ export const threadsPaged_query = async (
   }
 
   const conditions: any[] = [eq(threads.tenant_id, args.tenantId)];
+  conditions.push(visibleThreadListPredicate());
   if (args.spaceId) {
     conditions.push(eq(threads.space_id, args.spaceId));
   }

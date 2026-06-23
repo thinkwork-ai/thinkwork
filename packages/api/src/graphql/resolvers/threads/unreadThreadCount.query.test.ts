@@ -22,4 +22,8 @@ describe("unreadThreadCount participant-scoped read state", () => {
     expect(source).toContain("${threads.last_read_at} IS NULL");
     expect(source).toContain("${activityExpression} > ${threads.last_read_at}");
   });
+
+  it("excludes system-hidden automation builder threads from unread totals", () => {
+    expect(source).toContain("visibleThreadListPredicate");
+  });
 });

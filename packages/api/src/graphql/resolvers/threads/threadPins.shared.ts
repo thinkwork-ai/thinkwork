@@ -17,6 +17,7 @@ import {
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "./access.js";
+import { visibleThreadListPredicate } from "./system-hidden.js";
 
 const threadColumns = getTableColumns(threads);
 
@@ -58,6 +59,7 @@ export async function loadVisibleThreadForPin(input: {
       and(
         eq(threads.tenant_id, input.tenantId),
         eq(threads.id, input.threadId),
+        visibleThreadListPredicate(),
         callerVisibleThreadPredicate(input.tenantId, input.callerUserId),
       ),
     )
@@ -189,6 +191,7 @@ export async function loadPinnedThreads(
         eq(threadParticipants.user_id, input.userId),
         sql`${threadParticipants.pinned_at} IS NOT NULL`,
         sql`${threads.archived_at} IS NULL`,
+        visibleThreadListPredicate(),
         callerVisibleThreadPredicate(input.tenantId, input.userId),
       ),
     )

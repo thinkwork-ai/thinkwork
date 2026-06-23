@@ -4,6 +4,7 @@ import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
+import { visibleThreadListPredicate } from "./system-hidden.js";
 
 // Count of non-archived, non-task, top-level threads in the tenant (optionally
 // filtered by agent) that have new activity the caller hasn't read yet. Mirrors
@@ -29,6 +30,7 @@ export const unreadThreadCount = async (
     isNull(threads.archived_at),
     sql`${threads.channel} != 'task'`,
     isNull(threads.parent_id),
+    visibleThreadListPredicate(),
   ];
   if (args.agentId) conditions.push(eq(threads.agent_id, args.agentId));
   if (callerUserId) {
