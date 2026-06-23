@@ -289,8 +289,14 @@ export async function resolveOauthComponentBindings(args: {
     handler_ref: Record<string, unknown> | null;
   }>;
   fetchFn: typeof fetch;
-}): Promise<Array<{ authDomain: string; resource: string }>> {
-  const bindings: Array<{ authDomain: string; resource: string }> = [];
+}): Promise<
+  Array<{ authDomain: string; resource: string; scopesSupported?: string[] }>
+> {
+  const bindings: Array<{
+    authDomain: string;
+    resource: string;
+    scopesSupported?: string[];
+  }> = [];
   for (const component of args.components) {
     if (component.auth.mode === "oauth") {
       bindings.push({
@@ -310,9 +316,14 @@ export async function resolveOauthComponentBindings(args: {
         `Plugin ${args.pluginKey} MCP component "${component.key}" has no resolved endpoint yet; finish the install before activating`,
       );
     }
+    const discovery = await discoverResourceAuthMetadata(
+      resolved,
+      args.fetchFn,
+    );
     bindings.push({
-      authDomain: await discoverResourceAuthDomain(resolved, args.fetchFn),
+      authDomain: discovery.authDomain,
       resource: normalizeResource(resolved),
+      scopesSupported: discovery.scopesSupported,
     });
   }
   return bindings;
@@ -364,10 +375,10 @@ export function resolveUserHeaderComponentBindings(args: {
  * `<origin>/.well-known/oauth-protected-resource[/<path>]` for the
  * resolved endpoint and return its first authorization server.
  */
-async function discoverResourceAuthDomain(
+async function discoverResourceAuthMetadata(
   endpointUrl: string,
   fetchFn: typeof fetch,
-): Promise<string> {
+): Promise<{ authDomain: string; scopesSupported: string[] }> {
   const endpoint = new URL(endpointUrl);
   const path = endpoint.pathname.replace(/^\/+/, "").replace(/\/+$/, "");
   const metadataUrl = path
@@ -397,7 +408,18 @@ async function discoverResourceAuthDomain(
       `Protected-resource metadata for ${endpointUrl} declares no authorization server`,
     );
   }
-  return servers[0]!.replace(/\/+$/, "");
+  const scopesSupported = Array.isArray(
+    (metadata as { scopes_supported?: unknown }).scopes_supported,
+  )
+    ? (metadata as { scopes_supported?: unknown[] }).scopes_supported!.filter(
+        (scope): scope is string =>
+          typeof scope === "string" && scope.length > 0,
+      )
+    : [];
+  return {
+    authDomain: servers[0]!.replace(/\/+$/, ""),
+    scopesSupported,
+  };
 }
 
 async function resolvePinnedPayload(
@@ -646,10 +668,15 @@ export async function startActivation(
     .update(codeVerifier)
     .digest("base64url");
 
+  const discoveredScopes = [
+    ...new Set(bindings.flatMap((binding) => binding.scopesSupported ?? [])),
+  ];
   const scope =
     payload.requiredOauthScopes.length > 0
       ? payload.requiredOauthScopes.join(" ")
-      : DEFAULT_OAUTH_SCOPE;
+      : discoveredScopes.length > 0
+        ? discoveredScopes.join(" ")
+        : DEFAULT_OAUTH_SCOPE;
 
   const state = signPluginOAuthState(
     {

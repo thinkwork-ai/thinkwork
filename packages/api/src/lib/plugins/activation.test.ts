@@ -1130,7 +1130,10 @@ describe("startActivation with oauth-per-instance components (U10)", () => {
       fetchCalls.push({ url });
       // RFC 9728 protected-resource metadata on the Twenty instance.
       if (url === `${INSTANCE}/.well-known/oauth-protected-resource/mcp`) {
-        return json({ authorization_servers: [INSTANCE] });
+        return json({
+          authorization_servers: [INSTANCE],
+          scopes_supported: ["api", "profile"],
+        });
       }
       // RFC 8414 discovery against the derived (instance) auth domain.
       if (url === `${INSTANCE}/.well-known/oauth-authorization-server`) {
@@ -1181,10 +1184,8 @@ describe("startActivation with oauth-per-instance components (U10)", () => {
     expect(url.origin + url.pathname).toBe(`${INSTANCE}/authorize`);
     expect(url.searchParams.get("client_id")).toBe("twenty-client-1");
     expect(url.searchParams.getAll("resource")).toEqual([`${INSTANCE}/mcp`]);
-    // Empty manifest scopes degrade to the activation default scope set.
-    expect(url.searchParams.get("scope")).toBe(
-      "openid email profile offline_access",
-    );
+    // Empty per-instance manifest scopes use the resource's advertised scopes.
+    expect(url.searchParams.get("scope")).toBe("api profile");
     expect(
       h.fetchCalls.some(
         (call) =>
