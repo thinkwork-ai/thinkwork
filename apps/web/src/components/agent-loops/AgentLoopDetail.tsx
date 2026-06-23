@@ -365,7 +365,7 @@ export function AgentLoopDetailContent({
     : [];
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto p-6">
+    <div className="@container flex h-full min-h-0 w-full flex-col overflow-y-auto p-6">
       <SettingsPageTitle
         title={loop.name}
         description={loop.description ?? undefined}
@@ -398,7 +398,7 @@ export function AgentLoopDetailContent({
         </TabsList>
 
         <TabsContent value="definition" className="mt-0">
-          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-8 @min-[650px]:grid-cols-[minmax(0,1fr)_320px]">
             <main className="min-w-0 space-y-8">
               <section>
                 <div className="mb-3 flex items-center justify-between gap-3">

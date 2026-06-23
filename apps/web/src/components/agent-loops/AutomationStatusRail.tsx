@@ -80,7 +80,7 @@ export function AutomationStatusRail({
           />
         </div>
 
-        <div className="grid gap-2">
+        <div className="grid grid-cols-2 gap-2 @max-[650px]:grid-cols-1">
           <Button
             type="button"
             onClick={onRun}
