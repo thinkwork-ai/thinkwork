@@ -540,6 +540,13 @@ const installedPlugins = [
         componentKey: "workos-auth",
         componentType: "auth-provider",
         state: "provisioned",
+        handlerRef: {
+          status: "valid",
+          issuerUrl: "https://customer.authkit.app",
+          clientId: "client_saved",
+          publicOptionsPublished: true,
+          publicOptionLabel: "Continue with SSO",
+        },
         lastError: null,
       },
     ],

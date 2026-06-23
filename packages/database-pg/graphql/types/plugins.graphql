@@ -360,6 +360,15 @@ input UpdateN8nPluginApiCredentialInput {
   idempotencyKey: String!
 }
 
+input ConfigureWorkosAuthPluginInput {
+  installId: ID!
+  issuerUrl: String!
+  clientId: String!
+  "Write-only. Required for first-time setup; omit to keep the existing secret."
+  clientSecret: String
+  publicOptionLabel: String
+}
+
 """
 Start of the app-level OAuth activation flow. The caller redirects the user
 to `authorizeUrl`; the callback upserts the activation and its token records
@@ -402,6 +411,12 @@ type UpdateN8nPluginPackageSettingsResult {
 
 type UpdateN8nPluginApiCredentialResult {
   settings: N8nPluginSettings!
+}
+
+type ConfigureWorkosAuthPluginResult {
+  install: PluginInstall!
+  resource: AuthProviderResource!
+  reference: TenantAuthProviderReference!
 }
 
 """
@@ -512,6 +527,14 @@ extend type Mutation {
   updateN8nPluginApiCredential(
     input: UpdateN8nPluginApiCredentialInput!
   ): UpdateN8nPluginApiCredentialResult!
+  """
+  Tenant-admin: configure the installed WorkOS Auth plugin with customer-owned
+  AuthKit credentials. Stores the secret server-side, publishes the public SSO
+  option, and updates the auth-provider component state.
+  """
+  configureWorkosAuthPlugin(
+    input: ConfigureWorkosAuthPluginInput!
+  ): ConfigureWorkosAuthPluginResult!
   """
   One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
   MCP row to plugin ownership (management_source 'plugin' under the
