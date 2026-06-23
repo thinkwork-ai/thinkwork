@@ -167,7 +167,7 @@ locals {
   # in one account (KTD6 — activation is what's mutually exclusive).
   rule_set_name = "thinkwork-${var.stage}-customer-domain-email-rules"
 
-  has_lambda = local.ses_enabled && var.enable_email_inbound_lambda_action
+  has_lambda = local.ses_enabled && var.enable_email_inbound_lambda_action && var.email_inbound_fn_arn != "" && var.email_inbound_fn_name != ""
   has_bucket = var.inbound_bucket_name != ""
 
   # Universal hosted zone ID for CloudFront distributions — a documented AWS
