@@ -13,11 +13,11 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
-- Status: In progress.
-- Current unit: Unit 8 - Documentation, Codegen, and Release Readiness.
-- Current branch: `codex/thnk-46-u8-release-readiness`.
-- Current worktree: `.Codex/worktrees/thnk-46-u8-release-readiness`.
-- Current pull request: Not opened yet.
+- Status: Complete. U1 through U8 are merged to `main`.
+- Current unit: None.
+- Current branch: None.
+- Current worktree: None.
+- Current pull request: None.
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
     workflow, and the prompt-first Automations plan.
@@ -275,6 +275,18 @@ src/__tests__/automation-loop-designer.test.ts src/__tests__/parity.test.ts`,
   - 2026-06-23: U8 PR
     [#2893](https://github.com/thinkwork-ai/thinkwork/pull/2893) opened and CI
     monitoring started.
+  - 2026-06-23: U8 PR
+    [#2893](https://github.com/thinkwork-ai/thinkwork/pull/2893) passed
+    required CI (`cla`, `lint`, `verify`, `typecheck`, and `test`) and was
+    squash merged as `99be93913acbe11ad744760f73b93351114e45ec`; the remote
+    branch was deleted by GitHub, the local U8 worktree/branch were removed,
+    and `origin/main` was fetched to the merged commit. The primary checkout
+    was intentionally not pulled because it had unrelated dirty changes.
+  - 2026-06-23: THNK-46 prompt-first Automations autopilot completed. Product
+    language, prompt-first normalization, hidden builder threads, Chat builder,
+    Easy/Advanced creation, prompt-document detail, configured-Space execution
+    parity, documentation, codegen, browser feedback fixes, PR CI, and cleanup
+    are complete across PRs #2886 through #2893.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
