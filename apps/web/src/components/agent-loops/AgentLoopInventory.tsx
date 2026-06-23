@@ -218,7 +218,7 @@ export function AgentLoopInventory() {
   return (
     <SettingsTablePane
       title="Automations"
-      description="Build and inspect recurring or manual automations with explicit goals, workers, judges, and run evidence."
+      description="Create, run, and inspect recurring or manual automations."
       loading={loopsResult.fetching && !loopsResult.data}
       actions={
         <Button type="button" size="sm" onClick={() => setCreating(true)}>

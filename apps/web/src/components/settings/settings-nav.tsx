@@ -101,7 +101,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
   {
     label: "Automations",
-    to: "/settings/agent-loops",
+    to: "/settings/automations",
     icon: Clock,
     operatorOnly: true,
   },

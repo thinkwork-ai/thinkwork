@@ -134,7 +134,7 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
   usePageHeaderActions({
     title: loop?.name ?? "Automation",
     breadcrumbs: [
-      { label: "Automations", href: "/settings/agent-loops" },
+      { label: "Automations", href: "/settings/automations" },
       { label: loop?.name ?? "Automation" },
     ],
     action: loop ? (
@@ -242,7 +242,7 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
       const result = await deleteAgentLoop({ id: row.id });
       if (result.error) throw result.error;
       toast.success("Automation archived");
-      navigate({ to: "/settings/agent-loops" });
+      navigate({ to: "/settings/automations" });
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {

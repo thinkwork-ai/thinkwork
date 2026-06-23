@@ -28,6 +28,14 @@ tags:
 
 # AgentLoop Foundation Owns Autonomous Loop Identity
 
+## Supersession Note
+
+Follow-up planning on 2026-06-23 moved the user-facing noun back to
+**Automations**. AgentLoop remains the internal runtime, version, run,
+judgment, and evidence contract. UI and docs should teach Automations while
+engineering code can continue to use AgentLoop names where they describe the
+backing substrate.
+
 ## Context
 
 THNK-46 landed AgentLoop as the first-class automation primitive for
@@ -123,12 +131,15 @@ Phase 1 can safely run independent verification loops.
 
 Use these boundaries in docs and UI copy:
 
-- **AgentLoop:** autonomous goal/policy loop with trigger, worker, judge,
-  policy, run state, and evidence.
+- **Automation:** user-facing autonomous work object with prompt, Space,
+  trigger, run state, and evidence.
+- **AgentLoop:** internal autonomous goal/policy loop runtime with trigger,
+  worker, judge, policy, run state, and evidence.
 - **Workflow:** explicit multi-step orchestration with a known graph of steps,
   branching, retries, and HITL waits.
 - **Evaluation:** scoring/test-case product for measuring behavior. It may
-  share judgment primitives with AgentLoops but remains a separate product.
+  share judgment primitives with the AgentLoop runtime but remains a separate
+  product.
 - **scheduled_jobs/EventBridge/AWS Scheduler:** operational wake plumbing, not
   a user-facing automation product.
 
@@ -143,8 +154,8 @@ When touching AgentLoop foundations, verify:
 - Wakeup-processor parity tests include AgentLoop metadata and `goal_mode`.
 - Finalize projection tests cover terminal reason, continuation, budget stop,
   human approval escalation, and projection failure recovery.
-- UI/docs present AgentLoops as the v1 automation concept and avoid teaching
-  Automations as a competing product.
+- UI/docs present Automations as the v1 product concept and avoid exposing
+  AgentLoop as a competing user-facing product.
 
 ## Extension Guidance
 

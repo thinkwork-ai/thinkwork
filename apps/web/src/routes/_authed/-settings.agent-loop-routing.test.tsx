@@ -8,8 +8,14 @@ function source(path: string): string {
   return readFileSync(join(root, path), "utf8");
 }
 
-describe("AgentLoop settings routing", () => {
-  it("registers first-class AgentLoop settings routes", () => {
+describe("Automation settings routing", () => {
+  it("registers first-class Automation settings routes backed by AgentLoop internals", () => {
+    expect(
+      source("src/routes/_authed/settings.automations.index.tsx"),
+    ).toContain('"/_authed/settings/automations/"');
+    expect(
+      source("src/routes/_authed/settings.automations.index.tsx"),
+    ).toContain("AgentLoopInventory");
     expect(
       source("src/routes/_authed/settings.agent-loops.index.tsx"),
     ).toContain('"/_authed/settings/agent-loops/"');
@@ -26,16 +32,16 @@ describe("AgentLoop settings routing", () => {
     );
   });
 
-  it("keeps the Settings navigation label user-facing while using AgentLoop routes", () => {
+  it("uses Automations as the preferred Settings navigation route", () => {
     const nav = source("src/components/settings/settings-nav.tsx");
     expect(nav).toContain('label: "Automations"');
-    expect(nav).toContain('to: "/settings/agent-loops"');
+    expect(nav).toContain('to: "/settings/automations"');
   });
 
-  it("redirects the legacy Settings Automations index to the AgentLoop route", () => {
-    const route = source("src/routes/_authed/settings.automations.index.tsx");
-    expect(route).toContain('redirect({ to: "/settings/agent-loops" })');
-    expect(route).not.toContain("SettingsAutomations");
+  it("redirects the legacy AgentLoop index to the preferred Automation route", () => {
+    const route = source("src/routes/_authed/settings.agent-loops.index.tsx");
+    expect(route).toContain('redirect({ to: "/settings/automations" })');
+    expect(route).not.toContain("AgentLoopInventory");
   });
 
   it("keeps Settings scheduled-job detail as a compatibility inspector", () => {
@@ -47,7 +53,7 @@ describe("AgentLoop settings routing", () => {
     );
 
     expect(route).toContain("ScheduledJobDetail");
-    expect(route).toContain('backHref="/settings/agent-loops"');
+    expect(route).toContain('backHref="/settings/automations"');
     expect(detail).toContain("Scheduled-job compatibility detail");
     expect(detail).toContain('label: "Scheduled jobs"');
   });

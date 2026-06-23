@@ -69,7 +69,7 @@ export function AgentLoopRunDetail({
   usePageHeaderActions({
     title: run?.agentLoop?.name ?? "Automation run",
     breadcrumbs: [
-      { label: "Automations", href: "/settings/agent-loops" },
+      { label: "Automations", href: "/settings/automations" },
       {
         label: run?.agentLoop?.name ?? "Automation",
         href: `/settings/agent-loops/${agentLoopId}`,
@@ -262,10 +262,7 @@ function IterationCard({ iteration }: { iteration: AgentLoopIteration }) {
                 </div>
                 {iteration.threadId ? (
                   <Button asChild type="button" variant="ghost" size="sm">
-                    <Link
-                      to="/threads/$id"
-                      params={{ id: iteration.threadId }}
-                    >
+                    <Link to="/threads/$id" params={{ id: iteration.threadId }}>
                       Open thread
                     </Link>
                   </Button>

@@ -15,6 +15,7 @@ const BILLING = "/settings/billing";
 const AGENTS = "/settings/agents";
 const MODEL_CATALOG = "/settings/model-catalog";
 const EVALUATIONS = "/settings/evaluations";
+const AUTOMATIONS = "/settings/automations";
 
 describe("visibleSettingsNavItems", () => {
   it("no longer lists a standalone Main Agent entry (editor lives on Agents)", () => {
@@ -79,6 +80,16 @@ describe("visibleSettingsNavItems", () => {
     const item = SETTINGS_NAV_ITEMS.find((i) => i.to === EVALUATIONS);
     expect(item).toBeDefined();
     expect(item?.icon).toBe(IconFlask);
+  });
+
+  it("uses Automations as the user-facing automation route", () => {
+    const item = SETTINGS_NAV_ITEMS.find((i) => i.label === "Automations");
+    expect(item).toBeDefined();
+    expect(item?.to).toBe(AUTOMATIONS);
+    expect(item?.operatorOnly).toBe(true);
+    expect(settingsCrumbForPath(AUTOMATIONS)).toEqual([
+      { label: "Automations" },
+    ]);
   });
 
   it("shows Model Catalog to operators and hides it for members", () => {
