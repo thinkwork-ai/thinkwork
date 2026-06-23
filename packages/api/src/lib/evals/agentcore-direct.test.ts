@@ -56,6 +56,7 @@ const runtimeConfig: AgentRuntimeConfig = {
   guardrailConfig: undefined,
   runtimeType: "pi",
   skillsConfig: [],
+  trustedSkillIds: [],
   webExtractConfig: {
     toolSlug: "web-extract",
     provider: "firecrawl",

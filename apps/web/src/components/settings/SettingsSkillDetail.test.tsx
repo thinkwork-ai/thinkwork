@@ -649,9 +649,33 @@ describe("SettingsSkillDetail eval panel", () => {
 
     const { getByRole, queryByRole } = renderLatestHeaderAction();
     expect(getByRole("button", { name: "Publish skill draft" })).toBeTruthy();
+    expect(getByRole("button", { name: "Skill trust" })).toBeTruthy();
     expect(queryByRole("button", { name: "Skill card" })).toBeNull();
     expect(queryByRole("button", { name: "Skill evals" })).toBeNull();
     expect(queryByRole("button", { name: "Export skill archive" })).toBeNull();
+  });
+
+  it("runs skill trust against the draft detail target", async () => {
+    render(<SettingsSkillDetail mode="draft" draftId="draft-1" />);
+    await openTrustSheet();
+
+    await waitFor(() =>
+      expect(mocks.getSkillTrustReport).toHaveBeenCalledWith({
+        skillDraftId: "draft-1",
+        slug: "customer-brief",
+      }),
+    );
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+
+    await waitFor(() =>
+      expect(mocks.runSkillTrustPipeline).toHaveBeenCalledWith({
+        skillDraftId: "draft-1",
+        slug: "customer-brief",
+      }),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Skill trust pipeline completed.",
+    );
   });
 
   it("publishes a draft detail and navigates to the catalog skill", async () => {
@@ -1024,9 +1048,7 @@ describe("SettingsSkillDetail eval panel", () => {
       ),
     );
     await waitFor(() =>
-      expect(screen.getAllByText("starter generated").length).toBeGreaterThan(
-        0,
-      ),
+      expect(screen.getAllByText("Generated").length).toBeGreaterThan(0),
     );
     expect(mocks.toastSuccess).toHaveBeenCalledWith("Generated skill-card.md.");
   });
@@ -1077,6 +1099,107 @@ describe("SettingsSkillDetail eval panel", () => {
     ).toBeTruthy();
     expect(screen.queryByTestId("skill-trust-fix-step")).toBeNull();
     expect(mocks.fixSkillTrustEvidence).not.toHaveBeenCalled();
+  });
+
+  it("allows operators to approve and re-sign a present unverified signature", async () => {
+    mocks.runSkillTrustPipeline.mockResolvedValueOnce({
+      slug: "web-research",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-21T00:00:00.000Z",
+      status: "review",
+      summary: "Signature is present but not verified.",
+      spec: {
+        status: "passed",
+        name: "web-research",
+        description: "Researches the web.",
+        allowedTools: ["web_search"],
+        errors: [],
+      },
+      scanner: { status: "completed" },
+      severityCounts: {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+      },
+      findings: [],
+      evidence: {
+        skillCard: "present",
+        evalDataset: "present",
+        benchmark: "present",
+        signature: "present_unverified",
+      },
+      artifactPaths: {
+        skillCard: "skill-card.md",
+        evals: ["evals/smoke.json"],
+        benchmark: "BENCHMARK.md",
+        signature: "skill.oms.sig",
+      },
+    });
+    mocks.fixSkillTrustEvidence.mockResolvedValueOnce({
+      slug: "web-research",
+      fixedStep: {
+        step: "signature",
+        status: "generated",
+        message: "Generated and verified skill.oms.sig.",
+      },
+      artifactPath: "skill.oms.sig",
+      trustReport: {
+        slug: "web-research",
+        contentHash: "b".repeat(64),
+        generatedAt: "2026-06-22T00:00:00.000Z",
+        status: "passed",
+        summary: "Signature verified.",
+        spec: {
+          status: "passed",
+          name: "web-research",
+          description: "Researches the web.",
+          allowedTools: ["web_search"],
+          errors: [],
+        },
+        scanner: { status: "completed" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "present",
+          evalDataset: "present",
+          benchmark: "present",
+          signature: "verified",
+        },
+        artifactPaths: {
+          skillCard: "skill-card.md",
+          evals: ["evals/smoke.json"],
+          benchmark: "BENCHMARK.md",
+          signature: "skill.oms.sig",
+        },
+      },
+    });
+    render(<SettingsSkillDetail skillSlug="web-research" />);
+    await openTrustSheet();
+
+    fireEvent.click(screen.getByTestId("skill-run-trust"));
+    await openTrustStepDetail(/Signature trust step: present unverified/i);
+    fireEvent.click(screen.getByTestId("skill-trust-fix-step"));
+
+    await waitFor(() =>
+      expect(mocks.fixSkillTrustEvidence).toHaveBeenCalledWith(
+        "web-research",
+        "signature",
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText("verified").length).toBeGreaterThan(0),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Generated and verified skill.oms.sig.",
+    );
   });
 
   it("refreshes the editor file list without changing editor target after generating benchmark evidence", async () => {
@@ -1338,7 +1461,7 @@ describe("SettingsSkillDetail eval panel", () => {
     expect(
       await screen.findByText("Skill catalog index not updated."),
     ).toBeTruthy();
-    expect(screen.getAllByText("starter generated").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Generated").length).toBeGreaterThan(0);
 
     mocks.runSkillTrustPipeline.mockResolvedValueOnce({
       slug: "web-research",

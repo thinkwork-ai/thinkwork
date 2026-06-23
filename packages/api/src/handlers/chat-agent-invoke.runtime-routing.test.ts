@@ -845,5 +845,6 @@ describe("chat-agent-invoke runtime routing", () => {
           "tenants/acme/agents/thinkwork/workspace/skills/custom-research-skill",
       },
     ]);
+    expect(body.trusted_skill_ids).toEqual(["custom-research-skill"]);
   });
 });

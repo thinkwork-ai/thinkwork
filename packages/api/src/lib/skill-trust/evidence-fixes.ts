@@ -84,7 +84,10 @@ export async function fixSkillTrustEvidence(
     now: input.now,
   });
 
-  const existingPath = existingArtifactPath(baseReport, input.step);
+  const existingPath =
+    input.step === "signature"
+      ? null
+      : existingArtifactPath(baseReport, input.step);
   if (existingPath) {
     return {
       step: input.step,
@@ -426,7 +429,7 @@ async function signSkill(
     status: "generated",
     trustReport: buildCatalogSkillTrustReport({
       slug: input.slug,
-      files: appendArtifact(input.files, artifact),
+      files: replaceArtifact(input.files, artifact),
       scanner: input.scanner,
       scannerFindings: input.scannerFindings,
       signature: { status: "verified", signedPayloadHash },
@@ -457,6 +460,17 @@ function appendArtifact(
   artifact: GeneratedSkillTrustArtifact,
 ): SkillTrustInputFile[] {
   return [...files, { path: artifact.path, content: artifact.content }];
+}
+
+function replaceArtifact(
+  files: SkillTrustInputFile[],
+  artifact: GeneratedSkillTrustArtifact,
+): SkillTrustInputFile[] {
+  const artifactPath = artifact.path.toLowerCase();
+  return [
+    ...files.filter((file) => file.path.toLowerCase() !== artifactPath),
+    { path: artifact.path, content: artifact.content },
+  ];
 }
 
 function displayNameForSkill(skill: SkillMdParsed): string {

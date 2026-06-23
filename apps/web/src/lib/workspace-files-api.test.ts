@@ -14,6 +14,7 @@ import {
   getSkillTrustReport,
   importSkillArchive,
   importSkillArchiveAsDraft,
+  listSkillSummaries,
   runSkillTrustPipeline,
   spacesWorkspaceFilesClient,
   validateSkillDraft,
@@ -210,6 +211,44 @@ describe("exportSkillArchive", () => {
   });
 });
 
+describe("listSkillSummaries", () => {
+  it("uses the narrow skill trust API override when configured", async () => {
+    readRuntimeEnv.mockImplementation((key?: string) =>
+      key === "VITE_SKILL_TRUST_API_URL" ? "http://127.0.0.1:8787" : "",
+    );
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      skills: [
+        {
+          slug: "account-health-review",
+          displayName: "Account Health Review",
+          category: null,
+          icon: null,
+          tags: null,
+          sha: "sha",
+          trustStatus: "passed",
+          trustStale: false,
+          skillCardStatus: "starter_generated",
+        },
+      ],
+    });
+
+    const summaries = await listSkillSummaries();
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/workspaces/files",
+      expect.objectContaining({ baseUrl: "http://127.0.0.1:8787" }),
+    );
+    expect(lastBody()).toEqual({
+      action: "list",
+      catalog: true,
+      summary: true,
+    });
+    expect(summaries[0]?.trustStatus).toBe("passed");
+    expect(summaries[0]?.skillCardStatus).toBe("starter_generated");
+  });
+});
+
 describe("runSkillTrustPipeline", () => {
   it("requests a catalog trust run and returns the report", async () => {
     apiFetch.mockResolvedValueOnce({
@@ -253,6 +292,48 @@ describe("runSkillTrustPipeline", () => {
     });
     expect(report.slug).toBe("account-health-review");
     expect(report.scanner.status).toBe("not_configured");
+  });
+
+  it("requests a draft trust run against the draft target", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      trustReport: {
+        slug: "draft-helper",
+        contentHash: "a".repeat(64),
+        generatedAt: "2026-06-21T00:00:00.000Z",
+        status: "review",
+        summary: "Draft trust report.",
+        spec: { status: "passed", allowedTools: [], errors: [] },
+        scanner: { status: "not_configured" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "missing",
+          evalDataset: "missing",
+          benchmark: "missing",
+          signature: "missing",
+        },
+        artifactPaths: { evals: [] },
+      },
+    });
+
+    const report = await runSkillTrustPipeline({
+      skillDraftId: "draft-1",
+      slug: "draft-helper",
+    });
+
+    expect(lastBody()).toEqual({
+      action: "run-skill-trust",
+      skillDraftId: "draft-1",
+      slug: "draft-helper",
+    });
+    expect(report.slug).toBe("draft-helper");
   });
 
   it("uses the narrow skill trust API override when configured", async () => {
@@ -359,6 +440,29 @@ describe("getSkillTrustReport", () => {
     expect(result.trustReport?.summary).toBe("Cached report.");
   });
 
+  it("requests the cached draft trust report against the draft target", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "draft-helper",
+      cached: false,
+      stale: false,
+      trustReport: null,
+    });
+
+    const result = await getSkillTrustReport({
+      skillDraftId: "draft-1",
+      slug: "draft-helper",
+    });
+
+    expect(lastBody()).toEqual({
+      action: "get-skill-trust",
+      skillDraftId: "draft-1",
+      slug: "draft-helper",
+    });
+    expect(result.slug).toBe("draft-helper");
+    expect(result.trustReport).toBeNull();
+  });
+
   it("returns an empty cache result without a report", async () => {
     apiFetch.mockResolvedValueOnce({
       ok: true,
@@ -436,6 +540,60 @@ describe("fixSkillTrustEvidence", () => {
     expect(result.artifactPath).toBe("skill-card.md");
     expect(result.indexWarning).toBe("Rebuild the catalog index.");
     expect(result.trustReport.evidence.skillCard).toBe("starter_generated");
+  });
+
+  it("requests a draft evidence fix against the draft target", async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: true,
+      slug: "draft-helper",
+      fixedStep: {
+        step: "benchmark",
+        status: "generated",
+        message: "Generated BENCHMARK.md.",
+      },
+      artifactPath: "BENCHMARK.md",
+      trustReport: {
+        slug: "draft-helper",
+        contentHash: "b".repeat(64),
+        generatedAt: "2026-06-22T00:00:00.000Z",
+        status: "review",
+        summary: "Generated benchmark evidence.",
+        spec: { status: "passed", allowedTools: [], errors: [] },
+        scanner: { status: "not_configured" },
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        },
+        findings: [],
+        evidence: {
+          skillCard: "present",
+          evalDataset: "present",
+          benchmark: "starter_generated",
+          signature: "missing",
+        },
+        artifactPaths: {
+          skillCard: "skill-card.md",
+          evals: ["evals/smoke.json"],
+          benchmark: "BENCHMARK.md",
+        },
+      },
+    });
+
+    const result = await fixSkillTrustEvidence(
+      { skillDraftId: "draft-1", slug: "draft-helper" },
+      "benchmark",
+    );
+
+    expect(lastBody()).toEqual({
+      action: "fix-skill-trust-evidence",
+      skillDraftId: "draft-1",
+      slug: "draft-helper",
+      step: "benchmark",
+    });
+    expect(result.artifactPath).toBe("BENCHMARK.md");
   });
 
   it("uses the narrow skill trust API override when configured", async () => {

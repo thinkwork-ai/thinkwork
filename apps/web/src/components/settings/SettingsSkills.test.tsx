@@ -12,6 +12,10 @@ import { SettingsSkills } from "./SettingsSkills";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   listSkillSummaries: vi.fn(),
+  getSkillCardFile: vi.fn(),
+  getSkillTrustReport: vi.fn(),
+  runSkillTrustPipeline: vi.fn(),
+  fixSkillTrustEvidence: vi.fn(),
   importSkillArchiveAsDraft: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -75,9 +79,21 @@ vi.mock("@/lib/workspace-files-api", async (importOriginal) => {
   return {
     ...actual,
     listSkillSummaries: mocks.listSkillSummaries,
+    getSkillTrustReport: mocks.getSkillTrustReport,
+    runSkillTrustPipeline: mocks.runSkillTrustPipeline,
+    fixSkillTrustEvidence: mocks.fixSkillTrustEvidence,
+    skillCatalogClient: {
+      getFile: mocks.getSkillCardFile,
+    },
     importSkillArchiveAsDraft: mocks.importSkillArchiveAsDraft,
   };
 });
+
+vi.mock("@/components/ai-elements/response", () => ({
+  Response: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+    <div {...props}>{children}</div>
+  ),
+}));
 
 vi.mock("sonner", () => ({
   toast: {
@@ -113,26 +129,71 @@ vi.mock("@thinkwork/ui", () => ({
     </button>
   ),
   DataTable: ({
+    columns,
     data,
     emptyState,
     onRowClick,
   }: {
-    data: Array<{ slug: string; displayName?: string | null }>;
+    columns: Array<{
+      id?: string;
+      accessorKey?: string;
+      header?: React.ReactNode;
+      cell?: (ctx: { row: { original: SkillRowFixture } }) => React.ReactNode;
+    }>;
+    data: SkillRowFixture[];
     emptyState?: React.ReactNode;
-    onRowClick?: (row: { slug: string }) => void;
+    onRowClick?: (row: SkillRowFixture) => void;
   }) => (
     <div data-testid="skills-table">
-      {data.length
-        ? data.map((row) => (
-            <button
-              key={row.slug}
-              type="button"
-              onClick={() => onRowClick?.(row)}
-            >
-              {row.displayName ?? row.slug}
-            </button>
-          ))
-        : emptyState}
+      {data.length ? (
+        <table>
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th key={String(column.id ?? column.accessorKey)}>
+                  {column.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row) => (
+              <tr key={row.slug}>
+                {columns.map((column) => (
+                  <td key={String(column.id ?? column.accessorKey)}>
+                    {column.cell
+                      ? column.cell({ row: { original: row } })
+                      : String(
+                          row[column.accessorKey as keyof SkillRowFixture] ??
+                            "",
+                        )}
+                  </td>
+                ))}
+                <td>
+                  <button type="button" onClick={() => onRowClick?.(row)}>
+                    Open {row.displayName ?? row.slug}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        emptyState
+      )}
+      <div className="sr-only">
+        {data.length
+          ? data.map((row) => (
+              <button
+                key={row.slug}
+                type="button"
+                onClick={() => onRowClick?.(row)}
+              >
+                {row.displayName ?? row.slug}
+              </button>
+            ))
+          : null}
+      </div>
     </div>
   ),
   Dialog: ({
@@ -171,6 +232,34 @@ vi.mock("@thinkwork/ui", () => ({
   PopoverTrigger: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
+  Sheet: ({
+    children,
+    open,
+  }: {
+    children: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }) => (open ? <div>{children}</div> : null),
+  SheetContent: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+  SheetDescription: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLParagraphElement>) => (
+    <p {...props}>{children}</p>
+  ),
+  SheetHeader: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
+  SheetTitle: ({
+    children,
+    ...props
+  }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h2 {...props}>{children}</h2>
+  ),
   Spinner: (props: React.HTMLAttributes<HTMLSpanElement>) => (
     <span {...props}>Loading</span>
   ),
@@ -183,6 +272,20 @@ vi.mock("@thinkwork/ui", () => ({
   ),
 }));
 
+type SkillRowFixture = {
+  slug: string;
+  displayName?: string | null;
+  description?: string | null;
+  category?: string | null;
+  icon?: string | null;
+  tags?: string[] | null;
+  sha: string;
+  trustStatus?: "passed" | "review" | "blocked" | "failed" | null;
+  trustStale?: boolean | null;
+  trustUpdatedAt?: string | null;
+  skillCardStatus?: "present" | "missing" | "starter_generated" | null;
+};
+
 vi.mock("@/components/LoadingShimmer", () => ({
   LoadingShimmer: () => <div>Loading skills</div>,
 }));
@@ -190,6 +293,10 @@ vi.mock("@/components/LoadingShimmer", () => ({
 beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.listSkillSummaries.mockReset();
+  mocks.getSkillCardFile.mockReset();
+  mocks.getSkillTrustReport.mockReset();
+  mocks.runSkillTrustPipeline.mockReset();
+  mocks.fixSkillTrustEvidence.mockReset();
   mocks.importSkillArchiveAsDraft.mockReset();
   mocks.toastError.mockReset();
   mocks.toastSuccess.mockReset();
@@ -209,8 +316,44 @@ beforeEach(() => {
       icon: null,
       tags: null,
       sha: "sha",
+      trustStatus: "passed",
+      trustStale: false,
+      skillCardStatus: "starter_generated",
     },
   ]);
+  mocks.getSkillCardFile.mockResolvedValue({
+    content: "# Existing Skill Card\n\nSummary.",
+    source: "catalog",
+    sha256: "card-sha",
+  });
+  mocks.getSkillTrustReport.mockResolvedValue({
+    slug: "existing-skill",
+    trustReport: {
+      slug: "existing-skill",
+      contentHash: "a".repeat(64),
+      generatedAt: "2026-06-22T00:00:00.000Z",
+      status: "passed",
+      summary: "SkillSpector passed and release evidence is present.",
+      spec: { status: "passed", allowedTools: [], errors: [] },
+      scanner: { status: "completed" },
+      severityCounts: { critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+      findings: [],
+      evidence: {
+        skillCard: "starter_generated",
+        evalDataset: "starter_generated",
+        benchmark: "starter_generated",
+        signature: "verified",
+      },
+      artifactPaths: {
+        skillCard: "skill-card.md",
+        evals: ["evals/smoke.json"],
+        benchmark: "BENCHMARK.md",
+        signature: "skill.oms.sig",
+      },
+    },
+    cached: true,
+    stale: false,
+  });
 });
 
 afterEach(cleanup);
@@ -245,6 +388,52 @@ describe("SettingsSkills import", () => {
     expect(toolbar.contains(search)).toBe(true);
     expect(toolbar.contains(gate)).toBe(true);
     expect(actions.contains(gate)).toBe(true);
+  });
+
+  it("shows skill card and trust pipeline badges instead of the description column", async () => {
+    render(<SettingsSkills />);
+    await screen.findByPlaceholderText("Search skills…");
+
+    expect(screen.getByText("Skill card")).toBeTruthy();
+    expect(screen.getByText("Trust pipeline")).toBeTruthy();
+    expect(screen.getByText("Available")).toBeTruthy();
+    expect(screen.getByText("Passed")).toBeTruthy();
+    expect(screen.queryByText("Description")).toBeNull();
+    expect(screen.queryByText("Eval score")).toBeNull();
+  });
+
+  it("opens skill card and trust sheets from published badges", async () => {
+    render(<SettingsSkills />);
+    await screen.findByPlaceholderText("Search skills…");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Open skill card for Existing Skill",
+      }),
+    );
+
+    await screen.findByRole("heading", { name: "Skill card" });
+    expect(screen.getByTestId("skill-card-markdown").textContent).toContain(
+      "Existing Skill Card",
+    );
+    expect(mocks.getSkillCardFile).toHaveBeenCalledWith(
+      { skill: "existing-skill" },
+      "skill-card.md",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Open trust pipeline for Existing Skill",
+      }),
+    );
+
+    await screen.findByRole("heading", { name: "Skill trust" });
+    expect(mocks.getSkillTrustReport).toHaveBeenCalledWith("existing-skill");
+    expect(
+      screen.getByText("SkillSpector passed and release evidence is present."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Run pipeline" })).toBeTruthy();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("registers import as a muted header action", async () => {
@@ -382,7 +571,7 @@ describe("SettingsSkills drafts", () => {
     });
   });
 
-  it("shows requested-by and status columns without an action column", async () => {
+  it("shows compact draft review columns without extra row detail", async () => {
     mocks.draftsQueryState.data = {
       skillDrafts: [submittedDraft()],
     };
@@ -390,10 +579,18 @@ describe("SettingsSkills drafts", () => {
     render(<SettingsSkills tab="drafts" />);
     expect(await screen.findByText("Customer Brief")).toBeTruthy();
 
+    expect(screen.getByText("Name")).toBeTruthy();
     expect(screen.getByText("Requested by")).toBeTruthy();
     expect(screen.getByText("Eric")).toBeTruthy();
-    expect(screen.getByText("Status")).toBeTruthy();
-    expect(screen.getByText("submitted")).toBeTruthy();
+    expect(screen.getByText("Skill card")).toBeTruthy();
+    expect(screen.getByText("Trust card")).toBeTruthy();
+    expect(screen.getAllByText("Not run")).toHaveLength(2);
+    expect(screen.queryByText("submitted")).toBeNull();
+    expect(screen.queryByText("customer-brief")).toBeNull();
+    expect(screen.queryByText("Thread thread-1")).toBeNull();
+    expect(
+      screen.queryByText("Creates a concise customer briefing."),
+    ).toBeNull();
     expect(screen.queryByText("Action")).toBeNull();
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   });

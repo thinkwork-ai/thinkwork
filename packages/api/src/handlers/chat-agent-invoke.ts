@@ -60,6 +60,7 @@ import {
 import { isBuiltinToolSlug } from "../lib/builtin-tool-slugs.js";
 import { toolPolicyAliases } from "../lib/builtin-tool-policy-aliases.js";
 import { applyWorkspaceMcpPolicyFilter } from "../lib/plugins/gating.js";
+import { loadTrustedCatalogSkillIds } from "../lib/skill-trust/runtime-gate.js";
 // Post-AgentCore helpers — previously inline in this file; lifted into
 // the shared chat-finalize lib so chat-agent-finalize (the new HTTP
 // handler) and chat-agent-invoke (this file, for pre-dispatch error
@@ -1283,8 +1284,13 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     const pinnedSkillSlugs = Array.isArray(event.pinnedSkills)
       ? event.pinnedSkills
       : [];
+    const trustedPinnedSkillIds = await loadTrustedCatalogSkillIds({
+      tenantId,
+      skillIds: pinnedSkillSlugs,
+      logPrefix: "[chat-agent-invoke]",
+    });
     const pinnedSkillsConfig = buildPinnedSkillConfigs({
-      slugs: pinnedSkillSlugs,
+      slugs: pinnedSkillSlugs.filter((slug) => trustedPinnedSkillIds.has(slug)),
       tenantSlug: tenantSlug || "",
       catalogS3Key: tenantCatalogSkillS3Key,
       isAllowed: isSkillAllowedByPolicy,
@@ -1459,6 +1465,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       budget_paused: runtimeConfig.budgetPaused,
       skills:
         effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
+      trusted_skill_ids: [
+        ...new Set([
+          ...effectiveSkillsConfig.map((skill) => skill.skillId),
+          ...pinnedSkillsConfig.map((skill) => skill.skillId),
+        ]),
+      ],
       // Ephemeral force-pinned skills (plan 2026-06-04-004 U3/U4). Separate from
       // `skills` so the runtime loads + emphasizes them for this turn without a
       // permanent install. Already policy-filtered above (KD4).

@@ -99,6 +99,7 @@ import {
   type AgentLoopPolicy,
 } from "./agent-profile-loop-policy.js";
 import { listTenantModelCatalogByIds } from "./model-catalog/tenant-catalog.js";
+import { loadTrustedCatalogSkillIds } from "./skill-trust/runtime-gate.js";
 
 export interface SkillConfig {
   skillId: string;
@@ -218,6 +219,7 @@ export interface AgentRuntimeConfig {
   guardrailConfig: GuardrailPayload | undefined;
   runtimeType: AgentRuntimeType;
   skillsConfig: SkillConfig[];
+  trustedSkillIds: string[];
   webSearchConfig?: WebSearchConfig;
   webExtractConfig?: WebExtractConfig;
   sendEmailConfig?: SendEmailConfig;
@@ -571,6 +573,15 @@ export async function resolveAgentRuntimeConfig(
     }
   }
 
+  const trustedSkillIds = await loadTrustedCatalogSkillIds({
+    tenantId: opts.tenantId,
+    skillIds: skillsConfig.map((skill) => skill.skillId),
+    logPrefix,
+  });
+  skillsConfig = skillsConfig.filter((skill) =>
+    trustedSkillIds.has(skill.skillId),
+  );
+
   const webSearchConfig = resolveWebSearchConfigFromSkills(skillsConfig);
   const webExtractConfig =
     templateWebExtractEnabled &&
@@ -703,6 +714,7 @@ export async function resolveAgentRuntimeConfig(
     guardrailConfig,
     runtimeType: normalizeAgentRuntimeType(agent.runtime),
     skillsConfig,
+    trustedSkillIds: skillsConfig.map((skill) => skill.skillId),
     webSearchConfig,
     webExtractConfig: webExtractConfig
       ? {

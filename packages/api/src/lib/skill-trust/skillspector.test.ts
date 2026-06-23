@@ -8,13 +8,16 @@ const originalBin = process.env.SKILLSPECTOR_BIN;
 const originalRunner = process.env.SKILL_TRUST_RUNNER_FUNCTION_NAME;
 const originalStage = process.env.STAGE;
 const originalAwsFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME;
+const originalAwsRegion = process.env.AWS_REGION;
+const originalAwsDefaultRegion = process.env.AWS_DEFAULT_REGION;
 const mocks = vi.hoisted(() => ({
   lambdaSend: vi.fn(),
+  lambdaClient: vi.fn(() => ({ send: mocks.lambdaSend })),
   invokeCommand: vi.fn((input: unknown) => ({ input })),
 }));
 
 vi.mock("@aws-sdk/client-lambda", () => ({
-  LambdaClient: vi.fn(() => ({ send: mocks.lambdaSend })),
+  LambdaClient: mocks.lambdaClient,
   InvokeCommand: mocks.invokeCommand,
 }));
 
@@ -39,7 +42,18 @@ afterEach(() => {
   } else {
     process.env.AWS_LAMBDA_FUNCTION_NAME = originalAwsFunctionName;
   }
+  if (originalAwsRegion === undefined) {
+    delete process.env.AWS_REGION;
+  } else {
+    process.env.AWS_REGION = originalAwsRegion;
+  }
+  if (originalAwsDefaultRegion === undefined) {
+    delete process.env.AWS_DEFAULT_REGION;
+  } else {
+    process.env.AWS_DEFAULT_REGION = originalAwsDefaultRegion;
+  }
   mocks.lambdaSend.mockReset();
+  mocks.lambdaClient.mockClear();
   mocks.invokeCommand.mockClear();
 });
 
@@ -205,6 +219,36 @@ exit 1
         },
       ],
     });
+  });
+
+  it("passes the configured AWS region to the trust runner client", async () => {
+    process.env.SKILL_TRUST_RUNNER_FUNCTION_NAME =
+      "thinkwork-dev-skill-trust-runner";
+    process.env.AWS_REGION = "us-east-2";
+    process.env.AWS_DEFAULT_REGION = "us-west-2";
+    mocks.lambdaSend.mockResolvedValueOnce({
+      Payload: Buffer.from(
+        JSON.stringify({
+          report: {
+            risk_assessment: { score: 0, severity: "LOW" },
+            issues: [],
+            metadata: { skillspector_version: "2.2.3" },
+          },
+        }),
+      ),
+    });
+
+    await runSkillSpectorForFiles({
+      slug: "runner-skill",
+      files: [
+        {
+          path: "SKILL.md",
+          content: Buffer.from("---\nname: runner-skill\n---\n"),
+        },
+      ],
+    });
+
+    expect(mocks.lambdaClient).toHaveBeenCalledWith({ region: "us-east-2" });
   });
 
   it("fails closed when the configured trust runner errors", async () => {

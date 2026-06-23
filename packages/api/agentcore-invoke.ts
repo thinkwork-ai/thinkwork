@@ -270,6 +270,9 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     };
     if (body.model) payload.model = body.model;
     if (body.skills) payload.skills = body.skills;
+    if (body.trusted_skill_ids) {
+      payload.trusted_skill_ids = body.trusted_skill_ids;
+    }
     // Ephemeral force-pinned skills (plan 2026-06-04-004 U3/U4). This subset-dict
     // rebuild silently drops any field not copied — pinned_skills must be
     // forwarded explicitly or the Pi runtime never sees the pin (KTD2).

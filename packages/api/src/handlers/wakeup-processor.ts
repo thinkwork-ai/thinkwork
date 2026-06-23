@@ -108,6 +108,7 @@ import {
   filterBlockedSkills,
   resolveDispatchPinnedSkills,
 } from "../lib/skills/message-pinned-skills.js";
+import { loadTrustedCatalogSkillIds } from "../lib/skill-trust/runtime-gate.js";
 import {
   prependThreadProgressPromptBlock,
   readThreadProgressMarkdown,
@@ -914,7 +915,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     );
   }
 
-  // Default skills: always available for all agents (parity with chat-agent-invoke).
+  // Default skills enter the same trust gate as all other runtime skills.
   // web-search is NOT in this list — it's opt-in via tenant_builtin_tools below.
   const defaultSkills = [
     { skillId: "agent-thread-management" },
@@ -991,6 +992,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       );
     }
   }
+
+  const trustedSkillIds = await loadTrustedCatalogSkillIds({
+    tenantId: wakeup.tenant_id,
+    skillIds: skillsConfig.map((skill) => skill.skillId),
+    logPrefix: "[wakeup-processor]",
+  });
+  skillsConfig = skillsConfig.filter((skill) =>
+    trustedSkillIds.has(skill.skillId),
+  );
 
   // Look up agent's assigned knowledge bases (PRD-13)
   const kbRows = await db
@@ -2005,6 +2015,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       model: agentModel,
       skills:
         effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
+      trusted_skill_ids: effectiveSkillsConfig.map((skill) => skill.skillId),
       knowledge_bases: knowledgeBasesConfig,
       guardrail_config: guardrailPayload || undefined,
       mcp_servers: mcpServers,
@@ -2071,7 +2082,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       // ephemeral `pinned_skills` branch, dropping any blocked slug (KD4) using
       // the resolved blocked_tools for this turn.
       try {
-        const pinnedSlugs = filterBlockedSkills(
+        const policyAllowedPinnedSlugs = filterBlockedSkills(
           await resolveDispatchPinnedSkills({
             db,
             tenantId: wakeup.tenant_id,
@@ -2080,12 +2091,28 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
           }),
           effectiveBlockedTools,
         );
+        const trustedPinnedSlugs = [
+          ...(await loadTrustedCatalogSkillIds({
+            tenantId: wakeup.tenant_id,
+            skillIds: policyAllowedPinnedSlugs,
+            logPrefix: "[wakeup-processor]",
+          })),
+        ];
+        const pinnedSlugs = policyAllowedPinnedSlugs.filter((slug) =>
+          trustedPinnedSlugs.includes(slug),
+        );
         if (pinnedSlugs.length > 0 && tenantSlug) {
           Object.assign(agentCorePayload, {
             pinned_skills: pinnedSlugs.map((slug) => ({
               skillId: slug,
               s3Key: tenantCatalogSkillS3Key(tenantSlug, slug),
             })),
+            trusted_skill_ids: [
+              ...new Set([
+                ...((agentCorePayload.trusted_skill_ids as string[]) ?? []),
+                ...pinnedSlugs,
+              ]),
+            ],
           });
         }
       } catch (err) {

@@ -194,6 +194,41 @@ describe("fixSkillTrustEvidence", () => {
     );
   });
 
+  it("re-signs an existing signature for the current signed payload", async () => {
+    const signer: SkillTrustSigner = {
+      sign: vi.fn(async ({ signedPayloadHash }) =>
+        Buffer.from(`sig:${signedPayloadHash}`),
+      ),
+      verify: vi.fn(
+        async ({ signedPayloadHash, signature }) =>
+          signature.toString("utf8") === `sig:${signedPayloadHash}`,
+      ),
+    };
+    const files = [
+      ...baseFiles(),
+      { path: "skill.oms.sig", content: Buffer.from("old-signature") },
+    ];
+
+    const result = await fixSkillTrustEvidence({
+      slug: "account-health-review",
+      files,
+      step: "signature",
+      scanner: { status: "completed" },
+      signer,
+    });
+
+    expect(result.status).toBe("generated");
+    expect(result.artifactPath).toBe("skill.oms.sig");
+    expect(result.artifact?.content.toString("utf8")).toBe(
+      `sig:${computeSignedPayloadHash(files)}`,
+    );
+    expect(result.artifact?.content.toString("utf8")).not.toBe("old-signature");
+    expect(result.trustReport.evidence.signature).toBe("verified");
+    expect(result.trustReport.signedPayloadHash).toBe(
+      computeSignedPayloadHash(files),
+    );
+  });
+
   it("rejects malformed signatures from a configured signer", async () => {
     const result = await fixSkillTrustEvidence({
       slug: "account-health-review",
