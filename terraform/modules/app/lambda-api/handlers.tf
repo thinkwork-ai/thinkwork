@@ -718,6 +718,16 @@ resource "aws_lambda_function" "handler" {
     }
   }
 
+  lifecycle {
+    precondition {
+      condition = each.key != "okf-efs-refresh" || var.okf_efs_refresh_access_point_arn == "" || (
+        length(var.okf_efs_mount_target_ids) == length(var.okf_efs_subnet_ids) &&
+        alltrue([for id in var.okf_efs_mount_target_ids : id != ""])
+      )
+      error_message = "okf-efs-refresh requires an available EFS mount target dependency for every configured subnet."
+    }
+  }
+
   tags = {
     Name    = "thinkwork-${var.stage}-api-${each.key}"
     Handler = each.key
