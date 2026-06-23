@@ -212,8 +212,15 @@ export async function buildMcpConfigs(
           slug: mcp.slug ?? mcp.name,
           logPrefix,
         });
-        if (!resolved) continue;
-        pluginToken = resolved;
+        pluginToken =
+          resolved ??
+          (await resolveUserMcpBearerToken({
+            userId: requesterUserId,
+            mcp,
+            logPrefix,
+            fallbackLabel: "plugin server-level OAuth token",
+          }));
+        if (!pluginToken) continue;
       } else if (mcp.auth_type === "user_headers") {
         const headerNames = userHeaderNamesFromAuthConfig(
           mcp.auth_config as Record<string, unknown> | null,
@@ -292,178 +299,11 @@ export async function buildMcpConfigs(
       mcp.auth_type === "per_user_oauth"
     ) {
       if (humanPairId) {
-        try {
-          const [userToken] = await db
-            .select({
-              id: userMcpTokens.id,
-              secret_ref: userMcpTokens.secret_ref,
-              status: userMcpTokens.status,
-              expires_at: userMcpTokens.expires_at,
-            })
-            .from(userMcpTokens)
-            .where(
-              and(
-                eq(userMcpTokens.user_id, humanPairId),
-                eq(userMcpTokens.mcp_server_id, mcp.mcp_server_id),
-                eq(userMcpTokens.status, "active"),
-              ),
-            )
-            .limit(1);
-          if (userToken?.secret_ref) {
-            const sm = new SecretsManagerClient({
-              region: process.env.AWS_REGION || "us-east-1",
-            });
-            const secret = await sm.send(
-              new GetSecretValueCommand({ SecretId: userToken.secret_ref }),
-            );
-            if (secret.SecretString) {
-              const parsed = JSON.parse(secret.SecretString);
-              const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
-              const isExpired =
-                userToken.expires_at &&
-                new Date(userToken.expires_at).getTime() - Date.now() <
-                  EXPIRY_BUFFER_MS;
-
-              if (isExpired && parsed.refresh_token) {
-                // WorkOS public-client refresh REQUIRES client_id in the body.
-                // It's stored in tenant_mcp_servers.auth_config at DCR time.
-                const authCfg =
-                  (mcp.auth_config as Record<string, unknown>) || {};
-                const clientId =
-                  typeof authCfg.client_id === "string"
-                    ? authCfg.client_id
-                    : "";
-                if (!clientId) {
-                  console.warn(
-                    `${logPrefix} MCP token for ${mcp.slug} needs refresh but auth_config.client_id is missing; user must reconnect from mobile to re-run DCR`,
-                  );
-                  token = parsed.access_token;
-                } else {
-                  console.log(
-                    `${logPrefix} MCP token expired for ${mcp.slug}, refreshing...`,
-                  );
-                  try {
-                    const mcpBaseUrl = mcp.url.replace(/\/+$/, "");
-                    const serverPath = new URL(mcpBaseUrl).pathname.replace(
-                      /^\//,
-                      "",
-                    );
-                    const wellKnownUrl = `${new URL(mcpBaseUrl).origin}/.well-known/oauth-protected-resource/${serverPath}`;
-                    const resMeta = await fetch(wellKnownUrl, {
-                      signal: AbortSignal.timeout(5000),
-                    });
-                    if (resMeta.ok) {
-                      const meta = (await resMeta.json()) as {
-                        authorization_servers?: string[];
-                      };
-                      const authServer = meta.authorization_servers?.[0];
-                      if (authServer) {
-                        const authMetaRes = await fetch(
-                          `${authServer}/.well-known/oauth-authorization-server`,
-                          { signal: AbortSignal.timeout(5000) },
-                        ).catch(() => null);
-                        const oidcRes = authMetaRes?.ok
-                          ? authMetaRes
-                          : await fetch(
-                              `${authServer}/.well-known/openid-configuration`,
-                              { signal: AbortSignal.timeout(5000) },
-                            );
-                        if (oidcRes.ok) {
-                          const authMeta = (await oidcRes.json()) as {
-                            token_endpoint: string;
-                          };
-                          const refreshRes = await fetch(
-                            authMeta.token_endpoint,
-                            {
-                              method: "POST",
-                              headers: {
-                                "Content-Type":
-                                  "application/x-www-form-urlencoded",
-                              },
-                              body: new URLSearchParams({
-                                grant_type: "refresh_token",
-                                refresh_token: parsed.refresh_token,
-                                client_id: clientId,
-                              }).toString(),
-                              signal: AbortSignal.timeout(10000),
-                            },
-                          );
-                          if (refreshRes.ok) {
-                            const refreshData = (await refreshRes.json()) as {
-                              access_token: string;
-                              refresh_token?: string;
-                              expires_in?: number;
-                            };
-                            token = refreshData.access_token;
-                            const updatedSecret = {
-                              access_token: refreshData.access_token,
-                              refresh_token:
-                                refreshData.refresh_token ||
-                                parsed.refresh_token,
-                              token_type: parsed.token_type || "Bearer",
-                              obtained_at: new Date().toISOString(),
-                            };
-                            await sm.send(
-                              new UpdateSecretCommand({
-                                SecretId: userToken.secret_ref,
-                                SecretString: JSON.stringify(updatedSecret),
-                              }),
-                            );
-                            const newExpiry = refreshData.expires_in
-                              ? new Date(
-                                  Date.now() + refreshData.expires_in * 1000,
-                                )
-                              : null;
-                            await db
-                              .update(userMcpTokens)
-                              .set({
-                                expires_at: newExpiry,
-                                updated_at: new Date(),
-                              })
-                              .where(eq(userMcpTokens.id, userToken.id));
-                            console.log(
-                              `${logPrefix} MCP token refreshed for ${mcp.slug}`,
-                            );
-                          } else {
-                            const errBody = await refreshRes
-                              .text()
-                              .catch(() => "");
-                            console.warn(
-                              `${logPrefix} MCP token refresh failed for ${mcp.slug}: ${refreshRes.status} ${errBody}`,
-                            );
-                            await db
-                              .update(userMcpTokens)
-                              .set({
-                                status: "expired",
-                                updated_at: new Date(),
-                              })
-                              .where(eq(userMcpTokens.id, userToken.id));
-                          }
-                        }
-                      }
-                    }
-                  } catch (refreshErr) {
-                    console.warn(
-                      `${logPrefix} MCP token refresh error for ${mcp.slug}:`,
-                      refreshErr,
-                    );
-                  }
-                }
-              } else {
-                token = parsed.access_token;
-              }
-            }
-          } else {
-            console.warn(
-              `${logPrefix} No active MCP token for user ${humanPairId} (MCP: ${mcp.slug})`,
-            );
-          }
-        } catch (err) {
-          console.warn(
-            `${logPrefix} MCP token lookup failed for ${mcp.slug}:`,
-            err,
-          );
-        }
+        token = await resolveUserMcpBearerToken({
+          userId: humanPairId,
+          mcp,
+          logPrefix,
+        });
       }
     }
 
@@ -493,6 +333,174 @@ export async function buildMcpConfigs(
   }
 
   return mcpConfigs;
+}
+
+async function resolveUserMcpBearerToken(args: {
+  userId: string;
+  mcp: {
+    mcp_server_id: string;
+    slug: string | null;
+    name: string;
+    url: string;
+    auth_config: unknown;
+  };
+  logPrefix: string;
+  fallbackLabel?: string;
+}): Promise<string | undefined> {
+  const { userId, mcp, logPrefix } = args;
+  const slug = mcp.slug ?? mcp.name;
+  try {
+    const [userToken] = await db
+      .select({
+        id: userMcpTokens.id,
+        secret_ref: userMcpTokens.secret_ref,
+        status: userMcpTokens.status,
+        expires_at: userMcpTokens.expires_at,
+      })
+      .from(userMcpTokens)
+      .where(
+        and(
+          eq(userMcpTokens.user_id, userId),
+          eq(userMcpTokens.mcp_server_id, mcp.mcp_server_id),
+          eq(userMcpTokens.status, "active"),
+        ),
+      )
+      .limit(1);
+    if (!userToken?.secret_ref) {
+      console.warn(
+        `${logPrefix} No active MCP token for user ${userId} (MCP: ${slug})`,
+      );
+      return undefined;
+    }
+
+    const sm = new SecretsManagerClient({
+      region: process.env.AWS_REGION || "us-east-1",
+    });
+    const secret = await sm.send(
+      new GetSecretValueCommand({ SecretId: userToken.secret_ref }),
+    );
+    if (!secret.SecretString) return undefined;
+    const parsed = JSON.parse(secret.SecretString);
+    const accessToken =
+      typeof parsed.access_token === "string" ? parsed.access_token : "";
+    const refreshToken =
+      typeof parsed.refresh_token === "string" ? parsed.refresh_token : "";
+    const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+    const isExpired =
+      userToken.expires_at &&
+      new Date(userToken.expires_at).getTime() - Date.now() < EXPIRY_BUFFER_MS;
+
+    if (!isExpired) return accessToken || undefined;
+    if (!refreshToken) return accessToken || undefined;
+
+    // WorkOS public-client refresh REQUIRES client_id in the body.
+    // It's stored in tenant_mcp_servers.auth_config at DCR time.
+    const authCfg = (mcp.auth_config as Record<string, unknown>) || {};
+    const clientId =
+      typeof authCfg.client_id === "string" ? authCfg.client_id : "";
+    if (!clientId) {
+      console.warn(
+        `${logPrefix} MCP token for ${slug} needs refresh but auth_config.client_id is missing; user must reconnect from mobile to re-run DCR`,
+      );
+      return accessToken || undefined;
+    }
+
+    console.log(
+      `${logPrefix} MCP token expired for ${slug}, refreshing${args.fallbackLabel ? ` ${args.fallbackLabel}` : ""}...`,
+    );
+    try {
+      const mcpBaseUrl = mcp.url.replace(/\/+$/, "");
+      const serverPath = new URL(mcpBaseUrl).pathname.replace(/^\//, "");
+      const wellKnownUrl = `${new URL(mcpBaseUrl).origin}/.well-known/oauth-protected-resource/${serverPath}`;
+      const resMeta = await fetch(wellKnownUrl, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!resMeta.ok) return undefined;
+      const meta = (await resMeta.json()) as {
+        authorization_servers?: string[];
+      };
+      const authServer = meta.authorization_servers?.[0];
+      if (!authServer) return undefined;
+      const authMetaRes = await fetch(
+        `${authServer}/.well-known/oauth-authorization-server`,
+        { signal: AbortSignal.timeout(5000) },
+      ).catch(() => null);
+      const oidcRes = authMetaRes?.ok
+        ? authMetaRes
+        : await fetch(`${authServer}/.well-known/openid-configuration`, {
+            signal: AbortSignal.timeout(5000),
+          });
+      if (!oidcRes.ok) return undefined;
+      const authMeta = (await oidcRes.json()) as {
+        token_endpoint: string;
+      };
+      const refreshRes = await fetch(authMeta.token_endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: refreshToken,
+          client_id: clientId,
+        }).toString(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!refreshRes.ok) {
+        const errBody = await refreshRes.text().catch(() => "");
+        console.warn(
+          `${logPrefix} MCP token refresh failed for ${slug}: ${refreshRes.status} ${errBody}`,
+        );
+        await db
+          .update(userMcpTokens)
+          .set({
+            status: "expired",
+            updated_at: new Date(),
+          })
+          .where(eq(userMcpTokens.id, userToken.id));
+        return undefined;
+      }
+      const refreshData = (await refreshRes.json()) as {
+        access_token: string;
+        refresh_token?: string;
+        expires_in?: number;
+      };
+      const refreshedToken = refreshData.access_token;
+      const updatedSecret = {
+        access_token: refreshedToken,
+        refresh_token: refreshData.refresh_token || refreshToken,
+        token_type: parsed.token_type || "Bearer",
+        obtained_at: new Date().toISOString(),
+      };
+      await sm.send(
+        new UpdateSecretCommand({
+          SecretId: userToken.secret_ref,
+          SecretString: JSON.stringify(updatedSecret),
+        }),
+      );
+      const newExpiry = refreshData.expires_in
+        ? new Date(Date.now() + refreshData.expires_in * 1000)
+        : null;
+      await db
+        .update(userMcpTokens)
+        .set({
+          expires_at: newExpiry,
+          updated_at: new Date(),
+        })
+        .where(eq(userMcpTokens.id, userToken.id));
+      console.log(`${logPrefix} MCP token refreshed for ${slug}`);
+      return refreshedToken;
+    } catch (refreshErr) {
+      console.warn(
+        `${logPrefix} MCP token refresh error for ${slug}:`,
+        refreshErr,
+      );
+      return undefined;
+    }
+  } catch (err) {
+    console.warn(`${logPrefix} MCP token lookup failed for ${slug}:`, err);
+    return undefined;
+  }
 }
 
 function toMcpServerConfig(

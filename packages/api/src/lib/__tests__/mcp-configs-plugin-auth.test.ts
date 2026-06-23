@@ -300,6 +300,46 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     warn.mockRestore();
   });
 
+  it("plugin OAuth servers fall back to the requester's legacy server-level MCP token", async () => {
+    mockJoinRows.mockReturnValue([
+      pluginRow("crm", {
+        mcp_server_id: "srv-twenty",
+        slug: "twenty--crm",
+        name: "Twenty CRM",
+        url: "https://crm.thinkwork.invalid/mcp",
+        auth_config: { oauth_resource: "https://crm.thinkwork.invalid/mcp" },
+      }),
+    ]);
+    // No plugin activation is seeded. This matches the MCP-server-detail
+    // Authenticate path, which writes user_mcp_tokens rather than
+    // user_plugin_activation_tokens.
+    mockUserTokenRows.mockReturnValue([
+      {
+        id: "tok-twenty",
+        secret_ref: "arn:twenty-user-token",
+        status: "active",
+        expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ]);
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ access_token: "twenty-server-level-token" }),
+    );
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(1);
+    expect(configs[0]).toMatchObject({
+      name: "twenty--crm",
+      url: "https://crm.thinkwork.invalid/mcp",
+      auth: { type: "bearer", token: "twenty-server-level-token" },
+    });
+  });
+
   it("URL dedupe: plugin entry wins over a direct entry sharing the URL when the activation resolves", async () => {
     const sharedUrl = "https://shared.lastmile.invalid/mcp";
     mockJoinRows.mockReturnValue([
