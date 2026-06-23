@@ -701,7 +701,7 @@ resource "aws_lambda_function" "handler" {
   }
 
   dynamic "vpc_config" {
-    for_each = contains(["knowledge-graph-thread-ingest", "knowledge-graph-observations-ingest"], each.key) && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0 ? [1] : each.key == "okf-efs-refresh" && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0 && var.okf_efs_refresh_access_point_arn != "" ? [1] : []
+    for_each = contains(["knowledge-graph-thread-ingest", "knowledge-graph-observations-ingest"], each.key) && local.cognee_worker_vpc_enabled ? [1] : each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
 
     content {
       subnet_ids         = each.key == "okf-efs-refresh" ? var.okf_efs_subnet_ids : var.cognee_worker_subnet_ids
@@ -710,7 +710,7 @@ resource "aws_lambda_function" "handler" {
   }
 
   dynamic "file_system_config" {
-    for_each = each.key == "okf-efs-refresh" && var.okf_efs_refresh_access_point_arn != "" ? [1] : []
+    for_each = each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
 
     content {
       arn              = var.okf_efs_refresh_access_point_arn

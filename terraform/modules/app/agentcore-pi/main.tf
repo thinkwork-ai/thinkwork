@@ -21,7 +21,8 @@ locals {
   memory_retain_fn_name = "thinkwork-${var.stage}-api-memory-retain"
   memory_retain_fn_arn  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${local.memory_retain_fn_name}"
   pi_image_uri          = "${var.ecr_repository_url}:pi-latest"
-  okf_efs_mount_enabled = var.okf_efs_enabled && var.okf_efs_file_system_arn != "" && var.okf_efs_read_access_point_arn != "" && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
+  okf_efs_vpc_enabled   = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
+  okf_efs_mount_enabled = local.okf_efs_vpc_enabled && var.okf_efs_file_system_arn != "" && var.okf_efs_read_access_point_arn != ""
   okf_efs_iam_statements = local.okf_efs_mount_enabled ? [
     {
       Sid      = "OkfWikiEfsReadOnlyMount"
@@ -278,7 +279,7 @@ resource "aws_iam_role_policy" "agentcore_pi" {
 }
 
 resource "aws_iam_role_policy_attachment" "agentcore_pi_vpc_access" {
-  count = local.okf_efs_mount_enabled ? 1 : 0
+  count = local.okf_efs_vpc_enabled ? 1 : 0
 
   role       = aws_iam_role.agentcore_pi.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -378,7 +379,7 @@ resource "aws_lambda_function" "agentcore_pi" {
   }
 
   dynamic "vpc_config" {
-    for_each = local.okf_efs_mount_enabled ? [1] : []
+    for_each = local.okf_efs_vpc_enabled ? [1] : []
 
     content {
       subnet_ids         = var.okf_efs_subnet_ids
@@ -387,7 +388,7 @@ resource "aws_lambda_function" "agentcore_pi" {
   }
 
   dynamic "file_system_config" {
-    for_each = local.okf_efs_mount_enabled ? [1] : []
+    for_each = local.okf_efs_vpc_enabled ? [1] : []
 
     content {
       arn              = var.okf_efs_read_access_point_arn
