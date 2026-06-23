@@ -705,13 +705,18 @@ describe("PluginDetail", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText(/customer-owned SSO deployments/i)).toBeTruthy();
-    expect(screen.getByText(/WorkOS client ID and API key/i)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /AuthKit issuer URL, OAuth client ID, and OAuth client secret/i,
+      ),
+    ).toBeTruthy();
     expect(
       screen.getAllByText((content) =>
         content.endsWith("/api/auth/workos/callback"),
       ).length,
     ).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/Admin Portal setup links/i)).toBeTruthy();
+    expect(screen.getByText(/Step-by-step field guide/i)).toBeTruthy();
+    expect(screen.getByText(/click Publish SSO/i)).toBeTruthy();
     expect(
       screen.getByRole("link", { name: /admin portal docs/i }),
     ).toBeTruthy();
