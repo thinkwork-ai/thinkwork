@@ -9,7 +9,10 @@ vi.mock("@thinkwork/ui", () => ({
   AlertDialog: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  AlertDialogAction: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+  AlertDialogAction: ({
+    children,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
   AlertDialogCancel: ({ children }: { children: React.ReactNode }) => (
@@ -47,13 +50,8 @@ vi.mock("@thinkwork/ui", () => ({
   }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
     asChild?: boolean;
   }) => (asChild ? <>{children}</> : <button {...props}>{children}</button>),
-  Sheet: ({
-    open,
-    children,
-  }: {
-    open?: boolean;
-    children: React.ReactNode;
-  }) => (open ? <div data-testid="sheet">{children}</div> : null),
+  Sheet: ({ open, children }: { open?: boolean; children: React.ReactNode }) =>
+    open ? <div data-testid="sheet">{children}</div> : null,
   SheetContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -65,6 +63,38 @@ vi.mock("@thinkwork/ui", () => ({
   ),
   SheetTitle: ({ children }: { children: React.ReactNode }) => (
     <h2>{children}</h2>
+  ),
+  Tabs: ({
+    children,
+    defaultValue: _defaultValue,
+    ...props
+  }: {
+    children: React.ReactNode;
+    defaultValue?: string;
+  }) => <div {...props}>{children}</div>,
+  TabsContent: ({
+    children,
+    value: _value,
+    ...props
+  }: {
+    children: React.ReactNode;
+    value?: string;
+  }) => <div {...props}>{children}</div>,
+  TabsList: ({
+    children,
+    variant: _variant,
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement> & { variant?: string }) => (
+    <div {...props}>{children}</div>
+  ),
+  TabsTrigger: ({
+    children,
+    value,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { value?: string }) => (
+    <button {...props} type="button" data-value={value}>
+      {children}
+    </button>
   ),
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TooltipContent: ({ children }: { children: React.ReactNode }) => (
@@ -102,7 +132,7 @@ vi.mock("@/components/settings/SettingsContent", () => ({
 afterEach(() => cleanup());
 
 describe("AgentLoopDetailContent", () => {
-  it("renders the prompt, compact status rail, setup thread, and run thread links", () => {
+  it("renders Definition and Activity tabs with the prompt, status rail, and run table", () => {
     render(
       <AgentLoopDetailContent
         loop={loopFixture()}
@@ -115,17 +145,24 @@ describe("AgentLoopDetailContent", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Linear dispatcher" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Linear dispatcher" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Definition" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Activity" })).toBeTruthy();
     expect(
       screen.getByText(
         "Act as the Linear agent dispatcher for the Web Apps project.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Status")).toBeTruthy();
+    expect(screen.getAllByText("Status").length).toBeGreaterThan(0);
     expect(screen.getByText("Last result")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Setup thread" }).getAttribute("href"),
     ).toBe("/threads/builder-thread-1");
+    expect(screen.getByText("Recent Runs")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Started" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Cost" })).toBeTruthy();
     const runThreadLinks = screen.getAllByRole("link", {
       name: "Open thread",
     });

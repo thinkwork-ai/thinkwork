@@ -24,45 +24,63 @@ export function AutomationRunsList({
   }
 
   return (
-    <div className="divide-y divide-border rounded-md border border-border/70">
-      {runs.map((run) => (
-        <div
-          key={run.id}
-          className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
-        >
-          <div className="min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={run.status.toLowerCase()} size="sm" />
-              <Badge variant="outline" className="text-xs">
-                {titleize(run.triggerFamily)}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
+    <div className="overflow-x-auto rounded-md border border-border/70">
+      <table className="w-full min-w-[760px] text-left text-sm">
+        <thead className="border-b border-border/70 bg-muted/20 text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="px-4 py-3 font-medium">Status</th>
+            <th className="px-4 py-3 font-medium">Trigger</th>
+            <th className="px-4 py-3 font-medium">Started</th>
+            <th className="px-4 py-3 font-medium">Iteration</th>
+            <th className="px-4 py-3 font-medium">Duration</th>
+            <th className="px-4 py-3 font-medium">Cost</th>
+            <th className="px-4 py-3 text-right font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border/70">
+          {runs.map((run) => (
+            <tr key={run.id}>
+              <td className="px-4 py-3">
+                <StatusBadge status={run.status.toLowerCase()} size="sm" />
+              </td>
+              <td className="px-4 py-3">
+                <Badge variant="outline" className="text-xs">
+                  {titleize(run.triggerFamily)}
+                </Badge>
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                 {formatDateTime(run.startedAt ?? run.createdAt)}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <span>Iteration {run.currentIteration}</span>
-              <span>{formatDuration(run.startedAt, run.finishedAt)}</span>
-              <span>{formatCost(run.totalCostUsdCents)}</span>
-            </div>
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            {run.threadId ? (
-              <Button type="button" variant="outline" size="sm" asChild>
-                <a href={`/threads/${run.threadId}`}>Open thread</a>
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpenRun(run)}
-            >
-              Run details
-            </Button>
-          </div>
-        </div>
-      ))}
+              </td>
+              <td className="px-4 py-3 text-muted-foreground">
+                {run.currentIteration}
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                {formatDuration(run.startedAt, run.finishedAt)}
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                {formatCost(run.totalCostUsdCents)}
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex items-center justify-end gap-2">
+                  {run.threadId ? (
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <a href={`/threads/${run.threadId}`}>Open thread</a>
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onOpenRun(run)}
+                  >
+                    Run details
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
