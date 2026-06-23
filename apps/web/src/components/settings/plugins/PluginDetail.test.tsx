@@ -16,6 +16,7 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
     mocks: {
       activate: vi.fn(),
       activateCredentials: vi.fn(),
+      configureWorkos: vi.fn(),
       deactivate: vi.fn(),
       install: vi.fn(),
       navigate: vi.fn(),
@@ -32,6 +33,9 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
       SettingsActivatePluginMutation: Symbol("activatePlugin"),
       SettingsActivatePluginWithCredentialsMutation: Symbol(
         "activatePluginWithCredentials",
+      ),
+      SettingsConfigureWorkosAuthPluginMutation: Symbol(
+        "configureWorkosAuthPlugin",
       ),
       SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
       SettingsInstallPluginMutation: Symbol("installPlugin"),
@@ -76,6 +80,9 @@ vi.mock("urql", () => ({
     }
     if (doc === queryDocs.SettingsActivatePluginWithCredentialsMutation) {
       return [{ fetching: false }, mocks.activateCredentials];
+    }
+    if (doc === queryDocs.SettingsConfigureWorkosAuthPluginMutation) {
+      return [{ fetching: false }, mocks.configureWorkos];
     }
     if (doc === queryDocs.SettingsDeactivatePluginMutation) {
       return [{ fetching: false }, mocks.deactivate];
@@ -280,6 +287,24 @@ beforeEach(() => {
   });
   mocks.deactivate.mockResolvedValue({
     data: { deactivatePlugin: { id: "act-1", status: "revoked" } },
+  });
+  mocks.configureWorkos.mockResolvedValue({
+    data: {
+      configureWorkosAuthPlugin: {
+        resource: {
+          issuerUrl: "https://customer.authkit.app",
+          clientId: "client_saved",
+          clientSecretConfigured: true,
+          validationStatus: "valid",
+          publicOptionsPublished: true,
+        },
+        reference: {
+          status: "enabled",
+          hostnames: ["api.example.test"],
+          publicOptionLabel: "Continue with SSO",
+        },
+      },
+    },
   });
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
@@ -649,12 +674,11 @@ describe("PluginDetail", () => {
       );
     });
 
-    expect(screen.queryByText("WorkOS account setup")).toBeNull();
+    expect(screen.getByText("WorkOS configuration")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /create account/i })).toBeNull();
-    // The Setup section no longer renders a "WorkOS dashboard" row; the
-    // dashboard link now lives in the page header (asserted below).
-    expect(screen.queryByText("WorkOS dashboard")).toBeNull();
-    expect(screen.queryByRole("link", { name: /open dashboard/i })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /workos dashboard/i }),
+    ).toBeTruthy();
 
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     const headerAction = lastHeaderAction();
@@ -708,7 +732,7 @@ describe("PluginDetail", () => {
     ).toBeNull();
   });
 
-  it("shows WorkOS account setup only before the auth provider is configured", () => {
+  it("saves WorkOS credentials before the auth provider is configured", async () => {
     paramsState.pluginKey = "workos-auth";
     mockQueries({
       install: {
@@ -716,6 +740,7 @@ describe("PluginDetail", () => {
         components: workosInstall.components.map((component) => ({
           ...component,
           state: "pending",
+          handlerRef: null,
         })),
       },
       activations: [],
@@ -723,12 +748,43 @@ describe("PluginDetail", () => {
     });
     render(<PluginDetail />);
 
-    expect(screen.getByText("WorkOS account setup")).toBeTruthy();
+    expect(screen.getByText("Configure WorkOS")).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: /create account/i })
+        .getByRole("link", { name: /workos dashboard/i })
         .getAttribute("href"),
     ).toBe("https://dashboard.workos.com/get-started");
+
+    fireEvent.change(screen.getByLabelText(/authkit issuer url/i), {
+      target: { value: "https://customer.authkit.app" },
+    });
+    fireEvent.change(screen.getByLabelText(/oauth client id/i), {
+      target: { value: "client_customer" },
+    });
+    fireEvent.change(screen.getByLabelText(/oauth client secret/i), {
+      target: { value: "sk_customer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /publish sso/i }));
+
+    await waitFor(() => {
+      expect(mocks.configureWorkos).toHaveBeenCalledWith({
+        input: {
+          installId: "install-workos",
+          issuerUrl: "https://customer.authkit.app",
+          clientId: "client_customer",
+          clientSecret: "sk_customer",
+          publicOptionLabel: "Continue with SSO",
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(refreshInstalls).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+      expect(refreshCatalog).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+    });
 
     // No dashboard header affordance until the account is configured.
     const headerAction = lastHeaderAction();
@@ -1302,6 +1358,13 @@ const workosInstall = {
       componentKey: "workos-auth",
       componentType: "auth-provider",
       state: "provisioned",
+      handlerRef: {
+        status: "valid",
+        issuerUrl: "https://customer.authkit.app",
+        clientId: "client_saved",
+        publicOptionsPublished: true,
+        publicOptionLabel: "Continue with SSO",
+      },
       lastError: null,
     },
   ],

@@ -34,6 +34,7 @@ import { getDesktopBridge } from "@/lib/desktop-runtime";
 import {
   SettingsActivatePluginMutation,
   SettingsActivatePluginWithCredentialsMutation,
+  SettingsConfigureWorkosAuthPluginMutation,
   SettingsDeactivatePluginMutation,
   SettingsInstallPluginMutation,
   SettingsManagedApplicationDeploymentQuery,
@@ -58,6 +59,7 @@ import {
   isWorkosAccountConfigured,
   WORKOS_AUTH_PLUGIN_KEY,
   WORKOS_DASHBOARD_URL,
+  workosPublishedConfig,
 } from "./workos";
 import {
   broadenedScopes,
@@ -94,6 +96,15 @@ export function PluginDetail() {
     workspaceSlug: "",
   });
   const [workosInstructionsOpen, setWorkosInstructionsOpen] = useState(false);
+  const [workosConfigError, setWorkosConfigError] = useState<string | null>(
+    null,
+  );
+  const [workosConfigForm, setWorkosConfigForm] = useState({
+    issuerUrl: "",
+    clientId: "",
+    clientSecret: "",
+    publicOptionLabel: "Continue with SSO",
+  });
 
   const [catalogResult, refreshCatalog] = useQuery({
     query: SettingsPluginCatalogQuery,
@@ -124,6 +135,9 @@ export function PluginDetail() {
     useMutation(SettingsActivatePluginWithCredentialsMutation);
   const [deactivateState, deactivatePlugin] = useMutation(
     SettingsDeactivatePluginMutation,
+  );
+  const [configureWorkosState, configureWorkosAuthPlugin] = useMutation(
+    SettingsConfigureWorkosAuthPluginMutation,
   );
 
   const entry =
@@ -173,6 +187,11 @@ export function PluginDetail() {
   const workosAccountConfigured = isWorkosAccountConfigured(
     install?.components,
   );
+  const workosSavedConfig = workosPublishedConfig(install?.components);
+  const workosSavedIssuerUrl = workosSavedConfig?.issuerUrl ?? "";
+  const workosSavedClientId = workosSavedConfig?.clientId ?? "";
+  const workosSavedPublicOptionLabel =
+    workosSavedConfig?.publicOptionLabel ?? "";
   // When WorkOS is configured, surface a direct dashboard link from the
   // detail header (mirrors the list-row external-link affordance).
   const workosDashboardUrl =
@@ -192,6 +211,31 @@ export function PluginDetail() {
     refreshCatalog({ requestPolicy: "network-only" });
     refreshActivations({ requestPolicy: "network-only" });
   }
+
+  useEffect(() => {
+    if (
+      !isWorkosAuth ||
+      (!workosSavedIssuerUrl &&
+        !workosSavedClientId &&
+        !workosSavedPublicOptionLabel)
+    ) {
+      return;
+    }
+    setWorkosConfigForm((current) => ({
+      issuerUrl: current.issuerUrl || workosSavedIssuerUrl,
+      clientId: current.clientId || workosSavedClientId,
+      clientSecret: "",
+      publicOptionLabel:
+        current.publicOptionLabel ||
+        workosSavedPublicOptionLabel ||
+        "Continue with SSO",
+    }));
+  }, [
+    isWorkosAuth,
+    workosSavedClientId,
+    workosSavedIssuerUrl,
+    workosSavedPublicOptionLabel,
+  ]);
 
   // OAuth callback landing: /settings/plugins/$pluginKey?pluginOAuth=...
   // Read + clear the params on mount, show the notice, refetch activations
@@ -366,6 +410,58 @@ export function PluginDetail() {
     toast.success("Credentials saved.");
     refreshActivations({ requestPolicy: "network-only" });
     refreshInstalls({ requestPolicy: "network-only" });
+  }
+
+  async function saveWorkosConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!install) return;
+    setNotice(null);
+    setError(null);
+    setWorkosConfigError(null);
+
+    const issuerUrl = workosConfigForm.issuerUrl.trim();
+    const clientId = workosConfigForm.clientId.trim();
+    const clientSecret = workosConfigForm.clientSecret.trim();
+    const publicOptionLabel =
+      workosConfigForm.publicOptionLabel.trim() || "Continue with SSO";
+
+    if (!issuerUrl || !clientId || (!workosAccountConfigured && !clientSecret)) {
+      setWorkosConfigError(
+        workosAccountConfigured
+          ? "Enter the WorkOS issuer URL and client ID."
+          : "Enter the WorkOS issuer URL, client ID, and client secret.",
+      );
+      return;
+    }
+
+    const result = await configureWorkosAuthPlugin({
+      input: {
+        installId: install.id,
+        issuerUrl,
+        clientId,
+        clientSecret: clientSecret || null,
+        publicOptionLabel,
+      },
+    });
+    if (result.error) {
+      setWorkosConfigError(
+        `Could not save WorkOS configuration: ${result.error.message}`,
+      );
+      return;
+    }
+
+    const resource = result.data?.configureWorkosAuthPlugin.resource;
+    const reference = result.data?.configureWorkosAuthPlugin.reference;
+    setWorkosConfigForm({
+      issuerUrl: resource?.issuerUrl ?? issuerUrl,
+      clientId: resource?.clientId ?? clientId,
+      clientSecret: "",
+      publicOptionLabel: reference?.publicOptionLabel ?? publicOptionLabel,
+    });
+    setNotice("WorkOS configuration saved. SSO is published on the login page.");
+    toast.success("WorkOS configuration saved.");
+    refreshInstalls({ requestPolicy: "network-only" });
+    refreshCatalog({ requestPolicy: "network-only" });
   }
 
   async function disconnect() {
@@ -683,24 +779,19 @@ export function PluginDetail() {
                 label="WorkOS callback URL"
               />
             </SettingsRow>
-            {!workosAccountConfigured ? (
-              <SettingsRow
-                label="WorkOS account setup"
-                description="Create or open the WorkOS account and environment for this deployment."
-                layout="stacked"
-              >
-                <Button asChild type="button" variant="outline" size="sm">
-                  <a
-                    href="https://dashboard.workos.com/get-started"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Create account
-                    <ExternalLink className="size-3.5" />
-                  </a>
-                </Button>
-              </SettingsRow>
-            ) : null}
+            <WorkosConfigurationRow
+              configured={workosAccountConfigured}
+              error={workosConfigError}
+              form={workosConfigForm}
+              saving={configureWorkosState.fetching}
+              onChange={(field, value) =>
+                setWorkosConfigForm((current) => ({
+                  ...current,
+                  [field]: value,
+                }))
+              }
+              onSubmit={(event) => void saveWorkosConfig(event)}
+            />
           </SettingsSection>
         ) : null}
 
@@ -977,6 +1068,120 @@ function CopyablePluginValue({
         )}
       </Button>
     </div>
+  );
+}
+
+function WorkosConfigurationRow({
+  configured,
+  error,
+  form,
+  saving,
+  onChange,
+  onSubmit,
+}: {
+  configured: boolean;
+  error: string | null;
+  form: {
+    issuerUrl: string;
+    clientId: string;
+    clientSecret: string;
+    publicOptionLabel: string;
+  };
+  saving: boolean;
+  onChange: (
+    field: "issuerUrl" | "clientId" | "clientSecret" | "publicOptionLabel",
+    value: string,
+  ) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <SettingsRow
+      label={configured ? "WorkOS configuration" : "Configure WorkOS"}
+      description={
+        configured
+          ? "Update the customer-owned WorkOS AuthKit application used for SSO."
+          : "Enter the customer-owned WorkOS AuthKit application credentials."
+      }
+      layout="stacked"
+    >
+      <form
+        className="grid w-full gap-4 rounded-md border border-border/70 bg-background/30 p-4"
+        onSubmit={onSubmit}
+      >
+        <div className="grid gap-1.5">
+          <Label htmlFor="workos-issuer-url">AuthKit issuer URL</Label>
+          <Input
+            id="workos-issuer-url"
+            type="url"
+            autoComplete="off"
+            placeholder="https://example.authkit.app"
+            value={form.issuerUrl}
+            onChange={(event) =>
+              onChange("issuerUrl", event.currentTarget.value)
+            }
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="workos-client-id">OAuth client ID</Label>
+          <Input
+            id="workos-client-id"
+            autoComplete="off"
+            placeholder="client_..."
+            value={form.clientId}
+            onChange={(event) =>
+              onChange("clientId", event.currentTarget.value)
+            }
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="workos-client-secret">
+            OAuth client secret
+            {configured ? (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                leave blank to keep current
+              </span>
+            ) : null}
+          </Label>
+          <Input
+            id="workos-client-secret"
+            type="password"
+            autoComplete="off"
+            value={form.clientSecret}
+            onChange={(event) =>
+              onChange("clientSecret", event.currentTarget.value)
+            }
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="workos-public-label">Login button label</Label>
+          <Input
+            id="workos-public-label"
+            autoComplete="off"
+            value={form.publicOptionLabel}
+            onChange={(event) =>
+              onChange("publicOptionLabel", event.currentTarget.value)
+            }
+          />
+        </div>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button asChild type="button" variant="outline" size="sm">
+            <a
+              href="https://dashboard.workos.com/get-started"
+              target="_blank"
+              rel="noreferrer"
+            >
+              WorkOS dashboard
+              <ExternalLink className="size-3.5" />
+            </a>
+          </Button>
+          <Button type="submit" size="sm" disabled={saving}>
+            <KeyRound className="size-4" />
+            {saving ? "Saving..." : configured ? "Update SSO" : "Publish SSO"}
+          </Button>
+        </div>
+      </form>
+    </SettingsRow>
   );
 }
 

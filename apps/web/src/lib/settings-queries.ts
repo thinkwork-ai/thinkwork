@@ -2297,3 +2297,41 @@ export const SettingsDeactivatePluginMutation = graphql(`
     }
   }
 `);
+
+export const SettingsConfigureWorkosAuthPluginMutation = graphql(`
+  mutation SettingsConfigureWorkosAuthPlugin(
+    $input: ConfigureWorkosAuthPluginInput!
+  ) {
+    configureWorkosAuthPlugin(input: $input) {
+      install {
+        id
+        pluginKey
+        pinnedVersion
+        state
+        lastTransitionAt
+        lastError
+        activatedUserCount
+        components {
+          id
+          componentKey
+          componentType
+          state
+          handlerRef
+          lastError
+        }
+      }
+      resource {
+        issuerUrl
+        clientId
+        clientSecretConfigured
+        validationStatus
+        publicOptionsPublished
+      }
+      reference {
+        status
+        hostnames
+        publicOptionLabel
+      }
+    }
+  }
+`);

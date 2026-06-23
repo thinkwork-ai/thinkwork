@@ -12,23 +12,61 @@ type WorkosComponent = {
   componentType: string;
   componentKey: string;
   state: string;
+  handlerRef?: unknown;
 };
 
-/**
- * WorkOS is "configured" once its auth-provider component is provisioned —
- * i.e. the customer's WorkOS account/environment is wired into this
- * deployment. When configured we surface a direct link to the WorkOS
- * dashboard from the list row and the detail header.
- */
 export function isWorkosAccountConfigured(
   components: readonly WorkosComponent[] | undefined,
 ): boolean {
-  return Boolean(
-    components?.some(
-      (component) =>
-        component.componentType === "auth-provider" &&
-        component.componentKey === WORKOS_AUTH_PLUGIN_KEY &&
-        component.state === "provisioned",
-    ),
+  return Boolean(workosPublishedConfig(components));
+}
+
+export function workosPublishedConfig(
+  components: readonly WorkosComponent[] | undefined,
+): {
+  issuerUrl?: string;
+  clientId?: string;
+  publicOptionLabel?: string;
+} | null {
+  const component = components?.find(
+    (candidate) =>
+      candidate.componentType === "auth-provider" &&
+      candidate.componentKey === WORKOS_AUTH_PLUGIN_KEY &&
+      candidate.state === "provisioned",
   );
+  if (!component) return null;
+
+  const ref = parseHandlerRef(component.handlerRef);
+  if (
+    !ref ||
+    ref.status !== "valid" ||
+    ref.publicOptionsPublished !== true
+  ) {
+    return null;
+  }
+
+  return {
+    issuerUrl: stringValue(ref.issuerUrl),
+    clientId: stringValue(ref.clientId),
+    publicOptionLabel: stringValue(ref.publicOptionLabel),
+  };
+}
+
+function parseHandlerRef(value: unknown): Record<string, unknown> | null {
+  let ref = value;
+  if (typeof ref === "string") {
+    try {
+      ref = JSON.parse(ref);
+    } catch {
+      return null;
+    }
+  }
+  if (ref && typeof ref === "object" && !Array.isArray(ref)) {
+    return ref as Record<string, unknown>;
+  }
+  return null;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
 }

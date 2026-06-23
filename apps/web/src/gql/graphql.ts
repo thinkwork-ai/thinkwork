@@ -1234,6 +1234,22 @@ export type ConfigureEmailProviderInput = {
   webhookSecretRef?: InputMaybe<Scalars['String']['input']>;
 };
 
+export type ConfigureWorkosAuthPluginInput = {
+  clientId: Scalars['String']['input'];
+  /** Write-only. Required for first-time setup; omit to keep the existing secret. */
+  clientSecret?: InputMaybe<Scalars['String']['input']>;
+  installId: Scalars['ID']['input'];
+  issuerUrl: Scalars['String']['input'];
+  publicOptionLabel?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type ConfigureWorkosAuthPluginResult = {
+  __typename?: 'ConfigureWorkosAuthPluginResult';
+  install: PluginInstall;
+  reference: TenantAuthProviderReference;
+  resource: AuthProviderResource;
+};
+
 export type ConfirmAutomationDraftInput = {
   builderThreadId: Scalars['ID']['input'];
   input: SaveAgentLoopInput;
@@ -3251,6 +3267,12 @@ export type Mutation = {
    */
   compileWikiNow: WikiCompileJob;
   configureEmailProvider: EmailProviderInstall;
+  /**
+   * Tenant-admin: configure the installed WorkOS Auth plugin with customer-owned
+   * AuthKit credentials. Stores the secret server-side, publishes the public SSO
+   * option, and updates the auth-provider component state.
+   */
+  configureWorkosAuthPlugin: ConfigureWorkosAuthPluginResult;
   confirmAutomationDraft: AgentLoop;
   connectN8nWorkflow: ConnectN8nWorkflowResult;
   createAgentProfile: AgentProfile;
@@ -3731,6 +3753,11 @@ export type MutationCompileWikiNowArgs = {
 
 export type MutationConfigureEmailProviderArgs = {
   input: ConfigureEmailProviderInput;
+};
+
+
+export type MutationConfigureWorkosAuthPluginArgs = {
+  input: ConfigureWorkosAuthPluginInput;
 };
 
 
@@ -11257,6 +11284,13 @@ export type SettingsDeactivatePluginMutationVariables = Exact<{
 
 export type SettingsDeactivatePluginMutation = { __typename?: 'Mutation', deactivatePlugin: { __typename?: 'UserPluginActivation', id: string, status: string, revokedAt?: any | null } };
 
+export type SettingsConfigureWorkosAuthPluginMutationVariables = Exact<{
+  input: ConfigureWorkosAuthPluginInput;
+}>;
+
+
+export type SettingsConfigureWorkosAuthPluginMutation = { __typename?: 'Mutation', configureWorkosAuthPlugin: { __typename?: 'ConfigureWorkosAuthPluginResult', install: { __typename?: 'PluginInstall', id: string, pluginKey: string, pinnedVersion: string, state: string, lastTransitionAt: any, lastError?: string | null, activatedUserCount: number, components: Array<{ __typename?: 'PluginComponent', id: string, componentKey: string, componentType: string, state: string, handlerRef: any, lastError?: string | null }> }, resource: { __typename?: 'AuthProviderResource', issuerUrl: string, clientId: string, clientSecretConfigured: boolean, validationStatus: string, publicOptionsPublished: boolean }, reference: { __typename?: 'TenantAuthProviderReference', status: string, hostnames: Array<string>, publicOptionLabel: string } } };
+
 export type TenantSkillCatalogQueryVariables = Exact<{
   agentId?: InputMaybe<Scalars['ID']['input']>;
 }>;
@@ -11455,6 +11489,7 @@ export const SettingsRetryPluginComponentDocument = {"kind":"Document","definiti
 export const SettingsActivatePluginDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsActivatePlugin"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ActivatePluginInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activatePlugin"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"authorizeUrl"}}]}}]}}]} as unknown as DocumentNode<SettingsActivatePluginMutation, SettingsActivatePluginMutationVariables>;
 export const SettingsActivatePluginWithCredentialsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsActivatePluginWithCredentials"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ActivatePluginWithCredentialsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activatePluginWithCredentials"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"grantedAt"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsActivatePluginWithCredentialsMutation, SettingsActivatePluginWithCredentialsMutationVariables>;
 export const SettingsDeactivatePluginDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsDeactivatePlugin"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"DeactivatePluginInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deactivatePlugin"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"revokedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsDeactivatePluginMutation, SettingsDeactivatePluginMutationVariables>;
+export const SettingsConfigureWorkosAuthPluginDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsConfigureWorkosAuthPlugin"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ConfigureWorkosAuthPluginInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"configureWorkosAuthPlugin"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"install"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"pluginKey"}},{"kind":"Field","name":{"kind":"Name","value":"pinnedVersion"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"lastTransitionAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}},{"kind":"Field","name":{"kind":"Name","value":"activatedUserCount"}},{"kind":"Field","name":{"kind":"Name","value":"components"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"componentKey"}},{"kind":"Field","name":{"kind":"Name","value":"componentType"}},{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"handlerRef"}},{"kind":"Field","name":{"kind":"Name","value":"lastError"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"resource"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"issuerUrl"}},{"kind":"Field","name":{"kind":"Name","value":"clientId"}},{"kind":"Field","name":{"kind":"Name","value":"clientSecretConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"validationStatus"}},{"kind":"Field","name":{"kind":"Name","value":"publicOptionsPublished"}}]}},{"kind":"Field","name":{"kind":"Name","value":"reference"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"hostnames"}},{"kind":"Field","name":{"kind":"Name","value":"publicOptionLabel"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsConfigureWorkosAuthPluginMutation, SettingsConfigureWorkosAuthPluginMutationVariables>;
 export const TenantSkillCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TenantSkillCatalog"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantSkillCatalog"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"icon"}},{"kind":"Field","name":{"kind":"Name","value":"installed"}}]}}]}}]} as unknown as DocumentNode<TenantSkillCatalogQuery, TenantSkillCatalogQueryVariables>;
 export const SettingsSkillDraftsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsSkillDrafts"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillDrafts"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"currentContentHash"}},{"kind":"Field","name":{"kind":"Name","value":"inboxItemId"}},{"kind":"Field","name":{"kind":"Name","value":"submittedAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"requester"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"email"}}]}},{"kind":"Field","name":{"kind":"Name","value":"source"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsSkillDraftsQuery, SettingsSkillDraftsQueryVariables>;
 export const PublishSkillDraftDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"PublishSkillDraft"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PublishSkillDraftInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"publishSkillDraft"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"currentContentHash"}},{"kind":"Field","name":{"kind":"Name","value":"publishedCatalogSlug"}},{"kind":"Field","name":{"kind":"Name","value":"publishedContentHash"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<PublishSkillDraftMutation, PublishSkillDraftMutationVariables>;
