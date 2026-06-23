@@ -574,6 +574,7 @@ export const SettingsAgentLoopQuery = gql`
       }
       runs(limit: $runLimit) {
         id
+        threadId
         status
         triggerFamily
         triggerSource

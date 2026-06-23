@@ -14,9 +14,9 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: Unit 4 - Chat Creation Mode.
-- Current branch: `codex/thnk-46-u4-chat-builder`.
-- Current worktree: `.Codex/worktrees/thnk-46-u4-chat-builder`.
+- Current unit: Unit 6 - Prompt Document Detail Page.
+- Current branch: `codex/thnk-46-u6-detail-page`.
+- Current worktree: `.Codex/worktrees/thnk-46-u6-detail-page`.
 - Current pull request: Not opened yet.
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
@@ -177,6 +177,23 @@ status: in_progress
     `pnpm test:plugin-source-boundary`. Local `pnpm install` completed but
     logged an optional `canvas` build failure under local Node 25 because
     `pkg-config` is not installed; web tests and typechecks were unaffected.
+  - 2026-06-23: U5 PR
+    [#2890](https://github.com/thinkwork-ai/thinkwork/pull/2890) passed
+    required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was squash
+    merged as `0315f531fbcf0ee8a53e0dfb6e67c89208420e2a`; the remote branch
+    was deleted and the local U5 worktree/branch were removed.
+  - 2026-06-23: U6 started from `origin/main` at `0315f531f` in
+    `.Codex/worktrees/thnk-46-u6-detail-page`.
+  - 2026-06-23: U6 implementation in progress. Redesigned the Automation
+    detail page around the prompt document, compact status rail, visible setup
+    and run thread links, recent run list, and a read-only Advanced details
+    side sheet for AgentLoop runtime internals.
+  - 2026-06-23: U6 verification passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/lib/graphql-queries.schema.test.ts src/components/agent-loops/AgentLoopDetail.test.tsx src/components/agent-loops/AgentLoopForm.test.tsx src/components/agent-loops/agent-loop-utils.test.ts`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/web test`, `pnpm lint`, `pnpm typecheck`,
+    `pnpm test:release`, `pnpm test:plugin-source-boundary`, and
+    `git diff --check`.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 

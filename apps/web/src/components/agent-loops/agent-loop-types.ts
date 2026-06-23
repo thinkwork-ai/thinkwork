@@ -76,6 +76,7 @@ export interface AgentLoopVersionSummary {
 export interface AgentLoopRunSummary {
   id: string;
   status: string;
+  threadId?: string | null;
   triggerFamily: string;
   triggerSource?: string | null;
   scheduledJobId?: string | null;
