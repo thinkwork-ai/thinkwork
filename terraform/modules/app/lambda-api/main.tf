@@ -18,6 +18,11 @@
 
 data "aws_caller_identity" "current" {}
 
+locals {
+  cognee_worker_vpc_enabled = var.cognee_enabled && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0
+  okf_efs_vpc_enabled       = length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
+}
+
 ################################################################################
 # API Gateway V2 — HTTP API
 ################################################################################
@@ -151,10 +156,7 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 # go into the grouped managed policies, never inline.
 
 resource "aws_iam_role_policy_attachment" "lambda_cognee_worker_vpc_access" {
-  count = (
-    (var.cognee_enabled && length(var.cognee_worker_subnet_ids) > 0 && length(var.cognee_worker_security_group_ids) > 0) ||
-    (length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0 && var.okf_efs_refresh_access_point_arn != "")
-  ) ? 1 : 0
+  count = local.cognee_worker_vpc_enabled || local.okf_efs_vpc_enabled ? 1 : 0
 
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
