@@ -155,6 +155,10 @@ status: in_progress
     failed with `ssh: connect to host github.com port 22: Operation timed out`.
     The next required action is still to publish this branch, open the U4 PR,
     wait for required CI, merge, clean up, sync `main`, and then continue U5.
+  - 2026-06-23: GitHub connectivity recovered. `git ls-remote --heads origin
+    main` and HTTPS reachability both succeeded, then the U4 branch was pushed
+    and PR [#2889](https://github.com/thinkwork-ai/thinkwork/pull/2889) was
+    opened for CI.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
