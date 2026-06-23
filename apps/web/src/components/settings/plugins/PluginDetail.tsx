@@ -907,8 +907,8 @@ function WorkosSetupInstructionsSheet({
                 customer or deployment operator.
               </li>
               <li>
-                The WorkOS client ID and API key stored as ThinkWork managed
-                secrets for the customer stage.
+                The AuthKit issuer URL, OAuth client ID, and OAuth client
+                secret from the customer WorkOS application.
               </li>
               <li>
                 The ThinkWork WorkOS callback URL from this plugin detail page
@@ -926,59 +926,90 @@ function WorkosSetupInstructionsSheet({
           </section>
 
           <section className="space-y-3">
-            <h3 className="font-medium text-foreground">Manual setup</h3>
+            <h3 className="font-medium text-foreground">
+              Step-by-step field guide
+            </h3>
             <ol className="list-decimal space-y-3 pl-5 text-muted-foreground">
               <li>
-                Create or select the customer WorkOS environment. Use Sandbox
-                for test tenants and Production for live customer traffic.
+                Open the WorkOS Dashboard and switch to the customer
+                environment. Use Sandbox for test tenants and Production for
+                live customer traffic.
               </li>
               <li>
-                Open the WorkOS application Redirects page and add the ThinkWork
-                API callback URL:
+                Create or open the WorkOS AuthKit application for this
+                customer. In that application's Redirects settings, add this
+                ThinkWork callback URL:
                 <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
                   {callbackUrl}
                 </code>
               </li>
               <li>
-                Copy the WorkOS client ID and create an API key. Store the API
-                key in Secrets Manager or SSM for the customer deployment, then
-                register the secret reference and client ID with the ThinkWork
-                auth-provider resource.
+                For AuthKit issuer URL, stay in the same WorkOS application and
+                copy the AuthKit issuer or domain value. It should look like
+                <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                  https://example.authkit.app
+                </code>
+                .
               </li>
               <li>
-                Create a WorkOS organization for the customer. Use a stable
-                reference that matches the customer deployment or tenant record.
+                For OAuth client ID, open the application's OAuth credentials
+                and copy the Client ID. It should start with
+                <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                  client_
+                </code>
+                .
               </li>
               <li>
-                Configure SSO. For enterprise IdPs, invite the customer IT admin
-                through WorkOS Admin Portal. For Google/Microsoft testing,
-                enable the provider and test with an approved domain account.
+                For OAuth client secret, reveal or create the Client Secret in
+                the same OAuth credentials area. Paste it into ThinkWork once;
+                after Publish SSO, ThinkWork stores it server-side and clears
+                the field.
               </li>
               <li>
-                Install this plugin in ThinkWork and confirm the sign-in page
-                shows the SSO option. Sign in, log out, and sign in again to
-                confirm WorkOS shows provider/account selection instead of
-                silently reusing the previous user.
+                For Login button label, enter the customer-facing text that
+                should appear on the ThinkWork login page. The default is
+                <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                  Continue with SSO
+                </code>
+                .
+              </li>
+              <li>
+                In WorkOS, create or select the customer organization and make
+                sure it has at least one active SSO connection or OAuth provider
+                before publishing.
+              </li>
+              <li>
+                Back in ThinkWork, paste the three WorkOS values, confirm the
+                label, and click Publish SSO. Then open the ThinkWork login page
+                and confirm the SSO button appears.
               </li>
             </ol>
           </section>
 
           <section className="space-y-3">
-            <h3 className="font-medium text-foreground">Assisted setup path</h3>
+            <h3 className="font-medium text-foreground">Customer IdP setup</h3>
             <p className="text-muted-foreground">
-              ThinkWork can make this smoother by generating WorkOS Admin Portal
-              setup links for customer IT admins, then recording the resulting
-              organization and connection identifiers against the installed
-              plugin. That removes most IdP-specific instructions from ThinkWork
-              because Admin Portal hosts them.
+              For enterprise SAML or OIDC, invite the customer's IT admin
+              through WorkOS Admin Portal. WorkOS hosts the provider-specific
+              setup flow and records the active connection under the customer
+              organization.
             </p>
             <p className="text-muted-foreground">
-              The deployment operator still needs a WorkOS API key and client ID
-              for the customer environment. Redirect URLs and application
-              settings should be confirmed in WorkOS before enabling SSO for
-              production traffic.
+              For Google or Microsoft testing, enable the provider in WorkOS and
+              test with an account on an approved customer domain before turning
+              on production traffic.
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
+              <Button asChild variant="outline" size="sm">
+                <a
+                  href={WORKOS_DASHBOARD_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  WorkOS dashboard
+                  <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
               <Button asChild variant="outline" size="sm">
                 <a
                   href="https://workos.com/docs/admin-portal"
@@ -1104,10 +1135,7 @@ function WorkosConfigurationRow({
       }
       layout="stacked"
     >
-      <form
-        className="grid w-full gap-4 rounded-md border border-border/70 bg-background/30 p-4"
-        onSubmit={onSubmit}
-      >
+      <form className="grid w-full gap-4" onSubmit={onSubmit}>
         <div className="grid gap-1.5">
           <Label htmlFor="workos-issuer-url">AuthKit issuer URL</Label>
           <Input
