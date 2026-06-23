@@ -101,7 +101,7 @@ locals {
 
   inbound_smtp  = "inbound-smtp.${var.region}.amazonaws.com"
   rule_set_name = "thinkwork-${var.stage}-email-rules"
-  has_lambda    = var.enable_email_inbound_lambda_action
+  has_lambda    = var.enable_email_inbound_lambda_action && var.email_inbound_fn_arn != "" && var.email_inbound_fn_name != ""
   has_bucket    = var.inbound_bucket_name != ""
 }
 
