@@ -272,6 +272,9 @@ src/__tests__/automation-loop-designer.test.ts src/__tests__/parity.test.ts`,
     `pnpm --filter @thinkwork/api test` (583 files passed, 3 skipped; 5379
     tests passed, 9 skipped), Prettier check over U8-touched files, and
     `git diff --check`.
+  - 2026-06-23: U8 PR
+    [#2893](https://github.com/thinkwork-ai/thinkwork/pull/2893) opened and CI
+    monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
