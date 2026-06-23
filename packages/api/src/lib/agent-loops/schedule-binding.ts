@@ -23,6 +23,7 @@ export interface SyncAgentLoopScheduleBindingInput {
   description?: string | null;
   goalObjective: string;
   workerAgentId?: string | null;
+  spaceId?: string | null;
   triggerSpec: AgentLoopScheduleSpec;
   loopEnabled: boolean;
   actorId?: string | null;
@@ -69,6 +70,7 @@ export async function syncAgentLoopScheduleBinding(
         agent_loop_id: input.agentLoopId,
         trigger_type: AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
         agent_id: input.workerAgentId ?? null,
+        space_id: input.spaceId ?? null,
         name: input.name,
         description: input.description ?? null,
         prompt: input.goalObjective,
@@ -86,6 +88,7 @@ export async function syncAgentLoopScheduleBinding(
       triggerId: row.id,
       tenantId: input.tenantId,
       workerAgentId: input.workerAgentId,
+      spaceId: input.spaceId,
       name: input.name,
       scheduleType: schedule.scheduleType,
       scheduleExpression: schedule.scheduleExpression,
@@ -102,6 +105,7 @@ export async function syncAgentLoopScheduleBinding(
     description: input.description ?? null,
     prompt: input.goalObjective,
     agent_id: input.workerAgentId ?? null,
+    space_id: input.spaceId ?? null,
     schedule_type: schedule.scheduleType,
     schedule_expression: schedule.scheduleExpression,
     timezone: schedule.timezone,
@@ -112,6 +116,7 @@ export async function syncAgentLoopScheduleBinding(
     existing.description === desired.description &&
     existing.prompt === desired.prompt &&
     existing.agent_id === desired.agent_id &&
+    existing.space_id === desired.space_id &&
     existing.schedule_type === desired.schedule_type &&
     existing.schedule_expression === desired.schedule_expression &&
     existing.timezone === desired.timezone &&
@@ -125,6 +130,7 @@ export async function syncAgentLoopScheduleBinding(
     description: desired.description,
     prompt: desired.prompt,
     agentId: desired.agent_id,
+    spaceId: desired.space_id,
     scheduleType: desired.schedule_type,
     scheduleExpression: desired.schedule_expression,
     timezone: desired.timezone,
@@ -142,6 +148,7 @@ async function loadScheduledJob(tenantId: string, agentLoopId: string) {
       description: scheduledJobs.description,
       prompt: scheduledJobs.prompt,
       agent_id: scheduledJobs.agent_id,
+      space_id: scheduledJobs.space_id,
       schedule_type: scheduledJobs.schedule_type,
       schedule_expression: scheduledJobs.schedule_expression,
       timezone: scheduledJobs.timezone,
@@ -163,6 +170,7 @@ async function createSchedule(input: {
   triggerId: string;
   tenantId: string;
   workerAgentId?: string | null;
+  spaceId?: string | null;
   name: string;
   scheduleType: string;
   scheduleExpression: string;
@@ -176,6 +184,7 @@ async function createSchedule(input: {
     tenantId: input.tenantId,
     triggerType: AGENT_LOOP_SCHEDULE_TRIGGER_TYPE,
     agentId: input.workerAgentId ?? undefined,
+    spaceId: input.spaceId ?? undefined,
     name: input.name,
     scheduleType: input.scheduleType,
     scheduleExpression: input.scheduleExpression,

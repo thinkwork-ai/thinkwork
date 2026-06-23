@@ -487,6 +487,7 @@ export const SettingsAgentLoopsQuery = gql`
       enabled
       ownerUserId
       ownerAgentId
+      spaceId
       primaryTriggerFamily
       currentVersionId
       currentVersionNumber
@@ -546,6 +547,7 @@ export const SettingsAgentLoopQuery = gql`
       enabled
       ownerUserId
       ownerAgentId
+      spaceId
       primaryTriggerFamily
       currentVersionId
       currentVersionNumber

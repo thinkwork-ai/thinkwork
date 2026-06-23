@@ -4,16 +4,22 @@ import {
   draftToPayload,
   validateDraft,
 } from "./agent-loop-utils";
-import type { AgentLoopWorkerOption } from "./agent-loop-types";
+import type {
+  AgentLoopSpaceOption,
+  AgentLoopWorkerOption,
+} from "./agent-loop-types";
 
 const workers: AgentLoopWorkerOption[] = [
   { id: "agent-1", type: "agent", label: "ThinkWork Agent" },
+];
+const spaces: AgentLoopSpaceOption[] = [
+  { id: "space-1", name: "Customer", slug: "customer" },
 ];
 
 describe("agent-loop-utils", () => {
   it("keeps advanced drafts strict about explicit completion criteria", () => {
     const draft = {
-      ...defaultAgentLoopDraft(workers),
+      ...defaultAgentLoopDraft(workers, spaces, "space-1"),
       creationMode: "advanced" as const,
       name: "Advanced loop",
       objective: "Review escalations",
@@ -27,7 +33,7 @@ describe("agent-loop-utils", () => {
 
   it("allows easy prompt-only drafts and marks goal inference", () => {
     const draft = {
-      ...defaultAgentLoopDraft(workers),
+      ...defaultAgentLoopDraft(workers, spaces, "space-1"),
       creationMode: "easy" as const,
       name: "Escalation review",
       objective: "Review support escalations every morning.",
@@ -41,6 +47,7 @@ describe("agent-loop-utils", () => {
       draftToPayload({ draft, tenantId: "tenant-1", workerOptions: workers }),
     ).toMatchObject({
       tenantId: "tenant-1",
+      spaceId: "space-1",
       name: "Escalation review",
       goalSpec: {
         objective: "Review support escalations every morning.",
@@ -59,7 +66,7 @@ describe("agent-loop-utils", () => {
 
   it("derives an Automation name from prompt-first drafts without an explicit name", () => {
     const draft = {
-      ...defaultAgentLoopDraft(workers),
+      ...defaultAgentLoopDraft(workers, spaces, "space-1"),
       creationMode: "easy" as const,
       name: "",
       objective: "Route Linear issues to the right worker.",

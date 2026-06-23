@@ -4,6 +4,7 @@ import type {
   AgentLoopGoalSpec,
   AgentLoopJudgeSpec,
   AgentLoopPolicy,
+  AgentLoopSpaceOption,
   AgentLoopTriggerFamily,
   AgentLoopTriggerSpec,
   AgentLoopVersionSummary,
@@ -86,7 +87,12 @@ export function criteriaToText(value: unknown): string {
 
 export function defaultAgentLoopDraft(
   workerOptions: AgentLoopWorkerOption[],
+  spaceOptions: AgentLoopSpaceOption[] = [],
+  defaultSpaceId?: string | null,
 ): AgentLoopDraft {
+  const worker =
+    workerOptions.find((candidate) => candidate.type === "agent") ??
+    workerOptions[0];
   return {
     creationMode: "chat",
     name: "",
@@ -97,9 +103,10 @@ export function defaultAgentLoopDraft(
     scheduleType: "rate",
     scheduleExpression: "rate(7 days)",
     timezone: "UTC",
+    spaceId: selectDefaultSpaceId(spaceOptions, defaultSpaceId),
     objective: "",
     completionCriteriaText: "The agent produced a concise status summary.",
-    workerId: workerOptions[0]?.id ?? "",
+    workerId: worker?.id ?? "",
     judgeMode: "self_check",
     judgeCriteriaText:
       "The answer addresses the objective.\nEvidence or uncertainty is visible.\nA follow-up action is clear when needed.",
@@ -125,11 +132,18 @@ export function draftFromVersion(
     description?: string | null;
     lifecycleStatus: string;
     enabled: boolean;
+    spaceId?: string | null;
     currentVersion?: AgentLoopVersionSummary | null;
   },
   workerOptions: AgentLoopWorkerOption[],
+  spaceOptions: AgentLoopSpaceOption[] = [],
+  defaultSpaceId?: string | null,
 ): AgentLoopDraft {
-  const fallback = defaultAgentLoopDraft(workerOptions);
+  const fallback = defaultAgentLoopDraft(
+    workerOptions,
+    spaceOptions,
+    defaultSpaceId,
+  );
   const version = loop.currentVersion;
   const trigger = jsonRecord(version?.triggerSpec);
   const triggerConfig = jsonRecord(trigger.config);
@@ -156,6 +170,7 @@ export function draftFromVersion(
       fallback.scheduleExpression,
     ),
     timezone: stringValue(triggerConfig.timezone, fallback.timezone),
+    spaceId: loop.spaceId ?? fallback.spaceId,
     objective: stringValue(goal.objective),
     completionCriteriaText: criteriaToText(goal.completionCriteria),
     workerId: stringValue(worker.id, fallback.workerId),
@@ -253,6 +268,7 @@ export function draftToPayload(input: {
     description: input.draft.description.trim() || null,
     lifecycleStatus: input.draft.lifecycleStatus,
     enabled: input.draft.enabled && input.draft.lifecycleStatus === "active",
+    spaceId: input.draft.spaceId || null,
     triggerSpec,
     goalSpec,
     workerSpec,
@@ -299,6 +315,7 @@ export function validateDraft(draft: AgentLoopDraft): string | null {
   ) {
     return "At least one completion criterion is required.";
   }
+  if (!draft.spaceId) return "Choose a Space.";
   if (draft.creationMode === "advanced" && !draft.workerId) {
     return "Choose a worker.";
   }
@@ -325,6 +342,29 @@ export function validateDraft(draft: AgentLoopDraft): string | null {
     return "Cost budget must be a positive number.";
   }
   return null;
+}
+
+export function defaultSpaceIdFromAgentRuntimeConfig(
+  value: unknown,
+): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const defaultSpaceId = (value as { defaultSpaceId?: unknown }).defaultSpaceId;
+  return typeof defaultSpaceId === "string" && defaultSpaceId.trim()
+    ? defaultSpaceId
+    : null;
+}
+
+export function selectDefaultSpaceId(
+  spaceOptions: AgentLoopSpaceOption[],
+  defaultSpaceId?: string | null,
+): string {
+  if (
+    defaultSpaceId &&
+    spaceOptions.some((candidate) => candidate.id === defaultSpaceId)
+  ) {
+    return defaultSpaceId;
+  }
+  return spaceOptions[0]?.id ?? "";
 }
 
 function normalizeLifecycle(value: string): AgentLoopDraft["lifecycleStatus"] {

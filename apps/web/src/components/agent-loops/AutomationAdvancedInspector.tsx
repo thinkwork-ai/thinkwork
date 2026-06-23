@@ -1,5 +1,12 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { Bot, CheckCircle2, Gauge, History, ShieldCheck, Timer } from "lucide-react";
+import {
+  Bot,
+  CheckCircle2,
+  Gauge,
+  History,
+  ShieldCheck,
+  Timer,
+} from "lucide-react";
 import {
   Button,
   Input,
@@ -16,7 +23,6 @@ import {
   Switch,
   Textarea,
 } from "@thinkwork/ui";
-import { SettingsRow, SettingsSection } from "@/components/settings/SettingsContent";
 import type { AgentLoopDraft, AgentLoopWorkerOption } from "./agent-loop-types";
 
 export function AutomationAdvancedInspector({
@@ -42,12 +48,12 @@ export function AutomationAdvancedInspector({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-4 space-y-4 pb-6">
-          <SettingsSection label="Identity">
-            <SettingsRow label="Name">
+        <div className="mt-6 space-y-8 pb-6">
+          <InspectorSection label="Identity">
+            <InspectorField label="Name">
               <Input
                 aria-label="Automation name"
-                className="w-80"
+                className="w-full"
                 value={draft.name}
                 onChange={(event) =>
                   setDraft((current) => ({
@@ -57,8 +63,8 @@ export function AutomationAdvancedInspector({
                 }
                 placeholder="Weekly Agent Check-In"
               />
-            </SettingsRow>
-            <SettingsRow label="Description">
+            </InspectorField>
+            <InspectorField label="Description">
               <Textarea
                 aria-label="Automation description"
                 className="min-h-20 w-full"
@@ -71,18 +77,17 @@ export function AutomationAdvancedInspector({
                 }
                 placeholder="Review open work and summarize next actions."
               />
-            </SettingsRow>
-          </SettingsSection>
+            </InspectorField>
+          </InspectorSection>
 
-          <SettingsSection label="Goal">
-            <SettingsRow
+          <InspectorSection label="Goal">
+            <InspectorField
               label={
                 <span className="inline-flex items-center gap-2">
                   <CheckCircle2 className="size-4" />
                   Intent
                 </span>
               }
-              layout="stacked"
             >
               <Textarea
                 aria-label="Goal intent"
@@ -96,8 +101,8 @@ export function AutomationAdvancedInspector({
                 }
                 placeholder="Review open work and produce a concise status update."
               />
-            </SettingsRow>
-            <SettingsRow label="Completion criteria" layout="stacked">
+            </InspectorField>
+            <InspectorField label="Completion criteria">
               <Textarea
                 aria-label="Completion criteria"
                 className="min-h-28 w-full"
@@ -109,66 +114,70 @@ export function AutomationAdvancedInspector({
                   }))
                 }
               />
-            </SettingsRow>
-          </SettingsSection>
+            </InspectorField>
+          </InspectorSection>
 
-          <SettingsSection label="Worker and judge">
-            <SettingsRow
-              label={
-                <span className="inline-flex items-center gap-2">
-                  <Bot className="size-4" />
-                  Worker
-                </span>
-              }
-            >
-              <Select
-                value={draft.workerId}
-                onValueChange={(workerId) =>
-                  setDraft((current) => ({ ...current, workerId }))
+          <InspectorSection label="Worker and judge">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <InspectorField
+                label={
+                  <span className="inline-flex items-center gap-2">
+                    <Bot className="size-4" />
+                    Worker
+                  </span>
                 }
               >
-                <SelectTrigger className="w-80" aria-label="Worker">
-                  <SelectValue placeholder="Choose worker" />
-                </SelectTrigger>
-                <SelectContent>
-                  {workerOptions.map((worker) => (
-                    <SelectItem key={worker.id} value={worker.id}>
-                      {worker.label}
+                <Select
+                  value={draft.workerId}
+                  onValueChange={(workerId) =>
+                    setDraft((current) => ({ ...current, workerId }))
+                  }
+                >
+                  <SelectTrigger className="w-full" aria-label="Worker">
+                    <SelectValue placeholder="Choose worker" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workerOptions.map((worker) => (
+                      <SelectItem key={worker.id} value={worker.id}>
+                        {worker.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </InspectorField>
+              <InspectorField
+                label={
+                  <span className="inline-flex items-center gap-2">
+                    <ShieldCheck className="size-4" />
+                    Judge
+                  </span>
+                }
+              >
+                <Select
+                  value={draft.judgeMode}
+                  onValueChange={(value) =>
+                    setDraft((current) => ({
+                      ...current,
+                      judgeMode:
+                        value === "human_approval"
+                          ? "human_approval"
+                          : "self_check",
+                    }))
+                  }
+                >
+                  <SelectTrigger className="w-full" aria-label="Judge mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="self_check">Self-check</SelectItem>
+                    <SelectItem value="human_approval">
+                      Human approval
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </SettingsRow>
-            <SettingsRow
-              label={
-                <span className="inline-flex items-center gap-2">
-                  <ShieldCheck className="size-4" />
-                  Judge
-                </span>
-              }
-            >
-              <Select
-                value={draft.judgeMode}
-                onValueChange={(value) =>
-                  setDraft((current) => ({
-                    ...current,
-                    judgeMode:
-                      value === "human_approval"
-                        ? "human_approval"
-                        : "self_check",
-                  }))
-                }
-              >
-                <SelectTrigger className="w-64" aria-label="Judge mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="self_check">Self-check</SelectItem>
-                  <SelectItem value="human_approval">Human approval</SelectItem>
-                </SelectContent>
-              </Select>
-            </SettingsRow>
-            <SettingsRow label="Judge criteria" layout="stacked">
+                  </SelectContent>
+                </Select>
+              </InspectorField>
+            </div>
+            <InspectorField label="Judge criteria">
               <Textarea
                 aria-label="Judge criteria"
                 className="min-h-24 w-full"
@@ -180,11 +189,11 @@ export function AutomationAdvancedInspector({
                   }))
                 }
               />
-            </SettingsRow>
-          </SettingsSection>
+            </InspectorField>
+          </InspectorSection>
 
-          <SettingsSection label="Policy">
-            <div className="grid gap-0 md:grid-cols-2">
+          <InspectorSection label="Policy">
+            <div className="grid gap-4 sm:grid-cols-2">
               <CompactNumberRow
                 icon={<History className="size-4" />}
                 label="Max iterations"
@@ -224,7 +233,7 @@ export function AutomationAdvancedInspector({
                   setDraft((current) => ({ ...current, retryBackoffMinutes }))
                 }
               />
-              <SettingsRow label="Escalate on failure">
+              <InspectorField label="Escalate on failure">
                 <Switch
                   aria-label="Escalate on failure"
                   checked={draft.escalateOnFailure}
@@ -235,12 +244,12 @@ export function AutomationAdvancedInspector({
                     }))
                   }
                 />
-              </SettingsRow>
+              </InspectorField>
             </div>
-          </SettingsSection>
+          </InspectorSection>
 
-          <SettingsSection label="Evidence">
-            <SettingsRow label="Redaction">
+          <InspectorSection label="Evidence">
+            <InspectorField label="Redaction">
               <Select
                 value={draft.redactionState}
                 onValueChange={(redactionState) =>
@@ -255,7 +264,10 @@ export function AutomationAdvancedInspector({
                   }))
                 }
               >
-                <SelectTrigger className="w-60" aria-label="Evidence redaction">
+                <SelectTrigger
+                  className="w-full"
+                  aria-label="Evidence redaction"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -265,8 +277,8 @@ export function AutomationAdvancedInspector({
                   <SelectItem value="raw_allowed">Raw allowed</SelectItem>
                 </SelectContent>
               </Select>
-            </SettingsRow>
-            <SettingsRow label="Retain raw evidence">
+            </InspectorField>
+            <InspectorField label="Retain raw evidence">
               <Switch
                 aria-label="Retain raw evidence"
                 checked={draft.retainRawEvidence}
@@ -274,7 +286,7 @@ export function AutomationAdvancedInspector({
                   setDraft((current) => ({ ...current, retainRawEvidence }))
                 }
               />
-            </SettingsRow>
+            </InspectorField>
             <CompactNumberRow
               label="Retention days"
               value={draft.retentionDays}
@@ -282,7 +294,7 @@ export function AutomationAdvancedInspector({
                 setDraft((current) => ({ ...current, retentionDays }))
               }
             />
-          </SettingsSection>
+          </InspectorSection>
 
           <div className="flex justify-end">
             <Button type="button" onClick={() => onOpenChange(false)}>
@@ -292,6 +304,42 @@ export function AutomationAdvancedInspector({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function InspectorSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-4 border-t border-border pt-5 first:border-t-0 first:pt-0">
+      <h2 className="text-sm font-semibold text-foreground">{label}</h2>
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+function InspectorField({
+  label,
+  children,
+  className,
+}: {
+  label: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={["block min-w-0 space-y-2", className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <span className="block text-sm font-medium text-foreground">{label}</span>
+      <div className="min-w-0 text-sm text-muted-foreground">{children}</div>
+    </div>
   );
 }
 
@@ -309,7 +357,7 @@ function CompactNumberRow({
   placeholder?: string;
 }) {
   return (
-    <SettingsRow
+    <InspectorField
       label={
         <span className="inline-flex items-center gap-2">
           {icon}
@@ -327,6 +375,6 @@ function CompactNumberRow({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />
-    </SettingsRow>
+    </InspectorField>
   );
 }

@@ -94,6 +94,12 @@ vi.mock("../../utils.js", () => ({
     current_version_id: "agent_loops.current_version_id",
     current_version_number: "agent_loops.current_version_number",
     slug: "agent_loops.slug",
+    space_id: "agent_loops.space_id",
+  },
+  spaces: {
+    id: "spaces.id",
+    tenant_id: "spaces.tenant_id",
+    status: "spaces.status",
   },
   agentLoopVersions: {
     id: "agent_loop_versions.id",
@@ -150,6 +156,9 @@ describe("saveAgentLoop", () => {
         return [{ id: "agent-1", label: "ThinkWork Agent" }];
       }
       if (call === 2) {
+        return [{ id: "space-1" }];
+      }
+      if (call === 3) {
         return [
           {
             id: "loop-1",
@@ -180,6 +189,7 @@ describe("saveAgentLoop", () => {
         input: {
           tenantId: "tenant-1",
           name: "Morning escalation review",
+          spaceId: "space-1",
           lifecycleStatus: "active",
           enabled: true,
           triggerSpec: {
@@ -208,6 +218,13 @@ describe("saveAgentLoop", () => {
       expect.anything(),
       "tenant-1",
       "save_agent_loop",
+    );
+    expect(mocks.insertValues).toHaveBeenNthCalledWith(
+      1,
+      1,
+      expect.objectContaining({
+        space_id: "space-1",
+      }),
     );
     expect(mocks.insertValues).toHaveBeenNthCalledWith(
       2,
@@ -241,6 +258,7 @@ describe("saveAgentLoop", () => {
     expect(mocks.syncAgentLoopScheduleBinding).toHaveBeenCalledWith(
       expect.objectContaining({
         workerAgentId: "agent-1",
+        spaceId: "space-1",
         goalObjective: "Review support escalations every morning.",
       }),
     );

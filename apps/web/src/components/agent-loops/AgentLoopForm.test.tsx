@@ -7,7 +7,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentLoopForm } from "./AgentLoopForm";
-import type { AgentLoopWorkerOption } from "./agent-loop-types";
+import type {
+  AgentLoopSpaceOption,
+  AgentLoopWorkerOption,
+} from "./agent-loop-types";
 
 vi.mock("@/components/schedule-picker/SchedulePicker", () => ({
   SchedulePicker: ({
@@ -99,13 +102,8 @@ vi.mock("@thinkwork/ui", () => ({
   SelectValue: ({ placeholder }: { placeholder?: string }) => (
     <span>{placeholder}</span>
   ),
-  Sheet: ({
-    open,
-    children,
-  }: {
-    open?: boolean;
-    children: React.ReactNode;
-  }) => (open ? <div data-testid="sheet">{children}</div> : null),
+  Sheet: ({ open, children }: { open?: boolean; children: React.ReactNode }) =>
+    open ? <div data-testid="sheet">{children}</div> : null,
   SheetContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -141,6 +139,9 @@ vi.mock("@thinkwork/ui", () => ({
 const workers: AgentLoopWorkerOption[] = [
   { id: "agent-1", type: "agent", label: "Default Agent" },
 ];
+const spaces: AgentLoopSpaceOption[] = [
+  { id: "space-1", name: "Customer", slug: "customer" },
+];
 
 afterEach(() => cleanup());
 
@@ -151,6 +152,8 @@ describe("AgentLoopForm", () => {
         mode="create"
         tenantId="tenant-1"
         workerOptions={workers}
+        spaceOptions={spaces}
+        defaultSpaceId="space-1"
         onSubmit={vi.fn()}
         onCancel={vi.fn()}
       />,
@@ -174,6 +177,8 @@ describe("AgentLoopForm", () => {
         mode="create"
         tenantId="tenant-1"
         workerOptions={workers}
+        spaceOptions={spaces}
+        defaultSpaceId="space-1"
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />,
@@ -192,6 +197,7 @@ describe("AgentLoopForm", () => {
       expect.objectContaining({
         tenantId: "tenant-1",
         name: "Route Linear issues to the right worker",
+        spaceId: "space-1",
         triggerSpec: expect.objectContaining({ family: "manual" }),
         workerSpec: expect.objectContaining({ type: "agent", id: "agent-1" }),
         sourceMetadata: expect.objectContaining({
@@ -231,6 +237,8 @@ describe("AgentLoopForm", () => {
         mode="create"
         tenantId="tenant-1"
         workerOptions={workers}
+        spaceOptions={spaces}
+        defaultSpaceId="space-1"
         onSubmit={onSubmit}
         onStartBuilder={onStartBuilder}
         onConfirmBuilderDraft={onConfirmBuilderDraft}
@@ -257,6 +265,7 @@ describe("AgentLoopForm", () => {
       expect.objectContaining({
         tenantId: "tenant-1",
         name: "Linear routing automation",
+        spaceId: "space-1",
         sourceMetadata: expect.objectContaining({
           creationMode: "chat",
           builderThreadId: "thread-1",
@@ -280,6 +289,8 @@ describe("AgentLoopForm", () => {
         mode="create"
         tenantId="tenant-1"
         workerOptions={workers}
+        spaceOptions={spaces}
+        defaultSpaceId="space-1"
         onSubmit={vi.fn()}
         onStartBuilder={onStartBuilder}
         onCancel={vi.fn()}
@@ -305,6 +316,8 @@ describe("AgentLoopForm", () => {
         mode="create"
         tenantId="tenant-1"
         workerOptions={workers}
+        spaceOptions={spaces}
+        defaultSpaceId="space-1"
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />,
@@ -321,6 +334,7 @@ describe("AgentLoopForm", () => {
       expect.objectContaining({
         tenantId: "tenant-1",
         name: "Weekly Agent Check-In",
+        spaceId: "space-1",
         triggerSpec: expect.objectContaining({
           family: "schedule",
           config: expect.objectContaining({
@@ -355,6 +369,8 @@ describe("AgentLoopForm", () => {
         mode="create"
         tenantId="tenant-1"
         workerOptions={workers}
+        spaceOptions={spaces}
+        defaultSpaceId="space-1"
         onSubmit={onSubmit}
         onCancel={vi.fn()}
       />,
@@ -367,7 +383,9 @@ describe("AgentLoopForm", () => {
       target: { value: "Review failed jobs and summarize the fix path." },
     });
     fireEvent.change(screen.getByLabelText("Completion criteria"), {
-      target: { value: "The failure is summarized.\nThe next action is clear." },
+      target: {
+        value: "The failure is summarized.\nThe next action is clear.",
+      },
     });
     fireEvent.change(screen.getByLabelText("Judge criteria"), {
       target: { value: "The summary is specific." },

@@ -15,6 +15,7 @@ import {
   agentLoops,
   db,
   generateSlug,
+  spaces,
 } from "../../utils.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import { syncAgentLoopScheduleBinding } from "../../../lib/agent-loops/schedule-binding.js";
@@ -39,6 +40,7 @@ type SaveAgentLoopInput = {
   enabled?: boolean | null;
   ownerUserId?: string | null;
   ownerAgentId?: string | null;
+  spaceId?: string | null;
   triggerSpec: unknown;
   goalSpec: unknown;
   workerSpec: unknown;
@@ -58,17 +60,22 @@ export async function saveAgentLoop(
 
   const normalized = await normalizeSpecs(input);
   const actorId = await resolveCallerUserId(ctx);
+  const spaceId =
+    input.spaceId === undefined
+      ? undefined
+      : await resolveAgentLoopSpaceId(input.tenantId, input.spaceId);
 
   if (input.id) {
-    return updateAgentLoop(input.id, input, normalized, actorId);
+    return updateAgentLoop(input.id, input, normalized, actorId, spaceId);
   }
-  return createAgentLoop(input, normalized, actorId);
+  return createAgentLoop(input, normalized, actorId, spaceId ?? null);
 }
 
 async function createAgentLoop(
   input: SaveAgentLoopInput,
   normalized: NormalizedAgentLoopSpecs,
   actorId: string | null,
+  spaceId: string | null,
 ): Promise<unknown> {
   const [loop] = await db
     .insert(agentLoops)
@@ -81,6 +88,7 @@ async function createAgentLoop(
       enabled: input.enabled ?? true,
       owner_user_id: input.ownerUserId ?? actorId,
       owner_agent_id: input.ownerAgentId ?? null,
+      space_id: spaceId,
       primary_trigger_family: normalized.triggerSpec.family,
     })
     .returning();
@@ -121,6 +129,7 @@ async function createAgentLoop(
     description: input.description ?? null,
     goalObjective: normalized.goalSpec.objective,
     workerAgentId: workerAgentId(normalized.workerSpec),
+    spaceId,
     triggerSpec: normalized.triggerSpec,
     loopEnabled: input.enabled ?? true,
     actorId,
@@ -134,6 +143,7 @@ async function updateAgentLoop(
   input: SaveAgentLoopInput,
   normalized: NormalizedAgentLoopSpecs,
   actorId: string | null,
+  spaceId: string | null | undefined,
 ): Promise<unknown> {
   const [existing] = await db
     .select()
@@ -207,6 +217,7 @@ async function updateAgentLoop(
         input.ownerAgentId === undefined
           ? existing.owner_agent_id
           : input.ownerAgentId,
+      space_id: spaceId === undefined ? existing.space_id : spaceId,
       primary_trigger_family: normalized.triggerSpec.family,
       current_version_id: currentVersionId,
       current_version_number: currentVersionNumber,
@@ -221,6 +232,7 @@ async function updateAgentLoop(
     description: input.description ?? null,
     goalObjective: normalized.goalSpec.objective,
     workerAgentId: workerAgentId(normalized.workerSpec),
+    spaceId: spaceId === undefined ? existing.space_id : spaceId,
     triggerSpec: normalized.triggerSpec,
     loopEnabled: input.enabled ?? existing.enabled,
     actorId,
@@ -237,6 +249,30 @@ async function loadAgentLoop(id: string): Promise<unknown> {
     .limit(1);
   if (!row) throw new Error(`AgentLoop ${id} not found after save`);
   return agentLoopRowToGraphql(row);
+}
+
+async function resolveAgentLoopSpaceId(
+  tenantId: string,
+  spaceId: string | null,
+): Promise<string | null> {
+  if (!spaceId) return null;
+  const [space] = await db
+    .select({ id: spaces.id })
+    .from(spaces)
+    .where(
+      and(
+        eq(spaces.id, spaceId),
+        eq(spaces.tenant_id, tenantId),
+        eq(spaces.status, "active"),
+      ),
+    )
+    .limit(1);
+  if (!space) {
+    throw new Error(
+      "Automation Space is not active or does not belong to this tenant",
+    );
+  }
+  return space.id;
 }
 
 async function loadVersion(id: string) {

@@ -1,11 +1,19 @@
-import type { AgentLoopDraft, AgentLoopWorkerOption } from "./agent-loop-types";
+import type {
+  AgentLoopDraft,
+  AgentLoopSpaceOption,
+  AgentLoopWorkerOption,
+} from "./agent-loop-types";
 import { defaultAgentLoopDraft } from "./agent-loop-utils";
 
 export interface AgentLoopPreset {
   id: string;
   name: string;
   description: string;
-  buildDraft: (workerOptions: AgentLoopWorkerOption[]) => AgentLoopDraft;
+  buildDraft: (
+    workerOptions: AgentLoopWorkerOption[],
+    spaceOptions: AgentLoopSpaceOption[],
+    defaultSpaceId?: string | null,
+  ) => AgentLoopDraft;
 }
 
 export const AGENT_LOOP_PRESETS: AgentLoopPreset[] = [
@@ -13,8 +21,8 @@ export const AGENT_LOOP_PRESETS: AgentLoopPreset[] = [
     id: "weekly-agent-check-in",
     name: "Weekly Agent Check-In",
     description: "A scheduled self-check loop for recurring status review.",
-    buildDraft: (workerOptions) => ({
-      ...defaultAgentLoopDraft(workerOptions),
+    buildDraft: (workerOptions, spaceOptions, defaultSpaceId) => ({
+      ...defaultAgentLoopDraft(workerOptions, spaceOptions, defaultSpaceId),
       name: "Weekly Agent Check-In",
       description:
         "Review open work, summarize blockers, and recommend next actions.",

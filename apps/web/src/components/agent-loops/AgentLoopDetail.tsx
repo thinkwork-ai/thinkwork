@@ -38,6 +38,7 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { InfoCard } from "@/components/workflows/workflow-ui";
 import {
+  SpacesQuery,
   SettingsAgentLoopQuery,
   SettingsDeleteAgentLoopMutation,
   SettingsSaveAgentLoopMutation,
@@ -55,10 +56,12 @@ import { AutomationStatusRail } from "./AutomationStatusRail";
 import type {
   AgentLoopRow,
   AgentLoopRunSummary,
+  AgentLoopSpaceOption,
   AgentLoopWorkerOption,
   SaveAgentLoopPayload,
 } from "./agent-loop-types";
 import {
+  defaultSpaceIdFromAgentRuntimeConfig,
   draftFromVersion,
   draftToPayload,
   jsonRecord,
@@ -79,10 +82,15 @@ type AgentProfilesData = {
   }>;
 };
 
+type SpacesData = {
+  spaces?: AgentLoopSpaceOption[];
+};
+
 type TenantAgentData = {
   agent?: {
     id: string;
     name?: string | null;
+    runtimeConfig?: unknown;
   } | null;
 };
 
@@ -111,6 +119,11 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [spacesResult] = useQuery<SpacesData>({
+    query: SpacesQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
   const [, saveAgentLoop] = useMutation(SettingsSaveAgentLoopMutation);
   const [, deleteAgentLoop] = useMutation(SettingsDeleteAgentLoopMutation);
   const [, triggerRun] = useMutation(SettingsTriggerAgentLoopRunMutation);
@@ -123,6 +136,17 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
         profiles: profilesResult.data?.agentProfiles ?? [],
       }),
     [agentResult.data?.agent, profilesResult.data?.agentProfiles],
+  );
+  const spaceOptions = useMemo(
+    () => spacesResult.data?.spaces ?? [],
+    [spacesResult.data?.spaces],
+  );
+  const defaultSpaceId = useMemo(
+    () =>
+      defaultSpaceIdFromAgentRuntimeConfig(
+        agentResult.data?.agent?.runtimeConfig,
+      ),
+    [agentResult.data?.agent?.runtimeConfig],
   );
 
   usePageHeaderActions({
@@ -205,7 +229,12 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
     setPendingAction("pause");
     setActionError(null);
     try {
-      const draft = draftFromVersion(row, options);
+      const draft = draftFromVersion(
+        row,
+        options,
+        spaceOptions,
+        defaultSpaceId,
+      );
       const nextActive = row.lifecycleStatus !== "active" || !row.enabled;
       const payload = draftToPayload({
         draft: {
@@ -275,6 +304,8 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
           tenantId={tenantId}
           initialLoop={loop}
           workerOptions={workerOptions}
+          spaceOptions={spaceOptions}
+          defaultSpaceId={defaultSpaceId}
           onSubmit={saveLoop}
           onCancel={() => setEditing(false)}
         />

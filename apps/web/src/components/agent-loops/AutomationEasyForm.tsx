@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { CheckCircle2, Timer } from "lucide-react";
+import { CheckCircle2, Orbit, Timer } from "lucide-react";
 import {
   Checkbox,
   Select,
@@ -14,15 +14,20 @@ import {
   SchedulePicker,
   type SchedulePickerValue,
 } from "@/components/schedule-picker/SchedulePicker";
-import { SettingsRow, SettingsSection } from "@/components/settings/SettingsContent";
-import type { AgentLoopDraft } from "./agent-loop-types";
+import {
+  SettingsRow,
+  SettingsSection,
+} from "@/components/settings/SettingsContent";
+import type { AgentLoopDraft, AgentLoopSpaceOption } from "./agent-loop-types";
 
 export function AutomationEasyForm({
   draft,
   setDraft,
+  spaceOptions,
 }: {
   draft: AgentLoopDraft;
   setDraft: Dispatch<SetStateAction<AgentLoopDraft>>;
+  spaceOptions: AgentLoopSpaceOption[];
 }) {
   const scheduleValue: SchedulePickerValue = {
     scheduleType: draft.scheduleType,
@@ -71,6 +76,32 @@ export function AutomationEasyForm({
               }))
             }
           />
+        </SettingsRow>
+        <SettingsRow
+          label={
+            <span className="inline-flex items-center gap-2">
+              <Orbit className="size-4" />
+              Space
+            </span>
+          }
+        >
+          <Select
+            value={draft.spaceId || undefined}
+            onValueChange={(value) =>
+              setDraft((current) => ({ ...current, spaceId: value }))
+            }
+          >
+            <SelectTrigger className="w-64" aria-label="Automation Space">
+              <SelectValue placeholder="Choose a Space" />
+            </SelectTrigger>
+            <SelectContent>
+              {spaceOptions.map((space) => (
+                <SelectItem key={space.id} value={space.id}>
+                  {space.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </SettingsRow>
       </SettingsSection>
 

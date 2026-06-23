@@ -71,15 +71,18 @@ export async function triggerAgentLoopRun(
   }
 
   const workerId = workerAgentId(version?.worker_spec ?? null);
-  const defaultSpaceId = workerId
-    ? await loadAgentDefaultSpaceId(loop.tenant_id, workerId)
+  const configuredSpaceId = loop.space_id
+    ? await loadActiveSpaceId(loop.tenant_id, loop.space_id)
     : null;
+  const executionSpaceId =
+    configuredSpaceId ??
+    (workerId ? await loadAgentDefaultSpaceId(loop.tenant_id, workerId) : null);
   const executionThread =
     workerId && loop.lifecycle_status === "active"
       ? await ensureThreadForWork({
           tenantId: loop.tenant_id,
           agentId: workerId,
-          spaceId: defaultSpaceId ?? undefined,
+          spaceId: executionSpaceId ?? undefined,
           userId: actorId ?? undefined,
           title: `Automation: ${loop.name}`,
           channel: "schedule",
@@ -112,7 +115,7 @@ export async function triggerAgentLoopRun(
         actorType: actorId ? "user" : "system",
         actorId,
         threadId: executionThread?.threadId ?? null,
-        spaceId: defaultSpaceId,
+        spaceId: executionSpaceId,
         idempotencyKey,
         correlationId: args.input.correlationId ?? null,
         inputSummary,
@@ -172,6 +175,24 @@ async function loadAgentDefaultSpaceId(
     .where(
       and(
         eq(spaces.id, defaultSpaceId),
+        eq(spaces.tenant_id, tenantId),
+        eq(spaces.status, "active"),
+      ),
+    )
+    .limit(1);
+  return space?.id ?? null;
+}
+
+async function loadActiveSpaceId(
+  tenantId: string,
+  spaceId: string,
+): Promise<string | null> {
+  const [space] = await db
+    .select({ id: spaces.id })
+    .from(spaces)
+    .where(
+      and(
+        eq(spaces.id, spaceId),
         eq(spaces.tenant_id, tenantId),
         eq(spaces.status, "active"),
       ),

@@ -158,27 +158,45 @@ beforeEach(() => {
   useQueryMock.mockReset();
   let queryCall = 0;
   useQueryMock.mockImplementation(() => {
-    const index = queryCall++ % 3;
+    const index = queryCall++ % 4;
     if (index === 0) {
       return [{ data: { agentLoops: [loop()] }, fetching: false }, refetchMock];
     }
     if (index === 1) {
       return [
-        { data: { agent: { id: "agent-1", name: "Default Agent" } } },
+        {
+          data: {
+            agent: {
+              id: "agent-1",
+              name: "Default Agent",
+              runtimeConfig: { defaultSpaceId: "space-1" },
+            },
+          },
+        },
+        vi.fn(),
+      ];
+    }
+    if (index === 2) {
+      return [
+        {
+          data: {
+            agentProfiles: [
+              {
+                id: "profile-1",
+                name: "Research",
+                description: "Research profile",
+                enabled: true,
+              },
+            ],
+          },
+        },
         vi.fn(),
       ];
     }
     return [
       {
         data: {
-          agentProfiles: [
-            {
-              id: "profile-1",
-              name: "Research",
-              description: "Research profile",
-              enabled: true,
-            },
-          ],
+          spaces: [{ id: "space-1", name: "Customer", slug: "customer" }],
         },
       },
       vi.fn(),

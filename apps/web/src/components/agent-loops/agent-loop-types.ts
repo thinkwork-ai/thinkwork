@@ -106,6 +106,7 @@ export interface AgentLoopRow {
   enabled: boolean;
   ownerUserId?: string | null;
   ownerAgentId?: string | null;
+  spaceId?: string | null;
   primaryTriggerFamily: string;
   currentVersionId?: string | null;
   currentVersionNumber?: number | null;
@@ -213,6 +214,12 @@ export interface AgentLoopWorkerOption {
   description?: string | null;
 }
 
+export interface AgentLoopSpaceOption {
+  id: string;
+  name: string;
+  slug?: string | null;
+}
+
 export interface AgentLoopDraft {
   creationMode: AgentLoopCreationMode;
   name: string;
@@ -223,6 +230,7 @@ export interface AgentLoopDraft {
   scheduleType: string;
   scheduleExpression: string;
   timezone: string;
+  spaceId: string;
   objective: string;
   completionCriteriaText: string;
   workerId: string;
@@ -253,6 +261,7 @@ export interface SaveAgentLoopPayload {
   description?: string | null;
   lifecycleStatus: AgentLoopLifecycleStatus;
   enabled: boolean;
+  spaceId?: string | null;
   triggerSpec: AgentLoopTriggerSpec;
   goalSpec: AgentLoopGoalSpec;
   workerSpec: AgentLoopWorkerSpec;

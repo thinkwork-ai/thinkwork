@@ -30,6 +30,7 @@ import { relations, sql } from "drizzle-orm";
 import { agents } from "./agents";
 import { tenants, users } from "./core";
 import { agentWakeupRequests } from "./heartbeats";
+import { spaces } from "./spaces";
 import { threadTurns } from "./scheduled-jobs";
 
 export const AGENT_LOOP_LIFECYCLE_STATUSES = [
@@ -144,6 +145,9 @@ export const agentLoops = pgTable(
     owner_agent_id: uuid("owner_agent_id").references(() => agents.id, {
       onDelete: "set null",
     }),
+    space_id: uuid("space_id").references(() => spaces.id, {
+      onDelete: "set null",
+    }),
     primary_trigger_family: text("primary_trigger_family")
       .notNull()
       .default("manual"),
@@ -181,6 +185,7 @@ export const agentLoops = pgTable(
       table.lifecycle_status,
     ),
     index("agent_loops_tenant_enabled_idx").on(table.tenant_id, table.enabled),
+    index("agent_loops_tenant_space_idx").on(table.tenant_id, table.space_id),
     index("agent_loops_tenant_last_run_idx").on(
       table.tenant_id,
       table.last_run_at,
@@ -503,6 +508,10 @@ export const agentLoopsRelations = relations(agentLoops, ({ one, many }) => ({
   ownerAgent: one(agents, {
     fields: [agentLoops.owner_agent_id],
     references: [agents.id],
+  }),
+  space: one(spaces, {
+    fields: [agentLoops.space_id],
+    references: [spaces.id],
   }),
   versions: many(agentLoopVersions),
   runs: many(agentLoopRuns),
