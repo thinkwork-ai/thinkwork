@@ -17,7 +17,8 @@ status: in_progress
 - Current unit: Unit 2 - Prompt-First Draft Normalization.
 - Current branch: `codex/thnk-46-u2-draft-normalization`.
 - Current worktree: `.Codex/worktrees/thnk-46-u2-draft-normalization`.
-- Current pull request: None yet.
+- Current pull request:
+  [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887).
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
     workflow, and the prompt-first Automations plan.
@@ -59,6 +60,9 @@ status: in_progress
     `pnpm --filter @thinkwork/web exec vitest run src/components/agent-loops/agent-loop-utils.test.ts src/components/agent-loops/AgentLoopForm.test.tsx`,
     `pnpm --filter @thinkwork/api typecheck`, and
     `pnpm --filter @thinkwork/web typecheck`.
+  - 2026-06-23: U2 PR
+    [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887) opened and CI
+    monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
