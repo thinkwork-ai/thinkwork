@@ -254,6 +254,44 @@ describe("GET /api/skills/user-mcp-servers", () => {
     );
   });
 
+  it("reports active for plugin-managed OAuth servers before agent assignment", async () => {
+    dbState.selectQueue.push(
+      [],
+      [
+        managedTwentyRow({
+          mcp_server_id: "lastmile-crm",
+          name: "LastMile CRM",
+          slug: "lastmile-crm",
+          url: "https://dev-mcp.lastmile-tei.com/crm",
+          management_source: "plugin",
+          managed_application_key: null,
+        }),
+      ],
+      [{ mcp_server_id: "lastmile-crm", status: "active" }],
+    );
+
+    const response = await handler(event());
+    const body = JSON.parse(response.body ?? "{}") as {
+      servers: Array<{
+        id: string;
+        authStatus: string;
+        managementSource: string;
+        runtimeAssigned: boolean;
+      }>;
+    };
+
+    expect(response.statusCode).toBe(200);
+    expect(body.servers).toEqual([
+      expect.objectContaining({
+        id: "lastmile-crm",
+        authStatus: "active",
+        managementSource: "plugin",
+        runtimeAssigned: false,
+      }),
+    ]);
+    expect(JSON.stringify(dbState.predicates)).toContain("plugin");
+  });
+
   it("does not expose managed tenant API key servers as user-auth connectors without an agent assignment", async () => {
     dbState.selectQueue.push([], [managedTenantApiKeyRow()]);
 
