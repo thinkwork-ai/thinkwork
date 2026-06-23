@@ -17,7 +17,8 @@ status: in_progress
 - Current unit: Unit 3 - Hidden Builder Threads.
 - Current branch: `codex/thnk-46-u3-hidden-builder-threads`.
 - Current worktree: `.Codex/worktrees/thnk-46-u3-hidden-builder-threads`.
-- Current pull request: None yet.
+- Current pull request:
+  [#2888](https://github.com/thinkwork-ai/thinkwork/pull/2888).
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
     workflow, and the prompt-first Automations plan.
@@ -86,6 +87,9 @@ status: in_progress
   - 2026-06-23: U3 focused verification passed:
     `pnpm --filter @thinkwork/api exec vitest run src/lib/agent-loops/automation-builder-threads.test.ts src/graphql/resolvers/threads/system-hidden.test.ts src/graphql/resolvers/threads/threads.query.test.ts src/graphql/resolvers/threads/threadsPaged.query.test.ts src/graphql/resolvers/threads/unreadThreadCount.query.test.ts src/graphql/resolvers/threads/threadPins.readstate.test.ts src/graphql/resolvers/spaces/spaces.query.test.ts`
     and `pnpm --filter @thinkwork/api typecheck`.
+  - 2026-06-23: U3 PR
+    [#2888](https://github.com/thinkwork-ai/thinkwork/pull/2888) opened and CI
+    monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
