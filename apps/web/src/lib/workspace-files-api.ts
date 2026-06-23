@@ -24,11 +24,15 @@ export interface ThreadGoalFileFallback {
 export interface SkillSummary {
   slug: string;
   displayName: string | null;
-  description: string | null;
+  description?: string | null;
   category: string | null;
   icon: string | null;
   tags: string[] | null;
   sha: string;
+  trustStatus?: SkillTrustStatus | null;
+  trustStale?: boolean | null;
+  trustUpdatedAt?: string | null;
+  skillCardStatus?: SkillTrustReport["evidence"]["skillCard"] | null;
 }
 
 export interface ExportSkillArchiveResult {
@@ -127,6 +131,11 @@ export interface SkillTrustCacheResult {
   currentContentSha?: string;
   updatedAt?: string;
 }
+
+export type SkillTrustTarget =
+  | string
+  | { slug: string }
+  | { skillDraftId: string; slug?: string | null };
 
 export interface ImportSkillArchiveResult {
   slug: string;
@@ -312,7 +321,11 @@ export async function listSkillSlugs(): Promise<string[]> {
  * the parsed display metadata; the list renders names instead of raw slugs.
  */
 export async function listSkillSummaries(): Promise<SkillSummary[]> {
-  const data = await request({ action: "list", catalog: true, summary: true });
+  const skillTrustApiUrl = readRuntimeEnv("VITE_SKILL_TRUST_API_URL");
+  const data = await request(
+    { action: "list", catalog: true, summary: true },
+    skillTrustApiUrl ? { baseUrl: skillTrustApiUrl } : {},
+  );
   return (data.skills ?? [])
     .slice()
     .sort((a, b) => a.slug.localeCompare(b.slug));
@@ -337,15 +350,33 @@ export async function exportSkillArchive(
   };
 }
 
+function skillTrustRequestTarget(target: SkillTrustTarget) {
+  if (typeof target === "string") {
+    return { catalog: true, slug: target };
+  }
+  if ("skillDraftId" in target) {
+    return {
+      skillDraftId: target.skillDraftId,
+      ...(target.slug ? { slug: target.slug } : {}),
+    };
+  }
+  return { catalog: true, slug: target.slug };
+}
+
+function skillTrustFallbackSlug(target: SkillTrustTarget) {
+  if (typeof target === "string") return target;
+  if ("skillDraftId" in target) return target.slug ?? target.skillDraftId;
+  return target.slug;
+}
+
 export async function runSkillTrustPipeline(
-  slug: string,
+  target: SkillTrustTarget,
 ): Promise<SkillTrustReport> {
   const skillTrustApiUrl = readRuntimeEnv("VITE_SKILL_TRUST_API_URL");
   const data = await request(
     {
       action: "run-skill-trust",
-      catalog: true,
-      slug,
+      ...skillTrustRequestTarget(target),
     },
     skillTrustApiUrl ? { baseUrl: skillTrustApiUrl } : {},
   );
@@ -356,19 +387,18 @@ export async function runSkillTrustPipeline(
 }
 
 export async function getSkillTrustReport(
-  slug: string,
+  target: SkillTrustTarget,
 ): Promise<SkillTrustCacheResult> {
   const skillTrustApiUrl = readRuntimeEnv("VITE_SKILL_TRUST_API_URL");
   const data = await request(
     {
       action: "get-skill-trust",
-      catalog: true,
-      slug,
+      ...skillTrustRequestTarget(target),
     },
     skillTrustApiUrl ? { baseUrl: skillTrustApiUrl } : {},
   );
   return {
-    slug: data.slug ?? slug,
+    slug: data.slug ?? skillTrustFallbackSlug(target),
     trustReport: data.trustReport ?? null,
     cached: data.cached === true,
     stale: data.stale === true,
@@ -386,15 +416,14 @@ export async function getSkillTrustReport(
 }
 
 export async function fixSkillTrustEvidence(
-  slug: string,
+  target: SkillTrustTarget,
   step: SkillTrustEvidenceFixStepId,
 ): Promise<SkillTrustEvidenceFixResult> {
   const skillTrustApiUrl = readRuntimeEnv("VITE_SKILL_TRUST_API_URL");
   const data = await request(
     {
       action: "fix-skill-trust-evidence",
-      catalog: true,
-      slug,
+      ...skillTrustRequestTarget(target),
       step,
     },
     skillTrustApiUrl ? { baseUrl: skillTrustApiUrl } : {},
@@ -403,7 +432,7 @@ export async function fixSkillTrustEvidence(
     throw new Error("Skill trust fix response was missing fix metadata.");
   }
   return {
-    slug: data.slug ?? slug,
+    slug: data.slug ?? skillTrustFallbackSlug(target),
     trustReport: data.trustReport,
     fixedStep: data.fixedStep,
     ...(data.artifactPath ? { artifactPath: data.artifactPath } : {}),

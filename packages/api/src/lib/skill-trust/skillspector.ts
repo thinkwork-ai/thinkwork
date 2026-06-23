@@ -108,6 +108,14 @@ function resolveSkillTrustRunnerFunctionName(): string {
   return "";
 }
 
+function resolveAwsRegion(): string | undefined {
+  return (
+    process.env.AWS_REGION?.trim() ||
+    process.env.AWS_DEFAULT_REGION?.trim() ||
+    undefined
+  );
+}
+
 async function runSkillSpectorWithRunner(
   runnerFunctionName: string,
   input: { slug: string; files: SkillTrustInputFile[] },
@@ -115,7 +123,7 @@ async function runSkillSpectorWithRunner(
   try {
     const { InvokeCommand, LambdaClient } =
       await import("@aws-sdk/client-lambda");
-    const lambda = new LambdaClient({});
+    const lambda = new LambdaClient({ region: resolveAwsRegion() });
     const response = await lambda.send(
       new InvokeCommand({
         FunctionName: runnerFunctionName,

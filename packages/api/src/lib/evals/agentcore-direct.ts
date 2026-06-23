@@ -281,6 +281,7 @@ export function buildEvalAgentCorePayload(input: {
       runtimeConfig.skillsConfig.length > 0
         ? runtimeConfig.skillsConfig
         : undefined,
+    trusted_skill_ids: runtimeConfig.skillsConfig.map((skill) => skill.skillId),
     knowledge_bases: runtimeConfig.knowledgeBasesConfig,
     trigger_channel: "eval",
     guardrail_config: runtimeConfig.guardrailConfig || undefined,

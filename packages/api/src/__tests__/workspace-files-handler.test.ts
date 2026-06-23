@@ -152,6 +152,7 @@ vi.mock("../graphql/utils.js", () => {
       requested_by_user_id: tableCol("skill_drafts.requested_by_user_id"),
       status: tableCol("skill_drafts.status"),
       draft_s3_prefix: tableCol("skill_drafts.draft_s3_prefix"),
+      metadata: tableCol("skill_drafts.metadata"),
       current_content_hash: tableCol("skill_drafts.current_content_hash"),
       published_catalog_slug: tableCol("skill_drafts.published_catalog_slug"),
       published_content_hash: tableCol("skill_drafts.published_content_hash"),
@@ -479,6 +480,7 @@ function skillDraftRow(overrides: Record<string, unknown> = {}) {
     requested_by_user_id: USER_ID,
     status: "draft",
     draft_s3_prefix: `tenants/acme/skill-drafts/${DRAFT_ID}/`,
+    metadata: {},
     ...overrides,
   };
 }
@@ -1651,6 +1653,169 @@ describe("skill draft file target", () => {
     expect(res.body.currentContentHash).toMatch(/^sha256:/);
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
   });
+
+  it("lets an operator run skill trust against a submitted draft", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueOperatorSkillDraftTargetRows({ status: "submitted" });
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md` }],
+    });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md`,
+      })
+      .resolves(body(skillMd("draft-helper").toString("utf8")));
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "run-skill-trust",
+          skillDraftId: DRAFT_ID,
+          slug: "draft-helper",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "draft-helper",
+      cached: false,
+      trustReport: {
+        slug: "draft-helper",
+        spec: { status: "passed", name: "draft-helper" },
+        scanner: { status: "not_configured" },
+      },
+    });
+    expect(dbUpdateCalls.at(-1)).toMatchObject({
+      metadata: expect.anything(),
+    });
+    expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
+  });
+
+  it("serves a cached draft trust report from draft metadata", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    const draftContentSha = computeCatalogSkillSha([
+      {
+        relativePath: "SKILL.md",
+        content: skillMd("draft-helper").toString("utf8"),
+      },
+    ]);
+    queueOperatorSkillDraftTargetRows({
+      status: "submitted",
+      metadata: {
+        skillTrust: {
+          trustReportContentSha: draftContentSha,
+          trustReportPipelineVersion: "thinkwork-skill-trust-v1",
+          trustReportUpdatedAt: "2026-06-22T12:00:00.000Z",
+          trustReport: {
+            slug: "draft-helper",
+            contentHash: draftContentSha,
+            generatedAt: "2026-06-22T12:00:00.000Z",
+            status: "review",
+            summary: "Cached draft report.",
+            spec: {
+              status: "passed",
+              name: "draft-helper",
+              allowedTools: [],
+              errors: [],
+            },
+            scanner: { status: "not_configured" },
+            severityCounts: {
+              critical: 0,
+              high: 0,
+              medium: 0,
+              low: 0,
+              info: 0,
+            },
+            findings: [],
+            evidence: {
+              skillCard: "missing",
+              evalDataset: "missing",
+              benchmark: "missing",
+              signature: "missing",
+            },
+            artifactPaths: { evals: [] },
+          },
+        },
+      },
+    });
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md` }],
+    });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md`,
+      })
+      .resolves(body(skillMd("draft-helper").toString("utf8")));
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "get-skill-trust",
+          skillDraftId: DRAFT_ID,
+          slug: "draft-helper",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "draft-helper",
+      cached: true,
+      stale: false,
+      trustReport: { summary: "Cached draft report." },
+    });
+  });
+
+  it("lets an operator generate missing trust evidence on a submitted draft", async () => {
+    authMockImpl.mockResolvedValue(authOk());
+    queueOperatorSkillDraftTargetRows({ status: "submitted" });
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md` }],
+    });
+    s3Mock
+      .on(GetObjectCommand, {
+        Key: `tenants/acme/skill-drafts/${DRAFT_ID}/SKILL.md`,
+      })
+      .resolves(body(skillMd("draft-helper").toString("utf8")));
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const res = await parse(
+      await handler(
+        event({
+          action: "fix-skill-trust-evidence",
+          skillDraftId: DRAFT_ID,
+          slug: "draft-helper",
+          step: "skillCard",
+        }),
+      ),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      slug: "draft-helper",
+      artifactPath: "skill-card.md",
+      fixedStep: { step: "skillCard", status: "generated" },
+    });
+    expect(
+      s3Mock.commandCalls(PutObjectCommand)[0].args[0].input,
+    ).toMatchObject({
+      Bucket: "test-bucket",
+      Key: `tenants/acme/skill-drafts/${DRAFT_ID}/skill-card.md`,
+      IfNoneMatch: "*",
+    });
+    expect(dbUpdateCalls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          current_content_hash: expect.stringMatching(/^sha256:/),
+        }),
+        expect.objectContaining({ metadata: expect.anything() }),
+      ]),
+    );
+  });
 });
 
 // ─── 4c. Catalog skill install action ───────────────────────────────────────
@@ -1717,6 +1882,13 @@ describe("catalog summary read (U4)", () => {
         icon: null,
         tags: ["sales"],
         content_sha: "a".repeat(64),
+        trust_report: {
+          status: "passed",
+          evidence: { skillCard: "starter_generated" },
+        },
+        trust_report_content_sha: "a".repeat(64),
+        trust_report_pipeline_version: "thinkwork-skill-trust-v1",
+        trust_report_updated_at: new Date("2026-06-22T12:00:00.000Z"),
       },
       {
         slug: "renewal-prep",
@@ -1742,16 +1914,18 @@ describe("catalog summary read (U4)", () => {
       {
         slug: "crm-dashboard",
         displayName: "CRM Dashboard",
-        description: "Account health",
         category: "sales",
         icon: null,
         tags: ["sales"],
         sha: "a".repeat(64),
+        trustStatus: "passed",
+        trustStale: false,
+        skillCardStatus: "starter_generated",
+        trustUpdatedAt: "2026-06-22T12:00:00.000Z",
       },
       {
         slug: "renewal-prep",
         displayName: null,
-        description: null,
         category: null,
         icon: null,
         tags: null,
@@ -2935,6 +3109,78 @@ description: Reviews account health signals and produces a health report.
     });
     expect(s3Mock.commandCalls(PutObjectCommand)).toHaveLength(0);
     expect(reindexCatalogSkillMock).not.toHaveBeenCalled();
+  });
+
+  it("overwrites an existing signature when approving the current catalog snapshot", async () => {
+    const previousSecret = process.env.SKILL_TRUST_SIGNING_SECRET;
+    process.env.SKILL_TRUST_SIGNING_SECRET = "test-signing-secret";
+    try {
+      authMockImpl.mockResolvedValue(authOk());
+      queueAdminCatalogTargetRows();
+      const prefix = "tenants/acme/skill-catalog/account-health-review/";
+      const skill = `---
+name: account-health-review
+description: Reviews account health signals and produces a health report.
+---
+
+# Account Health Review
+`;
+      s3Mock.on(ListObjectsV2Command, { Prefix: prefix }).resolves({
+        Contents: [
+          { Key: `${prefix}SKILL.md` },
+          { Key: `${prefix}skill.oms.sig` },
+        ],
+      });
+      s3Mock
+        .on(GetObjectCommand, { Key: `${prefix}SKILL.md` })
+        .resolves(body(skill));
+      s3Mock
+        .on(GetObjectCommand, { Key: `${prefix}skill.oms.sig` })
+        .resolves(body("old-signature"));
+      s3Mock.on(PutObjectCommand).resolves({});
+
+      const res = await parse(
+        await handler(
+          event({
+            action: "fix-skill-trust-evidence",
+            catalog: true,
+            slug: "account-health-review",
+            step: "signature",
+          }),
+        ),
+      );
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body).toMatchObject({
+        ok: true,
+        fixedStep: {
+          step: "signature",
+          status: "generated",
+        },
+        artifactPath: "skill.oms.sig",
+        trustReport: {
+          evidence: {
+            signature: "verified",
+          },
+        },
+      });
+      expect(res.body.signedPayloadHash).toMatch(/^[a-f0-9]{64}$/);
+      const putCalls = s3Mock.commandCalls(PutObjectCommand);
+      expect(putCalls).toHaveLength(1);
+      expect(putCalls[0].args[0].input).toMatchObject({
+        Bucket: "test-bucket",
+        Key: `${prefix}skill.oms.sig`,
+        ContentType: "application/octet-stream",
+      });
+      expect(putCalls[0].args[0].input.IfNoneMatch).toBeUndefined();
+      expect(String(putCalls[0].args[0].input.Body)).not.toBe("old-signature");
+    } finally {
+      if (previousSecret === undefined) {
+        delete process.env.SKILL_TRUST_SIGNING_SECRET;
+      } else {
+        process.env.SKILL_TRUST_SIGNING_SECRET = previousSecret;
+      }
+    }
   });
 
   it("returns the existing artifact report if an evidence write races", async () => {

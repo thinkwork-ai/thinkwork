@@ -53,6 +53,10 @@ export interface SkillSummaryRow {
   icon: string | null;
   tags: string[] | null;
   content_sha: string;
+  trust_report?: unknown;
+  trust_report_content_sha?: string | null;
+  trust_report_pipeline_version?: string | null;
+  trust_report_updated_at?: Date | string | null;
 }
 
 export type ReindexAction = "upserted" | "skipped" | "deleted";
@@ -405,6 +409,11 @@ export function createDrizzleIndexStore(): IndexStore {
           icon: skillCatalog.icon,
           tags: skillCatalog.tags,
           content_sha: skillCatalog.content_sha,
+          trust_report: skillCatalog.trust_report,
+          trust_report_content_sha: skillCatalog.trust_report_content_sha,
+          trust_report_pipeline_version:
+            skillCatalog.trust_report_pipeline_version,
+          trust_report_updated_at: skillCatalog.trust_report_updated_at,
         })
         .from(skillCatalog)
         .where(eq(skillCatalog.tenant_id, tenantId))

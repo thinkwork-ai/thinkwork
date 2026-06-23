@@ -107,6 +107,14 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     skill_id: "agentSkills.skill_id",
     config: "agentSkills.config",
   },
+  skillCatalog: {
+    tenant_id: "skillCatalog.tenant_id",
+    slug: "skillCatalog.slug",
+    content_sha: "skillCatalog.content_sha",
+    trust_report: "skillCatalog.trust_report",
+    trust_report_content_sha: "skillCatalog.trust_report_content_sha",
+    trust_report_pipeline_version: "skillCatalog.trust_report_pipeline_version",
+  },
   tenants: { id: "tenants.id" },
   tenantContextProviderSettings: {
     tenant_id: "tenantContextProviderSettings.tenant_id",
@@ -199,6 +207,7 @@ vi.mock("drizzle-orm", () => ({
   // pairs were passed into each `.where(...)` — required to verify the
   // tenant predicate is applied on users lookups.
   eq: (col: unknown, val: unknown) => ({ op: "eq", col, val }),
+  inArray: (col: unknown, vals: unknown[]) => ({ op: "inArray", col, vals }),
   and: (...preds: unknown[]) => ({ op: "and", preds }),
 }));
 
@@ -233,6 +242,12 @@ const AGENT_ID = "22222222-2222-2222-2222-222222222222";
 const TEMPLATE_ID = "33333333-3333-3333-3333-333333333333";
 const USER_ID = "44444444-4444-4444-4444-444444444444";
 const PROFILE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
+const TRUST_PIPELINE_VERSION = "thinkwork-skill-trust-v1";
+const DEFAULT_RUNTIME_SKILL_IDS = [
+  "agent-thread-management",
+  "artifacts",
+  "workspace-memory",
+];
 
 function stageAgentRow(overrides?: Record<string, unknown>) {
   rowsQueue.push([
@@ -271,6 +286,39 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
 
 function stageTenantSlug(slug = "acme") {
   rowsQueue.push([{ slug }]);
+}
+
+function trustedSkillRow(
+  slug: string,
+  overrides: Record<string, unknown> = {},
+) {
+  const contentSha = `${slug}-sha`;
+  return {
+    slug,
+    content_sha: contentSha,
+    trust_report: {
+      status: "passed",
+      spec: { status: "passed" },
+      scanner: { status: "completed" },
+      evidence: {
+        skillCard: "starter_generated",
+        evalDataset: "starter_generated",
+        benchmark: "starter_generated",
+        signature: "verified",
+      },
+    },
+    trust_report_content_sha: contentSha,
+    trust_report_pipeline_version: TRUST_PIPELINE_VERSION,
+    ...overrides,
+  };
+}
+
+function stageTrustedRuntimeSkillRows(...additionalSkillIds: string[]) {
+  rowsQueue.push(
+    [...new Set([...DEFAULT_RUNTIME_SKILL_IDS, ...additionalSkillIds])].map(
+      (slug) => trustedSkillRow(slug),
+    ),
+  );
 }
 
 function stageProfileRows(rows: Array<Record<string, unknown>>) {
@@ -328,6 +376,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ template_id: null });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_skills metadata overlay
 
@@ -345,6 +394,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow();
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup (tenant_id + is_default=true)
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -364,7 +414,7 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.contextEngineConfig).toEqual({ enabled: true });
     expect(cfg.knowledgeBasesConfig).toBeUndefined();
     expect(cfg.mcpConfigs).toEqual([]);
-    // Default script skills stay present; send_email is injected as a direct tool.
+    // Default script skills stay present when they have passed the same trust gate.
     const slugs = cfg.skillsConfig.map((s) => s.skillId);
     expect(slugs).not.toContain("agent-email-send");
     expect(slugs).toContain("agent-thread-management");
@@ -375,6 +425,22 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
     });
     expect(cfg.sendEmailConfig).not.toHaveProperty("agentEmailAddress");
+  });
+
+  it("filters default runtime skills that have not passed the trust pipeline", async () => {
+    stageAgentRow();
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    rowsQueue.push([]); // skill trust gate
+    rowsQueue.push([]); // kbs
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(cfg.skillsConfig).toEqual([]);
+    expect(cfg.trustedSkillIds).toEqual([]);
   });
 
   it("registers workspace skills from the workspace tree", async () => {
@@ -409,6 +475,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     rowsQueue.push([]); // agent_skills metadata overlay
+    stageTrustedRuntimeSkillRows("approve-receipt", "tag-vendor");
     rowsQueue.push([]); // kbs
 
     const cfg = await resolveAgentRuntimeConfig({
@@ -432,6 +499,56 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(
       cfg.skillsConfig.some((skill) => skill.skillId === "web-search"),
     ).toBe(false);
+  });
+
+  it("filters workspace skills that have not passed the current trust pipeline", async () => {
+    vi.stubEnv("WORKSPACE_BUCKET", "workspace-bucket");
+    mockS3Send.mockImplementation(async (command: { input?: any }) => {
+      if (command.input?.Prefix) {
+        return {
+          Contents: [
+            {
+              Key: "tenants/acme/agents/ada/workspace/skills/trusted-skill/SKILL.md",
+            },
+            {
+              Key: "tenants/acme/agents/ada/workspace/skills/stale-skill/SKILL.md",
+            },
+            {
+              Key: "tenants/acme/agents/ada/workspace/skills/unscanned-skill/SKILL.md",
+            },
+          ],
+        };
+      }
+      return {
+        Body: {
+          transformToString: async () => "---\nname: Test\n---\n",
+        },
+      };
+    });
+    stageAgentRow();
+    stageTenantSlug("acme");
+    rowsQueue.push([]); // default guardrail lookup
+    rowsQueue.push([]); // agent_skills metadata overlay
+    rowsQueue.push([
+      ...DEFAULT_RUNTIME_SKILL_IDS.map((slug) => trustedSkillRow(slug)),
+      trustedSkillRow("trusted-skill"),
+      trustedSkillRow("stale-skill", {
+        trust_report_content_sha: "old-sha",
+      }),
+    ]); // skill trust gate
+    rowsQueue.push([]); // kbs
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    const slugs = cfg.skillsConfig.map((skill) => skill.skillId);
+    expect(slugs).toContain("trusted-skill");
+    expect(slugs).not.toContain("stale-skill");
+    expect(slugs).not.toContain("unscanned-skill");
+    expect(cfg.trustedSkillIds).toContain("trusted-skill");
+    expect(cfg.trustedSkillIds).not.toContain("stale-skill");
   });
 
   it("overlays agent_skills metadata onto workspace tree skills without making the table the source of truth", async () => {
@@ -470,6 +587,7 @@ describe("resolveAgentRuntimeConfig", () => {
         config: { secretRef: "secret/ignored" },
       },
     ]); // agent_skills metadata overlay
+    stageTrustedRuntimeSkillRows("github-issues");
     rowsQueue.push([]); // kbs
 
     const cfg = await resolveAgentRuntimeConfig({
@@ -497,6 +615,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ runtime: "strands" });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -510,6 +629,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -523,6 +643,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -536,6 +657,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ blocked_tools: ["artifacts", "workspace-memory"] });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -553,6 +675,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ browser: { enabled: true } });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -566,6 +689,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ browser: null });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([{ capability: "browser_automation", enabled: true }]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
@@ -580,6 +704,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ browser: { enabled: true } });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([{ capability: "browser_automation", enabled: false }]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
@@ -597,6 +722,7 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([{ capability: "browser_automation", enabled: true }]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
@@ -611,6 +737,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ send_email: null });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -624,6 +751,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ context_engine: null });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -644,6 +772,7 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([]); // tenant context provider settings
@@ -669,6 +798,7 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([
@@ -698,6 +828,7 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -717,6 +848,7 @@ describe("resolveAgentRuntimeConfig", () => {
         bedrock_version: "1",
       },
     ]); // tenant-default guardrail row
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -739,6 +871,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow();
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // users lookup — empty because predicate rejects cross-tenant
     await resolveAgentRuntimeConfig({
@@ -764,6 +897,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow();
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -784,6 +918,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ web_search: { enabled: true } });
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
+    stageTrustedRuntimeSkillRows("web-search");
     rowsQueue.push([]); // kbs
     mockLoadTenantBuiltinTools.mockResolvedValueOnce([
       {
@@ -807,6 +942,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow({ web_search: null });
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     mockLoadTenantBuiltinTools.mockResolvedValueOnce([
       {
@@ -828,6 +964,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ web_extract: { enabled: true } });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     mockLoadTenantWebExtractConfig.mockResolvedValueOnce({
       toolSlug: "web-extract",
@@ -855,6 +992,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ web_extract: null });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
 
     const disabledCfg = await resolveAgentRuntimeConfig({
@@ -872,6 +1010,7 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
 
     const blockedCfg = await resolveAgentRuntimeConfig({
@@ -888,6 +1027,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTemplateRow();
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     mockBuildMcpConfigs.mockResolvedValueOnce([
       { name: "admin-ops", url: "https://example.test/mcp" },
@@ -910,6 +1050,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     stageProfileRows([
@@ -982,6 +1123,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([]); // Space overrides lookup
@@ -1019,6 +1161,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([]); // Space overrides lookup
@@ -1066,6 +1209,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     mockBuildMcpConfigs.mockResolvedValueOnce([
@@ -1131,6 +1275,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([
@@ -1202,6 +1347,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ sandbox: { environment: "default-public" } });
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([

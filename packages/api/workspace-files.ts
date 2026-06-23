@@ -148,6 +148,7 @@ import {
   signatureStatusForFiles,
 } from "./src/lib/skill-trust/signing.js";
 import { runSkillSpectorForFiles } from "./src/lib/skill-trust/skillspector.js";
+import { SKILL_TRUST_PIPELINE_VERSION } from "./src/lib/skill-trust/runtime-gate.js";
 import {
   CATALOG_SKILL_ARCHIVE_LIMITS,
   parseCatalogSkillArchive,
@@ -205,8 +206,6 @@ const CORS_HEADERS = {
     "Content-Type, Authorization, x-api-key, x-tenant-id, x-principal-id",
   "Access-Control-Max-Age": "3600",
 };
-
-const SKILL_TRUST_PIPELINE_VERSION = "thinkwork-skill-trust-v1";
 
 function json(statusCode: number, body: unknown): APIGatewayProxyResult {
   return {
@@ -426,6 +425,7 @@ interface SkillDraftTarget {
   draftId: string;
   requestedByUserId: string;
   status: string;
+  metadata: Record<string, unknown>;
   prefix: string;
   readPrefixes?: string[];
   key: (path: string) => string;
@@ -682,6 +682,7 @@ async function resolveSkillDraftTarget(
       requested_by_user_id: skillDrafts.requested_by_user_id,
       status: skillDrafts.status,
       draft_s3_prefix: skillDrafts.draft_s3_prefix,
+      metadata: skillDrafts.metadata,
     })
     .from(skillDrafts)
     .where(
@@ -715,6 +716,10 @@ async function resolveSkillDraftTarget(
     draftId: draft.id,
     requestedByUserId: draft.requested_by_user_id,
     status: draft.status,
+    metadata:
+      draft.metadata && typeof draft.metadata === "object"
+        ? (draft.metadata as Record<string, unknown>)
+        : {},
     prefix,
     key: (path) => `${prefix}${path.replace(/^\/+/, "")}`,
     canWrite: auth.authType === "apikey" || isRequester,
@@ -1074,13 +1079,38 @@ async function handleCatalogSummary(
     skills: skills.map((s) => ({
       slug: s.slug,
       displayName: s.display_name,
-      description: s.description,
       category: s.category,
       icon: s.icon,
       tags: s.tags,
       sha: s.content_sha,
+      ...catalogSummaryTrustMetadata(s),
     })),
   });
+}
+
+function catalogSummaryTrustMetadata(skill: {
+  content_sha: string;
+  trust_report?: unknown;
+  trust_report_content_sha?: string | null;
+  trust_report_pipeline_version?: string | null;
+  trust_report_updated_at?: Date | string | null;
+}) {
+  if (!skill.trust_report || typeof skill.trust_report !== "object") {
+    return {};
+  }
+  const report = skill.trust_report as SkillTrustPipelineReport;
+  const trustStale =
+    skill.content_sha !== skill.trust_report_content_sha ||
+    skill.trust_report_pipeline_version !== SKILL_TRUST_PIPELINE_VERSION;
+  return {
+    trustStatus: report.status,
+    trustStale,
+    skillCardStatus: report.evidence.skillCard,
+    trustUpdatedAt:
+      skill.trust_report_updated_at instanceof Date
+        ? skill.trust_report_updated_at.toISOString()
+        : skill.trust_report_updated_at,
+  };
 }
 
 async function handleValidateSkillDraft(
@@ -1492,14 +1522,14 @@ async function handleRunSkillTrust(
   slug: string | undefined,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind !== "catalog") {
+  if (target.kind !== "catalog" && target.kind !== "skillDraft") {
     return json(400, {
       ok: false,
       code: "unsupported_target",
-      error: "run-skill-trust requires the skill catalog target",
+      error: "run-skill-trust requires a skill catalog or skill draft target",
     });
   }
-  if (!isCatalogArchiveSlug(slug)) {
+  if (target.kind === "catalog" && !isCatalogArchiveSlug(slug)) {
     return json(400, {
       ok: false,
       code: "invalid_skill_slug",
@@ -1508,34 +1538,53 @@ async function handleRunSkillTrust(
     });
   }
 
-  const loaded = await loadCatalogSkillTrustFiles(target, slug);
+  const loaded =
+    target.kind === "catalog"
+      ? await loadCatalogSkillTrustFiles(target, slug!)
+      : await loadSkillDraftTrustFiles(target);
   if (!loaded.ok) return loaded.response;
+  const effectiveSlug =
+    target.kind === "catalog"
+      ? slug!
+      : skillTrustSlugForFiles(loaded.files, slug ?? target.draftId);
 
-  const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
+  const scan = await runSkillSpectorForFiles({
+    slug: effectiveSlug,
+    files: loaded.files,
+  });
   const signer = createConfiguredSkillTrustSigner();
   const trustReport = buildCatalogSkillTrustReport({
-    slug,
+    slug: effectiveSlug,
     files: loaded.files,
     scanner: scan.scanner,
     scannerFindings: scan.findings,
     signature: await signatureStatusForFiles({
-      slug,
+      slug: effectiveSlug,
       files: loaded.files,
       signer,
     }),
   });
   const catalogContentSha = catalogContentShaForTrustFiles(loaded.files);
-  await persistSkillTrustReport({
-    tenantId,
-    slug,
-    report: trustReport,
-    catalogContentSha,
-    signedByUserId: deps.userId,
-  });
+  if (target.kind === "catalog") {
+    await persistSkillTrustReport({
+      tenantId,
+      slug: effectiveSlug,
+      report: trustReport,
+      catalogContentSha,
+      signedByUserId: deps.userId,
+    });
+  } else {
+    await persistSkillDraftTrustReport({
+      target,
+      report: trustReport,
+      contentSha: catalogContentSha,
+      signedByUserId: deps.userId,
+    });
+  }
 
   return json(200, {
     ok: true,
-    slug,
+    slug: effectiveSlug,
     trustReport,
     cached: false,
     stale: false,
@@ -1549,11 +1598,35 @@ async function handleGetSkillTrust(
   slug: string | undefined,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind !== "catalog") {
+  if (target.kind !== "catalog" && target.kind !== "skillDraft") {
     return json(400, {
       ok: false,
       code: "unsupported_target",
-      error: "get-skill-trust requires the skill catalog target",
+      error: "get-skill-trust requires a skill catalog or skill draft target",
+    });
+  }
+  if (target.kind === "skillDraft") {
+    const cached = await loadCachedSkillDraftTrustReport(target);
+    if (!cached) {
+      return json(200, {
+        ok: true,
+        slug: slug ?? target.draftId,
+        trustReport: null,
+        cached: false,
+        stale: false,
+      });
+    }
+    if (!cached.ok) return cached.response;
+    return json(200, {
+      ok: true,
+      slug: cached.trustReport.slug,
+      trustReport: cached.trustReport,
+      cached: true,
+      stale: cached.stale,
+      trustReportContentSha: cached.trustReportContentSha,
+      trustReportPipelineVersion: cached.trustReportPipelineVersion,
+      currentContentSha: cached.currentContentSha,
+      updatedAt: cached.updatedAt,
     });
   }
   if (!isCatalogArchiveSlug(slug)) {
@@ -1594,14 +1667,15 @@ async function handleFixSkillTrustEvidence(
   stepInput: string | undefined,
 ): Promise<APIGatewayProxyResult> {
   const { target, tenantId } = deps;
-  if (target.kind !== "catalog") {
+  if (target.kind !== "catalog" && target.kind !== "skillDraft") {
     return json(400, {
       ok: false,
       code: "unsupported_target",
-      error: "fix-skill-trust-evidence requires the skill catalog target",
+      error:
+        "fix-skill-trust-evidence requires a skill catalog or skill draft target",
     });
   }
-  if (!isCatalogArchiveSlug(slug)) {
+  if (target.kind === "catalog" && !isCatalogArchiveSlug(slug)) {
     return json(400, {
       ok: false,
       code: "invalid_skill_slug",
@@ -1620,13 +1694,23 @@ async function handleFixSkillTrustEvidence(
     });
   }
 
-  const loaded = await loadCatalogSkillTrustFiles(target, slug);
+  const loaded =
+    target.kind === "catalog"
+      ? await loadCatalogSkillTrustFiles(target, slug!)
+      : await loadSkillDraftTrustFiles(target);
   if (!loaded.ok) return loaded.response;
+  const effectiveSlug =
+    target.kind === "catalog"
+      ? slug!
+      : skillTrustSlugForFiles(loaded.files, slug ?? target.draftId);
 
-  const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
+  const scan = await runSkillSpectorForFiles({
+    slug: effectiveSlug,
+    files: loaded.files,
+  });
   const signer = createConfiguredSkillTrustSigner();
   const result = await fixSkillTrustEvidence({
-    slug,
+    slug: effectiveSlug,
     files: loaded.files,
     step,
     scanner: scan.scanner,
@@ -1635,18 +1719,28 @@ async function handleFixSkillTrustEvidence(
   });
 
   if (result.status === "invalid_skill") {
-    await persistSkillTrustReport({
-      tenantId,
-      slug,
-      report: result.trustReport,
-      catalogContentSha: catalogContentShaForTrustFiles(loaded.files),
-      signedByUserId: deps.userId,
-    });
+    const contentSha = catalogContentShaForTrustFiles(loaded.files);
+    if (target.kind === "catalog") {
+      await persistSkillTrustReport({
+        tenantId,
+        slug: effectiveSlug,
+        report: result.trustReport,
+        catalogContentSha: contentSha,
+        signedByUserId: deps.userId,
+      });
+    } else {
+      await persistSkillDraftTrustReport({
+        target,
+        report: result.trustReport,
+        contentSha,
+        signedByUserId: deps.userId,
+      });
+    }
     return json(422, {
       ok: false,
       code: "invalid_skill_md",
       error: result.message,
-      slug,
+      slug: effectiveSlug,
       trustReport: result.trustReport,
       fixedStep: serializeSkillTrustEvidenceFix(result),
       ...(result.prerequisite ? { prerequisite: result.prerequisite } : {}),
@@ -1654,16 +1748,26 @@ async function handleFixSkillTrustEvidence(
   }
 
   if (!result.artifact) {
-    await persistSkillTrustReport({
-      tenantId,
-      slug,
-      report: result.trustReport,
-      catalogContentSha: catalogContentShaForTrustFiles(loaded.files),
-      signedByUserId: deps.userId,
-    });
+    const contentSha = catalogContentShaForTrustFiles(loaded.files);
+    if (target.kind === "catalog") {
+      await persistSkillTrustReport({
+        tenantId,
+        slug: effectiveSlug,
+        report: result.trustReport,
+        catalogContentSha: contentSha,
+        signedByUserId: deps.userId,
+      });
+    } else {
+      await persistSkillDraftTrustReport({
+        target,
+        report: result.trustReport,
+        contentSha,
+        signedByUserId: deps.userId,
+      });
+    }
     return json(200, {
       ok: true,
-      slug,
+      slug: effectiveSlug,
       trustReport: result.trustReport,
       fixedStep: serializeSkillTrustEvidenceFix(result),
       ...(result.artifactPath ? { artifactPath: result.artifactPath } : {}),
@@ -1674,7 +1778,21 @@ async function handleFixSkillTrustEvidence(
     });
   }
 
-  const artifactKey = `${loaded.skillPrefix}${result.artifact.path}`;
+  if (target.kind === "skillDraft") {
+    const pathValidation = validateSkillDraftPath(result.artifact.path);
+    if (!pathValidation.ok) {
+      return json(400, {
+        ok: false,
+        code: "invalid_skill_draft_path",
+        error: pathValidation.error.message,
+        errors: [pathValidation.error],
+      });
+    }
+  }
+  const artifactKey =
+    target.kind === "catalog"
+      ? `${loaded.skillPrefix}${result.artifact.path}`
+      : target.key(result.artifact.path);
   try {
     await s3.send(
       new PutObjectCommand({
@@ -1683,24 +1801,38 @@ async function handleFixSkillTrustEvidence(
         Body: result.artifact.content,
         ContentType:
           result.artifact.contentType ??
-          contentTypeForCatalogSkillPath(result.artifact.path),
-        IfNoneMatch: "*",
+          (target.kind === "catalog"
+            ? contentTypeForCatalogSkillPath(result.artifact.path)
+            : contentTypeForSkillDraftPath(result.artifact.path)),
+        ...(step === "signature" ? {} : { IfNoneMatch: "*" }),
       }),
     );
   } catch (err) {
     if (isPreconditionFailed(err)) {
-      const refreshed = await buildSkillTrustReportFromCatalog(target, slug);
+      const refreshed =
+        target.kind === "catalog"
+          ? await buildSkillTrustReportFromCatalog(target, effectiveSlug)
+          : await buildSkillTrustReportFromDraft(target, effectiveSlug);
       if (!refreshed.ok) return refreshed.response;
-      await persistSkillTrustReport({
-        tenantId,
-        slug,
-        report: refreshed.trustReport,
-        catalogContentSha: refreshed.catalogContentSha,
-        signedByUserId: deps.userId,
-      });
+      if (target.kind === "catalog") {
+        await persistSkillTrustReport({
+          tenantId,
+          slug: effectiveSlug,
+          report: refreshed.trustReport,
+          catalogContentSha: refreshed.catalogContentSha,
+          signedByUserId: deps.userId,
+        });
+      } else {
+        await persistSkillDraftTrustReport({
+          target,
+          report: refreshed.trustReport,
+          contentSha: refreshed.catalogContentSha,
+          signedByUserId: deps.userId,
+        });
+      }
       return json(200, {
         ok: true,
-        slug,
+        slug: effectiveSlug,
         trustReport: refreshed.trustReport,
         fixedStep: {
           step,
@@ -1714,32 +1846,51 @@ async function handleFixSkillTrustEvidence(
       ok: false,
       code: "skill_trust_fix_failed",
       error: `Could not write ${result.artifact.path}: ${errorMessage(err)}`,
-      slug,
+      slug: effectiveSlug,
       fixedStep: serializeSkillTrustEvidenceFix(result),
       artifactPath: result.artifact.path,
     });
   }
 
-  const indexWarning = await reindexCatalogAfterMutation(
-    target,
-    tenantId,
-    slug,
-    "fix-skill-trust-evidence",
-  );
-  await persistSkillTrustReport({
-    tenantId,
-    slug,
-    report: result.trustReport,
-    catalogContentSha: catalogContentShaForTrustFiles([
-      ...loaded.files,
-      { path: result.artifact.path, content: result.artifact.content },
-    ]),
-    signedByUserId: deps.userId,
-  });
+  let indexWarning: string | undefined;
+  const updatedFiles =
+    step === "signature"
+      ? replaceSkillTrustFile(loaded.files, {
+          path: result.artifact.path,
+          content: result.artifact.content,
+        })
+      : [
+          ...loaded.files,
+          { path: result.artifact.path, content: result.artifact.content },
+        ];
+  const updatedContentSha = catalogContentShaForTrustFiles(updatedFiles);
+  if (target.kind === "catalog") {
+    indexWarning = await reindexCatalogAfterMutation(
+      target,
+      tenantId,
+      effectiveSlug,
+      "fix-skill-trust-evidence",
+    );
+    await persistSkillTrustReport({
+      tenantId,
+      slug: effectiveSlug,
+      report: result.trustReport,
+      catalogContentSha: updatedContentSha,
+      signedByUserId: deps.userId,
+    });
+  } else {
+    await updateSkillDraftContentHash(target, updatedFiles);
+    await persistSkillDraftTrustReport({
+      target,
+      report: result.trustReport,
+      contentSha: updatedContentSha,
+      signedByUserId: deps.userId,
+    });
+  }
 
   return json(200, {
     ok: true,
-    slug,
+    slug: effectiveSlug,
     trustReport: result.trustReport,
     fixedStep: serializeSkillTrustEvidenceFix(result),
     artifactPath: result.artifact.path,
@@ -1825,6 +1976,79 @@ async function loadCatalogSkillTrustFiles(
   return { ok: true, skillPrefix, files };
 }
 
+async function loadSkillDraftTrustFiles(
+  target: SkillDraftTarget,
+): Promise<CatalogTrustFilesLoaded> {
+  const relativePaths = await listAllObjectsUnfiltered(target.prefix);
+  if (relativePaths.length === 0) {
+    return {
+      ok: false,
+      response: json(404, {
+        ok: false,
+        code: "skill_draft_not_found",
+        error: `Skill draft '${target.draftId}' has no files to scan.`,
+        draftId: target.draftId,
+      }),
+    };
+  }
+  if (!relativePaths.includes("SKILL.md")) {
+    return {
+      ok: false,
+      response: json(404, {
+        ok: false,
+        code: "skill_md_not_found",
+        error: `Skill draft '${target.draftId}' is missing SKILL.md and cannot be scanned.`,
+        draftId: target.draftId,
+      }),
+    };
+  }
+  if (relativePaths.length > EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries) {
+    return {
+      ok: false,
+      response: exportLimitExceeded(
+        target.draftId,
+        `Skill draft '${target.draftId}' has ${relativePaths.length} files; max scannable files is ${EXPORT_SKILL_ARCHIVE_LIMITS.maxEntries}.`,
+      ),
+    };
+  }
+
+  let totalBytes = 0;
+  const files: { path: string; content: Buffer }[] = [];
+  for (const filePath of relativePaths) {
+    const object = await readCatalogObject(target.key(filePath));
+    if (object.content.byteLength > EXPORT_SKILL_ARCHIVE_LIMITS.maxFileBytes) {
+      return {
+        ok: false,
+        response: exportLimitExceeded(
+          target.draftId,
+          `Skill draft file '${filePath}' is too large to scan.`,
+        ),
+      };
+    }
+    totalBytes += object.content.byteLength;
+    if (totalBytes > EXPORT_SKILL_ARCHIVE_LIMITS.maxTotalBytes) {
+      return {
+        ok: false,
+        response: exportLimitExceeded(
+          target.draftId,
+          `Skill draft '${target.draftId}' is too large to scan.`,
+        ),
+      };
+    }
+    files.push({ path: filePath, content: object.content });
+  }
+
+  return { ok: true, skillPrefix: target.prefix, files };
+}
+
+function skillTrustSlugForFiles(
+  files: SkillTrustInputFile[],
+  fallback: string,
+): string {
+  const validated = validateSkillDraftFiles(files);
+  return validated.ok ? validated.slug : fallback;
+}
+
 async function buildSkillTrustReportFromCatalog(
   target: CatalogTarget,
   slug: string,
@@ -1850,10 +2074,88 @@ async function buildSkillTrustReportFromCatalog(
   };
 }
 
+async function buildSkillTrustReportFromDraft(
+  target: SkillDraftTarget,
+  fallbackSlug: string,
+) {
+  const loaded = await loadSkillDraftTrustFiles(target);
+  if (!loaded.ok) return loaded;
+  const slug = skillTrustSlugForFiles(loaded.files, fallbackSlug);
+  const signer = createConfiguredSkillTrustSigner();
+  const scan = await runSkillSpectorForFiles({ slug, files: loaded.files });
+  return {
+    ok: true as const,
+    catalogContentSha: catalogContentShaForTrustFiles(loaded.files),
+    trustReport: buildCatalogSkillTrustReport({
+      slug,
+      files: loaded.files,
+      scanner: scan.scanner,
+      scannerFindings: scan.findings,
+      signature: await signatureStatusForFiles({
+        slug,
+        files: loaded.files,
+        signer,
+      }),
+    }),
+  };
+}
+
 function catalogContentShaForTrustFiles(files: SkillTrustInputFile[]): string {
   return computeCatalogSkillSha(
     files.map((file) => ({ relativePath: file.path, content: file.content })),
   );
+}
+
+function replaceSkillTrustFile(
+  files: SkillTrustInputFile[],
+  replacement: SkillTrustInputFile,
+): SkillTrustInputFile[] {
+  const replacementPath = replacement.path.toLowerCase();
+  return [
+    ...files.filter((file) => file.path.toLowerCase() !== replacementPath),
+    replacement,
+  ];
+}
+
+function cachedSkillTrustFromMetadata(metadata: Record<string, unknown>) {
+  const raw = metadata.skillTrust;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const skillTrust = raw as Record<string, unknown>;
+  if (!skillTrust.trustReport || typeof skillTrust.trustReport !== "object") {
+    return null;
+  }
+  if (typeof skillTrust.trustReportContentSha !== "string") return null;
+  return {
+    trustReport: skillTrust.trustReport as SkillTrustPipelineReport,
+    trustReportContentSha: skillTrust.trustReportContentSha,
+    trustReportPipelineVersion:
+      typeof skillTrust.trustReportPipelineVersion === "string"
+        ? skillTrust.trustReportPipelineVersion
+        : null,
+    updatedAt:
+      typeof skillTrust.trustReportUpdatedAt === "string"
+        ? skillTrust.trustReportUpdatedAt
+        : null,
+  };
+}
+
+async function loadCachedSkillDraftTrustReport(target: SkillDraftTarget) {
+  const cached = cachedSkillTrustFromMetadata(target.metadata);
+  if (!cached) return null;
+  const loaded = await loadSkillDraftTrustFiles(target);
+  if (!loaded.ok) return { ok: false as const, response: loaded.response };
+  const currentContentSha = catalogContentShaForTrustFiles(loaded.files);
+  return {
+    ok: true as const,
+    trustReport: cached.trustReport,
+    stale:
+      currentContentSha !== cached.trustReportContentSha ||
+      cached.trustReportPipelineVersion !== SKILL_TRUST_PIPELINE_VERSION,
+    currentContentSha,
+    trustReportContentSha: cached.trustReportContentSha,
+    trustReportPipelineVersion: cached.trustReportPipelineVersion,
+    updatedAt: cached.updatedAt,
+  };
 }
 
 async function loadCachedSkillTrustReport(tenantId: string, slug: string) {
@@ -1923,6 +2225,47 @@ async function persistSkillTrustReport(input: {
         eq(skillCatalog.slug, input.slug),
       ),
     );
+}
+
+async function persistSkillDraftTrustReport(input: {
+  target: SkillDraftTarget;
+  report: SkillTrustPipelineReport;
+  contentSha: string;
+  signedByUserId: string | null;
+}) {
+  const metadata = {
+    skillTrust: {
+      trustReport: input.report,
+      trustReportContentSha: input.contentSha,
+      trustReportPipelineVersion: SKILL_TRUST_PIPELINE_VERSION,
+      trustReportUpdatedAt: new Date().toISOString(),
+      signatureStatus: input.report.evidence.signature,
+      signaturePayload: {
+        artifactPath: input.report.artifactPaths.signature ?? null,
+        signedPayloadHash: input.report.signedPayloadHash ?? null,
+        status: input.report.evidence.signature,
+      },
+      signedContentSha:
+        input.report.evidence.signature === "verified"
+          ? input.contentSha
+          : null,
+      signedPayloadHash:
+        input.report.evidence.signature === "verified"
+          ? (input.report.signedPayloadHash ?? null)
+          : null,
+      signedByUserId:
+        input.report.evidence.signature === "verified"
+          ? input.signedByUserId
+          : null,
+    },
+  };
+  await db
+    .update(skillDrafts)
+    .set({
+      metadata: sql`coalesce(${skillDrafts.metadata}, '{}'::jsonb) || ${JSON.stringify(metadata)}::jsonb`,
+      updated_at: sql`now()`,
+    })
+    .where(eq(skillDrafts.id, input.target.draftId));
 }
 
 function parseSkillTrustEvidenceFixStep(
@@ -4400,7 +4743,16 @@ export async function handler(
 
   if (
     target.kind === "skillDraft" &&
-    !["get", "list", "put", "delete", "validate-skill-draft"].includes(action)
+    ![
+      "fix-skill-trust-evidence",
+      "get",
+      "get-skill-trust",
+      "list",
+      "put",
+      "delete",
+      "run-skill-trust",
+      "validate-skill-draft",
+    ].includes(action)
   ) {
     return json(400, {
       ok: false,

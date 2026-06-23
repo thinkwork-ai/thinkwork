@@ -298,6 +298,22 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
+function trustedWorkspaceSkillIds(
+  payload: Record<string, unknown>,
+): Set<string> {
+  const explicit = stringArray(payload.trusted_skill_ids);
+  if (explicit.length > 0) return new Set(explicit);
+
+  const skills = Array.isArray(payload.skills) ? payload.skills : [];
+  return new Set(
+    skills.flatMap((skill) => {
+      if (!skill || typeof skill !== "object") return [];
+      const skillId = asString((skill as { skillId?: unknown }).skillId);
+      return skillId ? [skillId] : [];
+    }),
+  );
+}
+
 function requestedAgentProfileSlugs(input: {
   payload: Record<string, unknown>;
   message: string;
@@ -2169,14 +2185,19 @@ export async function handleInvocation(
     });
   }
 
-  const discoveredSkills = await discoverSkills(env.workspaceDir);
+  const trustedSkillIds = trustedWorkspaceSkillIds(args.payload);
+  const discoveredSkills = (await discoverSkills(env.workspaceDir)).filter(
+    (skill) => trustedSkillIds.has(skill.slug),
+  );
 
   // Ephemeral force-pinned skills (plan 2026-06-04-004 U4). The composer
   // slash-command can pin a tenant-catalog skill the agent has NOT installed;
   // fetch each pin's SKILL.md from the catalog for this turn only and merge it
   // into the discovered set, marking pinned slugs for system-prompt emphasis.
   // Fetch-per-turn keeps pins ephemeral — nothing is written to the workspace.
-  const pinnedSkillRefs = parsePinnedSkillRefs(args.payload.pinned_skills);
+  const pinnedSkillRefs = parsePinnedSkillRefs(
+    args.payload.pinned_skills,
+  ).filter((ref) => trustedSkillIds.has(ref.skillId));
   let pinnedEmphasizedSlugs = new Set<string>();
   let workspaceSkills = discoveredSkills;
   if (pinnedSkillRefs.length > 0 && workspaceBucket) {
