@@ -99,6 +99,25 @@ vi.mock("@thinkwork/ui", () => ({
   SelectValue: ({ placeholder }: { placeholder?: string }) => (
     <span>{placeholder}</span>
   ),
+  Sheet: ({
+    open,
+    children,
+  }: {
+    open?: boolean;
+    children: React.ReactNode;
+  }) => (open ? <div data-testid="sheet">{children}</div> : null),
+  SheetContent: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SheetDescription: ({ children }: { children: React.ReactNode }) => (
+    <p>{children}</p>
+  ),
+  SheetHeader: ({ children }: { children: React.ReactNode }) => (
+    <header>{children}</header>
+  ),
+  SheetTitle: ({ children }: { children: React.ReactNode }) => (
+    <h2>{children}</h2>
+  ),
   Switch: ({
     checked,
     onCheckedChange,
@@ -126,7 +145,7 @@ const workers: AgentLoopWorkerOption[] = [
 afterEach(() => cleanup());
 
 describe("AgentLoopForm", () => {
-  it("requires goal intent and completion criteria before saving", () => {
+  it("requires a prompt before saving", () => {
     render(
       <AgentLoopForm
         mode="create"
@@ -137,10 +156,6 @@ describe("AgentLoopForm", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Automation name"), {
-      target: { value: "Manual review loop" },
-    });
-
     expect(
       (
         screen.getByRole("button", {
@@ -149,6 +164,42 @@ describe("AgentLoopForm", () => {
       ).disabled,
     ).toBe(true);
     expect(screen.getByText("Goal intent is required.")).toBeTruthy();
+  });
+
+  it("saves Manual mode from prompt and default runtime settings", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AgentLoopForm
+        mode="create"
+        tenantId="tenant-1"
+        workerOptions={workers}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    expect(screen.queryByText("Worker")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Automation prompt"), {
+      target: { value: "Route Linear issues to the right worker." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Automation" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        name: "Route Linear issues to the right worker",
+        triggerSpec: expect.objectContaining({ family: "manual" }),
+        workerSpec: expect.objectContaining({ type: "agent", id: "agent-1" }),
+        sourceMetadata: expect.objectContaining({
+          creationMode: "easy",
+          createdFrom: "settings.automations.easy",
+        }),
+      }),
+    );
   });
 
   it("defaults creation to chat and confirms a builder draft before saving", async () => {
@@ -246,7 +297,7 @@ describe("AgentLoopForm", () => {
     ).toBe("Route Linear issues to the right worker.");
   });
 
-  it("turns the weekly preset into schedule, goal, judge, policy, and evidence specs", async () => {
+  it("opens templates in a side sheet and applies the weekly preset", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     render(
@@ -259,6 +310,7 @@ describe("AgentLoopForm", () => {
       />,
     );
 
+    fireEvent.click(screen.getByLabelText("Open templates"));
     fireEvent.click(
       screen.getByRole("button", { name: /Weekly Agent Check-In/ }),
     );
@@ -291,6 +343,56 @@ describe("AgentLoopForm", () => {
         evidencePolicy: expect.objectContaining({
           redactionState: "summary_only",
         }),
+      }),
+    );
+  });
+
+  it("keeps Advanced settings in an inspector and saves explicit criteria", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <AgentLoopForm
+        mode="create"
+        tenantId="tenant-1"
+        workerOptions={workers}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Completion criteria")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.change(screen.getByLabelText("Goal intent"), {
+      target: { value: "Review failed jobs and summarize the fix path." },
+    });
+    fireEvent.change(screen.getByLabelText("Completion criteria"), {
+      target: { value: "The failure is summarized.\nThe next action is clear." },
+    });
+    fireEvent.change(screen.getByLabelText("Judge criteria"), {
+      target: { value: "The summary is specific." },
+    });
+    fireEvent.change(screen.getByLabelText("Max iterations"), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create Automation" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceMetadata: expect.objectContaining({
+          creationMode: "advanced",
+        }),
+        goalSpec: expect.objectContaining({
+          completionCriteria: [
+            "The failure is summarized.",
+            "The next action is clear.",
+          ],
+        }),
+        judgeSpec: expect.objectContaining({
+          criteria: ["The summary is specific."],
+        }),
+        loopPolicy: expect.objectContaining({ maxIterations: 3 }),
       }),
     );
   });

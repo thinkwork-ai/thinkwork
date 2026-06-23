@@ -159,6 +159,24 @@ status: in_progress
     main` and HTTPS reachability both succeeded, then the U4 branch was pushed
     and PR [#2889](https://github.com/thinkwork-ai/thinkwork/pull/2889) was
     opened for CI.
+  - 2026-06-23: U4 PR
+    [#2889](https://github.com/thinkwork-ai/thinkwork/pull/2889) passed
+    required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was squash
+    merged as `902bad5860bc7ad46ad2c82b4199e3ddd568f4e9`; the remote branch
+    was deleted and the local U4 worktree/branch were removed.
+  - 2026-06-23: U5 started from `origin/main` at `902bad586` in
+    `.Codex/worktrees/thnk-46-u5-easy-advanced`.
+  - 2026-06-23: U5 implementation in progress. Split the Automation form into
+    prompt-first Easy form, Advanced inspector side sheet, and template side
+    sheet while preserving the existing AgentLoop save path.
+  - 2026-06-23: U5 focused verification passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/components/agent-loops/AgentLoopForm.test.tsx src/components/agent-loops/agent-loop-utils.test.ts`,
+    `pnpm --filter @thinkwork/web typecheck`, and `git diff --check`.
+    Broader verification passed: `pnpm --filter @thinkwork/web test`,
+    `pnpm lint`, `pnpm typecheck`, `pnpm test:release`, and
+    `pnpm test:plugin-source-boundary`. Local `pnpm install` completed but
+    logged an optional `canvas` build failure under local Node 25 because
+    `pkg-config` is not installed; web tests and typechecks were unaffected.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
