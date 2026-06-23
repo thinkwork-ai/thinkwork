@@ -14,11 +14,10 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: Unit 3 - Hidden Builder Threads.
-- Current branch: `codex/thnk-46-u3-hidden-builder-threads`.
-- Current worktree: `.Codex/worktrees/thnk-46-u3-hidden-builder-threads`.
-- Current pull request:
-  [#2888](https://github.com/thinkwork-ai/thinkwork/pull/2888).
+- Current unit: Unit 4 - Chat Creation Mode.
+- Current branch: `codex/thnk-46-u4-chat-builder`.
+- Current worktree: `.Codex/worktrees/thnk-46-u4-chat-builder`.
+- Current pull request: Not opened yet.
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
     workflow, and the prompt-first Automations plan.
@@ -90,6 +89,76 @@ status: in_progress
   - 2026-06-23: U3 PR
     [#2888](https://github.com/thinkwork-ai/thinkwork/pull/2888) opened and CI
     monitoring started.
+  - 2026-06-23: U3 PR
+    [#2888](https://github.com/thinkwork-ai/thinkwork/pull/2888) passed
+    required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was squash
+    merged as `c267a45939c435329f0135f7df571f9931d0751d`; the remote branch
+    was deleted and the local U3 worktree/branch were removed.
+  - 2026-06-23: U4 started from `origin/main` at `c267a4593` in
+    `.Codex/worktrees/thnk-46-u4-chat-builder`.
+  - 2026-06-23: U4 implementation in progress. Added
+    `startAutomationBuilder` and `confirmAutomationDraft` GraphQL mutations,
+    seeded hidden builder threads with Automation Loop Designer chat prompts,
+    added confirmation linking through `sourceMetadata.builderThreadId`, made
+    New Automation default to Chat mode, and added the
+    `automation-loop-designer` workspace default skill adapted from
+    `ksimback/looper` with MIT attribution.
+  - 2026-06-23: U4 focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/agent-loops/automation-builder.test.ts src/graphql/resolvers/agent-loops/confirmAutomationDraft.mutation.test.ts src/lib/agent-loops/automation-draft.test.ts`,
+    `pnpm --filter @thinkwork/web exec vitest run src/components/agent-loops/AgentLoopForm.test.tsx src/components/agent-loops/agent-loop-utils.test.ts`,
+    `pnpm --filter @thinkwork/workspace-defaults exec vitest run src/__tests__/automation-loop-designer.test.ts src/__tests__/parity.test.ts`,
+    `pnpm schema:build`, GraphQL codegen for CLI/web/mobile, and typechecks
+    for `@thinkwork/api`, `@thinkwork/web`, `@thinkwork/workspace-defaults`,
+    and `thinkwork-cli`.
+  - 2026-06-23: U4 broader local verification passed: `pnpm lint`,
+    `pnpm typecheck`, `pnpm --filter @thinkwork/api test`,
+    `pnpm --filter @thinkwork/workspace-defaults test`, `pnpm test:release`,
+    `pnpm test:plugin-source-boundary`, and `git diff --check`. The web suite
+    had one local timeout in
+    `src/iframe-shell/__tests__/host-build-define-smoke.test.ts`; the isolated
+    rerun passed. A root `pnpm test` attempt hit a local Electron extraction
+    issue in `apps/desktop`; reinstalling Electron and rerunning
+    `pnpm --filter @thinkwork/desktop test` passed.
+  - 2026-06-23: U4 sequential Compound review pass completed because the
+    available subagent tool disallowed reviewer spawning without explicit
+    delegation. One correctness/security finding was fixed before PR:
+    `confirmAutomationDraft` now verifies the caller is a participant on the
+    hidden builder thread before linking and saving the Automation. Residual
+    actionable work: none.
+  - 2026-06-23: U4 committed locally as `7eff5d1d7` with
+    `feat(automations): add chat builder`. Push/PR is currently blocked by
+    GitHub network connectivity from this session. Attempted commands:
+    `git push -u origin HEAD` over SSH port 22, `GIT_SSH_COMMAND='ssh -o Hostname=ssh.github.com -p 443' git push -u origin HEAD`,
+    `gh auth status`, and
+    `GIT_TERMINAL_PROMPT=0 git push https://github.com/thinkwork-ai/thinkwork.git HEAD:refs/heads/codex/thnk-46-u4-chat-builder`.
+    Failures were port 22 timeout, port 443 SSH timeout, GitHub CLI keyring
+    timeout, and HTTPS port 443 connection timeout. Next recommended action:
+    retry the push when GitHub connectivity is available, then open the U4 PR
+    and monitor required CI.
+  - 2026-06-23: User requested pushing the U4 PR and merging when CI passes.
+    Retried all available local GitHub publication routes from
+    `.Codex/worktrees/thnk-46-u4-chat-builder`: `git push -u origin HEAD`
+    timed out connecting to `github.com` on SSH port 22,
+    `GIT_SSH_COMMAND='ssh -o Hostname=ssh.github.com -p 443' git push -u origin HEAD`
+    timed out connecting to `ssh.github.com` on port 443, and
+    `GIT_TERMINAL_PROMPT=0 git push https://github.com/thinkwork-ai/thinkwork.git HEAD:refs/heads/codex/thnk-46-u4-chat-builder`
+    timed out connecting to `github.com` on HTTPS port 443 after 75 seconds.
+    No GitHub connector tool capable of publishing a local branch is available
+    in this session, so PR creation remains blocked by external GitHub network
+    connectivity.
+  - 2026-06-23: Automatic goal continuation retried the GitHub publication
+    gate. The U4 branch remains clean and ready with local commits
+    `7eff5d1d7 feat(automations): add chat builder` and
+    `fdd878fe2 docs: record chat builder push blocker`. `curl -I --connect-timeout 15 --max-time 25 https://github.com`
+    failed with `curl: (28) Failed to connect to github.com port 443 after
+    15005 ms: Timeout was reached`, and `git ls-remote --heads origin main`
+    failed with `ssh: connect to host github.com port 22: Operation timed out`.
+    The next required action is still to publish this branch, open the U4 PR,
+    wait for required CI, merge, clean up, sync `main`, and then continue U5.
+  - 2026-06-23: GitHub connectivity recovered. `git ls-remote --heads origin
+    main` and HTTPS reachability both succeeded, then the U4 branch was pushed
+    and PR [#2889](https://github.com/thinkwork-ai/thinkwork/pull/2889) was
+    opened for CI.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 

@@ -12,7 +12,8 @@
  *   USER.md, SPACE.md, AGENTS.md, CONTEXT.md, GUARDRAILS.md,
  *   MEMORY_GUIDE.md, ROUTER.md,
  *   memory/lessons.md, memory/preferences.md, memory/contacts.md,
- *   skills/.gitkeep, skills/artifact-builder/SKILL.md,
+ *   skills/.gitkeep, skills/automation-loop-designer/SKILL.md,
+ *   skills/artifact-builder/SKILL.md,
  *   skills/artifact-builder/references/crm-dashboard.md
  *
  * Content is inlined as TypeScript constants so the Lambda bundle doesn't
@@ -692,6 +693,12 @@ _(empty — add entries as you encounter them)_
 `;
 
 /**
+ * Mirror of `packages/workspace-defaults/files/skills/automation-loop-designer/SKILL.md`.
+ */
+const AUTOMATION_LOOP_DESIGNER_SKILL_MD =
+  '---\nname: automation-loop-designer\ndescription: Design a ThinkWork Automation from a prompt by interviewing for goal, Space, trigger, verification, judge settings, stop guards, and privacy boundaries, then emit a reviewable AutomationDraft.\nlicense: MIT\nmetadata:\n  adaptedFrom: https://github.com/ksimback/looper\n  adaptedFromLicense: MIT\n  adaptedFromAuthor: Kevin Simback\n---\n\n# Automation Loop Designer\n\nUse this skill when a user wants to create, improve, or review a ThinkWork\nAutomation. The output is a reviewable `AutomationDraft` for ThinkWork\'s durable\nAutomation runtime. Do not emit a Looper Python runner, Claude slash command,\nor file-scaffolded external loop unless the user explicitly asks for a separate\nportable design artifact.\n\nThis skill adapts design-coaching ideas from Kevin Simback\'s Looper\n(`https://github.com/ksimback/looper`, MIT license): coached goals, typed\nverification, review gates, stop guards, state/logging visibility, and explicit\nprivacy boundaries. ThinkWork remains the orchestrator.\n\n## Interview Flow\n\nAsk only the questions needed to make the draft reviewable. Prefer one compact\nquestion at a time when the user\'s intent is unclear.\n\n1. Goal: what outcome should exist after each run?\n2. Space: where should the execution thread live?\n3. Trigger: manual, schedule, API, webhook, app event, or future workflow.\n4. Verification: what evidence proves the run is good enough?\n5. Judge: self-check, human approval, model judge, reviewer agent, eval\n   threshold, or external callback.\n6. Control: max iterations, runtime/token/budget caps, no-progress stops, and\n   failure behavior.\n7. Privacy: which external systems or humans may see the prompt, evidence, or\n   review context.\n\n## Design Rules\n\n- Treat the user\'s prompt as the Automation\'s main artifact. Do not bury it\n  behind internal AgentLoop jargon.\n- If a crisp done state exists, write concrete `goal.completionCriteria` and\n  matching `judge.criteria`.\n- If the goal is useful but not yet crisply checkable, set\n  `source.goalInference` to `runtime_inferred` and include a plain-language\n  note about what should be clarified later.\n- Prefer programmatic checks when the Automation naturally has measurable\n  outputs. Use judge or human checks for qualitative work.\n- Keep reviewer and judge roles distinct. A reviewer gives notes; a judge\n  returns a verdict.\n- Require at least two stop guards for recurring work: an iteration/runtime cap\n  and a no-progress or budget stop.\n- Name the execution boundary. For ThinkWork v1 this is usually one selected\n  Space plus a first-class thread created by the Automation run.\n- Do not ask the user to select a worker agent in v1. Use the main ThinkWork\n  Agent unless an operator is in Advanced mode.\n\n## AutomationDraft Shape\n\nReturn a JSON object with this shape when the user is ready to review:\n\n```json\n{\n  "name": "Readable Automation name",\n  "prompt": "The instruction the Automation will run",\n  "space": {\n    "id": "selected-space-id-or-null",\n    "name": "selected Space name or requested Space"\n  },\n  "trigger": {\n    "family": "manual",\n    "scheduleExpression": null,\n    "timezone": "UTC"\n  },\n  "goal": {\n    "objective": "Normalized objective",\n    "completionCriteria": ["Concrete criterion, if known"]\n  },\n  "judge": {\n    "mode": "self_check",\n    "criteria": ["Criterion the judge can inspect"]\n  },\n  "policy": {\n    "maxIterations": 1,\n    "maxRuntimeMinutes": 30,\n    "maxTokens": 100000,\n    "failBehavior": "return_blocker"\n  },\n  "source": {\n    "creationMode": "chat",\n    "goalInference": "explicit",\n    "designerSkill": "automation-loop-designer"\n  }\n}\n```\n\nIf the draft uses runtime-inferred criteria, keep the Automation valid by\nincluding a fallback completion criterion in the review summary:\n\n```text\nThe agent produces a useful response or next step for the automation prompt.\n```\n\n## Review Summary\n\nBefore the Automation is saved, summarize:\n\n- Prompt\n- Space\n- Trigger\n- Done condition or runtime-inferred fallback\n- Judge mode\n- Stop guards\n- Privacy or external context notes\n\nAsk for explicit confirmation before save. After confirmation, the host system\nwill persist the draft through ThinkWork\'s Automation save path and link this\nbuilder thread as setup history.\n';
+
+/**
  * Mirror of `packages/workspace-defaults/files/skills/artifact-builder/SKILL.md`.
  */
 const ARTIFACT_BUILDER_SKILL_MD = `---
@@ -1178,7 +1185,7 @@ selected model is approved for the user before a routed tool call runs.
  *     `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 25;
+export const DEFAULTS_VERSION = 26;
 
 // ---------------------------------------------------------------------------
 // Aggregator
@@ -1205,6 +1212,7 @@ export const CANONICAL_FILE_NAMES = [
   "memory/preferences.md",
   "memory/contacts.md",
   "skills/.gitkeep",
+  "skills/automation-loop-designer/SKILL.md",
   "skills/artifact-builder/SKILL.md",
   "skills/artifact-builder/references/crm-dashboard.md",
   "skills/skill-creator/agents/analyzer.md",
@@ -1243,6 +1251,7 @@ const CONTENT: Record<CanonicalFileName, string> = {
   "memory/preferences.md": MEMORY_PREFERENCES_MD,
   "memory/contacts.md": MEMORY_CONTACTS_MD,
   "skills/.gitkeep": "\n",
+  "skills/automation-loop-designer/SKILL.md": AUTOMATION_LOOP_DESIGNER_SKILL_MD,
   "skills/artifact-builder/SKILL.md": ARTIFACT_BUILDER_SKILL_MD,
   "skills/artifact-builder/references/crm-dashboard.md":
     ARTIFACT_BUILDER_CRM_DASHBOARD_MD,

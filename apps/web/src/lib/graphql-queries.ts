@@ -742,6 +742,55 @@ export const SettingsSaveAgentLoopMutation = gql`
   }
 `;
 
+export const SettingsStartAutomationBuilderMutation = gql`
+  mutation SettingsStartAutomationBuilder(
+    $input: StartAutomationBuilderInput!
+  ) {
+    startAutomationBuilder(input: $input) {
+      threadCreated
+      setupPrompt
+      draft
+      thread {
+        id
+        title
+        status
+        channel
+        createdAt
+      }
+    }
+  }
+`;
+
+export const SettingsConfirmAutomationDraftMutation = gql`
+  mutation SettingsConfirmAutomationDraft(
+    $input: ConfirmAutomationDraftInput!
+  ) {
+    confirmAutomationDraft(input: $input) {
+      id
+      tenantId
+      name
+      slug
+      description
+      lifecycleStatus
+      enabled
+      primaryTriggerFamily
+      currentVersionNumber
+      currentVersion {
+        id
+        versionNumber
+        triggerSpec
+        goalSpec
+        workerSpec
+        judgeSpec
+        loopPolicy
+        evidencePolicy
+        sourceMetadata
+      }
+      updatedAt
+    }
+  }
+`;
+
 export const SettingsDeleteAgentLoopMutation = gql`
   mutation SettingsDeleteAgentLoop($id: ID!) {
     deleteAgentLoop(id: $id) {

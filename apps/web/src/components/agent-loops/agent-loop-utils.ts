@@ -88,7 +88,7 @@ export function defaultAgentLoopDraft(
   workerOptions: AgentLoopWorkerOption[],
 ): AgentLoopDraft {
   return {
-    creationMode: "advanced",
+    creationMode: "chat",
     name: "",
     description: "",
     lifecycleStatus: "active",
@@ -274,6 +274,12 @@ export function draftToPayload(input: {
       suitabilityGoalStable: input.draft.suitabilityGoalStable,
       suitabilityEvidenceAvailable: input.draft.suitabilityEvidenceAvailable,
       suitabilityBudgeted: input.draft.suitabilityBudgeted,
+      ...(input.draft.builderThreadId
+        ? { builderThreadId: input.draft.builderThreadId }
+        : {}),
+      ...(input.draft.builderSetupPrompt
+        ? { builderSetupPrompt: input.draft.builderSetupPrompt }
+        : {}),
     },
   };
 }

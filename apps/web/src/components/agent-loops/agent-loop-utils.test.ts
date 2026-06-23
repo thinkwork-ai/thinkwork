@@ -14,6 +14,7 @@ describe("agent-loop-utils", () => {
   it("keeps advanced drafts strict about explicit completion criteria", () => {
     const draft = {
       ...defaultAgentLoopDraft(workers),
+      creationMode: "advanced" as const,
       name: "Advanced loop",
       objective: "Review escalations",
       completionCriteriaText: "",

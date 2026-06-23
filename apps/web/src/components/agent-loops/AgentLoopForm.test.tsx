@@ -151,6 +151,101 @@ describe("AgentLoopForm", () => {
     expect(screen.getByText("Goal intent is required.")).toBeTruthy();
   });
 
+  it("defaults creation to chat and confirms a builder draft before saving", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onConfirmBuilderDraft = vi.fn().mockResolvedValue(undefined);
+    const onStartBuilder = vi.fn().mockResolvedValue({
+      threadCreated: true,
+      setupPrompt: "Builder questions",
+      draft: {
+        creationMode: "chat",
+        name: "Linear routing automation",
+        objective: "Route Linear issues to the right worker.",
+        triggerFamily: "manual",
+        scheduleType: "rate",
+        scheduleExpression: "rate(7 days)",
+        timezone: "UTC",
+        maxIterations: "1",
+        maxRuntimeMinutes: "30",
+        maxTokens: "100000",
+        retryBackoffMinutes: "5",
+        retentionDays: "30",
+        builderThreadId: "thread-1",
+      },
+      thread: { id: "thread-1", title: "Automation setup" },
+    });
+
+    render(
+      <AgentLoopForm
+        mode="create"
+        tenantId="tenant-1"
+        workerOptions={workers}
+        onSubmit={onSubmit}
+        onStartBuilder={onStartBuilder}
+        onConfirmBuilderDraft={onConfirmBuilderDraft}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Chat" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+
+    fireEvent.change(screen.getByLabelText("Automation prompt"), {
+      target: { value: "Route Linear issues to the right worker." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start chat builder" }));
+
+    await waitFor(() => expect(onStartBuilder).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Open setup thread")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Automation" }));
+
+    await waitFor(() => expect(onConfirmBuilderDraft).toHaveBeenCalledTimes(1));
+    expect(onConfirmBuilderDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        name: "Linear routing automation",
+        sourceMetadata: expect.objectContaining({
+          creationMode: "chat",
+          builderThreadId: "thread-1",
+        }),
+      }),
+      "thread-1",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps the entered prompt when the builder returns an incomplete draft", async () => {
+    const onStartBuilder = vi.fn().mockResolvedValue({
+      threadCreated: true,
+      setupPrompt: "Builder questions",
+      draft: {},
+      thread: { id: "thread-1", title: "Automation setup" },
+    });
+
+    render(
+      <AgentLoopForm
+        mode="create"
+        tenantId="tenant-1"
+        workerOptions={workers}
+        onSubmit={vi.fn()}
+        onStartBuilder={onStartBuilder}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Automation prompt"), {
+      target: { value: "Route Linear issues to the right worker." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start chat builder" }));
+
+    await waitFor(() => expect(onStartBuilder).toHaveBeenCalledTimes(1));
+    expect(
+      (screen.getByLabelText("Automation prompt") as HTMLTextAreaElement).value,
+    ).toBe("Route Linear issues to the right worker.");
+  });
+
   it("turns the weekly preset into schedule, goal, judge, policy, and evidence specs", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 

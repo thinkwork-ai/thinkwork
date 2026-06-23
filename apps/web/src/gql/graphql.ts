@@ -892,6 +892,14 @@ export type AuthProviderResource = {
   validationStatus: Scalars['String']['output'];
 };
 
+export type AutomationBuilderSession = {
+  __typename?: 'AutomationBuilderSession';
+  draft: Scalars['AWSJSON']['output'];
+  setupPrompt: Scalars['String']['output'];
+  thread: Thread;
+  threadCreated: Scalars['Boolean']['output'];
+};
+
 export type BedrockModelImportCandidate = {
   __typename?: 'BedrockModelImportCandidate';
   alreadyImported: Scalars['Boolean']['output'];
@@ -1223,6 +1231,11 @@ export type ConfigureEmailProviderInput = {
   providerInstallId?: InputMaybe<Scalars['ID']['input']>;
   status?: InputMaybe<EmailProviderInstallStatus>;
   webhookSecretRef?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type ConfirmAutomationDraftInput = {
+  builderThreadId: Scalars['ID']['input'];
+  input: SaveAgentLoopInput;
 };
 
 export type ConnectN8nWorkflowInput = {
@@ -3237,6 +3250,7 @@ export type Mutation = {
    */
   compileWikiNow: WikiCompileJob;
   configureEmailProvider: EmailProviderInstall;
+  confirmAutomationDraft: AgentLoop;
   connectN8nWorkflow: ConnectN8nWorkflowResult;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
@@ -3438,6 +3452,7 @@ export type Mutation = {
   setSpaceTools: Space;
   setTenantMemberPassword: SetTenantMemberPasswordResult;
   setUserModelApproval: Array<UserModelCatalogEntry>;
+  startAutomationBuilder: AutomationBuilderSession;
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startDeploymentReleaseUpdate: ReleaseUpdateJob;
   startEvalRun: EvalRun;
@@ -3715,6 +3730,11 @@ export type MutationCompileWikiNowArgs = {
 
 export type MutationConfigureEmailProviderArgs = {
   input: ConfigureEmailProviderInput;
+};
+
+
+export type MutationConfirmAutomationDraftArgs = {
+  input: ConfirmAutomationDraftInput;
 };
 
 
@@ -4508,6 +4528,11 @@ export type MutationSetUserModelApprovalArgs = {
   approved: Scalars['Boolean']['input'];
   modelId: Scalars['String']['input'];
   userId: Scalars['ID']['input'];
+};
+
+
+export type MutationStartAutomationBuilderArgs = {
+  input: StartAutomationBuilderInput;
 };
 
 
@@ -7976,6 +8001,13 @@ export type SpaceTenantMcpServer = {
   tools?: Maybe<Scalars['AWSJSON']['output']>;
   transport: Scalars['String']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type StartAutomationBuilderInput = {
+  builderThreadId?: InputMaybe<Scalars['ID']['input']>;
+  prompt?: InputMaybe<Scalars['String']['input']>;
+  tenantId: Scalars['ID']['input'];
+  title?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type StartCustomerOnboardingInput = {

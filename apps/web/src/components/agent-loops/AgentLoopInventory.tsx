@@ -14,7 +14,9 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsAgentLoopsQuery,
+  SettingsConfirmAutomationDraftMutation,
   SettingsSaveAgentLoopMutation,
+  SettingsStartAutomationBuilderMutation,
 } from "@/lib/graphql-queries";
 import {
   SettingsAgentProfilesQuery,
@@ -77,6 +79,12 @@ export function AgentLoopInventory() {
     pause: !tenantId,
   });
   const [, saveAgentLoop] = useMutation(SettingsSaveAgentLoopMutation);
+  const [, startAutomationBuilder] = useMutation(
+    SettingsStartAutomationBuilderMutation,
+  );
+  const [, confirmAutomationDraft] = useMutation(
+    SettingsConfirmAutomationDraftMutation,
+  );
 
   const workerOptions = useMemo(
     () =>
@@ -192,6 +200,48 @@ export function AgentLoopInventory() {
     }
   }
 
+  async function startBuilder(input: {
+    tenantId: string;
+    title?: string | null;
+    prompt?: string | null;
+    builderThreadId?: string | null;
+  }) {
+    const result = await startAutomationBuilder({ input });
+    if (result.error) throw result.error;
+    const session = (result.data as { startAutomationBuilder?: unknown })
+      .startAutomationBuilder as
+      | {
+          threadCreated: boolean;
+          setupPrompt: string;
+          draft: unknown;
+          thread: { id: string; title?: string | null };
+        }
+      | undefined;
+    if (!session) throw new Error("Automation builder did not start");
+    return session;
+  }
+
+  async function confirmBuilderDraft(
+    payload: SaveAgentLoopPayload,
+    builderThreadId: string,
+  ) {
+    const result = await confirmAutomationDraft({
+      input: { builderThreadId, input: payload },
+    });
+    if (result.error) throw result.error;
+    const id = (result.data as { confirmAutomationDraft?: { id?: string } })
+      ?.confirmAutomationDraft?.id;
+    toast.success("Automation created");
+    setCreating(false);
+    refetchLoops({ requestPolicy: "network-only" });
+    if (id) {
+      navigate({
+        to: "/settings/agent-loops/$agentLoopId",
+        params: { agentLoopId: id },
+      });
+    }
+  }
+
   if (creating) {
     if (!tenantId || (agentResult.fetching && workerOptions.length === 0)) {
       return (
@@ -209,6 +259,8 @@ export function AgentLoopInventory() {
           tenantId={tenantId}
           workerOptions={workerOptions}
           onSubmit={createLoop}
+          onStartBuilder={startBuilder}
+          onConfirmBuilderDraft={confirmBuilderDraft}
           onCancel={() => setCreating(false)}
         />
       </SettingsPane>
