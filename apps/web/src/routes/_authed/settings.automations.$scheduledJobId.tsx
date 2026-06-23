@@ -16,8 +16,8 @@ function SettingsAutomationDetailPage() {
     <OperatorGuard>
       <ScheduledJobDetail
         scheduledJobId={scheduledJobId}
-        backHref="/settings/agent-loops"
-        onDeleted={() => navigate({ to: "/settings/agent-loops" })}
+        backHref="/settings/automations"
+        onDeleted={() => navigate({ to: "/settings/automations" })}
       />
     </OperatorGuard>
   );

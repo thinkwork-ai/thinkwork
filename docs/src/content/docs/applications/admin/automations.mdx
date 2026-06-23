@@ -1,13 +1,14 @@
 ---
-title: Admin — AgentLoops and Schedule Plumbing
-description: AgentLoops are the v1 automation product surface. Scheduled jobs, webhooks, and Workflow triggers remain internal and compatibility plumbing behind the operator UI.
+title: Admin — Automations and Schedule Plumbing
+description: Automations are the v1 product surface for recurring or manually rerunnable agent work. AgentLoop remains the internal runtime and ledger behind the operator UI.
 ---
 
-AgentLoops are the admin app's v1 surface for recurring or manually rerunnable
-autonomous work. They own the trigger, goal, worker, judge, policy, run ledger,
-and evidence. The older Automations noun is now compatibility language for
-plumbing such as `scheduled_jobs`, AWS Scheduler, EventBridge, and webhook
-ingress.
+Automations are the admin app's v1 surface for recurring or manually
+rerunnable autonomous work. They own the prompt, Space, trigger, run history,
+and evidence that operators inspect. Internally, the AgentLoop runtime keeps
+the durable trigger, goal, worker, judge, policy, run ledger, and evidence
+contract. Schedule plumbing such as `scheduled_jobs`, AWS Scheduler,
+EventBridge, and webhook ingress remains behind the product surface.
 
 Active multi-step work appears in **Settings -> Workflows**. Step
 Functions-backed workflows still use the Routine adapter internally, so old
@@ -20,24 +21,24 @@ The current operator placement is:
 
 ```
 Settings
-├── AgentLoops             ← /settings/agent-loops
+├── Automations            ← /settings/automations
 ├── Workflows              ← /settings/workflows
 └── Webhooks               ← webhook endpoints
 ```
 
-The previous Settings Automations list redirects to `/settings/agent-loops`.
-Old `/automations` shell routes redirect into AgentLoops or the scheduled-job
-compatibility detail. Old Routine detail and execution URLs remain compatibility
-routes that either redirect to the matching Workflow detail/run or render the
-Step Functions adapter detail as a fallback.
+The previous Settings AgentLoop list redirects to `/settings/automations`.
+Old `/automations` shell routes redirect into the Automations list or the
+scheduled-job compatibility detail. Old Routine detail and execution URLs
+remain compatibility routes that either redirect to the matching Workflow
+detail/run or render the Step Functions adapter detail as a fallback.
 
-## AgentLoops
+## Automations
 
-**Inventory route:** `/settings/agent-loops`
+**Inventory route:** `/settings/automations`
 **Detail route:** `/settings/agent-loops/:agentLoopId`
 **Run-detail route:** `/settings/agent-loops/:agentLoopId/runs/:runId`
 
-An AgentLoop should be used when:
+An Automation should be used when:
 
 - the work repeats or needs a durable "run now" button;
 - completion can be judged by criteria, a self-check, or a human escalation;
@@ -45,9 +46,10 @@ An AgentLoop should be used when:
 - operators need evidence explaining completion, continuation, failure, budget
   stop, or escalation.
 
-Phase 1 AgentLoops support manual and scheduled triggers, worker goal-mode
-dispatch, self-check/human-approval judgment policy, and a run inspector.
-Model/reviewer judges and event-driven triggers remain later phases.
+Phase 1 Automations support manual and scheduled triggers, worker goal-mode
+dispatch, self-check/human-approval judgment policy, and a run inspector backed
+by AgentLoop internals. Model/reviewer judges and event-driven triggers remain
+later phases.
 
 ## Workflows
 
@@ -90,7 +92,7 @@ The page polls every 5s while non-terminal. Subscription wiring (AppSync `OnRout
 ## Scheduled-Job Compatibility
 
 **Compatibility detail:** `/settings/automations/:scheduledJobId`
-**Retired shell:** `/automations` redirects to `/settings/agent-loops`
+**Retired shell:** `/automations` redirects to `/settings/automations`
 **Retired shell detail:** `/automations/:scheduledJobId` redirects to the
 Settings compatibility detail
 
@@ -101,7 +103,7 @@ and Workflow triggers. The EventBridge -> `job-schedule-manager` ->
 
 Operators should start by inspecting the owning product run:
 
-- AgentLoop schedule fired? Open the AgentLoopRun inspector.
+- Automation schedule fired? Open the Automation run inspector.
 - Workflow schedule fired? Open the Workflow run detail.
 - No product run exists? Then inspect `scheduled_jobs`, AWS Scheduler, and
   `job-trigger` logs.
@@ -115,13 +117,13 @@ The webhook surface behavior is unchanged: webhook tokens, target_type (agent |
 workflow, with `routine` as the compatibility storage value for Step
 Functions-backed workflow targets), enabled toggle, invocation history.
 Workflow-target webhooks create Workflow run evidence when they invoke
-multi-step work. Event-driven AgentLoops are a later phase; webhooks may trigger
-them later, but ThinkWork should still own AgentLoop state, judgment, and
-evidence.
+multi-step work. Event-driven Automations are a later phase; webhooks may
+trigger them later, but ThinkWork should still own AgentLoop state, judgment,
+and evidence behind the product surface.
 
 ## What does _not_ live here
 
-- **Workspace HITL reviews** — system-agent workspace reviews surface in [Inbox](/applications/admin/inbox/), not AgentLoops or schedule plumbing. Workflow-driven HITL approvals (the `inbox_approval` recipe) also surface in Inbox; deciding an inbox item with `type = 'routine_approval'` resumes the paused Step Functions execution.
+- **Workspace HITL reviews** — system-agent workspace reviews surface in [Inbox](/applications/admin/inbox/), not Automations or schedule plumbing. Workflow-driven HITL approvals (the `inbox_approval` recipe) also surface in Inbox; deciding an inbox item with `type = 'routine_approval'` resumes the paused Step Functions execution.
 - **Per-thread agent invocations** — those live in [Threads](/applications/admin/threads/). Multi-step workflows are distinct: a Workflow run has its own ledger and, for Step Functions-backed workflows, adapter evidence in `routine_executions` rather than a `thread_turns` row.
 - **Per-user OAuth or integration credentials** — those live in the mobile app. Admin owns tenant-wide infra and config; users own their own integration auth on mobile.
 - **Legacy Python routines** — `engine = 'legacy_python'` rows are archived during the compatibility migration and excluded from active Workflow inventory. They're not deleted (status flips to `archived`); they stop being actionable from this UI.
@@ -129,10 +131,10 @@ evidence.
 ## Rollout Notes
 
 - Apply the AgentLoop database migration before deploying API/web code that
-  expects AgentLoop tables.
+  expects the Automation backing tables.
 - Keep `/api/scheduled-jobs` and `/api/job-schedules` routes deployed; internal
   jobs and compatibility details still use them.
-- Do not introduce new REST routes for AgentLoops unless GraphQL is
+- Do not introduce new REST routes for Automations unless GraphQL is
   insufficient.
 - If a tenant has user-created scheduled jobs from the retired Automations shell,
   preserve their detail URLs until they are migrated to AgentLoop definitions or
@@ -142,7 +144,7 @@ evidence.
 
 - Workflows: first-class `workflows`, `workflow_versions`, `workflow_triggers`, `workflow_engine_bindings`, `workflow_runs`, `workflow_run_events`, and `workflow_evidence` rows form the product control plane and run ledger.
 - Step Functions adapter: `routines` stores the adapter record; `routine_asl_versions` is the ASL version history; `routine_executions` records each SFN execution; `routine_step_events` is the per-step event log. EventBridge bridges SFN execution-state-change events into `routine-execution-callback` so the adapter execution row tracks lifecycle even for `agent_invoke`-only workflows that have no wrapper Lambda.
-- AgentLoops: `agent_loops`, `agent_loop_versions`, `agent_loop_runs`,
+- Automations: `agent_loops`, `agent_loop_versions`, `agent_loop_runs`,
   iterations, judgments, and evidence tables own autonomous loop identity.
 - Schedules: `scheduled_jobs` table; `job-schedule-manager` reconciles to AWS
   Scheduler; `job-trigger` fires the owning AgentLoop, Workflow, eval, skill,
@@ -157,5 +159,5 @@ User-initiated create and update Lambda invokes use `RequestResponse` so errors 
 
 - [Inbox](/applications/admin/inbox/) — the operator queue for human-in-the-loop decisions, including workflow `inbox_approval` waits.
 - [Threads](/applications/admin/threads/) — the conversation surface for agent runs that aren't workflow-driven.
-- [AgentLoops](/concepts/automations/) — the v1 automation product object.
-- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — how schedule and event plumbing reaches AgentLoops and Workflows.
+- [Automations](/concepts/automations/) — the v1 automation product object.
+- [Scheduled and Event-driven](/concepts/automations/scheduled-and-event-driven/) — how schedule and event plumbing reaches Automations and Workflows.

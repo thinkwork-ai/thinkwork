@@ -6,6 +6,43 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
+
+- Plan:
+  `docs/plans/2026-06-23-001-feat-prompt-first-automations-plan.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit unless tightly coupled.
+- Status: In progress.
+- Current unit: Unit 1 - Product Language and Route Compatibility.
+- Current branch: `codex/thnk-46-u1-automation-language`.
+- Current worktree: `.Codex/worktrees/thnk-46-u1-automation-language`.
+- Current pull request:
+  [#2886](https://github.com/thinkwork-ai/thinkwork/pull/2886).
+- Progress:
+  - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
+    workflow, and the prompt-first Automations plan.
+  - 2026-06-23: Main checkout is dirty and behind `origin/main`; preserving
+    existing changes and using isolated worktrees from `origin/main` for
+    implementation units.
+  - 2026-06-23: Linear THNK-46 updated with autopilot start comment.
+  - 2026-06-23: U1 started from `origin/main` at `4f37273c6` in
+    `.Codex/worktrees/thnk-46-u1-automation-language`.
+  - 2026-06-23: U1 implementation made `/settings/automations` the preferred
+    Automations list route, kept `/settings/agent-loops` as a compatibility
+    redirect, updated Settings navigation/breadcrumbs/back-links, removed
+    advanced substrate copy from the inventory hero, and updated docs/solution
+    taxonomy to teach Automations as the product noun backed by AgentLoop
+    internals.
+  - 2026-06-23: U1 focused verification passed:
+    `pnpm --filter @thinkwork/web exec vitest run src/routes/_authed/-settings.agent-loop-routing.test.tsx src/routes/_authed/_shell/-automations.$scheduledJobId.test.tsx src/components/settings/settings-nav.test.ts src/components/agent-loops/AgentLoopInventory.test.tsx`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/docs build`, touched-file Prettier check, and
+    `git diff --check`.
+  - 2026-06-23: U1 PR
+    [#2886](https://github.com/thinkwork-ai/thinkwork/pull/2886) opened and CI
+    monitoring started.
+
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
 - Plan: `docs/plans/2026-06-22-001-feat-skill-trust-evidence-fixes-plan.md`.

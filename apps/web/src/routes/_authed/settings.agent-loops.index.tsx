@@ -1,15 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { AgentLoopInventory } from "@/components/agent-loops/AgentLoopInventory";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authed/settings/agent-loops/")({
-  component: AgentLoopsRoute,
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/automations" });
+  },
 });
-
-function AgentLoopsRoute() {
-  return (
-    <OperatorGuard>
-      <AgentLoopInventory />
-    </OperatorGuard>
-  );
-}
