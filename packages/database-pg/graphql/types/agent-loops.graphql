@@ -244,6 +244,25 @@ input TriggerAgentLoopRunInput {
   inputSummary: AWSJSON
 }
 
+input StartAutomationBuilderInput {
+  tenantId: ID!
+  builderThreadId: ID
+  title: String
+  prompt: String
+}
+
+type AutomationBuilderSession {
+  thread: Thread!
+  threadCreated: Boolean!
+  setupPrompt: String!
+  draft: AWSJSON!
+}
+
+input ConfirmAutomationDraftInput {
+  builderThreadId: ID!
+  input: SaveAgentLoopInput!
+}
+
 extend type Query {
   agentLoops(
     tenantId: ID!
@@ -258,6 +277,10 @@ extend type Query {
 
 extend type Mutation {
   saveAgentLoop(input: SaveAgentLoopInput!): AgentLoop!
+  startAutomationBuilder(
+    input: StartAutomationBuilderInput!
+  ): AutomationBuilderSession!
+  confirmAutomationDraft(input: ConfirmAutomationDraftInput!): AgentLoop!
   deleteAgentLoop(id: ID!): DeleteAgentLoopResult!
   triggerAgentLoopRun(input: TriggerAgentLoopRunInput!): AgentLoopRun!
 }

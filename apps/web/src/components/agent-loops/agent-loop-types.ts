@@ -240,6 +240,9 @@ export interface AgentLoopDraft {
   suitabilityGoalStable: boolean;
   suitabilityEvidenceAvailable: boolean;
   suitabilityBudgeted: boolean;
+  builderThreadId?: string | null;
+  builderThreadTitle?: string | null;
+  builderSetupPrompt?: string | null;
 }
 
 export interface SaveAgentLoopPayload {
