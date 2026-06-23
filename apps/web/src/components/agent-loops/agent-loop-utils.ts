@@ -249,7 +249,7 @@ export function draftToPayload(input: {
   return {
     id: input.id,
     tenantId: input.tenantId,
-    name: input.draft.name.trim(),
+    name: displayNameFromDraft(input.draft),
     description: input.draft.description.trim() || null,
     lifecycleStatus: input.draft.lifecycleStatus,
     enabled: input.draft.enabled && input.draft.lifecycleStatus === "active",
@@ -285,7 +285,13 @@ export function draftToPayload(input: {
 }
 
 export function validateDraft(draft: AgentLoopDraft): string | null {
-  if (!draft.name.trim()) return "Name is required.";
+  if (
+    draft.creationMode === "advanced" &&
+    !draft.name.trim() &&
+    !draft.objective.trim()
+  ) {
+    return "Name is required.";
+  }
   if (!draft.objective.trim()) return "Goal intent is required.";
   if (
     draft.creationMode === "advanced" &&
@@ -370,4 +376,17 @@ function optionalMinutesMs(value: string): number | undefined {
 
 function isPositiveInt(value: string): boolean {
   return optionalPositiveInt(value) != null;
+}
+
+function displayNameFromDraft(draft: AgentLoopDraft): string {
+  const explicitName = draft.name.trim();
+  if (explicitName) return explicitName;
+  const inferredName = draft.objective
+    .split(/\r?\n/)[0]
+    ?.split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8)
+    .join(" ")
+    .replace(/[.?!,:;]+$/g, "");
+  return inferredName || "Untitled Automation";
 }

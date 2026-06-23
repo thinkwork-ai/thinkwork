@@ -56,4 +56,20 @@ describe("agent-loop-utils", () => {
       },
     });
   });
+
+  it("derives an Automation name from prompt-first drafts without an explicit name", () => {
+    const draft = {
+      ...defaultAgentLoopDraft(workers),
+      creationMode: "easy" as const,
+      name: "",
+      objective: "Route Linear issues to the right worker.",
+    };
+
+    expect(validateDraft(draft)).toBeNull();
+    expect(
+      draftToPayload({ draft, tenantId: "tenant-1", workerOptions: workers }),
+    ).toMatchObject({
+      name: "Route Linear issues to the right worker",
+    });
+  });
 });
