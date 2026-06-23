@@ -125,7 +125,7 @@ status: in_progress
     `confirmAutomationDraft` now verifies the caller is a participant on the
     hidden builder thread before linking and saving the Automation. Residual
     actionable work: none.
-  - 2026-06-23: U4 committed locally as `c61bbfb6c` with
+  - 2026-06-23: U4 committed locally as `7eff5d1d7` with
     `feat(automations): add chat builder`. Push/PR is currently blocked by
     GitHub network connectivity from this session. Attempted commands:
     `git push -u origin HEAD` over SSH port 22, `GIT_SSH_COMMAND='ssh -o Hostname=ssh.github.com -p 443' git push -u origin HEAD`,
@@ -135,6 +135,17 @@ status: in_progress
     timeout, and HTTPS port 443 connection timeout. Next recommended action:
     retry the push when GitHub connectivity is available, then open the U4 PR
     and monitor required CI.
+  - 2026-06-23: User requested pushing the U4 PR and merging when CI passes.
+    Retried all available local GitHub publication routes from
+    `.Codex/worktrees/thnk-46-u4-chat-builder`: `git push -u origin HEAD`
+    timed out connecting to `github.com` on SSH port 22,
+    `GIT_SSH_COMMAND='ssh -o Hostname=ssh.github.com -p 443' git push -u origin HEAD`
+    timed out connecting to `ssh.github.com` on port 443, and
+    `GIT_TERMINAL_PROMPT=0 git push https://github.com/thinkwork-ai/thinkwork.git HEAD:refs/heads/codex/thnk-46-u4-chat-builder`
+    timed out connecting to `github.com` on HTTPS port 443 after 75 seconds.
+    No GitHub connector tool capable of publishing a local branch is available
+    in this session, so PR creation remains blocked by external GitHub network
+    connectivity.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
