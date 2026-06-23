@@ -63,6 +63,13 @@ status: in_progress
   - 2026-06-23: U2 PR
     [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887) opened and CI
     monitoring started.
+  - 2026-06-23: User identified
+    [`ksimback/looper`](https://github.com/ksimback/looper) as a likely loop
+    skill to pull into the Skill Library. Reviewed the repo at a high level:
+    MIT license, design-coach/rubric focus, and explicit scaffolder-not-runtime
+    boundary. Updated the prompt-first Automations plan so Unit 4 seeds a
+    ThinkWork-native Automation Loop Designer skill, adapted from Looper with
+    attribution, as the Chat-mode draft builder.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 
