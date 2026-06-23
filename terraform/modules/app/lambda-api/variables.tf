@@ -290,6 +290,12 @@ variable "okf_efs_security_group_ids" {
   default     = []
 }
 
+variable "okf_efs_mount_target_ids" {
+  description = "EFS mount target IDs that must exist before creating the OKF EFS hydrator Lambda."
+  type        = list(string)
+  default     = []
+}
+
 variable "okf_efs_file_system_arn" {
   description = "EFS file system ARN for the OKF wiki current view. Empty disables EFS IAM grants."
   type        = string

@@ -1301,6 +1301,7 @@ module "api" {
   cognee_worker_security_group_ids              = local.cognee_enabled ? [aws_security_group.cognee_worker[0].id] : []
   okf_efs_subnet_ids                            = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
   okf_efs_security_group_ids                    = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
+  okf_efs_mount_target_ids                      = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
   okf_efs_file_system_arn                       = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
   okf_efs_refresh_access_point_arn              = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
   twenty_provisioned                            = local.twenty_provisioned
