@@ -83,6 +83,7 @@ type AgentLoop {
   enabled: Boolean!
   ownerUserId: ID
   ownerAgentId: ID
+  spaceId: ID
   primaryTriggerFamily: AgentLoopTriggerFamily!
   currentVersionId: ID
   currentVersionNumber: Int
@@ -223,6 +224,7 @@ input SaveAgentLoopInput {
   enabled: Boolean
   ownerUserId: ID
   ownerAgentId: ID
+  spaceId: ID
   triggerSpec: AWSJSON!
   goalSpec: AWSJSON!
   workerSpec: AWSJSON!

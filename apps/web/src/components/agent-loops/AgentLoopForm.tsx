@@ -7,7 +7,15 @@ import {
   Pencil,
   SlidersHorizontal,
 } from "lucide-react";
-import { Button, Textarea } from "@thinkwork/ui";
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+} from "@thinkwork/ui";
 import {
   SettingsPageTitle,
   SettingsRow,
@@ -16,6 +24,7 @@ import {
 import type {
   AgentLoopDraft,
   AgentLoopRow,
+  AgentLoopSpaceOption,
   AgentLoopWorkerOption,
   SaveAgentLoopPayload,
 } from "./agent-loop-types";
@@ -34,6 +43,8 @@ export function AgentLoopForm({
   tenantId,
   initialLoop,
   workerOptions,
+  spaceOptions,
+  defaultSpaceId,
   onSubmit,
   onStartBuilder,
   onConfirmBuilderDraft,
@@ -43,6 +54,8 @@ export function AgentLoopForm({
   tenantId: string;
   initialLoop?: AgentLoopRow | null;
   workerOptions: AgentLoopWorkerOption[];
+  spaceOptions: AgentLoopSpaceOption[];
+  defaultSpaceId?: string | null;
   onSubmit: (input: SaveAgentLoopPayload) => Promise<void>;
   onStartBuilder?: (input: {
     tenantId: string;
@@ -64,9 +77,14 @@ export function AgentLoopForm({
   const seededDraft = useMemo(
     () =>
       initialLoop
-        ? draftFromVersion(initialLoop, workerOptions)
-        : defaultAgentLoopDraft(workerOptions),
-    [initialLoop, workerOptions],
+        ? draftFromVersion(
+            initialLoop,
+            workerOptions,
+            spaceOptions,
+            defaultSpaceId,
+          )
+        : defaultAgentLoopDraft(workerOptions, spaceOptions, defaultSpaceId),
+    [defaultSpaceId, initialLoop, spaceOptions, workerOptions],
   );
   const [draft, setDraft] = useState<AgentLoopDraft>(seededDraft);
   const [saving, setSaving] = useState(false);
@@ -267,6 +285,25 @@ export function AgentLoopForm({
               ) : null}
             </div>
           </SettingsRow>
+          <SettingsRow label="Space">
+            <Select
+              value={draft.spaceId || undefined}
+              onValueChange={(value) =>
+                setDraft((current) => ({ ...current, spaceId: value }))
+              }
+            >
+              <SelectTrigger className="w-72" aria-label="Automation Space">
+                <SelectValue placeholder="Choose a Space" />
+              </SelectTrigger>
+              <SelectContent>
+                {spaceOptions.map((space) => (
+                  <SelectItem key={space.id} value={space.id}>
+                    {space.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SettingsRow>
           {draft.builderThreadId ? (
             <SettingsRow label="Review draft" layout="stacked">
               <div className="rounded-md border border-border/70 p-4 text-sm">
@@ -283,7 +320,11 @@ export function AgentLoopForm({
           ) : null}
         </SettingsSection>
       ) : (
-        <AutomationEasyForm draft={draft} setDraft={setDraft} />
+        <AutomationEasyForm
+          draft={draft}
+          setDraft={setDraft}
+          spaceOptions={spaceOptions}
+        />
       )}
 
       <AutomationAdvancedInspector
@@ -297,6 +338,8 @@ export function AgentLoopForm({
         open={presetSheetOpen}
         onOpenChange={setPresetSheetOpen}
         workerOptions={workerOptions}
+        spaceOptions={spaceOptions}
+        defaultSpaceId={defaultSpaceId}
         onSelect={selectPreset}
       />
 

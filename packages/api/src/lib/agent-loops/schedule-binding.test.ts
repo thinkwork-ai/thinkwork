@@ -28,6 +28,7 @@ vi.mock("../../graphql/utils.js", () => ({
     id: "scheduled_jobs.id",
     tenant_id: "scheduled_jobs.tenant_id",
     agent_loop_id: "scheduled_jobs.agent_loop_id",
+    space_id: "scheduled_jobs.space_id",
     trigger_type: "scheduled_jobs.trigger_type",
     name: "scheduled_jobs.name",
     description: "scheduled_jobs.description",
@@ -64,6 +65,7 @@ describe("syncAgentLoopScheduleBinding", () => {
       description: "summary",
       goalObjective: "Check blockers",
       workerAgentId: "agent-1",
+      spaceId: "space-1",
       loopEnabled: true,
       actorId: "user-1",
       triggerSpec: {
@@ -81,6 +83,7 @@ describe("syncAgentLoopScheduleBinding", () => {
       expect.objectContaining({
         tenant_id: "tenant-1",
         agent_loop_id: "loop-1",
+        space_id: "space-1",
         trigger_type: "agent_loop_schedule",
         agent_id: "agent-1",
         schedule_expression: "rate(7 days)",
@@ -94,6 +97,7 @@ describe("syncAgentLoopScheduleBinding", () => {
         triggerId: "scheduled-1",
         tenantId: "tenant-1",
         triggerType: "agent_loop_schedule",
+        spaceId: "space-1",
         scheduleExpression: "rate(7 days)",
       }),
     );
@@ -107,6 +111,7 @@ describe("syncAgentLoopScheduleBinding", () => {
         description: "summary",
         prompt: "Check blockers",
         agent_id: "agent-1",
+        space_id: "space-1",
         schedule_type: "rate",
         schedule_expression: "rate(7 days)",
         timezone: "UTC",
@@ -121,6 +126,7 @@ describe("syncAgentLoopScheduleBinding", () => {
       description: "summary",
       goalObjective: "Check blockers",
       workerAgentId: "agent-1",
+      spaceId: "space-1",
       loopEnabled: true,
       triggerSpec: {
         family: "schedule",

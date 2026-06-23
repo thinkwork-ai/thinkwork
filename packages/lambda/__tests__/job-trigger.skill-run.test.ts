@@ -96,6 +96,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     enabled: "agent_loops.enabled",
     lifecycle_status: "agent_loops.lifecycle_status",
     current_version_id: "agent_loops.current_version_id",
+    space_id: "agent_loops.space_id",
     last_run_id: "agent_loops.last_run_id",
     last_run_status: "agent_loops.last_run_status",
     last_run_at: "agent_loops.last_run_at",
@@ -121,7 +122,12 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
   agentLoopIterations: {
     id: "agent_loop_iterations.id",
   },
-  agents: { id: "agents.id" },
+  agents: { id: "agents.id", runtime_config: "agents.runtime_config" },
+  spaces: {
+    id: "spaces.id",
+    tenant_id: "spaces.tenant_id",
+    status: "spaces.status",
+  },
   agentSkills: {
     id: "agent_skills.id",
     agent_id: "agent_skills.agent_id",
@@ -363,6 +369,7 @@ const AGENT_LOOP_JOB = (
   name: "Daily research loop",
   agent_id: "agent-1",
   agent_loop_id: "loop-1",
+  space_id: "scheduled-space-1",
   prompt: "Prepare the daily research brief.",
   config: { product: "agent_loop" },
   created_by_type: "system",
@@ -377,6 +384,7 @@ const AGENT_LOOP_ROW = {
   enabled: true,
   lifecycle_status: "active",
   current_version_id: "version-1",
+  space_id: "loop-space-1",
 };
 
 const AGENT_LOOP_VERSION_ROW = {
@@ -434,7 +442,8 @@ describe("job-trigger agent_loop_schedule", () => {
       .mockReturnValueOnce([AGENT_LOOP_JOB()])
       .mockReturnValueOnce([AGENT_LOOP_ROW])
       .mockReturnValueOnce([AGENT_LOOP_VERSION_ROW])
-      .mockReturnValueOnce([]);
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([{ id: "loop-space-1" }]);
     mockInsert
       .mockReturnValueOnce([{ id: "run-1", status: "queued" }])
       .mockReturnValueOnce([{ id: "iteration-1" }])
@@ -481,6 +490,8 @@ describe("job-trigger agent_loop_schedule", () => {
         source: "agent_loop",
         idempotency_key: "agent-loop:run-1:iteration:1",
         payload: expect.objectContaining({
+          threadId: "thread-1",
+          spaceId: "loop-space-1",
           goalMode: expect.objectContaining({
             action: "start",
             goalRunId: "run-1",
@@ -495,6 +506,14 @@ describe("job-trigger agent_loop_schedule", () => {
         }),
       }),
     );
+    expect(mockEnsureThreadForWork).toHaveBeenCalledWith({
+      tenantId: "T1",
+      agentId: "agent-1",
+      userId: undefined,
+      spaceId: "loop-space-1",
+      title: "Automation: Daily research loop",
+      channel: "schedule",
+    });
   });
 
   it("reuses an existing scheduled run for the same fire id", async () => {
@@ -525,7 +544,8 @@ describe("job-trigger agent_loop_schedule", () => {
       ])
       .mockReturnValueOnce([AGENT_LOOP_ROW])
       .mockReturnValueOnce([AGENT_LOOP_VERSION_ROW])
-      .mockReturnValueOnce([]);
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([{ id: "loop-space-1" }]);
     mockInsert
       .mockReturnValueOnce([{ id: "run-1", status: "skipped" }])
       .mockReturnValueOnce([{ id: "iteration-1" }]);

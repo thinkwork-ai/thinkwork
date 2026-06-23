@@ -7,18 +7,26 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@thinkwork/ui";
-import type { AgentLoopDraft, AgentLoopWorkerOption } from "./agent-loop-types";
+import type {
+  AgentLoopDraft,
+  AgentLoopSpaceOption,
+  AgentLoopWorkerOption,
+} from "./agent-loop-types";
 import { AGENT_LOOP_PRESETS } from "./agent-loop-presets";
 
 export function AutomationPresetSheet({
   open,
   onOpenChange,
   workerOptions,
+  spaceOptions,
+  defaultSpaceId,
   onSelect,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workerOptions: AgentLoopWorkerOption[];
+  spaceOptions: AgentLoopSpaceOption[];
+  defaultSpaceId?: string | null;
   onSelect: (draft: AgentLoopDraft) => void;
 }) {
   return (
@@ -37,7 +45,13 @@ export function AutomationPresetSheet({
               type="button"
               className="flex w-full items-center justify-between gap-4 px-4 py-3.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => {
-                onSelect(preset.buildDraft(workerOptions));
+                onSelect(
+                  preset.buildDraft(
+                    workerOptions,
+                    spaceOptions,
+                    defaultSpaceId,
+                  ),
+                );
                 onOpenChange(false);
               }}
             >
@@ -52,7 +66,11 @@ export function AutomationPresetSheet({
           ))}
         </div>
         <div className="mt-4 flex justify-end">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
             Close
           </Button>
         </div>

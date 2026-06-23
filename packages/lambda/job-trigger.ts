@@ -302,9 +302,8 @@ async function invokeAgentcoreRunSkill(payload: {
     return { ok: false, error: "AGENTCORE_FUNCTION_NAME env var not set" };
   }
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget. Execution result
     // comes back via the HMAC-signed /api/skills/complete callback.
@@ -402,9 +401,8 @@ async function invokeThreadIdleMemoryLearningWorker(input: {
   scheduledFor: string;
   lastActivityAt: string;
 }): Promise<ThreadIdleMemoryLearningWorkerResult> {
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const fnName = runtimeFunctionName(
     "THREAD_IDLE_MEMORY_LEARNING_FUNCTION_NAME",
@@ -628,6 +626,25 @@ async function loadAgentDefaultSpaceId(
   return space?.id ?? null;
 }
 
+async function loadActiveSpaceId(
+  db: JobTriggerDb,
+  tenantId: string,
+  spaceId: string,
+): Promise<string | null> {
+  const [space] = await db
+    .select({ id: spaces.id })
+    .from(spaces)
+    .where(
+      and(
+        eq(spaces.id, spaceId),
+        eq(spaces.tenant_id, tenantId),
+        eq(spaces.status, "active"),
+      ),
+    )
+    .limit(1);
+  return space?.id ?? null;
+}
+
 function defaultSpaceIdFromRuntimeConfig(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const defaultSpaceId = (value as { defaultSpaceId?: unknown }).defaultSpaceId;
@@ -644,6 +661,7 @@ async function handleAgentLoopSchedule(input: {
     name: string;
     agent_id: string | null;
     agent_loop_id: string | null;
+    space_id?: string | null;
     prompt: string | null;
     config: unknown;
     budget_paused: boolean;
@@ -678,6 +696,7 @@ async function handleAgentLoopSchedule(input: {
       enabled: agentLoops.enabled,
       lifecycle_status: agentLoops.lifecycle_status,
       current_version_id: agentLoops.current_version_id,
+      space_id: agentLoops.space_id,
     })
     .from(agentLoops)
     .where(
@@ -736,16 +755,21 @@ async function handleAgentLoopSchedule(input: {
   }
 
   const workerId = workerAgentId(version?.worker_spec ?? null);
-  const defaultSpaceId = workerId
-    ? await loadAgentDefaultSpaceId(db, tenantId, workerId)
-    : null;
+  const configuredSpaceId = loop.space_id
+    ? await loadActiveSpaceId(db, tenantId, loop.space_id)
+    : job.space_id
+      ? await loadActiveSpaceId(db, tenantId, job.space_id)
+      : null;
+  const executionSpaceId =
+    configuredSpaceId ??
+    (workerId ? await loadAgentDefaultSpaceId(db, tenantId, workerId) : null);
   const executionThread =
     workerId && loop.lifecycle_status === "active"
       ? await ensureThreadForWork({
           tenantId,
           agentId: workerId,
           userId: input.actorId ?? undefined,
-          spaceId: defaultSpaceId ?? undefined,
+          spaceId: executionSpaceId ?? undefined,
           title: `Automation: ${loop.name}`,
           channel: "schedule",
         })
@@ -777,7 +801,7 @@ async function handleAgentLoopSchedule(input: {
         actorType: input.actorId ? "user" : "system",
         actorId: input.actorId,
         threadId: executionThread?.threadId ?? null,
-        spaceId: defaultSpaceId,
+        spaceId: executionSpaceId,
         scheduledJobId: triggerId,
         idempotencyKey,
         correlationId: `${AGENT_LOOP_SCHEDULE_TRIGGER_TYPE}:${triggerId}`,
@@ -1134,9 +1158,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
       );
 
       try {
-        const { LambdaClient, InvokeCommand } = await import(
-          "@aws-sdk/client-lambda"
-        );
+        const { LambdaClient, InvokeCommand } =
+          await import("@aws-sdk/client-lambda");
         const lambda = new LambdaClient({});
         const stage = process.env.STAGE || "dev";
         const fnName =
@@ -1550,9 +1573,8 @@ export async function handler(event: JobTriggerEvent): Promise<void> {
     // If this was a one-time schedule, delete the EventBridge schedule after firing
     if (oneTime && scheduleName) {
       try {
-        const { SchedulerClient, DeleteScheduleCommand } = await import(
-          "@aws-sdk/client-scheduler"
-        );
+        const { SchedulerClient, DeleteScheduleCommand } =
+          await import("@aws-sdk/client-scheduler");
         const scheduler = new SchedulerClient({});
         await scheduler.send(
           new DeleteScheduleCommand({

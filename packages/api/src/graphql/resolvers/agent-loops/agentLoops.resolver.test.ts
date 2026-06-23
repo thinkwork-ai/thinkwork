@@ -70,6 +70,7 @@ vi.mock("../../utils.js", () => ({
     name: "agent_loops.name",
     enabled: "agent_loops.enabled",
     lifecycle_status: "agent_loops.lifecycle_status",
+    space_id: "agent_loops.space_id",
   },
   agents: {
     id: "agents.id",
@@ -189,6 +190,7 @@ describe("AgentLoop resolvers", () => {
             enabled: true,
             lifecycle_status: "active",
             current_version_id: "version-1",
+            space_id: "loop-space-1",
           },
         ];
       }
@@ -218,13 +220,10 @@ describe("AgentLoop resolvers", () => {
       }
       if (call === 3) return [];
       if (call === 4) {
-        return [{ runtimeConfig: { defaultSpaceId: "space-1" } }];
+        return [{ id: "loop-space-1" }];
       }
-      if (call === 5) {
-        return [{ id: "space-1" }];
-      }
-      if (call === 6) return [];
-      if (call === 7) {
+      if (call === 5) return [];
+      if (call === 6) {
         return [
           {
             id: "run-1",
@@ -300,7 +299,7 @@ describe("AgentLoop resolvers", () => {
         idempotency_key: "agent-loop:run-1:iteration:1",
         payload: expect.objectContaining({
           threadId: "thread-1",
-          spaceId: "space-1",
+          spaceId: "loop-space-1",
           goalMode: expect.objectContaining({
             enabled: true,
             action: "start",
@@ -316,7 +315,7 @@ describe("AgentLoop resolvers", () => {
     expect(mocks.ensureThreadForWork).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       agentId: "agent-1",
-      spaceId: "space-1",
+      spaceId: "loop-space-1",
       userId: "user-1",
       title: "Automation: Loop",
       channel: "schedule",

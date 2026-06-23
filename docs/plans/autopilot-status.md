@@ -14,9 +14,9 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: Unit 6 - Prompt Document Detail Page.
-- Current branch: `codex/thnk-46-u6-detail-page`.
-- Current worktree: `.Codex/worktrees/thnk-46-u6-detail-page`.
+- Current unit: Unit 7 - Execution Thread Parity and End-to-End Validation.
+- Current branch: `codex/thnk-46-u7-execution-parity`.
+- Current worktree: `.Codex/worktrees/thnk-46-u7-execution-parity`.
 - Current pull request: Not opened yet.
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
@@ -151,12 +151,12 @@ status: in_progress
     `7eff5d1d7 feat(automations): add chat builder` and
     `fdd878fe2 docs: record chat builder push blocker`. `curl -I --connect-timeout 15 --max-time 25 https://github.com`
     failed with `curl: (28) Failed to connect to github.com port 443 after
-    15005 ms: Timeout was reached`, and `git ls-remote --heads origin main`
+15005 ms: Timeout was reached`, and `git ls-remote --heads origin main`
     failed with `ssh: connect to host github.com port 22: Operation timed out`.
     The next required action is still to publish this branch, open the U4 PR,
     wait for required CI, merge, clean up, sync `main`, and then continue U5.
   - 2026-06-23: GitHub connectivity recovered. `git ls-remote --heads origin
-    main` and HTTPS reachability both succeeded, then the U4 branch was pushed
+main` and HTTPS reachability both succeeded, then the U4 branch was pushed
     and PR [#2889](https://github.com/thinkwork-ai/thinkwork/pull/2889) was
     opened for CI.
   - 2026-06-23: U4 PR
@@ -194,6 +194,36 @@ status: in_progress
     `pnpm --filter @thinkwork/web test`, `pnpm lint`, `pnpm typecheck`,
     `pnpm test:release`, `pnpm test:plugin-source-boundary`, and
     `git diff --check`.
+  - 2026-06-23: U6 PR
+    [#2891](https://github.com/thinkwork-ai/thinkwork/pull/2891) passed
+    required CI (`cla`, `lint`, `test`, `typecheck`, `verify`) and was squash
+    merged as `dc71e7e0761da2ee586e84ec4f29f311f8b2f4e7`; the remote branch
+    was deleted by GitHub and the local U6 worktree/branch were removed.
+  - 2026-06-23: U7 started from `origin/main` at `dc71e7e07` in
+    `.Codex/worktrees/thnk-46-u7-execution-parity`.
+  - 2026-06-23: U7 implementation in progress. Added `agent_loops.space_id`
+    with a hand-rolled migration, exposed `AgentLoop.spaceId` /
+    `SaveAgentLoopInput.spaceId`, defaulted new Automations to the Agent
+    settings default Space, persisted the selected Space through save and
+    schedule binding, and updated manual and scheduled run paths so execution
+    threads prefer the configured Automation Space before falling back to the
+    Agent default Space.
+  - 2026-06-23: U7 focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/agent-loops/agentLoops.resolver.test.ts src/graphql/resolvers/agent-loops/saveAgentLoop.mutation.test.ts src/lib/agent-loops/schedule-binding.test.ts`,
+    `pnpm --filter @thinkwork/lambda exec vitest run __tests__/job-trigger.skill-run.test.ts`,
+    `pnpm --filter @thinkwork/web exec vitest run src/components/agent-loops/AgentLoopForm.test.tsx src/components/agent-loops/AgentLoopInventory.test.tsx src/components/agent-loops/AgentLoopDetail.test.tsx src/components/agent-loops/agent-loop-utils.test.ts src/lib/graphql-queries.schema.test.ts`,
+    package typechecks for web/api/lambda/database, `pnpm lint`,
+    `pnpm typecheck`, `pnpm test`, direct Prettier check on changed files, and
+    `git diff --check`.
+  - 2026-06-23: U7 browser validation ran the worktree web app on
+    `http://localhost:5180`. The New Automation screen rendered; Chat mode
+    displayed a Space selector defaulting to `Default`; Manual mode showed the
+    easy shape with prompt, active toggle, Space, and trigger only; Advanced
+    mode opened the runtime inspector. The Automations list itself showed the
+    expected pre-merge deployed-schema error
+    `[GraphQL] Cannot query field "spaceId" on type "AgentLoop"` because the
+    local web env points at the currently deployed API, which does not yet have
+    this PR's GraphQL schema.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 

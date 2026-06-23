@@ -13,6 +13,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { useTenant } from "@/context/TenantContext";
 import {
+  SpacesQuery,
   SettingsAgentLoopsQuery,
   SettingsConfirmAutomationDraftMutation,
   SettingsSaveAgentLoopMutation,
@@ -25,10 +26,12 @@ import {
 import { AgentLoopForm } from "./AgentLoopForm";
 import type {
   AgentLoopRow,
+  AgentLoopSpaceOption,
   AgentLoopWorkerOption,
   SaveAgentLoopPayload,
 } from "./agent-loop-types";
 import {
+  defaultSpaceIdFromAgentRuntimeConfig,
   formatCost,
   formatDateTime,
   jsonRecord,
@@ -49,10 +52,15 @@ type AgentProfilesData = {
   }>;
 };
 
+type SpacesData = {
+  spaces?: AgentLoopSpaceOption[];
+};
+
 type TenantAgentData = {
   agent?: {
     id: string;
     name?: string | null;
+    runtimeConfig?: unknown;
   } | null;
 };
 
@@ -78,6 +86,11 @@ export function AgentLoopInventory() {
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
   });
+  const [spacesResult] = useQuery<SpacesData>({
+    query: SpacesQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
   const [, saveAgentLoop] = useMutation(SettingsSaveAgentLoopMutation);
   const [, startAutomationBuilder] = useMutation(
     SettingsStartAutomationBuilderMutation,
@@ -93,6 +106,17 @@ export function AgentLoopInventory() {
         profiles: profilesResult.data?.agentProfiles ?? [],
       }),
     [agentResult.data?.agent, profilesResult.data?.agentProfiles],
+  );
+  const spaceOptions = useMemo(
+    () => spacesResult.data?.spaces ?? [],
+    [spacesResult.data?.spaces],
+  );
+  const defaultSpaceId = useMemo(
+    () =>
+      defaultSpaceIdFromAgentRuntimeConfig(
+        agentResult.data?.agent?.runtimeConfig,
+      ),
+    [agentResult.data?.agent?.runtimeConfig],
   );
 
   const rows = useMemo(
@@ -243,7 +267,11 @@ export function AgentLoopInventory() {
   }
 
   if (creating) {
-    if (!tenantId || (agentResult.fetching && workerOptions.length === 0)) {
+    if (
+      !tenantId ||
+      (agentResult.fetching && workerOptions.length === 0) ||
+      (spacesResult.fetching && spaceOptions.length === 0)
+    ) {
       return (
         <SettingsPane>
           <div className="flex items-center justify-center py-24">
@@ -258,6 +286,8 @@ export function AgentLoopInventory() {
           mode="create"
           tenantId={tenantId}
           workerOptions={workerOptions}
+          spaceOptions={spaceOptions}
+          defaultSpaceId={defaultSpaceId}
           onSubmit={createLoop}
           onStartBuilder={startBuilder}
           onConfirmBuilderDraft={confirmBuilderDraft}
