@@ -14,11 +14,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit unless tightly coupled.
 - Status: In progress.
-- Current unit: Unit 2 - Prompt-First Draft Normalization.
-- Current branch: `codex/thnk-46-u2-draft-normalization`.
-- Current worktree: `.Codex/worktrees/thnk-46-u2-draft-normalization`.
+- Current unit: Unit 3 - Hidden Builder Threads.
+- Current branch: `codex/thnk-46-u3-hidden-builder-threads`.
+- Current worktree: `.Codex/worktrees/thnk-46-u3-hidden-builder-threads`.
 - Current pull request:
-  [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887).
+  [#2888](https://github.com/thinkwork-ai/thinkwork/pull/2888).
 - Progress:
   - 2026-06-23: Read `AGENTS.md`, the Compound Engineering `ce-work`
     workflow, and the prompt-first Automations plan.
@@ -73,6 +73,23 @@ status: in_progress
   - 2026-06-23: U2 PR
     [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887) passed
     required CI: `cla`, `lint`, `test`, `typecheck`, and `verify`.
+  - 2026-06-23: U2 PR
+    [#2887](https://github.com/thinkwork-ai/thinkwork/pull/2887) was squash
+    merged as `3ba75eb46a8a713a0273a5e2f50ef39709065934`; remote branch was
+    deleted by GitHub and the local U2 worktree/branch were removed.
+  - 2026-06-23: U3 started from `origin/main` at `3ba75eb46` in
+    `.Codex/worktrees/thnk-46-u3-hidden-builder-threads`.
+  - 2026-06-23: U3 implementation in progress. Added a system-hidden
+    Automation Builder Space/thread helper, resolver-level hidden thread
+    predicates for normal thread lists/search/unread/pins, and Space-list
+    filtering so the builder Space and builder-thread activity do not appear in
+    normal navigation while direct participant thread lookup remains unchanged.
+  - 2026-06-23: U3 focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/agent-loops/automation-builder-threads.test.ts src/graphql/resolvers/threads/system-hidden.test.ts src/graphql/resolvers/threads/threads.query.test.ts src/graphql/resolvers/threads/threadsPaged.query.test.ts src/graphql/resolvers/threads/unreadThreadCount.query.test.ts src/graphql/resolvers/threads/threadPins.readstate.test.ts src/graphql/resolvers/spaces/spaces.query.test.ts`
+    and `pnpm --filter @thinkwork/api typecheck`.
+  - 2026-06-23: U3 PR
+    [#2888](https://github.com/thinkwork-ai/thinkwork/pull/2888) opened and CI
+    monitoring started.
 
 ## THNK-11 Skill Trust Evidence Fixes - 2026-06-22
 

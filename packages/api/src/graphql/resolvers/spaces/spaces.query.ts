@@ -8,6 +8,7 @@ import {
   toGraphqlSpace,
   userAccessibleSpacePredicate,
 } from "./shared.js";
+import { AUTOMATION_BUILDER_SPACE_TEMPLATE_KEY } from "../../../lib/agent-loops/automation-builder-constants.js";
 
 export async function spaces(
   _parent: any,
@@ -22,7 +23,10 @@ export async function spaces(
     return [];
   }
 
-  const conditions = [eq(spacesTable.tenant_id, args.tenantId)];
+  const conditions = [
+    eq(spacesTable.tenant_id, args.tenantId),
+    visibleSpaceListPredicate(),
+  ];
   const status = parseSpaceStatus(args.status);
   if (status) conditions.push(eq(spacesTable.status, status));
 
@@ -95,6 +99,11 @@ async function loadSpaceSummaries(input: {
     WHERE t.tenant_id = ${input.tenantId}
       AND t.space_id IN (${spaceIdList})
       AND t.archived_at IS NULL
+      AND NOT (
+        COALESCE(t.metadata->>'systemHidden', 'false') = 'true'
+        OR COALESCE(t.metadata->>'visibility', '') = 'system_hidden'
+        OR COALESCE(t.metadata->>'purpose', '') = 'automation_builder'
+      )
     GROUP BY t.space_id
   `);
 
@@ -113,4 +122,11 @@ async function loadSpaceSummaries(input: {
       },
     ]),
   );
+}
+
+function visibleSpaceListPredicate() {
+  return sql`NOT (
+    ${spacesTable.template_key} = ${AUTOMATION_BUILDER_SPACE_TEMPLATE_KEY}
+    AND COALESCE(${spacesTable.config}->>'visibility', '') = 'system_hidden'
+  )`;
 }

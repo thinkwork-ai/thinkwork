@@ -57,6 +57,7 @@ const {
     updated_at: tableCol("threads.updated_at"),
     last_turn_completed_at: tableCol("threads.last_turn_completed_at"),
     archived_at: tableCol("threads.archived_at"),
+    metadata: tableCol("threads.metadata"),
   };
   const threadParticipants = {
     tenant_id: tableCol("thread_participants.tenant_id"),
@@ -172,6 +173,23 @@ describe("threadsPaged filter assembly", () => {
     );
     expect(hasTenant).toBe(true);
     expect(hasComputer).toBe(false);
+  });
+
+  it("excludes system-hidden automation builder threads from list/search results", async () => {
+    await threadsPaged_query(
+      {},
+      { tenantId: TENANT, search: "automation" },
+      {} as any,
+    );
+
+    const allConditions = capturedConditions.flat();
+    const hiddenPredicate = allConditions.find(
+      (condition: any) =>
+        condition?.__sql &&
+        condition.__strings?.join(" ").includes("systemHidden") &&
+        condition.__strings?.join(" ").includes("automation_builder"),
+    );
+    expect(hiddenPredicate).toBeTruthy();
   });
 
   it("adds both tenant_id and computer_id conditions when computerId is set", async () => {
