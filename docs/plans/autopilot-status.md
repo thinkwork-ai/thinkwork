@@ -16,10 +16,10 @@ status: blocked
 - Status: Blocked after implementation and deploy. U1-U7 are merged to
   `main`; final live Twenty record-link proof is blocked by deployed
   environment auth/tool exposure state.
-- Current unit: Final live verification.
-- Current branch: `codex/mcp-record-links-final-status`.
+- Current unit: Post-deploy status ledger.
+- Current branch: `codex/mcp-record-links-postdeploy-status`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-final-status`.
+  `.Codex/worktrees/mcp-record-links-postdeploy-status`.
 - Current pull request: Pending for this status update.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
@@ -254,6 +254,34 @@ status: blocked
     `c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c`, then rerun the U7 smoke with
     `SMOKE_TWENTY_MCP_CALL=1` and verify the response contains Opportunity
     `recordLinks` pointing at `https://crm.thinkwork.ai`.
+  - 2026-06-24: Final status PR
+    [#2917](https://github.com/thinkwork-ai/thinkwork/pull/2917) passed CI
+    (CLA, lint, test, typecheck, verify), squash-merged to `main` as
+    `05e3286`, and the remote/local status branches were deleted. Its normal
+    deploy run
+    [#28107504825](https://github.com/thinkwork-ai/thinkwork/actions/runs/28107504825)
+    failed before apply at `Terraform Init` because an unrelated prior Plane
+    removal commit deleted `plugins/plane/terraform/plane` while
+    `terraform/modules/thinkwork/main.tf` still referenced that module.
+  - 2026-06-24: Plane Terraform follow-up PR
+    [#2918](https://github.com/thinkwork-ai/thinkwork/pull/2918) passed CI,
+    squash-merged to `main` as `2230febe`, and restored the normal deploy
+    pipeline by removing retained Plane Terraform wiring. Deploy run
+    [#28108285643](https://github.com/thinkwork-ai/thinkwork/actions/runs/28108285643)
+    succeeded: Detect Changes, Build Lambdas, Terraform Apply, Build & Deploy
+    Docs, Compliance Role Bootstrap, and Deploy Summary all completed
+    successfully.
+  - 2026-06-24: Post-deploy smoke retest after `2230febe`: `thinkwork me`
+    confirmed the dev Cognito session for `eric@thinkwork.ai` in tenant
+    `sleek-squirrel-230`; `/api/skills/user-mcp-servers` returned `HTTP 200`
+    and still shows `Twenty CRM` active, plugin-managed, runtime-assigned, and
+    runtime-enabled. The full Twenty MCP smoke still fails at the same runtime
+    exposure gate: `MCP proxy tools/list did not expose tools for server
+twenty-crm`. This confirms the remaining blocker is not the merged code,
+    the deployment pipeline, or local token freshness; it is live Twenty
+    MCP/upstream auth or tool-discovery state that needs repair/reconnection
+    through the product/admin flow before an Opportunity `recordLinks` proof
+    can pass.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
