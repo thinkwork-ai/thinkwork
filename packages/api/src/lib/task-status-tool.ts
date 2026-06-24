@@ -7,6 +7,7 @@ import {
 } from "./linked-tasks/status.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "./spaces/customer-onboarding-goal-md.js";
 import { deriveThreadGoalTaskProgress } from "./thread-goals/progress.js";
+import { syncWorkItemFromLinkedTask } from "./work-items/customer-onboarding.js";
 
 const { goals, linkedTaskEvents, linkedTasks, spaceMembers, threads } = schema;
 
@@ -50,6 +51,7 @@ export interface TaskStatusToolDeps {
   db?: typeof defaultDb;
   now?: () => Date;
   refreshGoalFolder?: typeof refreshCustomerOnboardingGoalFolderSafely;
+  syncNativeWorkItem?: typeof syncWorkItemFromLinkedTask;
 }
 
 const TERMINAL_TASK_STATUSES = new Set<LinkedTaskStatus>([
@@ -68,6 +70,8 @@ export async function setTaskStatus(
   const note = cleanNote(input.note);
   const refreshGoalFolder =
     deps.refreshGoalFolder ?? refreshCustomerOnboardingGoalFolderSafely;
+  const syncNativeWorkItem =
+    deps.syncNativeWorkItem ?? syncWorkItemFromLinkedTask;
 
   const result = await database.transaction(async (tx) => {
     const [task] = await tx
@@ -185,6 +189,26 @@ export async function setTaskStatus(
       }),
       occurred_at: now,
     });
+
+    if (hasNativeWorkItemPointer(task.metadata)) {
+      await syncNativeWorkItem(
+        {
+          tenantId: input.tenantId,
+          linkedTaskId: task.id,
+          status: nextStatus,
+          blocked: nextStatus === "blocked",
+          note,
+          actorUserId: input.actor.type === "user" ? input.actor.id : null,
+          actorAgentId: input.actor.type === "agent" ? input.actor.id : null,
+          metadata: compactObject({
+            source: "set_task_status",
+            actor: input.actor,
+            manualMetadata: input.metadata,
+          }),
+        },
+        { database: tx as never, now: () => now },
+      );
+    }
 
     let goalStatus: SetTaskStatusResult["goalStatus"] = null;
     const [activeGoal] = await tx
@@ -387,6 +411,15 @@ function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function hasNativeWorkItemPointer(value: unknown): boolean {
+  const metadata = objectValue(value);
+  const nativeWorkItem = objectValue(metadata.nativeWorkItem);
+  return Boolean(
+    typeof metadata.nativeWorkItemId === "string" ||
+    typeof nativeWorkItem.id === "string",
+  );
 }
 
 function compactObject(value: Record<string, unknown>) {

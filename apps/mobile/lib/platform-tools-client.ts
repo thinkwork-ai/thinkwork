@@ -116,6 +116,34 @@ export async function callPlatformTaskStatus(
   return { content: data.content, isError: data.isError };
 }
 
+export async function callPlatformWorkItemStatus(
+  input: {
+    agentId: string;
+    threadId: string;
+    workItemId: string;
+    statusCategory?: string | null;
+    statusId?: string | null;
+    note?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+  deps: PlatformToolDeps = {},
+): Promise<PlatformToolResult> {
+  const data = (await postPlatformTool(
+    "/api/work-items/status",
+    {
+      agentId: input.agentId,
+      threadId: input.threadId,
+      workItemId: input.workItemId,
+      statusCategory: input.statusCategory,
+      statusId: input.statusId,
+      note: input.note,
+      metadata: input.metadata,
+    },
+    deps,
+  )) as PlatformToolResult;
+  return { content: data.content, isError: data.isError };
+}
+
 export function platformToolContentToText(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return JSON.stringify(content ?? "");

@@ -168,12 +168,13 @@ export const MOBILE_PI_COMPATIBILITY_CONTRACT: MobilePiCompatibilityContract = {
     {
       id: "task-status-tool",
       status: "implemented",
-      upstreamSurface: "set_task_status platform extension",
+      upstreamSurface:
+        "set_work_item_status native platform extension plus set_task_status compatibility extension",
       mobileSurface:
         "apps/mobile/lib/agent/extensions/task-status-extension.ts",
-      ownerUnit: "U7",
+      ownerUnit: "THNK-69 U4",
       notes:
-        "Mobile exposes set_task_status as a platform tool that writes checklist status through the API/database rather than by editing GOAL.md or PROGRESS.md.",
+        "Mobile exposes set_work_item_status for native Work Items and preserves set_task_status for linked_tasks compatibility; both write through the API/database rather than editing GOAL.md or PROGRESS.md.",
     },
     {
       id: "bounded-mcp-proxy-tool",
