@@ -18,7 +18,8 @@ status: in_progress
 - Current branch: `codex/thnk-67-u1-company-data-shell`.
 - Current worktree:
   `.Codex/worktrees/thnk-67-u1-company-data-shell`.
-- Current pull request: None yet.
+- Current pull request:
+  [#2904](https://github.com/thinkwork-ai/thinkwork/pull/2904).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `ce-work` and
     `lfg` workflows, and the focused Company Data shell plugin plan.
@@ -47,6 +48,9 @@ status: in_progress
     `git diff --check`. Local `pnpm install` completed but logged the known
     optional `canvas` build failure under local Node 25 because `pkg-config` is
     not installed; package tests and typecheck were unaffected.
+  - 2026-06-24: U1 PR
+    [#2904](https://github.com/thinkwork-ai/thinkwork/pull/2904) opened and CI
+    monitoring started.
 
 ## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
 
