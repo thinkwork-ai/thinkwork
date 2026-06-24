@@ -163,7 +163,7 @@ export function WorkItemsPage({
 
   const handleSaveView = useCallback(
     async (name: string) => {
-      if (!tenantId) return;
+      if (!tenantId) return false;
       const result = await executeSaveView({
         input: savedViewInputFromRouteSearch(
           tenantId,
@@ -174,7 +174,7 @@ export function WorkItemsPage({
       });
       if (result.error) {
         toast.error(`Couldn't save view: ${result.error.message}`);
-        return;
+        return false;
       }
       const saved = result.data?.saveWorkItemView as
         | WorkItemSavedViewSummary
@@ -184,6 +184,7 @@ export function WorkItemsPage({
       }
       reexecuteSavedViews({ requestPolicy: "network-only" });
       toast.success("View saved");
+      return true;
     },
     [executeSaveView, onStateChange, reexecuteSavedViews, state, tenantId],
   );

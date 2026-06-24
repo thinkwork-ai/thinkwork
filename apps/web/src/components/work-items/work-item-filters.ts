@@ -5,7 +5,7 @@ import type {
   WorkItemViewType,
 } from "./work-item-display";
 import {
-  normalizeWorkItemStatusCategory,
+  WORK_ITEM_CATEGORY_ORDER,
   WORK_ITEM_PRIORITY_ORDER,
 } from "./work-item-display";
 
@@ -178,7 +178,10 @@ function parseStatusCategory(
   value: unknown,
 ): WorkItemStatusCategory | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
-  return normalizeWorkItemStatusCategory(value);
+  const normalized = value.trim().toUpperCase();
+  return WORK_ITEM_CATEGORY_ORDER.includes(normalized as WorkItemStatusCategory)
+    ? (normalized as WorkItemStatusCategory)
+    : undefined;
 }
 
 function parsePriority(value: unknown): WorkItemPriority | undefined {

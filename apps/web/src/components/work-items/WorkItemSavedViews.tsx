@@ -26,7 +26,7 @@ interface WorkItemSavedViewsProps {
   saving?: boolean;
   deleting?: boolean;
   onSelectView: (view: WorkItemSavedViewSummary | null) => void;
-  onSaveView: (name: string) => Promise<void> | void;
+  onSaveView: (name: string) => Promise<boolean | void> | boolean | void;
   onDeleteView: (view: WorkItemSavedViewSummary) => Promise<void> | void;
 }
 
@@ -119,7 +119,8 @@ export function WorkItemSavedViews({
               event.preventDefault();
               const trimmed = name.trim();
               if (!trimmed) return;
-              await onSaveView(trimmed);
+              const saved = await onSaveView(trimmed);
+              if (saved === false) return;
               setOpen(false);
             }}
           >

@@ -51,6 +51,14 @@ describe("work item route filters", () => {
     });
   });
 
+  it("drops unknown status categories instead of defaulting to todo", () => {
+    expect(
+      parseWorkItemRouteSearch({
+        statusCategory: "not-a-real-status",
+      }).statusCategory,
+    ).toBeUndefined();
+  });
+
   it("omits default values when writing route params", () => {
     expect(
       workItemRouteSearchToParams({
