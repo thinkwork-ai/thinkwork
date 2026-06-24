@@ -17,6 +17,7 @@ import {
   type CustomerOnboardingSourceInput,
   type NormalizedCustomerOnboardingSource,
 } from "./customer-onboarding-workflow.js";
+import { loadCustomerOnboardingWorkItemProgressTasks } from "../work-items/progress.js";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -140,7 +141,9 @@ export function renderCustomerOnboardingProgressMarkdown(input: {
   ].join("\n");
 }
 
-export class DrizzleCustomerOnboardingProgressRepository implements CustomerOnboardingProgressRepository {
+export class DrizzleCustomerOnboardingProgressRepository
+  implements CustomerOnboardingProgressRepository
+{
   async load(input: {
     tenantId: string;
     threadId: string;
@@ -176,6 +179,20 @@ export class DrizzleCustomerOnboardingProgressRepository implements CustomerOnbo
     if (onboarding.workflow !== CUSTOMER_ONBOARDING_TEMPLATE_KEY) return null;
 
     const normalized = normalizeProgressFacts(objectRecord(onboarding.facts));
+    const nativeTasks =
+      await loadCustomerOnboardingWorkItemProgressTasks(input);
+    if (nativeTasks.length > 0) {
+      return {
+        tenantSlug: tenant.slug,
+        threadId: thread.id,
+        threadFolderName: thread.workspaceFolderName,
+        spaceId: thread.spaceId,
+        threadTitle: thread.title,
+        normalized,
+        tasks: nativeTasks,
+      };
+    }
+
     const taskRows = await db
       .select()
       .from(linkedTasks)

@@ -36,6 +36,7 @@ import {
 } from "./customer-onboarding-seed.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "./customer-onboarding-goal-md.js";
 import { recordTwentyCrmWorkflowRun } from "../workflows/connected-app-bindings.js";
+import { createCustomerOnboardingWorkItem } from "../work-items/customer-onboarding.js";
 
 export const CUSTOMER_ONBOARDING_TEMPLATE_KEY = "customer_onboarding";
 
@@ -291,6 +292,11 @@ export interface CreateCustomerOnboardingLinkedTaskInput {
   metadata: Record<string, unknown>;
 }
 
+export interface CreateCustomerOnboardingWorkItemInput
+  extends CreateCustomerOnboardingLinkedTaskInput {
+  linkedTaskId?: string | null;
+}
+
 export interface EnsureCustomerOnboardingGoalInput {
   tenantId: string;
   spaceId: string;
@@ -325,7 +331,10 @@ export interface CustomerOnboardingWorkflowRepository {
   ensureGoal?(input: EnsureCustomerOnboardingGoalInput): Promise<void>;
   createLinkedTask(
     input: CreateCustomerOnboardingLinkedTaskInput,
-  ): Promise<void>;
+  ): Promise<{ id: string } | null>;
+  createWorkItem?(
+    input: CreateCustomerOnboardingWorkItemInput,
+  ): Promise<{ id: string } | null>;
 }
 
 export interface LastMileTasksWorkflowAdapter {
@@ -516,7 +525,7 @@ export async function startCustomerOnboardingWorkflow(
 
   const linkedTaskResults = checklistPlan.map((planned) => planned.task);
   for (const planned of checklistPlan) {
-    await repository.createLinkedTask({
+    const linkedTask = await repository.createLinkedTask({
       tenantId: input.tenantId,
       spaceId: space.id,
       threadId: thread.id,
@@ -526,6 +535,18 @@ export async function startCustomerOnboardingWorkflow(
       roleKey: planned.item.roleKey,
       assignee: planned.assignee,
       metadata: planned.metadata,
+    });
+    await repository.createWorkItem?.({
+      tenantId: input.tenantId,
+      spaceId: space.id,
+      threadId: thread.id,
+      checklistItem: planned.item,
+      task: planned.task,
+      required: planned.required,
+      roleKey: planned.item.roleKey,
+      assignee: planned.assignee,
+      metadata: planned.metadata,
+      linkedTaskId: linkedTask?.id ?? null,
     });
   }
 
@@ -1115,7 +1136,9 @@ function createUnavailableLastMileTaskAdapter(): LastMileTasksWorkflowAdapter {
   };
 }
 
-class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowRepository {
+class DrizzleCustomerOnboardingRepository
+  implements CustomerOnboardingWorkflowRepository
+{
   private readonly db = getDb();
 
   async findSpace(input: {
@@ -1464,9 +1487,9 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
       owner_id: input.startedBy?.id ?? null,
       mode: "collaborate",
       status: "active",
-      progress_model: "linked_tasks",
+      progress_model: "work_items",
       completion_rule: {
-        type: "all_required_applicable_linked_tasks_complete",
+        type: "all_required_applicable_work_items_complete",
       },
       review_policy: {
         required: true,
@@ -1545,7 +1568,7 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
 
   async createLinkedTask(
     input: CreateCustomerOnboardingLinkedTaskInput,
-  ): Promise<void> {
+  ): Promise<{ id: string } | null> {
     const [existing] = await this.db
       .select({ id: linkedTasks.id })
       .from(linkedTasks)
@@ -1557,7 +1580,7 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
         ),
       )
       .limit(1);
-    if (existing) return;
+    if (existing) return existing;
 
     const [row] = await this.db
       .insert(linkedTasks)
@@ -1599,6 +1622,13 @@ class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowR
         checklistItemKey: input.checklistItem.key,
       }),
     });
+    return row;
+  }
+
+  async createWorkItem(
+    input: CreateCustomerOnboardingWorkItemInput,
+  ): Promise<{ id: string } | null> {
+    return createCustomerOnboardingWorkItem(input);
   }
 }
 
