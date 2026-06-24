@@ -72,6 +72,10 @@ The approved plan recommends PR slices that group tightly coupled units:
   (`c8561cd04`). Duplicate PR #2926 was closed as superseded and cleaned up.
 - 2026-06-24T17:35Z: Began onboarding producer slice from fresh `origin/main`
   on branch `codex/thnk-69-onboarding`.
+- 2026-06-24T18:21Z: Onboarding producer slice merged via PR #2929
+  (`2acb0dc3b`); remote branch deleted and local worktree cleanup verified.
+- 2026-06-24T18:24Z: Began UI slice from the onboarding merge on branch
+  `codex/thnk-69-web-work-items`.
 
 ## Unit Log
 
@@ -160,3 +164,52 @@ Local verification:
   passed.
 - 2026-06-24T17:49Z: `pnpm --filter @thinkwork/api test` passed: 585 files,
   5,396 tests; 3 files/9 tests skipped for existing live-E2E gates.
+
+Merge evidence:
+
+- PR #2929: <https://github.com/thinkwork-ai/thinkwork/pull/2929>
+- Merge commit: `2acb0dc3b feat(work-items): emit onboarding work items (#2929)`
+- Cleanup: remote branch deleted; local branch/worktree removed after merge.
+
+### UI PR: Web Work Items Route + Thread/Space Integration
+
+Objective: add web-native Work Items discovery and triage surfaces, wire route
+state/saved views/status movement, and make thread/Space context prefer native
+Work Items with linked-task fallback.
+
+Branch:
+
+- `codex/thnk-69-web-work-items`
+
+Implementation notes:
+
+- Added Work Item web GraphQL documents and schema guards for list, thread,
+  status, saved-view, update-status, save-view, and delete-view operations.
+- Added Work Item display/filter helpers, including URL-backed due filters and
+  saved-view serialization.
+- Added `/work-items` under the shell with list and board views, Space/status/
+  priority/due/required/blocked filters, saved views, focus refresh, inline
+  status changes, and Work Items sidebar navigation.
+- Added Space home Work Items summary metrics and a Space-scoped board link.
+- Updated thread detail progress context to query `threadWorkItems`, prefer
+  native Work Items when present, and fall back to progress markdown/linked
+  tasks for legacy threads.
+- Added targeted helper and route tests for Work Item summaries, filters,
+  sidebar navigation, thread progress integration, Space summary metrics, and
+  GraphQL/schema validation.
+
+Local verification:
+
+- 2026-06-24T18:40Z: `pnpm install` completed in the UI worktree. Optional
+  `canvas` native build failed locally on Node 25 because `pkg-config`/pixman
+  were unavailable, but install exited successfully.
+- 2026-06-24T18:40Z: `pnpm --filter @thinkwork/web test -- src/components/work-items/work-item-display.test.ts src/components/work-items/work-item-filters.test.ts src/lib/graphql-queries.test.ts src/lib/graphql-queries.schema.test.ts src/components/shell/ChatSidebar.test.tsx`
+  passed: 5 files, 70 tests.
+- 2026-06-24T18:41Z: `pnpm --filter @thinkwork/web build` passed and
+  regenerated `apps/web/src/routeTree.gen.ts`; build emitted existing sourcemap
+  and chunk-size warnings only.
+- 2026-06-24T18:42Z: `pnpm --filter @thinkwork/web typecheck` passed.
+- 2026-06-24T18:48Z: `pnpm --filter @thinkwork/web test -- src/components/work-items/WorkItemsPage.test.ts src/components/workbench/SpacesThreadDetailRoute.test.tsx src/routes/_authed/_shell/-spaces-spaceId.test.ts`
+  passed: 3 files, 41 tests.
+- 2026-06-24T18:48Z: `pnpm --filter @thinkwork/web typecheck` passed after
+  thread/Space integration changes.
