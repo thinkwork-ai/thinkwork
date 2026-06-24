@@ -92,6 +92,12 @@ The approved plan recommends PR slices that group tightly coupled units:
 - 2026-06-24T20:26Z: Rebased Concepts/Rollout/Cleanup slice onto
   `origin/main` after PR #2936 (`docs: harden Linear dispatcher launches`)
   merged.
+- 2026-06-24T20:36Z: Concepts/Rollout/Cleanup slice merged via PR #2937
+  (`cc687922d0f413ef68a00384ce21aa3694c5b3c4`); remote branch deleted and
+  local worktree/branch cleanup verified.
+- 2026-06-24T20:37Z: Final merged-main verification passed and all planned
+  implementation artifacts are merged. THNK-69 is ready for Linear
+  Verification.
 
 ## Unit Log
 
@@ -362,4 +368,33 @@ Local verification:
 
 Merge evidence:
 
-- Pending PR.
+- PR #2937: <https://github.com/thinkwork-ai/thinkwork/pull/2937>
+- PR head after rebase:
+  `c4b75b611679eb85bca48ac53ff26bb754bf6a08 docs(work-items): define native work item concepts`
+- Merge commit:
+  `cc687922d0f413ef68a00384ce21aa3694c5b3c4 docs(work-items): define native work item concepts (#2937)`
+- CI on rebased head: CLA, lint, verify, typecheck, and test passed.
+- Cleanup: remote branch deleted; local branch/worktree removed after merge.
+
+### Final Merged-Main Verification
+
+Objective: prove every THNK-69 implementation artifact is merged into
+`origin/main` and the final vocabulary/status evidence is present.
+
+Verification:
+
+- 2026-06-24T20:37Z: Fast-forwarded main checkout to
+  `cc687922d0f413ef68a00384ce21aa3694c5b3c4`.
+- 2026-06-24T20:37Z: Verified merge commits for PRs #2925, #2929, #2933,
+  #2935, and #2937 are all ancestors of `origin/main`.
+- 2026-06-24T20:37Z:
+  `rg -n "## Work Tracking|### Work Item$|### Work Item Status|### Work Item View|### Linked Task Compatibility|set_task_status" CONCEPTS.md docs/plans/autopilot/THNK-69-status.md`
+  found the merged vocabulary and compatibility notes.
+- 2026-06-24T20:37Z: `git diff --check` passed on merged main.
+- 2026-06-24T20:37Z:
+  `pnpm dlx prettier@3.8.2 --check docs/plans/autopilot/THNK-69-status.md`
+  passed on merged main.
+- 2026-06-24T20:37Z:
+  `gh pr view 2937 --json state,mergedAt,mergeCommit,headRefName,headRefOid,url,title`
+  confirmed PR #2937 merged at
+  `cc687922d0f413ef68a00384ce21aa3694c5b3c4`.
