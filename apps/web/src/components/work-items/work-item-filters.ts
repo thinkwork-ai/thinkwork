@@ -9,6 +9,8 @@ import {
   WORK_ITEM_PRIORITY_ORDER,
 } from "./work-item-display";
 
+export type WorkItemDueFilter = "overdue" | "due_soon";
+
 export interface WorkItemRouteSearch {
   view: "list" | "board";
   savedViewId?: string;
@@ -16,6 +18,7 @@ export interface WorkItemRouteSearch {
   search?: string;
   statusCategory?: WorkItemStatusCategory;
   priority?: WorkItemPriority;
+  due?: WorkItemDueFilter;
   blocked?: boolean;
   required?: boolean;
   applicable?: boolean;
@@ -38,6 +41,7 @@ export function parseWorkItemRouteSearch(
     search: stringParam(search.search),
     statusCategory: parseStatusCategory(search.statusCategory),
     priority: parsePriority(search.priority),
+    due: parseDue(search.due),
     blocked: booleanParam(search.blocked),
     required: booleanParam(search.required),
     applicable: booleanParam(search.applicable),
@@ -54,6 +58,7 @@ export function workItemRouteSearchToParams(state: WorkItemRouteSearch) {
     search: state.search,
     statusCategory: state.statusCategory,
     priority: state.priority,
+    due: state.due,
     blocked: state.blocked,
     required: state.required,
     applicable: state.applicable,
@@ -68,7 +73,9 @@ export function workItemRouteSearchToParams(state: WorkItemRouteSearch) {
 export function buildWorkItemsInput(
   tenantId: string,
   state: WorkItemRouteSearch,
+  now = new Date(),
 ) {
+  const dueRange = workItemDueRange(state.due, now);
   return {
     tenantId,
     spaceId: state.spaceId,
@@ -76,6 +83,8 @@ export function buildWorkItemsInput(
     search: state.search,
     statusCategory: state.statusCategory,
     priority: state.priority,
+    dueAfter: dueRange.dueAfter,
+    dueBefore: dueRange.dueBefore,
     blocked: state.blocked,
     required: state.required,
     applicable: state.applicable,
@@ -108,6 +117,7 @@ export function savedViewInputFromRouteSearch(
     search: state.search,
     statusCategory: state.statusCategory,
     priority: state.priority,
+    due: state.due,
     blocked: state.blocked,
     required: state.required,
     applicable: state.applicable,
@@ -142,10 +152,11 @@ export function routeViewToGraphql(view: WorkItemRouteSearch["view"]) {
 
 export function hasActiveWorkItemFilters(state: WorkItemRouteSearch) {
   return Boolean(
-    state.spaceId ||
+      state.spaceId ||
       state.search ||
       state.statusCategory ||
       state.priority ||
+      state.due ||
       state.blocked !== undefined ||
       state.required !== undefined ||
       state.applicable !== undefined ||
@@ -174,6 +185,10 @@ function parsePriority(value: unknown): WorkItemPriority | undefined {
   return WORK_ITEM_PRIORITY_ORDER.includes(normalized as WorkItemPriority)
     ? (normalized as WorkItemPriority)
     : undefined;
+}
+
+function parseDue(value: unknown): WorkItemDueFilter | undefined {
+  return value === "overdue" || value === "due_soon" ? value : undefined;
 }
 
 function parseSort(value: unknown): WorkItemRouteSearch["sort"] {
@@ -222,4 +237,24 @@ function compact(value: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
   );
+}
+
+function workItemDueRange(due: WorkItemDueFilter | undefined, now: Date) {
+  const today = startOfToday(now);
+  if (due === "overdue") {
+    return { dueBefore: today.toISOString(), dueAfter: undefined };
+  }
+  if (due === "due_soon") {
+    const threshold = new Date(today);
+    threshold.setDate(threshold.getDate() + 7);
+    return {
+      dueAfter: today.toISOString(),
+      dueBefore: threshold.toISOString(),
+    };
+  }
+  return { dueBefore: undefined, dueAfter: undefined };
+}
+
+function startOfToday(now: Date) {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }

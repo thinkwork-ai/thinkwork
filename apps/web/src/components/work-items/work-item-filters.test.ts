@@ -17,6 +17,7 @@ describe("work item route filters", () => {
       spaceId: "space-1",
       statusCategory: "blocked",
       priority: "high",
+      due: "due_soon",
       blocked: "true",
       required: false,
       applicable: "false",
@@ -29,6 +30,7 @@ describe("work item route filters", () => {
       spaceId: "space-1",
       statusCategory: "BLOCKED",
       priority: "HIGH",
+      due: "due_soon",
       blocked: true,
       required: false,
       applicable: false,
@@ -42,6 +44,8 @@ describe("work item route filters", () => {
       spaceId: "space-1",
       statusCategory: "BLOCKED",
       priority: "HIGH",
+      dueAfter: expect.any(String),
+      dueBefore: expect.any(String),
       blocked: true,
       includeArchived: false,
     });
@@ -86,6 +90,7 @@ describe("work item route filters", () => {
       view: "list",
       spaceId: "space-1",
       statusCategory: "ACTIVE",
+      due: "overdue",
       sort: "due",
     });
 
@@ -100,6 +105,7 @@ describe("work item route filters", () => {
     expect(JSON.parse(input.filters)).toEqual({
       spaceId: "space-1",
       statusCategory: "ACTIVE",
+      due: "overdue",
       sort: "due",
     });
     expect(JSON.parse(input.sorting)).toEqual({
