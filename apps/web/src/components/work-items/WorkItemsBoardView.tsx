@@ -1,4 +1,11 @@
-import { type WorkItemSpaceSummary, type WorkItemStatusSummary, type WorkItemSummary, sortWorkItemStatuses, workItemStatusCategory, workItemStatusCategoryLabel } from "./work-item-display";
+import {
+  type WorkItemSpaceSummary,
+  type WorkItemStatusSummary,
+  type WorkItemSummary,
+  sortWorkItemStatuses,
+  workItemStatusCategory,
+  workItemStatusCategoryLabel,
+} from "./work-item-display";
 import { WorkItemCard } from "./WorkItemCard";
 import { WorkItemStatusBadge } from "./WorkItemStatusBadge";
 
@@ -7,7 +14,10 @@ interface WorkItemsBoardViewProps {
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
   updatingItemId?: string | null;
-  onStatusChange: (item: WorkItemSummary, status: WorkItemStatusSummary) => void;
+  onStatusChange: (
+    item: WorkItemSummary,
+    status: WorkItemStatusSummary,
+  ) => void;
 }
 
 export function WorkItemsBoardView({
@@ -42,7 +52,9 @@ export function WorkItemsBoardView({
               <header className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
                 <WorkItemStatusBadge
                   category={status.category}
-                  label={status.name || workItemStatusCategoryLabel(status.category)}
+                  label={
+                    status.name || workItemStatusCategoryLabel(status.category)
+                  }
                 />
                 <span className="text-xs tabular-nums text-muted-foreground">
                   {laneItems.length}

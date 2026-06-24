@@ -152,15 +152,15 @@ export function routeViewToGraphql(view: WorkItemRouteSearch["view"]) {
 
 export function hasActiveWorkItemFilters(state: WorkItemRouteSearch) {
   return Boolean(
-      state.spaceId ||
-      state.search ||
-      state.statusCategory ||
-      state.priority ||
-      state.due ||
-      state.blocked !== undefined ||
-      state.required !== undefined ||
-      state.applicable !== undefined ||
-      state.threadId,
+    state.spaceId ||
+    state.search ||
+    state.statusCategory ||
+    state.priority ||
+    state.due ||
+    state.blocked !== undefined ||
+    state.required !== undefined ||
+    state.applicable !== undefined ||
+    state.threadId,
   );
 }
 
@@ -174,7 +174,9 @@ export function clearWorkItemFilters(
   };
 }
 
-function parseStatusCategory(value: unknown): WorkItemStatusCategory | undefined {
+function parseStatusCategory(
+  value: unknown,
+): WorkItemStatusCategory | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   return normalizeWorkItemStatusCategory(value);
 }

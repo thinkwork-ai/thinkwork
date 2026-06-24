@@ -25,7 +25,10 @@ interface WorkItemsListViewProps {
   statuses: WorkItemStatusSummary[];
   includeSpace: boolean;
   updatingItemId?: string | null;
-  onStatusChange: (item: WorkItemSummary, status: WorkItemStatusSummary) => void;
+  onStatusChange: (
+    item: WorkItemSummary,
+    status: WorkItemStatusSummary,
+  ) => void;
 }
 
 export function WorkItemsListView({
@@ -72,7 +75,10 @@ function workItemColumns({
   statuses: WorkItemStatusSummary[];
   includeSpace: boolean;
   updatingItemId?: string | null;
-  onStatusChange: (item: WorkItemSummary, status: WorkItemStatusSummary) => void;
+  onStatusChange: (
+    item: WorkItemSummary,
+    status: WorkItemStatusSummary,
+  ) => void;
 }): ColumnDef<WorkItemSummary>[] {
   return [
     {
@@ -81,7 +87,9 @@ function workItemColumns({
       cell: ({ row }) => {
         const item = row.original;
         return (
-          <div className={`${CELL} flex-col items-start justify-center gap-0.5`}>
+          <div
+            className={`${CELL} flex-col items-start justify-center gap-0.5`}
+          >
             <span className="max-w-full truncate text-sm font-medium">
               {item.title}
             </span>
@@ -146,7 +154,9 @@ function workItemColumns({
       size: 120,
       cell: ({ row }) => (
         <span className={`${CELL} text-xs text-muted-foreground`}>
-          <span className="truncate">{workItemDueLabel(row.original.dueAt)}</span>
+          <span className="truncate">
+            {workItemDueLabel(row.original.dueAt)}
+          </span>
         </span>
       ),
     },
@@ -175,7 +185,12 @@ function workItemColumns({
         }
         return (
           <span className={CELL}>
-            <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+            >
               <Link to="/threads/$id" params={{ id: primaryThreadId }}>
                 <MessageSquareText className="size-3.5" />
                 <span>{workItemThreadCountLabel(row.original)}</span>

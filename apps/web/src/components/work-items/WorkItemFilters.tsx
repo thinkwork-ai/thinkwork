@@ -45,7 +45,9 @@ export function WorkItemFilters({
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={state.search ?? ""}
-          onChange={(event) => update({ search: event.target.value || undefined })}
+          onChange={(event) =>
+            update({ search: event.target.value || undefined })
+          }
           className="h-8 pl-9"
           placeholder="Search Work Items"
           aria-label="Search Work Items"
@@ -100,11 +102,17 @@ export function WorkItemFilters({
         onValueChange={(value) =>
           update({
             priority:
-              value === ALL ? undefined : (value as WorkItemRouteSearch["priority"]),
+              value === ALL
+                ? undefined
+                : (value as WorkItemRouteSearch["priority"]),
           })
         }
       >
-        <SelectTrigger size="sm" aria-label="Filter by priority" className="w-36">
+        <SelectTrigger
+          size="sm"
+          aria-label="Filter by priority"
+          className="w-36"
+        >
           <SelectValue placeholder="Any priority" />
         </SelectTrigger>
         <SelectContent>
@@ -121,12 +129,17 @@ export function WorkItemFilters({
         value={state.due ?? ALL}
         onValueChange={(value) =>
           update({
-            due: value === ALL ? undefined : (value as WorkItemRouteSearch["due"]),
+            due:
+              value === ALL ? undefined : (value as WorkItemRouteSearch["due"]),
             sort: value === ALL ? state.sort : "due",
           })
         }
       >
-        <SelectTrigger size="sm" aria-label="Filter by due date" className="w-36">
+        <SelectTrigger
+          size="sm"
+          aria-label="Filter by due date"
+          className="w-36"
+        >
           <SelectValue placeholder="Any due" />
         </SelectTrigger>
         <SelectContent>
@@ -165,6 +178,22 @@ export function WorkItemFilters({
           <SelectItem value={ALL}>Any blocker</SelectItem>
           <SelectItem value={TRUE}>Blocked</SelectItem>
           <SelectItem value={FALSE}>Unblocked</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={booleanValue(state.applicable)}
+        onValueChange={(value) =>
+          update({ applicable: value === ALL ? undefined : value === TRUE })
+        }
+      >
+        <SelectTrigger size="sm" aria-label="Filter applicable" className="w-36">
+          <SelectValue placeholder="Applicable" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>Any applicability</SelectItem>
+          <SelectItem value={TRUE}>Applicable</SelectItem>
+          <SelectItem value={FALSE}>Skipped</SelectItem>
         </SelectContent>
       </Select>
 

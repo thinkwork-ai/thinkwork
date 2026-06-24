@@ -118,7 +118,9 @@ export function workItemStatusCategoryLabel(
 export function normalizeWorkItemStatusCategory(
   value?: WorkItemStatusCategory | string | null,
 ): WorkItemStatusCategory {
-  const normalized = String(value ?? "TODO").trim().toUpperCase();
+  const normalized = String(value ?? "TODO")
+    .trim()
+    .toUpperCase();
   if (
     normalized === "ACTIVE" ||
     normalized === "BLOCKED" ||
@@ -165,7 +167,11 @@ export function workItemStatusTone(
 export function workItemPriorityLabel(
   priority?: WorkItemPriority | string | null,
 ) {
-  switch (String(priority ?? "NORMAL").trim().toUpperCase()) {
+  switch (
+    String(priority ?? "NORMAL")
+      .trim()
+      .toUpperCase()
+  ) {
     case "URGENT":
       return "Urgent";
     case "HIGH":
@@ -181,7 +187,11 @@ export function workItemPriorityLabel(
 export function workItemPriorityTone(
   priority?: WorkItemPriority | string | null,
 ) {
-  switch (String(priority ?? "NORMAL").trim().toUpperCase()) {
+  switch (
+    String(priority ?? "NORMAL")
+      .trim()
+      .toUpperCase()
+  ) {
     case "URGENT":
       return "bg-red-500/15 text-red-700 dark:text-red-300";
     case "HIGH":

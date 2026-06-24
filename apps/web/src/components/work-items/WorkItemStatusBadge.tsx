@@ -24,7 +24,8 @@ export function WorkItemStatusBadge({
 }: WorkItemStatusBadgeProps) {
   const resolvedCategory = item ? workItemStatusCategory(item) : category;
   const resolvedLabel =
-    label ?? (item ? workItemStatusLabel(item) : workItemStatusCategoryLabel(category));
+    label ??
+    (item ? workItemStatusLabel(item) : workItemStatusCategoryLabel(category));
 
   return (
     <Badge

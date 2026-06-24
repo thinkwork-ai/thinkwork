@@ -694,6 +694,9 @@ describe("ChatSidebar", () => {
     expect(screen.queryByRole("link", { name: /detail/i })).toBeNull();
     expect(screen.getByRole("button", { name: /^search/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /settings/i })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /work items/i }).getAttribute("href"),
+    ).toBe("/work-items?view=list&sort=updated");
     expect(screen.getByRole("link", { name: /automations/i })).toBeTruthy();
     expect(
       screen
@@ -705,6 +708,13 @@ describe("ChatSidebar", () => {
     expect(
       screen
         .getByRole("button", { name: /^search/i })
+        .compareDocumentPosition(
+          screen.getByRole("link", { name: /work items/i }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /work items/i })
         .compareDocumentPosition(
           screen.getByRole("link", { name: /automations/i }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,

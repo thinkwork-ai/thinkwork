@@ -59,7 +59,11 @@ export function WorkItemSavedViews({
           if (next) onSelectView(next);
         }}
       >
-        <SelectTrigger size="sm" aria-label="Saved Work Item view" className="w-48">
+        <SelectTrigger
+          size="sm"
+          aria-label="Saved Work Item view"
+          className="w-48"
+        >
           <Bookmark className="size-4" />
           <SelectValue placeholder="Current view" />
         </SelectTrigger>

@@ -29,7 +29,10 @@ interface WorkItemCardProps {
   statuses: WorkItemStatusSummary[];
   compact?: boolean;
   updating?: boolean;
-  onStatusChange: (item: WorkItemSummary, status: WorkItemStatusSummary) => void;
+  onStatusChange: (
+    item: WorkItemSummary,
+    status: WorkItemStatusSummary,
+  ) => void;
 }
 
 export function WorkItemCard({
@@ -69,7 +72,10 @@ export function WorkItemCard({
         <WorkItemStatusBadge item={item} />
         <Badge
           variant="secondary"
-          className={cn("rounded-full text-xs", workItemPriorityTone(item.priority))}
+          className={cn(
+            "rounded-full text-xs",
+            workItemPriorityTone(item.priority),
+          )}
         >
           {workItemPriorityLabel(item.priority)}
         </Badge>
@@ -107,7 +113,12 @@ export function WorkItemCard({
           onChange={(status) => onStatusChange(item, status)}
         />
         {primaryThreadId ? (
-          <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+          >
             <Link to="/threads/$id" params={{ id: primaryThreadId }}>
               Open
             </Link>
