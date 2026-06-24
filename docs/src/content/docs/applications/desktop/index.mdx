@@ -45,7 +45,7 @@ Desktop is for end users inside a ThinkWork tenant who want Spaces as their prim
 
 Operators still configure tenant-level settings in the [Admin Web App](/applications/admin/). Personal mobile workflows, push notifications, and user-scoped integration setup still live in the [Mobile App](/applications/mobile/).
 
-Operator-only Spaces Settings also include [Managed Applications](/applications/admin/managed-applications/), where optional deployed applications such as Cognee Knowledge Graph, Twenty CRM, and Plane can be queued through the normal deploy workflow. App-specific settings pages appear only after deployment status reports that runtime as running.
+Operator-only Spaces Settings also include [Managed Applications](/applications/admin/managed-applications/), where optional deployed applications such as Cognee Knowledge Graph, Twenty CRM, and n8n can be queued through the normal deploy workflow. App-specific settings pages appear only after deployment status reports that runtime as running.
 
 ## Thread notifications
 
@@ -154,7 +154,7 @@ Desktop uses separate app identities for stable, canary, and development builds.
 - **macOS is the supported Desktop target today.** The app architecture is Electron-based, but public install guidance should stay macOS-first until Windows or Linux release artifacts are intentionally shipped.
 - **Desktop follows Spaces releases.** A web-only Spaces deployment does not update the packaged app until a Desktop build is released.
 - **No local-only backend.** Desktop talks to the same deployed ThinkWork stack as Web Spaces and Mobile.
-- **Managed Applications are operator-only.** Cognee, CRM, and Plane settings are hidden from members and remain hidden until deployment status reports the managed runtime as enabled.
+- **Managed Applications are operator-only.** Cognee, CRM, and n8n settings are hidden from members and remain hidden until deployment status reports the managed runtime as enabled.
 
 ## Relationship to other apps
 

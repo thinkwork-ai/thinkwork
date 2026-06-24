@@ -12,7 +12,7 @@ Current managed-app adapter support is defined by:
 At the time this skill was written, supported adapter keys are:
 
 - `cognee`
-- `plane`
+- `n8n`
 - `twenty`
 
 Treat that set as closed unless the target repo has changed. If the source
@@ -52,7 +52,7 @@ provision or adopt the resources represented by the source project.
 | Adapter | Fit            | Evidence |
 | ------- | -------------- | -------- |
 | cognee  | no/partial/yes |          |
-| plane   | no/partial/yes |          |
+| n8n     | no/partial/yes |          |
 | twenty  | no/partial/yes |          |
 
 ### Decision

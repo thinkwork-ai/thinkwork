@@ -1,6 +1,6 @@
 ---
 title: Managed Applications
-description: Operator controls for optional ThinkWork-managed applications such as Cognee Knowledge Graph, Twenty CRM, Plane, and n8n.
+description: Operator controls for optional ThinkWork-managed applications such as Cognee Knowledge Graph, Twenty CRM, and n8n.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -22,7 +22,6 @@ The first managed applications are:
 | ----------- | -------------------------------------------- | ------------------------------------------- |
 | Cognee      | Knowledge Graph substrate for ontology work  | Deployment status reports Cognee running    |
 | Twenty CRM  | Self-hosted CRM runtime managed by ThinkWork | Deployment status reports Twenty running    |
-| Plane       | Self-hosted project management runtime       | Plugin is installed and runtime is deployed |
 | n8n         | Self-hosted workflow automation runtime      | Plugin is installed and runtime is deployed |
 
 The Managed Applications section is visible only to operators. Members do not
@@ -56,10 +55,6 @@ Parking Twenty stops the server and worker runtime capacity while retaining the
 dedicated database, Secrets Manager values, persistent file storage, cache
 configuration, DNS path, and re-enable path.
 
-Parking Plane stops web/API, worker, beat-worker, and live runtime capacity
-while retaining work items, pages, comments, files, database credentials,
-RabbitMQ, cache, S3 storage, endpoint wiring, and user activation records.
-
 Parking n8n stops main and worker runtime capacity while retaining workflows,
 executions, database state, queue/cache resources, binary-data storage, package
 configuration evidence, endpoint wiring, operator credentials, service
@@ -69,11 +64,6 @@ Destroying Twenty is intentionally separate from parking. It queues a
 destructive deploy that tears down the Twenty infrastructure and then removes
 the dedicated Twenty database, database role, and Twenty Secrets Manager
 entries. Use it only when CRM data is no longer needed.
-
-Destroying Plane is also separate from parking. It removes the retained Plane
-runtime substrate and app-owned data paths, including database state, file
-storage, queue/cache resources, secrets, and managed MCP rows. Use it only when
-Plane work-item history is no longer needed.
 
 Destroying n8n removes the retained n8n runtime substrate and app-owned data
 paths, including the `thinkwork_n8n` database state, storage, queue/cache
@@ -143,30 +133,6 @@ part of full CRM cleanup.
 When the managed MCP row is installed or repaired, ThinkWork assigns it to the
 tenant platform default agent. That makes the connector available to runtime
 only after the current user has completed their own OAuth connection.
-
-## Plane Plugin and MCP
-
-Plane is installed from Settings -> Plugins as the `plane` application plugin.
-The plugin detail page is the operator entry point for install/uninstall and
-infrastructure lifecycle. The backing managed-app adapter is not meant to be
-manually duplicated from the generic Managed Applications list.
-
-For the signed plugin catalog, GitHub-backed freshness metadata, and install
-pin versus latest-version behavior, see [Plugins](/applications/admin/plugins/).
-
-Plane MCP uses a user-provided Plane PAT and workspace header instead of OAuth.
-Each user connects their own Plane account by activating the plugin with:
-
-| Credential                  | Sent to Plane as   | Notes                                     |
-| --------------------------- | ------------------ | ----------------------------------------- |
-| Plane personal access token | Bearer token       | Stored as a user-scoped activation secret |
-| Plane workspace slug        | `x-workspace-slug` | Stored with the same activation           |
-
-The activation belongs to the signed-in user. Operators should not paste a
-tenant-wide Plane API key into plugin setup, and agents should not borrow a
-token from another user. When the current user has no active Plane activation,
-runtime MCP assembly fails closed for Plane instead of falling back to shared
-credentials.
 
 ## n8n Plugin and MCP
 
@@ -256,23 +222,6 @@ To HTTP-probe the generated record URL as the authorized Twenty user, add
 `SMOKE_TWENTY_WEB_AUTHORIZATION`. Otherwise open the generated URL in the
 authorized browser session and preserve redacted evidence that it lands on the
 intended Opportunity.
-
-After Plane is healthy and a user has activated the plugin, run:
-
-```sh
-node plugins/plane/smoke/plane-mcp-smoke.mjs
-
-SMOKE_ENABLE_PLANE_MCP=1 \
-  SMOKE_PLANE_MCP_WRITE=1 \
-  SMOKE_PLANE_MCP_URL=https://plane.example.com/mcp \
-  SMOKE_PLANE_API_KEY=<plane-pat> \
-  SMOKE_PLANE_WORKSPACE_SLUG=<workspace-slug> \
-  node plugins/plane/smoke/plane-mcp-smoke.mjs
-```
-
-Use `SMOKE_PLANE_THINKWORK_PROXY=1` with an activated Cognito user token to
-verify the ThinkWork `/api/mcp` proxy path and per-user bearer plus header
-injection. Keep `SMOKE_PLANE_MCP_WRITE` unset for read-only checks.
 
 After n8n is installed and deployed through Settings -> Plugins, run:
 

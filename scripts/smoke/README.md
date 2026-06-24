@@ -36,8 +36,6 @@ This kit fills the gap.
 | `deployment-evidence.mjs`                                            | Shared JSON evidence envelope writer/uploader for foundation and managed-app smokes. Writes locally or uploads to S3 only when explicitly configured.                                                                                                                                                                                                                                                                                                                          |
 | `knowledge-graph-thread-ingest-smoke.mjs`                            | Cognee Knowledge Graph smoke. Dry-run reports required live-mode configuration; live mode starts a manual thread ingest, polls the run, and verifies table/graph/detail GraphQL reads from the normalized snapshot.                                                                                                                                                                                                                                                            |
 | `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`                  | Twenty CRM managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public `/healthz` endpoint when CRM is running.                                                                                                                                                                                                                                                       |
-| `plugins/plane/smoke/plane-managed-app-smoke.mjs`                    | Plane managed-app smoke. Dry-run reports live-mode requirements; live mode reads Terraform/API status, skips parked or unprovisioned stages clearly, and probes the public Plane health path when the runtime is running.                                                                                                                                                                                                                                                      |
-| `plugins/plane/smoke/plane-mcp-smoke.mjs`                            | Plane MCP seed/write smoke. Dry-run reports required Plane PAT/proxy inputs; live mode lists tools, calls `get_me`, resolves/creates a seed project and work item, writes a comment to an existing item, and creates/reads a new work item when write mode is enabled.                                                                                                                                                                                                         |
 | `managed-app-controller-readiness-smoke.mjs`                         | Read-only managed-app controller readiness smoke. Verifies selected release manifest descriptors, smoke contracts, and required runtime images for managed apps without starting any managed-app job.                                                                                                                                                                                                                                                                          |
 | `deployment-teardown-readiness-smoke.mjs`                            | Read-only teardown readiness smoke. Verifies the selected release pins, customer controller, Terraform backend, lock table, and evidence bucket needed for a later destroy run without starting destroy.                                                                                                                                                                                                                                                                       |
 | `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs`                   | LastMile plugin smoke. Dry-run by default. Phase 1: live OAuth discovery drift guard + `installPlugin` + prints the `activatePlugin` authorize URL; a manual browser OAuth consent sits in between; phase 2 (`--post-activation`): per-user activation status plus MCP tool-surface inclusion/exclusion via `/api/mcp/tools/list`. After catalog-version bumps, first verify the signed GitHub-backed catalog refreshed through Settings -> Plugins or `refreshPluginCatalog`. |
@@ -111,65 +109,6 @@ Passing live mode means:
 - parked Twenty stages skip with an explicit retained-runtime message;
 - running Twenty stages expose an HTTPS URL;
 - the public `https://.../healthz` endpoint returns a successful response.
-
-## Plane managed-app smoke
-
-The Plane smoke is read-only and dry-run by default:
-
-```sh
-node plugins/plane/smoke/plane-managed-app-smoke.mjs
-
-SMOKE_ENABLE_PLANE_MANAGED_APP=1 \
-  SMOKE_TENANT_ID=<tenant-id> \
-  node plugins/plane/smoke/plane-managed-app-smoke.mjs
-```
-
-Live mode reads `terraform/examples/greenfield` outputs unless
-`SMOKE_TERRAFORM_DIR` points elsewhere. `SMOKE_PLANE_URL` can supply the public
-URL directly when Terraform outputs are unavailable. Passing live mode means:
-
-- unprovisioned Plane stages skip with an explicit message;
-- parked Plane stages skip with an explicit retained-runtime message;
-- running Plane stages expose an HTTPS URL;
-- the public health path, `/` by default, returns a successful response.
-
-## Plane MCP seed/write smoke
-
-The Plane MCP smoke is dry-run by default and only writes when explicitly
-enabled:
-
-```sh
-node plugins/plane/smoke/plane-mcp-smoke.mjs
-
-SMOKE_ENABLE_PLANE_MCP=1 \
-  SMOKE_PLANE_MCP_WRITE=1 \
-  SMOKE_PLANE_MCP_URL=https://plane.example.com/mcp \
-  SMOKE_PLANE_API_KEY=<plane-pat> \
-  SMOKE_PLANE_WORKSPACE_SLUG=<workspace-slug> \
-  node plugins/plane/smoke/plane-mcp-smoke.mjs
-```
-
-Direct mode verifies Plane MCP itself. After Plane is installed as a ThinkWork
-plugin, use proxy mode to exercise the ThinkWork `/api/mcp` path. The
-`SMOKE_PLANE_API_KEY` value is a Plane personal access token; the smoke sends it
-to Plane MCP as bearer auth with the workspace slug header.
-
-```sh
-SMOKE_ENABLE_PLANE_MCP=1 \
-  SMOKE_PLANE_THINKWORK_PROXY=1 \
-  SMOKE_API_BASE_URL=<api-url> \
-  SMOKE_COGNITO_ID_TOKEN=<activated-user-token> \
-  SMOKE_AGENT_ID=<agent-id> \
-  node plugins/plane/smoke/plane-mcp-smoke.mjs
-```
-
-Passing write-enabled live mode means:
-
-- Plane MCP exposes `get_me`, project, work-item, and comment tools;
-- `get_me` authenticates the active user;
-- the smoke project and existing work item can be seeded/read;
-- the existing item receives a write-back comment;
-- a new work item is created and read back by readable issue identifier.
 
 ## Company Brain premium plugin smoke
 
@@ -391,7 +330,7 @@ SMOKE_ENABLE_MANAGED_APP_CONTROLLER_READINESS=1 \
 
 Live mode reads the selected release manifest URL/digest from the customer
 deployment SSM prefix, downloads the manifest, verifies its SHA-256, and checks
-the Cognee, Twenty, and Plane managed-app descriptors by default. It verifies
+the Cognee, Twenty, and n8n managed-app descriptors by default. It verifies
 module source/version, smoke command paths, and required runtime images without
 starting a plan or approval job. Use `SMOKE_MANAGED_APP_KEYS` to narrow the
 check when validating a release that intentionally omits one of the default
@@ -401,9 +340,7 @@ By default the smoke exits successfully with `deployReady:false` when
 descriptors are present but runtime images are missing; this makes it useful for
 diagnosing the next gap without breaking read-only demo validation. Set
 `SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1` for the final optional-app gate. In
-strict mode, missing managed-app images or smoke contracts fail closed. Plane's
-strict gate requires a `plane` runtime image in the release manifest and the
-`plugins/plane/smoke/plane-managed-app-smoke.mjs` smoke contract.
+strict mode, missing managed-app images or smoke contracts fail closed.
 
 ## Knowledge Graph thread ingest smoke
 

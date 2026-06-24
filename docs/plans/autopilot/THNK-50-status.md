@@ -97,7 +97,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - Added API managed-application status projection for n8n with queue-mode
     service/log defaults, retained database/storage metadata, and native MCP
     readiness messaging.
-  - Widened the managed-app settings row helper so n8n and Plane route to their
+  - Widened the managed-app settings row helper so n8n and Twenty CRM route to their
     own Plugin Detail pages instead of being coerced to Company Brain.
 - Verification:
   - `pnpm --filter @thinkwork/plugin-n8n test` passed.
@@ -389,7 +389,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
     `http://localhost:5175/settings/plugins`; in-app browser automation was
     blocked by enterprise localhost policy, but the generated signed catalog
     now contains nine plugins ordered
-    `company-brain,lakehouse,lastmile,n8n,plane,email-channel,sendgrid,twenty,workos-auth`.
+    `company-brain,lakehouse,lastmile,n8n,twenty,email-channel,sendgrid,twenty,workos-auth`.
 - Local verification:
   - `pnpm install` completed; optional `canvas@2.11.2` native fallback reported
     missing local `pkg-config`, but package installation completed and the
@@ -446,7 +446,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
     commit `ededec8828cd4415c8ae2c7209ed2a31c0652d6d`, release tag
     `plugin-catalog-main`, and `lastRefreshStatus: fresh`.
   - The deployed dev API `pluginCatalog` returned nine entries in display-name
-    order including `n8n` between `lastmile` and `plane`.
+    order including `n8n` between `lastmile` and `twenty`.
   - Main branch Test workflow for `ededec8828cd4415c8ae2c7209ed2a31c0652d6d`
     passed; the Deploy workflow was still in Terraform Apply when catalog proof
     was captured, so managed-app install verification waited for the platform
@@ -474,13 +474,13 @@ U3/U4/U5/U6 before U7; U7 before U8.
     `workerDesiredCount`) and expected the deployment layer to fill in release
     image, shared database-admin secret, generated runtime secret placeholders,
     public URL, and certificate defaults.
-  - The same generated tfvars preserved `plane_provisioned = true` and
-    `plane_runtime_enabled = true` from current Terraform outputs while
-    clearing Plane's required image/secret/storage/public URL/certificate
-    values to empty strings. Terraform therefore failed Plane configuration
+  - The same generated tfvars preserved `twenty_provisioned = true` and
+    `twenty_runtime_enabled = true` from current Terraform outputs while
+    clearing Twenty CRM's required image/secret/storage/public URL/certificate
+    values to empty strings. Terraform therefore failed Twenty CRM configuration
     preconditions during the unrelated n8n plan.
-  - Root cause: `terraform/modules/app/deployment-control-plane/runner.py`
-    preserved Cognee and Twenty guardrails but not Plane guardrails, and it had
+  - Root cause: `terraform/modules/app/deployment-control-twenty/runner.py`
+    preserved Cognee and Twenty guardrails but not Twenty CRM guardrails, and it had
     no Python-side n8n override generation for managed-app plan payloads.
 - Runner fix in this U8 branch:
   - Added Python n8n managed-app override generation for `ENABLE`, `PARK`,
@@ -489,9 +489,9 @@ U3/U4/U5/U6 before U7; U7 before U8.
     tenant service credential/operator/encryption/database secret ARN inputs,
     digest-pinned base/package image handling, and custom-package digest
     validation.
-  - Preserved Plane guardrail values from
-    `terraform_data.plane_configuration_guardrails` during non-Plane managed
-    app plans so an unrelated n8n plan cannot blank an existing Plane runtime.
+  - Preserved Twenty CRM guardrail values from
+    `terraform_data.twenty_configuration_guardrails` during non-Twenty CRM managed
+    app plans so an unrelated n8n plan cannot blank an existing Twenty CRM runtime.
   - Preserved n8n guardrail values during unrelated managed-app plans, and
     expanded `terraform_data.n8n_configuration_guardrails` to record package,
     runtime count, container port, storage mode, cache, CIDR, and KMS settings
@@ -508,9 +508,9 @@ U3/U4/U5/U6 before U7; U7 before U8.
     placeholders, sibling app public URL/certificate guardrails, and safe n8n
     storage/runtime defaults.
 - Local verification for the runner fix:
-  - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`
+  - `python3 -m py_compile terraform/modules/app/deployment-control-twenty/runner.py`
     passed.
-  - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+  - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
     passed: 74 tests.
   - `terraform fmt -check terraform/modules/thinkwork` passed.
   - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed: 9
@@ -602,7 +602,7 @@ U3/U4/U5/U6 before U7; U7 before U8.
     route key containing spaces, producing a multi-line import id like
     `ho7oyksms0/None ... 5b1m09k ...` instead of the single live route id.
   - Failure 2: Terraform import evaluates the full greenfield configuration,
-    and the n8n/Plane Cloudflare ACM validation records used `for_each` keys
+    and the n8n/Twenty CRM Cloudflare ACM validation records used `for_each` keys
     derived from `aws_acm_certificate.*.domain_validation_options`, which are
     unknown until apply.
 - Follow-up deploy repair branch:
@@ -610,14 +610,14 @@ U3/U4/U5/U6 before U7; U7 before U8.
     `/Users/ericodom/Projects/thinkwork/.Codex/worktrees/fix-deploy-route-import-acm`
   - Git branch: `codex/fix-deploy-route-import-acm`
   - Objective: make WorkOS route import deterministic and remove unknown
-    `for_each` keys from the n8n/Plane ACM validation records so Terraform can
+    `for_each` keys from the n8n/Twenty CRM ACM validation records so Terraform can
     import route state before the targeted apply.
   - Started: 2026-06-19 21:31 UTC.
   - Implementation summary:
     - Changed the API Gateway route lookup to parse `get-routes --output json`
       with `jq --arg route_key`, selecting the exact `RouteKey` and taking the
       first matching `RouteId`.
-    - Replaced the n8n and Plane ACM validation Cloudflare record `for_each`
+    - Replaced the n8n and Twenty CRM ACM validation Cloudflare record `for_each`
       maps with static domain-name sets; apply-time validation record names,
       values, and types remain in resource values instead of instance keys.
   - Local verification:
@@ -759,16 +759,16 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - Full platform deploy output collection still raises on Terraform output
       failures; the relaxed behavior is limited to managed-app operations.
   - Local verification:
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k "managed_app_success_refreshes_root_outputs or managed_app_output_refresh_failure_is_non_fatal or managed_app_outputs_fall_back_to_state_after_output_failure"`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py -k "managed_app_success_refreshes_root_outputs or managed_app_output_refresh_failure_is_non_fatal or managed_app_outputs_fall_back_to_state_after_output_failure"`
       passed: 3 tests.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed: 77 tests.
-    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-twenty/runner.py terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed.
   - Rebase verification after PR #2717 landed:
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed: 77 tests.
-    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-twenty/runner.py terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed.
 - Post-PR #2718 release/deploy:
   - Main deploy workflow run `27853161203` passed.
@@ -1048,11 +1048,11 @@ U3/U4/U5/U6 before U7; U7 before U8.
   - Objective: make the deployment runner verify release manifests using the
     same canonical digest as the API and release workflow.
   - Local verification:
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k "ensure_release_manifest_available or sync_release_artifacts"`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py -k "ensure_release_manifest_available or sync_release_artifacts"`
       passed: 8 tests.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed: 82 tests.
-    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-twenty/runner.py terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed.
     - `git diff --check` passed.
   - PR:
@@ -1333,11 +1333,11 @@ U3/U4/U5/U6 before U7; U7 before U8.
       rejection for release selection, while preserving signature trust against
       the canonical digest.
   - Local verification:
-    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`
+    - `python3 -m py_compile terraform/modules/app/deployment-control-twenty/runner.py`
       passed.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k 'release_manifest_available or sync_release_artifacts'`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py -k 'release_manifest_available or sync_release_artifacts'`
       passed.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed.
     - `git diff --check` passed.
   - Status: active.
@@ -1392,12 +1392,12 @@ U3/U4/U5/U6 before U7; U7 before U8.
     - Updated n8n Terraform documentation and structural/runner tests for the
       database lifecycle, worker command, and managed DNS resource.
   - Local verification:
-    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py plugins/n8n/terraform/n8n/scripts/sync-database.py`
+    - `python3 -m py_compile terraform/modules/app/deployment-control-twenty/runner.py plugins/n8n/terraform/n8n/scripts/sync-database.py`
       passed.
     - `terraform fmt plugins/n8n/terraform/n8n` passed.
     - `terraform -chdir=plugins/n8n/terraform/n8n init -backend=false && terraform -chdir=plugins/n8n/terraform/n8n validate -no-color`
       passed.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed: 84 tests.
     - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed.
     - `pnpm --filter @thinkwork/plugin-n8n test` passed.
@@ -1481,15 +1481,15 @@ U3/U4/U5/U6 before U7; U7 before U8.
       reinstall.
   - Local verification:
     - `pnpm --filter @thinkwork/api test -- handlers/infra.test.ts` passed.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k 'n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py -k 'n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
       passed.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed: 84 tests.
-    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`
+    - `python3 -m py_compile terraform/modules/app/deployment-control-twenty/runner.py`
       passed.
     - `pnpm dlx prettier@3.8.2 --check packages/api/src/lib/plugins/handlers/infra.ts packages/api/src/lib/plugins/handlers/infra.test.ts`
       passed.
-    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-twenty/runner.py terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed.
     - `git diff --check` passed.
   - Status: active; preparing PR.
@@ -1563,7 +1563,7 @@ public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all datab
   - Objective: make the installed n8n endpoint HTTPS-valid and remove the
     invalid n8n binary data mode warning.
   - Implementation summary:
-    - Deployment runner no longer falls back from n8n to Twenty/Plane
+    - Deployment runner no longer falls back from n8n to Twenty/Twenty CRM
       certificate guardrails.
     - Generated managed-app Terraform now creates and DNS-validates a
       dedicated ACM certificate for `n8n.thinkwork.ai` when no explicit n8n
@@ -1572,12 +1572,12 @@ public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all datab
     - n8n binary data mode default/validation now uses n8n's accepted
       `default` mode instead of invalid `database`.
   - Local verification:
-    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py`
+    - `python3 -m py_compile terraform/modules/app/deployment-control-twenty/runner.py`
       passed.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k 'n8n_dns or n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py -k 'n8n_dns or n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
       passed.
     - `pnpm --filter thinkwork-cli test -- terraform-n8n-fixture` passed.
-    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-twenty/runner.py terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed.
     - `terraform fmt -check plugins/n8n/terraform/n8n terraform/modules/thinkwork`
       passed.
@@ -1629,11 +1629,11 @@ public OWNER TO thinkwork_n8n`. - Grants the runtime role connect/temp/all datab
     - Regression test covers an n8n DESTROY preserving legacy binary-mode
       guardrails while keeping execution data storage mode as `database`.
   - Local verification:
-    - `python3 -m py_compile terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `python3 -m py_compile terraform/modules/app/deployment-control-twenty/runner.py terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed.
-    - `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py -k 'n8n_destroy_normalizes_legacy_binary_database_guardrail or n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
+    - `uv run --with pytest pytest terraform/modules/app/deployment-control-twenty/test_runner_bundle.py -k 'n8n_destroy_normalizes_legacy_binary_database_guardrail or n8n_managed_app_overrides_complete_sparse_live_install_payload or unrelated_managed_app_overrides_preserve_existing_n8n_guardrails'`
       passed.
-    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-plane/runner.py terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
+    - `uv run --with ruff ruff check terraform/modules/app/deployment-control-twenty/runner.py terraform/modules/app/deployment-control-twenty/test_runner_bundle.py`
       passed.
     - `pnpm dlx prettier@3.8.2 --check docs/plans/autopilot/THNK-50-status.md`
       passed.
