@@ -18,7 +18,8 @@ status: in_progress
 - Current branch: `codex/mcp-record-links-u7`.
 - Current worktree:
   `.Codex/worktrees/mcp-record-links-u7`.
-- Current pull request: Not opened yet.
+- Current pull request:
+  [#2916](https://github.com/thinkwork-ai/thinkwork/pull/2916).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -186,6 +187,9 @@ status: in_progress
     `node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`,
     `pnpm --filter @thinkwork/docs build`, changed-file Prettier check, and
     `git diff --check`.
+  - 2026-06-24: U7 PR
+    [#2916](https://github.com/thinkwork-ai/thinkwork/pull/2916) opened and CI
+    monitoring started.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
