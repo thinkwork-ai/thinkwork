@@ -13,13 +13,13 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: In progress. U5 is active.
-- Current unit: U5 - Enrich Authenticated MCP Results With Record Links.
-- Current branch: `codex/mcp-record-links-u5`.
+- Status: In progress. U6 is active.
+- Current unit: U6 - Apply Enrichment to API MCP Proxy.
+- Current branch: `codex/mcp-record-links-u6`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-u5`.
+  `.Codex/worktrees/mcp-record-links-u6`.
 - Current pull request:
-  [#2913](https://github.com/thinkwork-ai/thinkwork/pull/2913).
+  [#2915](https://github.com/thinkwork-ai/thinkwork/pull/2915).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -150,6 +150,25 @@ status: in_progress
     check, and `git diff --check`.
   - 2026-06-24: U5 PR
     [#2913](https://github.com/thinkwork-ai/thinkwork/pull/2913) opened and CI
+    monitoring started.
+  - 2026-06-24: U5 PR
+    [#2913](https://github.com/thinkwork-ai/thinkwork/pull/2913) passed CI
+    (CLA, lint, test, typecheck, verify), squash-merged to `main` as
+    `bdc5cd33`, and the remote/local U5 branches were deleted. U6 started from
+    `origin/main` at `bdc5cd33` in `.Codex/worktrees/mcp-record-links-u6` on
+    branch `codex/mcp-record-links-u6`.
+  - 2026-06-24: U6 implementation in progress. API-side MCP tool calls now
+    apply the same conservative record-link enrichment when the selected
+    `McpServerConfig` carries `recordLinkHints`; the proxy passes hints into
+    `mcpCallTool`, returns structured `recordLinks` only on successful tool
+    results, and logs only the generated link count.
+  - 2026-06-24: U6 focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/mcp-client-call.test.ts`,
+    `pnpm --filter @thinkwork/api exec vitest run src/handlers/mcp-proxy.test.ts`,
+    `pnpm --filter @thinkwork/api typecheck`, changed-file Prettier check, and
+    `git diff --check`.
+  - 2026-06-24: U6 PR
+    [#2915](https://github.com/thinkwork-ai/thinkwork/pull/2915) opened and CI
     monitoring started.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24

@@ -82,6 +82,19 @@ const SERVER_A = {
 };
 
 const OK_CONTENT = [{ type: "text", text: "ok" }];
+const RECORD_LINK_HINTS = {
+  schemaVersion: 1 as const,
+  source: "plugin-manifest" as const,
+  browserBaseUrl: "https://crm.example.com",
+  routes: [
+    {
+      objectType: "opportunity",
+      routeTemplate: "/object/opportunity/{id}",
+      idFields: ["id"],
+      labelFields: ["name"],
+    },
+  ],
+};
 
 beforeEach(() => {
   mockAuthenticate.mockReset();
@@ -187,6 +200,60 @@ describe("mcp-proxy handler", () => {
     );
   });
 
+  it("tools/call forwards record-link hints and returns structured links", async () => {
+    mockBuildMcpConfigs.mockResolvedValue([
+      { ...SERVER_A, recordLinkHints: RECORD_LINK_HINTS },
+    ]);
+    mockCallTool.mockResolvedValue({
+      content: [
+        {
+          type: "text",
+          text: "Found records.\n\nRecord links:\n- McPherson POC: https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+        },
+      ],
+      isError: false,
+      raw: {},
+      recordLinks: [
+        {
+          objectType: "opportunity",
+          id: "c203680f-4d36-461b-b134-25aef43d62c5",
+          label: "McPherson POC",
+          url: "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+        },
+      ],
+    });
+
+    const res = await handler(
+      event(CALL_PATH, {
+        agentId: "ag1",
+        name: "crm__find_many_opportunities",
+        arguments: {},
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const body = parse(res);
+    expect(body.content[0].text).toContain("Record links:");
+    expect(body.recordLinks).toEqual([
+      {
+        objectType: "opportunity",
+        id: "c203680f-4d36-461b-b134-25aef43d62c5",
+        label: "McPherson POC",
+        url: "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+      },
+    ]);
+    expect(mockCallTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: SERVER_A.url,
+        token: "tok-a",
+        name: "crm",
+      }),
+      "find_many_opportunities",
+      {},
+      { recordLinkHints: RECORD_LINK_HINTS },
+    );
+  });
+
   it("tools/call forwards auxiliary headers for bearer-auth servers", async () => {
     mockBuildMcpConfigs.mockResolvedValue([
       {
@@ -255,6 +322,14 @@ describe("mcp-proxy handler", () => {
       content: [{ type: "text", text: "bad args" }],
       isError: true,
       raw: {},
+      recordLinks: [
+        {
+          objectType: "opportunity",
+          id: "opp-1",
+          label: "Should Not Leak",
+          url: "https://crm.example.com/object/opportunity/opp-1",
+        },
+      ],
     });
 
     const res = await handler(
@@ -268,6 +343,7 @@ describe("mcp-proxy handler", () => {
     const body = parse(res);
     expect(body.isError).toBe(true);
     expect(body.content).toEqual([{ type: "text", text: "bad args" }]);
+    expect(body.recordLinks).toBeUndefined();
   });
 
   it("upstream transport failure → 502 with no unhandled throw", async () => {
