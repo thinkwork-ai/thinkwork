@@ -6,6 +6,65 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
+
+- Plan:
+  `docs/plans/2026-06-24-001-feat-company-data-shell-plugin-plan.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit.
+- Status: In progress.
+- Current unit: U1 - Create Company Data shell package.
+- Current branch: `codex/thnk-67-u1-company-data-shell`.
+- Current worktree:
+  `.Codex/worktrees/thnk-67-u1-company-data-shell`.
+- Current pull request:
+  [#2904](https://github.com/thinkwork-ai/thinkwork/pull/2904).
+- Progress:
+  - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `ce-work` and
+    `lfg` workflows, and the focused Company Data shell plugin plan.
+  - 2026-06-24: Main checkout is dirty and behind `origin/main`; preserving
+    existing changes and using isolated worktrees from `origin/main` for each
+    implementation unit.
+  - 2026-06-24: Linear THNK-67 already had the focused plan attached and is in
+    `Plan Review`; implementation autopilot started from `origin/main` at
+    `033f08388`.
+  - 2026-06-24: U1 started in
+    `.Codex/worktrees/thnk-67-u1-company-data-shell` on branch
+    `codex/thnk-67-u1-company-data-shell`.
+  - 2026-06-24: U1 implementation in progress. Created the inert
+    `plugins/company-data` shell package by cloning the Data Integrations shell
+    pattern, renamed manifest/package identifiers, added README guardrails, and
+    adapted package-local manifest tests for Company Data's governed
+    operational-facts scope.
+  - 2026-06-24: U1 execution-time discovery: adding a workspace package also
+    requires a `pnpm-lock.yaml` importer update for install/CI stability, so
+    the U1 branch includes the lockfile importer even though the original plan
+    listed lockfile work under U2.
+  - 2026-06-24: U1 focused verification passed:
+    `pnpm --filter @thinkwork/plugin-company-data test`,
+    `pnpm --filter @thinkwork/plugin-company-data typecheck`, changed-file
+    Prettier check through the installed transitive Prettier binary, and
+    `git diff --check`. Local `pnpm install` completed but logged the known
+    optional `canvas` build failure under local Node 25 because `pkg-config` is
+    not installed; package tests and typecheck were unaffected.
+  - 2026-06-24: U1 PR
+    [#2904](https://github.com/thinkwork-ai/thinkwork/pull/2904) opened and CI
+    monitoring started.
+  - 2026-06-24: U1 CI failure observed in `Validate signed catalog build`:
+    `pnpm --filter @thinkwork/plugin-catalog check:plugins` reported
+    `generated-first-party.ts is stale` because the registry generator
+    discovered `@thinkwork/plugin-company-data` before U2's catalog publication
+    work. Fix in progress: mark the U1 package with
+    `thinkworkPlugin.catalogPublication: "deferred"` so U1 can land the shell
+    package while U2 remains responsible for publication.
+  - 2026-06-24: U1 CI fix verified locally:
+    `pnpm --filter @thinkwork/plugin-company-data test`,
+    `pnpm --filter @thinkwork/plugin-company-data typecheck`,
+    `pnpm --filter @thinkwork/plugin-catalog check:plugins`, changed-file
+    Prettier check, and `git diff --check` all passed after deferring catalog
+    publication in U1.
+
 ## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
 
 - Plan:
