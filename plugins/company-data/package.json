@@ -13,6 +13,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "thinkworkPlugin": {
+    "catalogPublication": "deferred"
+  },
   "devDependencies": {
     "@thinkwork/plugin-catalog": "workspace:*",
     "typescript": "^5.5.0",

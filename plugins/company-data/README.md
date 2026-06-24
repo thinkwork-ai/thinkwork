@@ -25,8 +25,8 @@ capability.
 
 V1 is deliberately narrow:
 
-- Company Data appears in the first-party plugin catalog as
-  `company-data@0.1.0`.
+- Company Data defines the shell catalog identity as `company-data@0.1.0`.
+  Publication is intentionally deferred until the catalog wiring slice.
 - Tenant administrators can install the shell through the normal plugin
   install flow.
 - The plugin engine records only the install and one no-op UI-surface component

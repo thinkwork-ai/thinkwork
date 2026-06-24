@@ -51,6 +51,19 @@ status: in_progress
   - 2026-06-24: U1 PR
     [#2904](https://github.com/thinkwork-ai/thinkwork/pull/2904) opened and CI
     monitoring started.
+  - 2026-06-24: U1 CI failure observed in `Validate signed catalog build`:
+    `pnpm --filter @thinkwork/plugin-catalog check:plugins` reported
+    `generated-first-party.ts is stale` because the registry generator
+    discovered `@thinkwork/plugin-company-data` before U2's catalog publication
+    work. Fix in progress: mark the U1 package with
+    `thinkworkPlugin.catalogPublication: "deferred"` so U1 can land the shell
+    package while U2 remains responsible for publication.
+  - 2026-06-24: U1 CI fix verified locally:
+    `pnpm --filter @thinkwork/plugin-company-data test`,
+    `pnpm --filter @thinkwork/plugin-company-data typecheck`,
+    `pnpm --filter @thinkwork/plugin-catalog check:plugins`, changed-file
+    Prettier check, and `git diff --check` all passed after deferring catalog
+    publication in U1.
 
 ## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
 
