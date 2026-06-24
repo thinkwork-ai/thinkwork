@@ -32,6 +32,7 @@ const {
   recentThreadItemsMock,
   searchThreadItemsMock,
   pinnedThreadItemsMock,
+  spacesMock,
   pinnedQueryPauseValuesMock,
   recentReexecuteMock,
   searchReexecuteMock,
@@ -73,6 +74,13 @@ const {
     lifecycleStatus?: string | null;
     lastActivityAt?: string;
     lastReadAt?: string | null;
+  }>,
+  spacesMock: [] as Array<{
+    id: string;
+    slug: string;
+    name: string;
+    unreadThreadCount: number;
+    lastActivityAt: string;
   }>,
   pinnedQueryPauseValuesMock: [] as boolean[],
   recentReexecuteMock: vi.fn(),
@@ -181,31 +189,7 @@ vi.mock("urql", () => ({
       return [
         {
           fetching: false,
-          data: {
-            spaces: [
-              {
-                id: "space-general",
-                slug: "general",
-                name: "General",
-                unreadThreadCount: 0,
-                lastActivityAt: "2026-05-19T18:30:00Z",
-              },
-              {
-                id: "space-default",
-                slug: "default",
-                name: "Default",
-                unreadThreadCount: 0,
-                lastActivityAt: "2026-05-19T19:00:00Z",
-              },
-              {
-                id: "space-1",
-                slug: "customer-onboarding",
-                name: "Customer Onboarding",
-                unreadThreadCount: 2,
-                lastActivityAt: "2026-05-19T18:00:00Z",
-              },
-            ],
-          },
+          data: { spaces: spacesMock },
         },
         vi.fn(),
       ];
@@ -559,6 +543,7 @@ afterEach(() => {
   recentThreadItemsMock.length = 0;
   searchThreadItemsMock.length = 0;
   pinnedThreadItemsMock.length = 0;
+  spacesMock.length = 0;
   pinnedQueryPauseValuesMock.length = 0;
   window.localStorage.clear();
   if (ORIGINAL_LOCAL_STORAGE) {
@@ -598,6 +583,29 @@ describe("ChatSidebar", () => {
     reorderPinnedThreadsMock.mockResolvedValue({
       data: { reorderPinnedThreads: [] },
     });
+    spacesMock.push(
+      {
+        id: "space-general",
+        slug: "general",
+        name: "General",
+        unreadThreadCount: 0,
+        lastActivityAt: "2026-05-19T18:30:00Z",
+      },
+      {
+        id: "space-default",
+        slug: "default",
+        name: "Default",
+        unreadThreadCount: 0,
+        lastActivityAt: "2026-05-19T19:00:00Z",
+      },
+      {
+        id: "space-1",
+        slug: "customer-onboarding",
+        name: "Customer Onboarding",
+        unreadThreadCount: 2,
+        lastActivityAt: "2026-05-19T18:00:00Z",
+      },
+    );
     recentThreadItemsMock.push({
       id: "thread-recent",
       title: "Recent Space thread",
@@ -722,6 +730,23 @@ describe("ChatSidebar", () => {
     );
     expect(spaceThreadLink.className).not.toContain("ml-5");
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
+  });
+
+  it("omits the Spaces section when no Spaces have loaded", () => {
+    recentThreadItemsMock.length = 0;
+    spacesMock.length = 0;
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({
+      pathname: "/threads",
+      search: {},
+    });
+
+    render(<ChatSidebar />);
+
+    expect(screen.queryByRole("heading", { name: "Spaces" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /spaces options/i }),
+    ).toBeNull();
   });
 
   it("expands and collapses all Space rows from the Spaces section menu", () => {

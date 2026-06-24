@@ -1615,19 +1615,7 @@ function SpacesListSection({
     );
   }
 
-  if (spaces.length === 0) {
-    return (
-      <div className="space-y-0.5">
-        <SpacesSectionHeader
-          onExpandAll={onExpandAll}
-          onCollapseAll={onCollapseAll}
-        />
-        <p className="px-2 py-1 text-xs text-sidebar-foreground/55">
-          No Spaces yet
-        </p>
-      </div>
-    );
-  }
+  if (spaces.length === 0) return null;
 
   return (
     <div className="space-y-0.5">
