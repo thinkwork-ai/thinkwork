@@ -13,13 +13,13 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: In progress. U1 is active.
-- Current unit: U1 - Add Provider-Neutral Record-Link Hint Contract.
-- Current branch: `codex/mcp-record-links-u1`.
+- Status: In progress. U2 is active.
+- Current unit: U2 - Publish Twenty Record Hints During Plugin Provisioning.
+- Current branch: `codex/mcp-record-links-u2`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-u1`.
+  `.Codex/worktrees/mcp-record-links-u2`.
 - Current pull request:
-  [#2909](https://github.com/thinkwork-ai/thinkwork/pull/2909).
+  [#2910](https://github.com/thinkwork-ai/thinkwork/pull/2910).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -64,6 +64,28 @@ status: in_progress
     a temporary investigation with the already-installed Prettier 3.8.2 copy
     reported 677 pre-existing formatting warnings outside U1. Changed-file
     Prettier checks and `git diff --check` passed.
+  - 2026-06-24: U1 PR
+    [#2909](https://github.com/thinkwork-ai/thinkwork/pull/2909) passed CI,
+    squash-merged to `main` as `65d2dfec5`, and the remote/local U1 branches
+    were deleted. U2 started from `origin/main` at `65d2dfec5` in
+    `.Codex/worktrees/mcp-record-links-u2` on branch
+    `codex/mcp-record-links-u2`.
+  - 2026-06-24: U2 implemented a new Twenty plugin version `0.2.0` with
+    Opportunity-only `recordLinkHints`, while preserving the legacy `0.1.0`
+    MCP contract. Plugin MCP provisioning now derives a non-secret browser
+    origin from the managed app `publicUrl` and stores route hints in
+    `tenant_mcp_servers.runtime_metadata` for new, repaired, and adopted
+    plugin-owned rows. Remote non-HTTPS origins omit link metadata; localhost
+    HTTP remains allowed for local smoke paths.
+  - 2026-06-24: U2 focused verification passed:
+    `pnpm --filter @thinkwork/plugin-twenty exec vitest run test/manifest.test.ts`,
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/handlers/mcp.test.ts`,
+    `pnpm --filter @thinkwork/plugin-twenty typecheck`,
+    `pnpm --filter @thinkwork/api typecheck`, changed-file Prettier check, and
+    `git diff --check`.
+  - 2026-06-24: U2 PR
+    [#2910](https://github.com/thinkwork-ai/thinkwork/pull/2910) opened and CI
+    monitoring started.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 

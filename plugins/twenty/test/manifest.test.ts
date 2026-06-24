@@ -39,8 +39,26 @@ function mcpComponent(m: PluginManifest): McpServerComponent {
   return component;
 }
 
+function latestVersion(m: PluginManifest) {
+  return [...m.versions].sort((a, b) =>
+    b.version.localeCompare(a.version, undefined, { numeric: true }),
+  )[0]!;
+}
+
+function latestMcpComponent(m: PluginManifest): McpServerComponent {
+  const component = latestVersion(m).components.find(
+    (candidate) => candidate.type === "mcp-server",
+  );
+  if (component?.type !== "mcp-server") {
+    throw new Error(
+      "latest twenty manifest is missing its mcp-server component",
+    );
+  }
+  return component;
+}
+
 function infrastructureComponent(): InfrastructureComponent {
-  const component = validatedTwentyManifest.versions[0].components.find(
+  const component = latestVersion(validatedTwentyManifest).components.find(
     (candidate) => candidate.type === "infrastructure",
   );
   if (component?.type !== "infrastructure") {
@@ -75,14 +93,18 @@ describe("twenty plugin manifest", () => {
     const validated = validatePluginManifest(twentyManifest);
     expect(validated.pluginKey).toBe("twenty");
     expect(validated.versions[0].version).toBe("0.1.0");
+    expect(validated.versions.map((version) => version.version)).toEqual([
+      "0.1.0",
+      "0.2.0",
+    ]);
 
-    const components = validated.versions[0].components;
+    const components = latestVersion(validated).components;
     expect(components.map((component) => component.type).sort()).toEqual([
       "infrastructure",
       "mcp-server",
     ]);
 
-    const mcp = mcpComponent(validated);
+    const mcp = latestMcpComponent(validated);
     expect(mcp.endpointUrl).toBeUndefined();
     expect(mcp.endpointFrom).toEqual({
       managedApp: "twenty",
@@ -90,6 +112,33 @@ describe("twenty plugin manifest", () => {
       path: "/mcp",
     });
     expect(mcp.auth).toEqual({ mode: "oauth-per-instance" });
+  });
+
+  it("preserves the original 0.1.0 MCP contract and publishes 0.2.0 record-link hints", () => {
+    const validated = validatePluginManifest(twentyManifest);
+    const legacyMcp = mcpComponent(validated);
+    const latestMcp = latestMcpComponent(validated);
+
+    expect(validated.versions[0].version).toBe("0.1.0");
+    expect(legacyMcp.recordLinkHints).toBeUndefined();
+    expect(latestVersion(validated).version).toBe("0.2.0");
+    expect(latestMcp.recordLinkHints).toEqual({
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+          idFields: ["id", "opportunityId", "record.id", "opportunity.id"],
+          labelFields: [
+            "name",
+            "opportunityName",
+            "record.name",
+            "opportunity.name",
+          ],
+        },
+      ],
+    });
   });
 
   it("owns a native Twenty app package for the ThinkWork Webhook workflow action", () => {
@@ -340,7 +389,11 @@ describe("twenty plugin manifest", () => {
   });
 
   it("allows empty requiredOauthScopes for a per-instance-only manifest", () => {
-    expect(validatedTwentyManifest.versions[0].requiredOauthScopes).toEqual([]);
+    expect(
+      validatedTwentyManifest.versions.map(
+        (version) => version.requiredOauthScopes,
+      ),
+    ).toEqual([[], []]);
     expect(() => validatePluginManifest(twentyManifest)).not.toThrow();
   });
 });

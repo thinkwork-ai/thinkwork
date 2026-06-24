@@ -220,10 +220,22 @@ const endpointFromComponent: McpServerComponent = {
   displayName: "Twenty CRM",
   endpointFrom: { managedApp: "twenty", configKey: "publicUrl", path: "/mcp" },
   auth: { mode: "oauth-per-instance" },
+  recordLinkHints: {
+    schemaVersion: 1,
+    source: "plugin-manifest",
+    routes: [
+      {
+        objectType: "opportunity",
+        routeTemplate: "/object/opportunity/{id}",
+        idFields: ["id", "opportunityId"],
+        labelFields: ["name"],
+      },
+    ],
+  },
 };
 
 describe("endpointFrom resolution (U10)", () => {
-  it("resolves the endpoint from the managed app's desired_config and derives per-instance oauth", async () => {
+  it("resolves the endpoint and stores non-secret record-link metadata", async () => {
     selectQueue.push([
       {
         desired_config: { publicUrl: "https://crm.tenant.example.com/welcome" },
@@ -255,6 +267,159 @@ describe("endpointFrom resolution (U10)", () => {
       management_source: "plugin",
       plugin_install_id: "install-1",
       status: "approved",
+      runtime_metadata: {
+        recordLinkHints: {
+          schemaVersion: 1,
+          source: "plugin-manifest",
+          browserBaseUrl: "https://crm.tenant.example.com",
+          routes: [
+            {
+              objectType: "opportunity",
+              routeTemplate: "/object/opportunity/{id}",
+              idFields: ["id", "opportunityId"],
+              labelFields: ["name"],
+            },
+          ],
+        },
+      },
+    });
+    expect(JSON.stringify(insertCalls[0]!.runtime_metadata)).not.toContain(
+      "/mcp",
+    );
+    expect(JSON.stringify(insertCalls[0]!.runtime_metadata)).not.toContain(
+      "token",
+    );
+  });
+
+  it("repairs existing plugin-owned rows with runtime record-link metadata without changing auth", async () => {
+    selectQueue.push([
+      {
+        desired_config: { publicUrl: "https://crm.tenant.example.com/old" },
+      },
+    ]);
+    selectQueue.push([{ id: "server-7" }]); // existing plugin row
+    selectQueue.push([]); // no platform agents
+
+    const ref = await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(ref).toEqual({
+      tenantMcpServerId: "server-7",
+      resolvedEndpointUrl: "https://crm.tenant.example.com/mcp",
+    });
+    expect(updateCalls[0]).toMatchObject({
+      auth_type: "oauth",
+      auth_config: { oauth_resource: "https://crm.tenant.example.com/mcp" },
+      runtime_metadata: {
+        recordLinkHints: {
+          browserBaseUrl: "https://crm.tenant.example.com",
+          routes: [
+            {
+              objectType: "opportunity",
+              routeTemplate: "/object/opportunity/{id}",
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  it("adopts manual rows with runtime record-link metadata", async () => {
+    selectQueue.push([
+      {
+        desired_config: {
+          publicUrl: "https://crm.tenant.example.com/app?utm=1#top",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no plugin-owned row
+    selectQueue.push([{ id: "server-manual" }]); // manual row same endpoint
+    selectQueue.push([]); // no platform agents
+
+    const ref = await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(ref).toEqual({
+      tenantMcpServerId: "server-manual",
+      resolvedEndpointUrl: "https://crm.tenant.example.com/mcp",
+    });
+    expect(updateCalls[0]).toMatchObject({
+      management_source: "plugin",
+      plugin_install_id: "install-1",
+      runtime_metadata: {
+        recordLinkHints: {
+          browserBaseUrl: "https://crm.tenant.example.com",
+        },
+      },
+    });
+    expect(insertCalls).toHaveLength(0);
+  });
+
+  it("omits runtime record-link metadata for remote http origins", async () => {
+    selectQueue.push([
+      {
+        desired_config: {
+          publicUrl: "http://crm.tenant.example.com/app",
+        },
+      },
+    ]);
+    selectQueue.push([]);
+    selectQueue.push([]);
+    returningQueue.push([{ id: "server-http" }]);
+    selectQueue.push([]);
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(insertCalls[0]).toMatchObject({
+      url: "http://crm.tenant.example.com/mcp",
+      runtime_metadata: null,
+    });
+  });
+
+  it("keeps runtime record-link metadata for localhost http origins", async () => {
+    selectQueue.push([
+      {
+        desired_config: {
+          publicUrl: "http://localhost:3000/app",
+        },
+      },
+    ]);
+    selectQueue.push([]);
+    selectQueue.push([]);
+    returningQueue.push([{ id: "server-localhost" }]);
+    selectQueue.push([]);
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(insertCalls[0]).toMatchObject({
+      url: "http://localhost:3000/mcp",
+      runtime_metadata: {
+        recordLinkHints: {
+          browserBaseUrl: "http://localhost:3000",
+        },
+      },
     });
   });
 
