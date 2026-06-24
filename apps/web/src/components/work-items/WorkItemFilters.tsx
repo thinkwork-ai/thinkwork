@@ -187,7 +187,11 @@ export function WorkItemFilters({
           update({ applicable: value === ALL ? undefined : value === TRUE })
         }
       >
-        <SelectTrigger size="sm" aria-label="Filter applicable" className="w-36">
+        <SelectTrigger
+          size="sm"
+          aria-label="Filter applicable"
+          className="w-36"
+        >
           <SelectValue placeholder="Applicable" />
         </SelectTrigger>
         <SelectContent>
