@@ -68,6 +68,10 @@ The approved plan recommends PR slices that group tightly coupled units:
 
 - 2026-06-24T16:45Z: Began implementation worker pass from fresh
   `origin/main` on branch `codex/thnk-69-native-work-items`.
+- 2026-06-24T17:34Z: Substrate slice merged via PR #2925
+  (`c8561cd04`). Duplicate PR #2926 was closed as superseded and cleaned up.
+- 2026-06-24T17:35Z: Began onboarding producer slice from fresh `origin/main`
+  on branch `codex/thnk-69-onboarding`.
 
 ## Unit Log
 
@@ -117,3 +121,42 @@ Local verification:
 - 2026-06-24T16:56Z: `git diff --check` passed.
 - 2026-06-24T16:56Z: `pnpm --filter thinkwork-cli typecheck` passed.
 - 2026-06-24T16:57Z: `pnpm --filter @thinkwork/web typecheck` passed.
+
+### Onboarding PR: Customer Onboarding Producer
+
+Objective: make Customer Onboarding emit native Work Items while preserving
+legacy `linked_tasks` compatibility during the migration.
+
+Branch:
+
+- `codex/thnk-69-onboarding`
+
+Implementation notes:
+
+- Added a Customer Onboarding Work Item adapter that creates native Work Items,
+  thread links, external refs, events, default statuses, and linked-task metadata
+  pointers.
+- Kept existing linked-task rows as compatibility data and records the native
+  Work Item ID back onto linked-task metadata.
+- Changed Customer Onboarding goals to use `work_items` progress metadata.
+- Updated progress rendering to prefer native Work Items when present and fall
+  back to linked tasks for older threads.
+- Synced native Work Item status when Customer Onboarding chat updates change or
+  remove mapped linked tasks.
+- Tenant-scoped linked-task compatibility pointer writes and filtered native
+  progress reads to onboarding-origin Work Items.
+
+Local verification:
+
+- 2026-06-24T17:41Z: `pnpm install` completed in the fresh worktree. Optional
+  `canvas` native build failed locally on Node 25 because `pkg-config`/pixman
+  were unavailable, but install exited successfully.
+- 2026-06-24T17:42Z: `pnpm --filter @thinkwork/api test -- src/lib/work-items/customer-onboarding.test.ts src/lib/spaces/customer-onboarding-workflow.test.ts src/lib/spaces/customer-onboarding-progress-md.test.ts src/lib/spaces/customer-onboarding-goal-md.test.ts src/lib/spaces/customer-onboarding-chat-updates.test.ts src/graphql/resolvers/spaces/startCustomerOnboarding.mutation.test.ts`
+  passed: 6 files, 45 tests.
+- 2026-06-24T17:42Z: `pnpm --filter @thinkwork/api typecheck` passed.
+- 2026-06-24T17:48Z: Re-ran the focused onboarding/API tests after review
+  edits; passed: 6 files, 45 tests.
+- 2026-06-24T17:48Z: Re-ran `pnpm --filter @thinkwork/api typecheck`;
+  passed.
+- 2026-06-24T17:49Z: `pnpm --filter @thinkwork/api test` passed: 585 files,
+  5,396 tests; 3 files/9 tests skipped for existing live-E2E gates.

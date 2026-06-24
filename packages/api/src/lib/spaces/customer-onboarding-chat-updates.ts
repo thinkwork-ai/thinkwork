@@ -15,6 +15,7 @@ import {
 } from "./customer-onboarding-workflow.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "./customer-onboarding-goal-md.js";
 import type { LinkedTaskStatus } from "../linked-tasks/status.js";
+import { syncWorkItemFromLinkedTask } from "../work-items/customer-onboarding.js";
 
 interface ApplyCustomerOnboardingChatUpdateInput {
   tenantId: string;
@@ -235,6 +236,22 @@ export async function applyCustomerOnboardingChatUpdate(
           .where(eq(linkedTasks.id, restored.id))
           .returning();
         activeTaskRows.push(updated);
+        await syncWorkItemFromLinkedTask(
+          {
+            tenantId: input.tenantId,
+            linkedTaskId: updated.id,
+            status: "todo",
+            required: true,
+            blocked: false,
+            note: addition.note,
+            actorUserId: input.senderUserId ?? null,
+            metadata: {
+              source: "customer_onboarding_chat_update",
+              restored: true,
+            },
+          },
+          { database: tx as never, now: () => now },
+        );
         addedTasks.push({ title: updated.title });
         continue;
       }
@@ -347,6 +364,22 @@ export async function applyCustomerOnboardingChatUpdate(
 
       const index = activeTaskRows.findIndex((row) => row.id === task.id);
       if (index >= 0) activeTaskRows.splice(index, 1);
+      await syncWorkItemFromLinkedTask(
+        {
+          tenantId: input.tenantId,
+          linkedTaskId: task.id,
+          status: "cancelled",
+          required: false,
+          blocked: false,
+          note: removal.note,
+          actorUserId: input.senderUserId ?? null,
+          metadata: {
+            source: "customer_onboarding_chat_update",
+            removed: true,
+          },
+        },
+        { database: tx as never, now: () => now },
+      );
       removedTasks.push({ title: task.title });
     }
 
@@ -443,6 +476,23 @@ export async function applyCustomerOnboardingChatUpdate(
           previousStatus,
           nextStatus,
         });
+        await syncWorkItemFromLinkedTask(
+          {
+            tenantId: input.tenantId,
+            linkedTaskId: task.id,
+            status: nextStatus,
+            required: nextRequired,
+            blocked: nextStatus === "blocked",
+            note: explicitStatusByKey.get(key)?.note,
+            actorUserId: input.senderUserId ?? null,
+            metadata: {
+              source: "customer_onboarding_chat_update",
+              checklistItemKey: key,
+              extractedFacts: extracted.facts,
+            },
+          },
+          { database: tx as never, now: () => now },
+        );
       }
       if (assignment && assigneeChanged) {
         await tx.insert(linkedTaskEvents).values({

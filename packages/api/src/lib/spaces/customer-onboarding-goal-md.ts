@@ -292,9 +292,9 @@ class DrizzleCustomerOnboardingGoalStatusUpdater
       ),
       mode: "collaborate",
       status: input.status,
-      progress_model: "linked_tasks",
+      progress_model: "work_items",
       completion_rule: {
-        type: "all_required_applicable_linked_tasks_complete",
+        type: "all_required_applicable_work_items_complete",
       },
       review_policy: {
         required: true,

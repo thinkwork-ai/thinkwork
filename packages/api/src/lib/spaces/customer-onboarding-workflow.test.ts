@@ -244,6 +244,14 @@ describe("startCustomerOnboardingWorkflow", () => {
       }),
     );
     expect(repository.linkedTasks).toHaveLength(2);
+    expect(repository.workItems).toHaveLength(2);
+    expect(repository.workItems[0]).toMatchObject({
+      linkedTaskId: "linked-task-1",
+      task: expect.objectContaining({ externalTaskId: "LM-100" }),
+      metadata: expect.objectContaining({
+        workflow: "customer_onboarding",
+      }),
+    });
     expect(coordinator.enqueueWakeup).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant-1",
@@ -374,6 +382,15 @@ describe("startCustomerOnboardingWorkflow", () => {
       }),
     ]);
     expect(repository.linkedTasks).toHaveLength(7);
+    expect(repository.workItems).toHaveLength(7);
+    expect(repository.workItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          linkedTaskId: "linked-task-1",
+          checklistItem: expect.objectContaining({ key: "docusign_package" }),
+        }),
+      ]),
+    );
     expect(repository.ensuredGoals).toEqual([
       expect.objectContaining({
         thread: expect.objectContaining({ id: "thread-prepared" }),
@@ -493,6 +510,22 @@ describe("startCustomerOnboardingWorkflow", () => {
         }),
       ]),
     );
+    expect(repository.workItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({ key: "credit_check" }),
+          task: expect.objectContaining({ status: "todo" }),
+          required: true,
+        }),
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({
+            key: "tax_exemption_forms",
+          }),
+          task: expect.objectContaining({ status: "not_applicable" }),
+          required: false,
+        }),
+      ]),
+    );
     expect(coordinator.enqueueWakeup).toHaveBeenCalledWith(
       expect.objectContaining({
         tenantId: "tenant-1",
@@ -559,6 +592,7 @@ describe("startCustomerOnboardingWorkflow", () => {
       }),
     ]);
     expect(repository.linkedTasks).toHaveLength(7);
+    expect(repository.workItems).toHaveLength(7);
   });
 
   it("applies tax and credit applicability independently", async () => {
@@ -583,6 +617,22 @@ describe("startCustomerOnboardingWorkflow", () => {
     );
 
     expect(repository.linkedTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({ key: "credit_check" }),
+          required: false,
+          task: expect.objectContaining({ status: "not_applicable" }),
+        }),
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({
+            key: "tax_exemption_forms",
+          }),
+          required: true,
+          task: expect.objectContaining({ status: "todo" }),
+        }),
+      ]),
+    );
+    expect(repository.workItems).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           checklistItem: expect.objectContaining({ key: "credit_check" }),
@@ -643,6 +693,15 @@ describe("startCustomerOnboardingWorkflow", () => {
               pendingIntake: true,
             }),
           }),
+        }),
+      ]),
+    );
+    expect(repository.workItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({ key: "credit_check" }),
+          required: false,
+          task: expect.objectContaining({ status: "todo" }),
         }),
       ]),
     );
@@ -760,6 +819,16 @@ describe("startCustomerOnboardingWorkflow", () => {
         }),
       ]),
     );
+    expect(repository.workItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          checklistItem: expect.objectContaining({
+            key: "missing_onboarding_information",
+          }),
+          task: expect.objectContaining({ status: "todo" }),
+        }),
+      ]),
+    );
   });
 
   it("mirrors provider failures as linked task sync errors", async () => {
@@ -794,6 +863,13 @@ describe("startCustomerOnboardingWorkflow", () => {
     });
     expect(repository.linkedTasks[0]?.task.providerError).toMatchObject({
       message: "LastMile unavailable",
+    });
+    expect(repository.workItems[0]).toMatchObject({
+      linkedTaskId: "linked-task-1",
+      task: expect.objectContaining({
+        provider: "lastmile",
+        externalTaskId: "pending:thread-1:item-tax",
+      }),
     });
   });
 
@@ -875,21 +951,27 @@ function makeRepository(
     >;
   } = {},
 ) {
+  const createdCases: Parameters<
+    CustomerOnboardingWorkflowRepository["createCase"]
+  >[0][] = [];
+  const initializedCases: Parameters<
+    NonNullable<CustomerOnboardingWorkflowRepository["initializePreparedCase"]>
+  >[0][] = [];
+  const linkedTasks: Parameters<
+    CustomerOnboardingWorkflowRepository["createLinkedTask"]
+  >[0][] = [];
+  const workItems: Parameters<
+    NonNullable<CustomerOnboardingWorkflowRepository["createWorkItem"]>
+  >[0][] = [];
+  const ensuredGoals: Parameters<
+    NonNullable<CustomerOnboardingWorkflowRepository["ensureGoal"]>
+  >[0][] = [];
   const repository = {
-    createdCases: [] as Parameters<
-      CustomerOnboardingWorkflowRepository["createCase"]
-    >[0][],
-    initializedCases: [] as Parameters<
-      NonNullable<
-        CustomerOnboardingWorkflowRepository["initializePreparedCase"]
-      >
-    >[0][],
-    linkedTasks: [] as Parameters<
-      CustomerOnboardingWorkflowRepository["createLinkedTask"]
-    >[0][],
-    ensuredGoals: [] as Parameters<
-      NonNullable<CustomerOnboardingWorkflowRepository["ensureGoal"]>
-    >[0][],
+    createdCases,
+    initializedCases,
+    linkedTasks,
+    workItems,
+    ensuredGoals,
     async findSpace() {
       return options.space ?? baseSpace;
     },
@@ -897,7 +979,7 @@ function makeRepository(
       return options.existingThread ?? null;
     }),
     async createCase(input) {
-      repository.createdCases.push(input);
+      createdCases.push(input);
       return {
         id: "thread-1",
         tenantId: input.tenantId,
@@ -908,7 +990,7 @@ function makeRepository(
       };
     },
     async initializePreparedCase(input) {
-      repository.initializedCases.push(input);
+      initializedCases.push(input);
       return {
         ...input.thread,
         title: input.title,
@@ -916,10 +998,16 @@ function makeRepository(
       };
     },
     async ensureGoal(input) {
-      repository.ensuredGoals.push(input);
+      ensuredGoals.push(input);
     },
     async createLinkedTask(input) {
-      repository.linkedTasks.push(input);
+      const id = `linked-task-${linkedTasks.length + 1}`;
+      linkedTasks.push(input);
+      return { id };
+    },
+    async createWorkItem(input) {
+      workItems.push(input);
+      return { id: `work-item-${workItems.length}` };
     },
   } satisfies CustomerOnboardingWorkflowRepository & {
     createdCases: Parameters<
@@ -932,6 +1020,9 @@ function makeRepository(
     >[0][];
     linkedTasks: Parameters<
       CustomerOnboardingWorkflowRepository["createLinkedTask"]
+    >[0][];
+    workItems: Parameters<
+      NonNullable<CustomerOnboardingWorkflowRepository["createWorkItem"]>
     >[0][];
     ensuredGoals: Parameters<
       NonNullable<CustomerOnboardingWorkflowRepository["ensureGoal"]>
