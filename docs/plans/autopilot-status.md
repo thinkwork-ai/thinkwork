@@ -14,12 +14,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
 - Status: In progress.
-- Current unit: U2 - Publish Company Data through the generated catalog.
-- Current branch: `codex/thnk-67-u2-company-data-catalog`.
+- Current unit: U3 - Extend plugin source-boundary enforcement.
+- Current branch: `codex/thnk-67-u3-company-data-boundary`.
 - Current worktree:
-  `.Codex/worktrees/thnk-67-u2-company-data-catalog`.
-- Current pull request:
-  [#2905](https://github.com/thinkwork-ai/thinkwork/pull/2905).
+  `.Codex/worktrees/thnk-67-u3-company-data-boundary`.
+- Current pull request: Pending.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `ce-work` and
     `lfg` workflows, and the focused Company Data shell plugin plan.
@@ -93,6 +92,21 @@ status: in_progress
   - 2026-06-24: U2 PR
     [#2905](https://github.com/thinkwork-ai/thinkwork/pull/2905) opened and CI
     monitoring started.
+  - 2026-06-24: U2 PR
+    [#2905](https://github.com/thinkwork-ai/thinkwork/pull/2905) passed
+    required CI (`cla`, `lint`, `test`, `typecheck`, `verify`, and
+    `Validate signed catalog build`) and was squash merged as
+    `aaf5b606398e7bb3bb2c346b32b094b6a02a61e5`; remote branch was deleted by
+    GitHub and the local U2 worktree/branch were removed.
+  - 2026-06-24: U3 started from `origin/main` at `aaf5b6063` in
+    `.Codex/worktrees/thnk-67-u3-company-data-boundary` on branch
+    `codex/thnk-67-u3-company-data-boundary`.
+  - 2026-06-24: U3 implementation in progress. Added `company-data` to the
+    plugin source-boundary key/root map and extended boundary fixtures to prove
+    Company Data source is accepted only under `plugins/company-data/`.
+  - 2026-06-24: U3 focused verification passed:
+    `pnpm test:plugin-source-boundary`, `pnpm lint:plugin-source`, changed-file
+    Prettier check, and `git diff --check`.
 
 ## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
 

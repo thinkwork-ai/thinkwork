@@ -26,6 +26,7 @@ describe("verify-plugin-source-boundary", () => {
         dir,
         "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
       );
+      await writeFixtureFile(dir, "plugins/company-data/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/data-integrations/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/email-channel/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/n8n/src/manifest.ts");
@@ -39,6 +40,7 @@ describe("verify-plugin-source-boundary", () => {
 
   it("blocks another plugin's source inside the wrong plugin package", async () => {
     await withFixture(async (dir) => {
+      await writeFixtureFile(dir, "plugins/lastmile/src/company-data-notes.md");
       await writeFixtureFile(dir, "plugins/lastmile/src/plane-notes.md");
       await writeFixtureFile(
         dir,
@@ -52,27 +54,32 @@ describe("verify-plugin-source-boundary", () => {
 
       const result = await scanFixture(dir);
 
-      assert.equal(result.violations.length, 4);
+      assert.equal(result.violations.length, 5);
       assert.equal(
         result.violations[0].path,
-        "plugins/lastmile/src/data-integrations-notes.md",
+        "plugins/lastmile/src/company-data-notes.md",
       );
-      assert.deepEqual(result.violations[0].pluginKeys, ["data-integrations"]);
+      assert.deepEqual(result.violations[0].pluginKeys, ["company-data"]);
       assert.equal(
         result.violations[1].path,
-        "plugins/lastmile/src/email-channel-notes.md",
+        "plugins/lastmile/src/data-integrations-notes.md",
       );
-      assert.deepEqual(result.violations[1].pluginKeys, ["email-channel"]);
+      assert.deepEqual(result.violations[1].pluginKeys, ["data-integrations"]);
       assert.equal(
         result.violations[2].path,
-        "plugins/lastmile/src/n8n-notes.md",
+        "plugins/lastmile/src/email-channel-notes.md",
       );
-      assert.deepEqual(result.violations[2].pluginKeys, ["n8n"]);
+      assert.deepEqual(result.violations[2].pluginKeys, ["email-channel"]);
       assert.equal(
         result.violations[3].path,
+        "plugins/lastmile/src/n8n-notes.md",
+      );
+      assert.deepEqual(result.violations[3].pluginKeys, ["n8n"]);
+      assert.equal(
+        result.violations[4].path,
         "plugins/lastmile/src/plane-notes.md",
       );
-      assert.deepEqual(result.violations[3].pluginKeys, ["plane"]);
+      assert.deepEqual(result.violations[4].pluginKeys, ["plane"]);
     });
   });
 
@@ -84,28 +91,37 @@ describe("verify-plugin-source-boundary", () => {
       );
       await writeFixtureFile(
         dir,
+        "packages/api/src/lib/plugins/company-data-extra.ts",
+      );
+      await writeFixtureFile(
+        dir,
         "packages/api/src/lib/plugins/data-integrations-extra.ts",
       );
       await writeFixtureFile(dir, "packages/api/src/lib/plugins/n8n-extra.ts");
 
       const result = await scanFixture(dir);
 
-      assert.equal(result.violations.length, 3);
+      assert.equal(result.violations.length, 4);
       assert.equal(
         result.violations[0].path,
-        "packages/api/src/lib/plugins/data-integrations-extra.ts",
+        "packages/api/src/lib/plugins/company-data-extra.ts",
       );
-      assert.deepEqual(result.violations[0].pluginKeys, ["data-integrations"]);
+      assert.deepEqual(result.violations[0].pluginKeys, ["company-data"]);
       assert.equal(
         result.violations[1].path,
-        "packages/api/src/lib/plugins/n8n-extra.ts",
+        "packages/api/src/lib/plugins/data-integrations-extra.ts",
       );
-      assert.deepEqual(result.violations[1].pluginKeys, ["n8n"]);
+      assert.deepEqual(result.violations[1].pluginKeys, ["data-integrations"]);
       assert.equal(
         result.violations[2].path,
+        "packages/api/src/lib/plugins/n8n-extra.ts",
+      );
+      assert.deepEqual(result.violations[2].pluginKeys, ["n8n"]);
+      assert.equal(
+        result.violations[3].path,
         "packages/api/src/lib/plugins/plane-extra.ts",
       );
-      assert.deepEqual(result.violations[2].pluginKeys, ["plane"]);
+      assert.deepEqual(result.violations[3].pluginKeys, ["plane"]);
     });
   });
 
