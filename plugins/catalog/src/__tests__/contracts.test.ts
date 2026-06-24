@@ -256,6 +256,90 @@ describe("validatePluginManifest", () => {
     expect(() => validatePluginManifest(ok)).not.toThrow();
   });
 
+  it("accepts provider-neutral MCP record-link hints", () => {
+    const ok = manifest();
+    const server = version(ok).components[0];
+    if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+    server.recordLinkHints = {
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+          idFields: ["id", "opportunityId"],
+          labelFields: ["name"],
+        },
+      ],
+      workspace: {
+        hashField: "workspaceId",
+      },
+    };
+
+    const validated = validatePluginManifest(ok);
+    const validatedServer = validated.versions[0].components[0];
+    if (validatedServer.type !== "mcp-server") {
+      throw new Error("expected mcp-server");
+    }
+    expect(validatedServer.recordLinkHints).toEqual(server.recordLinkHints);
+  });
+
+  it("rejects unsafe MCP record-link route templates", () => {
+    for (const routeTemplate of [
+      "https://crm.example.com/object/opportunity/{id}",
+      "//crm.example.com/object/opportunity/{id}",
+      "/object/opportunity",
+      "/object/opportunity/{id}?tab=details",
+      "/object/opportunity/{id}#workspace",
+    ]) {
+      const bad = manifest();
+      const server = version(bad).components[0];
+      if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+      server.recordLinkHints = {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        routes: [{ objectType: "opportunity", routeTemplate }],
+      };
+
+      expect(() => validatePluginManifest(bad)).toThrow(/recordLinkHints/);
+    }
+  });
+
+  it("rejects malformed MCP record-link object and field hints", () => {
+    const badObjectType = manifest();
+    const objectServer = version(badObjectType).components[0];
+    if (objectServer.type !== "mcp-server") {
+      throw new Error("missing mcp-server");
+    }
+    objectServer.recordLinkHints = {
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      routes: [
+        {
+          objectType: "Opportunity" as never,
+          routeTemplate: "/object/opportunity/{id}",
+        },
+      ],
+    };
+    expect(() => validatePluginManifest(badObjectType)).toThrow(/objectType/);
+
+    const badIdField = manifest();
+    const idServer = version(badIdField).components[0];
+    if (idServer.type !== "mcp-server") throw new Error("missing mcp-server");
+    idServer.recordLinkHints = {
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+          idFields: ["id", ""] as never,
+        },
+      ],
+    };
+    expect(() => validatePluginManifest(badIdField)).toThrow(/idFields/);
+  });
+
   it("rejects Authorization-shaped user-provided header auth", () => {
     const bad = manifest();
     const server = version(bad).components[0];

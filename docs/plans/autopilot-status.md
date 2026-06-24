@@ -6,6 +6,41 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## MCP Record Link Hints Autopilot - 2026-06-24
+
+- Plan:
+  `docs/plans/2026-06-24-002-feat-mcp-record-link-hints-plan.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit.
+- Status: In progress. U1 is active.
+- Current unit: U1 - Add Provider-Neutral Record-Link Hint Contract.
+- Current branch: `codex/mcp-record-links-u1`.
+- Current worktree:
+  `.Codex/worktrees/mcp-record-links-u1`.
+- Current pull request: None yet.
+- Progress:
+  - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
+    `ce-work` workflow instructions, and the MCP record-link hints plan.
+  - 2026-06-24: Main checkout is dirty with unrelated user/session changes,
+    including a modified autopilot ledger; preserving those changes and using
+    isolated worktrees from `origin/main`.
+  - 2026-06-24: U1 started from `origin/main` at `dffa9766d` in
+    `.Codex/worktrees/mcp-record-links-u1` on branch
+    `codex/mcp-record-links-u1`.
+  - 2026-06-24: U1 implementation in progress. Plan artifact copied into the
+    isolated worktree so the first PR can make the plan/status baseline durable
+    for later units.
+  - 2026-06-24: U1 implemented provider-neutral `recordLinkHints` manifest
+    validation, added nullable `tenant_mcp_servers.runtime_metadata`, and added
+    migration/schema coverage for the hand-rolled migration marker.
+  - 2026-06-24: U1 focused and package verification passed:
+    `pnpm --filter @thinkwork/plugin-catalog test`,
+    `pnpm --filter @thinkwork/database-pg test`,
+    `pnpm --filter @thinkwork/plugin-catalog typecheck`,
+    `pnpm --filter @thinkwork/database-pg typecheck`, changed-file Prettier
+    check, and `git diff --check`.
+
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
 - Plan:
