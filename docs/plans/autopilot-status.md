@@ -13,13 +13,12 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: In progress. U4 is active.
-- Current unit: U4 - Preserve Link Hints Inside Pi MCP Config Parsing.
-- Current branch: `codex/mcp-record-links-u4`.
+- Status: In progress. U5 is active.
+- Current unit: U5 - Enrich Authenticated MCP Results With Record Links.
+- Current branch: `codex/mcp-record-links-u5`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-u4`.
-- Current pull request:
-  [#2912](https://github.com/thinkwork-ai/thinkwork/pull/2912).
+  `.Codex/worktrees/mcp-record-links-u5`.
+- Current pull request: Not opened yet.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -131,6 +130,23 @@ status: in_progress
   - 2026-06-24: U4 PR
     [#2912](https://github.com/thinkwork-ai/thinkwork/pull/2912) opened and CI
     monitoring started.
+  - 2026-06-24: U4 PR
+    [#2912](https://github.com/thinkwork-ai/thinkwork/pull/2912) passed CI
+    (CLA, lint, test, typecheck, verify), squash-merged to `main` as
+    `2550e28d`, and the remote/local U4 branches were deleted. U5 started from
+    `origin/main` at `2550e28d` in `.Codex/worktrees/mcp-record-links-u5` on
+    branch `codex/mcp-record-links-u5`.
+  - 2026-06-24: U5 implementation in progress. Added Pi-side MCP result
+    enrichment that extracts supported records only from the current MCP
+    response envelope, appends a capped `Record links` text block, preserves
+    structured `details.recordLinks`, dedupes by object type/id, skips
+    pre-linked records, rejects malformed ids/routes/origins, and preserves
+    existing MCP `isError` behavior without synthesizing links.
+  - 2026-06-24: U5 focused verification passed:
+    `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp-record-links.test.ts`,
+    `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp-connect.test.ts`,
+    `pnpm --filter @thinkwork/agentcore-pi typecheck`, changed-file Prettier
+    check, and `git diff --check`.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 

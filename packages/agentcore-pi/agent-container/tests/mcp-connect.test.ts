@@ -264,6 +264,102 @@ describe("createConnectMcpServer", () => {
     await expect(tool!.execute("call-1", {})).rejects.toThrow(/boom/);
   });
 
+  it("adds record links to successful supported MCP results", async () => {
+    const fake = makeFakeClient([{ name: "find_many_opportunities" }], {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            opportunities: [
+              {
+                id: "c203680f-4d36-461b-b134-25aef43d62c5",
+                name: "McPherson POC",
+              },
+            ],
+          }),
+        },
+      ],
+    });
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    const [tool] = await factory({
+      url: "https://crm.example.com/mcp",
+      headers: {},
+      serverName: "twenty--crm",
+      recordLinkHints: {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        browserBaseUrl: "https://crm.example.com",
+        routes: [
+          {
+            objectType: "opportunity",
+            routeTemplate: "/object/opportunity/{id}",
+            idFields: ["id"],
+            labelFields: ["name"],
+          },
+        ],
+      },
+    });
+
+    const result = await tool!.execute("call-1", {});
+    const text =
+      result.content?.[0]?.type === "text" ? result.content[0].text : "";
+
+    expect(text).toContain("Record links:");
+    expect(text).toContain(
+      "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+    );
+    expect(result.details).toMatchObject({
+      recordLinks: [
+        {
+          objectType: "opportunity",
+          id: "c203680f-4d36-461b-b134-25aef43d62c5",
+          label: "McPherson POC",
+          url: "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+        },
+      ],
+    });
+  });
+
+  it("does not synthesize record links for MCP isError responses", async () => {
+    const fake = makeFakeClient([{ name: "find_many_opportunities" }], {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ id: "opp-1", objectType: "opportunity" }),
+        },
+      ],
+      isError: true,
+    });
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    const [tool] = await factory({
+      url: "https://crm.example.com/mcp",
+      headers: {},
+      serverName: "twenty--crm",
+      recordLinkHints: {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        browserBaseUrl: "https://crm.example.com",
+        routes: [
+          {
+            objectType: "opportunity",
+            routeTemplate: "/object/opportunity/{id}",
+            idFields: ["id"],
+          },
+        ],
+      },
+    });
+
+    await expect(tool!.execute("call-1", {})).rejects.toThrow(/opp-1/);
+  });
+
   it("connect failure surfaces as a rejected promise (caller handles)", async () => {
     const transport = makeFakeTransport();
     const client: FakeClient = {
