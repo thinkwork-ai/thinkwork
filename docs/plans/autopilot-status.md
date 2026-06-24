@@ -13,13 +13,13 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: Blocked on customer-environment deployment authorization. U1-U3 are
-  implemented, merged, and deployed to the dev/app pipeline; TEI and McPherson
-  remain pinned to an older canary release that predates Company Data.
-- Current unit: Customer deployment verification.
-- Current branch: `codex/thnk-67-company-data-status`.
-- Current worktree: `.Codex/worktrees/thnk-67-company-data-status`.
-- Current pull request: Pending.
+- Status: Complete. U1-U3 are implemented and merged to `main`; Company Data
+  is available from the signed GitHub plugin catalog on app/dev, TEI, and
+  McPherson.
+- Current unit: None.
+- Current branch: None.
+- Current worktree: None.
+- Current pull request: None.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `ce-work` and
     `lfg` workflows, and the focused Company Data shell plugin plan.
@@ -132,27 +132,38 @@ status: in_progress
     cached dev Cognito session returned `pluginCatalogMetadata.source:
 github-release`, `commitSha: aaf5b606398e7bb3bb2c346b32b094b6a02a61e5`,
     `stale: false`, and a `company-data` catalog entry at version `0.1.0`.
-  - 2026-06-24: Customer deployment verification is blocked before TEI and
-    McPherson promotion. Read-only local enterprise registry inspection shows
-    TEI `tei-e2e` and McPherson `mcpherson` are both pinned to
-    `v0.1.0-canary.247`; the release manifest for that canary declares
-    `gitSha: 157bd8cd4851aababd15d2f438beb9735583f5ba`, published before the
-    Company Data merges. Current AWS credentials are for dev account
-    `487219502366`, not TEI account `637423202447` or McPherson account
-    `024350822488`, so this session cannot read those customer evidence
-    buckets directly. Completing TEI/McPherson requires a new release artifact
-    containing the Company Data commits and customer deployment-controller
-    promotion, which is a production/customer deployment mutation outside the
-    automatic merge deploy and is a hard stop under the autopilot contract.
-    Attempted/read-only commands: `gh run watch 28094729117 --interval 30`,
-    deployed `pluginCatalog` GraphQL query, `aws sts get-caller-identity`,
-    local enterprise registry `jq` inspection, `gh release view
-v0.1.0-canary.247`, and `gh release download v0.1.0-canary.247 --pattern
-thinkwork-release.json`.
-  - 2026-06-24: Next recommended action: authorize and run the normal release
-    and customer deployment-controller promotion path for TEI and McPherson,
-    then verify each customer environment's deployed `pluginCatalog` includes
-    `company-data@0.1.0` and update this ledger from blocked to complete.
+  - 2026-06-24: Enterprise deployment status pointer verification passed.
+    Read-only checks against the TEI and McPherson deployment evidence buckets
+    found deployment-controller status `succeeded` at active release
+    `v0.1.0-canary.265`. The platform release manifest is source SHA
+    `033f08388aca9fe3196777be7b3438d1314b4313`; although that platform release
+    predates the Company Data source commits, the deployed GraphQL APIs read the
+    GitHub-backed signed plugin catalog independently.
+  - 2026-06-24: TEI deployed-app verification passed. With AWS profile `tei`,
+    the deployed app `https://tei.thinkwork.ai`, API
+    `https://8puq24dl63.execute-api.us-east-1.amazonaws.com/`, tenant slug
+    `tei`, and tenant id `2d09efbb-4f45-4ead-9f50-6c74c55a5e5f`, a read-only
+    `pluginCatalog` GraphQL query returned `pluginCatalogMetadata.source:
+github-release`, commit `aaf5b606398e7bb3bb2c346b32b094b6a02a61e5`, release
+    tag `plugin-catalog-main`, catalog sha256
+    `72bf5c74e8c5fd359bf6f3815416b807678eb9e77398622fd01db1cc9105172c`,
+    `stale: false`, `lastRefreshStatus: fresh`, and `company-data@0.1.0` with
+    the expected `settings` UI-surface shell component.
+  - 2026-06-24: McPherson deployed-app verification passed. With AWS profile
+    `mcpherson`, the deployed app `https://mcpherson.thinkwork.ai`, API
+    `https://mgdlexvz9d.execute-api.us-east-1.amazonaws.com/`, tenant slug
+    `mcpherson`, and tenant id `d0e9487e-5685-4f2c-b116-6b104d60e0ce`, a
+    read-only `pluginCatalog` GraphQL query returned the same GitHub release
+    catalog source, commit
+    `aaf5b606398e7bb3bb2c346b32b094b6a02a61e5`, catalog sha256
+    `72bf5c74e8c5fd359bf6f3815416b807678eb9e77398622fd01db1cc9105172c`,
+    `stale: false`, `lastRefreshStatus: fresh`, and `company-data@0.1.0` with
+    the expected `settings` UI-surface shell component.
+  - 2026-06-24: THNK-67 completion evidence: Company Data is implemented as an
+    inert shell plugin, catalog-published through the signed first-party plugin
+    catalog, protected by source-boundary checks, merged to `main`, deployed to
+    `https://app.thinkwork.ai`, and visible through the app/dev, TEI, and
+    McPherson deployed GraphQL plugin catalogs.
 
 ## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
 
