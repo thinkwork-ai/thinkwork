@@ -48,6 +48,20 @@ The ThinkWork-owned contract (case + agent response in, verdicts out) behind whi
 ### Eval dataset
 A per-tenant, versioned collection of eval cases stored as an S3 artifact with a derived DB index. Each tenant gets a `baseline-red-team` dataset (the seeded red-team suite) at install; operators curate custom datasets by flagging threads. Case identity is stable across dataset versions so trend history survives.
 
+## Work Tracking
+
+### Work Item
+The native ThinkWork unit of durable work. A Work Item belongs to a tenant and an owning Space, can link to Threads for collaboration context, and owns task state such as status, owner, due date, required/applicable flags, completion metadata, provenance, and event history. Threads remain collaboration records; Work Items are the source of truth for work/task state. The UI may say "Tasks" in user-facing contexts, but the platform model is `work_item`.
+
+### Work Item Status
+A Space-scoped status row for Work Items. Status names, colors, icons, display order, active/final flags, and defaults belong to the Space, while every status also carries a normalized category such as `todo`, `active`, `blocked`, `done`, or `skipped`. Single-Space boards render the Space's exact statuses; cross-Space views use normalized categories or show status labels with Space context so different Spaces are not flattened into a misleading global workflow.
+
+### Work Item View
+A saved Work Items list or board configuration. A Work Item View preserves view type, filters, grouping, sorting, visible/configured fields, privacy/default/favorite metadata, and enough route state to reopen the same operational slice. Views are product affordances over native Work Items, not separate task state.
+
+### Linked Task Compatibility
+The transitional bridge between legacy `linked_tasks` rows and native Work Items. During migration, `linked_tasks` can carry compatibility pointers, snapshots, or provider-shaped data for older onboarding UI/tool callers, but native Work Items are canonical for ThinkWork-owned task state. Compatibility should be removed only after production data is backfilled or accounted for, web/mobile/Pi callers use Work Items directly, agent status tools no longer require `set_task_status`, and the remaining cleanup is tracked explicitly.
+
 ## Flagged ambiguities
 
 ## Customer Domain Namespace
