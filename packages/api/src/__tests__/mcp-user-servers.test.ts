@@ -186,6 +186,7 @@ import { handler } from "../handlers/skills.js";
 beforeEach(() => {
   resetDbState();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   mockAuthenticate.mockResolvedValue({ sub: "principal-1" });
   mockRequireTenantMembership.mockResolvedValue({
     ok: true,
@@ -345,6 +346,76 @@ describe("GET /api/skills/user-mcp-servers", () => {
 
     expect(response.statusCode).toBe(302);
     expect(state.userId).toBe("db-user-1");
+  });
+
+  it("rediscovers OAuth metadata and performs DCR when cached endpoints are missing client_id", async () => {
+    dbState.selectQueue.push(
+      [{ id: "db-user-1" }],
+      [
+        {
+          url: "https://crm.thinkwork.ai/mcp",
+          slug: "twenty--crm",
+          auth_config: {
+            authorize_endpoint: "https://cached.example/authorize",
+            token_endpoint: "https://cached.example/token",
+            oauth_resource: "https://crm.thinkwork.ai/mcp",
+          },
+        },
+      ],
+    );
+    const fetchMock = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url = input.toString();
+        if (url.includes("/.well-known/oauth-protected-resource/mcp")) {
+          return Response.json({
+            authorization_servers: ["https://auth.crm.example"],
+          });
+        }
+        if (
+          url ===
+          "https://auth.crm.example/.well-known/oauth-authorization-server"
+        ) {
+          return Response.json({
+            authorization_endpoint: "https://auth.crm.example/authorize",
+            token_endpoint: "https://auth.crm.example/token",
+            registration_endpoint: "https://auth.crm.example/register",
+          });
+        }
+        if (
+          url === "https://auth.crm.example/register" &&
+          init?.method === "POST"
+        ) {
+          return Response.json({ client_id: "fresh-client-id" });
+        }
+        return new Response("not found", { status: 404 });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handler(oauthAuthorizeEvent({ userId: "user-1" }));
+    const location = response.headers?.Location as string;
+    const authorizeUrl = new URL(location);
+
+    expect(response.statusCode).toBe(302);
+    expect(authorizeUrl.origin + authorizeUrl.pathname).toBe(
+      "https://auth.crm.example/authorize",
+    );
+    expect(authorizeUrl.searchParams.get("client_id")).toBe("fresh-client-id");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://auth.crm.example/register",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(dbState.updateSets).toContainEqual(
+      expect.objectContaining({
+        auth_config: expect.objectContaining({
+          authorize_endpoint: "https://auth.crm.example/authorize",
+          token_endpoint: "https://auth.crm.example/token",
+          client_id: "fresh-client-id",
+          oauth_resource: "https://crm.thinkwork.ai/mcp",
+        }),
+        url_hash: expect.any(String),
+      }),
+    );
   });
 });
 

@@ -771,7 +771,10 @@ async function mcpOAuthAuthorize(
     return error("Invalid MCP OAuth return URL", 400);
   }
 
-  // Always discover via RFC 9728 unless we have cached endpoints AND not forcing rediscovery
+  // Always discover via RFC 9728 unless we have cached endpoints/client_id AND
+  // are not forcing rediscovery. A plugin repair may preserve endpoints while
+  // dropping client_id; in that case we still need the registration endpoint
+  // from fresh auth metadata so Dynamic Client Registration can run again.
   let authorizeEndpoint =
     (!forceRediscovery && authConfig.authorize_endpoint) || "";
   let tokenEndpoint = (!forceRediscovery && authConfig.token_endpoint) || "";
@@ -779,7 +782,7 @@ async function mcpOAuthAuthorize(
   let registrationEndpoint = "";
   let resourceMetadata: McpOAuthResourceMetadata | null = null;
 
-  if (!authorizeEndpoint || !tokenEndpoint) {
+  if (!authorizeEndpoint || !tokenEndpoint || !clientId) {
     // Discover via RFC 9728
     const mcpBaseUrl = server.url.replace(/\/+$/, "");
     const serverPath = new URL(mcpBaseUrl).pathname.replace(/^\//, "");
@@ -1216,12 +1219,14 @@ async function mcpListTenantServers(
 
   const authStatusByServerId = new Map(
     await Promise.all(
-      rows.map(async (r): Promise<
-        [string, "active" | "not_connected" | undefined]
-      > => [
-        r.id,
-        await serviceCredentialAuthStatus(r.auth_type, r.auth_config),
-      ]),
+      rows.map(
+        async (
+          r,
+        ): Promise<[string, "active" | "not_connected" | undefined]> => [
+          r.id,
+          await serviceCredentialAuthStatus(r.auth_type, r.auth_config),
+        ],
+      ),
     ),
   );
 
