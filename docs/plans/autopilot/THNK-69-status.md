@@ -81,6 +81,11 @@ The approved plan recommends PR slices that group tightly coupled units:
   local worktree/branch cleanup verified.
 - 2026-06-24T19:40Z: Began Agent Tool Contract slice from fresh `origin/main`
   on branch `codex/thnk-69-agent-tool-contract`.
+- 2026-06-24T20:10Z: Agent Tool Contract slice merged via PR #2935
+  (`2c42de29b364d3e81599805e80a8cdfc4b6aa218`); remote branch deleted and
+  local worktree/branch cleanup verified.
+- 2026-06-24T20:15Z: Began Concepts, Rollout, and Cleanup slice from fresh
+  `origin/main` on branch `codex/thnk-69-unit-8`.
 
 ## Unit Log
 
@@ -303,6 +308,51 @@ Local verification:
 - 2026-06-24T19:51Z:
   `pnpm --filter @thinkwork/agentcore-pi test -- tests/server.test.ts` passed:
   1 file, 89 tests.
+
+Merge evidence:
+
+- PR #2935: <https://github.com/thinkwork-ai/thinkwork/pull/2935>
+- Merge commit:
+  `2c42de29b364d3e81599805e80a8cdfc4b6aa218 feat(work-items): add agent status tool contract (#2935)`
+- Cleanup: remote branch deleted; local branch/worktree removed after merge.
+
+### Cleanup PR: Concepts, Rollout, and Compatibility Follow-Up
+
+Objective: close the approved Unit 8 documentation slice by recording Work Item
+domain vocabulary, the `linked_tasks` compatibility window, and follow-up
+cleanup criteria for removing the bridge after production data and callers are
+migrated.
+
+Branch:
+
+- `codex/thnk-69-unit-8`
+
+Implementation notes:
+
+- Added Work Management vocabulary to `CONCEPTS.md` for Work Item, Work Item
+  Status, Work Item View, and the Linked Tasks Compatibility Period.
+- Tracked the compatibility cleanup follow-up: remove `linked_tasks` bridge
+  paths only after production data is backfilled or confirmed migrated, legacy
+  generated clients/UI/tool callers are on Work Item APIs, `set_task_status`
+  compatibility is retired or formally deprecated, and deployed verification
+  confirms Customer Onboarding progress still works through native Work Items.
+- Confirmed the repo-local THNK-69 plan file is absent on fresh `origin/main`,
+  so the Linear plan document remains the source of truth for Unit 8.
+- Updated the Linear Progress document and rolling `automation-ledger:THNK-69`
+  before code changes with the selected branch/worktree and verification
+  contract.
+
+Local verification:
+
+- 2026-06-24T20:17Z: `pnpm prettier --check CONCEPTS.md docs/plans/autopilot/THNK-69-status.md`
+  could not run because this fresh worktree had no local `prettier` binary.
+- 2026-06-24T20:18Z:
+  `pnpm dlx prettier@3.8.2 --write CONCEPTS.md docs/plans/autopilot/THNK-69-status.md`
+  completed; it normalized Markdown spacing in `CONCEPTS.md`.
+- 2026-06-24T20:18Z:
+  `pnpm dlx prettier@3.8.2 --check CONCEPTS.md docs/plans/autopilot/THNK-69-status.md`
+  passed.
+- 2026-06-24T20:18Z: `git diff --check` passed.
 
 Merge evidence:
 
