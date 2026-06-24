@@ -235,7 +235,9 @@ status, and the ThinkWork MCP proxy `tools/list` path. Set
 `SMOKE_TWENTY_MCP_CALL=1` plus `SMOKE_TWENTY_USER_EMAIL` or
 `SMOKE_TWENTY_WORKSPACE_MEMBER_ID` to run the required
 assigned-opportunities tool proof through ThinkWork's runtime credential
-injection path:
+injection path. The live call proof now requires generated Opportunity
+`recordLinks`; a healthy runtime, OAuth metadata, or `tools/list` output alone
+does not prove agents can answer with CRM record URLs.
 
 ```sh
 SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
@@ -248,6 +250,12 @@ SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 \
   SMOKE_AGENT_ID=<agent-id> \
   node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs
 ```
+
+To HTTP-probe the generated record URL as the authorized Twenty user, add
+`SMOKE_TWENTY_VERIFY_RECORD_URL=1` plus `SMOKE_TWENTY_WEB_COOKIE` or
+`SMOKE_TWENTY_WEB_AUTHORIZATION`. Otherwise open the generated URL in the
+authorized browser session and preserve redacted evidence that it lands on the
+intended Opportunity.
 
 After Plane is healthy and a user has activated the plugin, run:
 

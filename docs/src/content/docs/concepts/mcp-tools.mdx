@@ -99,6 +99,27 @@ The same fail-closed rule applies to user-provided header servers. If the
 current user has not activated Plane, the runtime does not synthesize a
 tenant-wide Plane credential and does not reuse another user's PAT.
 
+### Record-link hints
+
+Some plugin-owned MCP servers can publish non-secret `recordLinkHints` runtime
+metadata. Hints describe supported object types, safe browser route templates,
+and field names to read from the current MCP tool result. They are not OAuth
+configuration and they do not change the server's credential approval hash.
+
+ThinkWork applies these hints only after an MCP tool call has succeeded for the
+current user. The runtime does not create links from arbitrary ids in a user
+message, previous conversation text, or unauthenticated tool output. If a result
+is malformed, unsupported, custom-object-only, or returned as MCP `isError`,
+ThinkWork omits generated links.
+
+Twenty CRM currently uses this path for Opportunity records. When an authorized
+Twenty MCP result includes a supported Opportunity id, the runtime can append a
+managed Twenty record URL to the agent-visible tool result and preserve the
+same links in structured `recordLinks` details for proxy/UI consumers. The
+generated URLs are thread-visible business data, not credentials; avoid copying
+raw CRM payloads, ids, names, or generated links into logs outside the intended
+thread/tool-result evidence.
+
 MCP usage is tracked in the thread timeline, including:
 
 - tool name
