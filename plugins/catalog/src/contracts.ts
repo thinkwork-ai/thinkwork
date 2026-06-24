@@ -713,6 +713,30 @@ function validateMcpServerComponent(
 }
 
 const RECORD_LINK_FIELD_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/;
+const RECORD_LINK_ALLOWED_HINT_KEYS = [
+  "schemaVersion",
+  "source",
+  "routes",
+  "workspace",
+] as const;
+const RECORD_LINK_ALLOWED_ROUTE_KEYS = [
+  "objectType",
+  "routeTemplate",
+  "idFields",
+  "labelFields",
+] as const;
+const RECORD_LINK_ALLOWED_WORKSPACE_KEYS = ["hashField"] as const;
+const RECORD_LINK_TEMPLATE_SEGMENT_RE = /^[A-Za-z0-9._~-]+$|^\{id\}$/;
+const RECORD_LINK_FORBIDDEN_FIELD_PARTS = [
+  "auth_config",
+  "authorization",
+  "cookie",
+  "token",
+  "secret",
+  "password",
+  "credential",
+  "header",
+] as const;
 
 function validateRecordLinkHints(
   hints: Partial<McpRecordLinkHints>,
@@ -722,6 +746,11 @@ function validateRecordLinkHints(
   if (!hints || typeof hints !== "object" || Array.isArray(hints)) {
     throw new PluginManifestError(`${label} must be an object`);
   }
+  rejectUnknownKeys(
+    hints as Record<string, unknown>,
+    RECORD_LINK_ALLOWED_HINT_KEYS,
+    label,
+  );
   if (hints.schemaVersion !== 1) {
     throw new PluginManifestError(`${label}.schemaVersion must be 1`);
   }
@@ -738,6 +767,11 @@ function validateRecordLinkHints(
     if (!route || typeof route !== "object" || Array.isArray(route)) {
       throw new PluginManifestError(`${routeLabel} must be an object`);
     }
+    rejectUnknownKeys(
+      route as unknown as Record<string, unknown>,
+      RECORD_LINK_ALLOWED_ROUTE_KEYS,
+      routeLabel,
+    );
     requireString(route.objectType, `${routeLabel}.objectType`);
     if (!SLUG_RE.test(route.objectType)) {
       throw new PluginManifestError(
@@ -752,16 +786,10 @@ function validateRecordLinkHints(
     seenObjectTypes.add(route.objectType);
 
     requireString(route.routeTemplate, `${routeLabel}.routeTemplate`);
-    if (
-      !route.routeTemplate.startsWith("/") ||
-      route.routeTemplate.startsWith("//") ||
-      /[?#\\]/.test(route.routeTemplate) ||
-      !route.routeTemplate.includes("{id}")
-    ) {
-      throw new PluginManifestError(
-        `${routeLabel}.routeTemplate must be a relative path containing "{id}" and carry no query/fragment`,
-      );
-    }
+    validateRecordLinkRouteTemplate(
+      route.routeTemplate,
+      `${routeLabel}.routeTemplate`,
+    );
 
     validateOptionalFieldList(route.idFields, `${routeLabel}.idFields`);
     validateOptionalFieldList(route.labelFields, `${routeLabel}.labelFields`);
@@ -775,12 +803,62 @@ function validateRecordLinkHints(
     ) {
       throw new PluginManifestError(`${label}.workspace must be an object`);
     }
+    rejectUnknownKeys(
+      hints.workspace as Record<string, unknown>,
+      RECORD_LINK_ALLOWED_WORKSPACE_KEYS,
+      `${label}.workspace`,
+    );
     if (hints.workspace.hashField !== undefined) {
       validateFieldName(
         hints.workspace.hashField,
         `${label}.workspace.hashField`,
       );
     }
+  }
+}
+
+function validateRecordLinkRouteTemplate(value: string, label: string): void {
+  if (!value.startsWith("/") || value.startsWith("//")) {
+    throw new PluginManifestError(
+      `${label} must be a relative path containing exactly one "{id}" segment`,
+    );
+  }
+  if (
+    /[?#\\%\s<>\[\]()"']/.test(value) ||
+    /[\u0000-\u001F\u007F]/.test(value)
+  ) {
+    throw new PluginManifestError(
+      `${label} must not contain query, fragment, encoded separator, whitespace, control, or markup characters`,
+    );
+  }
+
+  const placeholders = value.match(/\{[^}]*\}/g) ?? [];
+  if (placeholders.length !== 1 || placeholders[0] !== "{id}") {
+    throw new PluginManifestError(
+      `${label} must contain exactly one "{id}" placeholder and no other placeholders`,
+    );
+  }
+
+  const segments = value.slice(1).split("/");
+  if (segments.some((segment) => segment.length === 0)) {
+    throw new PluginManifestError(`${label} must not contain empty segments`);
+  }
+  let idSegmentCount = 0;
+  for (const segment of segments) {
+    if (segment === "." || segment === "..") {
+      throw new PluginManifestError(`${label} must not contain dot segments`);
+    }
+    if (!RECORD_LINK_TEMPLATE_SEGMENT_RE.test(segment)) {
+      throw new PluginManifestError(
+        `${label} contains an unsupported path segment "${segment}"`,
+      );
+    }
+    if (segment === "{id}") idSegmentCount += 1;
+  }
+  if (idSegmentCount !== 1) {
+    throw new PluginManifestError(
+      `${label} must use "{id}" as exactly one full path segment`,
+    );
   }
 }
 
@@ -812,6 +890,16 @@ function validateFieldName(
   if (!RECORD_LINK_FIELD_RE.test(value)) {
     throw new PluginManifestError(
       `${label} "${value}" must match ${RECORD_LINK_FIELD_RE.source}`,
+    );
+  }
+  const normalized = value.toLowerCase();
+  const parts = normalized.split(/[_.-]+/);
+  const hasSensitivePart =
+    parts.includes("auth") ||
+    RECORD_LINK_FORBIDDEN_FIELD_PARTS.some((part) => normalized.includes(part));
+  if (hasSensitivePart) {
+    throw new PluginManifestError(
+      `${label} must not reference credential-shaped data`,
     );
   }
 }
@@ -1255,6 +1343,19 @@ function rejectManifestValueCarrier(
       throw new PluginManifestError(
         `${prefix}.${key} is not allowed in ${context}`,
       );
+    }
+  }
+}
+
+function rejectUnknownKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  prefix: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new PluginManifestError(`${prefix}.${key} is not allowed`);
     }
   }
 }

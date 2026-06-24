@@ -291,6 +291,13 @@ describe("validatePluginManifest", () => {
       "/object/opportunity",
       "/object/opportunity/{id}?tab=details",
       "/object/opportunity/{id}#workspace",
+      "/object/opportunity/{id}/related/{id}",
+      "/object/opportunity/{id}/{workspaceId}",
+      "/object/opportunity/prefix-{id}",
+      "/object/opportunity/{id}/..",
+      "/object/opportunity/%2F{id}",
+      "/object/opportunity/{id} details",
+      "/object/opportunity/<script>/{id}",
     ]) {
       const bad = manifest();
       const server = version(bad).components[0];
@@ -338,6 +345,91 @@ describe("validatePluginManifest", () => {
       ],
     };
     expect(() => validatePluginManifest(badIdField)).toThrow(/idFields/);
+
+    for (const field of [
+      "auth_config.secretRef",
+      "accessToken",
+      "headers.Authorization",
+    ]) {
+      const badSensitiveField = manifest();
+      const sensitiveServer = version(badSensitiveField).components[0];
+      if (sensitiveServer.type !== "mcp-server") {
+        throw new Error("missing mcp-server");
+      }
+      sensitiveServer.recordLinkHints = {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        routes: [
+          {
+            objectType: "opportunity",
+            routeTemplate: "/object/opportunity/{id}",
+            idFields: [field],
+          },
+        ],
+      };
+      expect(() => validatePluginManifest(badSensitiveField)).toThrow(
+        /credential-shaped/,
+      );
+    }
+  });
+
+  it("rejects extra MCP record-link hint fields", () => {
+    for (const recordLinkHints of [
+      {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        baseUrl: "https://crm.example.com",
+        routes: [
+          {
+            objectType: "opportunity",
+            routeTemplate: "/object/opportunity/{id}",
+          },
+        ],
+      },
+      {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        headers: { Authorization: "Bearer nope" },
+        routes: [
+          {
+            objectType: "opportunity",
+            routeTemplate: "/object/opportunity/{id}",
+          },
+        ],
+      },
+      {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        routes: [
+          {
+            objectType: "opportunity",
+            routeTemplate: "/object/opportunity/{id}",
+            queryTemplate: "?token={token}",
+          },
+        ],
+      },
+      {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        routes: [
+          {
+            objectType: "opportunity",
+            routeTemplate: "/object/opportunity/{id}",
+          },
+        ],
+        workspace: {
+          hashField: "workspaceId",
+          secretRef: "twenty-workspace-secret",
+        },
+      },
+    ]) {
+      const bad = manifest();
+      const server = version(bad).components[0];
+      if (server.type !== "mcp-server") throw new Error("missing mcp-server");
+      server.recordLinkHints = recordLinkHints as never;
+
+      expect(() => validatePluginManifest(bad)).toThrow(/not allowed/);
+    }
   });
 
   it("rejects Authorization-shaped user-provided header auth", () => {

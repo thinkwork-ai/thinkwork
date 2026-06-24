@@ -16,13 +16,20 @@ const migration0186 = readFileSync(
 describe("migration 0186 - tenant MCP runtime metadata", () => {
   it("adds the nullable runtime metadata column to tenant_mcp_servers", () => {
     const columns = getTableConfig(tenantMcpServers).columns;
+    const runtimeMetadataColumn = columns.find(
+      (column) => column.name === "runtime_metadata",
+    );
 
     expect(columns.map((column) => column.name)).toContain("runtime_metadata");
+    expect(runtimeMetadataColumn?.notNull).toBe(false);
+    expect(runtimeMetadataColumn?.hasDefault).toBe(false);
     expect(migration0186).toContain(
       "-- creates-column: public.tenant_mcp_servers.runtime_metadata",
     );
     expect(migration0186).toMatch(
       /ALTER TABLE public\.tenant_mcp_servers\s+ADD COLUMN IF NOT EXISTS runtime_metadata jsonb/i,
     );
+    expect(migration0186).not.toMatch(/\bruntime_metadata jsonb\s+NOT NULL\b/i);
+    expect(migration0186).not.toMatch(/\bruntime_metadata jsonb\s+DEFAULT\b/i);
   });
 });

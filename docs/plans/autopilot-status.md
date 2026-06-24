@@ -44,6 +44,26 @@ status: in_progress
   - 2026-06-24: U1 PR
     [#2909](https://github.com/thinkwork-ai/thinkwork/pull/2909) opened and CI
     monitoring started.
+  - 2026-06-24: Compound review found malformed route-template coverage,
+    unknown `recordLinkHints` field preservation, sensitive field-name risk,
+    and nullable/default-free migration coverage gaps. Tightened validation and
+    tests before merging U1.
+  - 2026-06-24: PR #2909 CI initially failed `Migration Drift Precheck (dev)`
+    because the new hand-rolled migration
+    `packages/database-pg/drizzle/0186_tenant_mcp_runtime_metadata.sql` was not
+    yet applied to the shared `dev` Aurora database. Applied only that
+    idempotent migration to `dev` with `psql -v ON_ERROR_STOP=1`, then
+    confirmed the scoped manual drift reporter sees
+    `public.tenant_mcp_servers.runtime_metadata` as present.
+  - 2026-06-24: Full local `pnpm lint` and `pnpm typecheck` passed. Initial
+    full `pnpm test` stopped in `apps/desktop` because the worktree Electron
+    binary was partially extracted; `pnpm rebuild electron` repaired the local
+    dependency, `pnpm --filter @thinkwork/desktop test` passed, and the full
+    `pnpm test` rerun passed. `pnpm format:check` is not a clean repo-wide
+    signal on this checkout: the root package lacks a direct Prettier bin, and
+    a temporary investigation with the already-installed Prettier 3.8.2 copy
+    reported 677 pre-existing formatting warnings outside U1. Changed-file
+    Prettier checks and `git diff --check` passed.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
