@@ -368,7 +368,7 @@ describe("U7 capability extensions", () => {
     });
   });
 
-  it("set_task_status registers when configured and posts the database mutation request", async () => {
+  it("task status tools register when configured and post database mutation requests", async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({
         content: [{ type: "text", text: '{"ok":true}' }],
@@ -389,7 +389,10 @@ describe("U7 capability extensions", () => {
     });
     await toExtensionFactory(extension, {})(api);
 
-    expect(extension.toolNames).toEqual(["set_task_status"]);
+    expect(extension.toolNames).toEqual([
+      "set_task_status",
+      "set_work_item_status",
+    ]);
     const result = await getTool(tools, "set_task_status").execute(
       "call-1",
       {
@@ -420,6 +423,32 @@ describe("U7 capability extensions", () => {
       note: "Customer confirmed.",
     });
     expect(result.details).toEqual({ ok: true, status: "completed" });
+
+    await getTool(tools, "set_work_item_status").execute(
+      "call-2",
+      {
+        work_item_id: "work-item-1",
+        status_category: "done",
+        note: "Native item confirmed.",
+      },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+
+    expect(fetchCalls[1]![0]).toBe(
+      "https://api.example.com/api/work-items/status",
+    );
+    expect(JSON.parse(String(fetchCalls[1]![1]?.body))).toMatchObject({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      threadTurnId: "turn-1",
+      toolCallId: "call-2",
+      workItemId: "work-item-1",
+      statusCategory: "done",
+      note: "Native item confirmed.",
+    });
   });
 
   it("context-engine registers all query tools and calls the MCP facade", async () => {

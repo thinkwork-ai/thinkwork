@@ -998,6 +998,8 @@ locals {
       "OPTIONS /api/mobile/tools/web-search" = "mobile-tools"
       "POST /api/tasks/status"               = "task-status-tool"
       "OPTIONS /api/tasks/status"            = "task-status-tool"
+      "POST /api/work-items/status"          = "task-status-tool"
+      "OPTIONS /api/work-items/status"       = "task-status-tool"
 
       # Mobile agent harness MCP proxy — tenant-scoped tools/list + tools/call
       # over the signed-in user's Cognito idToken. One Lambda, two routes;

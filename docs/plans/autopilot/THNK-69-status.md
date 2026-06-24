@@ -76,6 +76,11 @@ The approved plan recommends PR slices that group tightly coupled units:
   (`2acb0dc3b`); remote branch deleted and local worktree cleanup verified.
 - 2026-06-24T18:24Z: Began UI slice from the onboarding merge on branch
   `codex/thnk-69-web-work-items`.
+- 2026-06-24T19:36Z: UI slice merged via PR #2933
+  (`3d2d61a34d92c804ea54f775efbeecea5abe681f`); remote branch deleted and
+  local worktree/branch cleanup verified.
+- 2026-06-24T19:40Z: Began Agent Tool Contract slice from fresh `origin/main`
+  on branch `codex/thnk-69-agent-tool-contract`.
 
 ## Unit Log
 
@@ -227,6 +232,77 @@ Local verification:
 - 2026-06-24T19:07Z: PR #2933 CI passed once at head
   `dfd5fa5e59ae39753bd924ff172d979826d045a6`; after the two follow-up fix
   commits, CI restarted for the new PR head.
+
+Merge evidence:
+
+- PR #2933: <https://github.com/thinkwork-ai/thinkwork/pull/2933>
+- Merge commit:
+  `3d2d61a34d92c804ea54f775efbeecea5abe681f feat(work-items): add web work items route (#2933)`
+- Cleanup: remote branch deleted; local branch/worktree removed after merge.
+
+### Tooling PR: Agent Tool Contract
+
+Objective: add the native Work Item status tool contract for agents/mobile/Pi,
+while preserving `set_task_status` compatibility during the linked-task
+migration.
+
+Branch:
+
+- `codex/thnk-69-agent-tool-contract`
+
+Implementation notes:
+
+- Added `set_work_item_status` service logic with thread-linked agent
+  authorization, Space member user authorization, event provenance, terminal
+  transition checks, and linked-task compatibility sync.
+- Extended the existing `task-status-tool` Lambda handler to serve both
+  `/api/tasks/status` and `/api/work-items/status`.
+- Added API Gateway routes for the native Work Item status endpoint.
+- Updated AgentCore Pi extension tools to expose both `set_task_status` and
+  `set_work_item_status`.
+- Updated the mobile platform client and mobile task-status extension to expose
+  the native Work Item tool while preserving the legacy tool.
+- Updated the mobile Pi compatibility contract to document the native tool plus
+  legacy bridge.
+- Changed legacy `set_task_status` to sync native Work Items when the linked
+  task carries a native Work Item pointer.
+
+Local verification:
+
+- 2026-06-24T19:48Z: Initial focused tests could not start before
+  `pnpm install` because the fresh worktree had no `node_modules`.
+- 2026-06-24T19:48Z: `pnpm install` completed. Optional `canvas` native build
+  failed locally on Node 25 because `pkg-config`/pixman were unavailable, but
+  install exited successfully.
+- 2026-06-24T19:49Z:
+  `pnpm --filter @thinkwork/api test -- src/lib/task-status-tool.test.ts src/lib/work-items/work-item-status-tool.test.ts src/handlers/task-status-tool.test.ts`
+  passed: 3 files, 12 tests.
+- 2026-06-24T19:49Z:
+  `pnpm --filter @thinkwork/pi-extensions test -- test/capabilities.test.ts`
+  passed: 1 file, 16 tests.
+- 2026-06-24T19:49Z:
+  `pnpm --filter @thinkwork/mobile test -- lib/agent/compat/pi-contract.test.ts`
+  passed: 1 file, 6 tests.
+- 2026-06-24T19:49Z: `pnpm --filter @thinkwork/api typecheck` passed after
+  fixing the new test fixture shape.
+- 2026-06-24T19:49Z: `pnpm --filter @thinkwork/pi-extensions typecheck`
+  passed.
+- 2026-06-24T19:49Z: `pnpm --filter @thinkwork/agentcore-pi typecheck`
+  passed.
+- 2026-06-24T19:49Z: `pnpm --filter @thinkwork/mobile typecheck` reported no
+  typecheck script for the selected package.
+- 2026-06-24T19:50Z: `pnpm dlx prettier@3.8.2 --check` passed for touched
+  TypeScript/Markdown files; `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf`
+  passed; `git diff --check` passed.
+- 2026-06-24T19:50Z: `bash scripts/build-lambdas.sh task-status-tool` passed
+  and produced `dist/lambdas/task-status-tool.zip`.
+- 2026-06-24T19:51Z: `pnpm --filter @thinkwork/api test` passed: 586 files
+  passed, 3 skipped; 5,402 tests passed, 9 skipped.
+- 2026-06-24T19:51Z: `pnpm --filter @thinkwork/pi-extensions test` passed:
+  12 files, 126 tests.
+- 2026-06-24T19:51Z:
+  `pnpm --filter @thinkwork/agentcore-pi test -- tests/server.test.ts` passed:
+  1 file, 89 tests.
 
 Merge evidence:
 

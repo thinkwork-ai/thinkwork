@@ -6,6 +6,7 @@ import { setTaskStatus, TaskStatusToolError } from "./task-status-tool";
 
 function fakeDb(options: {
   taskStatus?: string;
+  taskMetadata?: Record<string, unknown>;
   requiredComplete?: boolean;
   goalTaskRows?: Array<{ status: LinkedTaskStatus; required: boolean }>;
   onLinkedTaskUpdate?: (value: Record<string, unknown>) => void;
@@ -22,7 +23,7 @@ function fakeDb(options: {
         provider: "thinkwork",
         title: "Collect invoice",
         status: options.taskStatus ?? "todo",
-        metadata: {},
+        metadata: options.taskMetadata ?? {},
         threadAgentId: "agent-1",
       },
     ],
@@ -251,6 +252,46 @@ describe("setTaskStatus", () => {
     expect(progressWrites[0]).toContain("- Required complete: 1/1");
     expect(progressWrites[0]).toContain(
       "| Collect invoice | Completed | Finance | Yes |  |",
+    );
+  });
+
+  it("syncs the native work item when a linked task carries a native pointer", async () => {
+    const store = fakeDb({
+      taskMetadata: { nativeWorkItemId: "work-item-1" },
+      requiredComplete: false,
+    });
+    const syncNativeWorkItem = vi.fn(async () => ({ id: "work-item-1" }));
+
+    await setTaskStatus(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        agentId: "agent-1",
+        linkedTaskId: "task-1",
+        status: "completed",
+        note: "Invoice received",
+        actor: { type: "agent", id: "agent-1" },
+      },
+      {
+        db: store.db as never,
+        now: () => new Date("2026-05-31T12:00:00.000Z"),
+        refreshGoalFolder: async () => [],
+        syncNativeWorkItem,
+      },
+    );
+
+    expect(syncNativeWorkItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        linkedTaskId: "task-1",
+        status: "completed",
+        blocked: false,
+        note: "Invoice received",
+        actorAgentId: "agent-1",
+      }),
+      expect.objectContaining({
+        now: expect.any(Function),
+      }),
     );
   });
 

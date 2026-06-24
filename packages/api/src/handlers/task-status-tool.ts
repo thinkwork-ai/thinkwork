@@ -13,6 +13,7 @@ import {
   TaskStatusToolError,
   type TaskStatusToolActor,
 } from "../lib/task-status-tool.js";
+import { setWorkItemStatus } from "../lib/work-items/work-item-status-tool.js";
 
 const { users } = schema;
 
@@ -21,7 +22,11 @@ interface TaskStatusToolBody {
   threadId?: string;
   agentId?: string | null;
   threadTurnId?: string;
+  toolCallId?: string;
   linkedTaskId?: string;
+  workItemId?: string;
+  statusId?: string | null;
+  statusCategory?: string | null;
   status?: string;
   note?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -51,15 +56,52 @@ export async function handler(
     return error("Invalid JSON body", 400);
   }
 
+  const workItemStatusRequest = isWorkItemStatusPath(event);
   const linkedTaskId = stringValue(body.linkedTaskId);
+  const workItemId = stringValue(body.workItemId);
   const status = stringValue(body.status);
-  if (!linkedTaskId) return error("linkedTaskId is required", 400);
-  if (!status) return error("status is required", 400);
+  const statusCategory = stringValue(body.statusCategory) || status;
+  const statusId = stringValue(body.statusId);
+  if (workItemStatusRequest) {
+    if (!workItemId) return error("workItemId is required", 400);
+    if (!statusCategory && !statusId) {
+      return error("statusCategory or statusId is required", 400);
+    }
+  } else {
+    if (!linkedTaskId) return error("linkedTaskId is required", 400);
+    if (!status) return error("status is required", 400);
+  }
 
   const auth = await resolveAuth(event, body);
   if (!auth) return unauthorized("Authentication required");
 
   try {
+    if (workItemStatusRequest) {
+      const result = await setWorkItemStatus({
+        tenantId: auth.tenantId,
+        threadId: auth.threadId,
+        agentId: auth.agentId,
+        workItemId,
+        statusId,
+        statusCategory,
+        note: body.note,
+        metadata: body.metadata,
+        threadTurnId: body.threadTurnId,
+        toolCallId: body.toolCallId,
+        actor: auth.actor,
+      });
+      return json({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result),
+          },
+        ],
+        details: result,
+        isError: false,
+      });
+    }
+
     const result = await setTaskStatus({
       tenantId: auth.tenantId,
       threadId: auth.threadId,
@@ -102,7 +144,12 @@ export async function handler(
       );
     }
     console.error("[task-status-tool] failed", err);
-    return error("set_task_status failed", 500);
+    return error(
+      workItemStatusRequest
+        ? "set_work_item_status failed"
+        : "set_task_status failed",
+      500,
+    );
   }
 }
 
@@ -167,4 +214,11 @@ function bearerToken(
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isWorkItemStatusPath(event: APIGatewayProxyEventV2): boolean {
+  return (
+    event.rawPath === "/api/work-items/status" ||
+    event.requestContext.http.path === "/api/work-items/status"
+  );
 }

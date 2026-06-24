@@ -46,6 +46,7 @@ export interface SyncWorkItemFromLinkedTaskInput {
   blocked?: boolean;
   note?: string | null;
   actorUserId?: string | null;
+  actorAgentId?: string | null;
   metadata?: JsonRecord | null;
 }
 
@@ -254,6 +255,7 @@ export async function syncWorkItemFromLinkedTask(
     work_item_id: item.id,
     thread_id: task.thread_id,
     actor_user_id: input.actorUserId ?? null,
+    actor_agent_id: input.actorAgentId ?? null,
     event_type:
       input.status === "completed"
         ? "completed"
@@ -267,6 +269,8 @@ export async function syncWorkItemFromLinkedTask(
       source: "linked_tasks",
       linkedTaskId: task.id,
       note: input.note,
+      actorUserId: input.actorUserId,
+      actorAgentId: input.actorAgentId,
       metadata: input.metadata,
     }),
   });
