@@ -51,6 +51,29 @@ type PluginInstallPayload = Record<string, unknown> & {
   }>;
 };
 
+const COMPANY_ETL_PLUGIN_KEY = "company-etl";
+const LEGACY_DATA_INTEGRATIONS_PLUGIN_KEY = "data-integrations";
+
+function canonicalizeLegacyCompanyEtlInstall(
+  install: PluginInstallRow,
+): PluginInstallRow {
+  if (install.plugin_key !== LEGACY_DATA_INTEGRATIONS_PLUGIN_KEY) {
+    return install;
+  }
+  return { ...install, plugin_key: COMPANY_ETL_PLUGIN_KEY };
+}
+
+function installMatchesCatalogPlugin(
+  install: PluginInstallRow,
+  pluginKey: string,
+): boolean {
+  return (
+    install.plugin_key === pluginKey ||
+    (pluginKey === COMPANY_ETL_PLUGIN_KEY &&
+      install.plugin_key === LEGACY_DATA_INTEGRATIONS_PLUGIN_KEY)
+  );
+}
+
 async function installPayloadWithDetails(
   install: PluginInstallRow,
   deps = createDefaultPluginEngineDeps(),
@@ -236,10 +259,14 @@ export async function pluginCatalog(
     const versions = catalogVersionsPayload(plugin);
     const latestVersion = versions[0]?.version ?? "";
     const install =
-      installs.find((row) => row.plugin_key === plugin.pluginKey) ?? null;
-    const installPayload = install
+      installs.find((row) => installMatchesCatalogPlugin(row, plugin.pluginKey)) ??
+      null;
+    const canonicalInstall = install
+      ? canonicalizeLegacyCompanyEtlInstall(install)
+      : null;
+    const installPayload = canonicalInstall
       ? ((await installPayloadWithDetails(
-          install,
+          canonicalInstall,
           deps,
         )) as PluginInstallPayload)
       : null;
@@ -254,9 +281,9 @@ export async function pluginCatalog(
       install: installPayload,
       launchUrl: await pluginLaunchUrlForInstall(tenantId, installPayload),
       updateAvailable: Boolean(
-        install &&
+        canonicalInstall &&
         latestVersion &&
-        compareSemverDesc(latestVersion, install.pinned_version) < 0,
+        compareSemverDesc(latestVersion, canonicalInstall.pinned_version) < 0,
       ),
     });
   }
@@ -307,7 +334,12 @@ export async function pluginInstalls(
   const deps = createDefaultPluginEngineDeps();
   const installs = await deps.store.listInstalls(tenantId);
   return Promise.all(
-    installs.map((install) => installPayloadWithDetails(install, deps)),
+    installs.map((install) =>
+      installPayloadWithDetails(
+        canonicalizeLegacyCompanyEtlInstall(install),
+        deps,
+      ),
+    ),
   );
 }
 
@@ -320,7 +352,10 @@ export async function pluginInstall(
   const deps = createDefaultPluginEngineDeps();
   const install = await deps.store.getInstallById(tenantId, args.id);
   if (!install) return null;
-  return installPayloadWithDetails(install, deps);
+  return installPayloadWithDetails(
+    canonicalizeLegacyCompanyEtlInstall(install),
+    deps,
+  );
 }
 
 export async function myPluginActivations(
@@ -337,7 +372,9 @@ export async function myPluginActivations(
   const deps = createDefaultPluginEngineDeps();
   const installs = await deps.store.listInstalls(tenantId);
   if (installs.length === 0) return [];
-  const installsById = new Map(installs.map((row) => [row.id, row]));
+  const installsById = new Map(
+    installs.map((row) => [row.id, canonicalizeLegacyCompanyEtlInstall(row)]),
+  );
   const activations = await deps.store.listActivationsForUser(
     callerUserId,
     installs.map((row) => row.id),

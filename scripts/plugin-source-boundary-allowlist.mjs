@@ -27,6 +27,11 @@ export const sharedPluginTermAllowlist = [
       "legacy settings URL redirect only; Company Brain UI source is owned by plugin detail.",
   },
   {
+    path: "apps/web/src/routes/_authed/settings.plugins.data-integrations.tsx",
+    reason:
+      "legacy settings URL redirect only; Company ETL UI source is owned by the canonical company-etl plugin detail.",
+  },
+  {
     path: "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts",
     reason: "historical database migration coverage",
   },

@@ -21,6 +21,7 @@ const {
   mockIssuePremiumInstallKey,
   mockRedeemPremiumInstallKey,
   mockRevokePremiumInstallKey,
+  mockGetPluginCatalog,
   mockGetPluginCatalogSnapshot,
   depsHolder,
   activationDepsHolder,
@@ -35,6 +36,7 @@ const {
   mockIssuePremiumInstallKey: vi.fn(),
   mockRedeemPremiumInstallKey: vi.fn(),
   mockRevokePremiumInstallKey: vi.fn(),
+  mockGetPluginCatalog: vi.fn(),
   mockGetPluginCatalogSnapshot: vi.fn(),
   depsHolder: { current: null as unknown },
   activationDepsHolder: { current: null as unknown },
@@ -76,6 +78,7 @@ vi.mock("../../../lib/plugins/catalog-source.js", async (importOriginal) => {
     >();
   return {
     ...actual,
+    getPluginCatalog: mockGetPluginCatalog,
     getPluginCatalogSnapshot: mockGetPluginCatalogSnapshot,
   };
 });
@@ -120,7 +123,11 @@ vi.mock(
   },
 );
 
-import type { PluginVersion } from "@thinkwork/plugin-catalog";
+import {
+  allPluginManifests,
+  buildPluginCatalog,
+  type PluginVersion,
+} from "@thinkwork/plugin-catalog";
 import type {
   PluginEngineDeps,
   PremiumInstallGateInput,
@@ -143,12 +150,15 @@ import {
 } from "./mutations.js";
 import {
   myPluginActivations,
+  pluginCatalog,
   pluginCatalogMetadata,
   pluginInstalls,
   pluginLaunchUrlForInstall,
 } from "./queries.js";
 
 const CTX = { auth: { tenantId: null } } as never; // Google-federated shape
+const COMPANY_ETL_PAYLOAD_SHA256 =
+  "49681471c865d81257872da252538f84345f42b43299c27764fc2714bb2e8abf";
 
 const fixtureVersion: PluginVersion = {
   version: "0.1.0",
@@ -252,6 +262,12 @@ beforeEach(() => {
   mockResolveCallerTenantId.mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockResolvedValue("user-1");
   mockRequireTenantAdmin.mockResolvedValue(undefined);
+  mockGetPluginCatalog.mockResolvedValue(
+    buildPluginCatalog({
+      manifests: allPluginManifests,
+      generatedAt: "2026-06-24T00:00:00.000Z",
+    }),
+  );
   mockGetPluginCatalogSnapshot.mockResolvedValue({
     source: "bundled-unsigned",
     catalog: {
@@ -366,6 +382,65 @@ describe("pluginCatalogMetadata", () => {
       message: "GitHub catalog release fetch failed (403)",
       rateLimitRemaining: "0",
       rateLimitReset: "1760000000",
+    });
+  });
+});
+
+describe("pluginCatalog", () => {
+  it("canonicalizes a legacy Data Integrations install onto the Company ETL catalog entry", async () => {
+    store.seedInstall({
+      tenant_id: "tenant-1",
+      plugin_key: "data-integrations",
+      pinned_version: "0.1.0",
+      pinned_payload_sha256: COMPANY_ETL_PAYLOAD_SHA256,
+      state: "installed",
+    });
+
+    const result = (await pluginCatalog(null, {} as never, CTX)) as Array<{
+      pluginKey: string;
+      displayName: string;
+      install: { pluginKey: string; pinnedPayloadSha256: string } | null;
+    }>;
+
+    const companyEtl = result.find((entry) => entry.pluginKey === "company-etl");
+    expect(companyEtl).toBeDefined();
+    expect(companyEtl).toMatchObject({
+      pluginKey: "company-etl",
+      displayName: "Company ETL",
+      install: {
+        pluginKey: "company-etl",
+        pinnedPayloadSha256: COMPANY_ETL_PAYLOAD_SHA256,
+      },
+    });
+    expect(
+      result.some((entry) => entry.pluginKey === "data-integrations"),
+    ).toBe(false);
+  });
+
+  it("canonicalizes legacy Data Integrations activations to Company ETL", async () => {
+    const install = store.seedInstall({
+      tenant_id: "tenant-1",
+      plugin_key: "data-integrations",
+      pinned_version: "0.1.0",
+      pinned_payload_sha256: COMPANY_ETL_PAYLOAD_SHA256,
+      state: "installed",
+    });
+    store.seedActivation({
+      user_id: "user-1",
+      plugin_install_id: install.id,
+      granted_scopes: [],
+    });
+
+    const result = (await myPluginActivations(
+      null,
+      {} as never,
+      CTX,
+    )) as unknown as Array<{ pluginKey: string; pluginInstallId: string }>;
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      pluginKey: "company-etl",
+      pluginInstallId: install.id,
     });
   });
 });
