@@ -36,10 +36,11 @@ Produce a complete implementation plan with child/unit
 split, dependency order, rollout notes, risks, and explicit verification
 contract for each child/unit. Create/update Linear child issues for shippable
 units when appropriate and inherit Codex plus LFG when present on the parent.
-Commit the plan artifact, open a PR to main, wait for checks, fix real
-failures, squash-merge when allowed, clean up, record plan/child/PR/merge
-evidence in the progress document, and move to Ready to Work for LFG or Plan
-Review otherwise. Stop.
+Define the expected checkpoint PR boundary for each unit: one PR per unit by
+default, with explicit justification for any grouped units. Commit the plan
+artifact, open a PR to main, wait for checks, fix real failures, squash-merge
+when allowed, clean up, record plan/child/PR/merge evidence in the progress
+document, and move to Ready to Work for LFG or Plan Review otherwise. Stop.
 ```
 
 ## Debug Prompt
@@ -86,15 +87,24 @@ Start from fresh origin/main in this isolated worktree. Implement the active
 issue or child/unit end to end with no preference questions.
 
 If Verification Failed is present, start from failed verification evidence and
-implement the smallest correct fix. Update the progress document after every
-meaningful round and at unit boundaries. Repo-local
-docs/plans/autopilot/<ISSUE_ID>-status.md may be updated as supporting evidence
-when useful, but Linear Progress is canonical. Use Conventional Commits. Open
-PRs to main, run focused verification then broader checks, wait for required CI,
-fix failures, squash-merge when allowed, delete branches, remove completed
-worktrees, sync origin/main, update the progress document and rolling Linear
-ledger with PR/merge/CI evidence, and move the issue or child/unit to
-Verification when implementation is merged.
+implement the smallest correct fix. Treat each plan unit as a checkpoint
+boundary. Ship one PR per unit by default unless the plan explicitly requires
+grouping. Before starting a unit, update the progress document with the selected
+unit, dependency state, branch/worktree, verification contract, and expected
+stop condition. When the unit PR opens, record PR URL, commits, commands,
+remaining verification, and risks. When CI or verification changes, record the
+failure, fix, and rerun evidence. When the unit ships, record merged PR URL,
+merge commit, CI result, verification evidence, branch/worktree cleanup, and
+the next unit candidate. After each unit ships, update the progress document and
+rolling ledger, compact/checkpoint context, sync from origin/main, and start the
+next unit from the progress document's Next Steps rather than chat memory.
+Repo-local docs/plans/autopilot/<ISSUE_ID>-status.md may be updated as
+supporting evidence when useful, but Linear Progress is canonical. Use
+Conventional Commits. Open PRs to main, run focused verification then broader
+checks, wait for required CI, fix failures, squash-merge when allowed, delete
+branches, remove completed worktrees, sync origin/main, update the progress
+document and rolling Linear ledger with PR/merge/CI evidence, and move the issue
+or child/unit to Verification when implementation is merged.
 
 If LFG is absent, stop after moving to Verification for human review. If LFG is
 present, continue on later heartbeats through verification, repair rebounds,

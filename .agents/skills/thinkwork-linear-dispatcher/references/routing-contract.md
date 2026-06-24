@@ -76,6 +76,27 @@ run independently. A parent progress document tracks aggregate child state and
 points to child progress documents. A child progress document controls that
 child's implementation/verification loop.
 
+## Unit Checkpoint PRs
+
+Each implementation unit in a plan is a checkpoint boundary. Use one PR per
+unit by default. Group multiple units only when the plan explicitly requires
+grouping or when the units cannot be safely shipped independently.
+
+An implementation worker must not roll silently from one unit into the next.
+Before beginning the next unit, the current unit must have:
+
+- PR opened and merged, unless the plan explicitly marks the unit as docs-only,
+  investigation-only, or otherwise not requiring a PR;
+- required CI/checks passing or a recorded hard blocker;
+- verification evidence matching that unit's plan-owned verification contract;
+- branch, worktree, and local cleanup evidence when cleanup is allowed;
+- Progress document updated with shipped state, merge commit, and exact next
+  unit;
+- rolling ledger updated as a short pointer to the Progress document.
+
+After this checkpoint, the next worker round starts from fresh `origin/main` and
+the Progress document's `Next Steps`, not from chat memory alone.
+
 ## Verification Rebound
 
 Verification workers are judges, not mechanics. They must not fix product code.
@@ -106,9 +127,9 @@ Progress: <feature title>
 ```
 
 The progress document is the durable loop ledger. It must be updated after each
-worker launch, worker round, PR open, CI failure/repair, PR merge, verification
-verdict, blocker, and cleanup. Its `Active Work` and `Next Steps` sections drive
-the next dispatcher heartbeat.
+worker launch, worker round, PR open, CI failure/repair, unit PR merge,
+verification verdict, blocker, and cleanup. Its `Active Work` and `Next Steps`
+sections drive the next dispatcher heartbeat.
 
 Rolling ledger marker:
 

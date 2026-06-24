@@ -102,6 +102,28 @@ progress document. For parent/child trees, the parent progress document tracks
 aggregate child state and links to child progress documents; each child progress
 document controls that child's implementation and verification loop.
 
+## Unit Checkpoint PRs
+
+Each implementation unit in a plan is a checkpoint boundary. The default is one
+checkpoint PR per unit. Group units only when the plan explicitly says they are
+tightly coupled or when splitting would create unsafe intermediate behavior.
+
+Before a worker begins a unit, it updates the Progress document with the unit
+id/name, scope, dependencies, verification contract, selected worker, branch,
+worktree, and expected stop condition. When the PR opens, the worker records
+the PR URL, commit range, commands run, remaining verification, and risks. When
+CI fails or verification changes, the worker records the evidence, fix, and
+rerun state.
+
+After a unit ships, the worker updates the Progress document with the merged PR,
+merge commit, passing CI, required local or deployed proof, cleanup evidence,
+and the next unit candidate. The rolling ledger is then updated as a short
+pointer to the Progress document.
+
+Only after that checkpoint should the worker continue. Continuing means
+syncing from `origin/main`, compacting/checkpointing context, and starting the
+next unit from the Progress document's `Next Steps`, not from chat memory alone.
+
 ## Ready To Work Modes
 
 `Ready to Work` has two modes:
@@ -160,8 +182,10 @@ status still gates which phase is allowed; the progress document controls the
 unit-level continuity inside that phase.
 
 Workers and verifiers update the progress document after every meaningful
-round, unit completion, PR open, CI failure/repair, PR merge, verification
-verdict, blocker, and cleanup.
+round, unit selection, PR open, CI failure/repair, unit PR merge, verification
+verdict, blocker, and cleanup. Unit completion is the strongest checkpoint:
+Progress must include shipped evidence and the next unit before the worker
+continues.
 
 Use one rolling Linear automation ledger comment per issue or unit. The
 dispatcher and workers should update that comment in place whenever possible,
