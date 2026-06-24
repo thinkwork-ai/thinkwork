@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@thinkwork/plugin-company-brain": "workspace:*",
+    "@thinkwork/plugin-company-data": "workspace:*",
     "@thinkwork/plugin-email-channel": "workspace:*",
     "@thinkwork/plugin-data-integrations": "workspace:*",
     "@thinkwork/plugin-lastmile": "workspace:*",

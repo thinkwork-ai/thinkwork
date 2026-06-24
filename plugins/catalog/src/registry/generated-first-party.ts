@@ -4,6 +4,7 @@
 
 import { defineFirstPartyPluginPackage } from "../plugin-package";
 import { companyBrainPluginPackage as rawCompanyBrainPluginPackage } from "@thinkwork/plugin-company-brain";
+import { companyDataPluginPackage as rawCompanyDataPluginPackage } from "@thinkwork/plugin-company-data";
 import { dataIntegrationsPluginPackage as rawDataIntegrationsPluginPackage } from "@thinkwork/plugin-data-integrations";
 import { emailChannelPluginPackage as rawEmailChannelPluginPackage } from "@thinkwork/plugin-email-channel";
 import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/plugin-lastmile";
@@ -15,6 +16,9 @@ import { workosAuthPluginPackage as rawWorkosAuthPluginPackage } from "@thinkwor
 
 export const companyBrainPluginPackage = defineFirstPartyPluginPackage(
   rawCompanyBrainPluginPackage,
+);
+export const companyDataPluginPackage = defineFirstPartyPluginPackage(
+  rawCompanyDataPluginPackage,
 );
 export const dataIntegrationsPluginPackage = defineFirstPartyPluginPackage(
   rawDataIntegrationsPluginPackage,
@@ -42,6 +46,7 @@ export const workosAuthPluginPackage = defineFirstPartyPluginPackage(
 );
 
 export const companyBrainManifest = companyBrainPluginPackage.manifest;
+export const companyDataManifest = companyDataPluginPackage.manifest;
 export const dataIntegrationsManifest = dataIntegrationsPluginPackage.manifest;
 export const emailChannelManifest = emailChannelPluginPackage.manifest;
 export const lastmileManifest = lastmilePluginPackage.manifest;
@@ -53,6 +58,7 @@ export const workosAuthManifest = workosAuthPluginPackage.manifest;
 
 export const firstPartyPluginPackages = [
   companyBrainPluginPackage,
+  companyDataPluginPackage,
   dataIntegrationsPluginPackage,
   emailChannelPluginPackage,
   lastmilePluginPackage,
