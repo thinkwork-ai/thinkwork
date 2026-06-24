@@ -20,8 +20,14 @@ export interface EnrichMcpRecordLinksResult {
   recordLinks: McpRecordLink[];
 }
 
+type RecordLinkRoute = McpRuntimeRecordLinkHints["routes"][number];
+
 const DEFAULT_MAX_RECORD_LINKS = 5;
 const ROUTE_TEMPLATE_SEGMENT_RE = /^[A-Za-z0-9._~-]+$|^\{id\}$/;
+const DEFAULT_ID_FIELDS = ["id"];
+const RECORD_REFERENCE_ID_FIELDS = ["recordId", "record_id"];
+const DEFAULT_LABEL_FIELDS = ["name", "title"];
+const RECORD_REFERENCE_LABEL_FIELDS = ["displayName", "display_name"];
 
 export function enrichMcpRecordLinks(
   input: EnrichMcpRecordLinksInput,
@@ -44,7 +50,7 @@ export function enrichMcpRecordLinks(
       if (!candidateMatchesRoute(candidate, route.objectType, input.toolName)) {
         continue;
       }
-      const id = firstStringField(candidate, route.idFields ?? ["id"]);
+      const id = firstStringField(candidate, routeIdFields(route));
       if (!id || !isSafeRecordId(id)) continue;
       const url = recordUrl(input.hints, route.routeTemplate, id, candidate);
       if (!url || input.text.includes(url)) continue;
@@ -52,7 +58,7 @@ export function enrichMcpRecordLinks(
       if (seen.has(key)) continue;
       seen.add(key);
       const label =
-        firstStringField(candidate, route.labelFields ?? ["name", "title"]) ||
+        firstStringField(candidate, routeLabelFields(route)) ||
         `${route.objectType} ${id}`;
       links.push({
         objectType: route.objectType,
@@ -131,6 +137,8 @@ function candidateMatchesRoute(
   const explicitType = firstStringField(candidate, [
     "objectType",
     "object_type",
+    "objectNameSingular",
+    "object_name_singular",
     "entityType",
     "entity_type",
     "type",
@@ -143,6 +151,24 @@ function candidateMatchesRoute(
   return objectTypeAliases(objectType).some((alias) =>
     normalizedTool.includes(alias),
   );
+}
+
+function routeIdFields(route: RecordLinkRoute): string[] {
+  return uniqueFields([
+    ...(route.idFields ?? DEFAULT_ID_FIELDS),
+    ...RECORD_REFERENCE_ID_FIELDS,
+  ]);
+}
+
+function routeLabelFields(route: RecordLinkRoute): string[] {
+  return uniqueFields([
+    ...(route.labelFields ?? DEFAULT_LABEL_FIELDS),
+    ...RECORD_REFERENCE_LABEL_FIELDS,
+  ]);
+}
+
+function uniqueFields(fields: string[]): string[] {
+  return Array.from(new Set(fields));
 }
 
 function recordUrl(

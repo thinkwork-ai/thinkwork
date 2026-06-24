@@ -13,15 +13,15 @@ status: blocked
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: Blocked after implementation, remediation, merge, and deploy. U1-U7
-  and OAuth/DCR preservation hardening are merged to `main`; final live Twenty
-  record-link proof requires the current user to reconnect Twenty CRM MCP
-  through the product OAuth flow so DCR can repopulate the missing
-  `auth_config.client_id`.
-- Current unit: None.
-- Current branch: None.
-- Current worktree: None.
-- Current pull request: None.
+- Status: Active follow-up after user reconnect. U1-U7 and OAuth/DCR
+  preservation hardening are merged and deployed; reconnect restored live
+  Twenty tool execution, but the deployed record-link extractor does not yet
+  understand Twenty's current `recordReferences` response shape.
+- Current unit: Follow-up recordReferences extractor support.
+- Current branch: `codex/twenty-record-references-links`.
+- Current worktree: `.Codex/worktrees/twenty-record-references-links`.
+- Current pull request:
+  [#2930](https://github.com/thinkwork-ai/thinkwork/pull/2930).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -333,6 +333,35 @@ twenty-crm`. This confirms the remaining blocker is not the merged code,
     ThinkWork MCP server settings/product OAuth flow, then rerun the live smoke
     and verify Twenty tools plus Opportunity `recordLinks`. No production DB or
     auth row mutation was performed manually.
+  - 2026-06-24: User reconnected Twenty CRM MCP. The browser showed Chrome
+    `Aw, Snap!` / error code `5`, but read-only deployed checks showed the
+    server-side reconnect succeeded: `/api/skills/user-mcp-servers` still
+    reports plugin-managed `twenty--crm` active, `tenant_mcp_servers` now has
+    cached OAuth DCR keys including `client_id`, and CloudWatch shows
+    successful `tools/call` execution for `twenty--crm`.
+  - 2026-06-24: Live smoke with
+    `SMOKE_TWENTY_MCP_SERVER_NAME=twenty--crm` reached Twenty through the MCP
+    proxy and returned Opportunity records for Texas Enterprises POC and
+    McPherson POC, but `recordLinks` was still absent. A direct read-only
+    `tools/call` response contained Twenty `recordReferences` entries with
+    `objectNameSingular`, `recordId`, and `displayName`; the current extractor
+    only matched route-configured id/type/name fields.
+  - 2026-06-24: Started follow-up branch
+    `codex/twenty-record-references-links` from `origin/main` at `1a34dc4e`
+    in `.Codex/worktrees/twenty-record-references-links` to add
+    `recordReferences` support to the API and Pi record-link extractors and to
+    update the Twenty smoke default server slug to `twenty--crm`.
+  - 2026-06-24: Follow-up local verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/mcp-client-call.test.ts src/handlers/mcp-proxy.test.ts`,
+    `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp-record-links.test.ts agent-container/tests/mcp-connect.test.ts`,
+    `pnpm --filter @thinkwork/api typecheck`,
+    `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+    `node --check plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`,
+    `node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`, changed-file
+    Prettier check, and `git diff --check`.
+  - 2026-06-24: Follow-up PR
+    [#2930](https://github.com/thinkwork-ai/thinkwork/pull/2930) opened and
+    CI monitoring started.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
