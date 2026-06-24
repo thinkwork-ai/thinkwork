@@ -58,7 +58,10 @@ import {
   tenantMcpServers,
   userMcpTokens,
 } from "@thinkwork/database-pg/schema";
-import type { McpServerComponent } from "@thinkwork/plugin-catalog";
+import type {
+  McpRecordLinkHints,
+  McpServerComponent,
+} from "@thinkwork/plugin-catalog";
 import { db as defaultDb } from "../../../graphql/utils.js";
 import { computeMcpUrlHash } from "../../mcp-server-hash.js";
 
@@ -73,7 +76,17 @@ export interface McpHandlerRef extends Record<string, unknown> {
 
 interface ResolvedPluginMcpEndpoint {
   endpointUrl: string;
+  browserBaseUrl?: string;
   managedAppDesiredConfig?: Record<string, unknown>;
+}
+
+interface RuntimeRecordLinkHints extends McpRecordLinkHints {
+  /** Tenant-specific browser origin, e.g. https://crm.example.com. */
+  browserBaseUrl: string;
+}
+
+interface McpRuntimeMetadata {
+  recordLinkHints?: RuntimeRecordLinkHints;
 }
 
 export function pluginMcpServerSlug(
@@ -151,6 +164,41 @@ function pluginMcpAuthFields(
   return { auth_type: "none", auth_config: null };
 }
 
+function isLocalBrowserOrigin(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "127.0.0.1" ||
+    hostname.startsWith("127.") ||
+    hostname === "[::1]" ||
+    hostname === "::1"
+  );
+}
+
+function browserBaseUrlFromPublicUrl(url: URL): string | undefined {
+  if (url.protocol === "https:") return url.origin;
+  if (url.protocol === "http:" && isLocalBrowserOrigin(url)) {
+    return url.origin;
+  }
+  return undefined;
+}
+
+function pluginMcpRuntimeMetadata(
+  component: McpServerComponent,
+  resolvedEndpoint: ResolvedPluginMcpEndpoint,
+): McpRuntimeMetadata | null {
+  if (!component.recordLinkHints || !resolvedEndpoint.browserBaseUrl) {
+    return null;
+  }
+  return {
+    recordLinkHints: {
+      ...component.recordLinkHints,
+      browserBaseUrl: resolvedEndpoint.browserBaseUrl,
+    },
+  };
+}
+
 /**
  * Resolve the component's endpoint: static `endpointUrl`, or the U10
  * `endpointFrom` indirection against the tenant's managed_applications
@@ -220,6 +268,7 @@ async function resolvePluginMcpEndpointContext(args: {
   url.hash = "";
   return {
     endpointUrl: url.toString().replace(/\/$/, ""),
+    browserBaseUrl: browserBaseUrlFromPublicUrl(new URL(baseUrl)),
     managedAppDesiredConfig: desiredConfig,
   };
 }
@@ -245,6 +294,10 @@ export async function provisionPluginMcpComponent(args: {
     resolvedEndpoint.managedAppDesiredConfig,
   );
   const urlHash = computeMcpUrlHash(endpointUrl, auth_config);
+  const runtimeMetadata = pluginMcpRuntimeMetadata(
+    args.component,
+    resolvedEndpoint,
+  );
 
   const [existing] = (await db
     .select({ id: tenantMcpServers.id })
@@ -265,6 +318,7 @@ export async function provisionPluginMcpComponent(args: {
     transport: "streamable-http",
     auth_type,
     auth_config,
+    runtime_metadata: runtimeMetadata,
     enabled: true,
     management_source: "plugin",
     plugin_install_id: args.pluginInstallId,

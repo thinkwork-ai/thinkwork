@@ -1,5 +1,5 @@
 /**
- * Twenty CRM plugin manifest — v0.1.0 (plan 2026-06-12-001 U10).
+ * Twenty CRM plugin manifest.
  *
  * Rebuilds the Twenty managed application as an infrastructure-bundling
  * plugin:
@@ -53,6 +53,80 @@ export const twentyManifest = {
             path: "/mcp",
           },
           auth: { mode: "oauth-per-instance" },
+          toolNotes: [
+            "Twenty's MCP server exposes CRM object tools (people, companies, opportunities, tasks, notes); list tools first — the set varies by Twenty release.",
+          ],
+        },
+        {
+          type: "infrastructure",
+          key: "runtime",
+          managedAppKey: "twenty",
+          // Mirrors the deployment-runner twenty adapter's requiredInputs
+          // for ENABLE/UPGRADE (asserted by a parity test in packages/api).
+          terraformInputs: {
+            imageUri: {
+              description:
+                "Twenty CRM container image URI pinned with @sha256.",
+              type: "string",
+            },
+            dbUrlSecretArn: {
+              description: "Secrets Manager ARN containing PG_DATABASE_URL.",
+              type: "string",
+            },
+            encryptionKeySecretArn: {
+              description: "Secrets Manager ARN containing ENCRYPTION_KEY.",
+              type: "string",
+            },
+            publicUrl: {
+              description: "Public HTTPS origin for Twenty CRM.",
+              type: "string",
+            },
+            certificateArn: {
+              description: "ACM certificate ARN for the public HTTPS listener.",
+              type: "string",
+            },
+          },
+        },
+      ],
+    },
+    {
+      version: "0.2.0",
+      requiredOauthScopes: [],
+      components: [
+        {
+          type: "mcp-server",
+          key: "crm",
+          displayName: "Twenty CRM",
+          description:
+            "CRM records (people, companies, opportunities, notes) on the tenant's deployed Twenty instance.",
+          endpointFrom: {
+            managedApp: "twenty",
+            configKey: "publicUrl",
+            path: "/mcp",
+          },
+          auth: { mode: "oauth-per-instance" },
+          recordLinkHints: {
+            schemaVersion: 1,
+            source: "plugin-manifest",
+            routes: [
+              {
+                objectType: "opportunity",
+                routeTemplate: "/object/opportunity/{id}",
+                idFields: [
+                  "id",
+                  "opportunityId",
+                  "record.id",
+                  "opportunity.id",
+                ],
+                labelFields: [
+                  "name",
+                  "opportunityName",
+                  "record.name",
+                  "opportunity.name",
+                ],
+              },
+            ],
+          },
           toolNotes: [
             "Twenty's MCP server exposes CRM object tools (people, companies, opportunities, tasks, notes); list tools first — the set varies by Twenty release.",
           ],
