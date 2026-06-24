@@ -56,6 +56,8 @@ export const tenantMcpServers = pgTable(
     auth_type: text("auth_type").notNull().default("none"),
     /** For tenant_api_key/service_credential: { secretRef: "arn:..." }. */
     auth_config: jsonb("auth_config"),
+    /** Non-secret runtime metadata consumed by dispatch, e.g. record-link hints. */
+    runtime_metadata: jsonb("runtime_metadata"),
     /** @deprecated — use RFC 9728 discovery instead. Kept for migration compat. */
     oauth_provider: text("oauth_provider"),
     /** Cached tool list from discovery: [{ name: string, description?: string }] */

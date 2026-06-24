@@ -6,6 +6,65 @@ status: in_progress
 
 # Autopilot Status Ledger
 
+## MCP Record Link Hints Autopilot - 2026-06-24
+
+- Plan:
+  `docs/plans/2026-06-24-002-feat-mcp-record-link-hints-plan.md`.
+- Target branch: `main`.
+- Mode: Compound Engineering autopilot, one isolated worktree/branch per
+  implementation unit.
+- Status: In progress. U1 is active.
+- Current unit: U1 - Add Provider-Neutral Record-Link Hint Contract.
+- Current branch: `codex/mcp-record-links-u1`.
+- Current worktree:
+  `.Codex/worktrees/mcp-record-links-u1`.
+- Current pull request:
+  [#2909](https://github.com/thinkwork-ai/thinkwork/pull/2909).
+- Progress:
+  - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
+    `ce-work` workflow instructions, and the MCP record-link hints plan.
+  - 2026-06-24: Main checkout is dirty with unrelated user/session changes,
+    including a modified autopilot ledger; preserving those changes and using
+    isolated worktrees from `origin/main`.
+  - 2026-06-24: U1 started from `origin/main` at `dffa9766d` in
+    `.Codex/worktrees/mcp-record-links-u1` on branch
+    `codex/mcp-record-links-u1`.
+  - 2026-06-24: U1 implementation in progress. Plan artifact copied into the
+    isolated worktree so the first PR can make the plan/status baseline durable
+    for later units.
+  - 2026-06-24: U1 implemented provider-neutral `recordLinkHints` manifest
+    validation, added nullable `tenant_mcp_servers.runtime_metadata`, and added
+    migration/schema coverage for the hand-rolled migration marker.
+  - 2026-06-24: U1 focused and package verification passed:
+    `pnpm --filter @thinkwork/plugin-catalog test`,
+    `pnpm --filter @thinkwork/database-pg test`,
+    `pnpm --filter @thinkwork/plugin-catalog typecheck`,
+    `pnpm --filter @thinkwork/database-pg typecheck`, changed-file Prettier
+    check, and `git diff --check`.
+  - 2026-06-24: U1 PR
+    [#2909](https://github.com/thinkwork-ai/thinkwork/pull/2909) opened and CI
+    monitoring started.
+  - 2026-06-24: Compound review found malformed route-template coverage,
+    unknown `recordLinkHints` field preservation, sensitive field-name risk,
+    and nullable/default-free migration coverage gaps. Tightened validation and
+    tests before merging U1.
+  - 2026-06-24: PR #2909 CI initially failed `Migration Drift Precheck (dev)`
+    because the new hand-rolled migration
+    `packages/database-pg/drizzle/0186_tenant_mcp_runtime_metadata.sql` was not
+    yet applied to the shared `dev` Aurora database. Applied only that
+    idempotent migration to `dev` with `psql -v ON_ERROR_STOP=1`, then
+    confirmed the scoped manual drift reporter sees
+    `public.tenant_mcp_servers.runtime_metadata` as present.
+  - 2026-06-24: Full local `pnpm lint` and `pnpm typecheck` passed. Initial
+    full `pnpm test` stopped in `apps/desktop` because the worktree Electron
+    binary was partially extracted; `pnpm rebuild electron` repaired the local
+    dependency, `pnpm --filter @thinkwork/desktop test` passed, and the full
+    `pnpm test` rerun passed. `pnpm format:check` is not a clean repo-wide
+    signal on this checkout: the root package lacks a direct Prettier bin, and
+    a temporary investigation with the already-installed Prettier 3.8.2 copy
+    reported 677 pre-existing formatting warnings outside U1. Changed-file
+    Prettier checks and `git diff --check` passed.
+
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
 - Plan:

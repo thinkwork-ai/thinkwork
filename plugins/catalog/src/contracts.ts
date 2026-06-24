@@ -154,6 +154,33 @@ export interface McpEndpointFrom {
   path?: string;
 }
 
+export interface McpRecordLinkRouteHint {
+  /** Provider-neutral object key, e.g. `opportunity`. */
+  objectType: string;
+  /** Relative browser route template containing exactly one `{id}` placeholder. */
+  routeTemplate: string;
+  /** Candidate fields in the MCP result that can contain the record id. */
+  idFields?: string[];
+  /** Candidate fields in the MCP result that can contain a human label. */
+  labelFields?: string[];
+}
+
+export interface McpRecordLinkWorkspaceHint {
+  /** Optional non-secret field whose value can be appended as a URL hash. */
+  hashField?: string;
+}
+
+export interface McpRecordLinkHints {
+  /** Contract version for runtime metadata repair/audit decisions. */
+  schemaVersion: 1;
+  /** Declares where the static route hints came from. */
+  source: "plugin-manifest";
+  /** Supported record routes. Browser origins are resolved during provisioning. */
+  routes: McpRecordLinkRouteHint[];
+  /** Optional workspace/hash metadata. Never stores a credential. */
+  workspace?: McpRecordLinkWorkspaceHint;
+}
+
 export interface McpServerComponent {
   type: "mcp-server";
   key: string;
@@ -164,6 +191,8 @@ export interface McpServerComponent {
   /** Provision-time endpoint resolution from a managed-app row. */
   endpointFrom?: McpEndpointFrom;
   auth: McpServerAuth;
+  /** Optional non-secret hints for generating links from trusted MCP results. */
+  recordLinkHints?: McpRecordLinkHints;
   /** Optional human notes about the tools the server exposes. */
   toolNotes?: string[];
 }
@@ -632,6 +661,9 @@ function validateMcpServerComponent(
   } else {
     validateEndpointFrom(component.endpointFrom!, prefix);
   }
+  if (component.recordLinkHints !== undefined) {
+    validateRecordLinkHints(component.recordLinkHints, prefix);
+  }
   if (component.toolNotes !== undefined) {
     if (
       !Array.isArray(component.toolNotes) ||
@@ -678,6 +710,198 @@ function validateMcpServerComponent(
   requireHttpUrl(oauth.authDomain, `${prefix}.auth.authDomain`);
   requireString(oauth.resourceIndicator, `${prefix}.auth.resourceIndicator`);
   return true;
+}
+
+const RECORD_LINK_FIELD_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/;
+const RECORD_LINK_ALLOWED_HINT_KEYS = [
+  "schemaVersion",
+  "source",
+  "routes",
+  "workspace",
+] as const;
+const RECORD_LINK_ALLOWED_ROUTE_KEYS = [
+  "objectType",
+  "routeTemplate",
+  "idFields",
+  "labelFields",
+] as const;
+const RECORD_LINK_ALLOWED_WORKSPACE_KEYS = ["hashField"] as const;
+const RECORD_LINK_TEMPLATE_SEGMENT_RE = /^[A-Za-z0-9._~-]+$|^\{id\}$/;
+const RECORD_LINK_FORBIDDEN_FIELD_PARTS = [
+  "auth_config",
+  "authorization",
+  "cookie",
+  "token",
+  "secret",
+  "password",
+  "credential",
+  "header",
+] as const;
+
+function validateRecordLinkHints(
+  hints: Partial<McpRecordLinkHints>,
+  prefix: string,
+): void {
+  const label = `${prefix}.recordLinkHints`;
+  if (!hints || typeof hints !== "object" || Array.isArray(hints)) {
+    throw new PluginManifestError(`${label} must be an object`);
+  }
+  rejectUnknownKeys(
+    hints as Record<string, unknown>,
+    RECORD_LINK_ALLOWED_HINT_KEYS,
+    label,
+  );
+  if (hints.schemaVersion !== 1) {
+    throw new PluginManifestError(`${label}.schemaVersion must be 1`);
+  }
+  if (hints.source !== "plugin-manifest") {
+    throw new PluginManifestError(`${label}.source must be "plugin-manifest"`);
+  }
+  if (!Array.isArray(hints.routes) || hints.routes.length === 0) {
+    throw new PluginManifestError(`${label}.routes must be a non-empty array`);
+  }
+
+  const seenObjectTypes = new Set<string>();
+  for (const [index, route] of hints.routes.entries()) {
+    const routeLabel = `${label}.routes[${index}]`;
+    if (!route || typeof route !== "object" || Array.isArray(route)) {
+      throw new PluginManifestError(`${routeLabel} must be an object`);
+    }
+    rejectUnknownKeys(
+      route as unknown as Record<string, unknown>,
+      RECORD_LINK_ALLOWED_ROUTE_KEYS,
+      routeLabel,
+    );
+    requireString(route.objectType, `${routeLabel}.objectType`);
+    if (!SLUG_RE.test(route.objectType)) {
+      throw new PluginManifestError(
+        `${routeLabel}.objectType "${route.objectType}" must match ${SLUG_RE.source}`,
+      );
+    }
+    if (seenObjectTypes.has(route.objectType)) {
+      throw new PluginManifestError(
+        `${label}.routes declares duplicate objectType "${route.objectType}"`,
+      );
+    }
+    seenObjectTypes.add(route.objectType);
+
+    requireString(route.routeTemplate, `${routeLabel}.routeTemplate`);
+    validateRecordLinkRouteTemplate(
+      route.routeTemplate,
+      `${routeLabel}.routeTemplate`,
+    );
+
+    validateOptionalFieldList(route.idFields, `${routeLabel}.idFields`);
+    validateOptionalFieldList(route.labelFields, `${routeLabel}.labelFields`);
+  }
+
+  if (hints.workspace !== undefined) {
+    if (
+      !hints.workspace ||
+      typeof hints.workspace !== "object" ||
+      Array.isArray(hints.workspace)
+    ) {
+      throw new PluginManifestError(`${label}.workspace must be an object`);
+    }
+    rejectUnknownKeys(
+      hints.workspace as Record<string, unknown>,
+      RECORD_LINK_ALLOWED_WORKSPACE_KEYS,
+      `${label}.workspace`,
+    );
+    if (hints.workspace.hashField !== undefined) {
+      validateFieldName(
+        hints.workspace.hashField,
+        `${label}.workspace.hashField`,
+      );
+    }
+  }
+}
+
+function validateRecordLinkRouteTemplate(value: string, label: string): void {
+  if (!value.startsWith("/") || value.startsWith("//")) {
+    throw new PluginManifestError(
+      `${label} must be a relative path containing exactly one "{id}" segment`,
+    );
+  }
+  if (
+    /[?#\\%\s<>\[\]()"']/.test(value) ||
+    /[\u0000-\u001F\u007F]/.test(value)
+  ) {
+    throw new PluginManifestError(
+      `${label} must not contain query, fragment, encoded separator, whitespace, control, or markup characters`,
+    );
+  }
+
+  const placeholders = value.match(/\{[^}]*\}/g) ?? [];
+  if (placeholders.length !== 1 || placeholders[0] !== "{id}") {
+    throw new PluginManifestError(
+      `${label} must contain exactly one "{id}" placeholder and no other placeholders`,
+    );
+  }
+
+  const segments = value.slice(1).split("/");
+  if (segments.some((segment) => segment.length === 0)) {
+    throw new PluginManifestError(`${label} must not contain empty segments`);
+  }
+  let idSegmentCount = 0;
+  for (const segment of segments) {
+    if (segment === "." || segment === "..") {
+      throw new PluginManifestError(`${label} must not contain dot segments`);
+    }
+    if (!RECORD_LINK_TEMPLATE_SEGMENT_RE.test(segment)) {
+      throw new PluginManifestError(
+        `${label} contains an unsupported path segment "${segment}"`,
+      );
+    }
+    if (segment === "{id}") idSegmentCount += 1;
+  }
+  if (idSegmentCount !== 1) {
+    throw new PluginManifestError(
+      `${label} must use "{id}" as exactly one full path segment`,
+    );
+  }
+}
+
+function validateOptionalFieldList(
+  fields: string[] | undefined,
+  label: string,
+): void {
+  if (fields === undefined) return;
+  if (!Array.isArray(fields) || fields.length === 0) {
+    throw new PluginManifestError(`${label} must be a non-empty array`);
+  }
+  const seen = new Set<string>();
+  for (const [index, field] of fields.entries()) {
+    validateFieldName(field, `${label}[${index}]`);
+    if (seen.has(field)) {
+      throw new PluginManifestError(
+        `${label} declares duplicate field "${field}"`,
+      );
+    }
+    seen.add(field);
+  }
+}
+
+function validateFieldName(
+  value: unknown,
+  label: string,
+): asserts value is string {
+  requireString(value, label);
+  if (!RECORD_LINK_FIELD_RE.test(value)) {
+    throw new PluginManifestError(
+      `${label} "${value}" must match ${RECORD_LINK_FIELD_RE.source}`,
+    );
+  }
+  const normalized = value.toLowerCase();
+  const parts = normalized.split(/[_.-]+/);
+  const hasSensitivePart =
+    parts.includes("auth") ||
+    RECORD_LINK_FORBIDDEN_FIELD_PARTS.some((part) => normalized.includes(part));
+  if (hasSensitivePart) {
+    throw new PluginManifestError(
+      `${label} must not reference credential-shaped data`,
+    );
+  }
 }
 
 const HTTP_HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
@@ -1119,6 +1343,19 @@ function rejectManifestValueCarrier(
       throw new PluginManifestError(
         `${prefix}.${key} is not allowed in ${context}`,
       );
+    }
+  }
+}
+
+function rejectUnknownKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  prefix: string,
+): void {
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new PluginManifestError(`${prefix}.${key} is not allowed`);
     }
   }
 }
