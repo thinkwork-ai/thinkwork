@@ -1,12 +1,13 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { AgentLoopDetail } from "@/components/agent-loops/AgentLoopDetail";
 
 export const Route = createFileRoute(
   "/_authed/_shell/automations/$scheduledJobId",
 )({
-  beforeLoad: ({ params }) => {
-    throw redirect({
-      to: "/settings/automations/$scheduledJobId",
-      params,
-    });
-  },
+  component: AutomationDetailRoute,
 });
+
+function AutomationDetailRoute() {
+  const { scheduledJobId } = Route.useParams();
+  return <AgentLoopDetail agentLoopId={scheduledJobId} routeScope="main" />;
+}

@@ -98,7 +98,13 @@ type TenantAgentData = {
   } | null;
 };
 
-export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
+export function AgentLoopDetail({
+  agentLoopId,
+  routeScope = "settings",
+}: {
+  agentLoopId: string;
+  routeScope?: "main" | "settings";
+}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -153,10 +159,13 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
     [agentResult.data?.agent?.runtimeConfig],
   );
 
+  const automationsHref =
+    routeScope === "main" ? "/automations" : "/settings/automations";
+
   usePageHeaderActions({
     title: loop?.name ?? "Automation",
     breadcrumbs: [
-      { label: "Automations", href: "/settings/automations" },
+      { label: "Automations", href: automationsHref },
       { label: loop?.name ?? "Automation" },
     ],
     action: loop ? (
@@ -269,7 +278,7 @@ export function AgentLoopDetail({ agentLoopId }: { agentLoopId: string }) {
       const result = await deleteAgentLoop({ id: row.id });
       if (result.error) throw result.error;
       toast.success("Automation archived");
-      navigate({ to: "/settings/automations" });
+      navigate({ to: automationsHref });
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {

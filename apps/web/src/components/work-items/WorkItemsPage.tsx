@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KanbanSquare, List, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
-import { Button, Tabs, TabsList, TabsTrigger } from "@thinkwork/ui";
+import { Button } from "@thinkwork/ui";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { SettingsPageTitle } from "@/components/settings/SettingsContent";
+import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   DeleteWorkItemViewMutation,
-  SaveWorkItemViewMutation,
+  CreateWorkItemMutation,
   SpacesQuery,
   UpdateWorkItemStatusMutation,
   WorkItemSavedViewsQuery,
@@ -28,11 +30,15 @@ import {
 import {
   buildWorkItemsInput,
   routeSearchFromSavedView,
-  savedViewInputFromRouteSearch,
   workItemRouteSearchToParams,
   type WorkItemRouteSearch,
 } from "./work-item-filters";
+import { WorkItemDisplayPopover } from "./WorkItemDisplayPopover";
 import { WorkItemFilters } from "./WorkItemFilters";
+import {
+  NewWorkItemSheet,
+  type NewWorkItemFormInput,
+} from "./NewWorkItemSheet";
 import { WorkItemSavedViews } from "./WorkItemSavedViews";
 import { WorkItemsBoardView } from "./WorkItemsBoardView";
 import { WorkItemsListView } from "./WorkItemsListView";
@@ -65,6 +71,7 @@ export function WorkItemsPage({
   onStateChange,
 }: WorkItemsPageProps) {
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+  const [newWorkItemOpen, setNewWorkItemOpen] = useState(false);
   const input = useMemo(
     () => (tenantId ? buildWorkItemsInput(tenantId, state) : undefined),
     [state, tenantId],
@@ -101,8 +108,8 @@ export function WorkItemsPage({
   const [{ fetching: statusUpdating }, executeStatusUpdate] = useMutation(
     UpdateWorkItemStatusMutation,
   );
-  const [{ fetching: savingView }, executeSaveView] = useMutation(
-    SaveWorkItemViewMutation,
+  const [{ fetching: creatingWorkItem }, executeCreateWorkItem] = useMutation(
+    CreateWorkItemMutation,
   );
   const [{ fetching: deletingView }, executeDeleteView] = useMutation(
     DeleteWorkItemViewMutation,
@@ -136,7 +143,6 @@ export function WorkItemsPage({
     if (state.spaceId && spaceStatuses.length > 0) return spaceStatuses;
     return categoryStatuses();
   }, [state.spaceId, statusesData?.workItemStatuses]);
-  const counts = useMemo(() => summarizeWorkItems(workItems), [workItems]);
 
   const handleStatusChange = useCallback(
     async (item: WorkItemSummary, status: WorkItemStatusSummary) => {
@@ -161,32 +167,24 @@ export function WorkItemsPage({
     [executeStatusUpdate, reexecuteItems, statusUpdating, tenantId],
   );
 
-  const handleSaveView = useCallback(
-    async (name: string) => {
-      if (!tenantId) return false;
-      const result = await executeSaveView({
-        input: savedViewInputFromRouteSearch(
+  const handleCreateWorkItem = useCallback(
+    async (form: NewWorkItemFormInput) => {
+      if (!tenantId || creatingWorkItem) return false;
+      const result = await executeCreateWorkItem({
+        input: {
           tenantId,
-          name,
-          state,
-          state.savedViewId,
-        ),
+          ...form,
+        },
       });
       if (result.error) {
-        toast.error(`Couldn't save view: ${result.error.message}`);
+        toast.error(`Couldn't create Work Item: ${result.error.message}`);
         return false;
       }
-      const saved = result.data?.saveWorkItemView as
-        | WorkItemSavedViewSummary
-        | undefined;
-      if (saved) {
-        onStateChange(routeSearchFromSavedView(saved));
-      }
-      reexecuteSavedViews({ requestPolicy: "network-only" });
-      toast.success("View saved");
+      toast.success("Work Item created");
+      reexecuteItems({ requestPolicy: "network-only" });
       return true;
     },
-    [executeSaveView, onStateChange, reexecuteSavedViews, state, tenantId],
+    [creatingWorkItem, executeCreateWorkItem, reexecuteItems, tenantId],
   );
 
   const handleDeleteView = useCallback(
@@ -221,73 +219,73 @@ export function WorkItemsPage({
     [onStateChange],
   );
 
+  usePageHeaderActions({
+    title: "Work Items",
+    documentTitle: "Work Items",
+    action: (
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          aria-label="New Work Item"
+          title="New Work Item"
+          onClick={() => setNewWorkItemOpen(true)}
+        >
+          <Plus className="size-4" />
+        </Button>
+        <WorkItemSavedViews
+          views={savedViews}
+          activeViewId={state.savedViewId}
+          deleting={deletingView}
+          onSelectView={(view) =>
+            updateState(
+              view
+                ? routeSearchFromSavedView(view)
+                : {
+                    ...state,
+                    savedViewId: undefined,
+                  },
+            )
+          }
+          onDeleteView={handleDeleteView}
+        />
+        <WorkItemDisplayPopover state={state} onChange={updateState} />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          aria-label="Refresh Work Items"
+          title="Refresh Work Items"
+          onClick={() => reexecuteItems({ requestPolicy: "network-only" })}
+        >
+          <RefreshCw className="size-4" />
+        </Button>
+      </div>
+    ),
+    actionKey: `work-items:${JSON.stringify(state)}:${savedViews.map((view) => `${view.id}:${view.name}`).join("|")}:${deletingView ? "deleting" : "idle"}`,
+  });
+
   if (!tenantId || (fetching && !data)) {
     return <PageSkeleton />;
   }
 
   return (
     <main className="flex h-full w-full flex-col overflow-hidden bg-background">
-      <div className="flex h-full min-h-0 flex-col gap-3 px-2 py-4 sm:px-4">
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <Metric label="Total" value={workItems.length} />
-            <Metric label="Open" value={counts.open} />
-            <Metric label="Required" value={counts.requiredOpen} />
-            <Metric label="Blocked" value={counts.blocked} />
-            <Metric label="Due soon" value={counts.dueSoon} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <WorkItemSavedViews
-              views={savedViews}
-              activeViewId={state.savedViewId}
-              saving={savingView}
-              deleting={deletingView}
-              onSelectView={(view) =>
-                updateState(
-                  view
-                    ? routeSearchFromSavedView(view)
-                    : {
-                        ...state,
-                        savedViewId: undefined,
-                      },
-                )
-              }
-              onSaveView={handleSaveView}
-              onDeleteView={handleDeleteView}
-            />
-            <Tabs
-              value={state.view}
-              onValueChange={(view) =>
-                updateState({
-                  ...state,
-                  view: view === "board" ? "board" : "list",
-                  savedViewId: undefined,
-                })
-              }
-            >
-              <TabsList aria-label="Work Item view">
-                <TabsTrigger value="list" aria-label="List view">
-                  <List className="size-4" />
-                </TabsTrigger>
-                <TabsTrigger value="board" aria-label="Board view">
-                  <KanbanSquare className="size-4" />
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              aria-label="Refresh Work Items"
-              onClick={() => reexecuteItems({ requestPolicy: "network-only" })}
-            >
-              <RefreshCw className="size-4" />
-            </Button>
-          </div>
-        </header>
-
-        <WorkItemFilters state={state} spaces={spaces} onChange={updateState} />
+      <div className="flex h-full min-h-0 flex-col p-6">
+        <SettingsPageTitle
+          title="Work Items"
+          description="Track Space work items, blockers, and thread-linked progress."
+        />
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+          <WorkItemFilters
+            state={state}
+            spaces={spaces}
+            onChange={updateState}
+          />
+        </div>
 
         {error ? (
           <div className="shrink-0 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
@@ -298,7 +296,7 @@ export function WorkItemsPage({
           <div className="sr-only">Loading saved views</div>
         ) : null}
 
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {state.view === "board" ? (
             <WorkItemsBoardView
               items={workItems}
@@ -319,16 +317,15 @@ export function WorkItemsPage({
           )}
         </div>
       </div>
+      <NewWorkItemSheet
+        open={newWorkItemOpen}
+        spaces={spaces}
+        defaultSpaceId={state.spaceId}
+        saving={creatingWorkItem}
+        onOpenChange={setNewWorkItemOpen}
+        onCreate={handleCreateWorkItem}
+      />
     </main>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <span className="inline-flex h-7 items-center gap-1 rounded-md border px-2">
-      <span>{label}</span>
-      <span className="font-medium tabular-nums text-foreground">{value}</span>
-    </span>
   );
 }
 

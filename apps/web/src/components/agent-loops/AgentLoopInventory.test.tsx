@@ -217,6 +217,16 @@ describe("AgentLoopInventory", () => {
     });
   });
 
+  it("opens main-nav automation rows through the user Automation route", async () => {
+    render(<AgentLoopInventory routeScope="main" />);
+
+    fireEvent.click(await screen.findByText("Weekly Agent Check-In"));
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/automations/$scheduledJobId",
+      params: { scheduledJobId: "loop-1" },
+    });
+  });
+
   it("creates automations and navigates to the created loop", async () => {
     saveMutationMock.mockResolvedValue({
       data: { saveAgentLoop: { id: "loop-new" } },

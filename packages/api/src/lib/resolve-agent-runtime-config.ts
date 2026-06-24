@@ -575,13 +575,27 @@ export async function resolveAgentRuntimeConfig(
     }
   }
 
-  const trustedSkillIds = await loadTrustedCatalogSkillIds({
+  // Built-ins are credentialed platform tools, not catalog skills; keep their
+  // runtime config while the catalog trust gate still filters workspace skills.
+  const builtInSkillIds = new Set(
+    skillsConfig
+      .filter((skill) => isBuiltinToolSlug(skill.skillId))
+      .map((skill) => skill.skillId),
+  );
+  const catalogSkillIds = skillsConfig
+    .filter((skill) => !isBuiltinToolSlug(skill.skillId))
+    .map((skill) => skill.skillId);
+  const trustedCatalogSkillIds = await loadTrustedCatalogSkillIds({
     tenantId: opts.tenantId,
-    skillIds: skillsConfig.map((skill) => skill.skillId),
+    skillIds: catalogSkillIds,
     logPrefix,
   });
+  const runtimeAllowedSkillIds = new Set([
+    ...trustedCatalogSkillIds,
+    ...builtInSkillIds,
+  ]);
   skillsConfig = skillsConfig.filter((skill) =>
-    trustedSkillIds.has(skill.skillId),
+    runtimeAllowedSkillIds.has(skill.skillId),
   );
 
   const webSearchConfig = resolveWebSearchConfigFromSkills(skillsConfig);

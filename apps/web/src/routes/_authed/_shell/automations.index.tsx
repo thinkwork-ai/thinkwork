@@ -1,7 +1,10 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { AgentLoopInventory } from "@/components/agent-loops/AgentLoopInventory";
 
 export const Route = createFileRoute("/_authed/_shell/automations/")({
-  beforeLoad: () => {
-    throw redirect({ to: "/settings/automations" });
-  },
+  component: AutomationsRoute,
 });
+
+function AutomationsRoute() {
+  return <AgentLoopInventory routeScope="main" />;
+}
