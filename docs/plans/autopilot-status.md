@@ -14889,3 +14889,8 @@ pipeline.
   `scripts/plugin-source-boundary-allowlist.mjs` still listed the deleted
   `apps/cli/__tests__/terraform-plane-fixture.test.ts`. Removed the stale
   allowlist entry; local `pnpm lint:plugin-source` and `pnpm lint` pass.
+- PR #2914 CI failure: `test` then failed in
+  `scripts/__tests__/verify-plugin-source-boundary.test.mjs` because the
+  source-boundary unit fixture still expected the deleted Plane CLI fixture to
+  be accepted through the shared allowlist. Removed that fixture expectation;
+  local `pnpm test:plugin-source-boundary` and `pnpm lint:plugin-source` pass.
