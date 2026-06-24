@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-30
-status: in_progress
+status: blocked
 ---
 
 # Autopilot Status Ledger
@@ -13,13 +13,14 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: In progress. U7 is active.
-- Current unit: U7 - Document and Verify the Deployed Twenty Path.
-- Current branch: `codex/mcp-record-links-u7`.
+- Status: Blocked after implementation and deploy. U1-U7 are merged to
+  `main`; final live Twenty record-link proof is blocked by deployed
+  environment auth/tool exposure state.
+- Current unit: Final live verification.
+- Current branch: `codex/mcp-record-links-final-status`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-u7`.
-- Current pull request:
-  [#2916](https://github.com/thinkwork-ai/thinkwork/pull/2916).
+  `.Codex/worktrees/mcp-record-links-final-status`.
+- Current pull request: Pending for this status update.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -190,6 +191,69 @@ status: in_progress
   - 2026-06-24: U7 PR
     [#2916](https://github.com/thinkwork-ai/thinkwork/pull/2916) opened and CI
     monitoring started.
+  - 2026-06-24: U7 PR
+    [#2916](https://github.com/thinkwork-ai/thinkwork/pull/2916) passed CI
+    (CLA, lint, test, typecheck, verify, signed catalog build),
+    squash-merged to `main` as `daca4b01`, and the remote/local U7 branches
+    were deleted.
+  - 2026-06-24: The final U7 merge deployed successfully through the normal
+    `main` pipeline in GitHub Actions deploy run
+    [#28105203597](https://github.com/thinkwork-ai/thinkwork/actions/runs/28105203597).
+    Deploy evidence from that run:
+    - Terraform Apply, Build & Deploy Docs, Deploy Summary, and Compliance Role
+      Bootstrap succeeded.
+    - Public endpoints remained `https://app.thinkwork.ai`,
+      `https://docs.thinkwork.ai`,
+      `https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/`,
+      and `https://crm.thinkwork.ai`.
+    - Deploy Summary verified the Pi runtime image from U5:
+      `thinkwork_dev_pi` live version `463`, image source SHA `bdc5cd33`.
+    - Deployment status was written to
+      `s3://thinkwork-dev-487219502366-deploy-evidence/deployment/status/current.json`
+      and history object
+      `s3://thinkwork-dev-487219502366-deploy-evidence/deployment/status/history/2026-06-24T14-31-07Z-28105203597.json`.
+  - 2026-06-24: U6 API-side MCP proxy enrichment was also deployed through
+    the normal `main` pipeline in GitHub Actions deploy run
+    [#28104155357](https://github.com/thinkwork-ai/thinkwork/actions/runs/28104155357).
+  - 2026-06-24: Read-only deployed-state checks found the authenticated dev
+    user `eric@thinkwork.ai` in tenant `sleek-squirrel-230`
+    (`0015953e-aa13-4cab-8398-2e70f73dda63`) with tenant agent
+    `c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c`.
+  - 2026-06-24: Read-only MCP registry proof:
+    `thinkwork mcp list` shows plugin-managed `Twenty CRM`
+    (`5d50f8cc-e7df-40b0-bf9f-b7bf20638e11`) at
+    `https://crm.thinkwork.ai/mcp`, enabled. The authenticated
+    `/api/skills/user-mcp-servers` response for the current user shows the
+    same Twenty row with `authType: oauth`, `authStatus: active`,
+    `managementSource: plugin`, `managedApplicationKey: twenty-crm`,
+    `runtimeAssigned: true`, and `runtimeEnabled: true`.
+  - 2026-06-24: Read-only agent assignment proof:
+    `/api/skills/agents/c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c/mcp-servers`
+    includes the assigned `Twenty CRM` server
+    (`3e7de2b4-f9f1-4239-976d-03b5dd6b0afd`) at
+    `https://crm.thinkwork.ai/mcp`, enabled with `authType: oauth`.
+  - 2026-06-24: Final live smoke blocker:
+    `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 SMOKE_TWENTY_MCP_CALL=1 node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`
+    reached the deployed API but failed before an Opportunity call with
+    `MCP proxy tools/list did not expose tools for server twenty-crm`.
+    A direct read-only `/api/mcp/tools/list` call for the same tenant agent
+    returned 139 tools, but only for `plane--issues` and
+    `n8n--workflow-management`; no Twenty tools were exposed.
+  - 2026-06-24: Direct read-only `/api/mcp/tools/call` against assigned server
+    slug `twenty--crm` and tool `execute_tool` reached the MCP proxy but
+    returned `HTTP 502`: Twenty upstream returned `401`. The alternate managed
+    key `twenty-crm` returned `HTTP 404`
+    (`No MCP server resolves tool "undefined"`). This indicates the code is
+    merged and deployed, but live Twenty tool execution/link proof is blocked
+    by deployed OAuth/upstream state. Fixing that likely requires reconnecting
+    or repairing the live Twenty MCP auth/tool cache through the product/admin
+    flow; no production mutation was performed during autopilot.
+  - 2026-06-24: Next recommended action: reconnect or repair the live Twenty
+    CRM MCP auth/tool discovery for the dev tenant/user, confirm
+    `/api/mcp/tools/list` exposes Twenty tools for tenant agent
+    `c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c`, then rerun the U7 smoke with
+    `SMOKE_TWENTY_MCP_CALL=1` and verify the response contains Opportunity
+    `recordLinks` pointing at `https://crm.thinkwork.ai`.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
