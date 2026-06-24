@@ -238,6 +238,22 @@ Do not pass a made-up branch name as `startingState.branchName` for a new
 worker. Codex treats that value as an existing git ref, so worktree creation
 fails if the ref does not already exist.
 
+Launches are atomic. After `create_thread` returns, the dispatcher immediately
+records the returned `threadId` or `pendingWorktreeId` in the Progress document,
+rolling ledger, and handoff comment, then moves the issue state when required.
+If a launch decision is made but `create_thread` cannot be called, the
+dispatcher records `launch-blocked` instead of stopping at "launching now." If
+Linear recording fails after a worker was created, the dispatcher records the
+returned id wherever possible and must not create a replacement worker in the
+same heartbeat.
+
+Each inspected issue must end a heartbeat in one observable router state:
+active worker, pending worker, waiting, blocked, launched, or skipped with
+reason. The dispatcher may create at most one new implementation/repair worker
+per heartbeat, but existing worker monitoring does not consume that launch
+budget. Issues skipped because the launch budget was used must say that in the
+rolling ledger or Progress document.
+
 Implementation and repair prompts must include a first-action goal line. The
 goal should name the Linear issue, the implementation scope, the expected PR or
 artifact landing, the Linear ledger/status evidence to update, and the terminal

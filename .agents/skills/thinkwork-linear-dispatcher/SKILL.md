@@ -59,6 +59,35 @@ with the missing-skill-resource blocker and stop. Do not fall back to memory.
 10. Route the issue according to `references/routing-contract.md`, with the
     progress document as the authoritative implementation loop state.
 
+Every heartbeat must leave each eligible issue it inspects in one observable
+router state:
+
+- `active-worker`: a validated readable `threadId`, PR/check loop, or verified
+  pending worktree is already responsible for the current phase;
+- `pending-worker`: `create_thread` returned a `pendingWorktreeId` and Linear
+  has been updated with that exact id;
+- `waiting`: the issue is intentionally waiting at a non-LFG review or
+  verification gate;
+- `blocked`: a true blocker was recorded in the Progress document and rolling
+  ledger;
+- `launched`: a real worker was created and the Progress document, rolling
+  ledger, handoff comment, and issue state were updated in the same heartbeat;
+- `skipped-with-reason`: the issue was not routed because the heartbeat launch
+  budget was used or a higher-priority invariant stopped routing.
+
+Do not leave a heartbeat after "launching worker now" unless the Linear issue
+contains the returned `threadId` or `pendingWorktreeId`. If the dispatcher
+cannot call `create_thread` after deciding to launch, it must update the
+Progress document and rolling ledger with a `launch-blocked` state instead of
+waiting silently.
+
+Process all active Codex candidates until each has an observable router state.
+The dispatcher may create at most one new implementation/repair worker per
+heartbeat to reduce duplicate risk, but it must continue scanning the remaining
+eligible issues and mark them `skipped-with-reason: launch budget used` rather
+than ignoring them. Continuing or monitoring existing workers does not consume
+the launch budget.
+
 ## Duplicate-Worker Gate
 
 Before creating any worker, prove there is no existing active worker for the
@@ -93,6 +122,7 @@ authorizes deletion.
 
 When a route requires a Codex worker:
 
+- prepare the worker prompt before calling `create_thread`;
 - call Codex `create_thread` in the `/Users/ericodom/Projects/thinkwork`
   project;
 - use `environment: { type: "worktree" }`;
@@ -110,6 +140,28 @@ When a route requires a Codex worker:
 - update the progress document before launch with the selected phase/unit,
   expected worker title, returned `threadId` or `pendingWorktreeId`, branch or
   worktree expectations when known, and the exact stop condition.
+
+Atomic launch rule: after `create_thread` returns, the dispatcher must
+immediately update, in this order, before inspecting another issue:
+
+1. Progress document `Active Work`, with the exact returned id and stop
+   condition.
+2. Rolling ledger `automation-ledger:<ISSUE_ID>`.
+3. Handoff comment `dispatcher:<ISSUE_ID>:<PHASE>:Codex`.
+4. Linear issue state when the phase transition requires it, such as
+   `Ready to Work` -> `In Progress`.
+5. Thread title, when a readable `threadId` is available.
+
+If any Linear update fails after `create_thread` succeeds, retry the failed
+update once. If it still fails, post or update the rolling ledger when possible
+with `launch-recording-failed`, the returned id, and the failed update. Never
+call `create_thread` a second time for the same issue in that heartbeat.
+
+Pending worktree rule: a `pendingWorktreeId` is a real launch result, not a
+worker thread. Record it as pending setup, then stop launching for that issue
+until a later heartbeat resolves it to a readable thread or proves that setup
+failed. While pending setup is unresolved, duplicate-worker gate must treat the
+pending id as active enough to block another launch.
 
 Implementation and repair prompts must include a first-action goal instruction.
 The worker must set a Codex thread goal with the goal tool or `/goal` before

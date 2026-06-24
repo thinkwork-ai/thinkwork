@@ -41,6 +41,11 @@ it before launching workers. If it conflicts with Linear status, comments,
 threads, worktrees, or PR state, do not launch a worker until the mismatch is
 reconciled and recorded.
 
+Every routed issue must end the heartbeat with an observable state in the
+Progress document or rolling ledger: active worker, pending worker, waiting,
+blocked, launched, or skipped with reason. Do not leave an issue at an
+unrecorded "about to launch" point.
+
 | Status                            | Behavior                                                                                                                                                                                  |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Todo`                            | If labeled `Codex`, move to `Brainstorming`, update ledger, stop.                                                                                                                         |
@@ -146,6 +151,14 @@ dispatcher:<ISSUE_ID>:<PHASE>:Codex
 Handoff comments must include the desired title, real returned `threadId` or
 `pendingWorktreeId`, target project, worktree mode, phase, and expected stop.
 
+Worker launch is atomic from Linear's perspective. A successful `create_thread`
+must be followed immediately by Progress document, rolling ledger, handoff
+comment, and state updates before the dispatcher inspects another issue. If
+Linear recording fails after a worker was created, the dispatcher must not
+create a replacement worker. It must record the returned id wherever possible
+and mark the issue `launch-recording-failed` for the next heartbeat to
+reconcile.
+
 The rolling ledger comment is only a short router pointer: current status,
 active worker/PR/worktree, blocker summary, and a link to the progress
 document. Do not use the rolling comment as the durable progress log.
@@ -153,6 +166,12 @@ document. Do not use the rolling comment as the durable progress log.
 Before claiming a worker is active, validate `threadId` with `read_thread`.
 Stale/fake ids such as `019efa74-2e86-7ba2-b707-ca67dd44ef01` must not block
 dispatch.
+
+Before treating a `pendingWorktreeId` as failed, search Codex threads and local
+worktrees for the issue id, title slug, and likely generated worktree path. If a
+readable thread exists, update Progress and the ledger with the real `threadId`
+and set the title. If two readable threads exist, follow duplicate-worker
+incident handling.
 
 ## Duplicate Worker Incident Handling
 
