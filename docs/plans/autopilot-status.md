@@ -13,11 +13,12 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: In progress.
-- Current unit: U3 - Extend plugin source-boundary enforcement.
-- Current branch: `codex/thnk-67-u3-company-data-boundary`.
-- Current worktree:
-  `.Codex/worktrees/thnk-67-u3-company-data-boundary`.
+- Status: Blocked on customer-environment deployment authorization. U1-U3 are
+  implemented, merged, and deployed to the dev/app pipeline; TEI and McPherson
+  remain pinned to an older canary release that predates Company Data.
+- Current unit: Customer deployment verification.
+- Current branch: `codex/thnk-67-company-data-status`.
+- Current worktree: `.Codex/worktrees/thnk-67-company-data-status`.
 - Current pull request: Pending.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `ce-work` and
@@ -107,6 +108,51 @@ status: in_progress
   - 2026-06-24: U3 focused verification passed:
     `pnpm test:plugin-source-boundary`, `pnpm lint:plugin-source`, changed-file
     Prettier check, and `git diff --check`.
+  - 2026-06-24: U3 PR
+    [#2906](https://github.com/thinkwork-ai/thinkwork/pull/2906) passed
+    required CI (`cla`, `lint`, `test`, `typecheck`, and `verify`) and was
+    squash merged as `1b7884b2f5a2510485fffda391dcfaaa31ad1154`; the U3
+    remote branch was removed by GitHub and the local U3 worktree/branch were
+    removed.
+  - 2026-06-24: Main Deploy workflow
+    [#28094729117](https://github.com/thinkwork-ai/thinkwork/actions/runs/28094729117)
+    completed successfully for the U3 merge. Deploy Summary verified the
+    AgentCore runtime image, recorded the deployment status pointer, and
+    reported `https://app.thinkwork.ai` plus API
+    `https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/`.
+  - 2026-06-24: Signed catalog release asset verification passed. The stable
+    GitHub release `plugin-catalog-main` asset
+    `thinkwork-plugin-catalog-main.json` is sourced from U2 merge
+    `aaf5b606398e7bb3bb2c346b32b094b6a02a61e5` and includes
+    `company-data@0.1.0` with the expected `settings` UI-surface shell
+    component.
+  - 2026-06-24: Deployed app/API verification passed for the dev/app
+    environment. A read-only `pluginCatalog` GraphQL query against
+    `https://ho7oyksms0.execute-api.us-east-1.amazonaws.com/graphql` using the
+    cached dev Cognito session returned `pluginCatalogMetadata.source:
+github-release`, `commitSha: aaf5b606398e7bb3bb2c346b32b094b6a02a61e5`,
+    `stale: false`, and a `company-data` catalog entry at version `0.1.0`.
+  - 2026-06-24: Customer deployment verification is blocked before TEI and
+    McPherson promotion. Read-only local enterprise registry inspection shows
+    TEI `tei-e2e` and McPherson `mcpherson` are both pinned to
+    `v0.1.0-canary.247`; the release manifest for that canary declares
+    `gitSha: 157bd8cd4851aababd15d2f438beb9735583f5ba`, published before the
+    Company Data merges. Current AWS credentials are for dev account
+    `487219502366`, not TEI account `637423202447` or McPherson account
+    `024350822488`, so this session cannot read those customer evidence
+    buckets directly. Completing TEI/McPherson requires a new release artifact
+    containing the Company Data commits and customer deployment-controller
+    promotion, which is a production/customer deployment mutation outside the
+    automatic merge deploy and is a hard stop under the autopilot contract.
+    Attempted/read-only commands: `gh run watch 28094729117 --interval 30`,
+    deployed `pluginCatalog` GraphQL query, `aws sts get-caller-identity`,
+    local enterprise registry `jq` inspection, `gh release view
+v0.1.0-canary.247`, and `gh release download v0.1.0-canary.247 --pattern
+thinkwork-release.json`.
+  - 2026-06-24: Next recommended action: authorize and run the normal release
+    and customer deployment-controller promotion path for TEI and McPherson,
+    then verify each customer environment's deployed `pluginCatalog` includes
+    `company-data@0.1.0` and update this ledger from blocked to complete.
 
 ## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
 
