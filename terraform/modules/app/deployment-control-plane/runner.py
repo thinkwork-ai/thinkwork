@@ -18,10 +18,6 @@ RELEASE = WORK / "release"
 SOURCE = WORK / "source"
 TF = WORK / "terraform"
 MANIFEST = RELEASE / "thinkwork-release.json"
-DEFAULT_PLANE_AIO_IMAGE_URI = (
-    "artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:"
-    "7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db"
-)
 CLOUDFLARE_PROVIDER_VERSION = "4.52.7"
 CLOUDFLARE_PROVIDER_LINUX_AMD64_SHA256 = (
     "904acc31ebb9d6ef68c792074b30532ee61bf515f19e0a3c75b46f126cca1f13"
@@ -653,12 +649,6 @@ def terraform_plan_summary(plan_json):
 
 def managed_app_terraform_target_args(payload):
     app_key = payload.get("appKey")
-    if app_key == "plane":
-        return [
-            "-target=module.thinkwork.terraform_data.plane_configuration_guardrails",
-            "-target=module.thinkwork.module.plane",
-            "-target=cloudflare_record.plane",
-        ]
     if app_key == "n8n":
         return [
             "-target=module.thinkwork.terraform_data.n8n_configuration_guardrails",
@@ -815,24 +805,17 @@ def configure_managed_app_evidence_prefix(payload):
 
 def validate_managed_app_plan_scope(payload, plan_json):
     app_key = payload.get("appKey")
-    if app_key not in {"n8n", "plane"}:
+    if app_key != "n8n":
         return
-    allowed_prefixes = {
-        "n8n": [
-            "module.thinkwork.module.n8n",
-            "module.thinkwork.terraform_data.n8n_configuration_guardrails",
-            "module.thinkwork.terraform_data.n8n_runtime_state_guardrails",
-            "aws_acm_certificate.n8n",
-            "cloudflare_record.n8n_acm_validation",
-            "aws_acm_certificate_validation.n8n",
-            "cloudflare_record.n8n",
-        ],
-        "plane": [
-            "module.thinkwork.module.plane",
-            "module.thinkwork.terraform_data.plane_configuration_guardrails",
-            "cloudflare_record.plane",
-        ],
-    }[app_key]
+    allowed_prefixes = [
+        "module.thinkwork.module.n8n",
+        "module.thinkwork.terraform_data.n8n_configuration_guardrails",
+        "module.thinkwork.terraform_data.n8n_runtime_state_guardrails",
+        "aws_acm_certificate.n8n",
+        "cloudflare_record.n8n_acm_validation",
+        "aws_acm_certificate_validation.n8n",
+        "cloudflare_record.n8n",
+    ]
     unsafe_changes = []
     for change in plan_json.get("resource_changes", []):
         actions = change.get("change", {}).get("actions", [])
@@ -1392,12 +1375,10 @@ def n8n_terraform_overrides(
     current_outputs=None,
     n8n_guardrails=None,
     twenty_guardrails=None,
-    plane_guardrails=None,
 ):
     current_outputs = current_outputs or {}
     n8n_guardrails = n8n_guardrails or {}
     twenty_guardrails = twenty_guardrails or {}
-    plane_guardrails = plane_guardrails or {}
     provisioned = operation != "DESTROY"
     runtime_enabled = provisioned and operation != "PARK"
     if not provisioned:
@@ -1462,8 +1443,6 @@ def n8n_terraform_overrides(
         os.environ.get("THINKWORK_DOMAIN", ""),
         sibling_app_base_domain(twenty_guardrails.get("twenty_public_url", "")),
         sibling_app_base_domain(state_output(current_outputs, "twenty_url", "")),
-        sibling_app_base_domain(plane_guardrails.get("plane_public_url", "")),
-        sibling_app_base_domain(state_output(current_outputs, "plane_url", "")),
         sibling_app_base_domain(state_output(current_outputs, "app_url", "")),
     )
     domain = config_value(
@@ -1844,36 +1823,6 @@ def validate_managed_app_desired_state(payload, desired_config, manifest_images)
             "Managed app operation requires operation to be one of "
             "ENABLE, PARK, DESTROY, or UPGRADE."
         )
-    if operation == "DESTROY" or app_key != "plane":
-        return
-
-    required = [
-        (
-            "mcpImageUri",
-            "THINKWORK_PLANE_MCP_IMAGE_URI",
-            ["plane-mcp-server", "plane-mcp"],
-        ),
-        ("dbUrlSecretArn", "THINKWORK_PLANE_DB_URL_SECRET_ARN", []),
-        ("secretKeySecretArn", "THINKWORK_PLANE_SECRET_KEY_SECRET_ARN", []),
-        (
-            "liveServerSecretKeySecretArn",
-            "THINKWORK_PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN",
-            [],
-        ),
-        ("aesSecretKeySecretArn", "THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN", []),
-        ("publicUrl", "THINKWORK_PLANE_PUBLIC_URL", []),
-        ("certificateArn", "THINKWORK_PLANE_CERTIFICATE_ARN", []),
-    ]
-    missing = [
-        key
-        for key, env_name, image_names in required
-        if not config_value(desired_config, manifest_images, key, env_name, image_names)
-    ]
-    if missing:
-        raise RuntimeError(
-            "Plane managed app operation is missing required desired-state fields: "
-            + ", ".join(missing)
-        )
 
 
 def managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state):
@@ -1893,10 +1842,6 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
     twenty_guardrails = state_terraform_data_input(
         current_state,
         "twenty_configuration_guardrails",
-    )
-    plane_guardrails = state_terraform_data_input(
-        current_state,
-        "plane_configuration_guardrails",
     )
     n8n_guardrails = state_terraform_data_input(
         current_state,
@@ -2073,48 +2018,6 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "n8n_kms_key_arns": n8n_guardrails.get("n8n_kms_key_arns", []),
         "n8n_dns_enabled": False,
         "n8n_dns_name": "",
-        "plane_dns_enabled": False,
-        "plane_dns_name": "",
-        "plane_provisioned": bool(state_output(current_outputs, "plane_provisioned", False)),
-        "plane_runtime_enabled": bool(
-            state_output(current_outputs, "plane_runtime_enabled", False)
-        ),
-        "plane_image_uri": plane_guardrails.get("plane_image_uri", ""),
-        "plane_frontend_image_uri": plane_guardrails.get("plane_frontend_image_uri", ""),
-        "plane_backend_image_uri": plane_guardrails.get("plane_backend_image_uri", ""),
-        "plane_space_image_uri": plane_guardrails.get("plane_space_image_uri", ""),
-        "plane_admin_image_uri": plane_guardrails.get("plane_admin_image_uri", ""),
-        "plane_live_image_uri": plane_guardrails.get("plane_live_image_uri", ""),
-        "plane_mcp_image_uri": plane_guardrails.get("plane_mcp_image_uri", ""),
-        "plane_db_url_secret_arn": plane_guardrails.get("plane_db_url_secret_arn", ""),
-        "plane_secret_key_secret_arn": plane_guardrails.get(
-            "plane_secret_key_secret_arn",
-            "",
-        ),
-        "plane_live_server_secret_key_secret_arn": plane_guardrails.get(
-            "plane_live_server_secret_key_secret_arn",
-            "",
-        ),
-        "plane_aes_secret_key_secret_arn": plane_guardrails.get(
-            "plane_aes_secret_key_secret_arn",
-            "",
-        ),
-        "plane_s3_access_key_id_secret_arn": plane_guardrails.get(
-            "plane_s3_access_key_id_secret_arn",
-            "",
-        ),
-        "plane_s3_secret_access_key_secret_arn": plane_guardrails.get(
-            "plane_s3_secret_access_key_secret_arn",
-            "",
-        ),
-        "plane_s3_bucket_name": plane_guardrails.get("plane_s3_bucket_name", ""),
-        "plane_domain": "",
-        "plane_public_url": plane_guardrails.get(
-            "plane_public_url",
-            state_output(current_outputs, "plane_url", ""),
-        ),
-        "plane_certificate_arn": plane_guardrails.get("plane_certificate_arn", ""),
-        "plane_web_container_port": plane_guardrails.get("plane_web_container_port", 8080),
     }
 
     if app_key == "n8n":
@@ -2129,7 +2032,6 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
                 current_outputs,
                 n8n_guardrails,
                 twenty_guardrails,
-                plane_guardrails,
             )
         )
         n8n_dns_name = overrides["n8n_domain"] or url_hostname(overrides["n8n_public_url"])
@@ -2155,143 +2057,6 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         )
         return overrides
 
-    if app_key != "plane":
-        return overrides
-
-    provisioned = operation != "DESTROY"
-    runtime_enabled = provisioned and operation != "PARK"
-    default_bucket = f"thinkwork-{stage}-{account_id}-plane"
-    overrides.update(
-        {
-            "plane_provisioned": provisioned,
-            "plane_runtime_enabled": runtime_enabled,
-            "plane_image_uri": config_value(
-                desired_config,
-                manifest_images,
-                "imageUri",
-                "THINKWORK_PLANE_IMAGE_URI",
-                ["plane-aio", "plane"],
-                default=DEFAULT_PLANE_AIO_IMAGE_URI,
-            ),
-            "plane_frontend_image_uri": config_value(
-                desired_config,
-                manifest_images,
-                "frontendImageUri",
-                "THINKWORK_PLANE_FRONTEND_IMAGE_URI",
-                ["plane-frontend", "plane-web"],
-            ),
-            "plane_backend_image_uri": config_value(
-                desired_config,
-                manifest_images,
-                "backendImageUri",
-                "THINKWORK_PLANE_BACKEND_IMAGE_URI",
-                ["plane-backend", "plane-api"],
-            ),
-            "plane_space_image_uri": config_value(
-                desired_config,
-                manifest_images,
-                "spaceImageUri",
-                "THINKWORK_PLANE_SPACE_IMAGE_URI",
-                ["plane-space"],
-            ),
-            "plane_admin_image_uri": config_value(
-                desired_config,
-                manifest_images,
-                "adminImageUri",
-                "THINKWORK_PLANE_ADMIN_IMAGE_URI",
-                ["plane-admin"],
-            ),
-            "plane_live_image_uri": config_value(
-                desired_config,
-                manifest_images,
-                "liveImageUri",
-                "THINKWORK_PLANE_LIVE_IMAGE_URI",
-                ["plane-live"],
-            ),
-            "plane_mcp_image_uri": config_value(
-                desired_config,
-                manifest_images,
-                "mcpImageUri",
-                "THINKWORK_PLANE_MCP_IMAGE_URI",
-                ["plane-mcp-server", "plane-mcp"],
-            ),
-            "plane_db_url_secret_arn": config_value(
-                desired_config,
-                manifest_images,
-                "dbUrlSecretArn",
-                "THINKWORK_PLANE_DB_URL_SECRET_ARN",
-            ),
-            "plane_secret_key_secret_arn": config_value(
-                desired_config,
-                manifest_images,
-                "secretKeySecretArn",
-                "THINKWORK_PLANE_SECRET_KEY_SECRET_ARN",
-            ),
-            "plane_live_server_secret_key_secret_arn": config_value(
-                desired_config,
-                manifest_images,
-                "liveServerSecretKeySecretArn",
-                "THINKWORK_PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN",
-            ),
-            "plane_aes_secret_key_secret_arn": config_value(
-                desired_config,
-                manifest_images,
-                "aesSecretKeySecretArn",
-                "THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN",
-            ),
-            "plane_s3_access_key_id_secret_arn": config_value(
-                desired_config,
-                manifest_images,
-                "s3AccessKeyIdSecretArn",
-                "THINKWORK_PLANE_S3_ACCESS_KEY_ID_SECRET_ARN",
-            ),
-            "plane_s3_secret_access_key_secret_arn": config_value(
-                desired_config,
-                manifest_images,
-                "s3SecretAccessKeySecretArn",
-                "THINKWORK_PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN",
-            ),
-            "plane_s3_bucket_name": config_value(
-                desired_config,
-                manifest_images,
-                "s3BucketName",
-                "THINKWORK_PLANE_S3_BUCKET_NAME",
-                default=default_bucket,
-            ),
-            "plane_domain": config_value(
-                desired_config,
-                manifest_images,
-                "domain",
-                "THINKWORK_PLANE_DOMAIN",
-            ),
-            "plane_public_url": config_value(
-                desired_config,
-                manifest_images,
-                "publicUrl",
-                "THINKWORK_PLANE_PUBLIC_URL",
-            ),
-            "plane_certificate_arn": config_value(
-                desired_config,
-                manifest_images,
-                "certificateArn",
-                "THINKWORK_PLANE_CERTIFICATE_ARN",
-            ),
-            "plane_web_container_port": int(
-                desired_config.get("webContainerPort")
-                or desired_config.get("listenHttpPort")
-                or os.environ.get("THINKWORK_PLANE_WEB_CONTAINER_PORT", "8080")
-            ),
-            "deployment_control_plane_create_secret_placeholders": True,
-        }
-    )
-    plane_dns_name = overrides["plane_domain"] or url_hostname(overrides["plane_public_url"])
-    overrides["cloudflare_zone_id"] = overrides[
-        "cloudflare_zone_id"
-    ] or cloudflare_zone_id_for_hostname(stage, plane_dns_name)
-    overrides["plane_dns_name"] = plane_dns_name
-    overrides["plane_dns_enabled"] = (
-        provisioned and bool(overrides["cloudflare_zone_id"]) and bool(plane_dns_name)
-    )
     return overrides
 
 
@@ -3882,86 +3647,6 @@ variable "n8n_kms_key_arns" {{
   type = list(string)
 }}
 
-variable "plane_provisioned" {{
-  type = bool
-}}
-
-variable "plane_runtime_enabled" {{
-  type = bool
-}}
-
-variable "plane_image_uri" {{
-  type = string
-}}
-
-variable "plane_frontend_image_uri" {{
-  type = string
-}}
-
-variable "plane_backend_image_uri" {{
-  type = string
-}}
-
-variable "plane_space_image_uri" {{
-  type = string
-}}
-
-variable "plane_admin_image_uri" {{
-  type = string
-}}
-
-variable "plane_live_image_uri" {{
-  type = string
-}}
-
-variable "plane_mcp_image_uri" {{
-  type = string
-}}
-
-variable "plane_db_url_secret_arn" {{
-  type = string
-}}
-
-variable "plane_secret_key_secret_arn" {{
-  type = string
-}}
-
-variable "plane_live_server_secret_key_secret_arn" {{
-  type = string
-}}
-
-variable "plane_aes_secret_key_secret_arn" {{
-  type = string
-}}
-
-variable "plane_s3_access_key_id_secret_arn" {{
-  type = string
-}}
-
-variable "plane_s3_secret_access_key_secret_arn" {{
-  type = string
-}}
-
-variable "plane_s3_bucket_name" {{
-  type = string
-}}
-
-variable "plane_domain" {{
-  type = string
-}}
-
-variable "plane_public_url" {{
-  type = string
-}}
-
-variable "plane_certificate_arn" {{
-  type = string
-}}
-
-variable "plane_web_container_port" {{
-  type = number
-}}
-
 variable "cloudflare_zone_id" {{
   type = string
 }}
@@ -3971,14 +3656,6 @@ variable "n8n_dns_enabled" {{
 }}
 
 variable "n8n_dns_name" {{
-  type = string
-}}
-
-variable "plane_dns_enabled" {{
-  type = bool
-}}
-
-variable "plane_dns_name" {{
   type = string
 }}
 
@@ -4148,29 +3825,6 @@ module "thinkwork" {{
   n8n_cache_num_cache_clusters     = var.n8n_cache_num_cache_clusters
   n8n_allowed_public_cidr_blocks   = var.n8n_allowed_public_cidr_blocks
   n8n_kms_key_arns                 = var.n8n_kms_key_arns
-  plane_provisioned      = var.plane_provisioned
-  plane_runtime_enabled  = var.plane_runtime_enabled
-  plane_image_uri        = var.plane_image_uri
-
-  plane_frontend_image_uri = var.plane_frontend_image_uri
-  plane_backend_image_uri  = var.plane_backend_image_uri
-  plane_space_image_uri    = var.plane_space_image_uri
-  plane_admin_image_uri    = var.plane_admin_image_uri
-  plane_live_image_uri     = var.plane_live_image_uri
-  plane_mcp_image_uri      = var.plane_mcp_image_uri
-
-  plane_db_url_secret_arn                 = var.plane_db_url_secret_arn
-  plane_secret_key_secret_arn             = var.plane_secret_key_secret_arn
-  plane_live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
-  plane_aes_secret_key_secret_arn         = var.plane_aes_secret_key_secret_arn
-  plane_s3_access_key_id_secret_arn       = var.plane_s3_access_key_id_secret_arn
-  plane_s3_secret_access_key_secret_arn   = var.plane_s3_secret_access_key_secret_arn
-  plane_s3_bucket_name                    = var.plane_s3_bucket_name
-  plane_domain                            = var.plane_domain
-  plane_public_url                        = var.plane_public_url
-  plane_certificate_arn                   = var.plane_certificate_arn
-  plane_web_container_port                = var.plane_web_container_port
-
   enable_stripe_billing      = false
   enable_slack_workspace_app = false
 
@@ -4186,18 +3840,6 @@ module "thinkwork" {{
   deployment_release_manifest_trusted_keys_json = var.deployment_release_manifest_trusted_keys_json
   deployment_terraform_module_source            = var.deployment_terraform_module_source
   deployment_terraform_module_version           = var.deployment_terraform_module_version
-}}
-
-resource "cloudflare_record" "plane" {{
-  count = var.plane_dns_enabled ? 1 : 0
-
-  zone_id = var.cloudflare_zone_id
-  name    = var.plane_dns_name
-  content = module.thinkwork.plane_alb_dns_name
-  type    = "CNAME"
-  ttl     = 300
-  proxied = false
-  comment = "thinkwork-${{var.stage}} plane → Plane public ALB"
 }}
 
 resource "cloudflare_record" "n8n" {{
@@ -4266,27 +3908,6 @@ output "deployment_ssm_prefix" {{ value = module.thinkwork.deployment_ssm_prefix
 output "deployment_appconfig_application_id" {{ value = module.thinkwork.deployment_appconfig_application_id }}
 output "deployment_appconfig_environment_id" {{ value = module.thinkwork.deployment_appconfig_environment_id }}
 output "deployment_appconfig_configuration_profile_id" {{ value = module.thinkwork.deployment_appconfig_configuration_profile_id }}
-output "plane_provisioned" {{ value = module.thinkwork.plane_provisioned }}
-output "plane_runtime_enabled" {{ value = module.thinkwork.plane_runtime_enabled }}
-output "plane_url" {{ value = module.thinkwork.plane_url }}
-output "plane_alb_arn" {{ value = module.thinkwork.plane_alb_arn }}
-output "plane_target_group_arn" {{ value = module.thinkwork.plane_target_group_arn }}
-output "plane_cluster_arn" {{ value = module.thinkwork.plane_cluster_arn }}
-output "plane_web_service_name" {{ value = module.thinkwork.plane_web_service_name }}
-output "plane_api_service_name" {{ value = module.thinkwork.plane_api_service_name }}
-output "plane_worker_service_name" {{ value = module.thinkwork.plane_worker_service_name }}
-output "plane_beat_worker_service_name" {{ value = module.thinkwork.plane_beat_worker_service_name }}
-output "plane_live_service_name" {{ value = module.thinkwork.plane_live_service_name }}
-output "plane_mcp_service_name" {{ value = module.thinkwork.plane_mcp_service_name }}
-output "plane_web_log_group_name" {{ value = module.thinkwork.plane_web_log_group_name }}
-output "plane_api_log_group_name" {{ value = module.thinkwork.plane_api_log_group_name }}
-output "plane_worker_log_group_name" {{ value = module.thinkwork.plane_worker_log_group_name }}
-output "plane_beat_worker_log_group_name" {{ value = module.thinkwork.plane_beat_worker_log_group_name }}
-output "plane_live_log_group_name" {{ value = module.thinkwork.plane_live_log_group_name }}
-output "plane_mcp_log_group_name" {{ value = module.thinkwork.plane_mcp_log_group_name }}
-output "plane_cache_endpoint" {{ value = module.thinkwork.plane_cache_endpoint }}
-output "plane_rabbitmq_broker_arn" {{ value = module.thinkwork.plane_rabbitmq_broker_arn }}
-output "plane_storage_bucket_name" {{ value = module.thinkwork.plane_storage_bucket_name }}
 """,
         encoding="utf-8",
     )

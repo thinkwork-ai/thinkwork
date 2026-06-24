@@ -14958,3 +14958,35 @@ pipeline.
   source-boundary unit fixture still expected the deleted Plane CLI fixture to
   be accepted through the shared allowlist. Removed that fixture expectation;
   local `pnpm test:plugin-source-boundary` and `pnpm lint:plugin-source` pass.
+- PR #2914 passed required CI after rebase: CLA, lint, verify, typecheck, test,
+  and signed catalog build. Auto-merge squash merged the PR to `main` as
+  `951fa05decdeacb5cdcebf67a7e9f59e3884bf6f`; the remote branch was deleted,
+  and the local U1 worktree/branch were removed.
+
+### U3 Progress
+
+- 2026-06-24 CDT: Created worktree `.Codex/worktrees/remove-plane-u3` on
+  `codex/remove-plane-u3-terraform` from `origin/main` at `951fa05de`.
+- Current scope: remove Plane Terraform wiring from the composite ThinkWork
+  module, greenfield example, deployment-control-plane generated wrapper, and
+  shared fixture coverage. The unit intentionally preserves generic
+  `deployment control plane` terminology.
+- Implementation in progress. Removed root `plane_*` variables/outputs, the
+  root `module "plane"` block, Plane configuration/runtime guardrails,
+  greenfield Plane variables/certificate/DNS/module arguments/outputs, and
+  deployment-control-plane Plane target/override/DNS/template paths. Shared
+  controller tests now use supported n8n fixtures for generic managed-app state
+  isolation and output-refresh behavior.
+- Focused verification passed:
+  `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`,
+  `pnpm --dir apps/cli test -- __tests__/terraform-deployment-control-plane-fixture.test.ts`,
+  `terraform fmt -check terraform/modules/thinkwork terraform/examples/greenfield terraform/modules/app/deployment-control-plane`,
+  product-reference audit over the U3 Terraform/controller surface, changed-file
+  Prettier check, and `git diff --check`.
+- Broader local verification passed: `pnpm lint` and `pnpm typecheck`. Local
+  `pnpm install` exited successfully but logged the known optional
+  `canvas@2.11.2` native build warning under local Node 25 because `pkg-config`
+  is unavailable.
+- U3 PR opened:
+  [#2918](https://github.com/thinkwork-ai/thinkwork/pull/2918). CI monitoring
+  started.
