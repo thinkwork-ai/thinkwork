@@ -18,7 +18,8 @@ status: in_progress
 - Current branch: `codex/mcp-record-links-u6`.
 - Current worktree:
   `.Codex/worktrees/mcp-record-links-u6`.
-- Current pull request: Not opened yet.
+- Current pull request:
+  [#2915](https://github.com/thinkwork-ai/thinkwork/pull/2915).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -166,6 +167,9 @@ status: in_progress
     `pnpm --filter @thinkwork/api exec vitest run src/handlers/mcp-proxy.test.ts`,
     `pnpm --filter @thinkwork/api typecheck`, changed-file Prettier check, and
     `git diff --check`.
+  - 2026-06-24: U6 PR
+    [#2915](https://github.com/thinkwork-ai/thinkwork/pull/2915) opened and CI
+    monitoring started.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
