@@ -13,13 +13,12 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: In progress. U2 is active.
-- Current unit: U2 - Publish Twenty Record Hints During Plugin Provisioning.
-- Current branch: `codex/mcp-record-links-u2`.
+- Status: In progress. U3 is active.
+- Current unit: U3 - Thread Link Hints Through API Runtime Config.
+- Current branch: `codex/mcp-record-links-u3`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-u2`.
-- Current pull request:
-  [#2910](https://github.com/thinkwork-ai/thinkwork/pull/2910).
+  `.Codex/worktrees/mcp-record-links-u3`.
+- Current pull request: Not opened yet.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -86,6 +85,27 @@ status: in_progress
   - 2026-06-24: U2 PR
     [#2910](https://github.com/thinkwork-ai/thinkwork/pull/2910) opened and CI
     monitoring started.
+  - 2026-06-24: U2 PR
+    [#2910](https://github.com/thinkwork-ai/thinkwork/pull/2910) passed CI
+    (CLA, lint, test, typecheck, verify, signed catalog build), squash-merged
+    to `main` as `5dfd3c98`, and the remote/local U2 branches were deleted.
+    U3 started from `origin/main` at `5dfd3c98` in
+    `.Codex/worktrees/mcp-record-links-u3` on branch
+    `codex/mcp-record-links-u3`.
+  - 2026-06-24: U3 implemented API runtime pass-through for plugin-owned MCP
+    `recordLinkHints`: `buildMcpConfigs` now selects `runtime_metadata`,
+    sanitizes non-secret hint fields, emits hints only for included
+    plugin-owned rows, ignores malformed hint metadata without dropping the
+    server, and preserves direct/manual row shapes. `resolveAgentRuntimeConfig`
+    now keeps the field in its `mcpConfigs` payload, and wakeup parity tests
+    guard both wakeup dispatch builders using the shared resolved `mcpConfigs`.
+  - 2026-06-24: U3 focused verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/__tests__/mcp-configs-plugin-auth.test.ts`,
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/__tests__/mcp-configs-approved-filter.test.ts`,
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/__tests__/resolve-agent-runtime-config.test.ts`,
+    `pnpm --filter @thinkwork/api exec vitest run src/handlers/wakeup-processor.dispatch-parity.test.ts`,
+    `pnpm --filter @thinkwork/api exec vitest run src/handlers/mcp-proxy.test.ts`,
+    and `pnpm --filter @thinkwork/api typecheck`.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 

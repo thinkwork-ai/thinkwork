@@ -1030,14 +1030,44 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     mockBuildMcpConfigs.mockResolvedValueOnce([
-      { name: "admin-ops", url: "https://example.test/mcp" },
+      {
+        name: "admin-ops",
+        url: "https://example.test/mcp",
+        recordLinkHints: {
+          schemaVersion: 1,
+          source: "plugin-manifest",
+          browserBaseUrl: "https://example.test",
+          routes: [
+            {
+              objectType: "opportunity",
+              routeTemplate: "/object/opportunity/{id}",
+              idFields: ["id"],
+            },
+          ],
+        },
+      },
     ]);
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
     expect(cfg.mcpConfigs).toEqual([
-      { name: "admin-ops", url: "https://example.test/mcp" },
+      {
+        name: "admin-ops",
+        url: "https://example.test/mcp",
+        recordLinkHints: {
+          schemaVersion: 1,
+          source: "plugin-manifest",
+          browserBaseUrl: "https://example.test",
+          routes: [
+            {
+              objectType: "opportunity",
+              routeTemplate: "/object/opportunity/{id}",
+              idFields: ["id"],
+            },
+          ],
+        },
+      },
     ]);
     expect(mockBuildMcpConfigs).toHaveBeenCalledWith(
       AGENT_ID,

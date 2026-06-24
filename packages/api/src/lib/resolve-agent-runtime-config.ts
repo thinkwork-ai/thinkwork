@@ -64,6 +64,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
 import { buildMcpConfigs } from "./mcp-configs.js";
+import type { McpRuntimeRecordLinkHints } from "./mcp-configs.js";
 import {
   normalizeAgentRuntimeType,
   type AgentRuntimeType,
@@ -123,6 +124,7 @@ export interface McpConfig {
   auth?: unknown;
   tools?: string[];
   availableTools?: string[];
+  recordLinkHints?: McpRuntimeRecordLinkHints;
 }
 
 export type WebSearchConfig = WebSearchRuntimeConfig;

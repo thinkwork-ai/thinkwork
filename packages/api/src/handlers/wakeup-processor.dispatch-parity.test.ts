@@ -145,6 +145,15 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wire.agent_profiles).toEqual([]);
   });
 
+  it("both wakeup dispatch payloads use the resolved mcpConfigs object directly", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    expect(
+      wakeupSource.match(
+        /mcp_configs: mcpConfigs\.length > 0 \? mcpConfigs : undefined/g,
+      ),
+    ).toHaveLength(2);
+  });
+
   it("builds the activity callback on every path but the finalize callback only when opted in", () => {
     const wakeupStyle = buildAgentDispatchControlFields(
       baseArgs({ includeFinalizeCallback: false }),

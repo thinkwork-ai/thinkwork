@@ -61,6 +61,9 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     enabled: "tenantMcpServers.enabled",
     status: "tenantMcpServers.status",
     url_hash: "tenantMcpServers.url_hash",
+    management_source: "tenantMcpServers.management_source",
+    plugin_install_id: "tenantMcpServers.plugin_install_id",
+    runtime_metadata: "tenantMcpServers.runtime_metadata",
   },
   agentMcpServers: {
     mcp_server_id: "agentMcpServers.mcp_server_id",
@@ -113,12 +116,40 @@ function baseRow(over: Record<string, unknown> = {}) {
     server_enabled: true,
     server_status: "approved",
     server_url_hash: null,
+    management_source: "manual",
+    plugin_install_id: null,
+    runtime_metadata: null,
     tools: null,
     assignment_enabled: true,
     assignment_config: null,
     ...over,
   };
 }
+
+function recordLinkMetadata(over: Record<string, unknown> = {}) {
+  return {
+    recordLinkHints: {
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      browserBaseUrl: "https://crm.example",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+          idFields: ["id"],
+          labelFields: ["name"],
+        },
+      ],
+      ...over,
+    },
+  };
+}
+
+const activePluginAuth = {
+  resolveToken: vi.fn(async () => null),
+  resolveHeaders: vi.fn(async () => null),
+  hasActiveActivation: vi.fn(async () => true),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -143,6 +174,100 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     const configs = await buildMcpConfigs("agent-1", null);
     expect(configs).toHaveLength(1);
     expect(configs[0]!.name).toBe("test-server");
+  });
+
+  it("approved plugin rows include sanitized runtime record-link hints", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        slug: "twenty--crm",
+        auth_type: "none",
+        management_source: "plugin",
+        plugin_install_id: "install-twenty",
+        runtime_metadata: recordLinkMetadata(),
+      }),
+    ]);
+
+    const configs = await buildMcpConfigs(
+      "agent-1",
+      {
+        humanPairId: null,
+        requesterUserId: "requester-1",
+      },
+      "[test]",
+      { pluginAuth: activePluginAuth },
+    );
+
+    expect(configs).toEqual([
+      {
+        name: "twenty--crm",
+        url: "https://mcp.example/a",
+        transport: "streamable-http",
+        recordLinkHints: {
+          schemaVersion: 1,
+          source: "plugin-manifest",
+          browserBaseUrl: "https://crm.example",
+          routes: [
+            {
+              objectType: "opportunity",
+              routeTemplate: "/object/opportunity/{id}",
+              idFields: ["id"],
+              labelFields: ["name"],
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it("malformed runtime record-link hints are ignored without dropping the server", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        slug: "twenty--crm",
+        auth_type: "none",
+        management_source: "plugin",
+        plugin_install_id: "install-twenty",
+        runtime_metadata: recordLinkMetadata({
+          browserBaseUrl: "http://crm.example",
+        }),
+      }),
+    ]);
+
+    const configs = await buildMcpConfigs(
+      "agent-1",
+      {
+        humanPairId: null,
+        requesterUserId: "requester-1",
+      },
+      "[test]",
+      { pluginAuth: activePluginAuth },
+    );
+
+    expect(configs).toEqual([
+      {
+        name: "twenty--crm",
+        url: "https://mcp.example/a",
+        transport: "streamable-http",
+      },
+    ]);
+  });
+
+  it("manual rows do not emit record-link hints even if metadata exists", async () => {
+    mockRowsForJoin.mockReturnValue([
+      baseRow({
+        auth_type: "none",
+        runtime_metadata: recordLinkMetadata(),
+      }),
+    ]);
+
+    const configs = await buildMcpConfigs("agent-1", null);
+
+    expect(configs).toEqual([
+      {
+        name: "test-server",
+        url: "https://mcp.example/a",
+        transport: "streamable-http",
+      },
+    ]);
   });
 
   it("approved rows with matching url_hash are returned", async () => {
@@ -203,6 +328,7 @@ describe("buildMcpConfigs — approval + hash-pin filtering", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const configs = await buildMcpConfigs("agent-1", null);
     expect(configs).toHaveLength(0);
+    expect(JSON.stringify(configs)).not.toContain("recordLinkHints");
     expect(warn).toHaveBeenCalled();
     const msg = warn.mock.calls[0]?.[0] as string;
     expect(msg).toContain("url_hash mismatch");
