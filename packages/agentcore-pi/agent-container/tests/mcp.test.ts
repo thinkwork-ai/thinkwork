@@ -264,10 +264,10 @@ describe("buildMcpTools — Authorization shape", () => {
     const tools = await buildMcpTools({
       mcpConfigs: [
         {
-          serverName: "plane--issues",
-          url: "https://plane.example.invalid/mcp",
+          serverName: "header-auth--records",
+          url: "https://headers.example.invalid/mcp",
           extraHeaders: {
-            "x-api-key": "plane_pat_user_123",
+            "x-api-key": "header_token_user_123",
             "x-workspace-slug": "eng",
           },
         },
@@ -278,7 +278,7 @@ describe("buildMcpTools — Authorization shape", () => {
 
     expect(tools).toHaveLength(1);
     expect(captured.headers).toMatchObject({
-      "x-api-key": "plane_pat_user_123",
+      "x-api-key": "header_token_user_123",
       "x-workspace-slug": "eng",
     });
     expect(captured.headers.Authorization).toBeUndefined();

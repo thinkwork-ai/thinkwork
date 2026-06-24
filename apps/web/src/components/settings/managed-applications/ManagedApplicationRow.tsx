@@ -77,9 +77,6 @@ function managedAppDescription(key: ManagedAppKey): string {
   if (key === "twenty") {
     return "Customer-owned CRM runtime with dedicated database, cache, files, and generated secrets.";
   }
-  if (key === "plane") {
-    return "Self-hosted project management runtime with task-local sidecars and managed MCP integration.";
-  }
   if (key === "n8n") {
     return "Self-hosted workflow automation runtime with queue workers, retained workflow data, and native MCP integration.";
   }

@@ -2360,12 +2360,12 @@ describe("buildInvocationResources — bearer never reaches the connect factory"
       payload: {
         mcp_configs: [
           {
-            name: "plane--issues",
-            url: "https://plane.example.com/mcp",
+            name: "header-auth--records",
+            url: "https://headers.example.com/mcp",
             auth: {
               type: "headers",
               headers: {
-                "x-api-key": "plane_pat_user_123",
+                "x-api-key": "header_token_user_123",
                 "x-workspace-slug": "eng",
               },
             },
@@ -2407,7 +2407,7 @@ describe("buildInvocationResources — bearer never reaches the connect factory"
 
     expect(captured).toHaveLength(1);
     expect(captured[0]).toEqual({
-      "x-api-key": "plane_pat_user_123",
+      "x-api-key": "header_token_user_123",
       "x-workspace-slug": "eng",
     });
     bundle.handleStore.clear();
@@ -3823,8 +3823,8 @@ describe("buildInvocationResources — mcp proxy registration (Plan §006 U4)", 
       payload: {
         mcp_configs: [
           {
-            name: "plane--issues",
-            url: "https://plane.example.invalid/http/api-key/mcp",
+            name: "header-auth--records",
+            url: "https://headers.example.invalid/http/api-key/mcp",
             auth: { token: "FakeBearerForTestFixtureOnly" },
           },
         ],
@@ -3841,7 +3841,7 @@ describe("buildInvocationResources — mcp proxy registration (Plan §006 U4)", 
       mcpRegistry: registry,
     });
     const toolNames = bundle.tools.map((tool) => tool.name);
-    expect(toolNames).toContain("mcp_plane--issues_list_projects");
+    expect(toolNames).toContain("mcp_header-auth--records_list_projects");
     expect(toolNames).not.toContain("mcp");
     expect(bundle.mcpProxyRegistered).toBe(false);
     expect(registry.size).toBe(1);

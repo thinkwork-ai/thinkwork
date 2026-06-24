@@ -24,7 +24,7 @@
  *   6. Always stops the session in a finally-equivalent block. Stop
  *      failures degrade to console.warn + continue — AgentCore reaps
  *      idle sessions, but a stop_session error usually signals a control-
- *      plane issue worth investigating.
+ *      surface issue worth investigating.
  *
  * The handler is **SFN-only** — no API Gateway code path. Step Functions
  * delivers the Task input directly via Lambda integration.

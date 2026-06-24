@@ -334,15 +334,15 @@ describe("managed application deployment evidence reconciliation", () => {
     const planningJob = {
       ...destructiveJob,
       id: "job-plan",
-      app_key: "plane",
+      app_key: "twenty",
       operation: "ENABLE",
       status: "planning",
       application_id: "app-1",
       plan_digest: null,
       evidence_bucket: "evidence-bucket",
-      evidence_prefix: "tenant-1/plane/job-plan/plan",
+      evidence_prefix: "tenant-1/twenty/job-plan/plan",
       plan_summary: {
-        desiredConfig: { publicUrl: "https://plane.example.test" },
+        desiredConfig: { publicUrl: "https://crm.example.test" },
       },
     };
     mockS3Send.mockResolvedValue({
@@ -382,7 +382,7 @@ describe("managed application deployment evidence reconciliation", () => {
 
     expect(mockS3Send.mock.calls[0][0].input).toEqual({
       Bucket: "evidence-bucket",
-      Key: "tenant-1/plane/job-plan/plan/deployment-evidence.json",
+      Key: "tenant-1/twenty/job-plan/plan/deployment-evidence.json",
     });
     expect(result.status).toBe("awaiting_approval");
     expect(result.planDigest).toBe(planDigest);
@@ -392,7 +392,7 @@ describe("managed application deployment evidence reconciliation", () => {
           status: "awaiting_approval",
           plan_digest: planDigest,
           plan_summary: expect.objectContaining({
-            desiredConfig: { publicUrl: "https://plane.example.test" },
+            desiredConfig: { publicUrl: "https://crm.example.test" },
             terraform: { plan: { resourceChangeCount: 12 } },
           }),
         }),
@@ -404,12 +404,12 @@ describe("managed application deployment evidence reconciliation", () => {
     const applyingJob = {
       ...destructiveJob,
       id: "job-apply",
-      app_key: "plane",
+      app_key: "twenty",
       operation: "ENABLE",
       status: "applying",
       application_id: "app-1",
       evidence_bucket: "evidence-bucket",
-      evidence_prefix: "tenant-1/plane/job-apply/plan",
+      evidence_prefix: "tenant-1/twenty/job-apply/plan",
     };
     mockS3Send.mockResolvedValue({
       Body: {
@@ -420,7 +420,9 @@ describe("managed application deployment evidence reconciliation", () => {
             codebuildBuildId: "build-2",
             terraform: {
               outputs: {
-                plane_url: { value: "https://plane.example.test" },
+                twenty_provisioned: { value: true },
+                twenty_runtime_enabled: { value: true },
+                twenty_url: { value: "https://crm.example.test" },
               },
             },
           }),
@@ -447,13 +449,13 @@ describe("managed application deployment evidence reconciliation", () => {
 
     expect(mockS3Send.mock.calls[0][0].input).toEqual({
       Bucket: "evidence-bucket",
-      Key: "tenant-1/plane/job-apply/apply/deployment-evidence.json",
+      Key: "tenant-1/twenty/job-apply/apply/deployment-evidence.json",
     });
     expect(result.status).toBe("succeeded");
     expect(updateCalls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ status: "succeeded" }),
-        expect.objectContaining({ current_status: "enabled" }),
+        expect.objectContaining({ current_status: "running" }),
       ]),
     );
   });

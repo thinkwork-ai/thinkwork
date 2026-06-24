@@ -7,7 +7,7 @@ import {
 import { db as defaultDb } from "../../utils.js";
 import { resolveCogneeClusterIdentity } from "@thinkwork/plugin-company-brain/api/cognee-cluster-identity";
 
-export type ManagedApplicationKey = "cognee" | "n8n" | "plane" | "twenty";
+export type ManagedApplicationKey = "cognee" | "n8n" | "twenty";
 type DbBackedManagedApplicationKey = Exclude<ManagedApplicationKey, "cognee">;
 
 export type CogneeStatus = {
@@ -27,22 +27,6 @@ export type TwentyStatus = {
   workerLogGroupName: string | null;
   albArn: string | null;
   targetGroupArn: string | null;
-};
-
-export type PlaneStatus = {
-  provisioned: boolean;
-  runtimeEnabled: boolean;
-  url: string | null;
-  clusterArn: string | null;
-  serviceName: string | null;
-  appLogGroupName: string | null;
-  mcpLogGroupName: string | null;
-  redisLogGroupName: string | null;
-  rabbitmqLogGroupName: string | null;
-  albArn: string | null;
-  appTargetGroupArn: string | null;
-  mcpTargetGroupArn: string | null;
-  storageBucketName: string | null;
 };
 
 export type N8nStatus = {
@@ -106,9 +90,6 @@ export function normalizeManagedApplicationKey(
   }
   if (key === "twenty" || key === "crm" || key === "twenty-crm") {
     return "twenty";
-  }
-  if (key === "plane" || key === "tasks" || key === "project-management") {
-    return "plane";
   }
   if (key === "n8n" || key === "workflow-automation") {
     return "n8n";
@@ -287,22 +268,6 @@ const DISABLED_TWENTY_STATUS: TwentyStatus = {
   targetGroupArn: null,
 };
 
-const DISABLED_PLANE_STATUS: PlaneStatus = {
-  provisioned: false,
-  runtimeEnabled: false,
-  url: null,
-  clusterArn: null,
-  serviceName: null,
-  appLogGroupName: null,
-  mcpLogGroupName: null,
-  redisLogGroupName: null,
-  rabbitmqLogGroupName: null,
-  albArn: null,
-  appTargetGroupArn: null,
-  mcpTargetGroupArn: null,
-  storageBucketName: null,
-};
-
 const DISABLED_N8N_STATUS: N8nStatus = {
   provisioned: false,
   runtimeEnabled: false,
@@ -364,44 +329,6 @@ export async function readTwentyStatus(
   };
 }
 
-export async function readPlaneStatus(
-  tenantId: string | null,
-  deps: ManagedAppStatusReaderDeps = createDrizzleManagedAppStatusReaderDeps(),
-): Promise<PlaneStatus> {
-  if (!tenantId) return DISABLED_PLANE_STATUS;
-  const row = await deps.getManagedApplicationRow(tenantId, "plane");
-  if (!row) return DISABLED_PLANE_STATUS;
-  const operation = await deps.getLatestSucceededJobOperation(
-    tenantId,
-    "plane",
-  );
-  if (!operation || operation === "DESTROY") return DISABLED_PLANE_STATUS;
-
-  const provisioned = true;
-  const runtimeEnabled = operation !== "PARK";
-  const publicUrl = row.desiredConfig.publicUrl;
-  const storageBucketName = row.desiredConfig.s3BucketName;
-  const defaults = derivePlaneDefaults(provisioned);
-  return {
-    provisioned,
-    runtimeEnabled,
-    url: typeof publicUrl === "string" && publicUrl.trim() ? publicUrl : null,
-    clusterArn: defaults.clusterArn,
-    serviceName: defaults.serviceName,
-    appLogGroupName: defaults.appLogGroupName,
-    mcpLogGroupName: defaults.mcpLogGroupName,
-    redisLogGroupName: defaults.redisLogGroupName,
-    rabbitmqLogGroupName: defaults.rabbitmqLogGroupName,
-    albArn: null,
-    appTargetGroupArn: null,
-    mcpTargetGroupArn: null,
-    storageBucketName:
-      typeof storageBucketName === "string" && storageBucketName.trim()
-        ? storageBucketName
-        : defaults.storageBucketName,
-  };
-}
-
 export async function readN8nStatus(
   tenantId: string | null,
   deps: ManagedAppStatusReaderDeps = createDrizzleManagedAppStatusReaderDeps(),
@@ -452,7 +379,6 @@ export async function readManagedApplications(
   return [
     cogneeManagedApplication(),
     await n8nManagedApplication(tenantId, deps),
-    await planeManagedApplication(tenantId, deps),
     await twentyManagedApplication(tenantId, deps),
   ];
 }
@@ -464,7 +390,6 @@ export async function readManagedApplication(
 ): Promise<ManagedApplicationStatus> {
   if (key === "cognee") return cogneeManagedApplication();
   if (key === "n8n") return n8nManagedApplication(tenantId, deps);
-  if (key === "plane") return planeManagedApplication(tenantId, deps);
   return twentyManagedApplication(tenantId, deps);
 }
 
@@ -629,60 +554,6 @@ async function n8nManagedApplication(
   };
 }
 
-async function planeManagedApplication(
-  tenantId: string | null,
-  deps?: ManagedAppStatusReaderDeps,
-): Promise<ManagedApplicationStatus> {
-  const plane = await readPlaneStatus(tenantId, deps);
-  const status = plane.runtimeEnabled
-    ? "running"
-    : plane.provisioned
-      ? "parked"
-      : "disabled";
-  const logGroupNames = [
-    plane.appLogGroupName,
-    plane.mcpLogGroupName,
-    plane.redisLogGroupName,
-    plane.rabbitmqLogGroupName,
-  ].filter((value): value is string => Boolean(value));
-  const serviceNames = [plane.serviceName].filter((value): value is string =>
-    Boolean(value),
-  );
-
-  return {
-    key: "plane",
-    displayName: "Plane",
-    description: "Self-hosted project and task management runtime.",
-    status,
-    enabled: plane.runtimeEnabled,
-    provisioned: plane.provisioned,
-    runtimeEnabled: plane.runtimeEnabled,
-    url: plane.url,
-    endpoint: plane.url,
-    backendMode: "compact",
-    logGroupName: plane.appLogGroupName,
-    logGroupNames,
-    clusterArn: plane.clusterArn,
-    serviceName: plane.serviceName,
-    serviceNames,
-    albArn: plane.albArn,
-    targetGroupArn: plane.appTargetGroupArn,
-    storageBucketName: plane.storageBucketName,
-    databaseName: null,
-    message: planeStatusMessage(status),
-    managedMcpServerId: null,
-    managedMcpStatus: "missing",
-    managedMcpInstalled: false,
-    managedMcpInstallAvailable:
-      status === "running" && plane.provisioned && Boolean(plane.url),
-    managedMcpMessage:
-      status === "running" && plane.url
-        ? "Plane MCP server has not been registered yet."
-        : null,
-    ...nonWorkflowManagedApplicationProjection(),
-  };
-}
-
 export function twentyWorkflowProjection(
   application: Pick<
     ManagedApplicationStatus,
@@ -779,21 +650,6 @@ function nonWorkflowManagedApplicationProjection(): Pick<
   };
 }
 
-function planeStatusMessage(
-  status: ManagedApplicationStatus["status"],
-): string | null {
-  if (status === "parked") {
-    return "Plane runtime is parked; Plane data and app secrets are retained.";
-  }
-  if (status === "disabled") {
-    return "Plane has not been provisioned for this stage.";
-  }
-  if (status === "unknown") {
-    return "Plane deployment status could not be parsed.";
-  }
-  return null;
-}
-
 function n8nStatusMessage(
   status: ManagedApplicationStatus["status"],
 ): string | null {
@@ -856,49 +712,6 @@ function deriveTwentyDefaults(
     workerServiceName: `thinkwork-${stage}-twenty-worker`,
     serverLogGroupName: `/thinkwork/${stage}/twenty/server`,
     workerLogGroupName: `/thinkwork/${stage}/twenty/worker`,
-  };
-}
-
-function derivePlaneDefaults(
-  provisioned: boolean,
-): Pick<
-  PlaneStatus,
-  | "clusterArn"
-  | "serviceName"
-  | "appLogGroupName"
-  | "mcpLogGroupName"
-  | "redisLogGroupName"
-  | "rabbitmqLogGroupName"
-  | "storageBucketName"
-> {
-  if (!provisioned) {
-    return {
-      clusterArn: null,
-      serviceName: null,
-      appLogGroupName: null,
-      mcpLogGroupName: null,
-      redisLogGroupName: null,
-      rabbitmqLogGroupName: null,
-      storageBucketName: null,
-    };
-  }
-
-  const stage = process.env.STAGE || "unknown";
-  const region = process.env.AWS_REGION || "us-east-1";
-  const accountId = process.env.AWS_ACCOUNT_ID || null;
-
-  return {
-    clusterArn: accountId
-      ? `arn:aws:ecs:${region}:${accountId}:cluster/thinkwork-${stage}-plane-cluster`
-      : null,
-    serviceName: `thinkwork-${stage}-plane`,
-    appLogGroupName: `/thinkwork/${stage}/plane/app`,
-    mcpLogGroupName: `/thinkwork/${stage}/plane/mcp`,
-    redisLogGroupName: `/thinkwork/${stage}/plane/redis`,
-    rabbitmqLogGroupName: `/thinkwork/${stage}/plane/rabbitmq`,
-    storageBucketName: accountId
-      ? `thinkwork-${stage}-${accountId}-plane`
-      : null,
   };
 }
 

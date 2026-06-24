@@ -632,12 +632,12 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     warn.mockRestore();
   });
 
-  it("Plane-style user_headers plugin servers resolve bearer plus headers from the requester's activation secret", async () => {
+  it("user_headers plugin servers resolve bearer plus headers from the requester's activation secret", async () => {
     mockJoinRows.mockReturnValue([
-      pluginRow("issues", {
-        slug: "plane--issues",
-        name: "Plane work items",
-        url: "https://plane.example.invalid/http/api-key/mcp",
+      pluginRow("records", {
+        slug: "header-auth--records",
+        name: "Header-auth records",
+        url: "https://headers.example.invalid/http/api-key/mcp",
         auth_type: "user_headers",
         auth_config: {
           bearerCredentialKey: "apiKey",
@@ -651,22 +651,22 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       user_id: REQUESTER,
       plugin_install_id: INSTALL,
     });
-    const ref = "thinkwork/test/plugin-header-auth/requester/plane";
+    const ref = "thinkwork/test/plugin-header-auth/requester/records";
     store.seedToken({
       activation_id: activation.id,
-      resource_indicator: "https://plane.example.invalid/http/api-key/mcp",
+      resource_indicator: "https://headers.example.invalid/http/api-key/mcp",
       secret_ref: ref,
     });
     secrets.values.set(
       ref,
       JSON.stringify({
         auth_type: "user-provided-headers",
-        access_token: "plane_pat_user_123",
+        access_token: "header_token_user_123",
         token_type: "Bearer",
         headers: {
           "x-workspace-slug": "eng",
         },
-        resource: "https://plane.example.invalid/http/api-key/mcp",
+        resource: "https://headers.example.invalid/http/api-key/mcp",
       }),
     );
 
@@ -679,11 +679,11 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
 
     expect(configs).toHaveLength(1);
     expect(configs[0]).toMatchObject({
-      name: "plane--issues",
-      url: "https://plane.example.invalid/http/api-key/mcp",
+      name: "header-auth--records",
+      url: "https://headers.example.invalid/http/api-key/mcp",
       auth: {
         type: "bearer",
-        token: "plane_pat_user_123",
+        token: "header_token_user_123",
         headers: {
           "x-workspace-slug": "eng",
         },
@@ -691,12 +691,12 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     });
   });
 
-  it("Plane-style user_headers plugin servers fail closed when the requester has no header secret", async () => {
+  it("user_headers plugin servers fail closed when the requester has no header secret", async () => {
     mockJoinRows.mockReturnValue([
-      pluginRow("issues", {
-        slug: "plane--issues",
-        name: "Plane work items",
-        url: "https://plane.example.invalid/http/api-key/mcp",
+      pluginRow("records", {
+        slug: "header-auth--records",
+        name: "Header-auth records",
+        url: "https://headers.example.invalid/http/api-key/mcp",
         auth_type: "user_headers",
         auth_config: {
           headers: [{ name: "x-api-key", credentialKey: "apiKey" }],

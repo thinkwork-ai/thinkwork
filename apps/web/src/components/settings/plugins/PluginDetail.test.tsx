@@ -278,9 +278,9 @@ beforeEach(() => {
   mocks.activateCredentials.mockResolvedValue({
     data: {
       activatePluginWithCredentials: {
-        id: "act-plane",
-        pluginInstallId: "install-plane",
-        pluginKey: "plane",
+        id: "act-credentials",
+        pluginInstallId: "install-credentials",
+        pluginKey: "lastmile",
         status: "active",
       },
     },
@@ -441,45 +441,6 @@ describe("PluginDetail", () => {
         },
       });
     });
-  });
-
-  it("saves Plane credentials instead of starting OAuth", async () => {
-    paramsState.pluginKey = "plane";
-    mockQueries({
-      install: {
-        ...baseInstall,
-        id: "install-plane",
-        pluginKey: "plane",
-        state: "installed",
-      },
-      activations: [],
-      catalog: [planeEntry],
-    });
-    render(<PluginDetail />);
-
-    expect(screen.getByText("Not connected")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^connect$/i })).toBeNull();
-
-    fireEvent.change(screen.getByLabelText("Plane personal access token"), {
-      target: { value: "pat_test" },
-    });
-    fireEvent.change(screen.getByLabelText("Workspace slug"), {
-      target: { value: "engineering" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /save credentials/i }));
-
-    await waitFor(() => {
-      expect(mocks.activateCredentials).toHaveBeenCalledWith({
-        input: {
-          installId: "install-plane",
-          credentials: [
-            { key: "apiKey", value: "pat_test" },
-            { key: "workspaceSlug", value: "engineering" },
-          ],
-        },
-      });
-    });
-    expect(mocks.activate).not.toHaveBeenCalled();
   });
 
   it("shows the success notice, refetches activations, and clears the OAuth return params", async () => {
@@ -1260,32 +1221,6 @@ const catalogEntry = {
           displayName: "LastMile MCP",
         },
         { key: "lastmile-skills", type: "skills", displayName: null },
-      ],
-    },
-  ],
-  install: null,
-};
-
-const planeEntry = {
-  __typename: "PluginCatalogEntry" as const,
-  pluginKey: "plane",
-  displayName: "Plane",
-  description: "Plane work item tools.",
-  latestVersion: "0.1.2",
-  updateAvailable: false,
-  premium: null,
-  entitlement: null,
-  versions: [
-    {
-      version: "0.1.2",
-      payloadSha256: "sha256:plane",
-      requiredOauthScopes: [],
-      components: [
-        {
-          key: "issues",
-          type: "mcp-server",
-          displayName: "Plane work items",
-        },
       ],
     },
   ],

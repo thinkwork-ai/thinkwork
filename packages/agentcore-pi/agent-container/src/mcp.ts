@@ -525,7 +525,7 @@ function wrapMcpToolForModelRouting(input: {
 /**
  * Build the MCP tool surface for one invocation. Per OAuth server: mint a
  * handle from the bearer and build the handle-shaped Authorization header.
- * Header-auth servers (e.g. Plane PAT mode) carry only their declared
+ * Header-auth servers carry only their declared
  * extraHeaders. A failure on one server does not block the others; failed
  * OAuth server handles are revoked so the store doesn't accumulate dead
  * entries.

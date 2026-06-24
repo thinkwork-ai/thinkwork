@@ -173,15 +173,6 @@ function deploymentVariablesFor(
       },
     ];
   }
-  if (key === "plane") {
-    return [
-      { name: "PLANE_PROVISIONED", value: enable || park ? "true" : "false" },
-      {
-        name: "PLANE_RUNTIME_ENABLED",
-        value: enable ? "true" : "false",
-      },
-    ];
-  }
   return [
     { name: "N8N_PROVISIONED", value: enable || park ? "true" : "false" },
     {
@@ -212,8 +203,7 @@ function deploymentMessageFor(
   if (key === "cognee") {
     return `Knowledge Graph ${action === "ENABLE" ? "enable" : "disable"} deployment queued.`;
   }
-  const label =
-    key === "twenty" ? "Twenty CRM" : key === "plane" ? "Plane" : "n8n";
+  const label = key === "twenty" ? "Twenty CRM" : "n8n";
   if (action === "ENABLE") {
     return `${label} enable deployment queued.`;
   }

@@ -260,7 +260,7 @@ describe("mcp-proxy handler", () => {
         ...SERVER_A,
         auth: {
           type: "bearer",
-          token: "plane_pat_user_123",
+          token: "header_token_user_123",
           headers: { "x-workspace-slug": "eng" },
         },
       },
@@ -282,7 +282,7 @@ describe("mcp-proxy handler", () => {
     expect(res.statusCode).toBe(200);
     expect(mockCallTool).toHaveBeenCalledWith(
       expect.objectContaining({
-        token: "plane_pat_user_123",
+        token: "header_token_user_123",
         headers: { "x-workspace-slug": "eng" },
       }),
       "create_lead",

@@ -475,14 +475,14 @@ describe("endpointFrom resolution (U10)", () => {
   });
 });
 
-describe("user-provided header auth (THNK-27 U5)", () => {
-  it("provisions Plane MCP rows with header bindings but no credential values", async () => {
-    const planeComponent: McpServerComponent = {
+describe("user-provided header auth (shared header auth)", () => {
+  it("provisions header-auth MCP rows with header bindings but no credential values", async () => {
+    const headerAuthComponent: McpServerComponent = {
       type: "mcp-server",
       key: "issues",
-      displayName: "Plane work items",
+      displayName: "Header-auth records",
       endpointFrom: {
-        managedApp: "plane",
+        managedApp: "header-auth",
         configKey: "publicUrl",
         path: "/http/api-key/mcp",
       },
@@ -490,14 +490,14 @@ describe("user-provided header auth (THNK-27 U5)", () => {
         mode: "user-provided-headers",
         bearer: {
           credentialKey: "apiKey",
-          displayName: "Plane personal access token",
+          displayName: "API token",
           secret: true,
         },
         headers: [
           {
             name: "x-workspace-slug",
             credentialKey: "workspaceSlug",
-            displayName: "Plane workspace slug",
+            displayName: "Workspace slug",
           },
         ],
       },
@@ -505,40 +505,41 @@ describe("user-provided header auth (THNK-27 U5)", () => {
     selectQueue.push([
       {
         desired_config: {
-          publicUrl: "https://plane.tenant.example.com/app",
+          publicUrl: "https://headers.tenant.example.com/app",
         },
       },
     ]);
     selectQueue.push([]);
     selectQueue.push([]);
-    returningQueue.push([{ id: "server-plane" }]);
+    returningQueue.push([{ id: "server-header-auth" }]);
     selectQueue.push([]);
 
     const ref = await provisionPluginMcpComponent({
       tenantId: "tenant-1",
-      pluginInstallId: "install-plane",
-      pluginKey: "plane",
-      component: planeComponent,
+      pluginInstallId: "install-header-auth",
+      pluginKey: "header-auth",
+      component: headerAuthComponent,
       db: mockDb as never,
     });
 
     expect(ref).toEqual({
-      tenantMcpServerId: "server-plane",
-      resolvedEndpointUrl: "https://plane.tenant.example.com/http/api-key/mcp",
+      tenantMcpServerId: "server-header-auth",
+      resolvedEndpointUrl:
+        "https://headers.tenant.example.com/http/api-key/mcp",
     });
     expect(insertCalls[0]).toMatchObject({
-      slug: "plane--issues",
-      url: "https://plane.tenant.example.com/http/api-key/mcp",
+      slug: "header-auth--issues",
+      url: "https://headers.tenant.example.com/http/api-key/mcp",
       auth_type: "user_headers",
       auth_config: {
         bearerCredentialKey: "apiKey",
         headers: [{ name: "x-workspace-slug", credentialKey: "workspaceSlug" }],
       },
       management_source: "plugin",
-      plugin_install_id: "install-plane",
+      plugin_install_id: "install-header-auth",
       status: "approved",
     });
-    expect(JSON.stringify(insertCalls[0])).not.toContain("plane_pat");
+    expect(JSON.stringify(insertCalls[0])).not.toContain("header_token");
   });
 });
 

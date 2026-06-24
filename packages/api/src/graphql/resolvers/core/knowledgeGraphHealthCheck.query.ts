@@ -142,8 +142,8 @@ export async function probeCogneeAwsHealth(): Promise<CogneeAwsHealth> {
 /**
  * knowledgeGraphHealthCheck — operator-only live probe for the private Cognee
  * service. The GraphQL Lambda is intentionally outside Cognee's VPC path, so
- * this checks ECS service steadiness and ALB target health through AWS control
- * plane APIs instead of fetching the internal ALB directly.
+ * this checks ECS service steadiness and ALB target health through AWS APIs
+ * instead of fetching the internal ALB directly.
  */
 export const knowledgeGraphHealthCheck = async (
   _parent: any,
