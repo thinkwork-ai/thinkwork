@@ -72,11 +72,13 @@ function captureFakeConnect(capture: {
   url?: string;
   headers?: Record<string, string>;
   transport?: string;
+  recordLinkHints?: unknown;
 }): ConnectMcpServerFn {
   return async (args) => {
     capture.url = args.url;
     capture.headers = { ...args.headers };
     capture.transport = args.transport;
+    capture.recordLinkHints = args.recordLinkHints;
     return [makeFakeTool("captured", args.headers)];
   };
 }
@@ -344,6 +346,41 @@ describe("buildMcpTools — Authorization shape", () => {
     });
     expect(captured.transport).toBe("sse");
   });
+
+  it("forwards record-link hints without changing handle-shaped Authorization", async () => {
+    const store = new HandleStore();
+    const captured: any = {};
+    const recordLinkHints: McpServerConfig["recordLinkHints"] = {
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      browserBaseUrl: "https://crm.example.com",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+          idFields: ["id", "opportunityId"],
+          labelFields: ["name"],
+        },
+      ],
+    };
+
+    await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "twenty--crm",
+          url: "https://crm.example.com/mcp",
+          bearer: BEARER_FIXTURES.jwt,
+          recordLinkHints,
+        },
+      ],
+      handleStore: store,
+      connectMcpServer: captureFakeConnect(captured),
+    });
+
+    expect(captured.recordLinkHints).toEqual(recordLinkHints);
+    expect(captured.headers?.Authorization).toMatch(/^Handle /);
+    expect(captured.headers?.Authorization).not.toContain(BEARER_FIXTURES.jwt);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -378,6 +415,18 @@ describe("buildMcpTools — bearer-leak contract", () => {
         serverName: "jwt-server",
         url: "https://mcp.jwt.example/mcp",
         bearer: BEARER_FIXTURES.jwt,
+        recordLinkHints: {
+          schemaVersion: 1,
+          source: "plugin-manifest",
+          browserBaseUrl: "https://crm.example.com",
+          routes: [
+            {
+              objectType: "opportunity",
+              routeTemplate: "/object/opportunity/{id}",
+              idFields: ["id"],
+            },
+          ],
+        },
       },
     ];
 

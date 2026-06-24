@@ -142,6 +142,8 @@ export interface ConnectMcpServerArgs {
   toolWhitelist?: string[];
   /** Optional transport hint. Defaults to streamable-http. */
   transport?: "streamable-http" | "sse";
+  /** Optional non-secret record-link hints for enriching MCP tool results. */
+  recordLinkHints?: McpRuntimeRecordLinkHints;
   /**
    * Plan §006 U2/U4 — per-invocation registry the connect path populates
    * with each whitelist-filtered tool's metadata. The MCP proxy AgentTool
@@ -177,6 +179,23 @@ export type ConnectMcpServerFn = (
 export interface McpAgentToolIdentity {
   serverName: string;
   toolName: string;
+}
+
+export interface McpRuntimeRecordLinkHints {
+  schemaVersion: 1;
+  source: "plugin-manifest";
+  browserBaseUrl: string;
+  routes: McpRuntimeRecordLinkRouteHint[];
+  workspace?: {
+    hashField: string;
+  };
+}
+
+export interface McpRuntimeRecordLinkRouteHint {
+  objectType: string;
+  routeTemplate: string;
+  idFields?: string[];
+  labelFields?: string[];
 }
 
 const mcpAgentToolIdentities = new WeakMap<
@@ -226,6 +245,8 @@ export interface McpServerConfig {
   toolWhitelist?: string[];
   /** Transport hint. Defaults to streamable-http. */
   transport?: "streamable-http" | "sse";
+  /** Optional non-secret record-link hints for enriching MCP tool results. */
+  recordLinkHints?: McpRuntimeRecordLinkHints;
 }
 
 export interface BuildMcpToolsOptions {
@@ -570,6 +591,7 @@ export async function buildMcpTools(
         serverName: config.serverName,
         toolWhitelist: config.toolWhitelist,
         transport: config.transport,
+        recordLinkHints: config.recordLinkHints,
         registry,
       });
       tools.push(

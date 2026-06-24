@@ -1654,6 +1654,91 @@ describe("handleInvocation — handle store lifecycle", () => {
 // ---------------------------------------------------------------------------
 
 describe("handleInvocation — MCP URL validator", () => {
+  it("preserves valid MCP record-link hints when parsing mcp_configs", async () => {
+    let capturedRecordLinkHints: unknown;
+    await handleInvocation({
+      payload: VALID_PAYLOAD({
+        mcp_configs: [
+          {
+            name: "twenty--crm",
+            url: "https://crm.example.com/mcp",
+            auth: { token: "test-bearer" },
+            recordLinkHints: {
+              schemaVersion: 1,
+              source: "plugin-manifest",
+              browserBaseUrl: "https://crm.example.com",
+              routes: [
+                {
+                  objectType: "opportunity",
+                  routeTemplate: "/object/opportunity/{id}",
+                  idFields: ["id", "opportunityId"],
+                  labelFields: ["name"],
+                  ignoredExtra: "not forwarded",
+                },
+              ],
+              ignoredExtra: "not forwarded",
+            },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        connectMcpServerFactory: async (args) => {
+          capturedRecordLinkHints = args.recordLinkHints;
+          return [];
+        },
+      }),
+    });
+
+    expect(capturedRecordLinkHints).toEqual({
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      browserBaseUrl: "https://crm.example.com",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+          idFields: ["id", "opportunityId"],
+          labelFields: ["name"],
+        },
+      ],
+    });
+  });
+
+  it("ignores malformed MCP record-link hints while keeping the server usable", async () => {
+    let capturedRecordLinkHints: unknown = "not-called";
+    await handleInvocation({
+      payload: VALID_PAYLOAD({
+        mcp_configs: [
+          {
+            name: "twenty--crm",
+            url: "https://crm.example.com/mcp",
+            auth: { token: "test-bearer" },
+            recordLinkHints: {
+              schemaVersion: 1,
+              source: "plugin-manifest",
+              browserBaseUrl: "http://crm.example.com",
+              routes: [
+                {
+                  objectType: "opportunity",
+                  routeTemplate: "/object/opportunity/{id}",
+                  idFields: ["id"],
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        connectMcpServerFactory: async (args) => {
+          capturedRecordLinkHints = args.recordLinkHints;
+          return [];
+        },
+      }),
+    });
+
+    expect(capturedRecordLinkHints).toBeUndefined();
+  });
+
   it("skips configs with non-https schemes BEFORE handle minting", async () => {
     const connectCalls: Array<{ serverName: string }> = [];
     const connectFactory: ConnectMcpServerFn = async (args) => {
