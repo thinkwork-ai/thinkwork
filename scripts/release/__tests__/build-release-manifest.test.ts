@@ -104,17 +104,6 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
           "sha256:7777777777777777777777777777777777777777777777777777777777777777",
         architecture: "amd64",
       },
-      {
-        name: "plane",
-        repository: "makeplane/plane",
-        tag: "v1.2.3-plane-amd64",
-        digest:
-          "sha256:4444444444444444444444444444444444444444444444444444444444444444",
-        architecture: "amd64",
-      },
-      parseRuntimeImageSpec(
-        "name=plane-mcp-server,uri=ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:6666666666666666666666666666666666666666666666666666666666666666,architecture=amd64",
-      ),
       parseRuntimeImageSpec(
         "name=twenty,uri=twentycrm/twenty@sha256:5555555555555555555555555555555555555555555555555555555555555555,architecture=amd64",
       ),
@@ -170,8 +159,6 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
       "agentcore-pi-arm64",
       "cognee",
       "n8n-runtime",
-      "plane",
-      "plane-mcp-server",
       "twenty",
     ],
   );
@@ -186,7 +173,7 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
   );
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "n8n", "plane", "twenty"],
+    ["cognee", "n8n", "twenty"],
   );
   assert.deepEqual(
     Object.fromEntries(
@@ -195,7 +182,6 @@ test("buildReleaseManifest emits stable artifact metadata", async () => {
     {
       cognee: ["cognee"],
       n8n: ["n8n-runtime"],
-      plane: ["plane", "plane-mcp-server"],
       twenty: ["twenty"],
     },
   );
@@ -370,19 +356,13 @@ test("CLI build script includes default managed apps when no overrides are passe
   ) as ThinkWorkReleaseManifest;
   assert.deepEqual(
     manifest.managedApps.map((app) => app.id),
-    ["cognee", "n8n", "plane", "twenty"],
+    ["cognee", "n8n", "twenty"],
   );
   assert.deepEqual(
     manifest.managedApps
       .find((app) => app.id === "n8n")
       ?.smokeContracts?.map((contract) => contract.command),
     ["plugins/n8n/smoke/n8n-managed-app-smoke.mjs"],
-  );
-  assert.deepEqual(
-    manifest.managedApps
-      .find((app) => app.id === "plane")
-      ?.smokeContracts?.map((contract) => contract.command),
-    ["plugins/plane/smoke/plane-managed-app-smoke.mjs"],
   );
   assert.deepEqual(
     manifest.managedApps

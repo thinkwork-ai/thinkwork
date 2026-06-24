@@ -7,11 +7,6 @@ export const sharedPluginTermAllowlist = [
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
   },
   {
-    path: "apps/cli/__tests__/terraform-plane-fixture.test.ts",
-    reason:
-      "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
-  },
-  {
     path: "apps/cli/__tests__/terraform-n8n-fixture.test.ts",
     reason:
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",

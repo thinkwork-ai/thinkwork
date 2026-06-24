@@ -443,53 +443,6 @@ describe("provisionPluginInfraComponent", () => {
     expect(ref.componentHash).toBe(infraComponentHash(brainSubstrate));
   });
 
-  it("Plane creates an ENABLE plan when a previous managed app row is disabled", async () => {
-    const deps = fakeDeps();
-    deps.managedApps.set(`${TENANT}:plane`, {
-      id: "app-plane",
-      desiredConfig: { publicUrl: "https://plane.example.test" },
-      currentStatus: "disabled",
-      selectedReleaseVersion: "v1.2.3",
-      selectedManifestDigest: "sha-123",
-    });
-
-    const planeRuntime = component({
-      key: "runtime",
-      managedAppKey: "plane",
-      terraformInputs: {
-        publicUrl: { description: "URL", type: "string" },
-      },
-    });
-
-    const ref = await provisionPluginInfraComponent(
-      provisionArgs(
-        deps,
-        {},
-        {
-          pluginKey: "plane",
-          component: planeRuntime,
-        },
-      ),
-    );
-
-    expect(deps.startCalls).toHaveLength(1);
-    expect(deps.startCalls[0]).toMatchObject({
-      appKey: "plane",
-      operation: "ENABLE",
-      releaseVersion: "v1.2.3",
-      manifestDigest: "sha-123",
-      desiredConfig: { publicUrl: "https://plane.example.test" },
-    });
-    expect(ref).toMatchObject({
-      managedAppKey: "plane",
-      managedApplicationId: "app-plane",
-      deploymentJobId: "job-1",
-      operation: "ENABLE",
-      adoptedExisting: true,
-    });
-    expect(ref.adoptedRunningInfra).toBeUndefined();
-  });
-
   it("n8n net-new provisioning seeds database, storage, queue, and secret desired-config defaults", async () => {
     vi.stubEnv(
       "THINKWORK_N8N_IMAGE_URI",

@@ -135,7 +135,6 @@ jobs:
               - 'terraform/**'
               - 'plugins/company-brain/runtime/cognee/**'
               - 'plugins/company-brain/terraform/cognee/**'
-              - 'plugins/plane/terraform/plane/**'
               - 'plugins/twenty/terraform/twenty/**'
             workspace_defaults:
               - 'packages/workspace-defaults/files/**'
@@ -948,7 +947,7 @@ jobs:
             echo "TWENTY_CERTIFICATE_ARN=$TWENTY_CERTIFICATE_ARN_INPUT"
           } >> "$GITHUB_ENV"
 
-      - name: Resolve n8n and Plane deployment inputs
+      - name: Resolve n8n deployment inputs
         env:
           N8N_PROVISIONED_INPUT: ${{ vars.N8N_PROVISIONED || '' }}
           N8N_RUNTIME_ENABLED_INPUT: ${{ vars.N8N_RUNTIME_ENABLED || '' }}
@@ -966,23 +965,6 @@ jobs:
           N8N_CERTIFICATE_ARN_INPUT: ${{ vars.N8N_CERTIFICATE_ARN || '' }}
           N8N_CONTAINER_PORT_INPUT: ${{ vars.N8N_CONTAINER_PORT || '5678' }}
           N8N_CACHE_ENGINE_INPUT: ${{ vars.N8N_CACHE_ENGINE || 'valkey' }}
-          PLANE_PROVISIONED_INPUT: ${{ vars.PLANE_PROVISIONED || 'false' }}
-          PLANE_RUNTIME_ENABLED_INPUT: ${{ vars.PLANE_RUNTIME_ENABLED || 'false' }}
-          PLANE_IMAGE_URI_INPUT: ${{ vars.PLANE_IMAGE_URI || '' }}
-          PLANE_MCP_IMAGE_URI_INPUT: ${{ vars.PLANE_MCP_IMAGE_URI || '' }}
-          PLANE_DB_USERNAME_INPUT: ${{ vars.PLANE_DB_USERNAME || 'thinkwork_plane' }}
-          PLANE_DB_NAME_INPUT: ${{ vars.PLANE_DB_NAME || 'thinkwork_plane' }}
-          PLANE_DB_URL_SECRET_ARN_INPUT: ${{ vars.PLANE_DB_URL_SECRET_ARN || '' }}
-          PLANE_SECRET_KEY_SECRET_ARN_INPUT: ${{ vars.PLANE_SECRET_KEY_SECRET_ARN || '' }}
-          PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN_INPUT: ${{ vars.PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN || '' }}
-          PLANE_AES_SECRET_KEY_SECRET_ARN_INPUT: ${{ vars.PLANE_AES_SECRET_KEY_SECRET_ARN || '' }}
-          PLANE_S3_ACCESS_KEY_ID_SECRET_ARN_INPUT: ${{ vars.PLANE_S3_ACCESS_KEY_ID_SECRET_ARN || '' }}
-          PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN_INPUT: ${{ vars.PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN || '' }}
-          PLANE_S3_BUCKET_NAME_INPUT: ${{ vars.PLANE_S3_BUCKET_NAME || '' }}
-          PLANE_DOMAIN_INPUT: ${{ vars.PLANE_DOMAIN || '' }}
-          PLANE_PUBLIC_URL_INPUT: ${{ vars.PLANE_PUBLIC_URL || '' }}
-          PLANE_CERTIFICATE_ARN_INPUT: ${{ vars.PLANE_CERTIFICATE_ARN || '' }}
-          PLANE_WEB_CONTAINER_PORT_INPUT: ${{ vars.PLANE_WEB_CONTAINER_PORT || '8080' }}
         run: |
           set -euo pipefail
 
@@ -1130,73 +1112,6 @@ jobs:
             echo "N8N_CERTIFICATE_ARN=$n8n_certificate_arn"
             echo "N8N_CONTAINER_PORT=$n8n_container_port"
             echo "N8N_CACHE_ENGINE=$n8n_cache_engine"
-          } >> "$GITHUB_ENV"
-
-          plane_provisioned=$(printf '%s' "$PLANE_PROVISIONED_INPUT" | tr '[:upper:]' '[:lower:]')
-          plane_runtime_enabled=$(printf '%s' "$PLANE_RUNTIME_ENABLED_INPUT" | tr '[:upper:]' '[:lower:]')
-          for value_name in plane_provisioned plane_runtime_enabled; do
-            value="${!value_name}"
-            if [ "$value" != "true" ] && [ "$value" != "false" ]; then
-              echo "::error::${value_name^^} must be true or false."
-              exit 1
-            fi
-          done
-          if [ "$plane_runtime_enabled" = "true" ] && [ "$plane_provisioned" != "true" ]; then
-            echo "::error::PLANE_RUNTIME_ENABLED=true requires PLANE_PROVISIONED=true."
-            exit 1
-          fi
-
-          plane_image_uri="${PLANE_IMAGE_URI_INPUT:-}"
-          plane_mcp_image_uri="${PLANE_MCP_IMAGE_URI_INPUT:-}"
-          plane_db_username="${PLANE_DB_USERNAME_INPUT:-thinkwork_plane}"
-          plane_db_name="${PLANE_DB_NAME_INPUT:-thinkwork_plane}"
-          plane_web_container_port="${PLANE_WEB_CONTAINER_PORT_INPUT:-8080}"
-
-          if [ "$plane_provisioned" = "true" ]; then
-            if [[ ! "$plane_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
-              echo "::error::PLANE_IMAGE_URI must be pinned to an immutable sha256 digest when PLANE_PROVISIONED=true."
-              exit 1
-            fi
-            if [[ ! "$plane_mcp_image_uri" =~ @sha256:[0-9a-f]{64}$ ]]; then
-              echo "::error::PLANE_MCP_IMAGE_URI must be pinned to an immutable sha256 digest when PLANE_PROVISIONED=true."
-              exit 1
-            fi
-            if [ -z "$PLANE_S3_BUCKET_NAME_INPUT" ]; then
-              echo "::error::PLANE_S3_BUCKET_NAME is required when PLANE_PROVISIONED=true."
-              exit 1
-            fi
-          fi
-          if [[ ! "$plane_db_username" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
-            echo "::error::PLANE_DB_USERNAME must be a valid PostgreSQL identifier."
-            exit 1
-          fi
-          if [[ ! "$plane_db_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || [ "$plane_db_name" = "thinkwork" ]; then
-            echo "::error::PLANE_DB_NAME must be a valid PostgreSQL identifier distinct from thinkwork."
-            exit 1
-          fi
-          if [[ ! "$plane_web_container_port" =~ ^[0-9]+$ ]] || [ "$plane_web_container_port" -lt 1 ] || [ "$plane_web_container_port" -gt 65535 ]; then
-            echo "::error::PLANE_WEB_CONTAINER_PORT must be a valid TCP port."
-            exit 1
-          fi
-
-          {
-            echo "PLANE_PROVISIONED=$plane_provisioned"
-            echo "PLANE_RUNTIME_ENABLED=$plane_runtime_enabled"
-            echo "PLANE_IMAGE_URI=$plane_image_uri"
-            echo "PLANE_MCP_IMAGE_URI=$plane_mcp_image_uri"
-            echo "PLANE_DB_USERNAME=$plane_db_username"
-            echo "PLANE_DB_NAME=$plane_db_name"
-            echo "PLANE_DB_URL_SECRET_ARN=$PLANE_DB_URL_SECRET_ARN_INPUT"
-            echo "PLANE_SECRET_KEY_SECRET_ARN=$PLANE_SECRET_KEY_SECRET_ARN_INPUT"
-            echo "PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN=$PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN_INPUT"
-            echo "PLANE_AES_SECRET_KEY_SECRET_ARN=$PLANE_AES_SECRET_KEY_SECRET_ARN_INPUT"
-            echo "PLANE_S3_ACCESS_KEY_ID_SECRET_ARN=$PLANE_S3_ACCESS_KEY_ID_SECRET_ARN_INPUT"
-            echo "PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN=$PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN_INPUT"
-            echo "PLANE_S3_BUCKET_NAME=$PLANE_S3_BUCKET_NAME_INPUT"
-            echo "PLANE_DOMAIN=$PLANE_DOMAIN_INPUT"
-            echo "PLANE_PUBLIC_URL=$PLANE_PUBLIC_URL_INPUT"
-            echo "PLANE_CERTIFICATE_ARN=$PLANE_CERTIFICATE_ARN_INPUT"
-            echo "PLANE_WEB_CONTAINER_PORT=$plane_web_container_port"
           } >> "$GITHUB_ENV"
 
       - name: Prepare Cognee database credentials
@@ -1573,23 +1488,6 @@ jobs:
             -var "n8n_certificate_arn=$N8N_CERTIFICATE_ARN"
             -var "n8n_container_port=$N8N_CONTAINER_PORT"
             -var "n8n_cache_engine=$N8N_CACHE_ENGINE"
-            -var "plane_provisioned=$PLANE_PROVISIONED"
-            -var "plane_runtime_enabled=$PLANE_RUNTIME_ENABLED"
-            -var "plane_image_uri=$PLANE_IMAGE_URI"
-            -var "plane_mcp_image_uri=$PLANE_MCP_IMAGE_URI"
-            -var "plane_db_username=$PLANE_DB_USERNAME"
-            -var "plane_db_name=$PLANE_DB_NAME"
-            -var "plane_db_url_secret_arn=$PLANE_DB_URL_SECRET_ARN"
-            -var "plane_secret_key_secret_arn=$PLANE_SECRET_KEY_SECRET_ARN"
-            -var "plane_live_server_secret_key_secret_arn=$PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN"
-            -var "plane_aes_secret_key_secret_arn=$PLANE_AES_SECRET_KEY_SECRET_ARN"
-            -var "plane_s3_access_key_id_secret_arn=$PLANE_S3_ACCESS_KEY_ID_SECRET_ARN"
-            -var "plane_s3_secret_access_key_secret_arn=$PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN"
-            -var "plane_s3_bucket_name=$PLANE_S3_BUCKET_NAME"
-            -var "plane_domain=$PLANE_DOMAIN"
-            -var "plane_public_url=$PLANE_PUBLIC_URL"
-            -var "plane_certificate_arn=$PLANE_CERTIFICATE_ARN"
-            -var "plane_web_container_port=$PLANE_WEB_CONTAINER_PORT"
             -var "enable_workspace_orchestration=true"
             -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}"
             -var "lambda_zips_dir=$LAMBDA_DIR"

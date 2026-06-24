@@ -19,7 +19,6 @@
   "dependencies": {
     "@thinkwork/plugin-company-brain": "workspace:*",
     "@thinkwork/plugin-n8n": "workspace:*",
-    "@thinkwork/plugin-plane": "workspace:*",
     "@thinkwork/plugin-twenty": "workspace:*"
   },
   "devDependencies": {

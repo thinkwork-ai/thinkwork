@@ -70,7 +70,7 @@ export type McpServerAuth =
     }
   | {
       /**
-       * User-provided HTTP headers (e.g. Plane PAT mode). Activation stores
+       * User-provided HTTP headers for PAT/header-based MCP auth. Activation stores
        * the caller's values as a per-user plugin secret, then dispatch emits
        * only these declared headers to the MCP transport. Never use this for
        * Authorization-bearing OAuth; OAuth must stay in the handle-shaped

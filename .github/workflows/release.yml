@@ -215,8 +215,6 @@ jobs:
               --signature-expires-at "$(date -u -d '+1 year' '+%Y-%m-%dT%H:%M:%S.000Z')"
             )
           fi
-          PLANE_IMAGE_URI="${PLANE_IMAGE_URI:-$DEFAULT_PLANE_IMAGE_URI}"
-          PLANE_MCP_IMAGE_URI="${PLANE_MCP_IMAGE_URI:-$DEFAULT_PLANE_MCP_IMAGE_URI}"
           if [[ -z "${TWENTY_IMAGE_URI:-}" ]]; then
             echo "::error::TWENTY_IMAGE_URI repository variable must be set to a pinned image URI before publishing managed-app release manifests."
             exit 1
@@ -224,8 +222,6 @@ jobs:
           MANAGED_APP_IMAGE_ARGS=(
             --image "name=cognee,repository=${COGNEE_REPOSITORY},tag=${RELEASE_REF_NAME}-cognee-amd64,digest=${{ steps.cognee-amd64.outputs.digest }},architecture=amd64"
             --image "name=n8n-runtime,repository=${N8N_REPOSITORY},tag=${RELEASE_REF_NAME}-n8n-amd64,digest=${{ steps.n8n-amd64.outputs.digest }},architecture=amd64"
-            --image "name=plane,uri=${PLANE_IMAGE_URI},architecture=amd64"
-            --image "name=plane-mcp-server,uri=${PLANE_MCP_IMAGE_URI},architecture=amd64"
             --image "name=twenty,uri=${TWENTY_IMAGE_URI},architecture=amd64"
           )
           pnpm exec tsx scripts/release/build-release-manifest.ts \
@@ -244,10 +240,6 @@ jobs:
             "${MANAGED_APP_IMAGE_ARGS[@]}" \
             "${SIGN_ARGS[@]}"
         env:
-          DEFAULT_PLANE_IMAGE_URI: artifacts.plane.so/makeplane/plane-aio-commercial:stable@sha256:7385b873e58f8325e68950689ae003ce1cb8d017f49011ab4b3f1ad9e6e958db
-          DEFAULT_PLANE_MCP_IMAGE_URI: ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
-          PLANE_IMAGE_URI: ${{ vars.PLANE_IMAGE_URI || '' }}
-          PLANE_MCP_IMAGE_URI: ${{ vars.PLANE_MCP_IMAGE_URI || '' }}
           RELEASE_MANIFEST_KEY_ID: ${{ secrets.RELEASE_MANIFEST_KEY_ID }}
           RELEASE_MANIFEST_PRIVATE_KEY: ${{ secrets.RELEASE_MANIFEST_PRIVATE_KEY }}
           TWENTY_IMAGE_URI: ${{ vars.TWENTY_IMAGE_URI || '' }}

@@ -11,28 +11,6 @@ const digest = "a".repeat(64);
 const imageDigest = "1".repeat(64);
 const n8nPackageImageDigest = "4".repeat(64);
 const n8nPackageImageUri = `123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork/n8n@sha256:${n8nPackageImageDigest}`;
-const planeImageConfig = {
-  imageUri: `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${imageDigest}`,
-  mcpImageUri: `ghcr.io/astral-sh/uv@sha256:${imageDigest}`,
-};
-
-function planeDesiredConfig(extra: Record<string, unknown> = {}) {
-  return {
-    ...planeImageConfig,
-    dbUrlSecretArn:
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-db",
-    secretKeySecretArn:
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-secret",
-    liveServerSecretKeySecretArn:
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-live",
-    aesSecretKeySecretArn:
-      "arn:aws:secretsmanager:us-east-1:123456789012:secret:plane-aes",
-    s3BucketName: "thinkwork-dev-plane",
-    publicUrl: "https://plane.example.com",
-    certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/example",
-    ...extra,
-  };
-}
 
 function n8nDesiredConfig(extra: Record<string, unknown> = {}) {
   return {
@@ -189,47 +167,6 @@ describe("managed app deployment adapters", () => {
         desiredConfig: {},
       }),
     ).toThrow(/bedrockModelResourceArns|imageUri|dbPasswordSecretArn/);
-  });
-
-  it("maps Plane deploy config into Terraform variables and smoke evidence", () => {
-    const summary = buildPlanSummary({
-      evidenceBucket: "evidence-bucket",
-      input: {
-        phase: "plan",
-        tenantId: "tenant-1",
-        jobId: "job-plane-1",
-        appKey: "plane",
-        operation: "ENABLE",
-        releaseVersion: "1.2.3",
-        manifestDigest: digest,
-        desiredConfigVersion: "v1",
-        desiredConfig: planeDesiredConfig({
-          s3BucketName: "thinkwork-plane-files",
-          certificateArn:
-            "arn:aws:acm:us-east-1:123456789012:certificate/plane",
-        }),
-      },
-    });
-
-    expect(summary.displayName).toBe("Plane");
-    expect(summary.terraformVariables).toEqual(
-      expect.objectContaining({
-        plane_provisioned: true,
-        plane_runtime_enabled: true,
-        plane_image_uri: planeImageConfig.imageUri,
-        plane_mcp_image_uri: planeImageConfig.mcpImageUri,
-        plane_public_url: "https://plane.example.com",
-        plane_s3_bucket_name: "thinkwork-plane-files",
-      }),
-    );
-    expect(summary.smokeContracts).toContainEqual(
-      expect.objectContaining({
-        command: "plugins/plane/smoke/plane-managed-app-smoke.mjs",
-      }),
-    );
-    expect(summary.statusOutputs).toContain("plane_url");
-    expect(summary.statusOutputs).toContain("plane_rabbitmq_broker_arn");
-    expect(summary.statusOutputs).toContain("plane_cache_endpoint");
   });
 
   it("maps n8n deploy config into Terraform variables and smoke evidence", () => {
@@ -750,125 +687,6 @@ describe("managed app deployment adapters", () => {
           neptuneGraphId: "g-123",
           s3ArtifactRoot: "s3://brain/tenants/tenant-1/artifacts/",
           privateSubstrateMode: true,
-        }),
-      }),
-    );
-  });
-
-  it("maps Plane deploy and park plans to retained runtime states", () => {
-    const desiredConfig = planeDesiredConfig({ appDesiredCount: 2 });
-
-    expect(
-      buildManagedAppPlan({
-        appKey: "plane",
-        operation: "ENABLE",
-        desiredConfig,
-      }).terraformVariables,
-    ).toEqual(
-      expect.objectContaining({
-        plane_provisioned: true,
-        plane_runtime_enabled: true,
-        plane_image_uri: planeImageConfig.imageUri,
-        plane_public_url: "https://plane.example.com",
-        plane_web_desired_count: 2,
-      }),
-    );
-    expect(
-      buildManagedAppPlan({
-        appKey: "plane",
-        operation: "PARK",
-        desiredConfig,
-      }).terraformVariables,
-    ).toEqual(
-      expect.objectContaining({
-        plane_provisioned: true,
-        plane_runtime_enabled: false,
-      }),
-    );
-  });
-
-  it("lists destructive Plane resource and data impact", () => {
-    const summary = buildPlanSummary({
-      evidenceBucket: "evidence-bucket",
-      input: {
-        phase: "plan",
-        tenantId: "tenant-1",
-        jobId: "job-plane-destroy",
-        appKey: "plane",
-        operation: "DESTROY",
-        releaseVersion: "1.2.3",
-        manifestDigest: digest,
-        desiredConfigVersion: "v1",
-      },
-    });
-
-    expect(summary.dataImpact.destructive).toBe(true);
-    expect(summary.dataImpact.resources.join("\n")).toMatch(/ECS service/);
-    expect(summary.dataImpact.resources.join("\n")).toMatch(/RabbitMQ/);
-    expect(summary.dataImpact.resources.join("\n")).toMatch(/Valkey|Redis/);
-    expect(summary.dataImpact.resources.join("\n")).toMatch(/S3/);
-    expect(summary.preDestroySteps).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: "plane-db-drop" }),
-        expect.objectContaining({ id: "plane-object-storage-inventory" }),
-        expect.objectContaining({ id: "plane-secret-cleanup" }),
-      ]),
-    );
-    expect(summary.terraformVariables).toEqual({
-      plane_provisioned: false,
-      plane_runtime_enabled: false,
-    });
-  });
-
-  it("hydrates Plane images from the verified release manifest contract", () => {
-    const summary = buildApplySummary({
-      evidenceBucket: "evidence-bucket",
-      verifiedManifestDigest: digest,
-      input: {
-        phase: "apply",
-        tenantId: "tenant-1",
-        jobId: "job-plane-1",
-        appKey: "plane",
-        operation: "ENABLE",
-        releaseVersion: "1.2.3",
-        manifestDigest: digest,
-        desiredConfigVersion: "v1",
-        desiredConfig: planeDesiredConfig({
-          imageUri: undefined,
-          mcpImageUri: undefined,
-        }),
-        manifestImages: {
-          "plane-aio": `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${"2".repeat(64)}`,
-          "plane-mcp-server": `ghcr.io/astral-sh/uv@sha256:${"7".repeat(64)}`,
-        },
-        planDigest: "b".repeat(64),
-      },
-    });
-
-    expect(summary.terraformVariables).toEqual(
-      expect.objectContaining({
-        plane_image_uri: `artifacts.plane.so/makeplane/plane-aio-commercial@sha256:${"2".repeat(64)}`,
-        plane_mcp_image_uri: `ghcr.io/astral-sh/uv@sha256:${"7".repeat(64)}`,
-      }),
-    );
-  });
-
-  it("extracts Plane status from Terraform output shapes", () => {
-    expect(
-      getManagedAppAdapter("plane").extractStatus({
-        plane_provisioned: { value: true },
-        plane_runtime_enabled: { value: true },
-        plane_url: { value: "https://plane.example.com" },
-        plane_storage_bucket_name: { value: "thinkwork-dev-plane" },
-      }),
-    ).toEqual(
-      expect.objectContaining({
-        provisioned: true,
-        runtimeEnabled: true,
-        endpoint: "https://plane.example.com",
-        status: "running",
-        evidence: expect.objectContaining({
-          storageBucketName: "thinkwork-dev-plane",
         }),
       }),
     );

@@ -162,10 +162,6 @@ describe("verify-plugin-source-boundary", () => {
     await withFixture(async (dir) => {
       await writeFixtureFile(
         dir,
-        "apps/cli/__tests__/terraform-plane-fixture.test.ts",
-      );
-      await writeFixtureFile(
-        dir,
         "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts",
       );
       await writeFixtureFile(
@@ -174,7 +170,6 @@ describe("verify-plugin-source-boundary", () => {
       );
       const fixtureSharedAllowlist = sharedPluginTermAllowlist.filter(
         (entry) =>
-          entry.path === "apps/cli/__tests__/terraform-plane-fixture.test.ts" ||
           entry.path ===
             "packages/database-pg/__tests__/migration-0166-company-brain-substrate.test.ts" ||
           entry.path ===
@@ -190,7 +185,7 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations, []);
       assert.deepEqual(result.staleAllowlistEntries, []);
       assert.equal(result.allowlistMatchCount, 0);
-      assert.equal(result.sharedAllowlistMatchCount, 3);
+      assert.equal(result.sharedAllowlistMatchCount, 2);
     });
   });
 
