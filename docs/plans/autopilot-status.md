@@ -13,13 +13,12 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: In progress. U6 is active.
-- Current unit: U6 - Apply Enrichment to API MCP Proxy.
-- Current branch: `codex/mcp-record-links-u6`.
+- Status: In progress. U7 is active.
+- Current unit: U7 - Document and Verify the Deployed Twenty Path.
+- Current branch: `codex/mcp-record-links-u7`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-u6`.
-- Current pull request:
-  [#2915](https://github.com/thinkwork-ai/thinkwork/pull/2915).
+  `.Codex/worktrees/mcp-record-links-u7`.
+- Current pull request: Not opened yet.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -170,6 +169,23 @@ status: in_progress
   - 2026-06-24: U6 PR
     [#2915](https://github.com/thinkwork-ai/thinkwork/pull/2915) opened and CI
     monitoring started.
+  - 2026-06-24: U6 PR
+    [#2915](https://github.com/thinkwork-ai/thinkwork/pull/2915) passed CI
+    (CLA, lint, test, typecheck, verify), squash-merged to `main` as
+    `d59c8da6`, and the remote/local U6 branches were deleted. U7 started from
+    `origin/main` at `d59c8da6` in `.Codex/worktrees/mcp-record-links-u7` on
+    branch `codex/mcp-record-links-u7`.
+  - 2026-06-24: U7 implementation in progress. Documentation now explains
+    non-secret MCP record-link hints, Twenty Opportunity link generation, and
+    the deployed proof gate. The Twenty MCP OAuth smoke live call path now
+    requires proxy-returned Opportunity `recordLinks`, summarizes MCP output
+    instead of dumping raw payloads, and includes an optional authenticated URL
+    probe.
+  - 2026-06-24: U7 focused verification passed:
+    `node --check plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`,
+    `node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`,
+    `pnpm --filter @thinkwork/docs build`, changed-file Prettier check, and
+    `git diff --check`.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 

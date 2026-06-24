@@ -94,6 +94,15 @@ System-managed rows should not be duplicated with manual registrations. If a
 row is missing or stale, use the app page's install/repair action so ThinkWork
 can preserve managed metadata, default-agent assignment, and secret references.
 
+Plugin-owned MCP rows can also carry non-secret runtime metadata. For example,
+Twenty CRM publishes Opportunity record-link hints so ThinkWork can turn ids
+returned by an authorized MCP result into managed Twenty browser URLs. This
+metadata is repaired with the plugin-managed row and is separate from OAuth
+client metadata, user tokens, tenant API keys, and URL/auth approval hashes.
+Changing record-link copy or route hints should flow through plugin versioning
+or the managed repair path, not by editing credentials in the generic MCP
+server form.
+
 Plane is the first plugin-managed MCP row that uses per-user header activation
 instead of OAuth. Its activation stores the current user's Plane personal access
 token and workspace slug as user-scoped secrets, then sends them to Plane as
@@ -116,6 +125,8 @@ The user authenticates with the provider, the token is stored against their user
 
 - **`tenant_mcp_servers`** — tenant-level server rows with name, slug, URL, transport, auth_type, enabled, created_at, and a `secret_ref` pointing into Secrets Manager for the tenant-API-key case
 - **OAuth metadata** — stored alongside the server row (client id, authorize/token endpoints)
+- **Runtime metadata** — non-secret plugin-managed metadata such as
+  `recordLinkHints`; it is not auth config and must not contain token material
 - **Per-user tokens** — **not stored in admin state**. They live in the `user_mcp_tokens` table keyed by `(user_id, mcp_server_id)` with a secret reference pointing at Secrets Manager. That table is written by the mobile flow.
 - **`agent_template_mcp_servers`** — the join table that connects templates to servers
 
@@ -148,6 +159,9 @@ The admin UI does not currently expose an in-place rotate button — rotation ha
 3. If transport fails, verify the URL and transport type are correct
 4. If auth fails, re-check the tenant API key or the OAuth client configuration
 5. If the downstream service returned an error, the error message surfaces it; check the service's own logs
+6. For record-link behavior, do not stop at Test Connection or `tools/list`.
+   Run an actual authorized `tools/call` or agent turn that returns a supported
+   record and confirm the generated URL opens the intended downstream record.
 
 ## Known limits
 

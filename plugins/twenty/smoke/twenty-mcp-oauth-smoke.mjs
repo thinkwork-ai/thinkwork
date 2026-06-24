@@ -23,6 +23,9 @@
  *   SMOKE_TWENTY_WORKSPACE_MEMBER_ID=<Twenty workspace member uuid>
  *   SMOKE_TWENTY_OPPORTUNITIES_TOOL=execute_tool
  *   SMOKE_TWENTY_OPPORTUNITIES_ARGS='{"assignedTo":"me"}'
+ *   SMOKE_TWENTY_EXPECTED_OPPORTUNITY_ID=<optional expected opportunity uuid>
+ *   SMOKE_TWENTY_VERIFY_RECORD_URL=1
+ *   SMOKE_TWENTY_WEB_COOKIE='twenty_session=...'
  */
 
 import fs from "node:fs";
@@ -62,6 +65,10 @@ const opportunityArgs = parseJsonEnv(
   env.SMOKE_TWENTY_OPPORTUNITIES_ARGS,
   null,
 );
+const expectedOpportunityId = first(env.SMOKE_TWENTY_EXPECTED_OPPORTUNITY_ID);
+const verifyRecordUrl = env.SMOKE_TWENTY_VERIFY_RECORD_URL === "1";
+const twentyWebCookie = first(env.SMOKE_TWENTY_WEB_COOKIE);
+const twentyWebAuthorization = first(env.SMOKE_TWENTY_WEB_AUTHORIZATION);
 
 if (!LIVE_ENABLED) {
   console.log(
@@ -85,6 +92,8 @@ if (!LIVE_ENABLED) {
             "SMOKE_TWENTY_USER_EMAIL=<Twenty user email> or SMOKE_TWENTY_WORKSPACE_MEMBER_ID=<uuid>",
             "SMOKE_TWENTY_OPPORTUNITIES_TOOL=<Twenty MCP opportunity-list tool or execute_tool>",
             'SMOKE_TWENTY_OPPORTUNITIES_ARGS=\'{"ownerId":{"eq":"<workspace-member-id>"},"limit":20,"offset":0,"select":["id","name","ownerId"]}\'',
+            "SMOKE_TWENTY_EXPECTED_OPPORTUNITY_ID=<optional expected Opportunity uuid>",
+            "SMOKE_TWENTY_VERIFY_RECORD_URL=1 plus SMOKE_TWENTY_WEB_COOKIE or SMOKE_TWENTY_WEB_AUTHORIZATION to HTTP-probe the generated record URL",
           ],
           verifies: [
             "Twenty public MCP OAuth protected-resource metadata resolves",
@@ -92,6 +101,7 @@ if (!LIVE_ENABLED) {
             "Current user's Twenty auth status is active",
             "ThinkWork MCP proxy tools/list exposes Twenty tools for the agent",
             "Optional tools/call fetches assigned opportunities through ThinkWork runtime auth",
+            "Optional tools/call proof requires generated Opportunity recordLinks from the MCP proxy",
           ],
         },
       },
@@ -243,13 +253,20 @@ async function runOpportunityProof(twentyTools) {
       `Twenty opportunity tool returned isError=true: ${JSON.stringify(response.content)}`,
     );
   }
+  const recordLinks = validateOpportunityRecordLinks(response);
+  const urlOpenProof = await verifyRecordLinkUrl(recordLinks[0].url);
   return {
     skipped: false,
     server: expectedServerName,
     tool: selected.tool,
     qualifiedName: selected.name,
-    arguments: toolArguments,
-    contentPreview: JSON.stringify(response.content ?? []).slice(0, 1_500),
+    argumentSummary: summarizeToolArguments(toolArguments),
+    contentSummary: summarizeContent(response.content),
+    recordLinkProof: {
+      count: recordLinks.length,
+      links: recordLinks,
+      urlOpenProof,
+    },
   };
 }
 
@@ -324,6 +341,114 @@ function parseTwentyToolPayload(response) {
   const text = response.content?.find?.((item) => item.type === "text")?.text;
   if (!text) return null;
   return JSON.parse(text);
+}
+
+function validateOpportunityRecordLinks(response) {
+  const links = Array.isArray(response.recordLinks) ? response.recordLinks : [];
+  if (links.length === 0) {
+    throw new Error(
+      "Twenty opportunity proof did not return recordLinks. Health checks and tools/list are not sufficient proof; ensure the deployed API/runtime includes MCP record-link hints and the selected tool returns Opportunity records.",
+    );
+  }
+
+  const normalizedTwentyOrigin = originOf(twentyUrl);
+  const validLinks = links
+    .filter((link) => link?.objectType === "opportunity")
+    .map((link) => ({
+      objectType: link.objectType,
+      id: String(link.id ?? ""),
+      label: String(link.label ?? ""),
+      url: String(link.url ?? ""),
+    }))
+    .filter((link) => link.id && link.url);
+
+  if (validLinks.length === 0) {
+    throw new Error(
+      "Twenty opportunity proof returned recordLinks, but none were Opportunity links with an id and URL.",
+    );
+  }
+
+  if (
+    expectedOpportunityId &&
+    !validLinks.some((link) => link.id === expectedOpportunityId)
+  ) {
+    throw new Error(
+      `Twenty opportunity proof did not include expected Opportunity id ${expectedOpportunityId}.`,
+    );
+  }
+
+  const offOrigin = validLinks.find(
+    (link) => originOf(link.url) !== normalizedTwentyOrigin,
+  );
+  if (offOrigin) {
+    throw new Error(
+      `Generated record link does not use the expected Twenty origin ${normalizedTwentyOrigin}: ${redactUrl(offOrigin.url)}`,
+    );
+  }
+
+  return validLinks;
+}
+
+async function verifyRecordLinkUrl(url) {
+  if (!verifyRecordUrl) {
+    return {
+      skipped: true,
+      reason:
+        "set SMOKE_TWENTY_VERIFY_RECORD_URL=1 with SMOKE_TWENTY_WEB_COOKIE or SMOKE_TWENTY_WEB_AUTHORIZATION to HTTP-probe the generated URL; otherwise open the URL as the authorized user and record evidence.",
+    };
+  }
+
+  const headers = { accept: "text/html,application/xhtml+xml" };
+  if (twentyWebCookie) headers.cookie = twentyWebCookie;
+  if (twentyWebAuthorization) headers.authorization = twentyWebAuthorization;
+  if (!twentyWebCookie && !twentyWebAuthorization) {
+    throw new Error(
+      "SMOKE_TWENTY_VERIFY_RECORD_URL=1 requires SMOKE_TWENTY_WEB_COOKIE or SMOKE_TWENTY_WEB_AUTHORIZATION for the authorized Twenty user.",
+    );
+  }
+
+  const response = await fetchWithTimeout(url, { headers });
+  if (!response.ok) {
+    throw new Error(
+      `Generated Twenty record URL did not open for the authorized user: HTTP ${response.status} ${redactUrl(url)}`,
+    );
+  }
+  await response.text().catch(() => "");
+  return {
+    skipped: false,
+    status: response.status,
+    url: redactUrl(url),
+  };
+}
+
+function summarizeToolArguments(args) {
+  if (args?.toolName) {
+    return {
+      toolName: args.toolName,
+      argumentKeys: Object.keys(args.arguments ?? {}).sort(),
+    };
+  }
+  return { argumentKeys: Object.keys(args ?? {}).sort() };
+}
+
+function summarizeContent(content) {
+  const blocks = Array.isArray(content) ? content : [];
+  const textLength = blocks
+    .filter((item) => item?.type === "text" && typeof item.text === "string")
+    .reduce((total, item) => total + item.text.length, 0);
+  return {
+    blockCount: blocks.length,
+    textLength,
+  };
+}
+
+function originOf(value) {
+  return new URL(value).origin;
+}
+
+function redactUrl(value) {
+  const url = new URL(value);
+  return `${url.origin}${url.pathname ? "/..." : ""}`;
 }
 
 function findTwentyServer(servers) {
