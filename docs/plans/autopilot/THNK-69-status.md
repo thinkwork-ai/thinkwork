@@ -213,3 +213,21 @@ Local verification:
   passed: 3 files, 41 tests.
 - 2026-06-24T18:48Z: `pnpm --filter @thinkwork/web typecheck` passed after
   thread/Space integration changes.
+- 2026-06-24T18:57Z: Local review found and fixed two PR-head issues:
+  invalid `statusCategory` route/saved-view values now drop instead of
+  defaulting to `TODO`, failed saved-view mutations keep the save dialog open,
+  and the mobile list table now uses a stable minimum width for horizontal
+  scrolling.
+- 2026-06-24T19:06Z: `pnpm --filter @thinkwork/web exec vitest run src/components/work-items/WorkItemsPage.test.ts src/components/work-items/WorkItemSavedViews.test.tsx src/components/work-items/work-item-display.test.ts src/components/work-items/work-item-filters.test.ts src/lib/graphql-queries.test.ts src/lib/graphql-queries.schema.test.ts src/components/shell/ChatSidebar.test.tsx src/routes/_authed/_shell/-spaces-spaceId.test.ts src/components/workbench/SpacesThreadDetailRoute.test.tsx`
+  passed: 9 files, 114 tests.
+- 2026-06-24T19:06Z: `pnpm --filter @thinkwork/web typecheck` passed.
+- 2026-06-24T19:07Z: `pnpm --filter @thinkwork/web build` passed with existing
+  route-file, sourcemap, and large-chunk warnings only.
+- 2026-06-24T19:07Z: `git diff --check` passed.
+- 2026-06-24T19:07Z: PR #2933 CI passed once at head
+  `dfd5fa5e59ae39753bd924ff172d979826d045a6`; after the two follow-up fix
+  commits, CI restarted for the new PR head.
+
+Merge evidence:
+
+- Pending PR.
