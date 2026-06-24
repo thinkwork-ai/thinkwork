@@ -29,9 +29,9 @@ describe("generated first-party plugin registry", () => {
         exportName: "companyDataPluginPackage",
       },
       {
-        packageKey: "data-integrations",
-        packageName: "@thinkwork/plugin-data-integrations",
-        exportName: "dataIntegrationsPluginPackage",
+        packageKey: "company-etl",
+        packageName: "@thinkwork/plugin-company-etl",
+        exportName: "companyEtlPluginPackage",
       },
       {
         packageKey: "email-channel",

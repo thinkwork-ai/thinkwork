@@ -1,15 +1,15 @@
-# Data Integrations Plugin
+# Company ETL Plugin
 
-The Data Integrations plugin is the package-owned source boundary for the
-first-party ELT integration shell. This slice publishes the stable catalog
+The Company ETL plugin is the package-owned source boundary for the first-party
+ETL integration shell. This slice publishes the stable catalog
 identity and normal ThinkWork install path before any live integration runtime
 exists.
 
-The shell intentionally does not deploy connector runtime, ELT jobs, schedules,
+The shell intentionally does not deploy connector runtime, ETL jobs, schedules,
 pipelines, MCP servers, skills, credentials, datalake, warehouse, query,
 monitoring, analytics UI, BI, bucket, warehouse, or Terraform-managed resources.
-Future Data Integrations work should extend this `data-integrations` package and
-version line with explicit requirements, handler-backed components, and deployed
+Future Company ETL work should extend this `company-etl` package and version
+line with explicit requirements, handler-backed components, and deployed
 verification before introducing runtime capability.
 
 ## Owned Source
@@ -23,13 +23,13 @@ verification before introducing runtime capability.
 
 V1 is deliberately narrow:
 
-- Data Integrations appears in the first-party plugin catalog as
-  `data-integrations@0.1.0`.
+- Company ETL appears in the first-party plugin catalog as
+  `company-etl@0.1.0`.
 - Tenant administrators can install the shell through the normal plugin
   install flow.
 - The plugin engine records only the install and one no-op UI-surface component
   with an empty handler reference.
-- Live connector runtime, ELT jobs, schedules, pipelines, MCP servers, skills,
+- Live connector runtime, ETL jobs, schedules, pipelines, MCP servers, skills,
   credentials, analytics UI, BI, lakehouse query UI, and infrastructure are
   deferred follow-up work.
 
@@ -38,8 +38,8 @@ V1 is deliberately narrow:
 Package-local verification:
 
 ```bash
-pnpm --filter @thinkwork/plugin-data-integrations test
-pnpm --filter @thinkwork/plugin-data-integrations typecheck
+pnpm --filter @thinkwork/plugin-company-etl test
+pnpm --filter @thinkwork/plugin-company-etl typecheck
 pnpm --filter @thinkwork/plugin-catalog test
 pnpm --filter @thinkwork/plugin-catalog typecheck
 node scripts/verify-plugin-source-boundary.mjs
