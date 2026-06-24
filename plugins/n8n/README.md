@@ -43,7 +43,7 @@ The plugin is now catalog-published by `plugins/catalog`:
   `thinkworkPlugin.catalogPublication = "deferred"`.
 
 The catalog display name is `n8n`, so the alpha-sorted Settings -> Plugins
-catalog places it between `LastMile` and `Plane`.
+catalog places it with the other first-party application plugins.
 
 ## Operator Flow
 

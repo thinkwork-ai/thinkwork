@@ -45,7 +45,6 @@ locals {
   api      = "api.${var.domain}"
   crm      = "crm.${var.domain}"
   n8n      = "n8n.${var.domain}"
-  plane    = "plane.${var.domain}"
   name_id  = replace(var.domain, ".", "-")
 
   # ACM SANs: always include www, conditionally include docs, admin, computer,
@@ -76,7 +75,6 @@ locals {
   create_api_record      = var.include_api && var.api_gateway_id != ""
   create_crm_record      = var.include_crm
   create_n8n_record      = var.include_n8n
-  create_plane_record    = var.include_plane
 }
 
 ################################################################################
@@ -414,20 +412,4 @@ resource "cloudflare_record" "n8n" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} n8n -> n8n public ALB"
-}
-
-################################################################################
-# plane.<domain> → Plane public ALB (optional)
-################################################################################
-
-resource "cloudflare_record" "plane" {
-  count = local.create_plane_record ? 1 : 0
-
-  zone_id = var.cloudflare_zone_id
-  name    = local.plane
-  content = var.plane_alb_dns_name
-  type    = "CNAME"
-  ttl     = 300
-  proxied = false
-  comment = "thinkwork-${var.stage} plane → Plane public ALB"
 }

@@ -426,7 +426,7 @@ function launchUrlDb(row: {
   latestSucceededOperation?: string | null;
 }) {
   let selectCount = 0;
-  const appRow = { key: row.key ?? "plane", ...row };
+  const appRow = { key: row.key ?? "twenty", ...row };
   const jobRows = row.latestSucceededOperation
     ? [{ operation: row.latestSucceededOperation }]
     : [];
@@ -466,10 +466,10 @@ describe("pluginLaunchUrlForInstall", () => {
         },
         launchUrlDb({
           current_status: "enabled",
-          desired_config: { publicUrl: "https://plane.example.test/" },
+          desired_config: { publicUrl: "https://crm.example.test/" },
         }),
       ),
-    ).resolves.toBe("https://plane.example.test");
+    ).resolves.toBe("https://crm.example.test");
   });
 
   it("returns the public URL when handlerRef is a GraphQL AWSJSON string", async () => {
@@ -488,10 +488,10 @@ describe("pluginLaunchUrlForInstall", () => {
         },
         launchUrlDb({
           current_status: "enabled",
-          desired_config: { publicUrl: "https://plane.example.test/" },
+          desired_config: { publicUrl: "https://crm.example.test/" },
         }),
       ),
-    ).resolves.toBe("https://plane.example.test");
+    ).resolves.toBe("https://crm.example.test");
   });
 
   it("returns the public URL when the latest succeeded app operation is running-capable", async () => {
@@ -554,13 +554,13 @@ describe("pluginLaunchUrlForInstall", () => {
             {
               componentType: "infrastructure",
               state: "provisioned",
-              handlerRef: { managedAppKey: "plane" },
+              handlerRef: { managedAppKey: "twenty" },
             },
           ],
         },
         launchUrlDb({
           current_status: "parked",
-          desired_config: { publicUrl: "https://plane.example.test" },
+          desired_config: { publicUrl: "https://crm.example.test" },
           latestSucceededOperation: "UPGRADE",
         }),
       ),
@@ -771,7 +771,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         input: {
           installId,
           credentials: [
-            { key: "apiKey", value: "plane-pat" },
+            { key: "apiKey", value: "header-token" },
             { key: "workspaceSlug", value: "eng" },
           ],
         },
@@ -786,7 +786,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         tenantId: "tenant-1",
         pluginInstallId: installId,
         credentials: {
-          apiKey: "plane-pat",
+          apiKey: "header-token",
           workspaceSlug: "eng",
         },
       },
@@ -807,7 +807,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         {
           input: {
             installId: "install-1",
-            credentials: [{ key: "", value: "plane-pat" }],
+            credentials: [{ key: "", value: "header-token" }],
           },
         },
         CTX,

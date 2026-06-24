@@ -1,0 +1,4 @@
+interface:
+  display_name: "ThinkWork Linear Dispatcher"
+  short_description: "Route ThinkWork Linear issues through Codex automation."
+  default_prompt: "Use the ThinkWork Linear Dispatcher skill to route eligible Linear issues."

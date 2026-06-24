@@ -14,7 +14,7 @@
  *   SMOKE_DEPLOYMENT_SSM_PREFIX=/thinkwork/tei-e2e/deployment
  *   SMOKE_MANIFEST_URL=https://.../thinkwork-release.json
  *   SMOKE_MANIFEST_SHA256=<sha256>
- *   SMOKE_MANAGED_APP_KEYS=cognee,n8n,twenty,plane
+ *   SMOKE_MANAGED_APP_KEYS=cognee,n8n,twenty
  *   SMOKE_REQUIRE_MANAGED_APP_DEPLOY_READY=1
  *   SMOKE_EVIDENCE_FILE=/tmp/managed-app-controller-readiness.json
  */
@@ -36,7 +36,7 @@ const env = {
   ...process.env,
 };
 
-const DEFAULT_APP_KEYS = ["cognee", "n8n", "twenty", "plane"];
+const DEFAULT_APP_KEYS = ["cognee", "n8n", "twenty"];
 
 const dryRun = {
   requiredWhenRunning: [

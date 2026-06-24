@@ -55,7 +55,7 @@ const tenantId = first(env.SMOKE_TENANT_ID, env.TENANT_ID);
 const userId = first(env.SMOKE_USER_ID, env.USER_ID);
 const agentId = first(env.SMOKE_AGENT_ID, env.AGENT_ID);
 const twentyUrl = first(env.SMOKE_TWENTY_URL, "https://crm.thinkwork.ai");
-const expectedServerName = env.SMOKE_TWENTY_MCP_SERVER_NAME || "twenty-crm";
+const expectedServerName = env.SMOKE_TWENTY_MCP_SERVER_NAME || "twenty--crm";
 const expectedServerTitle = env.SMOKE_TWENTY_MCP_TITLE || "Twenty CRM";
 const opportunityToolOverride = first(env.SMOKE_TWENTY_OPPORTUNITIES_TOOL);
 const twentyUserEmail = first(env.SMOKE_TWENTY_USER_EMAIL, env.USER_EMAIL);
@@ -455,6 +455,7 @@ function findTwentyServer(servers) {
   return servers.find(
     (server) =>
       server.managedApplicationKey === "twenty-crm" ||
+      server.slug === "twenty--crm" ||
       server.slug === "twenty-crm" ||
       server.name === expectedServerTitle,
   );

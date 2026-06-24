@@ -319,46 +319,18 @@ describe("setManagedApplicationDeployment", () => {
     );
   });
 
-  it("parks Plane by setting Plane deployment variables", async () => {
-    mockSend.mockResolvedValueOnce({ SecretString: "plain-token" });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(response(204))
-      .mockResolvedValueOnce(response(204))
-      .mockResolvedValueOnce(response(204));
+  it("rejects unsupported managed application keys before updating deployment variables", async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await managedMod.setManagedApplicationDeployment(
-      null,
-      { input: { key: "plane", action: "PARK" } },
-      operatorCtx,
-    );
-
-    expect(result).toMatchObject({
-      key: "plane",
-      action: "PARK",
-      desiredEnabled: false,
-      provisioned: true,
-      runtimeEnabled: false,
-    });
-    expect(result.message).toMatch(/Plane runtime park/i);
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/PLANE_PROVISIONED",
-      expect.objectContaining({
-        body: JSON.stringify({ name: "PLANE_PROVISIONED", value: "true" }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "https://api.github.com/repos/thinkwork-ai/thinkwork/actions/variables/PLANE_RUNTIME_ENABLED",
-      expect.objectContaining({
-        body: JSON.stringify({
-          name: "PLANE_RUNTIME_ENABLED",
-          value: "false",
-        }),
-      }),
-    );
+    await expect(
+      managedMod.setManagedApplicationDeployment(
+        null,
+        { input: { key: "unsupported-app", action: "PARK" } },
+        operatorCtx,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects non-platform operators before updating managed apps", async () => {

@@ -12,7 +12,7 @@ linear: THNK-48
 ## Overview
 
 Build the first LakeHouse runtime slice as a ThinkWork-owned Edge Integration
-Runner for McPherson/JDE sales extracts. ThinkWork remains the control plane:
+Runner for McPherson/JDE sales extracts. ThinkWork remains the control twenty:
 agents author Meltano project changes through a Git-backed review path, the
 approved config is published as a signed immutable S3 artifact bundle in the
 customer AWS account, the on-prem runner pulls and verifies that bundle before
@@ -76,7 +76,7 @@ operation, and the first parity proof.
 - R18. Inject local secrets from customer-approved local sources; ThinkWork
   stores references and policy, not raw Oracle credentials.
 - R19. Upload raw outputs to customer AWS and report evidence without source row
-  payloads in ThinkWork control-plane storage.
+  payloads in ThinkWork control-twenty storage.
 - R20. Provide read-only MCP/control tools for version, project inspection,
   inventory, catalog/stream introspection, logs, state, schema, and evidence.
 - R21. Gate write-capable tools by mode, policy, and allowlists; never expose
@@ -154,7 +154,7 @@ inspection/write gating, AE6 Fivetran parity report.
   endpoint indirection through managed applications, user-scoped auth, and
   URL/auth hash pinning.
 - `packages/deployment-runner/src/apps/registry.ts` currently admits only
-  `cognee`, `plane`, and `twenty`; LakeHouse runtime work must not fake an
+  `cognee`, `twenty`, and `twenty`; LakeHouse runtime work must not fake an
   unsupported `managedAppKey` without adding a real adapter or choosing a
   non-infrastructure plugin slice.
 - `packages/database-pg/src/schema/deployments.ts` and deployment resolvers
@@ -174,7 +174,7 @@ inspection/write gating, AE6 Fivetran parity report.
 - `docs/solutions/architecture-patterns/terraform-plugin-builder-skills-stop-at-adapter-gaps-2026-06-14.md`
   says generated infrastructure manifests must stop at unsupported
   deployment-runner adapter gaps instead of inventing `managedAppKey` values.
-- `docs/solutions/architecture-patterns/github-free-customer-deployments-aws-control-plane-pattern-2026-06-06.md`
+- `docs/solutions/architecture-patterns/github-free-customer-deployments-aws-control-twenty-pattern-2026-06-06.md`
   establishes the AWS-native pattern: customer AWS owns steady-state authority,
   S3 stores artifacts/evidence, and operations are visible through jobs and
   approvals.
@@ -249,7 +249,7 @@ inspection/write gating, AE6 Fivetran parity report.
   release/catalog signing pattern where available, but the runner contract must
   be digest-first and fail-closed.
 - **Which ThinkWork mechanism publishes bundles and receives evidence?** Use
-  the deployed customer AWS control plane/API to publish tenant-scoped bundles
+  the deployed customer AWS control twenty/API to publish tenant-scoped bundles
   into customer S3 and receive evidence through GraphQL/API plus S3 evidence
   pointers. Do not make ThinkWork cloud reach into on-prem Oracle/JDE.
 - **Which MCP tools belong in the first spike?** Include read-only inspection
@@ -440,7 +440,7 @@ behavior.
 - Error path: a non-admin caller cannot approve a bundle or mutate runner
   policy.
 - Error path: source-row payload fields are rejected or stripped from evidence
-  summaries so ThinkWork control-plane storage remains payload-light.
+  summaries so ThinkWork control-twenty storage remains payload-light.
 - Integration: GraphQL schema exposes bundle, runner, run, and evidence fields
   needed by web and runner clients without breaking existing deployment or
   plugin GraphQL contracts.
@@ -492,7 +492,7 @@ F4; AE1, AE3, AE6.
 **Patterns to follow:**
 
 - `plugins/lakehouse/src/manifest.ts`
-- `plugins/plane/src/manifest.ts`
+- `plugins/twenty/src/manifest.ts`
 - `plugins/catalog/src/contracts.ts`
 - `docs/verification/mcpherson-lakehouse-plugin-builder-proof.md`
 
@@ -522,7 +522,7 @@ F4; AE1, AE3, AE6.
 
 - U3. **Bundle publication and approval lifecycle**
 
-**Goal:** Implement the ThinkWork control-plane path that turns an approved
+**Goal:** Implement the ThinkWork control-twenty path that turns an approved
 Git-backed Meltano project diff into a signed immutable S3 artifact bundle in
 customer AWS and records its approval/policy state.
 
@@ -625,7 +625,7 @@ into a clean local work directory, and injects local secrets at execution time.
 
 - `packages/lambda/routine-output-redactor.ts`
 - `packages/lambda/sandbox-log-scrubber.ts`
-- `docs/solutions/architecture-patterns/github-free-customer-deployments-aws-control-plane-pattern-2026-06-06.md`
+- `docs/solutions/architecture-patterns/github-free-customer-deployments-aws-control-twenty-pattern-2026-06-06.md`
 
 **Test scenarios:**
 
@@ -942,7 +942,7 @@ define the Verification gate for THNK-48 implementation.
 
 **Patterns to follow:**
 
-- `plugins/plane/smoke/plane-managed-app-smoke.mjs`
+- `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`
 - `plugins/company-brain/smoke/company-brain-plugin-smoke.mjs`
 - `docs/solutions/architecture-patterns/plugin-source-boundaries-package-owned-deploy-verified-2026-06-17.md`
 - `docs/verification/settings-release-upgrade-safety.md`
@@ -1074,7 +1074,7 @@ true in a deployed ThinkWork environment:
   platform, but adds a platform/Kubernetes operation surface for an hourly
   polling use case and conflicts with the code-reviewable agent-authored
   project direction.
-- **Direct ThinkWork cloud connector to Oracle/JDE:** Simpler control plane,
+- **Direct ThinkWork cloud connector to Oracle/JDE:** Simpler control twenty,
   but violates the no-inbound/no-direct-cloud-database boundary.
 - **Treat LakeHouse runner as a managed application immediately:** Attractive
   for reuse of deployment jobs, but the runner lives on-prem near Oracle/JDE
@@ -1113,7 +1113,7 @@ true in a deployed ThinkWork environment:
 - **Deployment schema:** [packages/database-pg/src/schema/deployments.ts](../../packages/database-pg/src/schema/deployments.ts)
 - **Source-boundary learning:** [docs/solutions/architecture-patterns/plugin-source-boundaries-package-owned-deploy-verified-2026-06-17.md](../solutions/architecture-patterns/plugin-source-boundaries-package-owned-deploy-verified-2026-06-17.md)
 - **Adapter-gap learning:** [docs/solutions/architecture-patterns/terraform-plugin-builder-skills-stop-at-adapter-gaps-2026-06-14.md](../solutions/architecture-patterns/terraform-plugin-builder-skills-stop-at-adapter-gaps-2026-06-14.md)
-- **Customer deployment pattern:** [docs/solutions/architecture-patterns/github-free-customer-deployments-aws-control-plane-pattern-2026-06-06.md](../solutions/architecture-patterns/github-free-customer-deployments-aws-control-plane-pattern-2026-06-06.md)
+- **Customer deployment pattern:** [docs/solutions/architecture-patterns/github-free-customer-deployments-aws-control-twenty-pattern-2026-06-06.md](../solutions/architecture-patterns/github-free-customer-deployments-aws-control-twenty-pattern-2026-06-06.md)
 - **Meltano project docs:** [https://docs.meltano.com/concepts/project/](https://docs.meltano.com/concepts/project/)
 - **Meltano CLI docs:** [https://docs.meltano.com/reference/command-line-interface/](https://docs.meltano.com/reference/command-line-interface/)
 - **Meltano state backends:** [https://docs.meltano.com/concepts/state_backends/](https://docs.meltano.com/concepts/state_backends/)

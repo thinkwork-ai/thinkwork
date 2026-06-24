@@ -159,7 +159,7 @@ type RuntimeMcpConfig = {
 };
 
 const EXPLICIT_PLUGIN_MCP_ALIASES: Record<string, string[]> = {
-  plane: ["plane", "plane pm", "plane project", "plane work"],
+  n8n: ["n8n", "workflow automation"],
   twenty: ["twenty", "twenty crm"],
 };
 

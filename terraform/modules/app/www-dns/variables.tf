@@ -108,18 +108,6 @@ variable "n8n_alb_dns_name" {
   default     = ""
 }
 
-variable "include_plane" {
-  description = "When true, create a Cloudflare CNAME for the Plane public ALB. The Plane ALB uses its own certificate."
-  type        = bool
-  default     = false
-}
-
-variable "plane_alb_dns_name" {
-  description = "Public ALB DNS name for the Plane app. Used as the target for the plane.<domain> Cloudflare CNAME when include_plane is true."
-  type        = string
-  default     = ""
-}
-
 variable "api_gateway_id" {
   description = "aws_apigatewayv2_api.id of the HTTP API to expose at api.<domain>. Required when include_api is true."
   type        = string

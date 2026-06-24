@@ -1,0 +1,273 @@
+# Native Work Items are ThinkWork-owned units of work. Threads can discuss
+# items, but Work Items own task status, provenance, and saved views.
+
+enum WorkItemStatusCategory {
+  TODO
+  ACTIVE
+  BLOCKED
+  DONE
+  SKIPPED
+}
+
+enum WorkItemPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum WorkItemEventType {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  COMPLETED
+  BLOCKED
+  UNBLOCKED
+  ASSIGNED
+  DUE_DATE_CHANGED
+  APPLICABILITY_CHANGED
+  LINKED_THREAD
+  AGENT_ACTION
+}
+
+enum WorkItemViewType {
+  LIST
+  BOARD
+}
+
+enum WorkItemThreadRelationship {
+  PRIMARY
+  MENTIONED
+  EVIDENCE
+  FOLLOW_UP
+}
+
+enum WorkItemExternalRefProvider {
+  THINKWORK
+  LASTMILE
+  LINEAR
+  PLANE
+  TWENTY
+}
+
+type WorkItemStatus {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  name: String!
+  description: String
+  color: String
+  icon: String
+  category: WorkItemStatusCategory!
+  isActive: Boolean!
+  isFinal: Boolean!
+  isDefault: Boolean!
+  displayOrder: Int!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type WorkItemThreadLink {
+  id: ID!
+  tenantId: ID!
+  workItemId: ID!
+  threadId: ID!
+  spaceId: ID!
+  relationship: WorkItemThreadRelationship!
+  createdAt: AWSDateTime!
+}
+
+type WorkItemEvent {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  workItemId: ID!
+  threadId: ID
+  actorUserId: ID
+  actorAgentId: ID
+  eventType: WorkItemEventType!
+  previousStatusId: ID
+  newStatusId: ID
+  message: String
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+}
+
+type WorkItemExternalRef {
+  id: ID!
+  tenantId: ID!
+  workItemId: ID!
+  provider: WorkItemExternalRefProvider!
+  externalId: String!
+  externalUrl: AWSURL
+  metadata: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type WorkItem {
+  id: ID!
+  tenantId: ID!
+  spaceId: ID!
+  statusId: ID
+  status: WorkItemStatus
+  title: String!
+  notes: String
+  priority: WorkItemPriority!
+  ownerUserId: ID
+  ownerAgentId: ID
+  dueAt: AWSDateTime
+  required: Boolean!
+  applicable: Boolean!
+  blocked: Boolean!
+  completedAt: AWSDateTime
+  completedByUserId: ID
+  completedByAgentId: ID
+  createdByUserId: ID
+  createdByAgentId: ID
+  templateSourceId: ID
+  metadata: AWSJSON
+  threadLinks: [WorkItemThreadLink!]!
+  events: [WorkItemEvent!]!
+  externalRefs: [WorkItemExternalRef!]!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  archivedAt: AWSDateTime
+}
+
+type WorkItemSavedView {
+  id: ID!
+  tenantId: ID!
+  userId: ID
+  spaceId: ID
+  name: String!
+  viewType: WorkItemViewType!
+  filters: AWSJSON
+  grouping: AWSJSON
+  sorting: AWSJSON
+  viewConfig: AWSJSON
+  isPrivate: Boolean!
+  isDefault: Boolean!
+  isFavorite: Boolean!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input WorkItemsInput {
+  tenantId: ID
+  spaceId: ID
+  threadId: ID
+  statusId: ID
+  statusCategory: WorkItemStatusCategory
+  ownerUserId: ID
+  ownerAgentId: ID
+  dueBefore: AWSDateTime
+  dueAfter: AWSDateTime
+  blocked: Boolean
+  priority: WorkItemPriority
+  required: Boolean
+  applicable: Boolean
+  search: String
+  includeArchived: Boolean
+  limit: Int
+}
+
+input CreateWorkItemInput {
+  tenantId: ID
+  spaceId: ID!
+  threadId: ID
+  statusId: ID
+  title: String!
+  notes: String
+  priority: WorkItemPriority
+  ownerUserId: ID
+  ownerAgentId: ID
+  dueAt: AWSDateTime
+  required: Boolean
+  applicable: Boolean
+  blocked: Boolean
+  templateSourceId: ID
+  metadata: AWSJSON
+}
+
+input UpdateWorkItemInput {
+  tenantId: ID
+  workItemId: ID!
+  title: String
+  notes: String
+  priority: WorkItemPriority
+  ownerUserId: ID
+  ownerAgentId: ID
+  dueAt: AWSDateTime
+  required: Boolean
+  applicable: Boolean
+  blocked: Boolean
+  metadata: AWSJSON
+  archived: Boolean
+}
+
+input UpdateWorkItemStatusInput {
+  tenantId: ID
+  workItemId: ID!
+  statusId: ID
+  statusCategory: WorkItemStatusCategory
+  threadId: ID
+  note: String
+  metadata: AWSJSON
+}
+
+input WorkItemStatusInput {
+  id: ID
+  name: String!
+  description: String
+  color: String
+  icon: String
+  category: WorkItemStatusCategory!
+  isActive: Boolean
+  isFinal: Boolean
+  isDefault: Boolean
+  displayOrder: Int
+}
+
+input SaveWorkItemStatusesInput {
+  tenantId: ID
+  spaceId: ID!
+  statuses: [WorkItemStatusInput!]!
+}
+
+input SaveWorkItemViewInput {
+  tenantId: ID
+  id: ID
+  name: String!
+  spaceId: ID
+  viewType: WorkItemViewType!
+  filters: AWSJSON
+  grouping: AWSJSON
+  sorting: AWSJSON
+  viewConfig: AWSJSON
+  isPrivate: Boolean
+  isDefault: Boolean
+  isFavorite: Boolean
+}
+
+input DeleteWorkItemViewInput {
+  tenantId: ID
+  id: ID!
+}
+
+extend type Query {
+  workItems(input: WorkItemsInput): [WorkItem!]!
+  workItem(tenantId: ID, id: ID!): WorkItem
+  threadWorkItems(tenantId: ID, threadId: ID!): [WorkItem!]!
+  workItemStatuses(tenantId: ID, spaceId: ID!): [WorkItemStatus!]!
+  workItemSavedViews(tenantId: ID, spaceId: ID): [WorkItemSavedView!]!
+}
+
+extend type Mutation {
+  createWorkItem(input: CreateWorkItemInput!): WorkItem!
+  updateWorkItem(input: UpdateWorkItemInput!): WorkItem!
+  updateWorkItemStatus(input: UpdateWorkItemStatusInput!): WorkItem!
+  saveWorkItemStatuses(input: SaveWorkItemStatusesInput!): [WorkItemStatus!]!
+  saveWorkItemView(input: SaveWorkItemViewInput!): WorkItemSavedView!
+  deleteWorkItemView(input: DeleteWorkItemViewInput!): Boolean!
+}

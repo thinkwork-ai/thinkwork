@@ -21,7 +21,7 @@ The manifest includes:
 - Terraform module or bundle references
 - deployment runner/build image reference
 - deployment runner script path, SHA-256, and size metadata
-- managed-app descriptors for Cognee, Twenty, and Plane
+- managed-app descriptors for Cognee, Twenty, and n8n
 - smoke contracts
 - deployment profile schema version
 - key id and detached signature metadata when the release is signed
@@ -84,7 +84,7 @@ Managed-app descriptors and runtime images are one contract. If a release
 manifest advertises a managed app with `requiredImages`, every required image
 name must appear in `runtimeImages` as an immutable `@sha256:` URI. The release
 publisher builds the ThinkWork-owned Cognee image and reads pinned Twenty and
-Plane image URIs from repository variables so the controller can fail before
+n8n image URIs from repository variables so the controller can fail before
 Terraform when an optional app cannot be deployed from the selected release.
 
 The default release manifest currently advertises:
@@ -93,12 +93,7 @@ The default release manifest currently advertises:
 | ----------- | ---------------------- | ---------------------------------------------------------- |
 | Cognee      | `cognee`               | `plugins/company-brain/smoke/cognee-managed-app-smoke.mjs` |
 | Twenty CRM  | `twenty`               | `plugins/twenty/smoke/twenty-managed-app-smoke.mjs`        |
-| Plane       | `plane`                | `plugins/plane/smoke/plane-managed-app-smoke.mjs`          |
-
-Plane's release descriptor is only deploy-ready when the selected manifest
-contains a digest-pinned Plane runtime image. The image URI must use `@sha256:`
-rather than a mutable tag because the deployment runner passes the selected
-manifest image directly into Terraform.
+| n8n         | `n8n`                  | `plugins/n8n/smoke/n8n-managed-app-smoke.mjs`              |
 
 Desktop assets may be published by a separate workflow, but operators should see
 one coordinated release version. The human-facing release should contain
@@ -130,8 +125,7 @@ Release upgrade evidence should record:
 - CodeBuild build ARN/id
 - Terraform plan and apply artifact keys
 - post-upgrade foundation smoke result
-- managed-app smoke results for enabled apps, including Plane when it is
-  provisioned or parked
+- managed-app smoke results for enabled apps when they are provisioned or parked
 
 ## Settings Preflight Contract
 

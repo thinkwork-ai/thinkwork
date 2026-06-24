@@ -13,14 +13,15 @@ status: blocked
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: Blocked after implementation and deploy. U1-U7 are merged to
-  `main`; final live Twenty record-link proof is blocked by deployed
-  environment auth/tool exposure state.
-- Current unit: Post-deploy status ledger.
-- Current branch: `codex/mcp-record-links-postdeploy-status`.
-- Current worktree:
-  `.Codex/worktrees/mcp-record-links-postdeploy-status`.
-- Current pull request: Pending for this status update.
+- Status: Active follow-up after user reconnect. U1-U7 and OAuth/DCR
+  preservation hardening are merged and deployed; reconnect restored live
+  Twenty tool execution, but the deployed record-link extractor does not yet
+  understand Twenty's current `recordReferences` response shape.
+- Current unit: Follow-up recordReferences extractor support.
+- Current branch: `codex/twenty-record-references-links`.
+- Current worktree: `.Codex/worktrees/twenty-record-references-links`.
+- Current pull request:
+  [#2930](https://github.com/thinkwork-ai/thinkwork/pull/2930).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -237,7 +238,7 @@ status: blocked
     reached the deployed API but failed before an Opportunity call with
     `MCP proxy tools/list did not expose tools for server twenty-crm`.
     A direct read-only `/api/mcp/tools/list` call for the same tenant agent
-    returned 139 tools, but only for `plane--issues` and
+    returned 139 tools, but only for `retired-plugin MCP server` and
     `n8n--workflow-management`; no Twenty tools were exposed.
   - 2026-06-24: Direct read-only `/api/mcp/tools/call` against assigned server
     slug `twenty--crm` and tool `execute_tool` reached the MCP proxy but
@@ -260,13 +261,13 @@ status: blocked
     `05e3286`, and the remote/local status branches were deleted. Its normal
     deploy run
     [#28107504825](https://github.com/thinkwork-ai/thinkwork/actions/runs/28107504825)
-    failed before apply at `Terraform Init` because an unrelated prior Plane
-    removal commit deleted `plugins/plane/terraform/plane` while
+    failed before apply at `Terraform Init` because an unrelated prior retired plugin
+    removal commit deleted `retired-plugin terraform source` while
     `terraform/modules/thinkwork/main.tf` still referenced that module.
-  - 2026-06-24: Plane Terraform follow-up PR
+  - 2026-06-24: retired plugin Terraform follow-up PR
     [#2918](https://github.com/thinkwork-ai/thinkwork/pull/2918) passed CI,
     squash-merged to `main` as `2230febe`, and restored the normal deploy
-    pipeline by removing retained Plane Terraform wiring. Deploy run
+    pipeline by removing retained retired plugin Terraform wiring. Deploy run
     [#28108285643](https://github.com/thinkwork-ai/thinkwork/actions/runs/28108285643)
     succeeded: Detect Changes, Build Lambdas, Terraform Apply, Build & Deploy
     Docs, Compliance Role Bootstrap, and Deploy Summary all completed
@@ -282,6 +283,85 @@ twenty-crm`. This confirms the remaining blocker is not the merged code,
     MCP/upstream auth or tool-discovery state that needs repair/reconnection
     through the product/admin flow before an Opportunity `recordLinks` proof
     can pass.
+  - 2026-06-24: Blocker investigation found CloudWatch evidence that
+    `twenty--crm` needed token refresh but the row's cached OAuth DCR
+    `client_id` was missing, so refresh could not use the stored
+    `user_mcp_tokens` refresh token. Started follow-up branch
+    `codex/mcp-oauth-dcr-preserve` from `origin/main` at `f5c6a8b75` in
+    `.Codex/worktrees/mcp-oauth-dcr-preserve`.
+  - 2026-06-24: Follow-up implementation preserves cached OAuth discovery/DCR
+    fields (`authorize_endpoint`, `token_endpoint`, `client_id`) when plugin
+    MCP provisioning repairs an existing plugin-owned or adopted manual row for
+    the same `oauth_resource`, drops stale fields when the resource changes,
+    and makes MCP OAuth reconnect rediscover metadata when cached endpoints
+    exist but `client_id` is missing.
+  - 2026-06-24: Follow-up local verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/handlers/mcp.test.ts src/__tests__/mcp-user-servers.test.ts`,
+    `pnpm --filter @thinkwork/api typecheck`, touched-file Prettier check via
+    the installed Prettier 3.8.2 package, and `git diff --check`.
+  - 2026-06-24: Follow-up PR
+    [#2923](https://github.com/thinkwork-ai/thinkwork/pull/2923) opened and CI
+    monitoring started.
+  - 2026-06-24: Follow-up PR #2923 initially passed CI but was behind
+    `main`; rebased the branch onto current `origin/main`, reran focused local
+    verification, pushed the rebased head, and waited for required CI
+    (CLA, lint, test, typecheck, verify) to pass again.
+  - 2026-06-24: Follow-up PR #2923 passed required CI, squash-merged to
+    `main` as `da56ec2c`, and the local branch/worktree were deleted. GitHub
+    had already removed the remote branch after merge.
+  - 2026-06-24: The normal `main` deploy for `da56ec2c` succeeded in GitHub
+    Actions run
+    [#28115702194](https://github.com/thinkwork-ai/thinkwork/actions/runs/28115702194):
+    Detect Changes, Build Lambdas, Terraform Apply, Workspace Layout
+    Migration, Compliance Role Bootstrap, Build & Deploy Docs, and Deploy
+    Summary all completed successfully.
+  - 2026-06-24: Post-remediation deployed smoke retest:
+    `thinkwork me --json` confirmed the current dev session for
+    `eric@thinkwork.ai` in tenant `sleek-squirrel-230`; the live smoke command
+    `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 SMOKE_TWENTY_MCP_CALL=1 node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`
+    still failed before exposing Twenty tools for `twenty-crm`.
+  - 2026-06-24: Read-only CloudWatch check of
+    `/aws/lambda/thinkwork-dev-api-mcp-proxy` after the smoke still shows
+    `MCP token for twenty--crm needs refresh but auth_config.client_id is missing; user must reconnect from mobile to re-run DCR`,
+    then `MCP configs built: 3 servers (..., twenty--crm)`, then
+    `tools/list failed for twenty--crm: MCP server twenty--crm returned 401`.
+    This confirms the code hardening is deployed, but the existing live user
+    OAuth state still requires a product reconnect to run DCR and refresh the
+    Twenty token.
+  - 2026-06-24: Final blocker: no safe next code/deploy unit remains. The next
+    action is for the current user to reconnect **Twenty CRM** from the
+    ThinkWork MCP server settings/product OAuth flow, then rerun the live smoke
+    and verify Twenty tools plus Opportunity `recordLinks`. No production DB or
+    auth row mutation was performed manually.
+  - 2026-06-24: User reconnected Twenty CRM MCP. The browser showed Chrome
+    `Aw, Snap!` / error code `5`, but read-only deployed checks showed the
+    server-side reconnect succeeded: `/api/skills/user-mcp-servers` still
+    reports plugin-managed `twenty--crm` active, `tenant_mcp_servers` now has
+    cached OAuth DCR keys including `client_id`, and CloudWatch shows
+    successful `tools/call` execution for `twenty--crm`.
+  - 2026-06-24: Live smoke with
+    `SMOKE_TWENTY_MCP_SERVER_NAME=twenty--crm` reached Twenty through the MCP
+    proxy and returned Opportunity records for Texas Enterprises POC and
+    McPherson POC, but `recordLinks` was still absent. A direct read-only
+    `tools/call` response contained Twenty `recordReferences` entries with
+    `objectNameSingular`, `recordId`, and `displayName`; the current extractor
+    only matched route-configured id/type/name fields.
+  - 2026-06-24: Started follow-up branch
+    `codex/twenty-record-references-links` from `origin/main` at `1a34dc4e`
+    in `.Codex/worktrees/twenty-record-references-links` to add
+    `recordReferences` support to the API and Pi record-link extractors and to
+    update the Twenty smoke default server slug to `twenty--crm`.
+  - 2026-06-24: Follow-up local verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/mcp-client-call.test.ts src/handlers/mcp-proxy.test.ts`,
+    `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp-record-links.test.ts agent-container/tests/mcp-connect.test.ts`,
+    `pnpm --filter @thinkwork/api typecheck`,
+    `pnpm --filter @thinkwork/agentcore-pi typecheck`,
+    `node --check plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`,
+    `node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`, changed-file
+    Prettier check, and `git diff --check`.
+  - 2026-06-24: Follow-up PR
+    [#2930](https://github.com/thinkwork-ai/thinkwork/pull/2930) opened and
+    CI monitoring started.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
@@ -2971,9 +3051,9 @@ src/__tests__/automation-loop-designer.test.ts src/__tests__/parity.test.ts`,
   - U1 added the workflow control-plane schema, `0177` migration/rollback,
     schema export coverage, and migration marker tests.
   - Added narrow plugin-source-boundary allowlist entries for the shared
-    `workflow-control-plane` migration/test filenames so the existing Plane
+    `workflow-control-plane` migration/test filenames so the existing retired plugin
     plugin heuristic does not treat shared control-plane database files as
-    Plane plugin source.
+    retired plugin source.
 - Local verification:
   - `pnpm install` completed; local Node 25 logged the known optional
     `canvas@2.11.2` native fallback build warning because `pkg-config` /
@@ -2991,7 +3071,7 @@ prettier@3.8.2 --check --ignore-unknown ...`; the historical
     so this update keeps it minimally patched.
   - `git diff --check` passed.
   - `pnpm lint` initially failed because the shared
-    `workflow-control-plane` filenames matched the existing Plane plugin
+    `workflow-control-plane` filenames matched the existing retired plugin
     boundary heuristic; after adding narrow allowlist entries, `pnpm lint`
     passed.
   - `pnpm --filter @thinkwork/desktop test` passed: 15 files, 105 tests. This
@@ -14918,41 +14998,29 @@ src/__tests__/pi-runtime-capability-smoke.test.ts` (5 tests).
 - U6 squash merged as `92b75b4448c8d3fea15a69cc60be6f5dc09a4d38`; remote
   branch deleted, local worktree and branch removed, and main synced.
 
-## Plane Plugin Removal Autopilot
+## Retired Application Plugin Removal Autopilot
 
-Plan: `docs/plans/2026-06-24-003-refactor-remove-plane-plugin-plan.md`
+Plan: retired application-plugin removal plan, dated 2026-06-24.
 
 Requested done condition note: the prompt says completion is when the Company
 Data plugin is deployed to app.thinkwork.ai, TEI, and McPherson environments,
-but the referenced plan is the Plane plugin removal. Autopilot is executing the
-referenced Plane removal plan as the authoritative implementation scope and
-will not run manual production deploys outside the normal merge/deploy
+but the referenced plan is the retired application-plugin removal. Autopilot is
+executing the referenced removal plan as the authoritative implementation scope
+and will not run manual production deploys outside the normal merge/deploy
 pipeline.
 
-### U1 + U2 Progress
+### U1 + U2 Catalog And Package Removal
 
-- 2026-06-24 CDT: Created worktree
-  `.Codex/worktrees/remove-plane-u1` on
-  `codex/remove-plane-u1-catalog` from `origin/main`.
-- U1 and U2 are grouped in one PR because deleting `plugins/plane` makes
-  workspace installation fail while `packages/deployment-runner` still depends
-  on `@thinkwork/plugin-plane`. A separate U1-only PR cannot satisfy the
-  repository's CI/typecheck bar.
-- Current scope: remove the Plane plugin package from the workspace and catalog,
-  remove release-manifest/CI entrypoints that publish or accept Plane images,
-  and keep Terraform/deployment-controller deep cleanup for the Terraform unit.
-- `pnpm install` completed in the worktree after package dependency removal;
-  local Node 25 logged the existing optional `canvas@2.11.2` native
-  fallback/missing `pkg-config` warning, but pnpm exited successfully.
-- `pnpm --filter @thinkwork/plugin-catalog generate:plugins` regenerated
-  `plugins/catalog/src/registry/generated-first-party.ts` without Plane.
-- `pnpm install --lockfile-only` refreshed `pnpm-lock.yaml` after removing the
-  `@thinkwork/plugin-plane` workspace package.
-- 2026-06-24 CDT: U1+U2 implementation completed. Removed `plugins/plane`,
+- 2026-06-24 CDT: Created an isolated worktree/branch from `origin/main`.
+- U1 and U2 were grouped in one PR because deleting the retired package made
+  workspace installation fail until `packages/deployment-runner` stopped
+  depending on it. A separate U1-only PR could not satisfy the repository's
+  CI/typecheck bar.
+- Implementation removed the retired package from the workspace and catalog,
   catalog registration/tests, deployment-runner adapter wiring, release
-  manifest defaults, release/deploy workflow Plane image inputs, and the
-  obsolete CLI Plane Terraform fixture. A small API infra cleanup is included
-  because the deployment-runner `ManagedAppKey` type no longer includes Plane.
+  manifest defaults, release/deploy workflow image inputs, and the obsolete CLI
+  Terraform fixture. A small API infra cleanup was included because the
+  deployment-runner `ManagedAppKey` type no longer includes the retired app key.
 - Focused verification passed:
   `pnpm --filter @thinkwork/plugin-catalog test`,
   `pnpm --filter @thinkwork/deployment-runner test`,
@@ -14969,52 +15037,141 @@ pipeline.
 - Broader verification passed: `pnpm lint`, `pnpm typecheck`, changed-file
   Prettier check excluding generated registry and `pnpm-lock.yaml`, and
   `git diff --check`.
-- Full `pnpm test` initially failed on the deleted Plane CLI Terraform fixture,
-  then on the now-fixed managed-app hidden-adapter assertion. The subsequent
-  full run passed those areas and failed only on an unrelated local timeout in
+- Full `pnpm test` initially failed on the deleted CLI Terraform fixture, then
+  on the now-fixed managed-app hidden-adapter assertion. The subsequent full run
+  passed those areas and failed only on an unrelated local timeout in
   `src/handlers/chat-agent-invoke.runtime-routing.test.ts`; rerunning that
-  exact suite passed (12 tests). CI remains the final broad gate for this PR.
-- U1+U2 PR opened:
-  [#2914](https://github.com/thinkwork-ai/thinkwork/pull/2914). CI monitoring
-  started.
-- PR #2914 CI failure: `lint` failed because
-  `scripts/plugin-source-boundary-allowlist.mjs` still listed the deleted
-  `apps/cli/__tests__/terraform-plane-fixture.test.ts`. Removed the stale
-  allowlist entry; local `pnpm lint:plugin-source` and `pnpm lint` pass.
-- PR #2914 CI failure: `test` then failed in
-  `scripts/__tests__/verify-plugin-source-boundary.test.mjs` because the
-  source-boundary unit fixture still expected the deleted Plane CLI fixture to
-  be accepted through the shared allowlist. Removed that fixture expectation;
-  local `pnpm test:plugin-source-boundary` and `pnpm lint:plugin-source` pass.
-- PR #2914 passed required CI after rebase: CLA, lint, verify, typecheck, test,
-  and signed catalog build. Auto-merge squash merged the PR to `main` as
-  `951fa05decdeacb5cdcebf67a7e9f59e3884bf6f`; the remote branch was deleted,
-  and the local U1 worktree/branch were removed.
+  exact suite passed.
+- PR [#2914](https://github.com/thinkwork-ai/thinkwork/pull/2914) passed
+  required CI after fixes and rebase: CLA, lint, verify, typecheck, test, and
+  signed catalog build. It squash-merged to `main` as
+  `951fa05decdeacb5cdcebf67a7e9f59e3884bf6f`; the remote branch and local
+  worktree/branch were removed.
 
-### U3 Progress
+### U3 Terraform Cleanup
 
-- 2026-06-24 CDT: Created worktree `.Codex/worktrees/remove-plane-u3` on
-  `codex/remove-plane-u3-terraform` from `origin/main` at `951fa05de`.
-- Current scope: remove Plane Terraform wiring from the composite ThinkWork
-  module, greenfield example, deployment-control-plane generated wrapper, and
-  shared fixture coverage. The unit intentionally preserves generic
-  `deployment control plane` terminology.
-- Implementation in progress. Removed root `plane_*` variables/outputs, the
-  root `module "plane"` block, Plane configuration/runtime guardrails,
-  greenfield Plane variables/certificate/DNS/module arguments/outputs, and
-  deployment-control-plane Plane target/override/DNS/template paths. Shared
-  controller tests now use supported n8n fixtures for generic managed-app state
-  isolation and output-refresh behavior.
+- 2026-06-24 CDT: Created an isolated worktree/branch from `origin/main` at
+  `951fa05de`.
+- Scope: remove retired application Terraform wiring from the composite
+  ThinkWork module, greenfield example, deployment-control-plane generated
+  wrapper, and shared fixture coverage while preserving generic deployment
+  control-plane terminology.
+- Implementation removed root variables/outputs for the retired app,
+  configuration/runtime guardrails, greenfield variables/certificate/DNS/module
+  arguments/outputs, and deployment-control-plane target/override/DNS/template
+  paths. Shared controller tests now use supported n8n fixtures for generic
+  managed-app state isolation and output-refresh behavior.
 - Focused verification passed:
   `uv run --with pytest pytest terraform/modules/app/deployment-control-plane/test_runner_bundle.py`,
   `pnpm --dir apps/cli test -- __tests__/terraform-deployment-control-plane-fixture.test.ts`,
   `terraform fmt -check terraform/modules/thinkwork terraform/examples/greenfield terraform/modules/app/deployment-control-plane`,
-  product-reference audit over the U3 Terraform/controller surface, changed-file
-  Prettier check, and `git diff --check`.
+  product-reference audit over the U3 Terraform/controller surface,
+  changed-file Prettier check, and `git diff --check`.
 - Broader local verification passed: `pnpm lint` and `pnpm typecheck`. Local
   `pnpm install` exited successfully but logged the known optional
   `canvas@2.11.2` native build warning under local Node 25 because `pkg-config`
   is unavailable.
-- U3 PR opened:
-  [#2918](https://github.com/thinkwork-ai/thinkwork/pull/2918). CI monitoring
+- PR [#2918](https://github.com/thinkwork-ai/thinkwork/pull/2918) passed
+  required CI after rebasing onto the then-current `main` (CLA, lint, verify,
+  typecheck, and test), squash-merged to `main` as
+  `2230febeb28c08aa3fe99556ee8362b5edfc5b8f`, and the remote/local U3 branches
+  were deleted.
+
+### U4 Runtime And UI Cleanup
+
+- 2026-06-24 CDT: Created an isolated worktree/branch from `origin/main` at
+  `2230febeb`.
+- Scope: remove retired application runtime/API/UI/MCP/generated-client
+  references while preserving shared managed-application lifecycle, plugin
+  activation, and user-header MCP credential infrastructure for supported and
+  future plugins.
+- Implementation removed the retired app key from the managed-application
+  resolver registry, deployment-variable handling, deployment evidence
+  reconciliation, chat routing aliases, web settings managed-app/UI surfaces,
+  plugin credential special-cases, generated GraphQL schema comments, and
+  runtime/MCP/header-auth test fixtures. Generic control-plane terminology and
+  neutral user-header MCP credential coverage were preserved.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginDetail.test.tsx`,
+  `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp.test.ts agent-container/tests/server.test.ts`,
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/chat-agent-invoke.runtime-routing.test.ts`,
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/managedApplications.test.ts src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts src/graphql/resolvers/plugins/plugins-resolvers.test.ts src/handlers/mcp-proxy.test.ts src/lib/__tests__/mcp-configs-plugin-auth.test.ts src/lib/mcp-client-call.test.ts src/lib/plugins/activation.test.ts src/lib/plugins/handlers/mcp.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/web typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and
+  `pnpm --filter thinkwork-cli typecheck`.
+- Broader verification passed: `pnpm lint`, root `pnpm typecheck`,
+  changed-file Prettier check excluding the already-non-Prettier generated web
+  GraphQL client, `git diff --check`, and full root `pnpm test`.
+- The first root `pnpm test` hit the known local Electron extraction race in
+  `apps/desktop`. `pnpm rebuild electron` repaired the local dependency,
+  `pnpm --filter @thinkwork/desktop test` passed, and the subsequent full
+  `pnpm test` run passed end-to-end.
+- PR [#2922](https://github.com/thinkwork-ai/thinkwork/pull/2922) passed
+  required CI after rebasing onto the then-current `main` (CLA, lint, verify,
+  typecheck, and test), squash-merged to `main` as
+  `605db2bb356fd8be2647c4b2edbde2c67816d51e`, and the remote/local U4 branches
+  were deleted.
+
+### U5 Docs And Guidance Cleanup
+
+- 2026-06-24 CDT: Created an isolated worktree/branch from `origin/main` at
+  `605db2bb`.
+- Scope: remove retired application support references from docs, repo
+  guidance, source-boundary rules, and historical artifacts while preserving
+  reusable managed-application guidance and generic control-plane terminology.
+- Implementation removed retired-app AGENTS guidance, public docs, smoke docs,
+  plugin-builder examples, and source-boundary plugin-key handling; deleted
+  retired-app-only historical requirements/plan/status/solution artifacts;
+  rewrote reusable historical examples to supported plugin examples; and
+  preserved generic `control-plane`, `data plane`, storage-plane, and
+  memory-plane terminology.
+- Focused verification passed:
+  `pnpm test:plugin-source-boundary`,
+  `node --check .agents/skills/thinkwork-plugin-builder/scripts/scan-plugin-builder-output.mjs`,
+  `node --check scripts/smoke/managed-app-controller-readiness-smoke.mjs`,
+  `node scripts/smoke/managed-app-controller-readiness-smoke.mjs`,
+  `pnpm --filter @thinkwork/docs build`, changed-file Prettier check, and
+  `git diff --check`.
+- Broader verification passed: `pnpm lint` and root `pnpm typecheck`. Local
+  `pnpm install` exited successfully but logged the known optional
+  `canvas@2.11.2` native build warning under local Node 25 because `pkg-config`
+  is unavailable.
+- Docs/tooling product-reference audit passed outside the active autopilot
+  ledger: no retired package, source path, MCP slug, smoke env vars, or product
+  support references remain; broad matches are generic platform/storage/data
+  control-plane terms.
+- PR [#2924](https://github.com/thinkwork-ai/thinkwork/pull/2924) passed
+  required CI after rebasing onto the then-current `main` (CLA, lint, verify,
+  typecheck, and test), squash-merged to `main` as
+  `752ee4253b05db7e45c418271aae233cd61df1f3`, and the remote/local U5 branches
+  were deleted.
+
+### U6 Final Reference Audit
+
+- 2026-06-24 CDT: Created an isolated worktree/branch from `origin/main` at
+  `752ee425`.
+- Scope: run a final repository reference audit and remove any remaining
+  retired-product identifiers that survived the package, Terraform, runtime,
+  UI, and docs cleanup units.
+- Implementation completed locally. Removed the stale optional `www-dns` CNAME
+  variables/resource for the retired app subdomain, replaced a retired product
+  ordering note in the n8n plugin README with supported first-party language,
+  and neutralized product-specific references in this autopilot ledger while
+  preserving generic control-plane/data-plane/storage-plane terminology.
+- Product-reference audit passed: no retired package, source path, MCP slug,
+  smoke env var, Terraform fixture, app subdomain, or product-support references
+  remain; broad matches are generic platform/storage/data control-plane terms.
+- Focused verification passed: `terraform fmt -check terraform/modules/app/www-dns`,
+  `pnpm test:plugin-source-boundary`, `pnpm --filter @thinkwork/docs build`,
+  changed-file Prettier check, and `git diff --check`.
+- Broader verification passed: `pnpm lint`, root `pnpm typecheck`, and root
+  `pnpm test`. The first root test run hit the known local Electron extraction
+  race in `apps/desktop`; `pnpm rebuild electron` repaired the local dependency,
+  `pnpm --filter @thinkwork/desktop test` passed, and the subsequent full
+  `pnpm test` run passed end-to-end.
+- U6 PR opened:
+  [#2928](https://github.com/thinkwork-ai/thinkwork/pull/2928). CI monitoring
   started.
+- PR #2928 passed required CI: CLA, lint, verify, typecheck, test, and signed
+  catalog validation all completed successfully.

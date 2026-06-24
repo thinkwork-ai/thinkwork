@@ -162,7 +162,7 @@ describe("mcp-client-call session lifecycle", () => {
       {
         ...TARGET,
         headers: {
-          "x-api-key": "plane_pat_user_123",
+          "x-api-key": "header_token_user_123",
           "x-workspace-slug": "eng",
           Authorization: "Bearer should-not-override",
         },
@@ -170,7 +170,7 @@ describe("mcp-client-call session lifecycle", () => {
       { fetchImpl },
     );
 
-    expect(seen[0]["x-api-key"]).toBe("plane_pat_user_123");
+    expect(seen[0]["x-api-key"]).toBe("header_token_user_123");
     expect(seen[0]["x-workspace-slug"]).toBe("eng");
     expect(seen[0].Authorization).toBeUndefined();
   });
@@ -253,6 +253,58 @@ describe("mcp-client-call session lifecycle", () => {
     expect(textFromMcpContent(result.content)).toContain(
       "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
     );
+  });
+
+  it("enriches Twenty recordReferences with record links", async () => {
+    const fetchImpl = lifecycleFetch([
+      jsonResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                result: {
+                  records: [
+                    {
+                      id: "c203680f-4d36-461b-b134-25aef43d62c5",
+                      name: "McPherson POC",
+                    },
+                  ],
+                },
+                recordReferences: [
+                  {
+                    objectNameSingular: "opportunity",
+                    recordId: "c203680f-4d36-461b-b134-25aef43d62c5",
+                    displayName: "McPherson POC",
+                  },
+                ],
+              }),
+            },
+          ],
+        },
+      }),
+    ]);
+
+    const result = await mcpCallTool(
+      TARGET,
+      "find_many_opportunities",
+      {},
+      { fetchImpl, recordLinkHints: RECORD_LINK_HINTS },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.recordLinks).toEqual([
+      {
+        objectType: "opportunity",
+        id: "c203680f-4d36-461b-b134-25aef43d62c5",
+        label: "McPherson POC",
+        url: "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+      },
+    ]);
+    expect(textFromMcpContent(result.content)).toContain("Record links:");
   });
 
   it("does not enrich MCP isError results even when hints are present", async () => {

@@ -126,7 +126,7 @@ describe("computeOrphans — minimum-age skip", () => {
 
   it("does not skip when createdAt is absent (treat as safe-to-delete)", () => {
     // A summary with no createdAt comes from a non-standard/stale control
-    // plane state; the guard can't run, so we still treat it as deletable
+    // control-plane state; the guard can't run, so we still treat it as deletable
     // rather than leak indefinitely.
     const result = computeOrphans({
       now,

@@ -22,16 +22,6 @@ export const sharedPluginTermAllowlist = [
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
   },
   {
-    path: "apps/cli/__tests__/terraform-deployment-control-plane-fixture.test.ts",
-    reason:
-      "deployment control plane is shared infrastructure, not the Plane plugin",
-  },
-  {
-    pathPrefix: "terraform/modules/app/deployment-control-plane/",
-    reason:
-      "deployment control plane is shared infrastructure, not the Plane plugin",
-  },
-  {
     path: "apps/web/src/routes/_authed/settings.applications.cognee.tsx",
     reason:
       "legacy settings URL redirect only; Company Brain UI source is owned by plugin detail.",
@@ -162,24 +152,5 @@ export const sharedPluginTermAllowlist = [
     path: "packages/database-pg/src/schema/n8n-agent-step-runs.ts",
     reason:
       "shared platform Drizzle schema for n8n agent-step bridge run state.",
-  },
-  {
-    path: "packages/database-pg/__tests__/migration-0177-workflow-control-plane.test.ts",
-    reason:
-      "shared workflow control plane database contract coverage, not Plane plugin source.",
-  },
-  {
-    path: "packages/database-pg/__tests__/workflow-control-plane-schema.test.ts",
-    reason:
-      "shared workflow control plane schema coverage, not Plane plugin source.",
-  },
-  {
-    path: "packages/database-pg/drizzle/0177_workflow_control_plane.sql",
-    reason: "shared workflow control plane migration, not Plane plugin source.",
-  },
-  {
-    path: "packages/database-pg/drizzle/0177_workflow_control_plane_rollback.sql",
-    reason:
-      "shared workflow control plane rollback migration, not Plane plugin source.",
   },
 ];

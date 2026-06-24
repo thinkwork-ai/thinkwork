@@ -14,7 +14,7 @@ marketplace, sideload path, or licensing mechanism.
 - Infrastructure plugin example:
   `plugins/twenty/src/manifest.ts`
 - Plugin package descriptor examples:
-  `plugins/plane/src/index.ts`, `plugins/lastmile/src/index.ts`
+  `plugins/twenty/src/index.ts`, `plugins/lastmile/src/index.ts`
 
 ## Identity
 

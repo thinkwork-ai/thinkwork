@@ -21,7 +21,6 @@ describe("verify-plugin-source-boundary", () => {
 
   it("accepts plugin-specific source inside the owning plugin package", async () => {
     await withFixture(async (dir) => {
-      await writeFixtureFile(dir, "plugins/plane/src/manifest.ts");
       await writeFixtureFile(
         dir,
         "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
@@ -30,6 +29,7 @@ describe("verify-plugin-source-boundary", () => {
       await writeFixtureFile(dir, "plugins/data-integrations/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/email-channel/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/n8n/src/manifest.ts");
+      await writeFixtureFile(dir, "plugins/twenty/src/manifest.ts");
 
       const result = await scanFixture(dir);
 
@@ -41,7 +41,6 @@ describe("verify-plugin-source-boundary", () => {
   it("blocks another plugin's source inside the wrong plugin package", async () => {
     await withFixture(async (dir) => {
       await writeFixtureFile(dir, "plugins/lastmile/src/company-data-notes.md");
-      await writeFixtureFile(dir, "plugins/lastmile/src/plane-notes.md");
       await writeFixtureFile(
         dir,
         "plugins/lastmile/src/email-channel-notes.md",
@@ -51,6 +50,7 @@ describe("verify-plugin-source-boundary", () => {
         "plugins/lastmile/src/data-integrations-notes.md",
       );
       await writeFixtureFile(dir, "plugins/lastmile/src/n8n-notes.md");
+      await writeFixtureFile(dir, "plugins/lastmile/src/twenty-notes.md");
 
       const result = await scanFixture(dir);
 
@@ -77,18 +77,14 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations[3].pluginKeys, ["n8n"]);
       assert.equal(
         result.violations[4].path,
-        "plugins/lastmile/src/plane-notes.md",
+        "plugins/lastmile/src/twenty-notes.md",
       );
-      assert.deepEqual(result.violations[4].pluginKeys, ["plane"]);
+      assert.deepEqual(result.violations[4].pluginKeys, ["twenty"]);
     });
   });
 
   it("blocks plugin-specific source outside plugins/<plugin-key>", async () => {
     await withFixture(async (dir) => {
-      await writeFixtureFile(
-        dir,
-        "packages/api/src/lib/plugins/plane-extra.ts",
-      );
       await writeFixtureFile(
         dir,
         "packages/api/src/lib/plugins/company-data-extra.ts",
@@ -98,6 +94,10 @@ describe("verify-plugin-source-boundary", () => {
         "packages/api/src/lib/plugins/data-integrations-extra.ts",
       );
       await writeFixtureFile(dir, "packages/api/src/lib/plugins/n8n-extra.ts");
+      await writeFixtureFile(
+        dir,
+        "packages/api/src/lib/plugins/twenty-extra.ts",
+      );
 
       const result = await scanFixture(dir);
 
@@ -119,17 +119,17 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations[2].pluginKeys, ["n8n"]);
       assert.equal(
         result.violations[3].path,
-        "packages/api/src/lib/plugins/plane-extra.ts",
+        "packages/api/src/lib/plugins/twenty-extra.ts",
       );
-      assert.deepEqual(result.violations[3].pluginKeys, ["plane"]);
+      assert.deepEqual(result.violations[3].pluginKeys, ["twenty"]);
     });
   });
 
-  it("accepts documented migration paths and shared false positives", async () => {
+  it("accepts documented migration paths and ignores non-plugin shared paths", async () => {
     await withFixture(async (dir) => {
       await writeFixtureFile(
         dir,
-        "packages/api/src/lib/plugins/plane-extra.ts",
+        "packages/api/src/lib/plugins/twenty-extra.ts",
       );
       await writeFixtureFile(
         dir,
@@ -139,7 +139,7 @@ describe("verify-plugin-source-boundary", () => {
       const result = await scanFixture(dir, {
         allowlist: [
           {
-            path: "packages/api/src/lib/plugins/plane-extra.ts",
+            path: "packages/api/src/lib/plugins/twenty-extra.ts",
             reason: "fixture migration path",
           },
         ],
@@ -154,7 +154,7 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations, []);
       assert.deepEqual(result.staleAllowlistEntries, []);
       assert.equal(result.allowlistMatchCount, 1);
-      assert.equal(result.sharedAllowlistMatchCount, 1);
+      assert.equal(result.sharedAllowlistMatchCount, 0);
     });
   });
 
@@ -194,7 +194,7 @@ describe("verify-plugin-source-boundary", () => {
       const result = await scanFixture(dir, {
         allowlist: [
           {
-            path: "packages/api/src/lib/plugins/plane-extra.ts",
+            path: "packages/api/src/lib/plugins/twenty-extra.ts",
             reason: "deleted fixture migration path",
           },
         ],
@@ -204,7 +204,7 @@ describe("verify-plugin-source-boundary", () => {
       assert.equal(result.staleAllowlistEntries.length, 1);
       assert.equal(
         result.staleAllowlistEntries[0].path,
-        "packages/api/src/lib/plugins/plane-extra.ts",
+        "packages/api/src/lib/plugins/twenty-extra.ts",
       );
     });
   });

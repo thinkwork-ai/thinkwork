@@ -1246,6 +1246,22 @@ export type ConfigureEmailProviderInput = {
   webhookSecretRef?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type ConfigureWorkosAuthPluginInput = {
+  clientId: Scalars["String"]["input"];
+  /** Write-only. Required for first-time setup; omit to keep the existing secret. */
+  clientSecret?: InputMaybe<Scalars["String"]["input"]>;
+  installId: Scalars["ID"]["input"];
+  issuerUrl: Scalars["String"]["input"];
+  publicOptionLabel?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type ConfigureWorkosAuthPluginResult = {
+  __typename?: "ConfigureWorkosAuthPluginResult";
+  install: PluginInstall;
+  reference: TenantAuthProviderReference;
+  resource: AuthProviderResource;
+};
+
 export type ConfirmAutomationDraftInput = {
   builderThreadId: Scalars["ID"]["input"];
   input: SaveAgentLoopInput;
@@ -1511,6 +1527,24 @@ export type CreateWebhookInput = {
   tenantId: Scalars["ID"]["input"];
 };
 
+export type CreateWorkItemInput = {
+  applicable?: InputMaybe<Scalars["Boolean"]["input"]>;
+  blocked?: InputMaybe<Scalars["Boolean"]["input"]>;
+  dueAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  notes?: InputMaybe<Scalars["String"]["input"]>;
+  ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
+  ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  priority?: InputMaybe<WorkItemPriority>;
+  required?: InputMaybe<Scalars["Boolean"]["input"]>;
+  spaceId: Scalars["ID"]["input"];
+  statusId?: InputMaybe<Scalars["ID"]["input"]>;
+  templateSourceId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  title: Scalars["String"]["input"];
+};
+
 export enum CrmStatusHandleState {
   Failed = "FAILED",
   Pending = "PENDING",
@@ -1642,6 +1676,11 @@ export type DeleteScheduledJobResult = {
   __typename?: "DeleteScheduledJobResult";
   id: Scalars["ID"]["output"];
   ok: Scalars["Boolean"]["output"];
+};
+
+export type DeleteWorkItemViewInput = {
+  id: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type DeploymentEvidence = {
@@ -3208,7 +3247,7 @@ export type Mutation = {
   activatePlugin: ActivatePluginResult;
   /**
    * Store per-user credentials for plugins whose MCP servers declare
-   * user-provided header auth (for example Plane PAT + workspace slug). Values
+   * user-provided header auth (for example API token + workspace slug). Values
    * are stored only as token secrets and are never exposed through GraphQL.
    */
   activatePluginWithCredentials: UserPluginActivation;
@@ -3263,6 +3302,12 @@ export type Mutation = {
    */
   compileWikiNow: WikiCompileJob;
   configureEmailProvider: EmailProviderInstall;
+  /**
+   * Tenant-admin: configure the installed WorkOS Auth plugin with customer-owned
+   * AuthKit credentials. Stores the secret server-side, publishes the public SSO
+   * option, and updates the auth-provider component state.
+   */
+  configureWorkosAuthPlugin: ConfigureWorkosAuthPluginResult;
   confirmAutomationDraft: AgentLoop;
   connectN8nWorkflow: ConnectN8nWorkflowResult;
   createAgentProfile: AgentProfile;
@@ -3299,6 +3344,7 @@ export type Mutation = {
   createThreadLabel: ThreadLabel;
   createWakeupRequest: AgentWakeupRequest;
   createWebhook: Webhook;
+  createWorkItem: WorkItem;
   /**
    * One-time Twenty cutover (tenant admin): adopts the legacy managed Twenty
    * MCP row to plugin ownership (management_source 'plugin' under the
@@ -3335,6 +3381,7 @@ export type Mutation = {
   deleteThread: Scalars["Boolean"]["output"];
   deleteThreadLabel: Scalars["Boolean"]["output"];
   deleteWebhook: Scalars["Boolean"]["output"];
+  deleteWorkItemView: Scalars["Boolean"]["output"];
   disableSkill: Scalars["Boolean"]["output"];
   disableWorkflow: Scalars["Boolean"]["output"];
   disableWorkflowTemplate: Scalars["Boolean"]["output"];
@@ -3452,6 +3499,8 @@ export type Mutation = {
   saveApplet: SaveAppletPayload;
   saveAppletState: AppletState;
   saveEmailProviderCredential: EmailProviderInstall;
+  saveWorkItemStatuses: Array<WorkItemStatus>;
+  saveWorkItemView: WorkItemSavedView;
   seedEvalTestCases: Scalars["Int"]["output"];
   sendMessage: Message;
   setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
@@ -3551,6 +3600,8 @@ export type Mutation = {
   updateUser: User;
   updateUserProfile: UserProfile;
   updateWebhook: Webhook;
+  updateWorkItem: WorkItem;
+  updateWorkItemStatus: WorkItem;
   /**
    * Pin a new catalog version and reconcile the component diff through the
    * install state machine (tenant admin). Scope/auth-domain changes flip
@@ -3715,6 +3766,10 @@ export type MutationConfigureEmailProviderArgs = {
   input: ConfigureEmailProviderInput;
 };
 
+export type MutationConfigureWorkosAuthPluginArgs = {
+  input: ConfigureWorkosAuthPluginInput;
+};
+
 export type MutationConfirmAutomationDraftArgs = {
   input: ConfirmAutomationDraftInput;
 };
@@ -3805,6 +3860,10 @@ export type MutationCreateWakeupRequestArgs = {
 
 export type MutationCreateWebhookArgs = {
   input: CreateWebhookInput;
+};
+
+export type MutationCreateWorkItemArgs = {
+  input: CreateWorkItemInput;
 };
 
 export type MutationDeactivatePluginArgs = {
@@ -3909,6 +3968,10 @@ export type MutationDeleteThreadLabelArgs = {
 
 export type MutationDeleteWebhookArgs = {
   id: Scalars["ID"]["input"];
+};
+
+export type MutationDeleteWorkItemViewArgs = {
+  input: DeleteWorkItemViewInput;
 };
 
 export type MutationDisableSkillArgs = {
@@ -4315,6 +4378,14 @@ export type MutationSaveEmailProviderCredentialArgs = {
   input: SaveEmailProviderCredentialInput;
 };
 
+export type MutationSaveWorkItemStatusesArgs = {
+  input: SaveWorkItemStatusesInput;
+};
+
+export type MutationSaveWorkItemViewArgs = {
+  input: SaveWorkItemViewInput;
+};
+
 export type MutationSeedEvalTestCasesArgs = {
   categories?: InputMaybe<Array<Scalars["String"]["input"]>>;
   tenantId: Scalars["ID"]["input"];
@@ -4655,6 +4726,14 @@ export type MutationUpdateUserProfileArgs = {
 export type MutationUpdateWebhookArgs = {
   id: Scalars["ID"]["input"];
   input: UpdateWebhookInput;
+};
+
+export type MutationUpdateWorkItemArgs = {
+  input: UpdateWorkItemInput;
+};
+
+export type MutationUpdateWorkItemStatusArgs = {
+  input: UpdateWorkItemStatusInput;
 };
 
 export type MutationUpgradePluginArgs = {
@@ -5624,6 +5703,7 @@ export type Query = {
   threadTurn?: Maybe<ThreadTurn>;
   threadTurnEvents: Array<ThreadTurnEvent>;
   threadTurns: Array<ThreadTurn>;
+  threadWorkItems: Array<WorkItem>;
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   turnInvocationLogs: Array<ModelInvocation>;
@@ -5682,6 +5762,10 @@ export type Query = {
    * ts_rank + alias-hit boost.
    */
   wikiSearch: Array<WikiSearchResult>;
+  workItem?: Maybe<WorkItem>;
+  workItemSavedViews: Array<WorkItemSavedView>;
+  workItemStatuses: Array<WorkItemStatus>;
+  workItems: Array<WorkItem>;
   workflow?: Maybe<Workflow>;
   workflowCatalog: Array<WorkflowCatalogItem>;
   workflowRun?: Maybe<WorkflowRun>;
@@ -6419,6 +6503,11 @@ export type QueryThreadTurnsArgs = {
   triggerId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
+export type QueryThreadWorkItemsArgs = {
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId: Scalars["ID"]["input"];
+};
+
 export type QueryThreadsArgs = {
   agentId?: InputMaybe<Scalars["ID"]["input"]>;
   assigneeId?: InputMaybe<Scalars["ID"]["input"]>;
@@ -6523,6 +6612,25 @@ export type QueryWikiSearchArgs = {
   query: Scalars["String"]["input"];
   tenantId: Scalars["ID"]["input"];
   userId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryWorkItemArgs = {
+  id: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryWorkItemSavedViewsArgs = {
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryWorkItemStatusesArgs = {
+  spaceId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type QueryWorkItemsArgs = {
+  input?: InputMaybe<WorkItemsInput>;
 };
 
 export type QueryWorkflowArgs = {
@@ -7097,6 +7205,27 @@ export type SaveEmailProviderCredentialInput = {
   provider: EmailChannelProvider;
   providerInstallId?: InputMaybe<Scalars["ID"]["input"]>;
   webhookSecretRef?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type SaveWorkItemStatusesInput = {
+  spaceId: Scalars["ID"]["input"];
+  statuses: Array<WorkItemStatusInput>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type SaveWorkItemViewInput = {
+  filters?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  grouping?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  id?: InputMaybe<Scalars["ID"]["input"]>;
+  isDefault?: InputMaybe<Scalars["Boolean"]["input"]>;
+  isFavorite?: InputMaybe<Scalars["Boolean"]["input"]>;
+  isPrivate?: InputMaybe<Scalars["Boolean"]["input"]>;
+  name: Scalars["String"]["input"];
+  sorting?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  viewConfig?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  viewType: WorkItemViewType;
 };
 
 export type ScheduledJob = {
@@ -8902,6 +9031,32 @@ export type UpdateWebhookInput = {
   targetType?: InputMaybe<Scalars["String"]["input"]>;
 };
 
+export type UpdateWorkItemInput = {
+  applicable?: InputMaybe<Scalars["Boolean"]["input"]>;
+  archived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  blocked?: InputMaybe<Scalars["Boolean"]["input"]>;
+  dueAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  notes?: InputMaybe<Scalars["String"]["input"]>;
+  ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
+  ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  priority?: InputMaybe<WorkItemPriority>;
+  required?: InputMaybe<Scalars["Boolean"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  title?: InputMaybe<Scalars["String"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
+};
+
+export type UpdateWorkItemStatusInput = {
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  note?: InputMaybe<Scalars["String"]["input"]>;
+  statusCategory?: InputMaybe<WorkItemStatusCategory>;
+  statusId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
+  workItemId: Scalars["ID"]["input"];
+};
+
 export type UpgradePluginInput = {
   idempotencyKey: Scalars["String"]["input"];
   installId: Scalars["ID"]["input"];
@@ -9332,6 +9487,196 @@ export type WikiSearchResult = {
   matchedAlias?: Maybe<Scalars["String"]["output"]>;
   page: WikiPage;
   score: Scalars["Float"]["output"];
+};
+
+export type WorkItem = {
+  __typename?: "WorkItem";
+  applicable: Scalars["Boolean"]["output"];
+  archivedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  blocked: Scalars["Boolean"]["output"];
+  completedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  completedByAgentId?: Maybe<Scalars["ID"]["output"]>;
+  completedByUserId?: Maybe<Scalars["ID"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  createdByAgentId?: Maybe<Scalars["ID"]["output"]>;
+  createdByUserId?: Maybe<Scalars["ID"]["output"]>;
+  dueAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  events: Array<WorkItemEvent>;
+  externalRefs: Array<WorkItemExternalRef>;
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  notes?: Maybe<Scalars["String"]["output"]>;
+  ownerAgentId?: Maybe<Scalars["ID"]["output"]>;
+  ownerUserId?: Maybe<Scalars["ID"]["output"]>;
+  priority: WorkItemPriority;
+  required: Scalars["Boolean"]["output"];
+  spaceId: Scalars["ID"]["output"];
+  status?: Maybe<WorkItemStatus>;
+  statusId?: Maybe<Scalars["ID"]["output"]>;
+  templateSourceId?: Maybe<Scalars["ID"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  threadLinks: Array<WorkItemThreadLink>;
+  title: Scalars["String"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export type WorkItemEvent = {
+  __typename?: "WorkItemEvent";
+  actorAgentId?: Maybe<Scalars["ID"]["output"]>;
+  actorUserId?: Maybe<Scalars["ID"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  eventType: WorkItemEventType;
+  id: Scalars["ID"]["output"];
+  message?: Maybe<Scalars["String"]["output"]>;
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  newStatusId?: Maybe<Scalars["ID"]["output"]>;
+  previousStatusId?: Maybe<Scalars["ID"]["output"]>;
+  spaceId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId?: Maybe<Scalars["ID"]["output"]>;
+  workItemId: Scalars["ID"]["output"];
+};
+
+export enum WorkItemEventType {
+  AgentAction = "AGENT_ACTION",
+  ApplicabilityChanged = "APPLICABILITY_CHANGED",
+  Assigned = "ASSIGNED",
+  Blocked = "BLOCKED",
+  Completed = "COMPLETED",
+  Created = "CREATED",
+  DueDateChanged = "DUE_DATE_CHANGED",
+  LinkedThread = "LINKED_THREAD",
+  StatusChanged = "STATUS_CHANGED",
+  Unblocked = "UNBLOCKED",
+  Updated = "UPDATED",
+}
+
+export type WorkItemExternalRef = {
+  __typename?: "WorkItemExternalRef";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  externalId: Scalars["String"]["output"];
+  externalUrl?: Maybe<Scalars["AWSURL"]["output"]>;
+  id: Scalars["ID"]["output"];
+  metadata?: Maybe<Scalars["AWSJSON"]["output"]>;
+  provider: WorkItemExternalRefProvider;
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  workItemId: Scalars["ID"]["output"];
+};
+
+export enum WorkItemExternalRefProvider {
+  Lastmile = "LASTMILE",
+  Linear = "LINEAR",
+  Plane = "PLANE",
+  Thinkwork = "THINKWORK",
+  Twenty = "TWENTY",
+}
+
+export enum WorkItemPriority {
+  High = "HIGH",
+  Low = "LOW",
+  Normal = "NORMAL",
+  Urgent = "URGENT",
+}
+
+export type WorkItemSavedView = {
+  __typename?: "WorkItemSavedView";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  filters?: Maybe<Scalars["AWSJSON"]["output"]>;
+  grouping?: Maybe<Scalars["AWSJSON"]["output"]>;
+  id: Scalars["ID"]["output"];
+  isDefault: Scalars["Boolean"]["output"];
+  isFavorite: Scalars["Boolean"]["output"];
+  isPrivate: Scalars["Boolean"]["output"];
+  name: Scalars["String"]["output"];
+  sorting?: Maybe<Scalars["AWSJSON"]["output"]>;
+  spaceId?: Maybe<Scalars["ID"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+  userId?: Maybe<Scalars["ID"]["output"]>;
+  viewConfig?: Maybe<Scalars["AWSJSON"]["output"]>;
+  viewType: WorkItemViewType;
+};
+
+export type WorkItemStatus = {
+  __typename?: "WorkItemStatus";
+  category: WorkItemStatusCategory;
+  color?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  description?: Maybe<Scalars["String"]["output"]>;
+  displayOrder: Scalars["Int"]["output"];
+  icon?: Maybe<Scalars["String"]["output"]>;
+  id: Scalars["ID"]["output"];
+  isActive: Scalars["Boolean"]["output"];
+  isDefault: Scalars["Boolean"]["output"];
+  isFinal: Scalars["Boolean"]["output"];
+  name: Scalars["String"]["output"];
+  spaceId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
+};
+
+export enum WorkItemStatusCategory {
+  Active = "ACTIVE",
+  Blocked = "BLOCKED",
+  Done = "DONE",
+  Skipped = "SKIPPED",
+  Todo = "TODO",
+}
+
+export type WorkItemStatusInput = {
+  category: WorkItemStatusCategory;
+  color?: InputMaybe<Scalars["String"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  displayOrder?: InputMaybe<Scalars["Int"]["input"]>;
+  icon?: InputMaybe<Scalars["String"]["input"]>;
+  id?: InputMaybe<Scalars["ID"]["input"]>;
+  isActive?: InputMaybe<Scalars["Boolean"]["input"]>;
+  isDefault?: InputMaybe<Scalars["Boolean"]["input"]>;
+  isFinal?: InputMaybe<Scalars["Boolean"]["input"]>;
+  name: Scalars["String"]["input"];
+};
+
+export type WorkItemThreadLink = {
+  __typename?: "WorkItemThreadLink";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  relationship: WorkItemThreadRelationship;
+  spaceId: Scalars["ID"]["output"];
+  tenantId: Scalars["ID"]["output"];
+  threadId: Scalars["ID"]["output"];
+  workItemId: Scalars["ID"]["output"];
+};
+
+export enum WorkItemThreadRelationship {
+  Evidence = "EVIDENCE",
+  FollowUp = "FOLLOW_UP",
+  Mentioned = "MENTIONED",
+  Primary = "PRIMARY",
+}
+
+export enum WorkItemViewType {
+  Board = "BOARD",
+  List = "LIST",
+}
+
+export type WorkItemsInput = {
+  applicable?: InputMaybe<Scalars["Boolean"]["input"]>;
+  blocked?: InputMaybe<Scalars["Boolean"]["input"]>;
+  dueAfter?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  dueBefore?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  includeArchived?: InputMaybe<Scalars["Boolean"]["input"]>;
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  ownerAgentId?: InputMaybe<Scalars["ID"]["input"]>;
+  ownerUserId?: InputMaybe<Scalars["ID"]["input"]>;
+  priority?: InputMaybe<WorkItemPriority>;
+  required?: InputMaybe<Scalars["Boolean"]["input"]>;
+  search?: InputMaybe<Scalars["String"]["input"]>;
+  spaceId?: InputMaybe<Scalars["ID"]["input"]>;
+  statusCategory?: InputMaybe<WorkItemStatusCategory>;
+  statusId?: InputMaybe<Scalars["ID"]["input"]>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type Workflow = {

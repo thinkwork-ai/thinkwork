@@ -28,8 +28,7 @@ MCP servers are registered at the tenant level, then assigned to agents,
 templates, or Spaces depending on the product surface. Most rows are manual
 operator registrations. Managed applications and application plugins can also
 reconcile system-managed rows, such as the **Twenty CRM** MCP server that
-appears automatically when the Twenty managed application is running or the
-**Plane** MCP server installed by the Plane plugin.
+appears automatically when the Twenty managed application is running.
 
 Typical config includes:
 
@@ -57,15 +56,13 @@ application:
 | Destroyed         | Managed row and stored token material are removed during cleanup                                                         |
 
 If an already-running Twenty CRM stage is missing the managed row, operators
-repair it from Settings -> CRM with **Install MCP Server**. If Plane is missing
-its managed MCP row, repair or reinstall it from Settings -> Plugins -> Plane.
-Do not register duplicate manual Twenty or Plane rows.
+repair it from Settings -> CRM with **Install MCP Server**. Do not register a
+duplicate manual Twenty row.
 
 The MCP server detail page imports runtime tools from the assigned agent. For
 Twenty CRM, the UI expands the MCP server's `get_tool_catalog` response so the
 full CRM tool catalog can be searched and paged instead of only showing the
-small top-level MCP wrapper tools. For Plane, agents should resolve readable
-work-item ids such as `ENG-42` to Plane UUIDs before calling UUID-only tools.
+small top-level MCP wrapper tools.
 
 ## Authentication
 
@@ -77,9 +74,8 @@ MCP tools commonly use these patterns:
   connect from Spaces/Desktop Settings -> MCP Servers. Mobile retains the same
   self-service flow for mobile users.
 - **Per-user plugin headers** when a plugin needs user-scoped non-OAuth
-  credentials. Plane uses this mode: each user activates the Plane plugin with a
-  personal access token and workspace slug, and ThinkWork sends them as bearer
-  auth plus `x-workspace-slug` only for that requester.
+  credentials. ThinkWork sends those headers only for the requester whose
+  activation stored them.
 
 <Aside type="note">
   If a per-user OAuth token is missing, ThinkWork can skip that MCP server for
@@ -96,8 +92,8 @@ missing user credential. When the token exists, ThinkWork injects it into the
 outbound MCP call automatically; the agent does not see or manage the token.
 
 The same fail-closed rule applies to user-provided header servers. If the
-current user has not activated Plane, the runtime does not synthesize a
-tenant-wide Plane credential and does not reuse another user's PAT.
+current user has not activated the server, the runtime does not synthesize a
+tenant-wide credential and does not reuse another user's secret.
 
 ### Record-link hints
 

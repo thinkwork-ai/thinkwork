@@ -44,7 +44,7 @@ The current codebase already has most of the plugin substrate:
 plugin install state, infrastructure components that create managed-app
 deployment jobs, package-owned managed-app adapters, Terraform modules, smoke
 contracts, and Plugin Detail surfaces. n8n needs to extend that substrate in
-three places the existing Plane/Twenty patterns do not fully cover:
+three places the existing Twenty CRM/Twenty patterns do not fully cover:
 
 - tenant-scoped native MCP with a service credential rather than per-user OAuth
   or per-user header activation;
@@ -169,8 +169,8 @@ destructive impact.
   pattern. Twenty uses `endpointFrom` to resolve a tenant-specific MCP endpoint
   from the managed-app URL, but it uses per-instance user OAuth, which n8n v1
   explicitly does not.
-- `plugins/plane/src/deployment/managed-app.ts` and
-  `plugins/plane/terraform/plane/` are the closest multi-resource app pattern,
+- `plugins/twenty/src/deployment/managed-app.ts` and
+  `plugins/twenty/terraform/twenty/` are the closest multi-resource app pattern,
   with app-owned Terraform, smoke contracts, destructive data-impact messaging,
   and plugin package ownership.
 - `packages/deployment-runner/src/apps/registry.ts` is the closed adapter
@@ -183,7 +183,7 @@ destructive impact.
   Terraform variables and smoke evidence.
 - `packages/api/src/lib/plugins/handlers/infra.ts` creates plugin-backed
   deployment jobs through the same shared plan-job core used by managed-app
-  operator actions. It also seeds app-specific defaults for Plane today.
+  operator actions. It also seeds app-specific defaults for Twenty CRM today.
 - `packages/api/src/lib/plugins/handlers/mcp.ts` provisions plugin-owned
   `tenant_mcp_servers` rows and supports static OAuth, per-instance OAuth, and
   per-user header activation. It does not yet model tenant service credentials
@@ -194,7 +194,7 @@ destructive impact.
   rejects per-user activation.
 - `apps/web/src/components/settings/plugins/PluginDetail.tsx` is the shared
   plugin detail host. It already contains plugin-specific operator sections for
-  Company Brain, Twenty, Plane credentials, and email-channel settings, so an
+  Company Brain, Twenty, Twenty CRM credentials, and email-channel settings, so an
   `N8nSettings` panel can be introduced without turning the generic detail page
   into a full schema renderer.
 - `packages/database-pg/graphql/types/plugins.graphql`,
@@ -255,7 +255,7 @@ destructive impact.
 
 - **Model n8n as a package-owned first-party plugin.** Create `plugins/n8n/`
   with the same descriptor, manifest, adapter, Terraform, runtime, smoke, test,
-  and README shape used by Plane and Twenty. Shared packages receive only
+  and README shape used by Twenty CRM and Twenty. Shared packages receive only
   generic extension points and generated registry updates; n8n-specific
   validators, runtime templates, and instructions stay under `plugins/n8n/` and
   shared API/web code imports or calls those package-owned contracts.
@@ -574,7 +574,7 @@ needed. Avoid n8n-specific branches when the adapter can own the contract.
 
 **Approach:**
 
-Create a plugin-owned Terraform module following Plane/Twenty module
+Create a plugin-owned Terraform module following Twenty CRM/Twenty module
 conventions. The module should provision:
 
 - an HTTPS ALB listener/rule and DNS target for `n8n.[thinkwork domain]`;
@@ -1093,7 +1093,7 @@ park/destroy verification, and final merge/teardown state.
 - Origin requirements:
   `docs/brainstorms/2026-06-19-n8n-application-plugin-requirements.md`
 - Plugin package contract: `plugins/README.md`
-- Managed-app precedents: `plugins/twenty/`, `plugins/plane/`
+- Managed-app precedents: `plugins/twenty/`, `plugins/n8n/`
 - Deployment runner registry: `packages/deployment-runner/src/apps/registry.ts`
 - Plugin MCP handler: `packages/api/src/lib/plugins/handlers/mcp.ts`
 - Plugin infrastructure handler: `packages/api/src/lib/plugins/handlers/infra.ts`

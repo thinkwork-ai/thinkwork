@@ -329,6 +329,79 @@ describe("endpointFrom resolution (U10)", () => {
     });
   });
 
+  it("preserves cached OAuth DCR metadata when repairing the same plugin-owned resource", async () => {
+    selectQueue.push([
+      {
+        desired_config: { publicUrl: "https://crm.tenant.example.com/old" },
+      },
+    ]);
+    selectQueue.push([
+      {
+        id: "server-7",
+        auth_config: {
+          oauth_resource: "https://crm.tenant.example.com/mcp",
+          authorize_endpoint: "https://crm.tenant.example.com/auth/authorize",
+          token_endpoint: "https://crm.tenant.example.com/auth/token",
+          client_id: "cached-client-id",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no platform agents
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(updateCalls[0]).toMatchObject({
+      auth_type: "oauth",
+      auth_config: {
+        oauth_resource: "https://crm.tenant.example.com/mcp",
+        authorize_endpoint: "https://crm.tenant.example.com/auth/authorize",
+        token_endpoint: "https://crm.tenant.example.com/auth/token",
+        client_id: "cached-client-id",
+      },
+    });
+    expect(updateCalls[0]!.url_hash).toEqual(expect.any(String));
+  });
+
+  it("does not preserve cached OAuth DCR metadata when the resource changes", async () => {
+    selectQueue.push([
+      {
+        desired_config: { publicUrl: "https://crm.tenant.example.com/old" },
+      },
+    ]);
+    selectQueue.push([
+      {
+        id: "server-7",
+        auth_config: {
+          oauth_resource: "https://old-crm.tenant.example.com/mcp",
+          authorize_endpoint: "https://old-crm.tenant.example.com/auth",
+          token_endpoint: "https://old-crm.tenant.example.com/token",
+          client_id: "stale-client-id",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no platform agents
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(updateCalls[0]).toMatchObject({
+      auth_type: "oauth",
+      auth_config: { oauth_resource: "https://crm.tenant.example.com/mcp" },
+    });
+    expect(updateCalls[0]!.auth_config).not.toHaveProperty("client_id");
+  });
+
   it("adopts manual rows with runtime record-link metadata", async () => {
     selectQueue.push([
       {
@@ -363,6 +436,48 @@ describe("endpointFrom resolution (U10)", () => {
       },
     });
     expect(insertCalls).toHaveLength(0);
+  });
+
+  it("preserves cached OAuth DCR metadata when adopting a manual row for the same resource", async () => {
+    selectQueue.push([
+      {
+        desired_config: {
+          publicUrl: "https://crm.tenant.example.com/app?utm=1#top",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no plugin-owned row
+    selectQueue.push([
+      {
+        id: "server-manual",
+        auth_config: {
+          oauth_resource: "https://crm.tenant.example.com/mcp",
+          authorize_endpoint: "https://crm.tenant.example.com/auth/authorize",
+          token_endpoint: "https://crm.tenant.example.com/auth/token",
+          client_id: "manual-client-id",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no platform agents
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(updateCalls[0]).toMatchObject({
+      management_source: "plugin",
+      plugin_install_id: "install-1",
+      auth_config: {
+        oauth_resource: "https://crm.tenant.example.com/mcp",
+        authorize_endpoint: "https://crm.tenant.example.com/auth/authorize",
+        token_endpoint: "https://crm.tenant.example.com/auth/token",
+        client_id: "manual-client-id",
+      },
+    });
   });
 
   it("omits runtime record-link metadata for remote http origins", async () => {
@@ -475,14 +590,14 @@ describe("endpointFrom resolution (U10)", () => {
   });
 });
 
-describe("user-provided header auth (THNK-27 U5)", () => {
-  it("provisions Plane MCP rows with header bindings but no credential values", async () => {
-    const planeComponent: McpServerComponent = {
+describe("user-provided header auth (shared header auth)", () => {
+  it("provisions header-auth MCP rows with header bindings but no credential values", async () => {
+    const headerAuthComponent: McpServerComponent = {
       type: "mcp-server",
       key: "issues",
-      displayName: "Plane work items",
+      displayName: "Header-auth records",
       endpointFrom: {
-        managedApp: "plane",
+        managedApp: "header-auth",
         configKey: "publicUrl",
         path: "/http/api-key/mcp",
       },
@@ -490,14 +605,14 @@ describe("user-provided header auth (THNK-27 U5)", () => {
         mode: "user-provided-headers",
         bearer: {
           credentialKey: "apiKey",
-          displayName: "Plane personal access token",
+          displayName: "API token",
           secret: true,
         },
         headers: [
           {
             name: "x-workspace-slug",
             credentialKey: "workspaceSlug",
-            displayName: "Plane workspace slug",
+            displayName: "Workspace slug",
           },
         ],
       },
@@ -505,40 +620,41 @@ describe("user-provided header auth (THNK-27 U5)", () => {
     selectQueue.push([
       {
         desired_config: {
-          publicUrl: "https://plane.tenant.example.com/app",
+          publicUrl: "https://headers.tenant.example.com/app",
         },
       },
     ]);
     selectQueue.push([]);
     selectQueue.push([]);
-    returningQueue.push([{ id: "server-plane" }]);
+    returningQueue.push([{ id: "server-header-auth" }]);
     selectQueue.push([]);
 
     const ref = await provisionPluginMcpComponent({
       tenantId: "tenant-1",
-      pluginInstallId: "install-plane",
-      pluginKey: "plane",
-      component: planeComponent,
+      pluginInstallId: "install-header-auth",
+      pluginKey: "header-auth",
+      component: headerAuthComponent,
       db: mockDb as never,
     });
 
     expect(ref).toEqual({
-      tenantMcpServerId: "server-plane",
-      resolvedEndpointUrl: "https://plane.tenant.example.com/http/api-key/mcp",
+      tenantMcpServerId: "server-header-auth",
+      resolvedEndpointUrl:
+        "https://headers.tenant.example.com/http/api-key/mcp",
     });
     expect(insertCalls[0]).toMatchObject({
-      slug: "plane--issues",
-      url: "https://plane.tenant.example.com/http/api-key/mcp",
+      slug: "header-auth--issues",
+      url: "https://headers.tenant.example.com/http/api-key/mcp",
       auth_type: "user_headers",
       auth_config: {
         bearerCredentialKey: "apiKey",
         headers: [{ name: "x-workspace-slug", credentialKey: "workspaceSlug" }],
       },
       management_source: "plugin",
-      plugin_install_id: "install-plane",
+      plugin_install_id: "install-header-auth",
       status: "approved",
     });
-    expect(JSON.stringify(insertCalls[0])).not.toContain("plane_pat");
+    expect(JSON.stringify(insertCalls[0])).not.toContain("header_token");
   });
 });
 

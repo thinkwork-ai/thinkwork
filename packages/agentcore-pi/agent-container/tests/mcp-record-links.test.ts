@@ -59,6 +59,45 @@ describe("enrichMcpRecordLinks", () => {
     );
   });
 
+  it("adds Opportunity links from Twenty recordReferences", () => {
+    const result = enrich({
+      response: {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              result: {
+                records: [
+                  {
+                    id: "c203680f-4d36-461b-b134-25aef43d62c5",
+                    name: "McPherson POC",
+                  },
+                ],
+              },
+              recordReferences: [
+                {
+                  objectNameSingular: "opportunity",
+                  recordId: "c203680f-4d36-461b-b134-25aef43d62c5",
+                  displayName: "McPherson POC",
+                },
+              ],
+            }),
+          },
+        ],
+      },
+    });
+
+    expect(result.recordLinks).toEqual([
+      {
+        objectType: "opportunity",
+        id: "c203680f-4d36-461b-b134-25aef43d62c5",
+        label: "McPherson POC",
+        url: "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+      },
+    ]);
+  });
+
   it("dedupes repeated records and caps multi-record output", () => {
     const result = enrich({
       maxLinks: 2,
