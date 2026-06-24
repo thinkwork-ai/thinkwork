@@ -22,11 +22,18 @@ import {
   SpaceThreadContextQuery,
   StartCustomerOnboardingMutation,
   ThreadLinkedTasksQuery,
+  ThreadWorkItemsQuery,
   ThreadMentionTargetsQuery,
   ThreadsPagedQuery,
   ThreadTurnUpdatedSubscription,
   UpdateLinkedTaskMutation,
+  UpdateWorkItemStatusMutation,
   UpdateThreadMutation,
+  WorkItemSavedViewsQuery,
+  WorkItemStatusesQuery,
+  WorkItemsQuery,
+  SaveWorkItemViewMutation,
+  DeleteWorkItemViewMutation,
 } from "./graphql-queries";
 
 describe("computer GraphQL queries", () => {
@@ -134,6 +141,27 @@ describe("computer GraphQL queries", () => {
     expect(print(StartCustomerOnboardingMutation)).toContain("missingFields");
     expect(print(UpdateThreadMutation)).toContain("status");
     expect(print(UpdateThreadMutation)).toContain("title");
+  });
+
+  it("requests native Work Item documents for the main route and thread context", () => {
+    const list = print(WorkItemsQuery);
+    const threadItems = print(ThreadWorkItemsQuery);
+    const statuses = print(WorkItemStatusesQuery);
+    const savedViews = print(WorkItemSavedViewsQuery);
+
+    expect(list).toContain("workItems(input: $input)");
+    expect(list).toContain("status {");
+    expect(list).toContain("threadLinks");
+    expect(threadItems).toContain("threadWorkItems");
+    expect(statuses).toContain("workItemStatuses");
+    expect(statuses).toContain("displayOrder");
+    expect(savedViews).toContain("workItemSavedViews");
+    expect(savedViews).toContain("viewConfig");
+    expect(print(UpdateWorkItemStatusMutation)).toContain(
+      "updateWorkItemStatus",
+    );
+    expect(print(SaveWorkItemViewMutation)).toContain("saveWorkItemView");
+    expect(print(DeleteWorkItemViewMutation)).toContain("deleteWorkItemView");
   });
 
   it("requests global Inbox rows with Space identity and unread filter", () => {

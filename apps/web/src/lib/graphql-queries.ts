@@ -1002,6 +1002,156 @@ export const ThreadLinkedTasksQuery = gql`
   }
 `;
 
+const WorkItemFieldsFragment = gql`
+  fragment WorkItemFields on WorkItem {
+    id
+    tenantId
+    spaceId
+    statusId
+    title
+    notes
+    priority
+    ownerUserId
+    ownerAgentId
+    dueAt
+    required
+    applicable
+    blocked
+    completedAt
+    completedByUserId
+    completedByAgentId
+    createdByUserId
+    createdByAgentId
+    templateSourceId
+    metadata
+    createdAt
+    updatedAt
+    archivedAt
+    status {
+      id
+      name
+      color
+      icon
+      category
+      isActive
+      isFinal
+      isDefault
+      displayOrder
+    }
+    threadLinks {
+      id
+      threadId
+      relationship
+      createdAt
+    }
+    externalRefs {
+      id
+      provider
+      externalId
+      externalUrl
+      metadata
+    }
+  }
+`;
+
+export const WorkItemsQuery = gql`
+  query WorkItems($input: WorkItemsInput) {
+    workItems(input: $input) {
+      ...WorkItemFields
+    }
+  }
+  ${WorkItemFieldsFragment}
+`;
+
+export const ThreadWorkItemsQuery = gql`
+  query ThreadWorkItems($tenantId: ID!, $threadId: ID!) {
+    threadWorkItems(tenantId: $tenantId, threadId: $threadId) {
+      ...WorkItemFields
+    }
+  }
+  ${WorkItemFieldsFragment}
+`;
+
+export const WorkItemStatusesQuery = gql`
+  query WorkItemStatuses($tenantId: ID!, $spaceId: ID!) {
+    workItemStatuses(tenantId: $tenantId, spaceId: $spaceId) {
+      id
+      tenantId
+      spaceId
+      name
+      description
+      color
+      icon
+      category
+      isActive
+      isFinal
+      isDefault
+      displayOrder
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const WorkItemSavedViewsQuery = gql`
+  query WorkItemSavedViews($tenantId: ID!, $spaceId: ID) {
+    workItemSavedViews(tenantId: $tenantId, spaceId: $spaceId) {
+      id
+      tenantId
+      userId
+      spaceId
+      name
+      viewType
+      filters
+      grouping
+      sorting
+      viewConfig
+      isPrivate
+      isDefault
+      isFavorite
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const UpdateWorkItemStatusMutation = gql`
+  mutation UpdateWorkItemStatus($input: UpdateWorkItemStatusInput!) {
+    updateWorkItemStatus(input: $input) {
+      ...WorkItemFields
+    }
+  }
+  ${WorkItemFieldsFragment}
+`;
+
+export const SaveWorkItemViewMutation = gql`
+  mutation SaveWorkItemView($input: SaveWorkItemViewInput!) {
+    saveWorkItemView(input: $input) {
+      id
+      tenantId
+      userId
+      spaceId
+      name
+      viewType
+      filters
+      grouping
+      sorting
+      viewConfig
+      isPrivate
+      isDefault
+      isFavorite
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const DeleteWorkItemViewMutation = gql`
+  mutation DeleteWorkItemView($input: DeleteWorkItemViewInput!) {
+    deleteWorkItemView(input: $input)
+  }
+`;
+
 export const ThreadProgressMarkdownQuery = gql`
   query ThreadProgressMarkdown($tenantId: ID!, $threadId: ID!) {
     threadProgressMarkdown(tenantId: $tenantId, threadId: $threadId) {
