@@ -425,7 +425,11 @@ export function PluginDetail() {
     const publicOptionLabel =
       workosConfigForm.publicOptionLabel.trim() || "Continue with SSO";
 
-    if (!issuerUrl || !clientId || (!workosAccountConfigured && !clientSecret)) {
+    if (
+      !issuerUrl ||
+      !clientId ||
+      (!workosAccountConfigured && !clientSecret)
+    ) {
       setWorkosConfigError(
         workosAccountConfigured
           ? "Enter the WorkOS issuer URL and client ID."
@@ -458,7 +462,9 @@ export function PluginDetail() {
       clientSecret: "",
       publicOptionLabel: reference?.publicOptionLabel ?? publicOptionLabel,
     });
-    setNotice("WorkOS configuration saved. SSO is published on the login page.");
+    setNotice(
+      "WorkOS configuration saved. SSO is published on the login page.",
+    );
     toast.success("WorkOS configuration saved.");
     refreshInstalls({ requestPolicy: "network-only" });
     refreshCatalog({ requestPolicy: "network-only" });
@@ -907,8 +913,8 @@ function WorkosSetupInstructionsSheet({
                 customer or deployment operator.
               </li>
               <li>
-                The AuthKit issuer URL, OAuth client ID, and OAuth client
-                secret from the customer WorkOS application.
+                The AuthKit issuer URL, OAuth client ID, and OAuth client secret
+                from the customer WorkOS application.
               </li>
               <li>
                 The ThinkWork WorkOS callback URL from this plugin detail page
@@ -936,9 +942,9 @@ function WorkosSetupInstructionsSheet({
                 live customer traffic.
               </li>
               <li>
-                Create or open the WorkOS AuthKit application for this
-                customer. In that application's Redirects settings, add this
-                ThinkWork callback URL:
+                Create or open the WorkOS AuthKit application for this customer.
+                In that application's Redirects settings, add this ThinkWork
+                callback URL:
                 <code className="mt-1 block rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
                   {callbackUrl}
                 </code>
@@ -1001,11 +1007,7 @@ function WorkosSetupInstructionsSheet({
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
               <Button asChild variant="outline" size="sm">
-                <a
-                  href={WORKOS_DASHBOARD_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <a href={WORKOS_DASHBOARD_URL} target="_blank" rel="noreferrer">
                   WorkOS dashboard
                   <ExternalLink className="size-3.5" />
                 </a>
@@ -1401,10 +1403,17 @@ function pluginDetailDescription(entry: {
 }
 
 function pluginEntryIsAuthCapable(entry: {
-  versions: Array<{ requiredOauthScopes?: readonly string[] | null }>;
+  versions: Array<{
+    requiredOauthScopes?: readonly string[] | null;
+    components?: readonly { type?: string | null }[] | null;
+  }>;
 }): boolean {
   return entry.versions.some(
-    (version) => (version.requiredOauthScopes?.length ?? 0) > 0,
+    (version) =>
+      (version.requiredOauthScopes?.length ?? 0) > 0 ||
+      (version.components ?? []).some(
+        (component) => component.type === "mcp-server",
+      ),
   );
 }
 

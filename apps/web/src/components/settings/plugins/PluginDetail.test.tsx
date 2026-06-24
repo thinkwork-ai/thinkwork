@@ -620,6 +620,39 @@ describe("PluginDetail", () => {
     expect(link.getAttribute("href")).toBe("/settings/crm");
   });
 
+  it("shows plugin OAuth connection for installed MCP plugins that rely on discovered scopes", () => {
+    paramsState.pluginKey = "twenty";
+    mockQueries({
+      install: { ...baseInstall, pluginKey: "twenty" },
+      activations: [],
+      catalog: [
+        {
+          ...catalogEntry,
+          pluginKey: "twenty",
+          displayName: "Twenty CRM",
+          versions: [
+            {
+              version: "1.0.0",
+              payloadSha256: "sha256:twenty",
+              requiredOauthScopes: [],
+              components: [
+                {
+                  key: "crm",
+                  type: "mcp-server",
+                  displayName: "Twenty CRM",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    render(<PluginDetail />);
+
+    expect(screen.getByText("Not connected")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^connect$/i })).toBeTruthy();
+  });
+
   it("disables the twenty deployment detail control before runtime provisioning", () => {
     paramsState.pluginKey = "twenty";
     mockQueries({
