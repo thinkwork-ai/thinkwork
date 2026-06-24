@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-30
-status: in_progress
+status: blocked
 ---
 
 # Autopilot Status Ledger
@@ -13,16 +13,15 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: Follow-up remediation in progress. U1-U7 are merged to `main`; final
-  live Twenty record-link proof is blocked by deployed environment auth/tool
-  exposure state, with a code hardening PR now addressing an OAuth DCR
-  preservation gap found during blocker investigation.
-- Current unit: Post-deploy OAuth/DCR preservation hardening.
-- Current branch: `codex/mcp-oauth-dcr-preserve`.
-- Current worktree:
-  `.Codex/worktrees/mcp-oauth-dcr-preserve`.
-- Current pull request:
-  [#2923](https://github.com/thinkwork-ai/thinkwork/pull/2923).
+- Status: Blocked after implementation, remediation, merge, and deploy. U1-U7
+  and OAuth/DCR preservation hardening are merged to `main`; final live Twenty
+  record-link proof requires the current user to reconnect Twenty CRM MCP
+  through the product OAuth flow so DCR can repopulate the missing
+  `auth_config.client_id`.
+- Current unit: None.
+- Current branch: None.
+- Current worktree: None.
+- Current pull request: None.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -303,6 +302,37 @@ twenty-crm`. This confirms the remaining blocker is not the merged code,
   - 2026-06-24: Follow-up PR
     [#2923](https://github.com/thinkwork-ai/thinkwork/pull/2923) opened and CI
     monitoring started.
+  - 2026-06-24: Follow-up PR #2923 initially passed CI but was behind
+    `main`; rebased the branch onto current `origin/main`, reran focused local
+    verification, pushed the rebased head, and waited for required CI
+    (CLA, lint, test, typecheck, verify) to pass again.
+  - 2026-06-24: Follow-up PR #2923 passed required CI, squash-merged to
+    `main` as `da56ec2c`, and the local branch/worktree were deleted. GitHub
+    had already removed the remote branch after merge.
+  - 2026-06-24: The normal `main` deploy for `da56ec2c` succeeded in GitHub
+    Actions run
+    [#28115702194](https://github.com/thinkwork-ai/thinkwork/actions/runs/28115702194):
+    Detect Changes, Build Lambdas, Terraform Apply, Workspace Layout
+    Migration, Compliance Role Bootstrap, Build & Deploy Docs, and Deploy
+    Summary all completed successfully.
+  - 2026-06-24: Post-remediation deployed smoke retest:
+    `thinkwork me --json` confirmed the current dev session for
+    `eric@thinkwork.ai` in tenant `sleek-squirrel-230`; the live smoke command
+    `SMOKE_ENABLE_TWENTY_MCP_OAUTH=1 SMOKE_TWENTY_MCP_CALL=1 node plugins/twenty/smoke/twenty-mcp-oauth-smoke.mjs`
+    still failed before exposing Twenty tools for `twenty-crm`.
+  - 2026-06-24: Read-only CloudWatch check of
+    `/aws/lambda/thinkwork-dev-api-mcp-proxy` after the smoke still shows
+    `MCP token for twenty--crm needs refresh but auth_config.client_id is missing; user must reconnect from mobile to re-run DCR`,
+    then `MCP configs built: 3 servers (..., twenty--crm)`, then
+    `tools/list failed for twenty--crm: MCP server twenty--crm returned 401`.
+    This confirms the code hardening is deployed, but the existing live user
+    OAuth state still requires a product reconnect to run DCR and refresh the
+    Twenty token.
+  - 2026-06-24: Final blocker: no safe next code/deploy unit remains. The next
+    action is for the current user to reconnect **Twenty CRM** from the
+    ThinkWork MCP server settings/product OAuth flow, then rerun the live smoke
+    and verify Twenty tools plus Opportunity `recordLinks`. No production DB or
+    auth row mutation was performed manually.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
