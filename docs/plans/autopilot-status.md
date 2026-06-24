@@ -13,13 +13,12 @@ status: in_progress
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: In progress. U3 is active.
-- Current unit: U3 - Thread Link Hints Through API Runtime Config.
-- Current branch: `codex/mcp-record-links-u3`.
+- Status: In progress. U4 is active.
+- Current unit: U4 - Preserve Link Hints Inside Pi MCP Config Parsing.
+- Current branch: `codex/mcp-record-links-u4`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-u3`.
-- Current pull request:
-  [#2911](https://github.com/thinkwork-ai/thinkwork/pull/2911).
+  `.Codex/worktrees/mcp-record-links-u4`.
+- Current pull request: Not opened yet.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -110,6 +109,24 @@ status: in_progress
   - 2026-06-24: U3 PR
     [#2911](https://github.com/thinkwork-ai/thinkwork/pull/2911) opened and CI
     monitoring started.
+  - 2026-06-24: U3 PR
+    [#2911](https://github.com/thinkwork-ai/thinkwork/pull/2911) passed CI
+    (CLA, lint, test, typecheck, verify), squash-merged to `main` as
+    `5d9cb40a`, and the remote/local U3 branches were deleted. U4 started from
+    `origin/main` at `5d9cb40a` in `.Codex/worktrees/mcp-record-links-u4` on
+    branch `codex/mcp-record-links-u4`.
+  - 2026-06-24: U4 implemented Pi-side `recordLinkHints` preservation:
+    `parseMcpConfigs` now reconstructs safe hint metadata from
+    `payload.mcp_configs`, ignores malformed hints without dropping the MCP
+    server, and `buildMcpTools` forwards the hint object to
+    `connectMcpServer` alongside URL, headers, server name, transport,
+    registry, and tool whitelist. Bearer handle behavior remains unchanged.
+  - 2026-06-24: U4 focused verification passed:
+    `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/server.test.ts`,
+    `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp.test.ts`,
+    `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp-connect.test.ts`,
+    `pnpm --filter @thinkwork/agentcore-pi typecheck`, changed-file Prettier
+    check, and `git diff --check`.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 

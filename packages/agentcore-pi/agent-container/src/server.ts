@@ -118,6 +118,7 @@ import {
   HandleStore,
   buildMcpTools,
   type ConnectMcpServerFn,
+  type McpRuntimeRecordLinkHints,
   type McpServerConfig,
 } from "./mcp.js";
 import { createConnectMcpServer } from "./mcp-connect.js";
@@ -829,9 +830,171 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
               (tool): tool is string => typeof tool === "string",
             ) as string[])
           : undefined,
+        recordLinkHints: parseMcpRecordLinkHints(record.recordLinkHints),
       } as McpServerConfig,
     ];
   });
+}
+
+const RECORD_LINK_FIELD_RE =
+  /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*){0,4}$/;
+const RECORD_LINK_OBJECT_TYPE_RE = /^[a-z][a-z0-9-]{1,63}$/;
+const RECORD_LINK_TEMPLATE_SEGMENT_RE = /^[A-Za-z0-9._~-]+$|^\{id\}$/;
+const RECORD_LINK_FORBIDDEN_FIELD_PARTS = [
+  "auth_config",
+  "authorization",
+  "cookie",
+  "token",
+  "secret",
+  "password",
+  "credential",
+  "header",
+];
+
+function parseMcpRecordLinkHints(
+  value: unknown,
+): McpRuntimeRecordLinkHints | undefined {
+  const hints = recordOrNull(value);
+  if (!hints) return undefined;
+  if (hints.schemaVersion !== 1 || hints.source !== "plugin-manifest") {
+    return undefined;
+  }
+  const browserBaseUrl =
+    typeof hints.browserBaseUrl === "string" ? hints.browserBaseUrl : "";
+  if (!isSafeRecordLinkBrowserBaseUrl(browserBaseUrl)) return undefined;
+  if (!Array.isArray(hints.routes) || hints.routes.length === 0) {
+    return undefined;
+  }
+
+  const routes: McpRuntimeRecordLinkHints["routes"] = [];
+  const seenObjectTypes = new Set<string>();
+  for (const route of hints.routes) {
+    const normalizedRoute = parseMcpRecordLinkRoute(route);
+    if (!normalizedRoute) return undefined;
+    if (seenObjectTypes.has(normalizedRoute.objectType)) return undefined;
+    seenObjectTypes.add(normalizedRoute.objectType);
+    routes.push(normalizedRoute);
+  }
+
+  const workspace = recordOrNull(hints.workspace);
+  const normalizedWorkspace =
+    workspace === undefined
+      ? undefined
+      : parseMcpRecordLinkWorkspace(workspace);
+  if (workspace !== undefined && !normalizedWorkspace) return undefined;
+
+  return {
+    schemaVersion: 1,
+    source: "plugin-manifest",
+    browserBaseUrl,
+    routes,
+    ...(normalizedWorkspace ? { workspace: normalizedWorkspace } : {}),
+  };
+}
+
+function parseMcpRecordLinkRoute(
+  value: unknown,
+): McpRuntimeRecordLinkHints["routes"][number] | undefined {
+  const route = recordOrNull(value);
+  if (!route) return undefined;
+  const objectType =
+    typeof route.objectType === "string" ? route.objectType : "";
+  const routeTemplate =
+    typeof route.routeTemplate === "string" ? route.routeTemplate : "";
+  if (!RECORD_LINK_OBJECT_TYPE_RE.test(objectType)) return undefined;
+  if (!isSafeRecordLinkRouteTemplate(routeTemplate)) return undefined;
+  const idFields = parseMcpRecordLinkFieldList(route.idFields);
+  const labelFields = parseMcpRecordLinkFieldList(route.labelFields);
+  if (route.idFields !== undefined && !idFields) return undefined;
+  if (route.labelFields !== undefined && !labelFields) return undefined;
+  return {
+    objectType,
+    routeTemplate,
+    ...(idFields ? { idFields } : {}),
+    ...(labelFields ? { labelFields } : {}),
+  };
+}
+
+function parseMcpRecordLinkWorkspace(
+  value: Record<string, unknown>,
+): { hashField: string } | undefined {
+  const hashField = typeof value.hashField === "string" ? value.hashField : "";
+  if (!isSafeRecordLinkField(hashField)) return undefined;
+  return { hashField };
+}
+
+function parseMcpRecordLinkFieldList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const fields: string[] = [];
+  const seen = new Set<string>();
+  for (const field of value) {
+    if (!isSafeRecordLinkField(field)) return undefined;
+    if (seen.has(field)) return undefined;
+    seen.add(field);
+    fields.push(field);
+  }
+  return fields;
+}
+
+function isSafeRecordLinkField(value: unknown): value is string {
+  if (typeof value !== "string" || !RECORD_LINK_FIELD_RE.test(value)) {
+    return false;
+  }
+  const normalized = value.toLowerCase();
+  const parts = normalized.split(/[_.-]+/);
+  return (
+    !parts.includes("auth") &&
+    !RECORD_LINK_FORBIDDEN_FIELD_PARTS.some((part) => normalized.includes(part))
+  );
+}
+
+function isSafeRecordLinkRouteTemplate(value: string): boolean {
+  if (!value.startsWith("/") || value.startsWith("//")) return false;
+  if (/[?#\\%\s<>\[\]()"']/.test(value)) return false;
+  if (/[\u0000-\u001F\u007F]/.test(value)) return false;
+  const placeholders = value.match(/\{[^}]*\}/g) ?? [];
+  if (placeholders.length !== 1 || placeholders[0] !== "{id}") return false;
+  const segments = value.slice(1).split("/");
+  if (segments.some((segment) => segment.length === 0)) return false;
+  let idSegmentCount = 0;
+  for (const segment of segments) {
+    if (segment === "." || segment === "..") return false;
+    if (!RECORD_LINK_TEMPLATE_SEGMENT_RE.test(segment)) return false;
+    if (segment === "{id}") idSegmentCount += 1;
+  }
+  return idSegmentCount === 1;
+}
+
+function isSafeRecordLinkBrowserBaseUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.href === url.origin + "/" &&
+      (url.protocol === "https:" ||
+        (url.protocol === "http:" && isLocalRecordLinkOrigin(url)))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isLocalRecordLinkOrigin(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  return (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "127.0.0.1" ||
+    hostname.startsWith("127.") ||
+    hostname === "[::1]" ||
+    hostname === "::1"
+  );
+}
+
+function recordOrNull(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
 }
 
 function stringRecord(value: unknown): Record<string, string> {
