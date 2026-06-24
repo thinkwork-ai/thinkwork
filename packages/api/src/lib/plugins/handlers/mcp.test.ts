@@ -329,6 +329,79 @@ describe("endpointFrom resolution (U10)", () => {
     });
   });
 
+  it("preserves cached OAuth DCR metadata when repairing the same plugin-owned resource", async () => {
+    selectQueue.push([
+      {
+        desired_config: { publicUrl: "https://crm.tenant.example.com/old" },
+      },
+    ]);
+    selectQueue.push([
+      {
+        id: "server-7",
+        auth_config: {
+          oauth_resource: "https://crm.tenant.example.com/mcp",
+          authorize_endpoint: "https://crm.tenant.example.com/auth/authorize",
+          token_endpoint: "https://crm.tenant.example.com/auth/token",
+          client_id: "cached-client-id",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no platform agents
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(updateCalls[0]).toMatchObject({
+      auth_type: "oauth",
+      auth_config: {
+        oauth_resource: "https://crm.tenant.example.com/mcp",
+        authorize_endpoint: "https://crm.tenant.example.com/auth/authorize",
+        token_endpoint: "https://crm.tenant.example.com/auth/token",
+        client_id: "cached-client-id",
+      },
+    });
+    expect(updateCalls[0]!.url_hash).toEqual(expect.any(String));
+  });
+
+  it("does not preserve cached OAuth DCR metadata when the resource changes", async () => {
+    selectQueue.push([
+      {
+        desired_config: { publicUrl: "https://crm.tenant.example.com/old" },
+      },
+    ]);
+    selectQueue.push([
+      {
+        id: "server-7",
+        auth_config: {
+          oauth_resource: "https://old-crm.tenant.example.com/mcp",
+          authorize_endpoint: "https://old-crm.tenant.example.com/auth",
+          token_endpoint: "https://old-crm.tenant.example.com/token",
+          client_id: "stale-client-id",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no platform agents
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(updateCalls[0]).toMatchObject({
+      auth_type: "oauth",
+      auth_config: { oauth_resource: "https://crm.tenant.example.com/mcp" },
+    });
+    expect(updateCalls[0]!.auth_config).not.toHaveProperty("client_id");
+  });
+
   it("adopts manual rows with runtime record-link metadata", async () => {
     selectQueue.push([
       {
@@ -363,6 +436,48 @@ describe("endpointFrom resolution (U10)", () => {
       },
     });
     expect(insertCalls).toHaveLength(0);
+  });
+
+  it("preserves cached OAuth DCR metadata when adopting a manual row for the same resource", async () => {
+    selectQueue.push([
+      {
+        desired_config: {
+          publicUrl: "https://crm.tenant.example.com/app?utm=1#top",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no plugin-owned row
+    selectQueue.push([
+      {
+        id: "server-manual",
+        auth_config: {
+          oauth_resource: "https://crm.tenant.example.com/mcp",
+          authorize_endpoint: "https://crm.tenant.example.com/auth/authorize",
+          token_endpoint: "https://crm.tenant.example.com/auth/token",
+          client_id: "manual-client-id",
+        },
+      },
+    ]);
+    selectQueue.push([]); // no platform agents
+
+    await provisionPluginMcpComponent({
+      tenantId: "tenant-1",
+      pluginInstallId: "install-1",
+      pluginKey: "twenty",
+      component: endpointFromComponent,
+      db: mockDb as never,
+    });
+
+    expect(updateCalls[0]).toMatchObject({
+      management_source: "plugin",
+      plugin_install_id: "install-1",
+      auth_config: {
+        oauth_resource: "https://crm.tenant.example.com/mcp",
+        authorize_endpoint: "https://crm.tenant.example.com/auth/authorize",
+        token_endpoint: "https://crm.tenant.example.com/auth/token",
+        client_id: "manual-client-id",
+      },
+    });
   });
 
   it("omits runtime record-link metadata for remote http origins", async () => {

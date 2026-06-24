@@ -1,7 +1,7 @@
 ---
 title: "Autopilot status ledger"
 date: 2026-05-30
-status: blocked
+status: in_progress
 ---
 
 # Autopilot Status Ledger
@@ -13,14 +13,16 @@ status: blocked
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: Blocked after implementation and deploy. U1-U7 are merged to
-  `main`; final live Twenty record-link proof is blocked by deployed
-  environment auth/tool exposure state.
-- Current unit: Post-deploy status ledger.
-- Current branch: `codex/mcp-record-links-postdeploy-status`.
+- Status: Follow-up remediation in progress. U1-U7 are merged to `main`; final
+  live Twenty record-link proof is blocked by deployed environment auth/tool
+  exposure state, with a code hardening PR now addressing an OAuth DCR
+  preservation gap found during blocker investigation.
+- Current unit: Post-deploy OAuth/DCR preservation hardening.
+- Current branch: `codex/mcp-oauth-dcr-preserve`.
 - Current worktree:
-  `.Codex/worktrees/mcp-record-links-postdeploy-status`.
-- Current pull request: Pending for this status update.
+  `.Codex/worktrees/mcp-oauth-dcr-preserve`.
+- Current pull request:
+  [#2923](https://github.com/thinkwork-ai/thinkwork/pull/2923).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -282,6 +284,25 @@ twenty-crm`. This confirms the remaining blocker is not the merged code,
     MCP/upstream auth or tool-discovery state that needs repair/reconnection
     through the product/admin flow before an Opportunity `recordLinks` proof
     can pass.
+  - 2026-06-24: Blocker investigation found CloudWatch evidence that
+    `twenty--crm` needed token refresh but the row's cached OAuth DCR
+    `client_id` was missing, so refresh could not use the stored
+    `user_mcp_tokens` refresh token. Started follow-up branch
+    `codex/mcp-oauth-dcr-preserve` from `origin/main` at `f5c6a8b75` in
+    `.Codex/worktrees/mcp-oauth-dcr-preserve`.
+  - 2026-06-24: Follow-up implementation preserves cached OAuth discovery/DCR
+    fields (`authorize_endpoint`, `token_endpoint`, `client_id`) when plugin
+    MCP provisioning repairs an existing plugin-owned or adopted manual row for
+    the same `oauth_resource`, drops stale fields when the resource changes,
+    and makes MCP OAuth reconnect rediscover metadata when cached endpoints
+    exist but `client_id` is missing.
+  - 2026-06-24: Follow-up local verification passed:
+    `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/handlers/mcp.test.ts src/__tests__/mcp-user-servers.test.ts`,
+    `pnpm --filter @thinkwork/api typecheck`, touched-file Prettier check via
+    the installed Prettier 3.8.2 package, and `git diff --check`.
+  - 2026-06-24: Follow-up PR
+    [#2923](https://github.com/thinkwork-ai/thinkwork/pull/2923) opened and CI
+    monitoring started.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 

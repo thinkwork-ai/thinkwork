@@ -164,6 +164,45 @@ function pluginMcpAuthFields(
   return { auth_type: "none", auth_config: null };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+function mergeExistingOauthDiscoveryAuthConfig(
+  desiredAuthConfig: Record<string, unknown> | null,
+  existingAuthConfig: unknown,
+): Record<string, unknown> | null {
+  const desiredResource = nonEmptyString(desiredAuthConfig?.oauth_resource);
+  if (!desiredAuthConfig || !desiredResource || !isRecord(existingAuthConfig)) {
+    return desiredAuthConfig;
+  }
+
+  const existingResource = nonEmptyString(existingAuthConfig.oauth_resource);
+  if (existingResource && existingResource !== desiredResource) {
+    return desiredAuthConfig;
+  }
+
+  const preserved: Record<string, string> = {};
+  for (const key of [
+    "authorize_endpoint",
+    "token_endpoint",
+    "client_id",
+  ] as const) {
+    const value = nonEmptyString(existingAuthConfig[key]);
+    if (value) preserved[key] = value;
+  }
+
+  return {
+    ...desiredAuthConfig,
+    ...preserved,
+    oauth_resource: desiredResource,
+  };
+}
+
 function isLocalBrowserOrigin(url: URL): boolean {
   const hostname = url.hostname.toLowerCase();
   return (
@@ -293,14 +332,31 @@ export async function provisionPluginMcpComponent(args: {
     endpointUrl,
     resolvedEndpoint.managedAppDesiredConfig,
   );
-  const urlHash = computeMcpUrlHash(endpointUrl, auth_config);
   const runtimeMetadata = pluginMcpRuntimeMetadata(
     args.component,
     resolvedEndpoint,
   );
+  const buildRowValues = (rowAuthConfig: Record<string, unknown> | null) => ({
+    name: args.component.displayName,
+    slug,
+    url: endpointUrl,
+    transport: "streamable-http",
+    auth_type,
+    auth_config: rowAuthConfig,
+    runtime_metadata: runtimeMetadata,
+    enabled: true,
+    management_source: "plugin",
+    plugin_install_id: args.pluginInstallId,
+    status: "approved",
+    url_hash: computeMcpUrlHash(endpointUrl, rowAuthConfig),
+    approved_at: new Date(),
+  });
 
   const [existing] = (await db
-    .select({ id: tenantMcpServers.id })
+    .select({
+      id: tenantMcpServers.id,
+      auth_config: tenantMcpServers.auth_config,
+    })
     .from(tenantMcpServers)
     .where(
       and(
@@ -309,25 +365,12 @@ export async function provisionPluginMcpComponent(args: {
         eq(tenantMcpServers.slug, slug),
       ),
     )
-    .limit(1)) as { id: string }[];
-
-  const rowValues = {
-    name: args.component.displayName,
-    slug,
-    url: endpointUrl,
-    transport: "streamable-http",
-    auth_type,
-    auth_config,
-    runtime_metadata: runtimeMetadata,
-    enabled: true,
-    management_source: "plugin",
-    plugin_install_id: args.pluginInstallId,
-    status: "approved",
-    url_hash: urlHash,
-    approved_at: new Date(),
-  };
+    .limit(1)) as { id: string; auth_config: unknown }[];
 
   if (existing) {
+    const rowValues = buildRowValues(
+      mergeExistingOauthDiscoveryAuthConfig(auth_config, existing.auth_config),
+    );
     await db
       .update(tenantMcpServers)
       .set({ ...rowValues, approved_by: null, updated_at: new Date() })
@@ -341,7 +384,10 @@ export async function provisionPluginMcpComponent(args: {
   }
 
   const [manualSameEndpoint] = (await db
-    .select({ id: tenantMcpServers.id })
+    .select({
+      id: tenantMcpServers.id,
+      auth_config: tenantMcpServers.auth_config,
+    })
     .from(tenantMcpServers)
     .where(
       and(
@@ -350,9 +396,15 @@ export async function provisionPluginMcpComponent(args: {
         sql`regexp_replace(lower(trim(${tenantMcpServers.url})), '/+$', '') = ${normalizeMcpEndpointUrl(endpointUrl)}`,
       ),
     )
-    .limit(1)) as { id: string }[];
+    .limit(1)) as { id: string; auth_config: unknown }[];
 
   if (manualSameEndpoint) {
+    const rowValues = buildRowValues(
+      mergeExistingOauthDiscoveryAuthConfig(
+        auth_config,
+        manualSameEndpoint.auth_config,
+      ),
+    );
     await db
       .update(tenantMcpServers)
       .set({ ...rowValues, approved_by: null, updated_at: new Date() })
@@ -368,6 +420,7 @@ export async function provisionPluginMcpComponent(args: {
     };
   }
 
+  const rowValues = buildRowValues(auth_config);
   const [inserted] = (await db
     .insert(tenantMcpServers)
     .values({ tenant_id: args.tenantId, ...rowValues })
