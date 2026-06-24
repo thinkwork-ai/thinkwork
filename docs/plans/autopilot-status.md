@@ -13,15 +13,14 @@ status: blocked
 - Target branch: `main`.
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
-- Status: Active follow-up after user reconnect. U1-U7 and OAuth/DCR
-  preservation hardening are merged and deployed; reconnect restored live
-  Twenty tool execution, but the deployed record-link extractor does not yet
-  understand Twenty's current `recordReferences` response shape.
-- Current unit: Follow-up recordReferences extractor support.
-- Current branch: `codex/twenty-record-references-links`.
-- Current worktree: `.Codex/worktrees/twenty-record-references-links`.
-- Current pull request:
-  [#2930](https://github.com/thinkwork-ai/thinkwork/pull/2930).
+- Status: Complete. U1-U7, OAuth/DCR preservation hardening, and the
+  post-reconnect Twenty `recordReferences` extractor fix are merged to `main`,
+  deployed to app/dev, and live-verified against the plugin-owned
+  `twenty--crm` MCP server.
+- Current unit: None.
+- Current branch: None.
+- Current worktree: None.
+- Current pull request: None.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -362,6 +361,36 @@ twenty-crm`. This confirms the remaining blocker is not the merged code,
   - 2026-06-24: Follow-up PR
     [#2930](https://github.com/thinkwork-ai/thinkwork/pull/2930) opened and
     CI monitoring started.
+  - 2026-06-24: Follow-up PR #2930 required two rebases because `main` moved
+    while checks were running. Auto-merge was enabled after the final rebase;
+    required checks passed (CLA, lint, test, typecheck, verify, signed catalog
+    build), and GitHub squash-merged the PR to `main` as `8c623858`.
+  - 2026-06-24: Deleted the remote and local
+    `codex/twenty-record-references-links` branch and removed the local
+    `.Codex/worktrees/twenty-record-references-links` worktree. The main
+    checkout was not fast-forwarded in place because it contains unrelated
+    dirty user/session changes; follow-up status work continued in an isolated
+    worktree from `origin/main`.
+  - 2026-06-24: Normal `main` deploy for `8c623858` succeeded in GitHub
+    Actions run
+    [#28121141342](https://github.com/thinkwork-ai/thinkwork/actions/runs/28121141342):
+    Detect Changes, Build Lambdas, Terraform Apply, Compliance Role Bootstrap,
+    Workspace Layout Migration, Build & Deploy Docs, Update AgentCore
+    Runtimes, and Deploy Summary all completed successfully.
+  - 2026-06-24: Post-deploy live smoke passed after refreshing the local dev
+    Cognito session with `thinkwork me --json`: Twenty OAuth metadata resolved,
+    `/api/skills/user-mcp-servers` showed plugin-managed `Twenty CRM` with
+    slug `twenty--crm`, `authStatus: active`, `runtimeAssigned: true`, and
+    `runtimeEnabled: true`, and `/api/mcp/tools/list` exposed the Twenty tools
+    for agent `c1e4434f-fa28-4ba2-bdd5-5d47f9d92e2c`.
+  - 2026-06-24: Direct deployed MCP proxy proof returned `isError: false`,
+    `textHasRecordLinks: true`, and structured Opportunity `recordLinks` for:
+    Local LLM Model
+    (`https://crm.thinkwork.ai/object/opportunity/03d06a24-146f-4f85-b47a-7f8eabdd94a2`),
+    Texas Enterprises POC
+    (`https://crm.thinkwork.ai/object/opportunity/52a20648-aa86-4598-95cb-485e276a604b`),
+    and McPherson POC
+    (`https://crm.thinkwork.ai/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5`).
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
