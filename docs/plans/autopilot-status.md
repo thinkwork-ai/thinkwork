@@ -18,7 +18,8 @@ status: in_progress
 - Current branch: `codex/mcp-record-links-u4`.
 - Current worktree:
   `.Codex/worktrees/mcp-record-links-u4`.
-- Current pull request: Not opened yet.
+- Current pull request:
+  [#2912](https://github.com/thinkwork-ai/thinkwork/pull/2912).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `lfg` and
     `ce-work` workflow instructions, and the MCP record-link hints plan.
@@ -127,6 +128,9 @@ status: in_progress
     `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp-connect.test.ts`,
     `pnpm --filter @thinkwork/agentcore-pi typecheck`, changed-file Prettier
     check, and `git diff --check`.
+  - 2026-06-24: U4 PR
+    [#2912](https://github.com/thinkwork-ai/thinkwork/pull/2912) opened and CI
+    monitoring started.
 
 ## THNK-67 Company Data Shell Plugin Autopilot - 2026-06-24
 
