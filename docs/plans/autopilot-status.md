@@ -18,7 +18,8 @@ status: in_progress
 - Current branch: `codex/thnk-67-u2-company-data-catalog`.
 - Current worktree:
   `.Codex/worktrees/thnk-67-u2-company-data-catalog`.
-- Current pull request: None yet.
+- Current pull request:
+  [#2905](https://github.com/thinkwork-ai/thinkwork/pull/2905).
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `ce-work` and
     `lfg` workflows, and the focused Company Data shell plugin plan.
@@ -89,6 +90,9 @@ status: in_progress
     `generated-first-party.ts`, and `git diff --check`. Local `pnpm install`
     again completed with the known optional `canvas` build warning under local
     Node 25 because `pkg-config` is not installed.
+  - 2026-06-24: U2 PR
+    [#2905](https://github.com/thinkwork-ai/thinkwork/pull/2905) opened and CI
+    monitoring started.
 
 ## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
 
