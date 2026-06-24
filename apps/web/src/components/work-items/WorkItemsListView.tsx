@@ -56,8 +56,7 @@ export function WorkItemsListView({
       columns={columns}
       data={items}
       scrollable
-      allowHorizontalScroll={false}
-      tableClassName="table-fixed"
+      tableClassName="min-w-[64rem] table-fixed"
       pageSize={25}
       emptyState="No Work Items match this view."
     />
