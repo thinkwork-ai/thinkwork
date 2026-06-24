@@ -14885,3 +14885,7 @@ pipeline.
 - U1+U2 PR opened:
   [#2914](https://github.com/thinkwork-ai/thinkwork/pull/2914). CI monitoring
   started.
+- PR #2914 CI failure: `lint` failed because
+  `scripts/plugin-source-boundary-allowlist.mjs` still listed the deleted
+  `apps/cli/__tests__/terraform-plane-fixture.test.ts`. Removed the stale
+  allowlist entry; local `pnpm lint:plugin-source` and `pnpm lint` pass.
