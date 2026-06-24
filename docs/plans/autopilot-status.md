@@ -14,12 +14,11 @@ status: in_progress
 - Mode: Compound Engineering autopilot, one isolated worktree/branch per
   implementation unit.
 - Status: In progress.
-- Current unit: U1 - Create Company Data shell package.
-- Current branch: `codex/thnk-67-u1-company-data-shell`.
+- Current unit: U2 - Publish Company Data through the generated catalog.
+- Current branch: `codex/thnk-67-u2-company-data-catalog`.
 - Current worktree:
-  `.Codex/worktrees/thnk-67-u1-company-data-shell`.
-- Current pull request:
-  [#2904](https://github.com/thinkwork-ai/thinkwork/pull/2904).
+  `.Codex/worktrees/thnk-67-u2-company-data-catalog`.
+- Current pull request: None yet.
 - Progress:
   - 2026-06-24: Read `AGENTS.md`, the Compound Engineering `ce-work` and
     `lfg` workflows, and the focused Company Data shell plugin plan.
@@ -64,6 +63,32 @@ status: in_progress
     `pnpm --filter @thinkwork/plugin-catalog check:plugins`, changed-file
     Prettier check, and `git diff --check` all passed after deferring catalog
     publication in U1.
+  - 2026-06-24: U1 PR
+    [#2904](https://github.com/thinkwork-ai/thinkwork/pull/2904) passed
+    required CI (`cla`, `lint`, `test`, `typecheck`, `verify`, and
+    `Validate signed catalog build`) and was squash merged as
+    `3bd6ef4aacf2ab221e9acc26c9019fb991d628e4`; remote branch was deleted by
+    GitHub and the local U1 worktree/branch were removed.
+  - 2026-06-24: U2 started from `origin/main` at `3bd6ef4a` in
+    `.Codex/worktrees/thnk-67-u2-company-data-catalog` on branch
+    `codex/thnk-67-u2-company-data-catalog`.
+  - 2026-06-24: U2 implementation in progress. Removed temporary deferred
+    catalog publication from `@thinkwork/plugin-company-data`, added the
+    Company Data workspace dependency to `@thinkwork/plugin-catalog`,
+    refreshed `pnpm-lock.yaml`, regenerated the first-party plugin registry,
+    updated catalog ordering tests, and changed the Company Data README to
+    state that `company-data@0.1.0` is published.
+  - 2026-06-24: U2 focused verification passed:
+    `pnpm --filter @thinkwork/plugin-catalog check:plugins`,
+    `pnpm --filter @thinkwork/plugin-catalog test`,
+    `pnpm --filter @thinkwork/plugin-catalog typecheck`,
+    `pnpm --filter @thinkwork/plugin-company-data test`,
+    `pnpm --filter @thinkwork/plugin-company-data typecheck`, signed catalog
+    build via `plugins/catalog/scripts/build-catalog.ts` with a temporary
+    throwaway Ed25519 key, changed-file Prettier check excluding generated
+    `generated-first-party.ts`, and `git diff --check`. Local `pnpm install`
+    again completed with the known optional `canvas` build warning under local
+    Node 25 because `pkg-config` is not installed.
 
 ## THNK-46 Prompt-first Automations Autopilot - 2026-06-23
 

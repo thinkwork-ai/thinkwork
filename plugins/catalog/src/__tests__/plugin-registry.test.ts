@@ -24,6 +24,11 @@ describe("generated first-party plugin registry", () => {
         exportName: "companyBrainPluginPackage",
       },
       {
+        packageKey: "company-data",
+        packageName: "@thinkwork/plugin-company-data",
+        exportName: "companyDataPluginPackage",
+      },
+      {
         packageKey: "data-integrations",
         packageName: "@thinkwork/plugin-data-integrations",
         exportName: "dataIntegrationsPluginPackage",

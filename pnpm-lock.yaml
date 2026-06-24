@@ -1680,6 +1680,9 @@ importers:
       '@thinkwork/plugin-company-brain':
         specifier: workspace:*
         version: link:../company-brain
+      '@thinkwork/plugin-company-data':
+        specifier: workspace:*
+        version: link:../company-data
       '@thinkwork/plugin-data-integrations':
         specifier: workspace:*
         version: link:../data-integrations
