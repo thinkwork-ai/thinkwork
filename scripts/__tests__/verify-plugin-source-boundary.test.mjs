@@ -26,7 +26,7 @@ describe("verify-plugin-source-boundary", () => {
         "plugins/company-brain/smoke/cognee-managed-app-smoke.mjs",
       );
       await writeFixtureFile(dir, "plugins/company-data/src/manifest.ts");
-      await writeFixtureFile(dir, "plugins/data-integrations/src/manifest.ts");
+      await writeFixtureFile(dir, "plugins/company-etl/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/email-channel/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/n8n/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/twenty/src/manifest.ts");
@@ -41,13 +41,10 @@ describe("verify-plugin-source-boundary", () => {
   it("blocks another plugin's source inside the wrong plugin package", async () => {
     await withFixture(async (dir) => {
       await writeFixtureFile(dir, "plugins/lastmile/src/company-data-notes.md");
+      await writeFixtureFile(dir, "plugins/lastmile/src/company-etl-notes.md");
       await writeFixtureFile(
         dir,
         "plugins/lastmile/src/email-channel-notes.md",
-      );
-      await writeFixtureFile(
-        dir,
-        "plugins/lastmile/src/data-integrations-notes.md",
       );
       await writeFixtureFile(dir, "plugins/lastmile/src/n8n-notes.md");
       await writeFixtureFile(dir, "plugins/lastmile/src/twenty-notes.md");
@@ -62,9 +59,9 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations[0].pluginKeys, ["company-data"]);
       assert.equal(
         result.violations[1].path,
-        "plugins/lastmile/src/data-integrations-notes.md",
+        "plugins/lastmile/src/company-etl-notes.md",
       );
-      assert.deepEqual(result.violations[1].pluginKeys, ["data-integrations"]);
+      assert.deepEqual(result.violations[1].pluginKeys, ["company-etl"]);
       assert.equal(
         result.violations[2].path,
         "plugins/lastmile/src/email-channel-notes.md",
@@ -91,7 +88,7 @@ describe("verify-plugin-source-boundary", () => {
       );
       await writeFixtureFile(
         dir,
-        "packages/api/src/lib/plugins/data-integrations-extra.ts",
+        "packages/api/src/lib/plugins/company-etl-extra.ts",
       );
       await writeFixtureFile(dir, "packages/api/src/lib/plugins/n8n-extra.ts");
       await writeFixtureFile(
@@ -109,9 +106,9 @@ describe("verify-plugin-source-boundary", () => {
       assert.deepEqual(result.violations[0].pluginKeys, ["company-data"]);
       assert.equal(
         result.violations[1].path,
-        "packages/api/src/lib/plugins/data-integrations-extra.ts",
+        "packages/api/src/lib/plugins/company-etl-extra.ts",
       );
-      assert.deepEqual(result.violations[1].pluginKeys, ["data-integrations"]);
+      assert.deepEqual(result.violations[1].pluginKeys, ["company-etl"]);
       assert.equal(
         result.violations[2].path,
         "packages/api/src/lib/plugins/n8n-extra.ts",
