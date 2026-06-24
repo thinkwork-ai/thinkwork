@@ -34,6 +34,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { createHash } from "node:crypto";
 import { Type, type TSchema } from "typebox";
 import type { ConnectMcpServerArgs, ConnectMcpServerFn } from "./mcp.js";
+import { enrichMcpRecordLinks } from "./mcp-record-links.js";
 
 /** Default per-RPC timeout; matches the legacy pi-mono MCP implementation. */
 const DEFAULT_LIST_TOOLS_TIMEOUT_MS = 30_000;
@@ -243,13 +244,22 @@ export function createConnectMcpServer(
             if ("isError" in response && response.isError) {
               throw new Error(text || `MCP tool ${tool.name} returned isError`);
             }
+            const enriched = enrichMcpRecordLinks({
+              hints: args.recordLinkHints,
+              response,
+              text,
+              toolName: tool.name,
+            });
             return {
-              content: [{ type: "text", text }],
+              content: [{ type: "text", text: enriched.text }],
               details: {
                 server_name: args.serverName,
                 mcp_server: args.serverName,
                 mcp_tool_name: tool.name,
                 exposed_tool_name: name,
+                ...(enriched.recordLinks.length > 0
+                  ? { recordLinks: enriched.recordLinks }
+                  : {}),
                 raw: response,
               },
             };
