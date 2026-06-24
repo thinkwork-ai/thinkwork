@@ -212,7 +212,7 @@ integration model.
 - `docs/solutions/architecture-patterns/plugin-source-boundaries-package-owned-deploy-verified-2026-06-17.md`.
 - `plugins/README.md`.
 - Existing plugin packages under `plugins/company-brain/`,
-  `plugins/lastmile/`, `plugins/plane/`, and `plugins/twenty/`.
+  `plugins/lastmile/`, `plugins/n8n/`, and `plugins/twenty/`.
 - Plugin catalog contracts and registry generation under `plugins/catalog/`.
 
 ---

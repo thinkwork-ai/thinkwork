@@ -43,8 +43,8 @@ one. V1 plugin packages are hand-authored TypeScript with tests.
 - `packages/plugin-catalog/src/__tests__/build-catalog.test.ts`
 - `packages/plugin-catalog/src/__tests__/plugin-package.test.ts`
 - `packages/plugin-catalog/src/__tests__/plugin-registry.test.ts`
-- `plugins/plane/src/index.ts`
-- `plugins/plane/test/manifest.test.ts`
+- `plugins/twenty/src/index.ts`
+- `plugins/twenty/test/manifest.test.ts`
 
 Test customer-facing copy separately from internal implementation details when
 the plugin wraps an internal substrate.

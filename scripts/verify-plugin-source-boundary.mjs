@@ -23,7 +23,6 @@ const PLUGIN_KEYS = [
   "email-channel",
   "lastmile",
   "n8n",
-  "plane",
   "twenty",
 ];
 const PLUGIN_SOURCE_ROOTS = new Map([
@@ -35,7 +34,6 @@ const PLUGIN_SOURCE_ROOTS = new Map([
   ["email-channel", ["plugins/email-channel/"]],
   ["lastmile", ["plugins/lastmile/"]],
   ["n8n", ["plugins/n8n/"]],
-  ["plane", ["plugins/plane/"]],
   ["twenty", ["plugins/twenty/"]],
 ]);
 const SKIP_DIRS = new Set([

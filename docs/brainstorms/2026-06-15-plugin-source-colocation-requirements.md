@@ -20,7 +20,7 @@ The desired ownership boundary is stronger than "move the manifest": root-level
 should be able to open one plugin folder and find the plugin-specific behavior,
 UI surfaces, substrate assets, deployment/runtime hooks, docs, tests, and
 operations material. Shared packages should retain only generic platform
-infrastructure that is not specific to Plane, Twenty, LastMile, Company Brain,
+infrastructure that is not specific to Twenty CRM, Twenty, LastMile, Company Brain,
 Cognee, or any future plugin.
 
 This revision tightens the original THNK-31 scope after implementation revealed
@@ -144,7 +144,7 @@ CLI/CI fixtures.
   service. Its Dockerfile/image wrapper, Terraform module source, deployment
   adapter, smoke tests, and customer-facing copy must therefore be owned by
   `plugins/company-brain/` or explicitly marked as temporary migration debt.
-- R13. Plane and Twenty managed-app Terraform modules and deployment adapters
+- R13. Twenty CRM and Twenty managed-app Terraform modules and deployment adapters
   must move behind plugin-owned source while preserving current deployment
   behavior.
 - R14. LastMile skill/MCP-only plugin content must remain package-local,
@@ -170,7 +170,7 @@ CLI/CI fixtures.
 
 **Migration coverage**
 
-- R20. Migrate Plane first as the full-shape proof plugin.
+- R20. Migrate Twenty CRM first as the full-shape proof plugin.
 - R21. Migrate Twenty while preserving install, infrastructure deployment, MCP
   registration, and user activation behavior.
 - R22. Migrate Company Brain/Cognee infrastructure and UI source without leaking
@@ -196,8 +196,8 @@ CLI/CI fixtures.
 
 ## Acceptance Examples
 
-- AE1. **Covers R1-R8, R13, R20.** Plane can be understood from
-  `plugins/plane/README.md` and local links to its manifest, skill source,
+- AE1. **Covers R1-R8, R13, R20.** Twenty CRM can be understood from
+  `plugins/twenty/README.md` and local links to its manifest, skill source,
   Terraform, adapter, smokes, tests, and operations notes.
 - AE2. **Covers R5-R8.** `packages/plugin-catalog` exposes only generic plugin
   contracts/catalog infrastructure and does not own first-party plugin behavior.
@@ -230,7 +230,7 @@ CLI/CI fixtures.
   owned by `plugins/company-brain/`.
 - A canonical plugin spec/README exists and is good enough for a new plugin
   author to know what belongs in a plugin package.
-- Existing product behavior for Plane, Twenty, LastMile, and Company Brain
+- Existing product behavior for Twenty CRM, Twenty, LastMile, and Company Brain
   remains unchanged through migration.
 - Repository checks make the new boundary durable and report any remaining
   plugin-specific migration debt.
@@ -265,7 +265,7 @@ CLI/CI fixtures.
   requirements pass explicitly promotes Cognee to shared platform infrastructure.
 - `packages/plugin-catalog` is allowed only as generic platform infrastructure;
   it must not be treated as a first-party plugin source folder.
-- Plane is the first proof plugin because it exercises manifest, skills,
+- Twenty CRM is the first proof plugin because it exercises manifest, skills,
   infrastructure, MCP activation, smokes, and operations material.
 - Temporary migration allowlists are acceptable only while their removal is
   tracked by THNK-31 implementation units.
@@ -309,7 +309,7 @@ CLI/CI fixtures.
 - Linear issue `THNK-31`.
 - Linear document `81845c7a-ccb7-40c6-bf38-472bf42ae502`.
 - `docs/plans/2026-06-12-001-feat-application-plugins-plan.md`.
-- `docs/brainstorms/2026-06-14-plane-application-plugin-requirements.md`.
+- `docs/brainstorms/2026-06-14-twenty-application-plugin-requirements.md`.
 - `docs/brainstorms/2026-06-14-plugin-builder-skill-requirements.md`.
 - Historical catalog source under `packages/plugin-catalog/src/plugins/`; root
   `plugins/<plugin-key>/` packages are now the intended source boundary.

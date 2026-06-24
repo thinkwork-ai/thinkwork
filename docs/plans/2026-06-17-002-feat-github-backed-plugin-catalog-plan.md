@@ -95,7 +95,7 @@ install the update.
 - Do not make GitHub availability a hard requirement for normal Plugins page
   reads when a valid cached or bundled catalog is available.
 - Do not introduce manual production mutation commands as part of rollout.
-- Do not broaden the Plane/Twenty/LastMile plugin source boundary outside
+- Do not broaden plugin source boundaries outside
   `plugins/<plugin-key>/` for plugin-specific code.
 
 ### Deferred to Follow-Up Work
@@ -243,7 +243,7 @@ install the update.
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```mermaid
 sequenceDiagram
@@ -301,6 +301,7 @@ GitHub-backed runtime source.
 **Dependencies:** None
 
 **Files:**
+
 - Modify: `plugins/catalog/src/catalog.ts`
 - Modify: `plugins/catalog/scripts/build-catalog.ts`
 - Modify: `plugins/catalog/src/__tests__/catalog.test.ts`
@@ -308,6 +309,7 @@ GitHub-backed runtime source.
 - Modify: `plugins/catalog/package.json`
 
 **Approach:**
+
 - Extend the signed catalog document or signed catalog metadata with
   provenance fields: repository, ref/channel, source commit SHA, generated-at,
   and catalog digest.
@@ -320,11 +322,13 @@ GitHub-backed runtime source.
   by the signature or tied to the verified digest.
 
 **Patterns to follow:**
+
 - Stable JSON and ed25519 verification in `plugins/catalog/src/catalog.ts`.
 - Generated-registry check before catalog build in
   `plugins/catalog/scripts/build-catalog.ts`.
 
 **Test scenarios:**
+
 - Happy path: building a catalog with source metadata produces a document that
   verifies and exposes the same plugin/version payloads.
 - Edge case: a catalog without optional source metadata still verifies for the
@@ -336,6 +340,7 @@ GitHub-backed runtime source.
   validation.
 
 **Verification:**
+
 - Catalog package tests prove generated, signed, verified, tampered, and
   backwards-compatible documents behave deterministically.
 
@@ -351,6 +356,7 @@ machine-readable catalog artifact that the API can fetch from GitHub.
 **Dependencies:** U1
 
 **Files:**
+
 - Create: `.github/workflows/plugin-catalog.yml`
 - Modify: `.github/workflows/verify.yml`
 - Modify: `plugins/README.md`
@@ -358,6 +364,7 @@ machine-readable catalog artifact that the API can fetch from GitHub.
 - Test: `plugins/catalog/src/__tests__/build-catalog.test.ts`
 
 **Approach:**
+
 - Add CI coverage that runs plugin registry generation check, catalog
   validation, and signed catalog build for `plugins/**` changes.
 - Publish or update one stable GitHub Release asset for the `main` catalog
@@ -372,10 +379,12 @@ machine-readable catalog artifact that the API can fetch from GitHub.
   can confirm which commit a stage is reading.
 
 **Patterns to follow:**
+
 - Release asset publishing in `.github/workflows/release.yml`.
 - Generated plugin package registry checks in `plugins/catalog/package.json`.
 
 **Test scenarios:**
+
 - Happy path: a plugin manifest version bump causes the workflow to produce a
   signed artifact with that version and the merge commit SHA.
 - Edge case: plugin-only docs changes do not publish a misleading catalog
@@ -386,6 +395,7 @@ machine-readable catalog artifact that the API can fetch from GitHub.
   publish.
 
 **Verification:**
+
 - The stable catalog release asset contains a signed catalog document that can
   be verified locally with the trusted public key and traced to a Git commit
   under `plugins/*`.
@@ -402,6 +412,7 @@ GitHub with cache and fallback behavior.
 **Dependencies:** U1, U2
 
 **Files:**
+
 - Modify: `packages/api/src/lib/plugins/catalog-source.ts`
 - Create: `packages/api/src/lib/plugins/catalog-github-source.ts`
 - Modify: `packages/api/src/lib/plugins/catalog-source.test.ts`
@@ -409,6 +420,7 @@ GitHub with cache and fallback behavior.
 - Modify: `packages/api/package.json` if a GitHub client dependency is needed
 
 **Approach:**
+
 - Split catalog loading into explicit source modes: bundled fallback, signed
   bundled document, GitHub-backed verified snapshot, and cached stale snapshot.
 - Fetch the stable GitHub Release asset or release metadata with a ThinkWork
@@ -423,11 +435,13 @@ GitHub with cache and fallback behavior.
   configuration keep working.
 
 **Patterns to follow:**
+
 - Fail-closed trust behavior in `packages/api/src/lib/plugins/catalog-source.ts`.
 - GitHub fetch headers, warm-container TTL, and stale-on-failure behavior in
   `packages/api/src/graphql/resolvers/deployments/deploymentReleases.query.ts`.
 
 **Test scenarios:**
+
 - Happy path: GitHub returns a newer signed document; `getPluginCatalog()`
   verifies it, caches it, and returns latest versions from the remote artifact.
 - Happy path: GitHub returns `304`; the API serves the cached verified snapshot
@@ -444,6 +458,7 @@ GitHub with cache and fallback behavior.
   snapshot returned by `pluginCatalog`.
 
 **Verification:**
+
 - API unit tests cover remote success, `304`, stale fallback, no-config
   fallback, bad signature, malformed payload, and rate-limit errors.
 
@@ -459,6 +474,7 @@ source, optional auth, trusted public key, and cache storage.
 **Dependencies:** U3
 
 **Files:**
+
 - Modify: `terraform/modules/app/lambda-api/variables.tf`
 - Modify: `terraform/modules/app/lambda-api/runtime-config.tf`
 - Modify: `terraform/modules/app/lambda-api/iam-grouped.tf`
@@ -468,6 +484,7 @@ source, optional auth, trusted public key, and cache storage.
 - Test: existing Terraform module fixture/test paths if present
 
 **Approach:**
+
 - Add narrow runtime configuration for catalog source mode, GitHub owner/repo,
   ref/channel, release selector or artifact path, cache TTL, and cache object
   location.
@@ -483,6 +500,7 @@ source, optional auth, trusted public key, and cache storage.
   requires a versioned companion parameter.
 
 **Patterns to follow:**
+
 - Stage-wide SSM read pattern in
   `terraform/modules/app/lambda-api/iam-grouped.tf`.
 - Runtime config conventions in
@@ -490,6 +508,7 @@ source, optional auth, trusted public key, and cache storage.
 - Existing `/thinkwork/${stage}/...` parameter naming.
 
 **Test scenarios:**
+
 - Happy path: Terraform renders catalog source parameters and the API role can
   read them.
 - Happy path: cache bucket/key permissions allow only required object
@@ -501,6 +520,7 @@ source, optional auth, trusted public key, and cache storage.
   closed according to the existing trust model.
 
 **Verification:**
+
 - Terraform plan output shows scoped SSM/secret/cache permissions and no broad
   repository-write capability for the API Lambda.
 
@@ -516,6 +536,7 @@ GitHub, cache, or bundled fallback, and understand available upgrades.
 **Dependencies:** U3
 
 **Files:**
+
 - Modify: `packages/database-pg/graphql/types/plugins.graphql`
 - Modify: `terraform/schema.graphql`
 - Modify: `packages/api/src/graphql/resolvers/plugins/queries.ts`
@@ -530,6 +551,7 @@ GitHub, cache, or bundled fallback, and understand available upgrades.
   `apps/mobile`, and `apps/cli` where scripts exist
 
 **Approach:**
+
 - Preserve `pluginCatalog: [PluginCatalogEntry!]!` as the existing list field.
   Add a sibling query such as `pluginCatalogStatus: PluginCatalogStatus!` for
   source/freshness metadata so current consumers remain source-compatible.
@@ -542,12 +564,14 @@ GitHub, cache, or bundled fallback, and understand available upgrades.
   are mainly an operator concern.
 
 **Patterns to follow:**
+
 - Existing `SettingsPluginCatalogQuery` and explicit urql refresh calls.
 - Existing Plugin Detail upgrade banner and `updateAvailable` behavior.
 - Explicit refetch guidance in
   `docs/solutions/integration-issues/spaces-urql-doc-cache-no-live-invalidation.md`.
 
 **Test scenarios:**
+
 - Happy path: installed plugin pinned at `0.1.0` with remote latest `0.1.1`
   renders update available and upgrade action.
 - Happy path: catalog metadata shows GitHub source commit and fetched time when
@@ -564,6 +588,7 @@ GitHub, cache, or bundled fallback, and understand available upgrades.
   controls.
 
 **Verification:**
+
 - API resolver tests prove schema compatibility and status metadata. Web tests
   prove update/status copy, stale metadata, fallback mode, and non-operator
   behavior render correctly from mocked GraphQL results.
@@ -580,6 +605,7 @@ making every page load call GitHub.
 **Dependencies:** U3, U4, U5
 
 **Files:**
+
 - Modify: `packages/database-pg/graphql/types/plugins.graphql`
 - Modify: `packages/api/src/graphql/resolvers/plugins/mutations.ts`
 - Modify: `packages/api/src/graphql/resolvers/plugins/index.ts`
@@ -592,6 +618,7 @@ making every page load call GitHub.
   appropriate
 
 **Approach:**
+
 - Add one operator-only refresh path if the UI needs manual "check GitHub now"
   behavior. It should return catalog metadata and avoid changing install state
   directly.
@@ -604,11 +631,13 @@ making every page load call GitHub.
   limits.
 
 **Patterns to follow:**
+
 - Admin mutation authorization rules from
   `docs/solutions/best-practices/every-admin-mutation-requires-requiretenantadmin-2026-04-22.md`.
 - Existing EventBridge/Lambda scheduling patterns in the app Terraform modules.
 
 **Test scenarios:**
+
 - Happy path: tenant admin triggers refresh, API fetches a newer verified
   catalog, and subsequent `pluginCatalog` reads show the new latest version.
 - Edge case: refresh called twice inside the minimum interval returns current
@@ -621,6 +650,7 @@ making every page load call GitHub.
   call.
 
 **Verification:**
+
 - Resolver tests prove admin-only refresh, rate-limit coalescing, stale
   fallback, and non-mutating behavior.
 
@@ -636,6 +666,7 @@ plugin authors, release operators, and verification agents use it correctly.
 **Dependencies:** U1-U6
 
 **Files:**
+
 - Modify: `plugins/README.md`
 - Modify: `docs/src/content/docs/applications/plugins.mdx` or the current
   plugin docs page if named differently
@@ -649,6 +680,7 @@ plugin authors, release operators, and verification agents use it correctly.
   `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs`
 
 **Approach:**
+
 - Explain the distinction between authored plugin source (`plugins/*`),
   generated signed catalog artifact, API verified cache, and installed pinned
   versions.
@@ -660,17 +692,20 @@ plugin authors, release operators, and verification agents use it correctly.
   package-local smoke verification.
 
 **Patterns to follow:**
+
 - Deployed verification gate in
   `docs/solutions/architecture-patterns/plugin-source-boundaries-package-owned-deploy-verified-2026-06-17.md`.
 - LastMile package-owned smoke posture in
   `plugins/lastmile/smoke/lastmile-plugin-smoke.mjs`.
 
 **Test scenarios:**
+
 - Test expectation: none -- documentation-only unit, but examples must remain
   truthful against implemented GraphQL fields, CI workflow names, and smoke
   commands.
 
 **Verification:**
+
 - Docs describe how a plugin version bump becomes visible without a full app
   deploy and how to verify LastMile remains installable/upgradeable through
   ThinkWork.
@@ -754,15 +789,15 @@ plugin flow.
 
 ## Risks & Dependencies
 
-| Risk | Mitigation |
-|------|------------|
-| API trusts mutable GitHub `main` too directly | Fetch only signed catalog artifacts, verify ed25519 signature and payload digests, and record source commit SHA. |
-| GitHub rate limits or outage break Settings -> Plugins | Use authenticated conditional requests, warm-container and persisted cache, scheduled refresh, and stale verified fallback. |
+| Risk                                                   | Mitigation                                                                                                                               |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| API trusts mutable GitHub `main` too directly          | Fetch only signed catalog artifacts, verify ed25519 signature and payload digests, and record source commit SHA.                         |
+| GitHub rate limits or outage break Settings -> Plugins | Use authenticated conditional requests, warm-container and persisted cache, scheduled refresh, and stale verified fallback.              |
 | Generated artifact drifts from root `plugins/*` source | CI must run registry check and catalog build from root plugin packages before publishing. Artifact metadata must name the source commit. |
-| Catalog freshness and install pinning diverge | Use one verified catalog source for both `pluginCatalog` reads and `getPluginVersion()` upgrade/install resolution. |
-| Terraform/env changes exceed Lambda config limits | Prefer SSM/runtime config and scoped IAM over many new Lambda environment variables. |
-| Browser shows stale or confusing update status | Expose source metadata and stale state in GraphQL; keep copy concise and non-alarming. |
-| Signing key leaks or is misused | Keep private key only in GitHub Actions secrets, avoid logging secrets, and deploy only the public key/trust anchor. |
+| Catalog freshness and install pinning diverge          | Use one verified catalog source for both `pluginCatalog` reads and `getPluginVersion()` upgrade/install resolution.                      |
+| Terraform/env changes exceed Lambda config limits      | Prefer SSM/runtime config and scoped IAM over many new Lambda environment variables.                                                     |
+| Browser shows stale or confusing update status         | Expose source metadata and stale state in GraphQL; keep copy concise and non-alarming.                                                   |
+| Signing key leaks or is misused                        | Keep private key only in GitHub Actions secrets, avoid logging secrets, and deploy only the public key/trust anchor.                     |
 
 ---
 

@@ -20,7 +20,7 @@ smokes, docs, tests, and operational evidence. Shared packages remain generic
 plugin platform infrastructure.
 
 The repo already has root plugin packages and has moved manifests, package
-tests, and smoke scripts for Plane, Twenty, Company Brain, and LastMile. The
+tests, and smoke scripts for Twenty CRM, Twenty, Company Brain, and LastMile. The
 remaining work is the stronger ownership pass: remove first-party plugin source
 ownership from `packages/plugin-catalog`, move managed-app adapters and
 Terraform source behind plugin packages, render plugin-specific operator UI from
@@ -53,13 +53,13 @@ ambiguous even though the first package migration slices have landed.
 - R9-R11: Plugin-specific web/operator screens are owned by plugin packages and
   rendered from plugin detail for this migration, with Company Brain ontology
   and knowledge-graph operations moving under `plugins/company-brain/`.
-- R12-R14: Cognee is Company Brain's internal substrate; Plane and Twenty
+- R12-R14: Cognee is Company Brain's internal substrate; Twenty CRM and Twenty
   managed-app infrastructure moves behind plugin-owned source; LastMile remains
   package-local for skill/MCP-only content.
 - R15-R19: A canonical plugin spec plus per-plugin README contracts define what
   plugin authors own and what remains platform code; plugin-builder emits that
   shape.
-- R20-R23: Plane, Twenty, Company Brain/Cognee, and LastMile preserve existing
+- R20-R23: Twenty CRM, Twenty, Company Brain/Cognee, and LastMile preserve existing
   product behavior through migration.
 - R24-R27: Tooling lists, validates, builds, tests, and enforces plugins from
   the folder source of truth; compatibility paths are removed after a full
@@ -71,7 +71,7 @@ operator, A4 Tenant/operator user.
 **Origin flows:** F1 Plugin review, F2 Catalog and deployment discovery, F3
 Plugin-owned operator UI, F4 Future plugin submission.
 
-**Origin acceptance examples:** AE1 Plane full-shape review, AE2 generic
+**Origin acceptance examples:** AE1 Twenty CRM full-shape review, AE2 generic
 `packages/plugin-catalog`, AE3 Company Brain plugin-owned UI, AE4 Cognee as
 Company Brain substrate, AE5 Twenty behavior parity, AE6 plugin-builder output,
 AE7 source-boundary enforcement.
@@ -106,13 +106,13 @@ AE7 source-boundary enforcement.
 
 ### Relevant Code and Patterns
 
-- `plugins/{plane,twenty,company-brain,lastmile}/` already define first-party
+- `plugins/{twenty,twenty,company-brain,lastmile}/` already define first-party
   plugin package roots, manifests, package tests, and package-local smokes.
 - `packages/plugin-catalog/src/plugin-package.ts` defines the current first
   party package contract; `packages/plugin-catalog/src/plugins/index.ts` still
   manually imports first-party plugin packages.
 - `packages/deployment-runner/src/apps/registry.ts` owns the current managed
-  app adapter registry, while `packages/deployment-runner/src/apps/{plane,twenty,cognee}.ts`
+  app adapter registry, while `packages/deployment-runner/src/apps/{twenty,twenty,cognee}.ts`
   remain plugin-specific implementation files.
 - `apps/web/src/components/settings/plugins/PluginDetail.tsx` is the generic
   plugin detail route and is the correct first host for plugin-declared UI
@@ -238,11 +238,11 @@ plugins/
       api/
       discovery.fixture.ts
       manifest.ts
-  plane/
+  twenty/
     src/
       deployment/
       manifest.ts
-    terraform/plane/
+    terraform/twenty/
   twenty/
     src/
       api/
@@ -298,7 +298,7 @@ temporary compatibility links.
 **Files:**
 
 - Create: `plugins/README.md`
-- Modify: `plugins/plane/README.md`
+- Modify: `plugins/twenty/README.md`
 - Modify: `plugins/twenty/README.md`
 - Modify: `plugins/company-brain/README.md`
 - Modify: `plugins/lastmile/README.md`
@@ -319,7 +319,7 @@ temporary compatibility links.
 
 - Existing `defineFirstPartyPluginPackage` validation in
   `packages/plugin-catalog/src/plugin-package.ts`.
-- Current package README style in `plugins/plane/README.md`.
+- Current package README style in `plugins/twenty/README.md`.
 - Company Brain operational language from
   `docs/solutions/runbooks/company-brain-premium-plugin-operations-2026-06-13.md`.
 
@@ -399,7 +399,7 @@ metadata.
 
 - U3. **Move managed-app deployment adapters behind plugins**
 
-**Goal:** Let plugin packages own Plane, Twenty, and Company Brain/Cognee
+**Goal:** Let plugin packages own Twenty CRM, Twenty, and Company Brain/Cognee
 managed-app adapter definitions while `packages/deployment-runner` keeps only
 generic managed-app planning/apply orchestration.
 
@@ -410,17 +410,17 @@ generic managed-app planning/apply orchestration.
 **Files:**
 
 - Modify: `packages/deployment-runner/src/apps/registry.ts`
-- Move: `packages/deployment-runner/src/apps/plane.ts` to
-  `plugins/plane/src/deployment/managed-app.ts`
+- Move: `packages/deployment-runner/src/apps/twenty.ts` to
+  `plugins/twenty/src/deployment/managed-app.ts`
 - Move: `packages/deployment-runner/src/apps/twenty.ts` to
   `plugins/twenty/src/deployment/managed-app.ts`
 - Move: `packages/deployment-runner/src/apps/cognee.ts` to
   `plugins/company-brain/src/deployment/cognee-managed-app.ts`
 - Modify: `packages/deployment-runner/src/apps/utils.ts`
-- Modify: `plugins/{plane,twenty,company-brain}/src/index.ts`
+- Modify: `plugins/{twenty,twenty,company-brain}/src/index.ts`
 - Test: `packages/deployment-runner/test/deployment-runner-managed-apps.test.ts`
 - Test: `packages/deployment-runner/test/deployment-runner.test.ts`
-- Test: `plugins/plane/test/manifest.test.ts`
+- Test: `plugins/twenty/test/manifest.test.ts`
 - Test: `plugins/twenty/test/manifest.test.ts`
 - Test: `plugins/company-brain/test/manifest.test.ts`
 
@@ -430,8 +430,8 @@ generic managed-app planning/apply orchestration.
   deployment-runner registry consume them through a generic adapter contract.
 - Keep `ManagedAppKey` semantics compatible for existing rows, Terraform
   variables, deployment evidence, and plugin install component state.
-- Preserve Plane-specific compact topology guardrails from `AGENTS.md` while
-  moving Plane adapter source into the Plane plugin package.
+- Preserve Twenty CRM-specific compact topology guardrails from `AGENTS.md` while
+  moving Twenty CRM adapter source into the Twenty CRM plugin package.
 
 **Patterns to follow:**
 
@@ -442,12 +442,12 @@ generic managed-app planning/apply orchestration.
 **Test scenarios:**
 
 - Happy path: `buildManagedAppPlan` still returns the same Terraform variables,
-  smoke contracts, status outputs, and data impact for Plane, Twenty, and
+  smoke contracts, status outputs, and data impact for Twenty CRM, Twenty, and
   Cognee after adapters move.
 - Error path: unknown managed-app keys still fail through the generic registry.
 - Integration: Company Brain install/adoption still maps its substrate component
   to managed app key `cognee` with unchanged evidence labels.
-- Covers AE1, AE4, AE5. Plane, Twenty, and Company Brain/Cognee behavior stays
+- Covers AE1, AE4, AE5. Twenty CRM, Twenty, and Company Brain/Cognee behavior stays
   stable while source ownership moves.
 
 **Verification:**
@@ -469,13 +469,13 @@ deployment compatibility.
 
 **Files:**
 
-- Move: `terraform/modules/app/plane/**` to `plugins/plane/terraform/plane/**`
+- Move: `plugins/twenty/terraform/twenty/**` to `plugins/twenty/terraform/twenty/**`
 - Move: `terraform/modules/app/twenty/**` to `plugins/twenty/terraform/twenty/**`
 - Move: `terraform/modules/app/cognee/**` to
   `plugins/company-brain/terraform/cognee/**`
 - Move: `packages/cognee/Dockerfile` to
   `plugins/company-brain/runtime/cognee/Dockerfile`
-- Modify: `apps/cli/__tests__/terraform-plane-fixture.test.ts`
+- Modify: `apps/cli/__tests__/terraform-twenty-fixture.test.ts`
 - Modify: `apps/cli/__tests__/terraform-twenty-fixture.test.ts`
 - Modify: `apps/cli/__tests__/terraform-cognee-fixture.test.ts`
 - Modify: release/build packaging references under `scripts/release/**`
@@ -500,7 +500,7 @@ deployment compatibility.
 
 **Test scenarios:**
 
-- Happy path: CLI fixture tests find Plane, Twenty, and Cognee Terraform source
+- Happy path: CLI fixture tests find Twenty CRM, Twenty, and Cognee Terraform source
   from plugin-owned paths.
 - Integration: release manifest/build packaging includes plugin-owned Terraform
   and Cognee runtime source while preserving existing artifact names.
@@ -511,7 +511,7 @@ deployment compatibility.
 
 **Verification:**
 
-- `terraform/modules/app/{plane,twenty,cognee}` and `packages/cognee` no longer
+- `terraform/modules/app/{twenty,twenty,cognee}` and `packages/cognee` no longer
   contain first-party plugin source, except temporary wrappers with documented
   removal gates.
 
@@ -734,7 +734,7 @@ and deleting compatibility wrappers after the full migration pass.
 - Error path: newly added plugin-specific source outside the owning package
   fails with actionable guidance.
 - Edge case: historical DB migration tests remain accepted as immutable history.
-- Edge case: shared false positives such as deployment-control-plane remain in
+- Edge case: shared false positives such as deployment-control-twenty remain in
   the shared allowlist, not migration debt.
 - Covers AE7. Misplaced plugin-specific files fail repository checks.
 
@@ -765,7 +765,7 @@ and deleting compatibility wrappers after the full migration pass.
   Brain plugin detail rendering, API runtime hooks, release packaging, and
   source-boundary enforcement.
 - **Unchanged invariants:** AWS-only deployment, no manual production mutation,
-  no local-only plugin install path, and existing Plane compact ECS topology
+  no local-only plugin install path, and existing Twenty CRM compact ECS topology
   guardrails remain in force.
 
 ---
@@ -803,9 +803,9 @@ and deleting compatibility wrappers after the full migration pass.
 
 - **Origin document:** [docs/brainstorms/2026-06-15-plugin-source-colocation-requirements.md](../brainstorms/2026-06-15-plugin-source-colocation-requirements.md)
 - Related plan: [docs/plans/2026-06-12-001-feat-application-plugins-plan.md](2026-06-12-001-feat-application-plugins-plan.md)
-- Related brainstorm: [docs/brainstorms/2026-06-14-plane-application-plugin-requirements.md](../brainstorms/2026-06-14-plane-application-plugin-requirements.md)
+- Related brainstorm: [docs/brainstorms/2026-06-14-twenty-application-plugin-requirements.md](../brainstorms/2026-06-14-twenty-application-plugin-requirements.md)
 - Related brainstorm: [docs/brainstorms/2026-06-14-plugin-builder-skill-requirements.md](../brainstorms/2026-06-14-plugin-builder-skill-requirements.md)
-- Plugin packages: `plugins/plane/`, `plugins/twenty/`,
+- Plugin packages: `plugins/twenty/`, `plugins/n8n/`,
   `plugins/company-brain/`, `plugins/lastmile/`
 - Catalog contracts: `packages/plugin-catalog/src/plugin-package.ts`,
   `packages/plugin-catalog/src/plugins/index.ts`

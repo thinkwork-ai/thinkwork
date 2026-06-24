@@ -15085,3 +15085,36 @@ pipeline.
 - U4 PR opened:
   [#2922](https://github.com/thinkwork-ai/thinkwork/pull/2922). CI monitoring
   started.
+- PR #2922 passed required CI after rebasing onto the then-current `main`
+  (CLA, lint, verify, typecheck, and test), squash-merged to `main` as
+  `605db2bb356fd8be2647c4b2edbde2c67816d51e`, and the remote/local U4
+  branches were deleted.
+
+### U5 Progress
+
+- 2026-06-24 CDT: Created worktree `.Codex/worktrees/remove-plane-u5` on
+  `codex/remove-plane-u5-docs` from `origin/main` at `605db2bb`.
+- Current scope: remove Plane support references from docs, repo guidance,
+  source-boundary rules, and historical artifacts while preserving reusable
+  managed-application guidance and generic control-plane terminology.
+- 2026-06-24 CDT: U5 implementation completed locally. Removed Plane-specific
+  AGENTS guidance, public docs, smoke docs, plugin-builder examples, and
+  source-boundary plugin-key handling; deleted Plane-only historical
+  requirements/plan/status/solution artifacts; rewrote reusable historical
+  examples to supported plugin examples; and preserved generic `control-plane`,
+  `data plane`, storage-plane, and memory-plane terminology.
+- U5 focused verification passed:
+  `pnpm test:plugin-source-boundary`,
+  `node --check .agents/skills/thinkwork-plugin-builder/scripts/scan-plugin-builder-output.mjs`,
+  `node --check scripts/smoke/managed-app-controller-readiness-smoke.mjs`,
+  `node scripts/smoke/managed-app-controller-readiness-smoke.mjs`,
+  `pnpm --filter @thinkwork/docs build`, changed-file Prettier check, and
+  `git diff --check`.
+- U5 broader verification passed: `pnpm lint` and root `pnpm typecheck`.
+  Local `pnpm install` exited successfully but logged the known optional
+  `canvas@2.11.2` native build warning under local Node 25 because `pkg-config`
+  is unavailable.
+- U5 docs/tooling product-reference audit passed outside the active autopilot
+  ledger: no `@thinkwork/plugin-plane`, `plugins/plane`, `plane--`,
+  Plane-specific smoke env vars, or Plane product support references remain;
+  broad `plane` matches are generic platform/storage/data/control-plane terms.

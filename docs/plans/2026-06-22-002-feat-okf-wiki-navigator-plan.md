@@ -113,7 +113,7 @@ default OKF routing, richer mobile trace cards, or broader OKF distribution.
   eval report proves quality and safety.
 - Replacing Company Brain, Compounding Wiki, Hindsight, AgentCore Memory, or the
   knowledge graph.
-- Per-service Plane-style managed runtime dependencies; this feature should add
+- Per-service managed runtime dependencies; this feature should add
   EFS/cache surface only where needed for OKF.
 - Full mobile trace-card parity in the first slice. Mobile may show generic
   activity until a follow-up designs a native card.

@@ -124,7 +124,7 @@ and bundler compatibility.
 Use the package boundary aggressively for plugin-specific code:
 
 - manifests, skill source, package docs, and package-local tests;
-- managed-app adapters for Plane, Twenty, and Company Brain/Cognee;
+- managed-app adapters for Twenty, n8n, and Company Brain/Cognee;
 - plugin-owned Terraform modules and runtime assets;
 - plugin-specific API helpers such as LastMile task normalization or Twenty
   cutover orchestration;
@@ -378,6 +378,5 @@ issue is closed before the deployed ThinkWork install path is rechecked
 - [PR #2570: restore LastMile MCP tokens after reauth](https://github.com/thinkwork-ai/thinkwork/pull/2570)
 - [PR #2571: update all API handlers on package changes](https://github.com/thinkwork-ai/thinkwork/pull/2571)
 - [PR #2572: record LastMile verification evidence](https://github.com/thinkwork-ai/thinkwork/pull/2572)
-- [Plane-style managed apps need compact topology and product-path verification](./plane-managed-app-compact-topology-verification-2026-06-16.md)
 - [Managed applications should reconcile MCP connectors and keep user OAuth separate](./managed-app-mcp-oauth-lifecycle-2026-06-06.md)
 - [Terraform plugin-builder skills should stop at adapter gaps](./terraform-plugin-builder-skills-stop-at-adapter-gaps-2026-06-14.md)

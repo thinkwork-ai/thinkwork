@@ -153,7 +153,7 @@ For every customer release update, record:
 - final `deployment/status/current.json` status
 - whether customer domain, SES sender, OAuth, operator emails, and optional
   app flags were preserved
-- for optional app releases, whether Cognee, Twenty, and Plane descriptors have
+- for optional app releases, whether Cognee, Twenty, and n8n descriptors have
   digest-pinned runtime images and smoke contracts in the selected manifest
 
 ## Related Docs

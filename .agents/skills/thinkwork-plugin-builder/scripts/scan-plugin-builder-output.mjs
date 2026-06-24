@@ -3,7 +3,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
 
-const SUPPORTED_MANAGED_APP_KEYS = new Set(["cognee", "plane", "twenty"]);
+const SUPPORTED_MANAGED_APP_KEYS = new Set(["cognee", "n8n", "twenty"]);
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SKIP_DIRS = new Set([".git", "node_modules", ".terraform", "dist"]);
 const SHARED_PLUGIN_SOURCE_ROOTS = [

@@ -85,10 +85,9 @@ registration form. They may appear in Settings -> MCP Servers so operators can
 confirm assignment and connection state, but their lifecycle belongs to the
 app-specific settings page.
 
-| Server     | Owner              | Authentication model                              | Operator action                                                                                     |
-| ---------- | ------------------ | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Twenty CRM | Twenty managed app | Per-user OAuth against the managed Twenty runtime | Users connect their own OAuth token; repair the row from Settings -> CRM                            |
-| Plane      | Plane plugin       | Per-user Plane PAT bearer auth + workspace header | Users activate Plane from Settings -> Plugins; repair by reinstalling or repairing the Plane plugin |
+| Server     | Owner              | Authentication model                              | Operator action                                                          |
+| ---------- | ------------------ | ------------------------------------------------- | ------------------------------------------------------------------------ |
+| Twenty CRM | Twenty managed app | Per-user OAuth against the managed Twenty runtime | Users connect their own OAuth token; repair the row from Settings -> CRM |
 
 System-managed rows should not be duplicated with manual registrations. If a
 row is missing or stale, use the app page's install/repair action so ThinkWork
@@ -102,12 +101,6 @@ client metadata, user tokens, tenant API keys, and URL/auth approval hashes.
 Changing record-link copy or route hints should flow through plugin versioning
 or the managed repair path, not by editing credentials in the generic MCP
 server form.
-
-Plane is the first plugin-managed MCP row that uses per-user header activation
-instead of OAuth. Its activation stores the current user's Plane personal access
-token and workspace slug as user-scoped secrets, then sends them to Plane as
-`Authorization: Bearer <PAT>` plus `x-workspace-slug`. Do not configure a
-tenant-wide Plane API key or a second manual Plane MCP row.
 
 ### OAuth flow from the admin UI
 
@@ -168,8 +161,8 @@ The admin UI does not currently expose an in-place rotate button — rotation ha
 - **REST, not GraphQL.** MCP server management does not flow through urql, so there's no live subscription for MCP state changes. The list fetches on mount and after mutations.
 - **No in-place key rotation.** Rotating a tenant API key currently requires delete + re-register.
 - **Managed rows are repaired from app pages.** System-managed rows such as
-  Twenty CRM and Plane are reconciled by their owning managed app or plugin,
-  not by manual delete/recreate flows.
+  Twenty CRM are reconciled by their owning managed app or plugin, not by
+  manual delete/recreate flows.
 - **Tool list is a snapshot.** Test connection caches the tool list at the time of the test. If the MCP server adds or removes tools, the cached list is stale until the next test.
 - **Admin OAuth popup flow is rudimentary.** The admin-side OAuth button opens a browser popup and relies on the user completing the flow manually; end-user Spaces/Desktop Settings has the supported desktop return flow.
 
