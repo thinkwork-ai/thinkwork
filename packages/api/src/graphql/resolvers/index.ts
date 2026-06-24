@@ -110,6 +110,11 @@ import {
   linkedTaskTypeResolvers,
 } from "./linked-tasks/index.js";
 import {
+  workItemMutations,
+  workItemQueries,
+  workItemTypeResolvers,
+} from "./work-items/index.js";
+import {
   agentLoopIterationTypeResolvers,
   agentLoopJudgmentTypeResolvers,
   agentLoopMutations,
@@ -172,6 +177,7 @@ export const queryResolvers: Record<string, any> = {
   ...n8nAgentStepRunQueries,
   ...spaceQueries,
   ...linkedTaskQueries,
+  ...workItemQueries,
   ...agentLoopQueries,
 };
 
@@ -218,6 +224,7 @@ export const mutationResolvers: Record<string, any> = {
   ...ontologyMutations,
   ...spaceMutations,
   ...linkedTaskMutations,
+  ...workItemMutations,
   ...agentLoopMutations,
 };
 
@@ -257,6 +264,7 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   SpaceChecklistTemplate: spaceChecklistTemplateTypeResolvers,
   SpaceMcpServer: spaceMcpServerTypeResolvers,
   LinkedTask: linkedTaskTypeResolvers,
+  WorkItem: workItemTypeResolvers,
   AgentLoop: agentLoopTypeResolvers,
   AgentLoopVersion: agentLoopVersionTypeResolvers,
   AgentLoopRun: agentLoopRunTypeResolvers,
