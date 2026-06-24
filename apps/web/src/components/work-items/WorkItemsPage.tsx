@@ -331,7 +331,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function summarizeWorkItems(items: WorkItemSummary[]) {
+export function summarizeWorkItems(items: WorkItemSummary[]) {
   return items.reduce(
     (acc, item) => {
       if (isWorkItemOpen(item)) {
@@ -350,7 +350,7 @@ function summarizeWorkItems(items: WorkItemSummary[]) {
   );
 }
 
-function sortWorkItems(
+export function sortWorkItems(
   items: WorkItemSummary[],
   sort: WorkItemRouteSearch["sort"] = "updated",
 ) {

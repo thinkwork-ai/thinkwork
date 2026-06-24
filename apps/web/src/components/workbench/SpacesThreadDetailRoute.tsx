@@ -61,6 +61,7 @@ import {
   ThreadArtifactsQuery,
   ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
+  ThreadWorkItemsQuery,
   ThreadProgressMarkdownQuery,
   ThreadMentionTargetsQuery,
   ThreadUpdatedSubscription,
@@ -96,6 +97,11 @@ import {
   type ApprovedModelOption,
 } from "@/lib/approved-model-selection";
 import { SettingsAgentProfilesQuery } from "@/lib/settings-queries";
+import {
+  type WorkItemSummary,
+  workItemOwnerLabel,
+  workItemStatusCategory,
+} from "@/components/work-items/work-item-display";
 
 interface SpacesThreadDetailRouteProps {
   threadId: string;
@@ -276,6 +282,10 @@ interface ApprovedModelsResult {
 
 interface ThreadLinkedTasksResult {
   threadLinkedTasks?: LinkedTaskSummary[] | null;
+}
+
+interface ThreadWorkItemsResult {
+  threadWorkItems?: WorkItemSummary[] | null;
 }
 
 interface ThreadProgressMarkdownResult {
@@ -591,6 +601,15 @@ export function SpacesThreadDetailRoute({
     requestPolicy: "cache-and-network",
   });
   const [
+    { data: workItemsData, fetching: workItemsFetching, error: workItemsError },
+    reexecuteWorkItemsQuery,
+  ] = useQuery<ThreadWorkItemsResult>({
+    query: ThreadWorkItemsQuery,
+    variables: { tenantId: tenantId ?? "", threadId },
+    pause: !tenantId || !threadId,
+    requestPolicy: "cache-and-network",
+  });
+  const [
     {
       data: progressMarkdownData,
       fetching: progressMarkdownFetching,
@@ -801,6 +820,7 @@ export function SpacesThreadDetailRoute({
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
       reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     }
@@ -811,6 +831,7 @@ export function SpacesThreadDetailRoute({
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     reexecuteThreadTurnsQuery,
+    reexecuteWorkItemsQuery,
     threadId,
     turnUpdate?.onThreadTurnUpdated?.threadId,
   ]);
@@ -822,6 +843,7 @@ export function SpacesThreadDetailRoute({
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
       reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     }
@@ -833,6 +855,7 @@ export function SpacesThreadDetailRoute({
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     reexecuteThreadTurnsQuery,
+    reexecuteWorkItemsQuery,
     threadId,
     threadUpdate?.onThreadUpdated?.threadId,
   ]);
@@ -845,6 +868,7 @@ export function SpacesThreadDetailRoute({
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
       reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     }
@@ -859,6 +883,7 @@ export function SpacesThreadDetailRoute({
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     reexecuteThreadTurnsQuery,
+    reexecuteWorkItemsQuery,
     threadId,
   ]);
 
@@ -1010,6 +1035,7 @@ export function SpacesThreadDetailRoute({
     tasksFetching ||
     eventsFetching ||
     runbookRunsFetching ||
+    workItemsFetching ||
     linkedTasksFetching ||
     progressMarkdownFetching ||
     goalFilesFetching ||
@@ -1031,6 +1057,7 @@ export function SpacesThreadDetailRoute({
     reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
     reexecuteMentionTargetsQuery({ requestPolicy: "network-only" });
     reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+    reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
     reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
     reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
   }, [
@@ -1042,6 +1069,7 @@ export function SpacesThreadDetailRoute({
     reexecuteQuery,
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
+    reexecuteWorkItemsQuery,
     refreshThreadProgress,
     tenantId,
     threadId,
@@ -1073,6 +1101,7 @@ export function SpacesThreadDetailRoute({
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
       reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     };
@@ -1090,9 +1119,11 @@ export function SpacesThreadDetailRoute({
     reexecuteRunbookRunsQuery,
     reexecuteTasksQuery,
     reexecuteThreadTurnsQuery,
+    reexecuteWorkItemsQuery,
     shouldPollActiveAgentResult,
   ]);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
+  const nativeWorkItems = workItemsData?.threadWorkItems ?? [];
   const goalFiles = goalFilesData?.threadGoalFiles ?? null;
   const goal = goalFiles?.goal ?? null;
   const progressChecklistTasks = useMemo(
@@ -1102,10 +1133,16 @@ export function SpacesThreadDetailRoute({
       ),
     [progressMarkdownData?.threadProgressMarkdown?.content],
   );
+  const nativeChecklistTasks = useMemo(
+    () => nativeWorkItems.map(toThreadInfoWorkItem),
+    [nativeWorkItems],
+  );
   const infoPanelChecklistTasks =
-    progressChecklistTasks.length > 0
-      ? progressChecklistTasks
-      : linkedTasks.map(toThreadInfoChecklistTask);
+    nativeChecklistTasks.length > 0
+      ? nativeChecklistTasks
+      : progressChecklistTasks.length > 0
+        ? progressChecklistTasks
+        : linkedTasks.map(toThreadInfoChecklistTask);
   const goalReadiness = useMemo(
     () => deriveGoalReadiness(infoPanelChecklistTasks),
     [infoPanelChecklistTasks],
@@ -1118,10 +1155,12 @@ export function SpacesThreadDetailRoute({
     Boolean(goal) ||
     goalFilesFetching ||
     hasCustomerOnboardingMetadata(data?.thread?.metadata) ||
+    nativeWorkItems.length > 0 ||
     linkedTasks.length > 0 ||
     Boolean(progressMarkdownData?.threadProgressMarkdown?.content);
   const showOnboardingChecklist =
     isCustomerOnboardingThread ||
+    workItemsFetching ||
     linkedTasksFetching ||
     progressMarkdownFetching ||
     goalFilesFetching;
@@ -1276,6 +1315,7 @@ export function SpacesThreadDetailRoute({
       );
       reexecuteQuery({ requestPolicy: "network-only" });
       reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+      reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
       reexecuteProgressMarkdownQuery({ requestPolicy: "network-only" });
       reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
     },
@@ -1285,6 +1325,7 @@ export function SpacesThreadDetailRoute({
       reexecuteLinkedTasksQuery,
       reexecuteProgressMarkdownQuery,
       reexecuteQuery,
+      reexecuteWorkItemsQuery,
       reviewGoal,
       tenantId,
     ],
@@ -1345,9 +1386,12 @@ export function SpacesThreadDetailRoute({
             title: "Progress",
             tasks: infoPanelChecklistTasks,
             isLoading:
-              (linkedTasksFetching || progressMarkdownFetching) &&
+              (workItemsFetching ||
+                linkedTasksFetching ||
+                progressMarkdownFetching) &&
               infoPanelChecklistTasks.length === 0,
             error:
+              workItemsError?.message ??
               progressMarkdownError?.message ??
               linkedTasksError?.message ??
               null,
@@ -1379,6 +1423,8 @@ export function SpacesThreadDetailRoute({
       infoPanelChecklistTasks,
       linkedTasksError?.message,
       linkedTasksFetching,
+      workItemsError?.message,
+      workItemsFetching,
       progressMarkdownError?.message,
       progressMarkdownFetching,
       refreshingProgress,
@@ -1604,6 +1650,7 @@ export function SpacesThreadDetailRoute({
     toast.success("Thread completed");
     reexecuteQuery({ requestPolicy: "network-only" });
     reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+    reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
     reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
   }
 
@@ -1781,6 +1828,7 @@ export function SpacesThreadDetailRoute({
         reexecuteEventsQuery({ requestPolicy: "network-only" });
         reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
         reexecuteLinkedTasksQuery({ requestPolicy: "network-only" });
+        reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
         reexecuteGoalFilesQuery({ requestPolicy: "network-only" });
         reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
       }}
@@ -1933,6 +1981,38 @@ function toThreadInfoChecklistTask(
     blocked: task.blocked,
     updatedAt: task.updatedAt,
   };
+}
+
+function toThreadInfoWorkItem(item: WorkItemSummary): ThreadInfoChecklistTask {
+  return {
+    id: item.id,
+    title: item.title,
+    status: threadStatusFromWorkItem(item),
+    required: item.required,
+    roleKey: stringValue(objectValue(item.metadata)?.roleKey),
+    assigneeDisplay: workItemOwnerLabel(item),
+    blocked: item.blocked,
+    notes: item.notes,
+    updatedAt: item.updatedAt,
+  };
+}
+
+function threadStatusFromWorkItem(item: WorkItemSummary) {
+  if (!item.applicable) return "not_applicable";
+  if (item.completedAt) return "completed";
+  switch (workItemStatusCategory(item)) {
+    case "DONE":
+      return "completed";
+    case "SKIPPED":
+      return "not_applicable";
+    case "ACTIVE":
+      return "in_progress";
+    case "BLOCKED":
+      return "blocked";
+    case "TODO":
+    default:
+      return "todo";
+  }
 }
 
 function deriveGoalReadiness(tasks: ThreadInfoChecklistTask[]) {

@@ -22,6 +22,7 @@ import {
   ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
   ThreadProgressMarkdownQuery,
+  ThreadWorkItemsQuery,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
 import { APPROVED_MODEL_STORAGE_KEY } from "@/lib/approved-model-selection";
@@ -119,6 +120,7 @@ vi.mock("@/lib/api-fetch", () => ({
 
 const reexecuteThreadQuery = vi.fn();
 const reexecuteLinkedTasksQuery = vi.fn();
+const reexecuteWorkItemsQuery = vi.fn();
 const reexecuteProgressMarkdownQuery = vi.fn();
 const reexecuteGoalFilesQuery = vi.fn();
 const reexecuteTasksQuery = vi.fn();
@@ -134,6 +136,7 @@ let taskData: unknown;
 let eventData: unknown;
 let mentionTargetsData: unknown;
 let linkedTasksData: unknown;
+let workItemsData: unknown;
 let progressMarkdownData: unknown;
 let goalFilesData: unknown;
 let approvedModelsData: unknown;
@@ -147,6 +150,7 @@ beforeEach(() => {
   clearPendingThreadStart("thread-new");
   reexecuteThreadQuery.mockReset();
   reexecuteLinkedTasksQuery.mockReset();
+  reexecuteWorkItemsQuery.mockReset();
   reexecuteProgressMarkdownQuery.mockReset();
   reexecuteGoalFilesQuery.mockReset();
   reexecuteTasksQuery.mockReset();
@@ -197,6 +201,7 @@ beforeEach(() => {
   eventData = { computerEvents: [] };
   mentionTargetsData = { threadMentionTargets: [] };
   linkedTasksData = { threadLinkedTasks: [] };
+  workItemsData = { threadWorkItems: [] };
   progressMarkdownData = { threadProgressMarkdown: null };
   goalFilesData = { threadGoalFiles: null };
   approvedModelsData = undefined;
@@ -254,6 +259,9 @@ beforeEach(() => {
     }
     if (options.query === ThreadLinkedTasksQuery) {
       return [queryState(linkedTasksData), reexecuteLinkedTasksQuery];
+    }
+    if (options.query === ThreadWorkItemsQuery) {
+      return [queryState(workItemsData), reexecuteWorkItemsQuery];
     }
     if (options.query === ThreadProgressMarkdownQuery) {
       return [queryState(progressMarkdownData), reexecuteProgressMarkdownQuery];
@@ -919,21 +927,30 @@ describe("SpacesThreadDetailRoute", () => {
         },
       ],
     };
-    progressMarkdownData = {
-      threadProgressMarkdown: {
-        threadId: "thread-1",
-        key: "tenants/acme/threads/thread-1/PROGRESS.md",
-        content: [
-          "# PROGRESS",
-          "",
-          "Goal: Complete customer onboarding for E2E Progress MD 20260525201201 Co.",
-          "",
-          "## Tasks",
-          "| Task | Status | Owner | Required | Blocker/Notes |",
-          "| --- | --- | --- | --- | --- |",
-          "| Get contract signed - E2E Progress MD 20260525201201 Co | Completed | Sales | Yes | signed package received |",
-        ].join("\n"),
-      },
+    workItemsData = {
+      threadWorkItems: [
+        {
+          id: "work-1",
+          spaceId: "space-1",
+          title: "Get contract signed",
+          notes: "signed package received",
+          priority: "NORMAL",
+          required: true,
+          applicable: true,
+          blocked: false,
+          completedAt: "2026-05-27T15:00:00.000Z",
+          updatedAt: "2026-05-27T15:00:00.000Z",
+          metadata: {
+            roleKey: "sales",
+            assignee: { displayName: "Sales" },
+          },
+          status: {
+            id: "done",
+            name: "Done",
+            category: "DONE",
+          },
+        },
+      ],
     };
 
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
@@ -942,12 +959,7 @@ describe("SpacesThreadDetailRoute", () => {
 
     expect(screen.getByText("Progress")).toBeTruthy();
     expect(screen.getByText("Get contract signed")).toBeTruthy();
-    expect(
-      screen.queryByText(
-        "Get contract signed - E2E Progress MD 20260525201201 Co",
-      ),
-    ).toBeNull();
-    // Owner + status now render as a sublabel under the task title (Progress card style).
+    // Owner + status render as a sublabel under the task title.
     expect(screen.getByText("Sales · Completed")).toBeTruthy();
     expect(screen.queryByText("signed package received")).toBeNull();
     expect(screen.queryByText("Stale linked task title")).toBeNull();
@@ -965,6 +977,9 @@ describe("SpacesThreadDetailRoute", () => {
       });
     });
     expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteWorkItemsQuery).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });
     expect(reexecuteGoalFilesQuery).toHaveBeenCalledWith({
