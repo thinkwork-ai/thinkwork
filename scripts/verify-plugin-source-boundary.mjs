@@ -18,8 +18,8 @@ const DEFAULT_SCAN_ROOTS = [
 const PLUGIN_KEYS = [
   "company-brain",
   "company-data",
+  "company-etl",
   "cognee",
-  "data-integrations",
   "email-channel",
   "lastmile",
   "n8n",
@@ -28,9 +28,9 @@ const PLUGIN_KEYS = [
 const PLUGIN_SOURCE_ROOTS = new Map([
   ["company-brain", ["plugins/company-brain/"]],
   ["company-data", ["plugins/company-data/"]],
+  ["company-etl", ["plugins/company-etl/"]],
   // Cognee is the internal infrastructure substrate for Company Brain.
   ["cognee", ["plugins/company-brain/"]],
-  ["data-integrations", ["plugins/data-integrations/"]],
   ["email-channel", ["plugins/email-channel/"]],
   ["lastmile", ["plugins/lastmile/"]],
   ["n8n", ["plugins/n8n/"]],

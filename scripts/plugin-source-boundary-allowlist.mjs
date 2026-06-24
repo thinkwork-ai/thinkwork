@@ -74,6 +74,10 @@ export const sharedPluginTermAllowlist = [
     reason: "Email Channel plugin database contract coverage.",
   },
   {
+    path: "packages/database-pg/__tests__/migration-0188-company-etl-plugin-rename.test.ts",
+    reason: "Company ETL plugin-key rename database migration contract coverage.",
+  },
+  {
     path: "packages/database-pg/graphql/types/email-channel.graphql",
     reason:
       "shared platform GraphQL contract for the Email Channel plugin control plane.",
