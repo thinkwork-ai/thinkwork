@@ -5,9 +5,14 @@ import {
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "urql";
-import { MessageCirclePlus } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarClock,
+  ListTodo,
+  MessageCirclePlus,
+} from "lucide-react";
 import { IconFiles } from "@tabler/icons-react";
 import { Button } from "@thinkwork/ui";
 import { WorkspaceFileEditor } from "@thinkwork/workspace-editor";
@@ -18,12 +23,21 @@ import {
   desktopToolbarActiveButtonClassName,
   desktopToolbarButtonClassName,
 } from "@/lib/desktop-chrome";
-import { SpaceQuery, SpaceThreadsQuery } from "@/lib/graphql-queries";
+import {
+  SpaceQuery,
+  SpaceThreadsQuery,
+  WorkItemsQuery,
+} from "@/lib/graphql-queries";
 import { spacesWorkspaceFilesClient } from "@/lib/workspace-files-api";
 import {
   formatRelativeDate,
   threadTitle,
 } from "@/components/shell/chat-sidebar-types";
+import {
+  isWorkItemDueSoon,
+  isWorkItemOpen,
+  type WorkItemSummary,
+} from "@/components/work-items/work-item-display";
 
 export const Route = createFileRoute("/_authed/_shell/spaces/$spaceId")({
   component: SpaceWorkroomPage,
@@ -52,6 +66,10 @@ interface SpaceThreadsResult {
       createdAt?: string | null;
     }> | null;
   } | null;
+}
+
+interface SpaceWorkItemsResult {
+  workItems?: WorkItemSummary[] | null;
 }
 
 function SpaceWorkroomPage() {
@@ -108,6 +126,21 @@ function SpaceWorkroomHome() {
     pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
+  const [
+    { data: workItemsData, fetching: workItemsFetching, error: workItemsError },
+  ] = useQuery<SpaceWorkItemsResult>({
+    query: WorkItemsQuery,
+    variables: {
+      input: {
+        tenantId: tenantId ?? "",
+        spaceId,
+        includeArchived: false,
+        limit: 100,
+      },
+    },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
 
   const spaceName =
     spaceData?.space?.name?.trim() || (spaceFetching ? "Space" : "Space");
@@ -144,6 +177,8 @@ function SpaceWorkroomHome() {
   });
 
   const threads = threadsData?.threadsPaged?.items ?? [];
+  const workItems = workItemsData?.workItems ?? [];
+  const workItemSummary = summarizeSpaceWorkItems(workItems);
   const isCustomerOnboardingSpace = shouldShowCustomerOnboardingStart(
     spaceData?.space,
   );
@@ -199,6 +234,56 @@ function SpaceWorkroomHome() {
       </section>
 
       <section className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Work Items
+          </h2>
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs"
+          >
+            <Link
+              to="/work-items"
+              search={{ view: "board", sort: "updated", spaceId }}
+            >
+              <ListTodo className="size-4" />
+              <span>Open board</span>
+            </Link>
+          </Button>
+        </div>
+        {workItemsError ? (
+          <div className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">
+            {workItemsError.message}
+          </div>
+        ) : workItemsFetching && workItems.length === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            Loading Work Items...
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-3">
+            <SpaceWorkItemMetric
+              label="Open required"
+              value={workItemSummary.openRequired}
+              icon={<ListTodo className="size-4" />}
+            />
+            <SpaceWorkItemMetric
+              label="Blocked"
+              value={workItemSummary.blocked}
+              icon={<AlertCircle className="size-4" />}
+              destructive={workItemSummary.blocked > 0}
+            />
+            <SpaceWorkItemMetric
+              label="Due soon"
+              value={workItemSummary.dueSoon}
+              icon={<CalendarClock className="size-4" />}
+            />
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-2">
         <h2 className="text-sm font-medium text-muted-foreground">
           Recent threads
         </h2>
@@ -241,6 +326,47 @@ function SpaceWorkroomHome() {
       </section>
     </main>
   );
+}
+
+function SpaceWorkItemMetric({
+  label,
+  value,
+  icon,
+  destructive,
+}: {
+  label: string;
+  value: number;
+  icon: ReactNode;
+  destructive?: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-md border p-3">
+      <div
+        className={`flex size-8 shrink-0 items-center justify-center rounded-md bg-muted ${
+          destructive ? "text-destructive" : "text-muted-foreground"
+        }`}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <div className="text-lg font-semibold tabular-nums">{value}</div>
+        <div className="truncate text-xs text-muted-foreground">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+export function summarizeSpaceWorkItems(items: WorkItemSummary[]) {
+  return {
+    openRequired: items.filter(
+      (item) => item.required && item.applicable && isWorkItemOpen(item),
+    ).length,
+    blocked: items.filter((item) => item.blocked && isWorkItemOpen(item))
+      .length,
+    dueSoon: items.filter(
+      (item) => isWorkItemOpen(item) && isWorkItemDueSoon(item.dueAt),
+    ).length,
+  };
 }
 
 export function shouldShowCustomerOnboardingStart(

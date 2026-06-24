@@ -32,6 +32,7 @@ import {
   Globe,
   Keyboard,
   List,
+  ListChecks,
   ListFilter,
   MessageCirclePlus,
   Monitor,
@@ -167,6 +168,7 @@ export function ChatSidebar() {
     enabled: threadNotificationsEnabled,
   });
   const isNewThreadRoute = location.pathname === "/new";
+  const isWorkItemsRoute = location.pathname.startsWith("/work-items");
   const isAgentLoopsRoute = location.pathname.startsWith(
     "/settings/agent-loops",
   );
@@ -847,6 +849,21 @@ export function ChatSidebar() {
                     ⌘K
                   </span>
                 </button>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={isWorkItemsRoute}
+                tooltip="Work Items"
+              >
+                <Link
+                  to="/work-items"
+                  search={{ view: "list", sort: "updated" }}
+                >
+                  <ListChecks />
+                  <span>Work Items</span>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>

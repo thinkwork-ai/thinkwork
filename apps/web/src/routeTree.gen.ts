@@ -54,6 +54,7 @@ import { Route as AuthedSettingsAutomationsIndexRouteImport } from "./routes/_au
 import { Route as AuthedSettingsArtifactsIndexRouteImport } from "./routes/_authed/settings.artifacts.index";
 import { Route as AuthedSettingsAgentsIndexRouteImport } from "./routes/_authed/settings.agents.index";
 import { Route as AuthedSettingsAgentLoopsIndexRouteImport } from "./routes/_authed/settings.agent-loops.index";
+import { Route as AuthedShellWorkItemsIndexRouteImport } from "./routes/_authed/_shell/work-items.index";
 import { Route as AuthedShellThreadsIndexRouteImport } from "./routes/_authed/_shell/threads.index";
 import { Route as AuthedShellSpacesIndexRouteImport } from "./routes/_authed/_shell/spaces.index";
 import { Route as AuthedShellMemoryIndexRouteImport } from "./routes/_authed/_shell/memory.index";
@@ -352,6 +353,12 @@ const AuthedSettingsAgentLoopsIndexRoute =
     id: "/agent-loops/",
     path: "/agent-loops/",
     getParentRoute: () => AuthedSettingsRoute,
+  } as any);
+const AuthedShellWorkItemsIndexRoute =
+  AuthedShellWorkItemsIndexRouteImport.update({
+    id: "/work-items/",
+    path: "/work-items/",
+    getParentRoute: () => AuthedShellRoute,
   } as any);
 const AuthedShellThreadsIndexRoute = AuthedShellThreadsIndexRouteImport.update({
   id: "/threads/",
@@ -752,6 +759,7 @@ export interface FileRoutesByFullPath {
   "/memory/": typeof AuthedShellMemoryIndexRoute;
   "/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/work-items/": typeof AuthedShellWorkItemsIndexRoute;
   "/settings/agent-loops/": typeof AuthedSettingsAgentLoopsIndexRoute;
   "/settings/agents/": typeof AuthedSettingsAgentsIndexRoute;
   "/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
@@ -848,6 +856,7 @@ export interface FileRoutesByTo {
   "/memory": typeof AuthedShellMemoryIndexRoute;
   "/spaces": typeof AuthedShellSpacesIndexRoute;
   "/threads": typeof AuthedShellThreadsIndexRoute;
+  "/work-items": typeof AuthedShellWorkItemsIndexRoute;
   "/settings/agent-loops": typeof AuthedSettingsAgentLoopsIndexRoute;
   "/settings/agents": typeof AuthedSettingsAgentsIndexRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsIndexRoute;
@@ -952,6 +961,7 @@ export interface FileRoutesById {
   "/_authed/_shell/memory/": typeof AuthedShellMemoryIndexRoute;
   "/_authed/_shell/spaces/": typeof AuthedShellSpacesIndexRoute;
   "/_authed/_shell/threads/": typeof AuthedShellThreadsIndexRoute;
+  "/_authed/_shell/work-items/": typeof AuthedShellWorkItemsIndexRoute;
   "/_authed/settings/agent-loops/": typeof AuthedSettingsAgentLoopsIndexRoute;
   "/_authed/settings/agents/": typeof AuthedSettingsAgentsIndexRoute;
   "/_authed/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
@@ -1055,6 +1065,7 @@ export interface FileRouteTypes {
     | "/memory/"
     | "/spaces/"
     | "/threads/"
+    | "/work-items/"
     | "/settings/agent-loops/"
     | "/settings/agents/"
     | "/settings/artifacts/"
@@ -1151,6 +1162,7 @@ export interface FileRouteTypes {
     | "/memory"
     | "/spaces"
     | "/threads"
+    | "/work-items"
     | "/settings/agent-loops"
     | "/settings/agents"
     | "/settings/artifacts"
@@ -1254,6 +1266,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/memory/"
     | "/_authed/_shell/spaces/"
     | "/_authed/_shell/threads/"
+    | "/_authed/_shell/work-items/"
     | "/_authed/settings/agent-loops/"
     | "/_authed/settings/agents/"
     | "/_authed/settings/artifacts/"
@@ -1613,6 +1626,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/agent-loops/";
       preLoaderRoute: typeof AuthedSettingsAgentLoopsIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/_shell/work-items/": {
+      id: "/_authed/_shell/work-items/";
+      path: "/work-items";
+      fullPath: "/work-items/";
+      preLoaderRoute: typeof AuthedShellWorkItemsIndexRouteImport;
+      parentRoute: typeof AuthedShellRoute;
     };
     "/_authed/_shell/threads/": {
       id: "/_authed/_shell/threads/";
@@ -2099,6 +2119,7 @@ interface AuthedShellRouteChildren {
   AuthedShellArtifactsIndexRoute: typeof AuthedShellArtifactsIndexRoute;
   AuthedShellSpacesIndexRoute: typeof AuthedShellSpacesIndexRoute;
   AuthedShellThreadsIndexRoute: typeof AuthedShellThreadsIndexRoute;
+  AuthedShellWorkItemsIndexRoute: typeof AuthedShellWorkItemsIndexRoute;
 }
 
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
@@ -2116,6 +2137,7 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellArtifactsIndexRoute: AuthedShellArtifactsIndexRoute,
   AuthedShellSpacesIndexRoute: AuthedShellSpacesIndexRoute,
   AuthedShellThreadsIndexRoute: AuthedShellThreadsIndexRoute,
+  AuthedShellWorkItemsIndexRoute: AuthedShellWorkItemsIndexRoute,
 };
 
 const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
