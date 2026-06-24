@@ -5,7 +5,7 @@
 import { defineFirstPartyPluginPackage } from "../plugin-package";
 import { companyBrainPluginPackage as rawCompanyBrainPluginPackage } from "@thinkwork/plugin-company-brain";
 import { companyDataPluginPackage as rawCompanyDataPluginPackage } from "@thinkwork/plugin-company-data";
-import { dataIntegrationsPluginPackage as rawDataIntegrationsPluginPackage } from "@thinkwork/plugin-data-integrations";
+import { companyEtlPluginPackage as rawCompanyEtlPluginPackage } from "@thinkwork/plugin-company-etl";
 import { emailChannelPluginPackage as rawEmailChannelPluginPackage } from "@thinkwork/plugin-email-channel";
 import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/plugin-lastmile";
 import { n8nPluginPackage as rawN8nPluginPackage } from "@thinkwork/plugin-n8n";
@@ -19,8 +19,8 @@ export const companyBrainPluginPackage = defineFirstPartyPluginPackage(
 export const companyDataPluginPackage = defineFirstPartyPluginPackage(
   rawCompanyDataPluginPackage,
 );
-export const dataIntegrationsPluginPackage = defineFirstPartyPluginPackage(
-  rawDataIntegrationsPluginPackage,
+export const companyEtlPluginPackage = defineFirstPartyPluginPackage(
+  rawCompanyEtlPluginPackage,
 );
 export const emailChannelPluginPackage = defineFirstPartyPluginPackage(
   rawEmailChannelPluginPackage,
@@ -43,7 +43,7 @@ export const workosAuthPluginPackage = defineFirstPartyPluginPackage(
 
 export const companyBrainManifest = companyBrainPluginPackage.manifest;
 export const companyDataManifest = companyDataPluginPackage.manifest;
-export const dataIntegrationsManifest = dataIntegrationsPluginPackage.manifest;
+export const companyEtlManifest = companyEtlPluginPackage.manifest;
 export const emailChannelManifest = emailChannelPluginPackage.manifest;
 export const lastmileManifest = lastmilePluginPackage.manifest;
 export const n8nManifest = n8nPluginPackage.manifest;
@@ -54,7 +54,7 @@ export const workosAuthManifest = workosAuthPluginPackage.manifest;
 export const firstPartyPluginPackages = [
   companyBrainPluginPackage,
   companyDataPluginPackage,
-  dataIntegrationsPluginPackage,
+  companyEtlPluginPackage,
   emailChannelPluginPackage,
   lastmilePluginPackage,
   n8nPluginPackage,

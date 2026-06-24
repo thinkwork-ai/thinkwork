@@ -8,18 +8,18 @@ import {
 } from "@thinkwork/plugin-catalog/contracts";
 import { defineFirstPartyPluginPackage } from "@thinkwork/plugin-catalog/plugin-package";
 
-import { dataIntegrationsPluginPackage } from "../src";
+import { companyEtlPluginPackage } from "../src";
 import {
-  DATA_INTEGRATIONS_SETTINGS_SURFACE,
-  dataIntegrationsManifest,
+  COMPANY_ETL_SETTINGS_SURFACE,
+  companyEtlManifest,
 } from "../src/manifest";
 
-describe("Data Integrations plugin manifest", () => {
+describe("Company ETL plugin manifest", () => {
   it("validates as an inert shell plugin", () => {
-    const validated = validatePluginManifest(dataIntegrationsManifest);
+    const validated = validatePluginManifest(companyEtlManifest);
 
-    expect(validated.pluginKey).toBe("data-integrations");
-    expect(validated.displayName).toBe("Data Integrations");
+    expect(validated.pluginKey).toBe("company-etl");
+    expect(validated.displayName).toBe("Company ETL");
     expect(validated.versions[0].version).toBe("0.1.0");
     expect(validated.versions[0].requiredOauthScopes).toEqual([]);
     expect(validated.versions[0].capabilities).toEqual([]);
@@ -27,18 +27,18 @@ describe("Data Integrations plugin manifest", () => {
       {
         type: "ui-surface",
         key: "settings",
-        displayName: "Data Integrations settings",
-        intendedMount: DATA_INTEGRATIONS_SETTINGS_SURFACE,
+        displayName: "Company ETL settings",
+        intendedMount: COMPANY_ETL_SETTINGS_SURFACE,
       },
     ]);
   });
 
   it("does not declare side-effecting components, OAuth scopes, or secrets", () => {
-    const version = dataIntegrationsManifest.versions[0];
+    const version = companyEtlManifest.versions[0];
     const componentTypes = version.components.map(
       (component) => component.type as PluginComponentType,
     );
-    const serializedManifest = JSON.stringify(dataIntegrationsManifest);
+    const serializedManifest = JSON.stringify(companyEtlManifest);
 
     expect(componentTypes).toEqual(["ui-surface"]);
     expect(componentTypes).not.toContain("infrastructure");
@@ -50,43 +50,41 @@ describe("Data Integrations plugin manifest", () => {
     );
   });
 
-  it("keeps customer-facing copy on the ELT integration scope", () => {
+  it("keeps customer-facing copy on the ETL integration scope", () => {
     const customerFacingText = [
-      dataIntegrationsManifest.displayName,
-      dataIntegrationsManifest.description,
-      ...dataIntegrationsManifest.versions[0].components.map(
+      companyEtlManifest.displayName,
+      companyEtlManifest.description,
+      ...companyEtlManifest.versions[0].components.map(
         (component) => component.displayName,
       ),
     ].join("\n");
 
-    expect(customerFacingText).toContain("Data Integrations");
-    expect(customerFacingText).toContain("tenant-managed ELT integration");
+    expect(customerFacingText).toContain("Company ETL");
+    expect(customerFacingText).toContain("tenant-managed ETL shell");
     expect(customerFacingText).toContain("SaaS apps");
     expect(customerFacingText).toContain("agent-accessible systems");
+    expect(customerFacingText).toContain("Company Data projection");
     expect(customerFacingText).toContain("separate plugins");
     expect(customerFacingText).not.toMatch(
       /\b(deploys?|provides?|operates?)\s+(analytics|BI|dashboards?|lakehouse query)/i,
     );
   });
 
-  it("defines a first-party package boundary under plugins/data-integrations", () => {
-    const defined = defineFirstPartyPluginPackage(
-      dataIntegrationsPluginPackage,
-    );
+  it("defines a first-party package boundary under plugins/company-etl", () => {
+    const defined = defineFirstPartyPluginPackage(companyEtlPluginPackage);
 
-    expect(defined.packageKey).toBe("data-integrations");
-    expect(defined.sourceRoot).toBe("plugins/data-integrations");
+    expect(defined.packageKey).toBe("company-etl");
+    expect(defined.sourceRoot).toBe("plugins/company-etl");
     expect(defined.ownedSources).toContainEqual({
       kind: "manifest",
-      path: "plugins/data-integrations/src/manifest.ts",
+      path: "plugins/company-etl/src/manifest.ts",
       description:
-        "Data Integrations catalog manifest for the shell-only plugin identity.",
+        "Company ETL catalog manifest for the shell-only plugin identity.",
     });
     expect(defined.ownedSources).toContainEqual({
       kind: "tests",
-      path: "plugins/data-integrations/test",
-      description:
-        "Data Integrations package-local manifest and shell-boundary tests.",
+      path: "plugins/company-etl/test",
+      description: "Company ETL package-local manifest and shell-boundary tests.",
     });
     expect(defined.compatibilityLinks).toEqual([]);
   });
@@ -97,7 +95,7 @@ describe("Data Integrations plugin manifest", () => {
 
     expect(readme).toContain("intentionally does not deploy");
     expect(readme).toContain("connector runtime");
-    expect(readme).toContain("ELT jobs");
+    expect(readme).toContain("ETL jobs");
     expect(readme).toContain("analytics UI");
     expect(readme).toContain("BI");
     expect(readme).toContain("warehouse");

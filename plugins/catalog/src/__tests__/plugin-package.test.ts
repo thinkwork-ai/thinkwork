@@ -15,7 +15,7 @@ describe("first-party plugin packages", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
       "company-brain",
       "company-data",
-      "data-integrations",
+      "company-etl",
       "email-channel",
       "lastmile",
       "n8n",
@@ -49,7 +49,7 @@ describe("first-party plugin packages", () => {
     expect(allPluginManifests.map((manifest) => manifest.pluginKey)).toEqual([
       "company-brain",
       "company-data",
-      "data-integrations",
+      "company-etl",
       "lastmile",
       "n8n",
       "email-channel",

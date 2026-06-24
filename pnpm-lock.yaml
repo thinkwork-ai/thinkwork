@@ -1680,9 +1680,9 @@ importers:
       '@thinkwork/plugin-company-data':
         specifier: workspace:*
         version: link:../company-data
-      '@thinkwork/plugin-data-integrations':
+      '@thinkwork/plugin-company-etl':
         specifier: workspace:*
-        version: link:../data-integrations
+        version: link:../company-etl
       '@thinkwork/plugin-email-channel':
         specifier: workspace:*
         version: link:../email-channel
@@ -1752,7 +1752,7 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@25.6.0)(jsdom@29.1.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(msw@2.13.2(@types/node@25.6.0)(typescript@5.9.3))(terser@5.46.1)
 
-  plugins/data-integrations:
+  plugins/company-etl:
     devDependencies:
       '@thinkwork/plugin-catalog':
         specifier: workspace:*

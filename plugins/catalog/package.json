@@ -23,8 +23,8 @@
   "dependencies": {
     "@thinkwork/plugin-company-brain": "workspace:*",
     "@thinkwork/plugin-company-data": "workspace:*",
+    "@thinkwork/plugin-company-etl": "workspace:*",
     "@thinkwork/plugin-email-channel": "workspace:*",
-    "@thinkwork/plugin-data-integrations": "workspace:*",
     "@thinkwork/plugin-lastmile": "workspace:*",
     "@thinkwork/plugin-n8n": "workspace:*",
     "@thinkwork/plugin-sendgrid": "workspace:*",
