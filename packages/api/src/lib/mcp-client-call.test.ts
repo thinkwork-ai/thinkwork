@@ -8,6 +8,19 @@ import {
 } from "./mcp-client-call.js";
 
 const TARGET = { url: "https://mcp.example.com/rpc", name: "demo" };
+const RECORD_LINK_HINTS = {
+  schemaVersion: 1 as const,
+  source: "plugin-manifest" as const,
+  browserBaseUrl: "https://crm.example.com",
+  routes: [
+    {
+      objectType: "opportunity",
+      routeTemplate: "/object/opportunity/{id}",
+      idFields: ["id"],
+      labelFields: ["name"],
+    },
+  ],
+};
 
 /** Build a JSON Response. */
 function jsonResponse(
@@ -195,6 +208,84 @@ describe("mcp-client-call session lifecycle", () => {
     );
     expect(result.isError).toBe(true);
     expect(textFromMcpContent(result.content)).toBe("nope");
+  });
+
+  it("enriches successful tool results with record links when hints are present", async () => {
+    const fetchImpl = lifecycleFetch([
+      jsonResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                opportunities: [
+                  {
+                    id: "c203680f-4d36-461b-b134-25aef43d62c5",
+                    name: "McPherson POC",
+                  },
+                ],
+              }),
+            },
+          ],
+        },
+      }),
+    ]);
+
+    const result = await mcpCallTool(
+      TARGET,
+      "find_many_opportunities",
+      {},
+      { fetchImpl, recordLinkHints: RECORD_LINK_HINTS },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.recordLinks).toEqual([
+      {
+        objectType: "opportunity",
+        id: "c203680f-4d36-461b-b134-25aef43d62c5",
+        label: "McPherson POC",
+        url: "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+      },
+    ]);
+    expect(textFromMcpContent(result.content)).toContain("Record links:");
+    expect(textFromMcpContent(result.content)).toContain(
+      "https://crm.example.com/object/opportunity/c203680f-4d36-461b-b134-25aef43d62c5",
+    );
+  });
+
+  it("does not enrich MCP isError results even when hints are present", async () => {
+    const fetchImpl = lifecycleFetch([
+      jsonResponse({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                id: "c203680f-4d36-461b-b134-25aef43d62c5",
+                objectType: "opportunity",
+                name: "McPherson POC",
+              }),
+            },
+          ],
+          isError: true,
+        },
+      }),
+    ]);
+
+    const result = await mcpCallTool(
+      TARGET,
+      "find_many_opportunities",
+      {},
+      { fetchImpl, recordLinkHints: RECORD_LINK_HINTS },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.recordLinks).toBeUndefined();
+    expect(textFromMcpContent(result.content)).not.toContain("Record links:");
   });
 
   it("throws McpTransportError on a JSON-RPC error", async () => {

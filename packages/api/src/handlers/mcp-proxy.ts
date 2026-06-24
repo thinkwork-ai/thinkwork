@@ -99,9 +99,7 @@ function targetFor(config: McpServerConfig) {
     url: config.url,
     token: config.auth?.type === "bearer" ? config.auth.token : undefined,
     headers:
-      config.auth && "headers" in config.auth
-        ? config.auth.headers
-        : undefined,
+      config.auth && "headers" in config.auth ? config.auth.headers : undefined,
     name: config.name,
   };
 }
@@ -285,7 +283,15 @@ async function handleCall(
   }
 
   try {
-    const result = await mcpCallTool(targetFor(config), toolName, args);
+    const target = targetFor(config);
+    const result = config.recordLinkHints
+      ? await mcpCallTool(target, toolName, args, {
+          recordLinkHints: config.recordLinkHints,
+        })
+      : await mcpCallTool(target, toolName, args);
+    const recordLinkCount = !result.isError
+      ? (result.recordLinks?.length ?? 0)
+      : 0;
     console.info(
       LOG_PREFIX,
       JSON.stringify({
@@ -295,11 +301,18 @@ async function handleCall(
         server: config.name,
         tool: toolName,
         isError: result.isError,
+        recordLinks: recordLinkCount,
       }),
     );
     // An MCP isError result is a recoverable tool failure, not a server fault —
     // forward it as 200 so the on-device loop can react.
-    return json({ content: result.content, isError: result.isError });
+    return json({
+      content: result.content,
+      isError: result.isError,
+      ...(!result.isError && result.recordLinks?.length
+        ? { recordLinks: result.recordLinks }
+        : {}),
+    });
   } catch (err) {
     if (err instanceof McpTransportError) {
       console.warn(`${LOG_PREFIX} tools/call transport failure:`, err.message);

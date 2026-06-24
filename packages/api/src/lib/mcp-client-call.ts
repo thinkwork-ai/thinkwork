@@ -28,6 +28,12 @@
  * call.
  */
 
+import type { McpRuntimeRecordLinkHints } from "./mcp-configs.js";
+import {
+  enrichMcpRecordLinks,
+  type McpRecordLink,
+} from "./mcp-record-links.js";
+
 /** MCP protocol version we advertise. Matches the agentcore-pi SDK pin era. */
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 
@@ -45,6 +51,7 @@ export interface McpCallToolResult {
   isError: boolean;
   /** The raw JSON-RPC `result` object for callers that want structured data. */
   raw: unknown;
+  recordLinks?: McpRecordLink[];
 }
 
 export interface McpServerTarget {
@@ -67,6 +74,12 @@ export class McpTransportError extends Error {
     super(message);
     this.name = "McpTransportError";
   }
+}
+
+export interface McpCallToolOptions {
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  recordLinkHints?: McpRuntimeRecordLinkHints;
 }
 
 interface JsonRpcResponse {
@@ -297,7 +310,7 @@ export async function mcpCallTool(
   target: McpServerTarget,
   name: string,
   args: Record<string, unknown>,
-  opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+  opts: McpCallToolOptions = {},
 ): Promise<McpCallToolResult> {
   const result = (await rpc(
     target,
@@ -308,9 +321,26 @@ export async function mcpCallTool(
   )) as Record<string, unknown>;
   const content =
     "content" in result ? result.content : (result.toolResult ?? null);
+  const isError = result.isError === true;
+  if (!isError && opts.recordLinkHints) {
+    const enriched = enrichMcpRecordLinks({
+      hints: opts.recordLinkHints,
+      response: result,
+      text: textFromMcpContent(content),
+      toolName: name,
+    });
+    if (enriched.recordLinks.length > 0) {
+      return {
+        content: [{ type: "text", text: enriched.text }],
+        isError,
+        raw: result,
+        recordLinks: enriched.recordLinks,
+      };
+    }
+  }
   return {
     content,
-    isError: result.isError === true,
+    isError,
     raw: result,
   };
 }
