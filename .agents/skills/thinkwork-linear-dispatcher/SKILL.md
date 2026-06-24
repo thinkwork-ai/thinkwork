@@ -140,6 +140,32 @@ The progress document must include, and workers must keep current:
 - verification contract and latest pass/fail evidence;
 - repair rebound evidence when `Verification Failed` is present.
 
+## Unit Checkpoint Discipline
+
+Each plan unit is a checkpoint boundary. By default, a worker should ship one
+plan unit per PR. Group units only when the plan explicitly says they are
+tightly coupled or when splitting would create unsafe intermediate behavior.
+
+For every implementation unit, the Progress document must be updated at these
+checkpoints:
+
+1. **Unit selected**: record the unit id/name, scope, dependencies,
+   verification contract, worker thread id or pendingWorktreeId, branch,
+   worktree, and expected stop condition.
+2. **PR opened**: record PR URL, commit range, commands already run, remaining
+   verification, and known risks.
+3. **CI or verification changes**: record failed checks, fixes, reruns, and
+   latest evidence.
+4. **Unit shipped**: record merged PR URL, merge commit, CI result, local or
+   deployed proof required by the unit's verification contract, branch/worktree
+   cleanup, and the next unit candidate.
+
+After a unit ships, the worker must compact/checkpoint its operating context
+before beginning the next unit: update the Progress document, update the short
+rolling ledger pointer, clean completed branches/worktrees when allowed, sync
+from `origin/main`, and then start the next unit from the Progress document's
+`Next Steps`. Do not begin the next unit from memory or chat history alone.
+
 Dispatcher rule: before creating or continuing any worker, read the progress
 document and use `Active Work` plus `Next Steps` as the primary source for what
 the next heartbeat should do. Linear status still gates which phase is allowed;
