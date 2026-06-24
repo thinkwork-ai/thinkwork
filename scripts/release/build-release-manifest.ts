@@ -751,22 +751,6 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
       ],
     },
     {
-      id: "plane",
-      displayName: "Plane",
-      terraformModule: {
-        source: `${TERRAFORM_MODULE_SOURCE}//modules/app/plane`,
-        version,
-      },
-      requiredImages: ["plane", "plane-mcp-server"],
-      smokeContracts: [
-        {
-          id: "plane-runtime-health",
-          command: "plugins/plane/smoke/plane-managed-app-smoke.mjs",
-          required: true,
-        },
-      ],
-    },
-    {
       id: "twenty",
       displayName: "Twenty CRM",
       terraformModule: {

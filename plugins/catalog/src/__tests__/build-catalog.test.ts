@@ -38,7 +38,6 @@ describe("buildSignedCatalogJson", () => {
       "data-integrations",
       "lastmile",
       "n8n",
-      "plane",
       "email-channel",
       "sendgrid",
       "twenty",

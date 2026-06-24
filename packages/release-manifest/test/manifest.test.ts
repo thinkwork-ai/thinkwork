@@ -110,22 +110,6 @@ function manifest(overrides: Partial<ThinkWorkReleaseManifest> = {}) {
         ],
       },
       {
-        id: "plane",
-        displayName: "Plane",
-        terraformModule: {
-          source: "thinkwork-ai/thinkwork/aws//modules/app/plane",
-          version: "1.2.3",
-        },
-        requiredArtifacts: ["twenty-thinkwork-app"],
-        smokeContracts: [
-          {
-            id: "plane-runtime-health",
-            command: "plugins/plane/smoke/plane-managed-app-smoke.mjs",
-            required: true,
-          },
-        ],
-      },
-      {
         id: "twenty",
         displayName: "Twenty CRM",
         terraformModule: {
@@ -157,7 +141,6 @@ describe("release manifest contract", () => {
     expect(parsed.release.version).toBe("1.2.3");
     expect(parsed.managedApps.map((app) => app.id)).toEqual([
       "cognee",
-      "plane",
       "twenty",
     ]);
     expect(releaseManifestSha256(parsed)).toMatch(/^[a-f0-9]{64}$/);

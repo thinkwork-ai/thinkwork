@@ -1,12 +1,11 @@
 import { cogneeAdapter } from "@thinkwork/plugin-company-brain/deployment/cognee-managed-app";
 import { n8nAdapter } from "@thinkwork/plugin-n8n/deployment/managed-app";
-import { planeAdapter } from "@thinkwork/plugin-plane/deployment/managed-app";
 import { twentyAdapter } from "@thinkwork/plugin-twenty/deployment/managed-app";
 import type { ManagedAppOperation } from "../shared.js";
 
 export type { ManagedAppOperation } from "../shared.js";
 
-export type ManagedAppKey = "cognee" | "n8n" | "plane" | "twenty";
+export type ManagedAppKey = "cognee" | "n8n" | "twenty";
 
 export interface SmokeContract {
   id: string;
@@ -79,7 +78,6 @@ export interface ManagedAppAdapter {
 export const managedAppRegistry = [
   cogneeAdapter,
   n8nAdapter,
-  planeAdapter,
   twentyAdapter,
 ] as const;
 
@@ -128,9 +126,6 @@ export function resolveManagedAppDesiredConfig(args: {
   manifestImages?: Record<string, string>;
 }): Record<string, unknown> | undefined {
   if (args.operation === "DESTROY") return args.desiredConfig;
-  if (args.appKey === "plane") {
-    return resolvePlaneDesiredConfig(args.desiredConfig, args.manifestImages);
-  }
   if (
     typeof args.desiredConfig?.imageUri === "string" &&
     args.desiredConfig.imageUri.trim()
@@ -163,40 +158,9 @@ function manifestImageForApp(
   const candidates =
     appKey === "twenty"
       ? ["twenty", "twenty-crm", "managed-app-twenty"]
-      : appKey === "plane"
-        ? ["plane", "plane-app", "managed-app-plane"]
-        : appKey === "n8n"
-          ? ["n8n", "n8n-runtime", "managed-app-n8n"]
-          : [appKey, `managed-app-${appKey}`, `${appKey}-runtime`];
-  for (const candidate of candidates) {
-    const value = manifestImages[candidate];
-    if (value) return value;
-  }
-  return null;
-}
-
-function resolvePlaneDesiredConfig(
-  desiredConfig: Record<string, unknown> | undefined,
-  manifestImages: Record<string, string> | undefined,
-): Record<string, unknown> | undefined {
-  const next = { ...(desiredConfig ?? {}) };
-  const imageKeys: Array<[string, string[]]> = [
-    ["imageUri", ["plane-aio", "plane", "plane-app", "managed-app-plane"]],
-    ["mcpImageUri", ["plane-mcp-server", "plane-mcp"]],
-  ];
-  for (const [configKey, candidates] of imageKeys) {
-    if (typeof next[configKey] === "string" && next[configKey]) continue;
-    const image = firstManifestImage(candidates, manifestImages);
-    if (image) next[configKey] = image;
-  }
-  return Object.keys(next).length > 0 ? next : desiredConfig;
-}
-
-function firstManifestImage(
-  candidates: string[],
-  manifestImages: Record<string, string> | undefined,
-): string | null {
-  if (!manifestImages) return null;
+      : appKey === "n8n"
+        ? ["n8n", "n8n-runtime", "managed-app-n8n"]
+        : [appKey, `managed-app-${appKey}`, `${appKey}-runtime`];
   for (const candidate of candidates) {
     const value = manifestImages[candidate];
     if (value) return value;

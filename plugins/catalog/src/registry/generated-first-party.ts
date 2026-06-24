@@ -9,7 +9,6 @@ import { dataIntegrationsPluginPackage as rawDataIntegrationsPluginPackage } fro
 import { emailChannelPluginPackage as rawEmailChannelPluginPackage } from "@thinkwork/plugin-email-channel";
 import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/plugin-lastmile";
 import { n8nPluginPackage as rawN8nPluginPackage } from "@thinkwork/plugin-n8n";
-import { planePluginPackage as rawPlanePluginPackage } from "@thinkwork/plugin-plane";
 import { sendgridPluginPackage as rawSendgridPluginPackage } from "@thinkwork/plugin-sendgrid";
 import { twentyPluginPackage as rawTwentyPluginPackage } from "@thinkwork/plugin-twenty";
 import { workosAuthPluginPackage as rawWorkosAuthPluginPackage } from "@thinkwork/plugin-workos-auth";
@@ -32,9 +31,6 @@ export const lastmilePluginPackage = defineFirstPartyPluginPackage(
 export const n8nPluginPackage = defineFirstPartyPluginPackage(
   rawN8nPluginPackage,
 );
-export const planePluginPackage = defineFirstPartyPluginPackage(
-  rawPlanePluginPackage,
-);
 export const sendgridPluginPackage = defineFirstPartyPluginPackage(
   rawSendgridPluginPackage,
 );
@@ -51,7 +47,6 @@ export const dataIntegrationsManifest = dataIntegrationsPluginPackage.manifest;
 export const emailChannelManifest = emailChannelPluginPackage.manifest;
 export const lastmileManifest = lastmilePluginPackage.manifest;
 export const n8nManifest = n8nPluginPackage.manifest;
-export const planeManifest = planePluginPackage.manifest;
 export const sendgridManifest = sendgridPluginPackage.manifest;
 export const twentyManifest = twentyPluginPackage.manifest;
 export const workosAuthManifest = workosAuthPluginPackage.manifest;
@@ -63,7 +58,6 @@ export const firstPartyPluginPackages = [
   emailChannelPluginPackage,
   lastmilePluginPackage,
   n8nPluginPackage,
-  planePluginPackage,
   sendgridPluginPackage,
   twentyPluginPackage,
   workosAuthPluginPackage,

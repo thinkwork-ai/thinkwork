@@ -129,7 +129,7 @@ describe("managed application plan jobs", () => {
       "cognee",
       "twenty",
     ]);
-    expect(sharedMod.normalizeManagedAppKey("plane")).toBe("plane");
+    expect(sharedMod.normalizeManagedAppKey("n8n")).toBe("n8n");
   });
 
   it("creates a Cognee plan job, records release metadata, and starts Step Functions", async () => {

@@ -303,32 +303,6 @@ function compactRecord(
   );
 }
 
-function planeDefaultDesiredConfig(): Record<string, unknown> {
-  return compactRecord({
-    imageUri: process.env.THINKWORK_PLANE_IMAGE_URI,
-    frontendImageUri: process.env.THINKWORK_PLANE_FRONTEND_IMAGE_URI,
-    backendImageUri: process.env.THINKWORK_PLANE_BACKEND_IMAGE_URI,
-    spaceImageUri: process.env.THINKWORK_PLANE_SPACE_IMAGE_URI,
-    adminImageUri: process.env.THINKWORK_PLANE_ADMIN_IMAGE_URI,
-    liveImageUri: process.env.THINKWORK_PLANE_LIVE_IMAGE_URI,
-    mcpImageUri: process.env.THINKWORK_PLANE_MCP_IMAGE_URI,
-    dbUrlSecretArn: process.env.THINKWORK_PLANE_DB_URL_SECRET_ARN,
-    secretKeySecretArn: process.env.THINKWORK_PLANE_SECRET_KEY_SECRET_ARN,
-    liveServerSecretKeySecretArn:
-      process.env.THINKWORK_PLANE_LIVE_SERVER_SECRET_KEY_SECRET_ARN,
-    aesSecretKeySecretArn:
-      process.env.THINKWORK_PLANE_AES_SECRET_KEY_SECRET_ARN,
-    s3AccessKeyIdSecretArn:
-      process.env.THINKWORK_PLANE_S3_ACCESS_KEY_ID_SECRET_ARN,
-    s3SecretAccessKeySecretArn:
-      process.env.THINKWORK_PLANE_S3_SECRET_ACCESS_KEY_SECRET_ARN,
-    s3BucketName: process.env.THINKWORK_PLANE_S3_BUCKET_NAME,
-    publicUrl: process.env.THINKWORK_PLANE_PUBLIC_URL,
-    certificateArn: process.env.THINKWORK_PLANE_CERTIFICATE_ARN,
-    domain: process.env.THINKWORK_PLANE_DOMAIN,
-  });
-}
-
 function n8nDefaultDesiredConfig(): Record<string, unknown> {
   const domain =
     process.env.THINKWORK_N8N_DOMAIN ?? process.env.THINKWORK_DOMAIN;
@@ -397,12 +371,6 @@ function desiredConfigForPlanJob(args: {
   existing: InfraManagedApplicationSnapshot | null;
 }): Record<string, unknown> {
   const existingConfig = args.existing?.desiredConfig ?? {};
-  if (args.appKey === "plane") {
-    return {
-      ...planeDefaultDesiredConfig(),
-      ...existingConfig,
-    };
-  }
   if (args.appKey === "n8n") {
     const desiredConfig = {
       ...n8nDefaultDesiredConfig(),

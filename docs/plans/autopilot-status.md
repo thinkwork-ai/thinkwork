@@ -14825,3 +14825,60 @@ src/__tests__/pi-runtime-capability-smoke.test.ts` (5 tests).
   Required CI passed: CLA, lint, verify, typecheck, and test.
 - U6 squash merged as `92b75b4448c8d3fea15a69cc60be6f5dc09a4d38`; remote
   branch deleted, local worktree and branch removed, and main synced.
+
+## Plane Plugin Removal Autopilot
+
+Plan: `docs/plans/2026-06-24-003-refactor-remove-plane-plugin-plan.md`
+
+Requested done condition note: the prompt says completion is when the Company
+Data plugin is deployed to app.thinkwork.ai, TEI, and McPherson environments,
+but the referenced plan is the Plane plugin removal. Autopilot is executing the
+referenced Plane removal plan as the authoritative implementation scope and
+will not run manual production deploys outside the normal merge/deploy
+pipeline.
+
+### U1 + U2 Progress
+
+- 2026-06-24 CDT: Created worktree
+  `.Codex/worktrees/remove-plane-u1` on
+  `codex/remove-plane-u1-catalog` from `origin/main`.
+- U1 and U2 are grouped in one PR because deleting `plugins/plane` makes
+  workspace installation fail while `packages/deployment-runner` still depends
+  on `@thinkwork/plugin-plane`. A separate U1-only PR cannot satisfy the
+  repository's CI/typecheck bar.
+- Current scope: remove the Plane plugin package from the workspace and catalog,
+  remove release-manifest/CI entrypoints that publish or accept Plane images,
+  and keep Terraform/deployment-controller deep cleanup for the Terraform unit.
+- `pnpm install` completed in the worktree after package dependency removal;
+  local Node 25 logged the existing optional `canvas@2.11.2` native
+  fallback/missing `pkg-config` warning, but pnpm exited successfully.
+- `pnpm --filter @thinkwork/plugin-catalog generate:plugins` regenerated
+  `plugins/catalog/src/registry/generated-first-party.ts` without Plane.
+- `pnpm install --lockfile-only` refreshed `pnpm-lock.yaml` after removing the
+  `@thinkwork/plugin-plane` workspace package.
+- 2026-06-24 CDT: U1+U2 implementation completed. Removed `plugins/plane`,
+  catalog registration/tests, deployment-runner adapter wiring, release
+  manifest defaults, release/deploy workflow Plane image inputs, and the
+  obsolete CLI Plane Terraform fixture. A small API infra cleanup is included
+  because the deployment-runner `ManagedAppKey` type no longer includes Plane.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/plugin-catalog test`,
+  `pnpm --filter @thinkwork/deployment-runner test`,
+  `pnpm --filter @thinkwork/plugin-catalog typecheck`,
+  `pnpm --filter @thinkwork/deployment-runner typecheck`,
+  `pnpm test:release`,
+  `pnpm --filter @thinkwork/release-manifest test`,
+  `pnpm --filter @thinkwork/plugin-catalog check:plugins`,
+  `pnpm --filter @thinkwork/api exec vitest run src/lib/plugins/handlers/infra.test.ts`,
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/deployments/managed-applications.test.ts`,
+  `pnpm --dir apps/cli test`, and
+  `pnpm --filter @thinkwork/desktop test` after repairing the local Electron
+  install with `pnpm rebuild electron`.
+- Broader verification passed: `pnpm lint`, `pnpm typecheck`, changed-file
+  Prettier check excluding generated registry and `pnpm-lock.yaml`, and
+  `git diff --check`.
+- Full `pnpm test` initially failed on the deleted Plane CLI Terraform fixture,
+  then on the now-fixed managed-app hidden-adapter assertion. The subsequent
+  full run passed those areas and failed only on an unrelated local timeout in
+  `src/handlers/chat-agent-invoke.runtime-routing.test.ts`; rerunning that
+  exact suite passed (12 tests). CI remains the final broad gate for this PR.

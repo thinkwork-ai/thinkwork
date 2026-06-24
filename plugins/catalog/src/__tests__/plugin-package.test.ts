@@ -8,11 +8,10 @@ import {
   allPluginManifests,
   firstPartyPluginPackages,
   n8nPluginPackage,
-  planePluginPackage,
 } from "../registry";
 
 describe("first-party plugin packages", () => {
-  it("registers Plane and n8n from their root plugin package boundaries", () => {
+  it("registers n8n from its root plugin package boundary", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
       "company-brain",
       "company-data",
@@ -20,29 +19,10 @@ describe("first-party plugin packages", () => {
       "email-channel",
       "lastmile",
       "n8n",
-      "plane",
       "sendgrid",
       "twenty",
       "workos-auth",
     ]);
-    expect(planePluginPackage.sourceRoot).toBe("plugins/plane");
-    expect(planePluginPackage.manifest.pluginKey).toBe("plane");
-    expect(planePluginPackage.ownedSources).toContainEqual({
-      kind: "manifest",
-      path: "plugins/plane/src/manifest.ts",
-      description: "Plane catalog manifest and versioned component contract.",
-    });
-    expect(planePluginPackage.ownedSources).toContainEqual({
-      kind: "deployment",
-      path: "plugins/plane/src/deployment/managed-app.ts",
-      description: "Plane managed-app deployment adapter.",
-    });
-    expect(planePluginPackage.ownedSources).toContainEqual({
-      kind: "terraform",
-      path: "plugins/plane/terraform/plane",
-      description: "Plane managed-app Terraform module.",
-    });
-    expect(planePluginPackage.compatibilityLinks).toEqual([]);
 
     expect(n8nPluginPackage.sourceRoot).toBe("plugins/n8n");
     expect(n8nPluginPackage.manifest.pluginKey).toBe("n8n");
@@ -72,7 +52,6 @@ describe("first-party plugin packages", () => {
       "data-integrations",
       "lastmile",
       "n8n",
-      "plane",
       "email-channel",
       "sendgrid",
       "twenty",
@@ -83,8 +62,8 @@ describe("first-party plugin packages", () => {
   it("rejects package descriptors whose source root does not match the key", () => {
     expect(() =>
       defineFirstPartyPluginPackage({
-        ...planePluginPackage,
-        sourceRoot: "plugins/not-plane",
+        ...n8nPluginPackage,
+        sourceRoot: "plugins/not-n8n",
       }),
     ).toThrow(PluginPackageError);
   });
@@ -92,8 +71,8 @@ describe("first-party plugin packages", () => {
   it("rejects package descriptors whose manifest key does not match", () => {
     expect(() =>
       defineFirstPartyPluginPackage({
-        ...planePluginPackage,
-        packageKey: "not-plane",
+        ...n8nPluginPackage,
+        packageKey: "not-n8n",
       }),
     ).toThrow(PluginPackageError);
   });
@@ -101,25 +80,25 @@ describe("first-party plugin packages", () => {
   it("rejects owned source descriptors outside the package root", () => {
     expect(() =>
       defineFirstPartyPluginPackage({
-        ...planePluginPackage,
+        ...n8nPluginPackage,
         ownedSources: [
           {
             kind: "deployment",
-            path: "packages/deployment-runner/src/apps/plane.ts",
-            description: "Misplaced Plane deployment adapter.",
+            path: "packages/deployment-runner/src/apps/n8n.ts",
+            description: "Misplaced n8n deployment adapter.",
           },
         ],
       }),
-    ).toThrow(/ownedSources\[0\]\.path must live under plugins\/plane\//);
+    ).toThrow(/ownedSources\[0\]\.path must live under plugins\/n8n\//);
   });
 
   it("rejects compatibility links without migration debt documentation", () => {
     expect(() =>
       defineFirstPartyPluginPackage({
-        ...planePluginPackage,
+        ...n8nPluginPackage,
         compatibilityLinks: [
           {
-            path: "packages/deployment-runner/src/apps/plane.ts",
+            path: "packages/deployment-runner/src/apps/n8n.ts",
             reason: "",
             removal: "THNK-31 U3",
           },
@@ -131,15 +110,15 @@ describe("first-party plugin packages", () => {
   it("rejects compatibility links that point back inside the package", () => {
     expect(() =>
       defineFirstPartyPluginPackage({
-        ...planePluginPackage,
+        ...n8nPluginPackage,
         compatibilityLinks: [
           {
-            path: "plugins/plane/src/manifest.ts",
+            path: "plugins/n8n/src/manifest.ts",
             reason: "Already owned source should not be compatibility debt.",
             removal: "Remove the compatibility link.",
           },
         ],
       }),
-    ).toThrow(/should describe legacy source outside plugins\/plane\//);
+    ).toThrow(/should describe legacy source outside plugins\/n8n\//);
   });
 });
