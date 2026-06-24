@@ -14987,3 +14987,6 @@ pipeline.
   `pnpm install` exited successfully but logged the known optional
   `canvas@2.11.2` native build warning under local Node 25 because `pkg-config`
   is unavailable.
+- U3 PR opened:
+  [#2918](https://github.com/thinkwork-ai/thinkwork/pull/2918). CI monitoring
+  started.
