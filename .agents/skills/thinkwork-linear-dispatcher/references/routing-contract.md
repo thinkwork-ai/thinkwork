@@ -29,6 +29,18 @@ hard blocker appears.
 
 ## Status Routing
 
+Before applying the status table, read the attached progress document named
+`Progress: <feature title>`. Use the same suffix as the issue's
+`Requirements: ...` and `Plan: ...` documents when those exist; otherwise use
+the issue title. The progress document controls unit-level continuity: current
+active work, next steps, open PRs, branch/worktree names, worker ids, blockers,
+verification evidence, and cleanup state.
+
+If the progress document is missing for an issue that is beyond `Todo`, create
+it before launching workers. If it conflicts with Linear status, comments,
+threads, worktrees, or PR state, do not launch a worker until the mismatch is
+reconciled and recorded.
+
 | Status                            | Behavior                                                                                                                                                                                  |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Todo`                            | If labeled `Codex`, move to `Brainstorming`, update ledger, stop.                                                                                                                         |
@@ -59,6 +71,11 @@ plan units.
 The parent moves to In Progress when the first child starts, Verification when
 all children are implemented, and Done only after all children pass verification.
 
+Parent and child issues each get their own `Progress: ...` document when they
+run independently. A parent progress document tracks aggregate child state and
+points to child progress documents. A child progress document controls that
+child's implementation/verification loop.
+
 ## Verification Rebound
 
 Verification workers are judges, not mechanics. They must not fix product code.
@@ -80,7 +97,18 @@ Done requires merged implementation/artifact PRs plus the proof required by the
 plan-owned verification contract. If the plan requires deployed proof, local
 checks alone are not enough.
 
-## Ledger And Handoff Markers
+## Progress Document, Ledger, And Handoff Markers
+
+Progress document title:
+
+```text
+Progress: <feature title>
+```
+
+The progress document is the durable loop ledger. It must be updated after each
+worker launch, worker round, PR open, CI failure/repair, PR merge, verification
+verdict, blocker, and cleanup. Its `Active Work` and `Next Steps` sections drive
+the next dispatcher heartbeat.
 
 Rolling ledger marker:
 
@@ -96,6 +124,10 @@ dispatcher:<ISSUE_ID>:<PHASE>:Codex
 
 Handoff comments must include the desired title, real returned `threadId` or
 `pendingWorktreeId`, target project, worktree mode, phase, and expected stop.
+
+The rolling ledger comment is only a short router pointer: current status,
+active worker/PR/worktree, blocker summary, and a link to the progress
+document. Do not use the rolling comment as the durable progress log.
 
 Before claiming a worker is active, validate `threadId` with `read_thread`.
 Stale/fake ids such as `019efa74-2e86-7ba2-b707-ca67dd44ef01` must not block

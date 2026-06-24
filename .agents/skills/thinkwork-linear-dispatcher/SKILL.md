@@ -34,14 +34,30 @@ with the missing-skill-resource blocker and stop. Do not fall back to memory.
 5. Read each candidate issue fully: status, labels, comments, documents,
    attachments, parent/child issues, blockers, dependencies, project, milestone,
    and recent worker evidence.
-6. Locate the rolling ledger comment marked `automation-ledger:<ISSUE_ID>`.
-   Update it in place when possible.
-7. Locate worker handoff comments marked
+6. Locate or create the issue progress document. This document controls the
+   loop.
+   - Preferred title: `Progress: <feature title>`, where `<feature title>` is
+     the suffix already used by `Requirements: ...` and `Plan: ...` documents
+     on the issue.
+   - Fallback title when no matching requirements/plan suffix exists:
+     `Progress: <issue title>`.
+   - Read the document before dispatch and use its `Active Work`, `Next Steps`,
+     blockers, current branch/worktree/PR, and verification notes to decide what
+     to continue or launch.
+   - If the document is missing for a Codex issue that is beyond Todo, create it
+     from the issue, requirements, plan, comments, and current Linear state
+     before launching a worker.
+7. Locate the rolling ledger comment marked `automation-ledger:<ISSUE_ID>`.
+   Keep it short: current router state, active worker id/pendingWorktreeId,
+   current PR/branch/worktree, blocker summary, and a link to the progress
+   document. Update it in place when possible.
+8. Locate worker handoff comments marked
    `dispatcher:<ISSUE_ID>:<PHASE>:Codex`.
-8. Run the duplicate-worker gate below. Do this even when Linear comments do
+9. Run the duplicate-worker gate below. Do this even when Linear comments do
    not mention a worker; missing handoff comments are not proof that no worker
    exists.
-9. Route the issue according to `references/routing-contract.md`.
+10. Route the issue according to `references/routing-contract.md`, with the
+    progress document as the authoritative implementation loop state.
 
 ## Duplicate-Worker Gate
 
@@ -91,22 +107,60 @@ When a route requires a Codex worker:
   `pendingWorktreeId`, then set it after the real thread exists;
 - update the rolling ledger and post/update a handoff comment with the stable
   marker, desired title, project, worktree mode, and returned id.
+- update the progress document before launch with the selected phase/unit,
+  expected worker title, returned `threadId` or `pendingWorktreeId`, branch or
+  worktree expectations when known, and the exact stop condition.
 
 Implementation and repair prompts must include a first-action goal instruction.
 The worker must set a Codex thread goal with the goal tool or `/goal` before
 changing code. The goal must name the issue, implementation scope, PR/artifact
 landing expectation, Linear evidence to update, and terminal phase.
 
+## Progress Document Discipline
+
+Each automated issue uses one attached Linear document as the durable loop
+controller. The document is named:
+
+```text
+Progress: <feature title>
+```
+
+Use the same `<feature title>` suffix as the attached `Requirements: ...` and
+`Plan: ...` documents. If those documents are absent or do not share a suffix,
+use the Linear issue title.
+
+The progress document must include, and workers must keep current:
+
+- current Linear state, labels, and automation mode;
+- completed units with PRs, merge commits, CI results, local verification, and
+  cleanup evidence;
+- active work with branch, worktree, PR, worker thread id or pendingWorktreeId,
+  current blocker, and exact next action;
+- remaining plan units and dependencies;
+- verification contract and latest pass/fail evidence;
+- repair rebound evidence when `Verification Failed` is present.
+
+Dispatcher rule: before creating or continuing any worker, read the progress
+document and use `Active Work` plus `Next Steps` as the primary source for what
+the next heartbeat should do. Linear status still gates which phase is allowed;
+the progress document controls the unit-level loop inside that phase. If Linear
+status/comments and the progress document disagree, pause launch, update the
+rolling ledger with the mismatch, and reconcile by reading issue history,
+threads, worktrees, and PRs before proceeding.
+
 ## Comment Discipline
 
-Use one rolling ledger comment per issue/unit. New comments are reserved for:
+Use one rolling ledger comment per issue/unit as the short router pointer. New
+comments are reserved for:
 
 - real worker handoffs;
 - hard blockers;
 - failed verification verdicts;
 - final completion summaries.
 
-Do not create noisy progress streams. When in doubt, update the ledger.
+Do not create noisy progress streams. Durable progress belongs in the
+`Progress: ...` Linear document; the rolling comment should point to it and
+summarize only the current dispatch state.
 
 ## Stop Conditions
 
@@ -121,6 +175,7 @@ Stop only for hard blockers:
 - plan ambiguity where any reasonable choice risks building the wrong product
   or violating scope.
 
-When stopped, update the rolling ledger with the exact blocker, attempted
+When stopped, update the progress document with the exact blocker, attempted
 commands/tool calls, current worker/thread id if any, and the recommended next
-action.
+action. Also update the rolling ledger with a short blocker summary and a link
+to the progress document.
