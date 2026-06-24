@@ -97,6 +97,11 @@ The parent issue tracks aggregate progress. It moves to `In Progress` when the
 first child starts, moves to `Verification` when all children are implemented,
 and moves to `Done` only after all children pass verification.
 
+Each independently running parent or child issue gets its own attached Linear
+progress document. For parent/child trees, the parent progress document tracks
+aggregate child state and links to child progress documents; each child progress
+document controls that child's implementation and verification loop.
+
 ## Ready To Work Modes
 
 `Ready to Work` has two modes:
@@ -134,20 +139,46 @@ Done requires merged implementation and artifact PRs plus the proof required by
 the verification contract. If the plan requires deployed proof, local checks
 alone are not enough.
 
-## Comments And Ledgers
+## Progress Documents And Ledgers
+
+Linear is the canonical progress ledger for autopilot work. Every `Codex` issue
+that is beyond `Todo` should have an attached progress document named:
+
+```text
+Progress: <feature title>
+```
+
+Use the same `<feature title>` suffix as the attached
+`Requirements: <feature title>` and `Plan: <feature title>` documents. If those
+documents are absent or do not share a suffix, use the issue title.
+
+The progress document controls the loop. The dispatcher reads it before each
+heartbeat route and uses its `Active Work`, `Next Steps`, blocker notes, worker
+ids, current PR, branch/worktree, verification evidence, and cleanup state to
+decide whether to continue, repair, verify, or launch the next worker. Linear
+status still gates which phase is allowed; the progress document controls the
+unit-level continuity inside that phase.
+
+Workers and verifiers update the progress document after every meaningful
+round, unit completion, PR open, CI failure/repair, PR merge, verification
+verdict, blocker, and cleanup.
 
 Use one rolling Linear automation ledger comment per issue or unit. The
-dispatcher and workers should update that comment in place whenever possible.
-New comments are reserved for:
+dispatcher and workers should update that comment in place whenever possible,
+but it is only a short router pointer: current phase, active worker or pending
+worktree, active branch/worktree/PR, blocker summary, and a link to the progress
+document. New comments are reserved for:
 
 - worker handoffs;
 - hard blockers;
 - failed verification verdicts;
 - final completion summaries.
 
-Detailed progress belongs in `docs/plans/autopilot/<ISSUE>-status.md`. Workers
-may update that file locally during a phase, but should commit and merge it at
-phase boundaries with the relevant artifact or implementation PR.
+Repo-local files such as `docs/plans/autopilot/<ISSUE>-status.md` may still be
+used as supporting committed evidence, but they are not the dispatcher source of
+truth. If a repo status file and the Linear progress document disagree, the
+dispatcher must pause launch, inspect Linear history, worker threads, worktrees,
+and PRs, then reconcile the Linear progress document before proceeding.
 
 ## Worker Launches
 
@@ -168,6 +199,11 @@ When launching a ThinkWork worker, the dispatcher must:
   `pendingWorktreeId`, then set the title after the real thread exists;
 - include a Codex goal instruction in every implementation or repair prompt,
   and require the worker to set the thread goal before changing code;
+- include the progress document URL/title in every launch prompt and require
+  the worker to read it before selecting the next unit;
+- update the progress document before launch with selected phase/unit, desired
+  title, returned `threadId` or `pendingWorktreeId`, active branch/worktree when
+  known, and expected stop condition;
 - validate existing `threadId` values with `read_thread` before treating them
   as active;
 - ignore stale handoff comments whose thread ids cannot be read;
