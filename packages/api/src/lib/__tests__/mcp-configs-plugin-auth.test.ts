@@ -121,6 +121,25 @@ function directRow(over: Record<string, unknown> = {}) {
   };
 }
 
+function twentyRecordLinkMetadata(over: Record<string, unknown> = {}) {
+  return {
+    recordLinkHints: {
+      schemaVersion: 1,
+      source: "plugin-manifest",
+      browserBaseUrl: "https://crm.thinkwork.invalid",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+          idFields: ["id", "opportunityId"],
+          labelFields: ["name"],
+        },
+      ],
+      ...over,
+    },
+  };
+}
+
 let store: InMemoryPluginEngineStore;
 let secrets: InMemoryPluginSecrets;
 
@@ -317,6 +336,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
         name: "Twenty CRM",
         url: "https://crm.thinkwork.invalid/mcp",
         auth_config: { oauth_resource: "https://crm.thinkwork.invalid/mcp" },
+        runtime_metadata: twentyRecordLinkMetadata(),
       }),
     ]);
     const pluginAuth = {
@@ -350,9 +370,47 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       name: "twenty--crm",
       url: "https://crm.thinkwork.invalid/mcp",
       auth: { type: "bearer", token: "twenty-server-level-token" },
+      recordLinkHints: {
+        schemaVersion: 1,
+        source: "plugin-manifest",
+        browserBaseUrl: "https://crm.thinkwork.invalid",
+        routes: [
+          {
+            objectType: "opportunity",
+            routeTemplate: "/object/opportunity/{id}",
+            idFields: ["id", "opportunityId"],
+            labelFields: ["name"],
+          },
+        ],
+      },
     });
+    expect(JSON.stringify(configs[0]!.recordLinkHints)).not.toContain(
+      "twenty-server-level-token",
+    );
     expect(pluginAuth.resolveToken).not.toHaveBeenCalled();
     expect(pluginAuth.hasActiveActivation).not.toHaveBeenCalled();
+  });
+
+  it("a requester WITHOUT an MCP token receives no plugin record-link hints", async () => {
+    mockJoinRows.mockReturnValue([
+      pluginRow("crm", {
+        slug: "twenty--crm",
+        runtime_metadata: twentyRecordLinkMetadata(),
+      }),
+    ]);
+    mockUserTokenRows.mockReturnValue([]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toEqual([]);
+    expect(JSON.stringify(configs)).not.toContain("recordLinkHints");
+    warn.mockRestore();
   });
 
   it("URL dedupe: plugin entry wins over a direct entry sharing the URL when requester MCP auth resolves", async () => {
@@ -369,6 +427,9 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       pluginRow("crm", {
         url: sharedUrl,
         auth_config: { oauth_resource: "https://crm.lastmile.invalid" },
+        runtime_metadata: twentyRecordLinkMetadata({
+          browserBaseUrl: "https://shared.lastmile.invalid",
+        }),
       }),
     ]);
     mockUserTokenRows.mockReturnValue([
@@ -392,6 +453,15 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
 
     expect(configs).toHaveLength(1); // never both
     expect(configs[0]!.name).toBe("lastmile--crm");
+    expect(configs[0]!.recordLinkHints).toMatchObject({
+      browserBaseUrl: "https://shared.lastmile.invalid",
+      routes: [
+        {
+          objectType: "opportunity",
+          routeTemplate: "/object/opportunity/{id}",
+        },
+      ],
+    });
   });
 
   it("URL dedupe: the direct entry serves users whose plugin MCP auth does NOT resolve", async () => {
