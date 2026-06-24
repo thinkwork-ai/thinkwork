@@ -61,16 +61,11 @@ locals {
     ? var.twenty_email_from_address
     : local.twenty_email_domain != "" ? "noreply@${local.twenty_email_domain}" : ""
   )
-  plane_provisioned     = var.plane_provisioned
-  plane_runtime_enabled = var.plane_provisioned && var.plane_runtime_enabled
-  plane_domain          = var.plane_domain != "" ? var.plane_domain : (var.www_domain != "" ? "plane.${var.www_domain}" : "")
-  plane_public_url      = var.plane_public_url != "" ? var.plane_public_url : (local.plane_domain != "" ? "https://${local.plane_domain}" : "")
-  plane_certificate_arn = var.plane_certificate_arn != "" ? var.plane_certificate_arn : var.www_certificate_arn
-  n8n_provisioned       = var.n8n_provisioned
-  n8n_runtime_enabled   = var.n8n_provisioned && var.n8n_runtime_enabled
-  n8n_domain            = var.n8n_domain != "" ? var.n8n_domain : (var.www_domain != "" ? "n8n.${var.www_domain}" : "")
-  n8n_public_url        = var.n8n_public_url != "" ? var.n8n_public_url : (local.n8n_domain != "" ? "https://${local.n8n_domain}" : "")
-  n8n_certificate_arn   = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : var.www_certificate_arn
+  n8n_provisioned     = var.n8n_provisioned
+  n8n_runtime_enabled = var.n8n_provisioned && var.n8n_runtime_enabled
+  n8n_domain          = var.n8n_domain != "" ? var.n8n_domain : (var.www_domain != "" ? "n8n.${var.www_domain}" : "")
+  n8n_public_url      = var.n8n_public_url != "" ? var.n8n_public_url : (local.n8n_domain != "" ? "https://${local.n8n_domain}" : "")
+  n8n_certificate_arn = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : var.www_certificate_arn
   cognee_worker_subnet_ids = (
     length(module.vpc.private_subnet_ids) > 0
     ? module.vpc.private_subnet_ids
@@ -456,123 +451,6 @@ resource "terraform_data" "twenty_runtime_state_guardrails" {
     precondition {
       condition     = !var.twenty_runtime_enabled || var.twenty_provisioned
       error_message = "twenty_runtime_enabled requires twenty_provisioned = true."
-    }
-  }
-}
-
-resource "terraform_data" "plane_configuration_guardrails" {
-  count = local.plane_provisioned ? 1 : 0
-
-  input = {
-    plane_runtime_enabled                   = local.plane_runtime_enabled
-    plane_image_uri                         = var.plane_image_uri
-    plane_frontend_image_uri                = var.plane_frontend_image_uri
-    plane_backend_image_uri                 = var.plane_backend_image_uri
-    plane_space_image_uri                   = var.plane_space_image_uri
-    plane_admin_image_uri                   = var.plane_admin_image_uri
-    plane_live_image_uri                    = var.plane_live_image_uri
-    plane_mcp_image_uri                     = var.plane_mcp_image_uri
-    plane_db_name                           = var.plane_db_name
-    plane_db_username                       = var.plane_db_username
-    plane_db_url_secret_arn                 = var.plane_db_url_secret_arn
-    plane_secret_key_secret_arn             = var.plane_secret_key_secret_arn
-    plane_live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
-    plane_aes_secret_key_secret_arn         = var.plane_aes_secret_key_secret_arn
-    plane_s3_access_key_id_secret_arn       = var.plane_s3_access_key_id_secret_arn
-    plane_s3_secret_access_key_secret_arn   = var.plane_s3_secret_access_key_secret_arn
-    plane_s3_bucket_name                    = var.plane_s3_bucket_name
-    plane_public_url                        = local.plane_public_url
-    plane_certificate_arn                   = local.plane_certificate_arn
-    plane_web_container_port                = var.plane_web_container_port
-    plane_cache_engine                      = var.plane_cache_engine
-    plane_rabbitmq_engine_version           = var.plane_rabbitmq_engine_version
-    public_subnet_count                     = length(module.vpc.public_subnet_ids)
-    private_subnet_count                    = length(module.vpc.private_subnet_ids)
-  }
-
-  lifecycle {
-    precondition {
-      condition = (
-        var.plane_image_uri != "" &&
-        var.plane_mcp_image_uri != ""
-      )
-      error_message = "plane_provisioned requires Plane AIO plane_image_uri and plane_mcp_image_uri pinned to immutable digests."
-    }
-
-    precondition {
-      condition     = var.plane_db_url_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
-      error_message = "plane_provisioned requires plane_db_url_secret_arn or deployment_control_plane_create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = var.plane_secret_key_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
-      error_message = "plane_provisioned requires plane_secret_key_secret_arn or deployment_control_plane_create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = var.plane_live_server_secret_key_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
-      error_message = "plane_provisioned requires plane_live_server_secret_key_secret_arn or deployment_control_plane_create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = var.plane_aes_secret_key_secret_arn != "" || var.deployment_control_plane_create_secret_placeholders
-      error_message = "plane_provisioned requires plane_aes_secret_key_secret_arn or deployment_control_plane_create_secret_placeholders = true."
-    }
-
-    precondition {
-      condition     = var.plane_db_url_secret_arn == "" || var.plane_db_url_secret_arn != module.database.graphql_db_secret_arn
-      error_message = "plane_provisioned requires a dedicated Plane database URL secret, not the shared Thinkwork admin database secret."
-    }
-
-    precondition {
-      condition     = var.plane_db_name != var.database_name
-      error_message = "plane_db_name must be distinct from the shared Thinkwork database name."
-    }
-
-    precondition {
-      condition     = var.plane_s3_bucket_name != ""
-      error_message = "plane_provisioned requires plane_s3_bucket_name."
-    }
-
-    precondition {
-      condition     = local.plane_public_url != ""
-      error_message = "plane_provisioned requires plane_public_url or a www_domain-derived plane.<domain> URL."
-    }
-
-    precondition {
-      condition     = local.plane_certificate_arn != ""
-      error_message = "plane_provisioned requires plane_certificate_arn or www_certificate_arn."
-    }
-
-    precondition {
-      condition     = length(module.vpc.public_subnet_ids) > 0
-      error_message = "plane_provisioned requires at least one public subnet for the public ALB and phase-1 task egress pattern."
-    }
-
-    precondition {
-      condition     = length(module.vpc.private_subnet_ids) > 0
-      error_message = "plane_provisioned requires at least one private subnet for managed Valkey/Redis and RabbitMQ."
-    }
-
-    precondition {
-      condition     = !var.plane_runtime_enabled || var.plane_provisioned
-      error_message = "plane_runtime_enabled requires plane_provisioned = true."
-    }
-  }
-}
-
-resource "terraform_data" "plane_runtime_state_guardrails" {
-  count = var.plane_runtime_enabled && !var.plane_provisioned ? 1 : 0
-
-  input = {
-    plane_provisioned     = var.plane_provisioned
-    plane_runtime_enabled = var.plane_runtime_enabled
-  }
-
-  lifecycle {
-    precondition {
-      condition     = !var.plane_runtime_enabled || var.plane_provisioned
-      error_message = "plane_runtime_enabled requires plane_provisioned = true."
     }
   }
 }
@@ -1696,59 +1574,6 @@ module "n8n" {
   kms_key_arns               = var.n8n_kms_key_arns
 
   depends_on = [terraform_data.n8n_configuration_guardrails]
-}
-
-module "plane" {
-  count  = local.plane_provisioned ? 1 : 0
-  source = "../../../plugins/plane/terraform/plane"
-
-  stage                = var.stage
-  vpc_id               = module.vpc.vpc_id
-  subnet_ids           = module.vpc.public_subnet_ids
-  cache_subnet_ids     = module.vpc.private_subnet_ids
-  queue_subnet_ids     = module.vpc.private_subnet_ids
-  db_security_group_id = module.database.db_security_group_id
-  public_url           = local.plane_public_url
-  certificate_arn      = local.plane_certificate_arn
-  image_uri            = var.plane_image_uri
-  frontend_image_uri   = var.plane_frontend_image_uri
-  backend_image_uri    = var.plane_backend_image_uri
-  space_image_uri      = var.plane_space_image_uri
-  admin_image_uri      = var.plane_admin_image_uri
-  live_image_uri       = var.plane_live_image_uri
-  mcp_image_uri        = var.plane_mcp_image_uri
-
-  runtime_enabled           = local.plane_runtime_enabled
-  web_desired_count         = var.plane_web_desired_count
-  web_container_port        = var.plane_web_container_port
-  api_desired_count         = var.plane_api_desired_count
-  worker_desired_count      = var.plane_worker_desired_count
-  beat_worker_desired_count = var.plane_beat_worker_desired_count
-  live_desired_count        = var.plane_live_desired_count
-
-  db_url_secret_arn                 = var.plane_db_url_secret_arn
-  secret_key_secret_arn             = var.plane_secret_key_secret_arn
-  live_server_secret_key_secret_arn = var.plane_live_server_secret_key_secret_arn
-  aes_secret_key_secret_arn         = var.plane_aes_secret_key_secret_arn
-  s3_access_key_id_secret_arn       = var.plane_s3_access_key_id_secret_arn
-  s3_secret_access_key_secret_arn   = var.plane_s3_secret_access_key_secret_arn
-  create_secret_placeholders        = var.deployment_control_plane_create_secret_placeholders
-
-  s3_bucket_name = var.plane_s3_bucket_name
-
-  cache_engine                 = var.plane_cache_engine
-  cache_engine_version         = var.plane_cache_engine_version
-  cache_parameter_group_family = var.plane_cache_parameter_group_family
-  cache_node_type              = var.plane_cache_node_type
-  cache_num_cache_clusters     = var.plane_cache_num_cache_clusters
-  rabbitmq_engine_version      = var.plane_rabbitmq_engine_version
-  rabbitmq_instance_type       = var.plane_rabbitmq_instance_type
-  rabbitmq_deployment_mode     = var.plane_rabbitmq_deployment_mode
-
-  allowed_public_cidr_blocks = var.plane_allowed_public_cidr_blocks
-  kms_key_arns               = var.plane_kms_key_arns
-
-  depends_on = [terraform_data.plane_configuration_guardrails]
 }
 
 module "ses" {

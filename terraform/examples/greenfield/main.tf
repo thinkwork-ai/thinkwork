@@ -507,162 +507,6 @@ variable "n8n_cache_engine" {
   default     = "valkey"
 }
 
-variable "plane_provisioned" {
-  description = "Provision the retained Plane managed-app substrate. Runtime can be parked independently with plane_runtime_enabled."
-  type        = bool
-  default     = false
-}
-
-variable "plane_runtime_enabled" {
-  description = "Run Plane ECS services when the retained substrate is provisioned."
-  type        = bool
-  default     = false
-}
-
-variable "plane_image_uri" {
-  description = "Plane container image URI pinned to an immutable sha256 digest. Required when plane_provisioned = true."
-  type        = string
-  default     = ""
-}
-
-variable "plane_mcp_image_uri" {
-  description = "Plane MCP server runtime image URI pinned to an immutable sha256 digest."
-  type        = string
-  default     = ""
-}
-
-variable "plane_web_container_port" {
-  description = "Container port exposed by the Plane web/AIO runtime."
-  type        = number
-  default     = 8080
-}
-
-variable "plane_db_url_secret_arn" {
-  description = "Secrets Manager ARN containing a JSON DATABASE_URL field for the dedicated Plane database."
-  type        = string
-  default     = ""
-}
-
-variable "plane_db_username" {
-  description = "Dedicated PostgreSQL username for Plane."
-  type        = string
-  default     = "thinkwork_plane"
-}
-
-variable "plane_db_name" {
-  description = "Dedicated PostgreSQL database name for Plane."
-  type        = string
-  default     = "thinkwork_plane"
-}
-
-variable "plane_secret_key_secret_arn" {
-  description = "Secrets Manager ARN containing Plane SECRET_KEY."
-  type        = string
-  default     = ""
-}
-
-variable "plane_live_server_secret_key_secret_arn" {
-  description = "Secrets Manager ARN containing Plane LIVE_SERVER_SECRET_KEY."
-  type        = string
-  default     = ""
-}
-
-variable "plane_aes_secret_key_secret_arn" {
-  description = "Secrets Manager ARN containing Plane AES_SECRET_KEY."
-  type        = string
-  default     = ""
-}
-
-variable "plane_amqp_url_secret_arn" {
-  description = "Deprecated no-op. Plane creates AMQP_URL from the managed Amazon MQ broker endpoint."
-  type        = string
-  default     = ""
-}
-
-variable "plane_s3_access_key_id_secret_arn" {
-  description = "Secrets Manager ARN containing Plane AWS_ACCESS_KEY_ID for S3 uploads."
-  type        = string
-  default     = ""
-}
-
-variable "plane_s3_secret_access_key_secret_arn" {
-  description = "Secrets Manager ARN containing Plane AWS_SECRET_ACCESS_KEY for S3 uploads."
-  type        = string
-  default     = ""
-}
-
-variable "plane_s3_bucket_name" {
-  description = "S3 bucket name used for Plane file uploads. Required when plane_provisioned = true."
-  type        = string
-  default     = ""
-}
-
-variable "plane_cache_engine" {
-  description = "ElastiCache engine for Plane. Prefer valkey; redis is available as a compatibility fallback."
-  type        = string
-  default     = "valkey"
-}
-
-variable "plane_cache_engine_version" {
-  description = "ElastiCache engine version for the selected Plane cache engine."
-  type        = string
-  default     = "8.0"
-}
-
-variable "plane_cache_parameter_group_family" {
-  description = "ElastiCache parameter group family matching plane_cache_engine/plane_cache_engine_version."
-  type        = string
-  default     = "valkey8"
-}
-
-variable "plane_cache_node_type" {
-  description = "ElastiCache node type for Plane."
-  type        = string
-  default     = "cache.t4g.micro"
-}
-
-variable "plane_cache_num_cache_clusters" {
-  description = "Number of Plane cache nodes in the replication group."
-  type        = number
-  default     = 1
-}
-
-variable "plane_rabbitmq_engine_version" {
-  description = "Amazon MQ RabbitMQ engine version for Plane."
-  type        = string
-  default     = "3.13"
-}
-
-variable "plane_rabbitmq_instance_type" {
-  description = "Amazon MQ RabbitMQ broker instance type for Plane. mq.m7g.medium is the smallest current RabbitMQ option in us-east-1."
-  type        = string
-  default     = "mq.m7g.medium"
-}
-
-variable "plane_rabbitmq_deployment_mode" {
-  description = "Amazon MQ RabbitMQ deployment mode for Plane."
-  type        = string
-  default     = "SINGLE_INSTANCE"
-}
-
-variable "plane_public_url" {
-  description = "Public HTTPS URL for Plane. Leave empty to derive https://plane.<www_domain>."
-  type        = string
-  default     = ""
-}
-
-variable "plane_domain" {
-  description = "Public DNS name for Plane. Leave empty to derive plane.<www_domain>."
-  type        = string
-  default     = ""
-}
-
-variable "plane_certificate_arn" {
-  description = "ACM certificate ARN for the Plane public ALB. Leave empty to create a dedicated plane.<www_domain> certificate when Plane is provisioned."
-  type        = string
-  default     = ""
-}
-
 variable "google_oauth_client_id" {
   description = "Google OAuth client ID (optional — leave empty to skip Google login)"
   type        = string
@@ -947,14 +791,11 @@ locals {
   api_domain      = var.www_domain != "" ? "api.${var.www_domain}" : ""
   crm_domain      = var.www_domain != "" ? "crm.${var.www_domain}" : ""
   n8n_domain      = var.n8n_domain != "" ? var.n8n_domain : (var.www_domain != "" ? "n8n.${var.www_domain}" : "")
-  plane_domain    = var.plane_domain != "" ? var.plane_domain : (var.www_domain != "" ? "plane.${var.www_domain}" : "")
   twenty_url      = var.twenty_public_url != "" ? var.twenty_public_url : (local.crm_domain != "" ? "https://${local.crm_domain}" : "")
   n8n_url         = var.n8n_public_url != "" ? var.n8n_public_url : (local.n8n_domain != "" ? "https://${local.n8n_domain}" : "")
-  plane_url       = var.plane_public_url != "" ? var.plane_public_url : (local.plane_domain != "" ? "https://${local.plane_domain}" : "")
 
   twenty_managed_certificate_enabled = local.www_dns_enabled && var.twenty_provisioned && var.twenty_certificate_arn == "" && local.crm_domain != ""
   n8n_managed_certificate_enabled    = local.www_dns_enabled && var.n8n_provisioned && var.n8n_certificate_arn == "" && local.n8n_domain != ""
-  plane_managed_certificate_enabled  = local.www_dns_enabled && var.plane_provisioned && var.plane_certificate_arn == "" && local.plane_domain != ""
 }
 
 resource "aws_acm_certificate" "computer_sandbox" {
@@ -1087,44 +928,6 @@ resource "aws_acm_certificate_validation" "n8n" {
   ]
 }
 
-resource "aws_acm_certificate" "plane" {
-  count = local.plane_managed_certificate_enabled ? 1 : 0
-
-  domain_name       = local.plane_domain
-  validation_method = "DNS"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = {
-    Name = "thinkwork-${var.stage}-plane"
-  }
-}
-
-resource "cloudflare_record" "plane_acm_validation" {
-  for_each = local.plane_managed_certificate_enabled ? toset([local.plane_domain]) : toset([])
-
-  zone_id = var.cloudflare_zone_id
-  name    = trimsuffix(tolist(aws_acm_certificate.plane[0].domain_validation_options)[0].resource_record_name, ".")
-  content = trimsuffix(tolist(aws_acm_certificate.plane[0].domain_validation_options)[0].resource_record_value, ".")
-  type    = tolist(aws_acm_certificate.plane[0].domain_validation_options)[0].resource_record_type
-  ttl     = 60
-  proxied = false
-  comment = "ACM DNS validation for ${each.key}"
-
-  allow_overwrite = true
-}
-
-resource "aws_acm_certificate_validation" "plane" {
-  count = local.plane_managed_certificate_enabled ? 1 : 0
-
-  certificate_arn = aws_acm_certificate.plane[0].arn
-  validation_record_fqdns = [
-    for record in cloudflare_record.plane_acm_validation : record.hostname
-  ]
-}
-
 moved {
   from = module.www_dns[0].cloudflare_record.acm_validation["crm.thinkwork.ai"]
   to   = cloudflare_record.twenty_acm_validation["crm.thinkwork.ai"]
@@ -1214,32 +1017,6 @@ module "thinkwork" {
   n8n_domain                                 = local.n8n_domain
   n8n_public_url                             = local.n8n_url
   n8n_certificate_arn                        = var.n8n_certificate_arn != "" ? var.n8n_certificate_arn : (local.n8n_managed_certificate_enabled ? aws_acm_certificate_validation.n8n[0].certificate_arn : "")
-  plane_provisioned                          = var.plane_provisioned
-  plane_runtime_enabled                      = var.plane_runtime_enabled
-  plane_image_uri                            = var.plane_image_uri
-  plane_mcp_image_uri                        = var.plane_mcp_image_uri
-  plane_web_container_port                   = var.plane_web_container_port
-  plane_db_username                          = var.plane_db_username
-  plane_db_name                              = var.plane_db_name
-  plane_db_url_secret_arn                    = var.plane_db_url_secret_arn
-  plane_secret_key_secret_arn                = var.plane_secret_key_secret_arn
-  plane_live_server_secret_key_secret_arn    = var.plane_live_server_secret_key_secret_arn
-  plane_aes_secret_key_secret_arn            = var.plane_aes_secret_key_secret_arn
-  plane_amqp_url_secret_arn                  = var.plane_amqp_url_secret_arn
-  plane_s3_access_key_id_secret_arn          = var.plane_s3_access_key_id_secret_arn
-  plane_s3_secret_access_key_secret_arn      = var.plane_s3_secret_access_key_secret_arn
-  plane_s3_bucket_name                       = var.plane_s3_bucket_name
-  plane_cache_engine                         = var.plane_cache_engine
-  plane_cache_engine_version                 = var.plane_cache_engine_version
-  plane_cache_parameter_group_family         = var.plane_cache_parameter_group_family
-  plane_cache_node_type                      = var.plane_cache_node_type
-  plane_cache_num_cache_clusters             = var.plane_cache_num_cache_clusters
-  plane_rabbitmq_engine_version              = var.plane_rabbitmq_engine_version
-  plane_rabbitmq_instance_type               = var.plane_rabbitmq_instance_type
-  plane_rabbitmq_deployment_mode             = var.plane_rabbitmq_deployment_mode
-  plane_domain                               = local.plane_domain
-  plane_public_url                           = local.plane_url
-  plane_certificate_arn                      = var.plane_certificate_arn != "" ? var.plane_certificate_arn : (local.plane_managed_certificate_enabled ? aws_acm_certificate_validation.plane[0].certificate_arn : "")
   google_oauth_client_id                     = var.google_oauth_client_id
   google_oauth_client_secret                 = var.google_oauth_client_secret
   pre_signup_lambda_zip                      = var.pre_signup_lambda_zip
@@ -1373,10 +1150,6 @@ module "www_dns" {
   include_n8n      = var.n8n_provisioned
   n8n_alb_dns_name = module.thinkwork.n8n_alb_dns_name != null ? module.thinkwork.n8n_alb_dns_name : ""
 
-  # Plane custom domain (plane.<apex>). Plane uses its own ACM certificate;
-  # this module owns only the public CNAME to the ALB.
-  include_plane      = var.plane_provisioned
-  plane_alb_dns_name = module.thinkwork.plane_alb_dns_name != null ? module.thinkwork.plane_alb_dns_name : ""
 }
 
 ################################################################################
@@ -1637,46 +1410,6 @@ output "n8n_valkey_endpoint" {
 output "n8n_storage_bucket_name" {
   description = "S3 bucket name used for n8n managed artifacts (null when n8n_provisioned = false)"
   value       = module.thinkwork.n8n_storage_bucket_name
-}
-
-output "plane_provisioned" {
-  description = "Whether the Plane retained managed-app substrate is provisioned"
-  value       = module.thinkwork.plane_provisioned
-}
-
-output "plane_runtime_enabled" {
-  description = "Whether Plane ECS services are enabled"
-  value       = module.thinkwork.plane_runtime_enabled
-}
-
-output "plane_url" {
-  description = "Public Plane URL (null when plane_provisioned = false)"
-  value       = module.thinkwork.plane_url
-}
-
-output "plane_cluster_arn" {
-  description = "ECS cluster ARN for Plane (null when plane_provisioned = false)"
-  value       = module.thinkwork.plane_cluster_arn
-}
-
-output "plane_web_service_name" {
-  description = "ECS service name for Plane web (null when plane_provisioned = false)"
-  value       = module.thinkwork.plane_web_service_name
-}
-
-output "plane_api_service_name" {
-  description = "ECS service name for Plane API (null when plane_provisioned = false)"
-  value       = module.thinkwork.plane_api_service_name
-}
-
-output "plane_cache_endpoint" {
-  description = "ElastiCache primary endpoint for Plane (null when plane_provisioned = false)"
-  value       = module.thinkwork.plane_cache_endpoint
-}
-
-output "plane_rabbitmq_broker_arn" {
-  description = "Amazon MQ RabbitMQ broker ARN for Plane (null when plane_provisioned = false)"
-  value       = module.thinkwork.plane_rabbitmq_broker_arn
 }
 
 output "agentcore_memory_id" {
