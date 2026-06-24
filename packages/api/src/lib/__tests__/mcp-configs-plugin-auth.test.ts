@@ -1,12 +1,13 @@
 /**
  * buildMcpConfigs plugin-dispatch tests (plan 2026-06-12-001 U6).
  *
- * Plugin-managed servers (management_source='plugin') resolve auth from
- * the REQUESTER's app-level activation token records; direct
- * per_user_oauth servers keep resolving user_mcp_tokens by humanPairId
- * (R16). Covers: the requester/human-pair split, fail-closed null
- * requester, URL-dedupe precedence, needs_reauth refresh-failure skip,
- * and deactivation dropping servers on the next resolution.
+ * Plugin-managed OAuth MCP servers (management_source='plugin') are registered
+ * by plugin install but resolve auth from the REQUESTER's user_mcp_tokens
+ * record. Direct per_user_oauth servers keep resolving user_mcp_tokens by
+ * humanPairId (R16). user_headers and non-OAuth plugin servers continue to use
+ * app-level activation records. Covers: the requester/human-pair split,
+ * fail-closed null requester, URL-dedupe precedence, and activation-gated
+ * non-OAuth/header shapes.
  *
  * getDb() is mocked (fake query shapes); schema + drizzle are REAL; the
  * plugin auth resolver runs for real against the in-memory store +
@@ -180,17 +181,23 @@ beforeEach(() => {
 });
 
 describe("buildMcpConfigs — plugin dispatch identity", () => {
-  it("AE2: one activation's token records resolve ALL three LastMile-shaped servers", async () => {
+  it("plugin-registered OAuth MCP servers resolve from the requester's MCP tokens", async () => {
     mockJoinRows.mockReturnValue([
       pluginRow("crm"),
       pluginRow("tasks"),
       pluginRow("routing"),
     ]);
-    seedActivationWithTokens([
-      "https://crm.lastmile.invalid",
-      "https://tasks.lastmile.invalid",
-      "https://routing.lastmile.invalid",
+    mockUserTokenRows.mockReturnValue([
+      {
+        id: "tok-plugin-mcp",
+        secret_ref: "arn:plugin-mcp",
+        status: "active",
+        expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      },
     ]);
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ access_token: "requester-mcp-token" }),
+    );
 
     const configs = await buildMcpConfigs(
       AGENT,
@@ -205,28 +212,29 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       "lastmile--tasks",
     ]);
     for (const config of configs) {
-      expect(bearerToken(config)).toMatch(/^plugin-token-/);
+      expect(bearerToken(config)).toBe("requester-mcp-token");
     }
   });
 
   it("plugin servers resolve by requesterUserId while a direct per_user_oauth server resolves by humanPairId", async () => {
     mockJoinRows.mockReturnValue([pluginRow("crm"), directRow()]);
-    // Plugin token belongs to the REQUESTER (not the human pair).
-    seedActivationWithTokens(["https://crm.lastmile.invalid"]);
-    // Direct token rows come back from the user_mcp_tokens query — the
-    // SQL is keyed by humanPairId (asserted by the no-humanPairId case
-    // below returning nothing despite this row being available).
+    // Plugin OAuth rows also use user_mcp_tokens, but they are keyed by the
+    // requester. Direct rows are keyed by humanPairId.
     mockUserTokenRows.mockReturnValue([
       {
-        id: "tok-direct",
-        secret_ref: "arn:direct",
+        id: "tok-user-mcp",
+        secret_ref: "arn:user-mcp",
         status: "active",
         expires_at: new Date(Date.now() + 60 * 60 * 1000),
       },
     ]);
-    mockSecretString.mockReturnValue(
-      JSON.stringify({ access_token: "direct-user-token" }),
-    );
+    mockSecretString
+      .mockReturnValueOnce(
+        JSON.stringify({ access_token: "plugin-user-token" }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({ access_token: "direct-user-token" }),
+      );
 
     const configs = await buildMcpConfigs(
       AGENT,
@@ -238,9 +246,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     expect(configs).toHaveLength(2);
     const plugin = configs.find((config) => config.name === "lastmile--crm")!;
     const direct = configs.find((config) => config.name === "direct-server")!;
-    expect(bearerToken(plugin)).toBe(
-      "plugin-token-https://crm.lastmile.invalid",
-    );
+    expect(bearerToken(plugin)).toBe("plugin-user-token");
     expect(bearerToken(direct)).toBe("direct-user-token");
   });
 
@@ -286,9 +292,9 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     warn.mockRestore();
   });
 
-  it("a requester WITHOUT an activation gets no plugin servers (deactivation drops them next resolution)", async () => {
+  it("a requester WITHOUT an MCP token gets no plugin-registered OAuth MCP servers", async () => {
     mockJoinRows.mockReturnValue([pluginRow("crm")]);
-    // No activation seeded — the post-deactivation shape.
+    mockUserTokenRows.mockReturnValue([]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const configs = await buildMcpConfigs(
       AGENT,
@@ -297,10 +303,13 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       { pluginAuth: resolver() },
     );
     expect(configs).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("No active MCP token for user"),
+    );
     warn.mockRestore();
   });
 
-  it("plugin OAuth servers fall back to the requester's legacy server-level MCP token", async () => {
+  it("plugin OAuth servers do not require a plugin activation when the requester has an MCP token", async () => {
     mockJoinRows.mockReturnValue([
       pluginRow("crm", {
         mcp_server_id: "srv-twenty",
@@ -310,9 +319,13 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
         auth_config: { oauth_resource: "https://crm.thinkwork.invalid/mcp" },
       }),
     ]);
-    // No plugin activation is seeded. This matches the MCP-server-detail
-    // Authenticate path, which writes user_mcp_tokens rather than
-    // user_plugin_activation_tokens.
+    const pluginAuth = {
+      resolveToken: vi.fn(async () => {
+        throw new Error("plugin activation token must not be used");
+      }),
+      resolveHeaders: vi.fn(async () => ({})),
+      hasActiveActivation: vi.fn(async () => false),
+    };
     mockUserTokenRows.mockReturnValue([
       {
         id: "tok-twenty",
@@ -329,7 +342,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       AGENT,
       { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
       "[test]",
-      { pluginAuth: resolver() },
+      { pluginAuth },
     );
 
     expect(configs).toHaveLength(1);
@@ -338,9 +351,11 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
       url: "https://crm.thinkwork.invalid/mcp",
       auth: { type: "bearer", token: "twenty-server-level-token" },
     });
+    expect(pluginAuth.resolveToken).not.toHaveBeenCalled();
+    expect(pluginAuth.hasActiveActivation).not.toHaveBeenCalled();
   });
 
-  it("URL dedupe: plugin entry wins over a direct entry sharing the URL when the activation resolves", async () => {
+  it("URL dedupe: plugin entry wins over a direct entry sharing the URL when requester MCP auth resolves", async () => {
     const sharedUrl = "https://shared.lastmile.invalid/mcp";
     mockJoinRows.mockReturnValue([
       // Direct row listed FIRST to prove ordering is by kind, not row order.
@@ -356,7 +371,17 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
         auth_config: { oauth_resource: "https://crm.lastmile.invalid" },
       }),
     ]);
-    seedActivationWithTokens(["https://crm.lastmile.invalid"]);
+    mockUserTokenRows.mockReturnValue([
+      {
+        id: "tok-plugin-mcp",
+        secret_ref: "arn:plugin-mcp",
+        status: "active",
+        expires_at: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    ]);
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ access_token: "plugin-user-token" }),
+    );
 
     const configs = await buildMcpConfigs(
       AGENT,
@@ -369,7 +394,7 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     expect(configs[0]!.name).toBe("lastmile--crm");
   });
 
-  it("URL dedupe: the direct entry serves users whose activation does NOT resolve", async () => {
+  it("URL dedupe: the direct entry serves users whose plugin MCP auth does NOT resolve", async () => {
     const sharedUrl = "https://shared.lastmile.invalid/mcp";
     mockJoinRows.mockReturnValue([
       pluginRow("crm", { url: sharedUrl }),
@@ -381,7 +406,8 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
         auth_config: null,
       }),
     ]);
-    // No activation for the requester → plugin entry drops, direct serves.
+    // No MCP token for the requester → plugin entry drops, direct serves.
+    mockUserTokenRows.mockReturnValue([]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const configs = await buildMcpConfigs(
       AGENT,
@@ -391,35 +417,6 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     );
     expect(configs).toHaveLength(1);
     expect(configs[0]!.name).toBe("shared-direct");
-    warn.mockRestore();
-  });
-
-  it("refresh failure marks needs_reauth and skips the plugin's remaining servers WITHOUT throwing", async () => {
-    mockJoinRows.mockReturnValue([pluginRow("crm"), pluginRow("tasks")]);
-    seedActivationWithTokens([
-      "https://crm.lastmile.invalid",
-      "https://tasks.lastmile.invalid",
-    ]);
-    // Expire both token records; the AS rejects the refresh.
-    for (const token of store.tokens.values()) {
-      token.expires_at = new Date(Date.now() - 1000);
-    }
-    const failingFetch = (async () =>
-      new Response(JSON.stringify({ error: "invalid_grant" }), {
-        status: 400,
-      })) as typeof fetch;
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const configs = await buildMcpConfigs(
-      AGENT,
-      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
-      "[test]",
-      { pluginAuth: resolver(failingFetch) },
-    );
-
-    expect(configs).toHaveLength(0); // skipped, not thrown
-    const activation = [...store.activations.values()][0]!;
-    expect(activation.status).toBe("needs_reauth");
     warn.mockRestore();
   });
 

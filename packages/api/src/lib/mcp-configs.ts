@@ -13,14 +13,12 @@
  *   - `humanPairId`      — the agent's paired human; resolves DIRECT
  *     `per_user_oauth` servers via user_mcp_tokens exactly as before (R16).
  *   - `requesterUserId`  — the thread-turn / job owner; resolves
- *     PLUGIN-managed OAuth/header servers (management_source='plugin') via
- *     user_plugin_activation_tokens by (requester, plugin_install_id,
- *     resource indicator), with refresh-on-expiry per token record.
- *     Refresh failure flips the activation to needs_reauth and skips that
- *     plugin's servers (log, never throw). A null requester excludes these
- *     plugin servers (fail closed). Plugin rows declared as
- *     service_credential are tenant-owned and resolve server-side without
- *     requester activation.
+ *     PLUGIN-managed OAuth MCP servers (management_source='plugin') via
+ *     user_mcp_tokens for that requester and server. The plugin owns the MCP
+ *     server registration/lifecycle; each user still authenticates to the MCP
+ *     server individually. Plugin-managed user_headers servers continue to use
+ *     user_plugin_activation_tokens, and service_credential rows are
+ *     tenant-owned and resolve server-side without requester activation.
  *
  * URL dedupe: when a plugin server and a direct server share an endpoint
  * URL, the dispatch includes the plugin entry for users whose activation
@@ -45,7 +43,6 @@ import {
 } from "@aws-sdk/client-secrets-manager";
 import { mcpHashMatches } from "./mcp-server-hash.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
-import { resolveMcpOAuthResource } from "./mcp-oauth-client.js";
 
 export interface McpServerConfig {
   name: string;
@@ -172,9 +169,10 @@ export async function buildMcpConfigs(
     }
 
     // ── Plugin-managed servers (management_source='plugin') ──────────
-    // Auth resolves from the REQUESTER's app-level activation, never
-    // from humanPairId. Service credentials are the explicit tenant-owned
-    // exception and resolve entirely server-side.
+    // Plugin installation registers and owns the server row, but OAuth MCP
+    // access is still per-user MCP auth. Resolve that from the REQUESTER's
+    // user_mcp_tokens record, never from humanPairId. user_headers remains an
+    // app-level activation shape, and service_credential is tenant-owned.
     if (isPluginRow(mcp)) {
       if (mcp.auth_type === "service_credential") {
         const resolved = await resolveServiceCredentialAuth(
@@ -199,27 +197,12 @@ export async function buildMcpConfigs(
       let pluginToken: string | undefined;
       let pluginHeaders: Record<string, string> | undefined;
       if (mcp.auth_type === "oauth" || mcp.auth_type === "per_user_oauth") {
-        const resource = resolveMcpOAuthResource({
-          serverUrl: mcp.url,
-          authConfig: mcp.auth_config as Record<string, unknown> | null,
-        });
-        const resolved = await (
-          await getPluginAuth()
-        ).resolveToken({
-          requesterUserId,
-          pluginInstallId,
-          resource,
-          slug: mcp.slug ?? mcp.name,
+        pluginToken = await resolveUserMcpBearerToken({
+          userId: requesterUserId,
+          mcp,
           logPrefix,
+          fallbackLabel: "for plugin-registered MCP server",
         });
-        pluginToken =
-          resolved ??
-          (await resolveUserMcpBearerToken({
-            userId: requesterUserId,
-            mcp,
-            logPrefix,
-            fallbackLabel: "plugin server-level OAuth token",
-          }));
         if (!pluginToken) continue;
       } else if (mcp.auth_type === "user_headers") {
         const headerNames = userHeaderNamesFromAuthConfig(

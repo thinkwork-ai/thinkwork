@@ -20,11 +20,11 @@
  *           invokerUserId ?? null; render userId = costOwnerUserId ?? null
  *           (wakeup-processor.ts ~558/~1562/~1711).
  *
- * and asserts: same user, same tenant, same plugin state → IDENTICAL
- * gated tool surface and IDENTICAL skill-folder exclusions on the chat
- * turn and the wakeup/resume turn; a deactivation between turns drops
- * tools AND skills on the resume turn; no resolvable requester fails
- * closed in both builders.
+ * and asserts: same user, same tenant, same plugin state + MCP auth state →
+ * IDENTICAL gated tool surface and IDENTICAL skill-folder exclusions on the
+ * chat turn and the wakeup/resume turn; clearing both user auth states between
+ * turns drops tools AND skills on the resume turn; no resolvable requester
+ * fails closed in both builders.
  *
  * Fixture approach mirrors mcp-configs-plugin-auth.test.ts (mocked getDb
  * join rows + in-memory plugin store/secrets through the injectable
@@ -296,6 +296,25 @@ function activate(userId: string): void {
   );
 }
 
+function authenticateMcp(): void {
+  mockUserTokenRows.mockReturnValue([
+    {
+      id: "tok-lastmile-crm",
+      secret_ref: "arn:lastmile-crm-user-token",
+      status: "active",
+      expires_at: new Date(Date.now() + 60 * 60 * 1000),
+    },
+  ]);
+  mockSecretString.mockReturnValue(
+    JSON.stringify({ access_token: "lastmile-crm-user-token" }),
+  );
+}
+
+function clearMcpAuth(): void {
+  mockUserTokenRows.mockReturnValue([]);
+  mockSecretString.mockReturnValue("");
+}
+
 async function deactivate(userId: string): Promise<void> {
   const activation = await pluginStore.getActivationByUserAndInstall(
     userId,
@@ -441,6 +460,7 @@ beforeEach(() => {
 describe("dispatch parity — plugin activation gating (U7)", () => {
   it("PARITY: same user, same tenant, same plugin state → identical gated tool surface and skill-folder exclusions on the chat turn AND the wakeup/resume turn", async () => {
     activate(ALICE);
+    authenticateMcp();
 
     const chat = await chatTurnSurface(seededObjectStore(), ALICE);
     const wakeup = await wakeupTurnSurface(seededObjectStore(), {
@@ -453,7 +473,7 @@ describe("dispatch parity — plugin activation gating (U7)", () => {
     expect(chat.pluginSkillFiles).toEqual(wakeup.pluginSkillFiles);
     expect(chat.contextMd).toEqual(wakeup.contextMd);
 
-    // Activated: plugin tools + plugin skill folders + routing entries present.
+    // Plugin activation exposes plugin skills; MCP auth exposes OAuth MCP tools.
     expect(chat.toolNames).toEqual(["direct-server", "lastmile--crm"]);
     expect(chat.pluginSkillFiles).toEqual([
       "skills/lastmile--crm-basics/SKILL.md",
@@ -463,7 +483,7 @@ describe("dispatch parity — plugin activation gating (U7)", () => {
     expect(chat.contextMd).toContain("skills/notes-helper/SKILL.md");
   });
 
-  it("PARITY: a NON-activated user gets the identical (empty) plugin surface from both builders, with non-plugin skills and direct servers intact", async () => {
+  it("PARITY: a user without plugin activation or MCP auth gets the identical empty plugin surface from both builders, with non-plugin skills and direct servers intact", async () => {
     activate(ALICE); // someone else is activated — must not leak to Bob
 
     const chat = await chatTurnSurface(seededObjectStore(), BOB);
@@ -483,17 +503,20 @@ describe("dispatch parity — plugin activation gating (U7)", () => {
     expect(chat.contextMd).toContain("skills/notes-helper/SKILL.md");
   });
 
-  it("PARITY: deactivation between turns drops tools AND skills on the resume (wakeup) turn", async () => {
+  it("PARITY: clearing plugin activation and MCP auth between turns drops tools AND skills on the resume (wakeup) turn", async () => {
     activate(ALICE);
+    authenticateMcp();
     const objectStore = seededObjectStore();
 
-    // Turn 1 — chat turn while activated.
+    // Turn 1 — chat turn while plugin-activated and MCP-authenticated.
     const first = await chatTurnSurface(objectStore, ALICE, "thread-shared");
     expect(first.toolNames).toContain("lastmile--crm");
     expect(first.pluginSkillFiles).not.toEqual([]);
 
-    // Alice disconnects the plugin between turns.
+    // Alice disconnects between turns. Plugin activation controls skills;
+    // per-user MCP auth controls plugin-registered OAuth MCP tools.
     await deactivate(ALICE);
+    clearMcpAuth();
 
     // Turn 2 — the wakeup/resume turn for the SAME user and thread.
     const resume = await wakeupTurnSurface(
@@ -511,11 +534,13 @@ describe("dispatch parity — plugin activation gating (U7)", () => {
     expect(followUp.workspaceFiles).toEqual(resume.workspaceFiles);
   });
 
-  it("scheduled-job turns gate on the job OWNER's activation at dispatch time — owner deactivated since scheduling loses the tools", async () => {
+  it("scheduled-job turns gate on the job OWNER's current activation and MCP auth at dispatch time", async () => {
     activate(ALICE);
-    // Job scheduled while Alice was activated…
+    authenticateMcp();
+    // Job scheduled while Alice was connected…
     await deactivate(ALICE);
-    // …but dispatch evaluates the CURRENT activation state.
+    clearMcpAuth();
+    // …but dispatch evaluates the CURRENT activation and MCP auth state.
     const dispatch = await wakeupTurnSurface(seededObjectStore(), {
       requested_by_actor_type: "user",
       requested_by_actor_id: ALICE,
@@ -583,6 +608,7 @@ describe("dispatch parity — plugin activation gating (U7)", () => {
 
   it("the shared MCP policy chokepoint applies TOOLS.md policy identically for both builders", async () => {
     activate(ALICE);
+    authenticateMcp();
     const policy = {
       mcpAllowedServers: null,
       mcpBlockedServers: ["direct-server"],
