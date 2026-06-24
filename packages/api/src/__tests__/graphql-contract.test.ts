@@ -81,6 +81,11 @@ describe("GraphQL Schema Contract", () => {
       "space",
       "customerOnboardingSpace",
       "threadLinkedTasks",
+      "workItems",
+      "workItem",
+      "threadWorkItems",
+      "workItemStatuses",
+      "workItemSavedViews",
       // Messages
       "messages",
       // Core
@@ -568,6 +573,35 @@ describe("GraphQL Schema Contract", () => {
     });
   });
 
+  describe("Native work items contract", () => {
+    const schema = buildSchema(loadFullSchema());
+
+    it("exposes work item state, Space statuses, event history, and saved views", () => {
+      const workItem = schema.getType("WorkItem") as any;
+      const status = schema.getType("WorkItemStatus") as any;
+      const event = schema.getType("WorkItemEvent") as any;
+      const view = schema.getType("WorkItemSavedView") as any;
+
+      expect(workItem?.toString()).toBe("WorkItem");
+      expect(status?.toString()).toBe("WorkItemStatus");
+      expect(event?.toString()).toBe("WorkItemEvent");
+      expect(view?.toString()).toBe("WorkItemSavedView");
+      expect(workItem.getFields().status.type.toString()).toBe(
+        "WorkItemStatus!",
+      );
+      expect(workItem.getFields().threadLinks.type.toString()).toBe(
+        "[WorkItemThreadLink!]!",
+      );
+      expect(workItem.getFields().events.type.toString()).toBe(
+        "[WorkItemEvent!]!",
+      );
+      expect(status.getFields().category.type.toString()).toBe(
+        "WorkItemStatusCategory!",
+      );
+      expect(view.getFields().viewConfig.type.toString()).toBe("AWSJSON!");
+    });
+  });
+
   describe("v1 Mutation surface", () => {
     const schema = buildSchema(loadFullSchema());
     const mutationType = schema.getMutationType();
@@ -591,6 +625,12 @@ describe("GraphQL Schema Contract", () => {
       "createSpace",
       "setSpaceRuntimeOverrides",
       "startCustomerOnboarding",
+      "createWorkItem",
+      "updateWorkItem",
+      "updateWorkItemStatus",
+      "saveWorkItemStatuses",
+      "saveWorkItemView",
+      "deleteWorkItemView",
       // Messages
       "sendMessage",
       "deleteMessage",
