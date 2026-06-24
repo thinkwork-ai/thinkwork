@@ -913,18 +913,18 @@ describe("resolveAgentRuntimeConfig", () => {
     );
   });
 
-  it("injects tenant built-in tools when template Web Search is enabled", async () => {
+  it("injects tenant built-in tools without requiring a catalog skill trust row", async () => {
     stageAgentRow();
     stageTemplateRow({ web_search: { enabled: true } });
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
-    stageTrustedRuntimeSkillRows("web-search");
+    stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
     mockLoadTenantBuiltinTools.mockResolvedValueOnce([
       {
         toolSlug: "web-search",
-        provider: "serper",
-        envOverrides: { SERPER_API_KEY: "abc" },
+        provider: "exa",
+        envOverrides: { WEB_SEARCH_PROVIDER: "exa", EXA_API_KEY: "abc" },
       },
     ]);
     const cfg = await resolveAgentRuntimeConfig({
@@ -934,7 +934,15 @@ describe("resolveAgentRuntimeConfig", () => {
     const webSearch = cfg.skillsConfig.find((s) => s.skillId === "web-search");
     expect(webSearch).toBeDefined();
     expect(webSearch?.s3Key).toBe("tenants/acme/skill-catalog/web-search");
-    expect(webSearch?.envOverrides).toEqual({ SERPER_API_KEY: "abc" });
+    expect(webSearch?.envOverrides).toEqual({
+      WEB_SEARCH_PROVIDER: "exa",
+      EXA_API_KEY: "abc",
+    });
+    expect(cfg.webSearchConfig).toEqual({
+      provider: "exa",
+      apiKey: "abc",
+    });
+    expect(cfg.trustedSkillIds).toContain("web-search");
   });
 
   it("does not inject web-search when the template Web Search opt-in is null", async () => {
@@ -947,8 +955,8 @@ describe("resolveAgentRuntimeConfig", () => {
     mockLoadTenantBuiltinTools.mockResolvedValueOnce([
       {
         toolSlug: "web-search",
-        provider: "serper",
-        envOverrides: { SERPER_API_KEY: "abc" },
+        provider: "exa",
+        envOverrides: { WEB_SEARCH_PROVIDER: "exa", EXA_API_KEY: "abc" },
       },
     ]);
     const cfg = await resolveAgentRuntimeConfig({
