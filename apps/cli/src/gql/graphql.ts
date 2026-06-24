@@ -3208,7 +3208,7 @@ export type Mutation = {
   activatePlugin: ActivatePluginResult;
   /**
    * Store per-user credentials for plugins whose MCP servers declare
-   * user-provided header auth (for example Plane PAT + workspace slug). Values
+   * user-provided header auth (for example API token + workspace slug). Values
    * are stored only as token secrets and are never exposed through GraphQL.
    */
   activatePluginWithCredentials: UserPluginActivation;

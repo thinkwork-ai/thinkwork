@@ -162,7 +162,7 @@ describe("mcp-client-call session lifecycle", () => {
       {
         ...TARGET,
         headers: {
-          "x-api-key": "plane_pat_user_123",
+          "x-api-key": "header_token_user_123",
           "x-workspace-slug": "eng",
           Authorization: "Bearer should-not-override",
         },
@@ -170,7 +170,7 @@ describe("mcp-client-call session lifecycle", () => {
       { fetchImpl },
     );
 
-    expect(seen[0]["x-api-key"]).toBe("plane_pat_user_123");
+    expect(seen[0]["x-api-key"]).toBe("header_token_user_123");
     expect(seen[0]["x-workspace-slug"]).toBe("eng");
     expect(seen[0].Authorization).toBeUndefined();
   });

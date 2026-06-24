@@ -423,7 +423,10 @@ function currentStatusFromTerraformOutputs(
   operation: string,
   outputs: Record<string, unknown>,
 ): string {
-  if (isManagedAppKey(appKey) && hasManagedAppStatusIndicator(appKey, outputs)) {
+  if (
+    isManagedAppKey(appKey) &&
+    hasManagedAppStatusIndicator(appKey, outputs)
+  ) {
     try {
       return getManagedAppAdapter(appKey).extractStatus(outputs).status;
     } catch (error) {
@@ -438,12 +441,7 @@ function currentStatusFromTerraformOutputs(
 }
 
 function isManagedAppKey(value: string): value is ManagedAppKey {
-  return (
-    value === "cognee" ||
-    value === "n8n" ||
-    value === "plane" ||
-    value === "twenty"
-  );
+  return value === "cognee" || value === "n8n" || value === "twenty";
 }
 
 function hasManagedAppStatusIndicator(

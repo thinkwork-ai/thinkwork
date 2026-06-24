@@ -278,7 +278,7 @@ describe("chat-agent-invoke runtime routing", () => {
     });
   });
 
-  it("narrows plugin MCP configs when the user explicitly names Plane", async () => {
+  it("narrows plugin MCP configs when the user explicitly names n8n", async () => {
     mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
       tenantId: "tenant-1",
       agentId: "agent-1",
@@ -309,13 +309,12 @@ describe("chat-agent-invoke runtime routing", () => {
           auth: { type: "bearer", token: "twenty-token" },
         },
         {
-          name: "plane--issues",
-          url: "https://plane.example.test/http/api-key/mcp",
+          name: "n8n--workflow-management",
+          url: "https://n8n.example.test/mcp",
           transport: "streamable-http",
           auth: {
             type: "bearer",
-            token: "plane-token",
-            headers: { "x-workspace-slug": "thinkwork" },
+            token: "n8n-token",
           },
         },
       ],
@@ -328,7 +327,7 @@ describe("chat-agent-invoke runtime routing", () => {
       tenantId: "tenant-1",
       threadId: "thread-1",
       agentId: "agent-1",
-      userMessage: "Use the Plane work items MCP tools to list Plane projects.",
+      userMessage: "Use the n8n workflow MCP tools to list workflows.",
       messageId: "message-1",
     });
 
@@ -337,7 +336,7 @@ describe("chat-agent-invoke runtime routing", () => {
     };
     const body = decodeInvokeBody(command);
     expect(body.mcp_configs).toEqual([
-      expect.objectContaining({ name: "plane--issues" }),
+      expect.objectContaining({ name: "n8n--workflow-management" }),
     ]);
   });
 
@@ -372,13 +371,12 @@ describe("chat-agent-invoke runtime routing", () => {
           auth: { type: "bearer", token: "twenty-token" },
         },
         {
-          name: "plane--issues",
-          url: "https://plane.example.test/http/api-key/mcp",
+          name: "n8n--workflow-management",
+          url: "https://n8n.example.test/mcp",
           transport: "streamable-http",
           auth: {
             type: "bearer",
-            token: "plane-token",
-            headers: { "x-workspace-slug": "thinkwork" },
+            token: "n8n-token",
           },
         },
       ],
@@ -392,7 +390,7 @@ describe("chat-agent-invoke runtime routing", () => {
       threadId: "thread-1",
       agentId: "agent-1",
       userMessage:
-        "Use the Plane work items MCP tools to list Plane projects. Do not use Twenty CRM tools.",
+        "Use the n8n workflow MCP tools to list workflows. Do not use Twenty CRM tools.",
       messageId: "message-1",
     });
 
@@ -401,7 +399,7 @@ describe("chat-agent-invoke runtime routing", () => {
     };
     const body = decodeInvokeBody(command);
     expect(body.mcp_configs).toEqual([
-      expect.objectContaining({ name: "plane--issues" }),
+      expect.objectContaining({ name: "n8n--workflow-management" }),
     ]);
   });
 

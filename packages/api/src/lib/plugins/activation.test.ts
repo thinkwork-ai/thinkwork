@@ -76,7 +76,7 @@ function lastmileVersion(
   };
 }
 
-function planeVersion(): PluginVersion {
+function headerAuthVersion(): PluginVersion {
   return {
     version: "0.1.0",
     requiredOauthScopes: [],
@@ -84,20 +84,20 @@ function planeVersion(): PluginVersion {
       {
         type: "mcp-server",
         key: "issues",
-        displayName: "Plane work items",
-        endpointUrl: "https://plane.example.invalid/http/api-key/mcp",
+        displayName: "Header-auth records",
+        endpointUrl: "https://headers.example.invalid/http/api-key/mcp",
         auth: {
           mode: "user-provided-headers",
           bearer: {
             credentialKey: "apiKey",
-            displayName: "Plane personal access token",
+            displayName: "API token",
             secret: true,
           },
           headers: [
             {
               name: "x-workspace-slug",
               credentialKey: "workspaceSlug",
-              displayName: "Plane workspace slug",
+              displayName: "Workspace slug",
             },
           ],
         },
@@ -199,7 +199,7 @@ function buildHarness(payload: PluginVersion = lastmileVersion()): Harness {
     store,
     secrets,
     resolveVersion: async (pluginKey, version) =>
-      (pluginKey === "lastmile" || pluginKey === "plane") &&
+      (pluginKey === "lastmile" || pluginKey === "header-auth") &&
       (!version || version === "0.1.0")
         ? {
             plugin: { pluginKey },
@@ -579,19 +579,19 @@ describe("completeActivation", () => {
   });
 });
 
-describe("activatePluginWithCredentials (THNK-27 U5)", () => {
-  it("stores Plane PAT bearer auth and workspace header as a user-scoped plugin activation secret", async () => {
-    const h = buildHarness(planeVersion());
+describe("activatePluginWithCredentials (shared header auth)", () => {
+  it("stores header-auth bearer token and workspace header as a user-scoped plugin activation secret", async () => {
+    const h = buildHarness(headerAuthVersion());
     const install = h.store.installs.get(h.installId)!;
-    install.plugin_key = "plane";
+    install.plugin_key = "header-auth";
     h.store.seedComponent({
       plugin_install_id: h.installId,
       component_key: "issues",
       component_type: "mcp-server",
       state: "provisioned",
       handler_ref: {
-        tenantMcpServerId: "srv-plane",
-        resolvedEndpointUrl: "https://plane.example.invalid/http/api-key/mcp",
+        tenantMcpServerId: "srv-header-auth",
+        resolvedEndpointUrl: "https://headers.example.invalid/http/api-key/mcp",
       },
     });
 
@@ -601,7 +601,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         tenantId: TENANT,
         pluginInstallId: h.installId,
         credentials: {
-          apiKey: "plane_pat_user_123",
+          apiKey: "header_token_user_123",
           workspaceSlug: "eng",
         },
       },
@@ -617,22 +617,22 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
     const tokens = await h.store.listActivationTokens(activation.id);
     expect(tokens).toHaveLength(1);
     expect(tokens[0]!.resource_indicator).toBe(
-      "https://plane.example.invalid/http/api-key/mcp",
+      "https://headers.example.invalid/http/api-key/mcp",
     );
     const secret = JSON.parse(
       h.secrets.values.get(tokens[0]!.secret_ref)!,
     ) as Record<string, unknown>;
     expect(secret).toMatchObject({
       auth_type: "user-provided-headers",
-      access_token: "plane_pat_user_123",
+      access_token: "header_token_user_123",
       token_type: "Bearer",
-      resource: "https://plane.example.invalid/http/api-key/mcp",
+      resource: "https://headers.example.invalid/http/api-key/mcp",
       headers: {
         "x-workspace-slug": "eng",
       },
     });
     expect(h.store.audits.at(-1)?.payload).toMatchObject({
-      pluginKey: "plane",
+      pluginKey: "header-auth",
       authMode: "user-provided-headers",
       credentialKeys: ["apiKey", "workspaceSlug"],
     });
@@ -646,15 +646,15 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         {
           type: "mcp-server",
           key: "issues",
-          displayName: "Plane issues",
-          endpointUrl: "https://plane.example.invalid/http/api-key/mcp",
+          displayName: "Header-auth issues",
+          endpointUrl: "https://headers.example.invalid/http/api-key/mcp",
           auth: {
             mode: "user-provided-headers",
             headers: [
               {
                 name: "x-api-key",
                 credentialKey: "apiKey",
-                displayName: "Plane personal access token",
+                displayName: "API token",
                 secret: true,
               },
             ],
@@ -663,15 +663,15 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         {
           type: "mcp-server",
           key: "workspace",
-          displayName: "Plane workspace",
-          endpointUrl: "https://plane.example.invalid/http/api-key/mcp",
+          displayName: "Header-auth workspace",
+          endpointUrl: "https://headers.example.invalid/http/api-key/mcp",
           auth: {
             mode: "user-provided-headers",
             headers: [
               {
                 name: "x-workspace-slug",
                 credentialKey: "workspaceSlug",
-                displayName: "Plane workspace slug",
+                displayName: "Workspace slug",
               },
             ],
           },
@@ -679,7 +679,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
       ],
     });
     const install = h.store.installs.get(h.installId)!;
-    install.plugin_key = "plane";
+    install.plugin_key = "header-auth";
     for (const componentKey of ["issues", "workspace"]) {
       h.store.seedComponent({
         plugin_install_id: h.installId,
@@ -687,8 +687,9 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         component_type: "mcp-server",
         state: "provisioned",
         handler_ref: {
-          tenantMcpServerId: `srv-plane-${componentKey}`,
-          resolvedEndpointUrl: "https://plane.example.invalid/http/api-key/mcp",
+          tenantMcpServerId: `srv-header-auth-${componentKey}`,
+          resolvedEndpointUrl:
+            "https://headers.example.invalid/http/api-key/mcp",
         },
       });
     }
@@ -699,7 +700,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
         tenantId: TENANT,
         pluginInstallId: h.installId,
         credentials: {
-          apiKey: "plane_pat_user_123",
+          apiKey: "header_token_user_123",
           workspaceSlug: "eng",
         },
       },
@@ -713,24 +714,24 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
     ) as Record<string, unknown>;
     expect(secret).toMatchObject({
       headers: {
-        "x-api-key": "plane_pat_user_123",
+        "x-api-key": "header_token_user_123",
         "x-workspace-slug": "eng",
       },
     });
   });
 
   it("rejects malformed header values before writing token secrets", async () => {
-    const h = buildHarness(planeVersion());
+    const h = buildHarness(headerAuthVersion());
     const install = h.store.installs.get(h.installId)!;
-    install.plugin_key = "plane";
+    install.plugin_key = "header-auth";
     h.store.seedComponent({
       plugin_install_id: h.installId,
       component_key: "issues",
       component_type: "mcp-server",
       state: "provisioned",
       handler_ref: {
-        tenantMcpServerId: "srv-plane",
-        resolvedEndpointUrl: "https://plane.example.invalid/http/api-key/mcp",
+        tenantMcpServerId: "srv-header-auth",
+        resolvedEndpointUrl: "https://headers.example.invalid/http/api-key/mcp",
       },
     });
 
@@ -741,7 +742,7 @@ describe("activatePluginWithCredentials (THNK-27 U5)", () => {
           tenantId: TENANT,
           pluginInstallId: h.installId,
           credentials: {
-            apiKey: "plane_pat_user_123\nx-evil: yes",
+            apiKey: "header_token_user_123\nx-evil: yes",
             workspaceSlug: "eng",
           },
         },

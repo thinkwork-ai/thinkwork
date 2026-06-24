@@ -15018,3 +15018,49 @@ pipeline.
 - U3 PR opened:
   [#2918](https://github.com/thinkwork-ai/thinkwork/pull/2918). CI monitoring
   started.
+- PR #2918 passed required CI after rebasing onto the then-current `main`
+  (CLA, lint, verify, typecheck, and test), squash-merged to `main` as
+  `2230febeb28c08aa3fe99556ee8362b5edfc5b8f`, and the remote/local U3
+  branches were deleted.
+
+### U4 Progress
+
+- 2026-06-24 CDT: Created worktree `.Codex/worktrees/remove-plane-u4` on
+  `codex/remove-plane-u4-runtime` from `origin/main` at `2230febeb`.
+- Current scope: remove Plane runtime/API/UI/MCP/generated-client references
+  while preserving shared managed-application lifecycle, plugin activation,
+  and user-header MCP credential infrastructure for supported and future
+  plugins.
+- 2026-06-24 CDT: U4 implementation completed locally. Removed Plane from the
+  managed-application resolver registry, deployment-variable handling,
+  deployment evidence reconciliation, chat routing aliases, web settings
+  managed-app/UI surfaces, plugin credential special-cases, generated GraphQL
+  schema comments, and runtime/MCP/header-auth test fixtures. Preserved generic
+  control-plane terminology and neutral user-header MCP credential coverage for
+  future header-auth plugins.
+- Product reference audit passed for U4 product surfaces:
+  `rg -n "@thinkwork/plugin-plane|plugins/plane|plane_|plane--|plane\\.example|plane-pat|plane_pat|PLANE_" apps packages --glob '!node_modules/**' --glob '!dist/**'`
+  returns only generic control-plane false positives and no Plane plugin or
+  product references.
+- GraphQL codegen passed for `@thinkwork/web`, `@thinkwork/mobile`, and
+  `thinkwork-cli`; `@thinkwork/api` has no codegen script. Generated clients
+  were reduced to the intended schema-comment delta to avoid unrelated churn.
+- Focused verification passed:
+  `pnpm --filter @thinkwork/web exec vitest run src/components/settings/plugins/PluginDetail.test.tsx`,
+  `pnpm --filter @thinkwork/agentcore-pi exec vitest run agent-container/tests/mcp.test.ts agent-container/tests/server.test.ts`,
+  `pnpm --filter @thinkwork/api exec vitest run src/handlers/chat-agent-invoke.runtime-routing.test.ts`,
+  `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/core/managedApplications.test.ts src/graphql/resolvers/core/setKnowledgeGraphDeployment.mutation.test.ts src/graphql/resolvers/deployments/managed-application-deployment.test.ts src/graphql/resolvers/plugins/plugins-resolvers.test.ts src/handlers/mcp-proxy.test.ts src/lib/__tests__/mcp-configs-plugin-auth.test.ts src/lib/mcp-client-call.test.ts src/lib/plugins/activation.test.ts src/lib/plugins/handlers/mcp.test.ts`,
+  `pnpm --filter @thinkwork/api typecheck`,
+  `pnpm --filter @thinkwork/web typecheck`,
+  `pnpm --filter @thinkwork/agentcore-pi typecheck`, and
+  `pnpm --filter thinkwork-cli typecheck`.
+- Broader verification passed: `pnpm lint`, root `pnpm typecheck`,
+  changed-file Prettier check excluding the already-non-Prettier generated web
+  GraphQL client, `git diff --check`, and full root `pnpm test`.
+- The first root `pnpm test` hit the known local Electron extraction race in
+  `apps/desktop`. `pnpm rebuild electron` repaired the local dependency,
+  `pnpm --filter @thinkwork/desktop test` passed, and the subsequent full
+  `pnpm test` run passed end-to-end.
+- U4 PR opened:
+  [#2922](https://github.com/thinkwork-ai/thinkwork/pull/2922). CI monitoring
+  started.
