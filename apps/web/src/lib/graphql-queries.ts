@@ -1063,6 +1063,15 @@ export const WorkItemsQuery = gql`
   ${WorkItemFieldsFragment}
 `;
 
+export const CreateWorkItemMutation = gql`
+  mutation CreateWorkItem($input: CreateWorkItemInput!) {
+    createWorkItem(input: $input) {
+      ...WorkItemFields
+    }
+  }
+  ${WorkItemFieldsFragment}
+`;
+
 export const ThreadWorkItemsQuery = gql`
   query ThreadWorkItems($tenantId: ID!, $threadId: ID!) {
     threadWorkItems(tenantId: $tenantId, threadId: $threadId) {

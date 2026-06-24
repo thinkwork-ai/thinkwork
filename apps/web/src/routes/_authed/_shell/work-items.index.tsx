@@ -4,7 +4,6 @@ import {
   parseWorkItemRouteSearch,
   type WorkItemRouteSearch,
 } from "@/components/work-items/work-item-filters";
-import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 
 export const Route = createFileRoute("/_authed/_shell/work-items/")({
@@ -16,11 +15,6 @@ function WorkItemsRoute() {
   const { tenantId } = useTenant();
   const state = Route.useSearch();
   const navigate = useNavigate();
-
-  usePageHeaderActions({
-    title: "Work Items",
-    documentTitle: "Work Items",
-  });
 
   return (
     <WorkItemsPage

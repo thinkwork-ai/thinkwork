@@ -169,9 +169,7 @@ export function ChatSidebar() {
   });
   const isNewThreadRoute = location.pathname === "/new";
   const isWorkItemsRoute = location.pathname.startsWith("/work-items");
-  const isAgentLoopsRoute = location.pathname.startsWith(
-    "/settings/agent-loops",
-  );
+  const isAgentLoopsRoute = location.pathname.startsWith("/automations");
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
@@ -872,7 +870,7 @@ export function ChatSidebar() {
                 isActive={isAgentLoopsRoute}
                 tooltip="Automations"
               >
-                <Link to="/settings/agent-loops">
+                <Link to="/automations">
                   <Clock />
                   <span>Automations</span>
                 </Link>

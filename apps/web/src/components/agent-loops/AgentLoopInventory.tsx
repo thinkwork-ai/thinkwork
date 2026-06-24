@@ -64,7 +64,11 @@ type TenantAgentData = {
   } | null;
 };
 
-export function AgentLoopInventory() {
+export function AgentLoopInventory({
+  routeScope = "settings",
+}: {
+  routeScope?: "main" | "settings";
+}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
@@ -208,6 +212,20 @@ export function AgentLoopInventory() {
     [],
   );
 
+  const openLoop = (id: string) => {
+    if (routeScope === "main") {
+      navigate({
+        to: "/automations/$scheduledJobId",
+        params: { scheduledJobId: id },
+      });
+      return;
+    }
+    navigate({
+      to: "/settings/agent-loops/$agentLoopId",
+      params: { agentLoopId: id },
+    });
+  };
+
   async function createLoop(payload: SaveAgentLoopPayload) {
     const result = await saveAgentLoop({ input: payload });
     if (result.error) throw result.error;
@@ -216,12 +234,7 @@ export function AgentLoopInventory() {
     toast.success("Automation created");
     setCreating(false);
     refetchLoops({ requestPolicy: "network-only" });
-    if (id) {
-      navigate({
-        to: "/settings/agent-loops/$agentLoopId",
-        params: { agentLoopId: id },
-      });
-    }
+    if (id) openLoop(id);
   }
 
   async function startBuilder(input: {
@@ -258,12 +271,7 @@ export function AgentLoopInventory() {
     toast.success("Automation created");
     setCreating(false);
     refetchLoops({ requestPolicy: "network-only" });
-    if (id) {
-      navigate({
-        to: "/settings/agent-loops/$agentLoopId",
-        params: { agentLoopId: id },
-      });
-    }
+    if (id) openLoop(id);
   }
 
   if (creating) {
@@ -331,12 +339,7 @@ export function AgentLoopInventory() {
               No automations found.
             </div>
           }
-          onRowClick={(row) =>
-            navigate({
-              to: "/settings/agent-loops/$agentLoopId",
-              params: { agentLoopId: row.id },
-            })
-          }
+          onRowClick={(row) => openLoop(row.id)}
         />
       )}
     </SettingsTablePane>

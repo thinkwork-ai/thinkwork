@@ -8,21 +8,22 @@ function source(path: string): string {
   return readFileSync(join(root, path), "utf8");
 }
 
-describe("retired Automations shell routes", () => {
-  it("redirects the old main Automations surface to the preferred Settings route", () => {
+describe("main Automations shell routes", () => {
+  it("renders the user-facing Automations inventory in main navigation", () => {
     const route = source("src/routes/_authed/_shell/automations.index.tsx");
 
-    expect(route).toContain('redirect({ to: "/settings/automations" })');
-    expect(route).not.toContain("AutomationsPage");
-    expect(route).not.toContain("ScheduledJobForm");
+    expect(route).toContain("AgentLoopInventory");
+    expect(route).toContain('routeScope="main"');
+    expect(route).not.toContain('to: "/settings/automations"');
   });
 
-  it("preserves old scheduled-job detail deep links as Settings compatibility links", () => {
+  it("renders user-facing Automation detail in main navigation", () => {
     const route = source(
       "src/routes/_authed/_shell/automations.$scheduledJobId.tsx",
     );
 
-    expect(route).toContain('to: "/settings/automations/$scheduledJobId"');
-    expect(route).not.toContain("ScheduledJobDetail");
+    expect(route).toContain("AgentLoopDetail");
+    expect(route).toContain('routeScope="main"');
+    expect(route).not.toContain('to: "/settings/automations/$scheduledJobId"');
   });
 });

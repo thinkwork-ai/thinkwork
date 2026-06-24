@@ -697,7 +697,9 @@ describe("ChatSidebar", () => {
     expect(
       screen.getByRole("link", { name: /work items/i }).getAttribute("href"),
     ).toBe("/work-items?view=list&sort=updated");
-    expect(screen.getByRole("link", { name: /automations/i })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /automations/i }).getAttribute("href"),
+    ).toBe("/automations");
     expect(
       screen
         .getByRole("link", { name: "New thread" })
