@@ -81,6 +81,17 @@ The approved plan recommends PR slices that group tightly coupled units:
   local worktree/branch cleanup verified.
 - 2026-06-24T19:40Z: Began Agent Tool Contract slice from fresh `origin/main`
   on branch `codex/thnk-69-agent-tool-contract`.
+- 2026-06-24T20:10Z: Agent Tool Contract slice merged via PR #2935
+  (`2c42de29b364d3e81599805e80a8cdfc4b6aa218`); remote branch deleted and
+  local worktree/branch cleanup verified.
+- 2026-06-24T20:13Z: Began Concepts/Rollout/Cleanup slice from fresh
+  `origin/main` on branch `codex/thnk-69-concepts-cleanup`. The repo-local
+  THNK-69 plan/requirements files remain absent on fresh `origin/main`, so the
+  Linear `Plan: Native Work Items` and `Requirements: Native Work Items`
+  documents remain source of truth for this cleanup slice.
+- 2026-06-24T20:26Z: Rebased Concepts/Rollout/Cleanup slice onto
+  `origin/main` after PR #2936 (`docs: harden Linear dispatcher launches`)
+  merged.
 
 ## Unit Log
 
@@ -303,6 +314,51 @@ Local verification:
 - 2026-06-24T19:51Z:
   `pnpm --filter @thinkwork/agentcore-pi test -- tests/server.test.ts` passed:
   1 file, 89 tests.
+
+Merge evidence:
+
+- PR #2935: <https://github.com/thinkwork-ai/thinkwork/pull/2935>
+- PR head after rebase:
+  `ee205b7f26e53892bb27179618ef32022b621f72 feat(work-items): add agent status tool contract`
+- Merge commit:
+  `2c42de29b364d3e81599805e80a8cdfc4b6aa218 feat(work-items): add agent status tool contract`
+- CI on rebased head: CLA, lint, verify, typecheck, and test passed.
+- Cleanup: remote branch deleted; local branch/worktree removed after merge.
+
+### Cleanup PR: Concepts, Rollout, And Compatibility Follow-Ups
+
+Objective: land final THNK-69 vocabulary and rollout notes so native Work Items
+are documented as canonical task state and `linked_tasks` compatibility has a
+clear migration boundary.
+
+Branch:
+
+- `codex/thnk-69-concepts-cleanup`
+
+Implementation notes:
+
+- Added Work Tracking vocabulary to `CONCEPTS.md`: Work Item, Work Item
+  Status, Work Item View, and Linked Task Compatibility.
+- Recorded that repo-local THNK-69 plan/requirements documents are still absent
+  from fresh `origin/main`; Linear documents are the source of truth for this
+  cleanup slice.
+
+Local verification:
+
+- 2026-06-24T20:14Z: `git diff --check` passed.
+- 2026-06-24T20:14Z:
+  `pnpm dlx prettier@3.8.2 --check docs/plans/autopilot/THNK-69-status.md`
+  passed.
+- 2026-06-24T20:14Z:
+  `pnpm dlx prettier@3.8.2 --check CONCEPTS.md` failed, and the same check
+  against `origin/main:CONCEPTS.md` also fails. The cleanup slice keeps
+  `CONCEPTS.md` style-consistent with the existing glossary to avoid unrelated
+  whole-file Markdown churn.
+- 2026-06-24T20:26Z: After rebasing onto PR #2936,
+  `git diff --check` passed and
+  `pnpm dlx prettier@3.8.2 --check docs/plans/autopilot/THNK-69-status.md`
+  passed; `origin/main:CONCEPTS.md` still fails standalone Prettier before this
+  slice's changes.
 
 Merge evidence:
 
