@@ -450,3 +450,61 @@ PR / CI:
 - Commit: `b3d9f7a74` (`feat(cost): make budgets confidence-aware`)
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2961
 - 2026-06-25 11:51 CDT: PR opened; waiting for required CI.
+- 2026-06-25 12:00 CDT: PR merged.
+- Merge commit: `faf51c72b4bca30adcb96f8fd38509d575ad3a3e`.
+- Required CI passed: CLA, lint, test, typecheck, and verify.
+- U5 worktree, remote branch, and local branch cleanup completed before U6
+  start.
+
+### U6: Move Trace Detail GraphQL, Web, And CLI Projections Onto The Substrate
+
+Objective: replace ad hoc trace joins with canonical trace projections for
+operators, CLI users, Activity, thread detail, and analytics-adjacent views while
+preserving compatibility fields used by existing clients.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u6-trace-projections`
+- Worktree: `/Users/ericodom/.codex/worktrees/e22c/thinkwork`
+- Base: `origin/main` at `faf51c72b4bca30adcb96f8fd38509d575ad3a3e`.
+
+Planned local verification:
+
+- Focused `threadTraces` and `turnInvocationLogs` resolver tests.
+- CLI `trace` command tests.
+- Web Activity execution/thread detail tests.
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter thinkwork-cli typecheck`
+- `pnpm --filter @thinkwork/web typecheck`
+- CLI GraphQL codegen after command query changes.
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 12:01 CDT: U6 started from `origin/main` at
+  `faf51c72b4bca30adcb96f8fd38509d575ad3a3e`.
+- `pnpm install` passed; local `canvas` native build still logs the known
+  non-fatal missing `pkg-config` warning under Node 25.6.0.
+- Moved `threadTraces` from a `cost_events`-filtered projection to canonical
+  `trace_runs` / `trace_events` projection with compatibility fields,
+  source-evidence arrays, and latest reconciliation state/source.
+- Updated CLI `trace thread` and `trace turn` queries/output to include
+  reconciliation state, confidence, diagnostics, and source evidence.
+- Updated Activity execution/thread detail queries and timeline/table displays
+  to show reconciliation state and source evidence.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/observability/threadTraces.query.test.ts src/graphql/resolvers/observability/turnInvocationLogs.query.test.ts`
+  passed.
+- `pnpm --filter thinkwork-cli exec vitest run __tests__/trace.test.ts` passed.
+- `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsActivityExecutionTrace.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm dlx prettier@3.6.2 --check` on touched TS/Markdown/generated files
+  passed.
+- `git diff --check` passed.

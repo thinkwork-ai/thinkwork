@@ -12071,6 +12071,17 @@ export type CliThreadTracesQuery = {
     durationMs?: number | null;
     costUsd?: number | null;
     estimated?: boolean | null;
+    source?: string | null;
+    reconciliationState?: string | null;
+    reconciliationSource?: string | null;
+    sourceEvidence?: Array<{
+      __typename?: "TraceSourceEvidence";
+      sourceType: string;
+      sourceSystem: string;
+      sourceId?: string | null;
+      uri?: string | null;
+      observedAt?: any | null;
+    }> | null;
   }>;
 };
 
@@ -12091,6 +12102,11 @@ export type CliTurnInvocationLogsQuery = {
     cacheReadTokenCount: number;
     toolCount?: number | null;
     costUsd?: number | null;
+    reconciliationState?: string | null;
+    reconciliationReason?: string | null;
+    reconciliationConfidence?: string | null;
+    reconciliationDiagnostic?: string | null;
+    reconciliationRuntimeRequestId?: string | null;
   }>;
 };
 
@@ -20809,6 +20825,41 @@ export const CliThreadTracesDocument = {
                 { kind: "Field", name: { kind: "Name", value: "durationMs" } },
                 { kind: "Field", name: { kind: "Name", value: "costUsd" } },
                 { kind: "Field", name: { kind: "Name", value: "estimated" } },
+                { kind: "Field", name: { kind: "Name", value: "source" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "reconciliationState" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "reconciliationSource" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "sourceEvidence" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceType" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceSystem" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sourceId" },
+                      },
+                      { kind: "Field", name: { kind: "Name", value: "uri" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "observedAt" },
+                      },
+                    ],
+                  },
+                },
               ],
             },
           },
@@ -20895,6 +20946,29 @@ export const CliTurnInvocationLogsDocument = {
                 },
                 { kind: "Field", name: { kind: "Name", value: "toolCount" } },
                 { kind: "Field", name: { kind: "Name", value: "costUsd" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "reconciliationState" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "reconciliationReason" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "reconciliationConfidence" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "reconciliationDiagnostic" },
+                },
+                {
+                  kind: "Field",
+                  name: {
+                    kind: "Name",
+                    value: "reconciliationRuntimeRequestId",
+                  },
+                },
               ],
             },
           },

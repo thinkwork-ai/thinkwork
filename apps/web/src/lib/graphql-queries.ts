@@ -1526,6 +1526,11 @@ export const TurnInvocationLogsQuery = gql`
       toolUses
       hasToolResult
       branch
+      reconciliationState
+      reconciliationReason
+      reconciliationConfidence
+      reconciliationRuntimeRequestId
+      reconciliationDiagnostic
     }
   }
 `;
@@ -1563,6 +1568,15 @@ export const SettingsActivityThreadTracesQuery = gql`
       reviewerRole
       loopEvidence
       modelRoutingStatus
+      reconciliationState
+      reconciliationSource
+      sourceEvidence {
+        sourceType
+        sourceSystem
+        sourceId
+        uri
+        observedAt
+      }
       ruleSource
       match
       metadata

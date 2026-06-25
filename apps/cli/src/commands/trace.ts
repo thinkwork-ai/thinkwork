@@ -24,6 +24,16 @@ const ThreadTracesDoc = graphql(`
       durationMs
       costUsd
       estimated
+      source
+      reconciliationState
+      reconciliationSource
+      sourceEvidence {
+        sourceType
+        sourceSystem
+        sourceId
+        uri
+        observedAt
+      }
     }
   }
 `);
@@ -39,6 +49,11 @@ const TurnInvocationLogsDoc = graphql(`
       cacheReadTokenCount
       toolCount
       costUsd
+      reconciliationState
+      reconciliationReason
+      reconciliationConfidence
+      reconciliationDiagnostic
+      reconciliationRuntimeRequestId
     }
   }
 `);
@@ -70,6 +85,8 @@ async function runTraceThread(
       output: t.outputTokens != null ? t.outputTokens.toLocaleString() : "—",
       durMs: t.durationMs != null ? String(t.durationMs) : "—",
       cost: t.costUsd != null ? `$${t.costUsd.toFixed(4)}` : "—",
+      state: t.reconciliationState ?? (t.estimated ? "estimated" : "—"),
+      source: t.sourceEvidence?.[0]?.sourceType ?? t.source ?? "—",
     })),
     [
       { key: "traceId", header: "TRACE ID" },
@@ -79,6 +96,8 @@ async function runTraceThread(
       { key: "output", header: "OUTPUT TOKENS" },
       { key: "durMs", header: "DUR (ms)" },
       { key: "cost", header: "COST" },
+      { key: "state", header: "STATE" },
+      { key: "source", header: "SOURCE" },
     ],
   );
 }
@@ -111,6 +130,9 @@ async function runTraceTurn(
       cache: m.cacheReadTokenCount.toLocaleString(),
       tools: m.toolCount != null ? String(m.toolCount) : "—",
       cost: m.costUsd != null ? `$${m.costUsd.toFixed(4)}` : "—",
+      state: m.reconciliationState ?? "unreconciled",
+      confidence: m.reconciliationConfidence ?? "—",
+      diagnostic: m.reconciliationDiagnostic ?? m.reconciliationReason ?? "—",
     })),
     [
       { key: "requestId", header: "REQUEST" },
@@ -121,6 +143,9 @@ async function runTraceTurn(
       { key: "cache", header: "CACHE READ" },
       { key: "tools", header: "TOOLS" },
       { key: "cost", header: "COST" },
+      { key: "state", header: "STATE" },
+      { key: "confidence", header: "CONF" },
+      { key: "diagnostic", header: "DIAGNOSTIC" },
     ],
   );
 }
