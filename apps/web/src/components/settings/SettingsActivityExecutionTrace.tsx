@@ -216,6 +216,11 @@ type TimelineEvent = {
   outputPreview?: string;
   toolUses?: string[];
   hasToolResult?: boolean;
+  reconciliationState?: string | null;
+  reconciliationReason?: string | null;
+  reconciliationConfidence?: string | null;
+  reconciliationDiagnostic?: string | null;
+  reconciliationRuntimeRequestId?: string | null;
   // Tool fields
   toolCallId?: string;
   toolName?: string;
@@ -1407,6 +1412,11 @@ function buildTimeline(
       outputPreview: inv.outputPreview,
       toolUses: inv.toolUses,
       hasToolResult: inv.hasToolResult,
+      reconciliationState: inv.reconciliationState,
+      reconciliationReason: inv.reconciliationReason,
+      reconciliationConfidence: inv.reconciliationConfidence,
+      reconciliationDiagnostic: inv.reconciliationDiagnostic,
+      reconciliationRuntimeRequestId: inv.reconciliationRuntimeRequestId,
     });
 
     if (inv.toolUses?.length > 0) {
@@ -1866,6 +1876,11 @@ function ExecutionTimeline({
                 <span className="tabular-nums">
                   {formatCost(ev.costUsd || 0)}
                 </span>
+                {ev.reconciliationState ? (
+                  <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-normal text-muted-foreground">
+                    {ev.reconciliationState}
+                  </span>
+                ) : null}
                 <ModelNameBadge
                   modelId={ev.modelId}
                   label={hasMixedModels ? "Mixed" : undefined}
@@ -1886,6 +1901,27 @@ function ExecutionTimeline({
               parts.push(`── INPUT ──\n\n${ev.inputPreview}`);
             if (ev.outputPreview)
               parts.push(`── OUTPUT ──\n\n${ev.outputPreview}`);
+            if (ev.reconciliationState) {
+              parts.push(
+                [
+                  "── RECONCILIATION ──",
+                  `State: ${ev.reconciliationState}`,
+                  ev.reconciliationConfidence
+                    ? `Confidence: ${ev.reconciliationConfidence}`
+                    : null,
+                  ev.reconciliationRuntimeRequestId
+                    ? `Runtime request: ${ev.reconciliationRuntimeRequestId}`
+                    : null,
+                  (ev.reconciliationDiagnostic ?? ev.reconciliationReason)
+                    ? `Diagnostic: ${
+                        ev.reconciliationDiagnostic ?? ev.reconciliationReason
+                      }`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              );
+            }
             clickTitle = `${label}${isOnBranch ? ` (${branch!.name})` : ""}`;
             clickContent = parts.join("\n\n");
           } else if (ev.type === "profile_run") {
