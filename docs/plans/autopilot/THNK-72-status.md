@@ -2,8 +2,9 @@
 linear_issue: THNK-72
 plan: "docs/plans/2026-06-25-001-feat-data-table-filter-work-items-plan.md"
 requirements: "docs/brainstorms/2026-06-25-data-table-filter-work-items-requirements.md"
-status: active
+status: complete
 started_at: 2026-06-25T00:28:34Z
+completed_at: 2026-06-25T01:29:00Z
 ---
 
 # THNK-72 Autopilot Status
@@ -74,6 +75,12 @@ on U3; U5 verifies and polishes the integrated result.
   local U2 worktree/branch cleanup verified.
 - 2026-06-25T01:03Z: Began U3/U4 grouped implementation from fresh
   `origin/main` on branch `codex/thnk-72-work-items-filter-adapter`.
+- 2026-06-25T01:26Z: U3/U4 PR #2948 merged via squash merge
+  (`863ad1baa0c0f335ae17147629c6ebbd205848f3`); remote branch deleted and
+  local U3/U4 worktree/branch cleanup verified.
+- 2026-06-25T01:28Z: Restarted `http://localhost:5174/` from the merged main
+  checkout and verified `/work-items?view=list&sort=updated` renders the
+  completed filter/table surface.
 
 ## Unit Log
 
@@ -219,7 +226,11 @@ Local verification:
   clearing `Status is Todo` creates/removes a token while preserving the visible
   row.
 
-Status: locally verified; ready for commit/PR.
+Status: merged.
+
+PR:
+
+- https://github.com/thinkwork-ai/thinkwork/pull/2948
 
 ### U4: Remove Saved-View and Old Filter UI
 
@@ -254,14 +265,21 @@ Local verification:
 
 - Covered by the U3/U4 grouped verification above.
 
-Status: locally verified; ready for commit/PR.
+Status: merged.
+
+PR:
+
+- https://github.com/thinkwork-ai/thinkwork/pull/2948
 
 ### U5: Polish and Verification
 
 Objective: verify the token filter bar matches the reference interaction,
 behaves on desktop/mobile widths, and does not regress the Work Items page.
 
-Branch: pending.
+Branch:
+
+- `codex/thnk-72-work-items-filter-adapter` for integrated polish.
+- `codex/thnk-72-closeout` for final status ledger closeout.
 
 Planned local verification:
 
@@ -269,8 +287,19 @@ Planned local verification:
 - Browser smoke on `/work-items` after copying the ignored web `.env` into the
   worktree if needed.
 
-Status: in progress; local browser polish complete for the U3/U4 branch.
+Final verification:
+
+- Shared U1 and U2 package tests/typechecks passed before their merges.
+- U3/U4 focused Work Items tests, web typecheck, targeted formatting checks,
+  and full `@thinkwork/web` test suite passed before merge.
+- GitHub CI passed for all implementation PRs before merge.
+- Authenticated browser smoke passed on merged main at
+  `http://localhost:5174/work-items?view=list&sort=updated`: the table renders,
+  visible columns fit the app shell, the Filter menu opens, a `Status is Todo`
+  token applies, and clearing filters returns the page to a clean state.
+
+Status: complete.
 
 ## Current Blockers
 
-None.
+None. THNK-72 implementation is complete.
