@@ -100,6 +100,7 @@ const {
     ThreadUpdatedSubscription: Symbol("ThreadUpdatedSubscription"),
     UnpinThreadMutation: Symbol("UnpinThreadMutation"),
     UpdateThreadMutation: Symbol("UpdateThreadMutation"),
+    WorkItemsQuery: Symbol("WorkItemsQuery"),
   },
 }));
 
@@ -190,6 +191,15 @@ vi.mock("urql", () => ({
         {
           fetching: false,
           data: { spaces: spacesMock },
+        },
+        vi.fn(),
+      ];
+    }
+    if (query === queryDocs.WorkItemsQuery) {
+      return [
+        {
+          fetching: false,
+          data: { workItems: [] },
         },
         vi.fn(),
       ];
