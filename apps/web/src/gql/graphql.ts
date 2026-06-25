@@ -1276,6 +1276,12 @@ export type CostEvent = {
   __typename?: 'CostEvent';
   agentId?: Maybe<Scalars['ID']['output']>;
   amountUsd: Scalars['Float']['output'];
+  billingAccountId?: Maybe<Scalars['String']['output']>;
+  billingAttributionLevel?: Maybe<Scalars['String']['output']>;
+  billingOperation?: Maybe<Scalars['String']['output']>;
+  billingPeriodEnd?: Maybe<Scalars['AWSDateTime']['output']>;
+  billingPeriodStart?: Maybe<Scalars['AWSDateTime']['output']>;
+  billingServiceCode?: Maybe<Scalars['String']['output']>;
   cachedReadTokens?: Maybe<Scalars['Int']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   durationMs?: Maybe<Scalars['Int']['output']>;

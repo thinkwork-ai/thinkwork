@@ -603,6 +603,9 @@ build_handler "eval-worker" \
 build_handler "eval-runs-reconciler" \
   "$REPO_ROOT/packages/api/src/handlers/eval-runs-reconciler.ts"
 
+build_handler "cost-bill-reconciler" \
+  "$REPO_ROOT/packages/api/src/handlers/cost-bill-reconciler.ts"
+
 build_handler "trace-invocation-reconciler" \
   "$REPO_ROOT/packages/api/src/handlers/trace-invocation-reconciler.ts"
 
