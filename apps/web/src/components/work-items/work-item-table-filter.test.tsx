@@ -3,6 +3,7 @@ import type { WorkItemSummary } from "./work-item-display";
 import {
   WORK_ITEM_FILTER_COLUMN_VISIBILITY,
   WORK_ITEM_FILTER_COLUMNS,
+  WORK_ITEM_UNASSIGNED_FILTER_VALUE,
   buildWorkItemFilterColumnDefs,
   buildWorkItemTokenFilterColumns,
   workItemDueFilterValue,
@@ -34,6 +35,39 @@ describe("work item table filter adapter", () => {
 
     expect(tokenColumnIds).toEqual(Object.values(WORK_ITEM_FILTER_COLUMNS));
     expect(tableColumnIds).toEqual(Object.values(WORK_ITEM_FILTER_COLUMNS));
+  });
+
+  it("builds assignee option filters from stable user ids", () => {
+    const tokenColumns = buildWorkItemTokenFilterColumns(
+      [],
+      [{ id: "user-1", name: "Eric Odom", email: "eric@example.com" }],
+    );
+    const assigneeTokenColumn = tokenColumns.find(
+      (column) => column.id === WORK_ITEM_FILTER_COLUMNS.owner,
+    );
+    expect(assigneeTokenColumn?.type).toBe("option");
+    expect(
+      assigneeTokenColumn?.options?.map((option) => [
+        option.value,
+        option.label,
+      ]),
+    ).toEqual([
+      [WORK_ITEM_UNASSIGNED_FILTER_VALUE, "Unassigned"],
+      ["user-1", "Eric Odom"],
+    ]);
+
+    const ownerColumn = buildWorkItemFilterColumnDefs().find(
+      (column) => column.id === WORK_ITEM_FILTER_COLUMNS.owner,
+    );
+    const accessor = (
+      ownerColumn as
+        | { accessorFn?: (row: WorkItemSummary, index: number) => unknown }
+        | undefined
+    )?.accessorFn;
+    expect(accessor?.(item({ ownerUserId: "user-1" }), 0)).toBe("user-1");
+    expect(accessor?.(item({ ownerUserId: null }), 0)).toBe(
+      WORK_ITEM_UNASSIGNED_FILTER_VALUE,
+    );
   });
 
   it("classifies due dates for option filters", () => {

@@ -24,6 +24,7 @@ import {
   type WorkItemSpaceSummary,
   type WorkItemSummary,
   isWorkItemDueSoon,
+  workItemAssigneeColorClass,
   workItemAssigneeLabel,
   workItemPriorityLabel,
   workItemSpaceLabel,
@@ -44,6 +45,7 @@ export const WORK_ITEM_FILTER_COLUMNS = {
 } as const;
 
 export type WorkItemDueFilterValue = "overdue" | "due_soon" | "later" | "none";
+export const WORK_ITEM_UNASSIGNED_FILTER_VALUE = "__unassigned__";
 
 export const WORK_ITEM_FILTER_COLUMN_VISIBILITY: VisibilityState =
   Object.fromEntries(
@@ -55,6 +57,7 @@ export const WORK_ITEM_FILTER_COLUMN_VISIBILITY: VisibilityState =
 
 export function buildWorkItemTokenFilterColumns(
   spaces: WorkItemSpaceSummary[],
+  assignees: WorkItemAssigneeSummary[] = [],
 ): DataTableTokenFilterColumn[] {
   return [
     {
@@ -128,8 +131,33 @@ export function buildWorkItemTokenFilterColumns(
     {
       id: WORK_ITEM_FILTER_COLUMNS.owner,
       label: "Assignee",
-      type: "text",
+      type: "option",
       icon: <UserRound className="size-4" />,
+      options: [
+        {
+          value: WORK_ITEM_UNASSIGNED_FILTER_VALUE,
+          label: "Unassigned",
+          icon: (
+            <span className="inline-flex size-5 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <UserRound className="size-3" />
+            </span>
+          ),
+        },
+        ...assignees.map((assignee) => ({
+          value: assignee.id,
+          label: assignee.name?.trim() || assignee.email || "Assignee",
+          icon: (
+            <span
+              className={`inline-flex size-5 items-center justify-center rounded-full text-[10px] font-semibold ${workItemAssigneeColorClass(
+                assignee.id,
+              )}`}
+            >
+              {assigneeInitials(assignee.name || assignee.email || "User")}
+            </span>
+          ),
+        })),
+      ],
+      emptyMessage: "No team members available.",
     },
   ];
 }
@@ -180,8 +208,9 @@ export function buildWorkItemFilterColumnDefs(
     },
     {
       id: WORK_ITEM_FILTER_COLUMNS.owner,
-      accessorFn: (item) => workItemAssigneeLabel(item, assignees),
-      filterFn: dataTableTokenFilterFns.text,
+      accessorFn: (item) =>
+        item.ownerUserId ?? WORK_ITEM_UNASSIGNED_FILTER_VALUE,
+      filterFn: dataTableTokenFilterFns.option,
     },
   ];
 }
@@ -219,6 +248,18 @@ function statusIcon(category: (typeof WORK_ITEM_CATEGORY_ORDER)[number]) {
   if (category === "SKIPPED") return <CircleSlash className="size-4" />;
   if (category === "ACTIVE") return <CircleDotDashed className="size-4" />;
   return <CircleDashed className="size-4" />;
+}
+
+function assigneeInitials(value: string) {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const letters =
+    parts.length >= 2
+      ? `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`
+      : value.slice(0, 2);
+  return letters.toUpperCase();
 }
 
 function startOfToday(now: Date) {

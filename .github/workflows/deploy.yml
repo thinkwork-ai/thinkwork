@@ -757,6 +757,31 @@ jobs:
             --single-transaction \
             -f ../../../packages/database-pg/drizzle/0153_message_mentions_agent_profile.sql
 
+      # THNK-69 — create the native Work Items schema before GraphQL/web code
+      # serves Work Item queries. This migration is hand-rolled rather than
+      # drizzle-journaled, and the drift-check deploy gate is currently
+      # disabled, so it must be explicitly applied here like the other
+      # pre-apply manual migrations. Idempotent: CREATE TABLE/INDEX IF NOT
+      # EXISTS leaves already-migrated stages untouched.
+      - name: Apply native Work Items schema
+        working-directory: terraform/examples/greenfield
+        run: |
+          set -euo pipefail
+          source ../../../scripts/lib/terraform-output.sh
+          DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
+          DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
+          if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
+            echo "Skipping native Work Items schema: no existing DB outputs (greenfield apply)."
+            exit 0
+          fi
+          DB_PASS=$(aws secretsmanager get-secret-value \
+            --secret-id "$DB_SECRET_ARN" \
+            --query SecretString --output text | jq -r .password)
+          export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${DB_ENDPOINT}:5432/thinkwork?sslmode=require"
+          psql "$DATABASE_URL" \
+            -v ON_ERROR_STOP=1 \
+            -f ../../../packages/database-pg/drizzle/0187_native_work_items.sql
+
       # THNK-71 U3 — rename persisted Data Integrations plugin state before
       # the GraphQL Lambda serves the Company ETL catalog key. Idempotent and
       # fail-closed: duplicate old/new install rows raise before any update.

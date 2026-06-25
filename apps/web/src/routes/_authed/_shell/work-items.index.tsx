@@ -13,13 +13,14 @@ export const Route = createFileRoute("/_authed/_shell/work-items/")({
 });
 
 function WorkItemsRoute() {
-  const { tenantId } = useTenant();
+  const { tenantId, userId } = useTenant();
   const state = Route.useSearch();
   const navigate = useNavigate();
 
   return (
     <WorkItemsPage
       tenantId={tenantId}
+      userId={userId}
       state={state}
       onStateChange={(next) => {
         void navigate({
