@@ -64,6 +64,11 @@ on U3; U5 verifies and polishes the integrated result.
   `codex/thnk-72-token-filter` from fresh `origin/main`.
 - 2026-06-25T00:38Z: Opened U1 PR #2945 and added Linear progress comment with
   local verification evidence.
+- 2026-06-25T00:47Z: U1 PR #2945 merged via squash merge
+  (`9bed33d747f61fd5a9018d805aa90b70e01bb25c`); remote branch deleted and
+  local U1 worktree/branch cleanup verified.
+- 2026-06-25T00:49Z: Began U2 from fresh `origin/main` on branch
+  `codex/thnk-72-data-table-hidden-columns`.
 
 ## Unit Log
 
@@ -105,7 +110,7 @@ Local verification:
   THNK-72 files. Root `pnpm format:check` could not run in this worktree
   because `prettier` is not installed in the workspace dependency graph.
 
-Status: locally verified; ready for commit/PR.
+Status: merged.
 
 PR:
 
@@ -116,14 +121,39 @@ PR:
 Objective: let callers add filter-only TanStack columns and initial visibility
 without rendering those columns or affecting visible table layout.
 
-Branch: pending.
+Branch:
+
+- `codex/thnk-72-data-table-hidden-columns`
 
 Planned local verification:
 
 - `pnpm --filter @thinkwork/ui test -- data-table`
 - Relevant `@thinkwork/ui` typecheck or package tests after implementation.
 
-Status: pending.
+Implementation notes:
+
+- Added `initialColumnVisibility` to `DataTable` for filter-only hidden
+  columns.
+- Kept column visibility owned internally by DataTable while seeding the initial
+  TanStack visibility state.
+- Changed fixed-table `<colgroup>` rendering to use visible leaf columns only,
+  so hidden filter columns cannot distort widths.
+- Changed empty-state `colSpan` to use the visible leaf column count.
+- Added coverage proving hidden columns do not render headers/cells/colgroup
+  entries, can still filter rows, and keep empty-state colSpan aligned.
+
+Local verification:
+
+- 2026-06-25T00:50Z: Initial focused test failed before implementation because
+  hidden columns still rendered and fixed-table colgroups included hidden
+  columns.
+- 2026-06-25T00:50Z: `pnpm --filter @thinkwork/ui test -- data-table` passed.
+- 2026-06-25T00:50Z: `pnpm --filter @thinkwork/ui test` passed.
+- 2026-06-25T00:50Z: `pnpm --filter @thinkwork/ui typecheck` passed.
+- 2026-06-25T00:51Z: `pnpm dlx prettier@3.6.2 --check ...` passed for touched
+  U2 files.
+
+Status: locally verified; ready for commit/PR.
 
 ### U3: Work Items Filter Adapter and Table Columns
 
