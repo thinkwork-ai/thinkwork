@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { WorkItemsPage } from "@/components/work-items/WorkItemsPage";
 import {
   parseWorkItemRouteSearch,
+  workItemRouteSearchToParams,
   type WorkItemRouteSearch,
 } from "@/components/work-items/work-item-filters";
 import { useTenant } from "@/context/TenantContext";
@@ -23,18 +24,12 @@ function WorkItemsRoute() {
       onStateChange={(next) => {
         void navigate({
           to: "/work-items",
-          search: normalizeRouteState(next),
+          search: workItemRouteSearchToParams(
+            next,
+          ) as unknown as WorkItemRouteSearch,
           replace: true,
         });
       }}
     />
   );
-}
-
-function normalizeRouteState(state: WorkItemRouteSearch): WorkItemRouteSearch {
-  return {
-    ...state,
-    view: state.view ?? "list",
-    sort: state.sort ?? "updated",
-  };
 }

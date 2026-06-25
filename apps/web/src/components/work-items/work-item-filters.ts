@@ -1,34 +1,35 @@
 import type { WorkItemViewType } from "./work-item-display";
+import {
+  DEFAULT_WORK_ITEM_DISPLAY_STATE,
+  normalizeWorkItemDisplayState,
+  workItemDisplayStateToParams,
+  type WorkItemDisplayState,
+} from "./work-item-view-display";
 
-export interface WorkItemRouteSearch {
-  view: "list" | "board";
+export interface WorkItemRouteSearch extends WorkItemDisplayState {
   spaceId?: string;
   threadId?: string;
-  sort?: "updated" | "due" | "priority" | "title";
 }
 
 export const DEFAULT_WORK_ITEM_SEARCH: WorkItemRouteSearch = {
-  view: "list",
-  sort: "updated",
+  ...DEFAULT_WORK_ITEM_DISPLAY_STATE,
 };
 
 export function parseWorkItemRouteSearch(
   search: Record<string, unknown>,
 ): WorkItemRouteSearch {
   return {
-    view: search.view === "board" ? "board" : "list",
+    ...normalizeWorkItemDisplayState(search),
     spaceId: stringParam(search.spaceId),
     threadId: stringParam(search.threadId),
-    sort: parseSort(search.sort),
   };
 }
 
 export function workItemRouteSearchToParams(state: WorkItemRouteSearch) {
   const params: Record<string, string | boolean | undefined> = {
-    view: state.view === DEFAULT_WORK_ITEM_SEARCH.view ? undefined : state.view,
+    ...workItemDisplayStateToParams(state),
     spaceId: state.spaceId,
     threadId: state.threadId,
-    sort: state.sort === DEFAULT_WORK_ITEM_SEARCH.sort ? undefined : state.sort,
   };
   return Object.fromEntries(
     Object.entries(params).filter(([, value]) => value !== undefined),
@@ -50,18 +51,6 @@ export function buildWorkItemsInput(
 
 export function routeViewToGraphql(view: WorkItemRouteSearch["view"]) {
   return (view === "board" ? "BOARD" : "LIST") satisfies WorkItemViewType;
-}
-
-function parseSort(value: unknown): WorkItemRouteSearch["sort"] {
-  if (
-    value === "due" ||
-    value === "priority" ||
-    value === "title" ||
-    value === "updated"
-  ) {
-    return value;
-  }
-  return DEFAULT_WORK_ITEM_SEARCH.sort;
 }
 
 function stringParam(value: unknown): string | undefined {

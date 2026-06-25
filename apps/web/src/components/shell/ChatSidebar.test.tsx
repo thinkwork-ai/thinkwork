@@ -696,7 +696,7 @@ describe("ChatSidebar", () => {
     expect(screen.queryByRole("button", { name: /settings/i })).toBeNull();
     expect(
       screen.getByRole("link", { name: /work items/i }).getAttribute("href"),
-    ).toBe("/work-items?view=list&sort=updated");
+    ).toBe("/work-items");
     expect(
       screen.getByRole("link", { name: /automations/i }).getAttribute("href"),
     ).toBe("/automations");
