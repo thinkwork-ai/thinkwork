@@ -7,11 +7,9 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
-  DeleteWorkItemViewMutation,
   CreateWorkItemMutation,
   SpacesQuery,
   UpdateWorkItemStatusMutation,
-  WorkItemSavedViewsQuery,
   WorkItemStatusesQuery,
   WorkItemsQuery,
 } from "@/lib/graphql-queries";
@@ -21,7 +19,6 @@ import {
   isWorkItemDueSoon,
   isWorkItemOpen,
   sortWorkItemStatuses,
-  type WorkItemSavedViewSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
@@ -29,17 +26,14 @@ import {
 } from "./work-item-display";
 import {
   buildWorkItemsInput,
-  routeSearchFromSavedView,
   workItemRouteSearchToParams,
   type WorkItemRouteSearch,
 } from "./work-item-filters";
 import { WorkItemDisplayPopover } from "./WorkItemDisplayPopover";
-import { WorkItemFilters } from "./WorkItemFilters";
 import {
   NewWorkItemSheet,
   type NewWorkItemFormInput,
 } from "./NewWorkItemSheet";
-import { WorkItemSavedViews } from "./WorkItemSavedViews";
 import { WorkItemsBoardView } from "./WorkItemsBoardView";
 import { WorkItemsListView } from "./WorkItemsListView";
 
@@ -49,10 +43,6 @@ interface WorkItemsResult {
 
 interface WorkItemStatusesResult {
   workItemStatuses?: WorkItemStatusSummary[] | null;
-}
-
-interface WorkItemSavedViewsResult {
-  workItemSavedViews?: WorkItemSavedViewSummary[] | null;
 }
 
 interface SpacesResult {
@@ -96,23 +86,11 @@ export function WorkItemsPage({
     pause: !tenantId || !state.spaceId,
     requestPolicy: "cache-and-network",
   });
-  const [
-    { data: savedViewsData, fetching: savedViewsFetching },
-    reexecuteSavedViews,
-  ] = useQuery<WorkItemSavedViewsResult>({
-    query: WorkItemSavedViewsQuery,
-    variables: { tenantId: tenantId ?? "", spaceId: state.spaceId },
-    pause: !tenantId,
-    requestPolicy: "cache-and-network",
-  });
   const [{ fetching: statusUpdating }, executeStatusUpdate] = useMutation(
     UpdateWorkItemStatusMutation,
   );
   const [{ fetching: creatingWorkItem }, executeCreateWorkItem] = useMutation(
     CreateWorkItemMutation,
-  );
-  const [{ fetching: deletingView }, executeDeleteView] = useMutation(
-    DeleteWorkItemViewMutation,
   );
 
   useEffect(() => {
@@ -131,7 +109,6 @@ export function WorkItemsPage({
   }, [reexecuteItems, tenantId]);
 
   const spaces = spacesData?.spaces ?? [];
-  const savedViews = savedViewsData?.workItemSavedViews ?? [];
   const workItems = useMemo(
     () => sortWorkItems(data?.workItems ?? [], state.sort),
     [data?.workItems, state.sort],
@@ -187,27 +164,6 @@ export function WorkItemsPage({
     [creatingWorkItem, executeCreateWorkItem, reexecuteItems, tenantId],
   );
 
-  const handleDeleteView = useCallback(
-    async (view: WorkItemSavedViewSummary) => {
-      if (!tenantId) return;
-      const confirmed = window.confirm(`Delete saved view "${view.name}"?`);
-      if (!confirmed) return;
-      const result = await executeDeleteView({
-        input: { tenantId, id: view.id },
-      });
-      if (result.error) {
-        toast.error(`Couldn't delete view: ${result.error.message}`);
-        return;
-      }
-      if (state.savedViewId === view.id) {
-        onStateChange({ ...state, savedViewId: undefined });
-      }
-      reexecuteSavedViews({ requestPolicy: "network-only" });
-      toast.success("View deleted");
-    },
-    [executeDeleteView, onStateChange, reexecuteSavedViews, state, tenantId],
-  );
-
   const updateState = useCallback(
     (next: WorkItemRouteSearch) => {
       onStateChange({
@@ -235,22 +191,6 @@ export function WorkItemsPage({
         >
           <Plus className="size-4" />
         </Button>
-        <WorkItemSavedViews
-          views={savedViews}
-          activeViewId={state.savedViewId}
-          deleting={deletingView}
-          onSelectView={(view) =>
-            updateState(
-              view
-                ? routeSearchFromSavedView(view)
-                : {
-                    ...state,
-                    savedViewId: undefined,
-                  },
-            )
-          }
-          onDeleteView={handleDeleteView}
-        />
         <WorkItemDisplayPopover state={state} onChange={updateState} />
         <Button
           type="button"
@@ -265,7 +205,7 @@ export function WorkItemsPage({
         </Button>
       </div>
     ),
-    actionKey: `work-items:${JSON.stringify(state)}:${savedViews.map((view) => `${view.id}:${view.name}`).join("|")}:${deletingView ? "deleting" : "idle"}`,
+    actionKey: `work-items:${JSON.stringify(state)}`,
   });
 
   if (!tenantId || (fetching && !data)) {
@@ -279,21 +219,10 @@ export function WorkItemsPage({
           title="Work Items"
           description="Track Space work items, blockers, and thread-linked progress."
         />
-        <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-          <WorkItemFilters
-            state={state}
-            spaces={spaces}
-            onChange={updateState}
-          />
-        </div>
-
         {error ? (
           <div className="shrink-0 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
             {error.message}
           </div>
-        ) : null}
-        {savedViewsFetching ? (
-          <div className="sr-only">Loading saved views</div>
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-hidden">

@@ -69,6 +69,11 @@ on U3; U5 verifies and polishes the integrated result.
   local U1 worktree/branch cleanup verified.
 - 2026-06-25T00:49Z: Began U2 from fresh `origin/main` on branch
   `codex/thnk-72-data-table-hidden-columns`.
+- 2026-06-25T01:01Z: U2 PR #2946 merged via squash merge
+  (`b72124c700e1aaf5958516cd3124cef378236aa3`); remote branch deleted and
+  local U2 worktree/branch cleanup verified.
+- 2026-06-25T01:03Z: Began U3/U4 grouped implementation from fresh
+  `origin/main` on branch `codex/thnk-72-work-items-filter-adapter`.
 
 ## Unit Log
 
@@ -153,14 +158,20 @@ Local verification:
 - 2026-06-25T00:51Z: `pnpm dlx prettier@3.6.2 --check ...` passed for touched
   U2 files.
 
-Status: locally verified; ready for commit/PR.
+Status: merged.
+
+PR:
+
+- https://github.com/thinkwork-ai/thinkwork/pull/2946
 
 ### U3: Work Items Filter Adapter and Table Columns
 
 Objective: add Work Items-specific token filter configuration and filter-only
 columns beside the Work Items list view.
 
-Branch: pending.
+Branch:
+
+- `codex/thnk-72-work-items-filter-adapter`
 
 Planned local verification:
 
@@ -168,14 +179,57 @@ Planned local verification:
 - Focused Work Items list view tests.
 - Relevant `apps/web` typecheck/test target after implementation.
 
-Status: pending.
+Implementation notes:
+
+- Added a Work Items token-filter adapter with hidden TanStack filter columns
+  for search, status, priority, due bucket, required, blocked, applicable,
+  Space, and owner.
+- Converted the Work Items list view from the grouped custom list to
+  `DataTable`, with visible columns for Work Item, Status, Priority, Due, and
+  Threads.
+- Wired `DataTableTokenFilter` into the list view toolbar so filters apply to
+  already-loaded rows client-side.
+- Tuned the table column sizing after browser verification so all visible
+  columns fit in the current app shell width.
+
+Local verification:
+
+- 2026-06-25T01:09Z: Initial focused web test could not run because the fresh
+  worktree was missing `node_modules`; ran `pnpm install` successfully. The
+  optional `canvas` native build failed under Node 25 / missing `pkg-config`,
+  but pnpm completed with exit code 0 and test tooling was installed.
+- 2026-06-25T01:09Z: `pnpm --filter @thinkwork/web test -- work-item` passed
+  with 4 files / 14 tests.
+- 2026-06-25T01:10Z: `pnpm --filter @thinkwork/web typecheck` passed.
+- 2026-06-25T01:13Z: After formatting and table-width polish,
+  `pnpm --filter @thinkwork/web test -- work-item` passed with 4 files /
+  14 tests.
+- 2026-06-25T01:13Z: After formatting and table-width polish,
+  `pnpm --filter @thinkwork/web typecheck` passed.
+- 2026-06-25T01:13Z: Targeted Prettier check passed for touched Work Items
+  files.
+- 2026-06-25T01:15Z: `pnpm --filter @thinkwork/web test` passed with
+  198 files / 1510 tests.
+- 2026-06-25T01:13Z: Started the worktree web dev server on
+  `http://localhost:5174/` after copying `apps/web/.env` from the main
+  checkout.
+- 2026-06-25T01:13Z: Browser smoke verified authenticated
+  `http://localhost:5174/work-items?view=list&sort=updated`: Work Items page
+  renders, filter menu opens, all visible table columns fit, and applying then
+  clearing `Status is Todo` creates/removes a token while preserving the visible
+  row.
+
+Status: locally verified; ready for commit/PR.
 
 ### U4: Remove Saved-View and Old Filter UI
 
 Objective: stop exposing saved views and the old select-heavy filter row on
 `/work-items` while preserving route context needed by existing navigation.
 
-Branch: pending.
+Branch:
+
+- `codex/thnk-72-work-items-filter-adapter` (grouped with U3 because this is
+  the smallest testable Work Items integration surface)
 
 Planned local verification:
 
@@ -183,7 +237,24 @@ Planned local verification:
 - Existing shell/sidebar and Space route tests named by the plan.
 - Relevant `apps/web` typecheck/test target after implementation.
 
-Status: pending.
+Implementation notes:
+
+- Removed the visible saved-view control and delete flow from the Work Items
+  page header.
+- Removed the old select-heavy Work Item filter row from the page.
+- Deleted the now-unused `WorkItemFilters` and `WorkItemSavedViews`
+  components/tests.
+- Simplified Work Items route/search state to display context (`view`,
+  `spaceId`, `threadId`, `sort`) and made legacy filter/saved-view query params
+  ignored.
+- Simplified `buildWorkItemsInput` so the API fetches the current display
+  context while token filters run client-side in the table.
+
+Local verification:
+
+- Covered by the U3/U4 grouped verification above.
+
+Status: locally verified; ready for commit/PR.
 
 ### U5: Polish and Verification
 
@@ -198,7 +269,7 @@ Planned local verification:
 - Browser smoke on `/work-items` after copying the ignored web `.env` into the
   worktree if needed.
 
-Status: pending.
+Status: in progress; local browser polish complete for the U3/U4 branch.
 
 ## Current Blockers
 

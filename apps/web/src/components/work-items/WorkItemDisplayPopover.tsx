@@ -36,7 +36,7 @@ export function WorkItemDisplayPopover({
   const [allowDragDrop, setAllowDragDrop] = useState(true);
 
   const update = (patch: Partial<WorkItemRouteSearch>) =>
-    onChange({ ...state, ...patch, savedViewId: undefined });
+    onChange({ ...state, ...patch });
 
   return (
     <Popover>
