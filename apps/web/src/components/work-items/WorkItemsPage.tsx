@@ -9,6 +9,7 @@ import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   CreateWorkItemMutation,
   SpacesQuery,
+  UpdateWorkItemMutation,
   UpdateWorkItemStatusMutation,
   WorkItemStatusesQuery,
   WorkItemsQuery,
@@ -22,6 +23,7 @@ import {
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
+  type WorkItemPriority,
   workItemStatusCategory,
 } from "./work-item-display";
 import {
@@ -90,6 +92,9 @@ export function WorkItemsPage({
   const [{ fetching: statusUpdating }, executeStatusUpdate] = useMutation(
     UpdateWorkItemStatusMutation,
   );
+  const [{ fetching: workItemUpdating }, executeWorkItemUpdate] = useMutation(
+    UpdateWorkItemMutation,
+  );
   const [{ fetching: creatingWorkItem }, executeCreateWorkItem] = useMutation(
     CreateWorkItemMutation,
   );
@@ -140,6 +145,31 @@ export function WorkItemsPage({
       reexecuteItems({ requestPolicy: "network-only" });
     },
     [executeStatusUpdate, reexecuteItems, statusUpdating, tenantId],
+  );
+
+  const handleWorkItemUpdate = useCallback(
+    async (
+      item: WorkItemSummary,
+      patch: { priority?: WorkItemPriority; dueAt?: string | null },
+    ) => {
+      if (!tenantId || workItemUpdating) return;
+      setUpdatingItemId(item.id);
+      const result = await executeWorkItemUpdate({
+        input: {
+          tenantId,
+          workItemId: item.id,
+          ...patch,
+        },
+      });
+      setUpdatingItemId(null);
+      if (result.error) {
+        toast.error(`Couldn't update Work Item: ${result.error.message}`);
+        return;
+      }
+      toast.success("Work Item updated");
+      reexecuteItems({ requestPolicy: "network-only" });
+    },
+    [executeWorkItemUpdate, reexecuteItems, tenantId, workItemUpdating],
   );
 
   const handleCreateWorkItem = useCallback(
@@ -238,6 +268,7 @@ export function WorkItemsPage({
               includeSpace={!state.spaceId}
               updatingItemId={updatingItemId}
               onStatusChange={handleStatusChange}
+              onItemUpdate={handleWorkItemUpdate}
             />
           )}
         </div>

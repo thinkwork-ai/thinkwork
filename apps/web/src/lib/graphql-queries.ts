@@ -1133,6 +1133,15 @@ export const UpdateWorkItemStatusMutation = gql`
   ${WorkItemFieldsFragment}
 `;
 
+export const UpdateWorkItemMutation = gql`
+  mutation UpdateWorkItem($input: UpdateWorkItemInput!) {
+    updateWorkItem(input: $input) {
+      ...WorkItemFields
+    }
+  }
+  ${WorkItemFieldsFragment}
+`;
+
 export const SaveWorkItemViewMutation = gql`
   mutation SaveWorkItemView($input: SaveWorkItemViewInput!) {
     saveWorkItemView(input: $input) {
