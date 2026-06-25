@@ -959,8 +959,8 @@ describe("SpacesThreadDetailRoute", () => {
 
     expect(screen.getByText("Progress")).toBeTruthy();
     expect(screen.getByText("Get contract signed")).toBeTruthy();
-    // Owner + status render as a sublabel under the task title.
-    expect(screen.getByText("Sales · Completed")).toBeTruthy();
+    // Owner renders as the sublabel under the task title.
+    expect(screen.getByText("Sales")).toBeTruthy();
     expect(screen.queryByText("signed package received")).toBeNull();
     expect(screen.queryByText("Stale linked task title")).toBeNull();
 

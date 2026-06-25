@@ -6,6 +6,7 @@ import {
   users,
   workItemEvents,
   workItemExternalRefs,
+  workItemStatuses,
   workItems,
   workItemThreadLinks,
 } from "@thinkwork/database-pg/schema";
@@ -68,6 +69,19 @@ export interface AssignCustomerOnboardingWorkItemInput {
   assigneeDisplay: string;
   note?: string | null;
   actorUserId?: string | null;
+  metadata?: JsonRecord | null;
+}
+
+export interface UpdateCustomerOnboardingWorkItemStatusInput {
+  tenantId: string;
+  threadId: string;
+  checklistItemKey: string;
+  status: LinkedTaskStatus;
+  required?: boolean;
+  blocked?: boolean;
+  note?: string | null;
+  actorUserId?: string | null;
+  actorAgentId?: string | null;
   metadata?: JsonRecord | null;
 }
 
@@ -484,6 +498,137 @@ export async function assignCustomerOnboardingWorkItem(
   return { id: item.id, title: item.title, ownerUserId };
 }
 
+export async function updateCustomerOnboardingWorkItemStatus(
+  input: UpdateCustomerOnboardingWorkItemStatusInput,
+  deps: CustomerOnboardingWorkItemDeps = {},
+): Promise<{
+  id: string;
+  title: string;
+  previousStatus: LinkedTaskStatus;
+  nextStatus: LinkedTaskStatus;
+} | null> {
+  const database = deps.database ?? getDb();
+  const now = deps.now?.() ?? new Date();
+  const rows = await database
+    .select({
+      id: workItems.id,
+      spaceId: workItems.space_id,
+      title: workItems.title,
+      statusId: workItems.status_id,
+      required: workItems.required,
+      metadata: workItems.metadata,
+      statusCategory: workItemStatuses.category,
+    })
+    .from(workItems)
+    .innerJoin(
+      workItemThreadLinks,
+      and(
+        eq(workItemThreadLinks.work_item_id, workItems.id),
+        eq(workItemThreadLinks.tenant_id, workItems.tenant_id),
+      ),
+    )
+    .leftJoin(
+      workItemStatuses,
+      and(
+        eq(workItemStatuses.id, workItems.status_id),
+        eq(workItemStatuses.tenant_id, workItems.tenant_id),
+      ),
+    )
+    .where(
+      and(
+        eq(workItems.tenant_id, input.tenantId),
+        eq(workItemThreadLinks.thread_id, input.threadId),
+      ),
+    );
+  const item = rows.find(
+    (row) =>
+      stringValue(objectRecord(row.metadata).checklistItemKey) ===
+      input.checklistItemKey,
+  );
+  if (!item) return null;
+
+  const statusCategory = workItemStatusCategoryForLinkedTaskStatus(
+    input.status,
+  );
+  const status = await findStatusForWorkItemUpdate({
+    tenantId: input.tenantId,
+    spaceId: item.spaceId,
+    statusCategory,
+    tx: database as never,
+  });
+  const previousStatus = linkedTaskStatusForWorkItemCategory(
+    item.statusCategory,
+  );
+  const applicable = input.status !== "not_applicable";
+  const terminal =
+    input.status === "completed" ||
+    input.status === "cancelled" ||
+    input.status === "not_applicable";
+  const nextMetadata = compactObject({
+    ...objectRecord(item.metadata),
+    linkedTaskStatus: input.status,
+    lastChatStatus: {
+      source: "customer_onboarding_chat_update",
+      checklistItemKey: input.checklistItemKey,
+      syncedAt: now.toISOString(),
+      note: input.note ?? undefined,
+      metadata: input.metadata ?? undefined,
+    },
+  });
+
+  await database
+    .update(workItems)
+    .set({
+      status_id: status.id,
+      required: input.required ?? item.required,
+      applicable,
+      blocked: input.blocked ?? input.status === "blocked",
+      completed_at: terminal ? now : null,
+      completed_by_user_id:
+        input.status === "completed" ? (input.actorUserId ?? null) : null,
+      completed_by_agent_id:
+        input.status === "completed" ? (input.actorAgentId ?? null) : null,
+      metadata: nextMetadata,
+      updated_at: now,
+    })
+    .where(
+      and(eq(workItems.tenant_id, input.tenantId), eq(workItems.id, item.id)),
+    );
+
+  await database.insert(workItemEvents).values({
+    tenant_id: input.tenantId,
+    space_id: item.spaceId,
+    work_item_id: item.id,
+    thread_id: input.threadId,
+    actor_user_id: input.actorUserId ?? null,
+    actor_agent_id: input.actorAgentId ?? null,
+    event_type:
+      input.status === "completed"
+        ? "completed"
+        : input.status === "blocked"
+          ? "blocked"
+          : "status_changed",
+    previous_status_id: item.statusId,
+    new_status_id: status.id,
+    message: `${item.title} marked ${input.status.replace(/_/g, " ")} from Customer Onboarding chat.`,
+    metadata: compactObject({
+      source: "customer_onboarding_chat_update",
+      checklistItemKey: input.checklistItemKey,
+      note: input.note ?? undefined,
+      actorUserId: input.actorUserId ?? undefined,
+      actorAgentId: input.actorAgentId ?? undefined,
+      metadata: input.metadata ?? undefined,
+    }),
+  });
+
+  return {
+    id: item.id,
+    title: item.title,
+    previousStatus,
+    nextStatus: input.status,
+  };
+}
+
 export function workItemStatusCategoryForLinkedTaskStatus(
   status: LinkedTaskStatus,
 ): "todo" | "active" | "blocked" | "done" | "skipped" {
@@ -499,6 +644,24 @@ export function workItemStatusCategoryForLinkedTaskStatus(
       return "skipped";
     case "todo":
     case "unknown":
+    default:
+      return "todo";
+  }
+}
+
+function linkedTaskStatusForWorkItemCategory(
+  category?: string | null,
+): LinkedTaskStatus {
+  switch (category) {
+    case "done":
+      return "completed";
+    case "blocked":
+      return "blocked";
+    case "active":
+      return "in_progress";
+    case "skipped":
+      return "not_applicable";
+    case "todo":
     default:
       return "todo";
   }

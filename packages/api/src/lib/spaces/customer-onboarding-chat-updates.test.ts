@@ -130,6 +130,17 @@ describe("extractCustomerOnboardingChatUpdate", () => {
         note: "Collect tax exemption forms: not applicable",
       },
     ]);
+    const inProgress = extractCustomerOnboardingChatUpdate(
+      "Collect tax exemption forms: in progress",
+    );
+    expect(inProgress.taskStatusUpdates).toEqual([
+      {
+        key: "tax_exemption_forms",
+        status: "in_progress",
+        note: "Collect tax exemption forms: in progress",
+      },
+    ]);
+    expect(inProgress.statusRequest).toBe(false);
   });
 
   it("treats natural credit approval replies as credit-check completion evidence", () => {
@@ -518,9 +529,13 @@ describe("sendMessage customer onboarding hook", () => {
     );
 
     expect(source).toContain("assignCustomerOnboardingWorkItem");
+    expect(source).toContain("updateCustomerOnboardingWorkItemStatus");
     expect(source).toContain("syncWorkItemAssignmentFromLinkedTask");
     expect(source.indexOf("assignmentChanges.push")).toBeLessThan(
       source.indexOf("await assignCustomerOnboardingWorkItem"),
+    );
+    expect(source.indexOf("statusChanges.push")).toBeLessThan(
+      source.indexOf("await updateCustomerOnboardingWorkItemStatus"),
     );
   });
 });

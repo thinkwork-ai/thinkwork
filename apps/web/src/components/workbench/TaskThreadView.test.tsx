@@ -885,7 +885,7 @@ describe("TaskThreadView", () => {
       "text-white/55",
     );
     expect(completedIcon.getAttribute("class") ?? "").not.toContain("emerald");
-    expect(within(panel).queryByText("Ops · Completed")).toBeTruthy();
+    expect(within(panel).queryByText("Ops")).toBeTruthy();
     expect(within(panel).getByText("Get contract signed")).toBeTruthy();
     expect(
       within(panel).getByText("Enter customer information into P21"),
