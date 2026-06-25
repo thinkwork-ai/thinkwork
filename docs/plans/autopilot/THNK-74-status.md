@@ -194,3 +194,9 @@ Local verification:
 - `pnpm dlx prettier@3.6.2 --check packages/api/src/lib/trace-ledger/record-trace-evidence.ts packages/api/src/lib/trace-ledger/record-trace-evidence.test.ts packages/api/src/lib/chat-finalize/process-finalize.ts packages/api/src/lib/chat-finalize/process-finalize.test.ts packages/api/src/lib/cost-recording.ts docs/plans/autopilot/THNK-74-status.md`
   passed.
 - `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `79eebd594` (`feat(trace-ledger): ingest finalize evidence`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2958
+- 2026-06-25 09:08 CDT: PR opened; waiting for required CI.
