@@ -2,9 +2,9 @@
 linear_issue: THNK-72
 plan: "docs/plans/2026-06-25-001-feat-data-table-filter-work-items-plan.md"
 requirements: "docs/brainstorms/2026-06-25-data-table-filter-work-items-requirements.md"
-status: complete
+status: followup-ready
 started_at: 2026-06-25T00:28:34Z
-completed_at: 2026-06-25T01:29:00Z
+completed_at:
 ---
 
 # THNK-72 Autopilot Status
@@ -81,6 +81,12 @@ on U3; U5 verifies and polishes the integrated result.
 - 2026-06-25T01:28Z: Restarted `http://localhost:5174/` from the merged main
   checkout and verified `/work-items?view=list&sort=updated` renders the
   completed filter/table surface.
+- 2026-06-25T01:43Z: Reopened implementation after local product review found
+  the option filter menu too TanStack-demo-like: Work Items needed Bazza-style
+  checkbox multi-select values and a separate operator menu.
+- 2026-06-25T01:53Z: Verified the follow-up locally on
+  `http://localhost:5174/work-items?view=list&sort=updated` and added Linear
+  progress comment with evidence.
 
 ## Unit Log
 
@@ -271,7 +277,7 @@ PR:
 
 - https://github.com/thinkwork-ai/thinkwork/pull/2948
 
-### U5: Polish and Verification
+### U5: Initial Polish and Verification
 
 Objective: verify the token filter bar matches the reference interaction,
 behaves on desktop/mobile widths, and does not regress the Work Items page.
@@ -298,8 +304,53 @@ Final verification:
   visible columns fit the app shell, the Filter menu opens, a `Status is Todo`
   token applies, and clearing filters returns the page to a clean state.
 
-Status: complete.
+Status: superseded by U6 follow-up polish.
+
+### U6: Bazza-Exact Multi-Value Option Filters
+
+Objective: address product review feedback that option filters must match the
+Bazza demo interaction, not the TanStack demo: values are selected with
+checkboxes, multiple values stay in one token, and operator selection is
+separate from value selection.
+
+Branch:
+
+- `codex/thnk-72-multi-value-filters`
+
+Implementation notes:
+
+- Added option filter operators `is any of` and `is none of` while preserving
+  boolean `is` / `is not` and text `contains` / `does not contain`.
+- Extended token filter values to support arrays for multi-value option
+  filters.
+- Changed option value editing to a searchable checkbox list that applies
+  immediately and keeps the menu open for multi-select.
+- Split option operator editing into the token operator segment with its own
+  searchable operator menu.
+- Changed Work Items to use the icon-only filter trigger and red `Clear`
+  action from the reference demo.
+- Kept the change scoped to the shared primitive plus the Work Items pilot
+  configuration.
+
+Local verification:
+
+- 2026-06-25T01:49Z: `pnpm --filter @thinkwork/ui test -- data-table-token-filter`
+  passed with 9 tests.
+- 2026-06-25T01:49Z: `pnpm --filter @thinkwork/ui typecheck` passed.
+- 2026-06-25T01:49Z: `pnpm --filter @thinkwork/web test -- work-item` passed
+  with 4 files / 14 tests.
+- 2026-06-25T01:49Z: `pnpm --filter @thinkwork/web typecheck` passed.
+- 2026-06-25T01:49Z: Targeted Prettier check passed for touched UI and Work
+  Items files.
+- 2026-06-25T01:52Z: Browser smoke verified
+  `http://localhost:5174/work-items?view=list&sort=updated`: the Status value
+  menu shows search plus checkbox rows only, selecting `Done` and `Todo`
+  creates one `Status | is any of | 2 statuses` token, both values remain
+  checked, the red `Clear` action appears, and the token operator segment opens
+  a separate searchable operators menu with `is any of` and `is none of`.
+
+Status: local verification passed; PR pending.
 
 ## Current Blockers
 
-None. THNK-72 implementation is complete.
+None. U6 is ready for PR/CI/merge.

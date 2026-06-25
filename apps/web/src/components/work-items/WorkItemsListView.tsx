@@ -152,6 +152,7 @@ export function WorkItemsListView({
           table={table}
           columns={tokenFilterColumns}
           addLabel="Filter"
+          showAddLabel={false}
           clearLabel="Clear filters"
         />
       )}

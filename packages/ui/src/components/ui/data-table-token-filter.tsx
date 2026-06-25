@@ -6,7 +6,7 @@ import {
   type RowData,
   type Table as TanStackTable,
 } from "@tanstack/react-table";
-import { Check, ChevronLeft, Filter, X } from "lucide-react";
+import { Check, ChevronLeft, Filter, FilterX, Search, X } from "lucide-react";
 import { Button } from "./button.js";
 import { Input } from "./input.js";
 import {
@@ -25,11 +25,13 @@ export type DataTableTokenFilterOperator =
   | "contains"
   | "does_not_contain"
   | "is"
-  | "is_not";
+  | "is_not"
+  | "is_any_of"
+  | "is_none_of";
 
 export interface DataTableTokenFilterValue {
   operator: DataTableTokenFilterOperator;
-  value: string | boolean;
+  value: string | boolean | Array<string | boolean>;
 }
 
 export interface DataTableTokenFilterOption {
@@ -62,6 +64,7 @@ export interface DataTableTokenFilterProps<TData extends RowData> {
   className?: string;
   align?: "start" | "center" | "end";
   addLabel?: string;
+  showAddLabel?: boolean;
   clearLabel?: string;
 }
 
@@ -70,6 +73,8 @@ const operatorLabels = {
   does_not_contain: "does not contain",
   is: "is",
   is_not: "is not",
+  is_any_of: "is any of",
+  is_none_of: "is none of",
 } satisfies Record<DataTableTokenFilterOperator, string>;
 
 const booleanOptions: DataTableTokenFilterOption[] = [
@@ -118,16 +123,20 @@ export function matchesDataTableTokenFilter(
   }
 
   const normalizedRowValue =
-    typeof filterValue.value === "boolean"
+    typeof firstFilterValue(filterValue.value) === "boolean"
       ? Boolean(rowValue)
       : String(rowValue);
-  const normalizedFilterValue =
-    typeof filterValue.value === "boolean"
-      ? filterValue.value
-      : String(filterValue.value);
-  const isEqual = normalizedRowValue === normalizedFilterValue;
+  const normalizedFilterValues = filterValueList(filterValue.value).map(
+    (value) => (typeof value === "boolean" ? value : String(value)),
+  );
+  if (normalizedFilterValues.length === 0) return true;
+  const isEqual = normalizedFilterValues.some(
+    (value) => normalizedRowValue === value,
+  );
 
-  return filterValue.operator === "is" ? isEqual : !isEqual;
+  return filterValue.operator === "is" || filterValue.operator === "is_any_of"
+    ? isEqual
+    : !isEqual;
 }
 
 export function isDataTableTokenFilterValue(
@@ -137,11 +146,15 @@ export function isDataTableTokenFilterValue(
   const candidate = value as Partial<DataTableTokenFilterValue>;
   return (
     typeof candidate.operator === "string" &&
-    ["contains", "does_not_contain", "is", "is_not"].includes(
-      candidate.operator,
-    ) &&
-    (typeof candidate.value === "string" ||
-      typeof candidate.value === "boolean")
+    [
+      "contains",
+      "does_not_contain",
+      "is",
+      "is_not",
+      "is_any_of",
+      "is_none_of",
+    ].includes(candidate.operator) &&
+    isValidFilterValue(candidate.value)
   );
 }
 
@@ -151,6 +164,7 @@ export function DataTableTokenFilter<TData extends RowData>({
   className,
   align = "start",
   addLabel = "Add filter",
+  showAddLabel = true,
   clearLabel = "Clear filters",
 }: DataTableTokenFilterProps<TData>) {
   const [addOpen, setAddOpen] = React.useState(false);
@@ -172,6 +186,11 @@ export function DataTableTokenFilter<TData extends RowData>({
 
   const updateFilter = React.useCallback(
     (column: DataTableTokenFilterColumn, value: DataTableTokenFilterValue) => {
+      if (isEmptyFilterValue(value)) {
+        table.getColumn(column.id)?.setFilterValue(undefined);
+        table.setPageIndex(0);
+        return;
+      }
       table.getColumn(column.id)?.setFilterValue(value);
       table.setPageIndex(0);
     },
@@ -214,7 +233,7 @@ export function DataTableTokenFilter<TData extends RowData>({
             aria-label={addLabel}
           >
             <Filter className="h-4 w-4" aria-hidden="true" />
-            <span>{addLabel}</span>
+            {showAddLabel ? <span>{addLabel}</span> : null}
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -225,11 +244,14 @@ export function DataTableTokenFilter<TData extends RowData>({
             <FilterValueEditor
               column={draftColumn}
               value={getFilterValue(table, draftColumn.id)}
+              showOperators={draftColumn.type !== "option"}
               onBack={() => setDraftColumnId(null)}
               onApply={(value) => {
                 updateFilter(draftColumn, value);
-                setAddOpen(false);
-                setDraftColumnId(null);
+                if (draftColumn.type !== "option") {
+                  setAddOpen(false);
+                  setDraftColumnId(null);
+                }
               }}
               onCancel={() => {
                 setAddOpen(false);
@@ -259,14 +281,14 @@ export function DataTableTokenFilter<TData extends RowData>({
         <Button
           type="button"
           variant="ghost"
-          size="icon-sm"
+          size="sm"
           aria-label={clearLabel}
           title={clearLabel}
-          className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"
+          className="h-8 rounded-md bg-red-700 px-3 text-white hover:bg-red-800 hover:text-white"
           onClick={clearFilters}
         >
-          <X className="h-4 w-4" aria-hidden="true" />
-          <span className="sr-only">{clearLabel}</span>
+          <FilterX className="h-4 w-4" aria-hidden="true" />
+          <span>Clear</span>
         </Button>
       ) : null}
     </div>
@@ -323,15 +345,17 @@ function FilterToken({
   onApply: (value: DataTableTokenFilterValue) => void;
   onRemove: () => void;
 }) {
-  const [open, setOpen] = React.useState(false);
+  const [valueOpen, setValueOpen] = React.useState(false);
+  const [operatorOpen, setOperatorOpen] = React.useState(false);
   const label = getValueLabel(column, value.value);
+  const valueIcons = getSelectedOptionIcons(column, value.value);
 
   return (
     <div
       aria-label={`${column.label} filter`}
       className="flex h-8 min-w-0 max-w-full items-stretch overflow-hidden rounded-full border bg-background shadow-sm"
     >
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={valueOpen} onOpenChange={setValueOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -348,27 +372,54 @@ function FilterToken({
           <FilterValueEditor
             column={column}
             value={value}
+            showOperators={column.type !== "option"}
             onApply={(nextValue) => {
               onApply(nextValue);
-              setOpen(false);
+              if (column.type !== "option") setValueOpen(false);
             }}
-            onCancel={() => setOpen(false)}
+            onCancel={() => setValueOpen(false)}
+          />
+        </PopoverContent>
+      </Popover>
+      <Popover open={operatorOpen} onOpenChange={setOperatorOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="border-l px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            aria-label={`Edit ${column.label} operator`}
+          >
+            {operatorLabels[value.operator]}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 p-2">
+          <OperatorList
+            column={column}
+            value={value}
+            onSelect={(operator) => {
+              onApply({ ...value, operator });
+              setOperatorOpen(false);
+            }}
           />
         </PopoverContent>
       </Popover>
       <button
         type="button"
-        className="border-l px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-        onClick={() => setOpen(true)}
-      >
-        {operatorLabels[value.operator]}
-      </button>
-      <button
-        type="button"
         className="min-w-0 max-w-56 border-l px-3 text-sm font-medium hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-        onClick={() => setOpen(true)}
+        onClick={() => setValueOpen(true)}
+        aria-label={`Edit ${column.label} values`}
       >
-        <span className="block truncate">{label}</span>
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          {valueIcons.map((icon, index) => (
+            <span
+              // eslint-disable-next-line react/no-array-index-key
+              key={index}
+              className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
+            >
+              {icon}
+            </span>
+          ))}
+          <span className="truncate">{label}</span>
+        </span>
       </button>
       <button
         type="button"
@@ -388,12 +439,14 @@ function FilterValueEditor({
   onBack,
   onApply,
   onCancel,
+  showOperators = true,
 }: {
   column: DataTableTokenFilterColumn;
   value?: DataTableTokenFilterValue;
   onBack?: () => void;
   onApply: (value: DataTableTokenFilterValue) => void;
   onCancel: () => void;
+  showOperators?: boolean;
 }) {
   const [operator, setOperator] = React.useState<DataTableTokenFilterOperator>(
     value?.operator ?? defaultOperatorFor(column),
@@ -429,25 +482,27 @@ function FilterValueEditor({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-1 rounded-md bg-muted/60 p-1">
-        {operators.map((nextOperator) => (
-          <Button
-            key={nextOperator}
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "h-7 justify-center rounded-md text-xs",
-              operator === nextOperator &&
-                "bg-background text-foreground shadow-sm ring-1 ring-border hover:bg-background",
-            )}
-            aria-pressed={operator === nextOperator}
-            onClick={() => setOperator(nextOperator)}
-          >
-            {operatorLabels[nextOperator]}
-          </Button>
-        ))}
-      </div>
+      {showOperators ? (
+        <div className="grid grid-cols-2 gap-1 rounded-md bg-muted/60 p-1">
+          {operators.map((nextOperator) => (
+            <Button
+              key={nextOperator}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 justify-center rounded-md text-xs",
+                operator === nextOperator &&
+                  "bg-background text-foreground shadow-sm ring-1 ring-border hover:bg-background",
+              )}
+              aria-pressed={operator === nextOperator}
+              onClick={() => setOperator(nextOperator)}
+            >
+              {operatorLabels[nextOperator]}
+            </Button>
+          ))}
+        </div>
+      ) : null}
 
       {column.type === "text" ? (
         <TextValueEditor
@@ -470,6 +525,7 @@ function FilterValueEditor({
           value={value}
           operator={operator}
           onApply={onApply}
+          onCancel={onCancel}
         />
       )}
     </div>
@@ -524,11 +580,13 @@ function OptionValueList({
   value,
   operator,
   onApply,
+  onCancel,
 }: {
   column: DataTableTokenFilterColumn;
   value?: DataTableTokenFilterValue;
   operator: DataTableTokenFilterOperator;
   onApply: (value: DataTableTokenFilterValue) => void;
+  onCancel: () => void;
 }) {
   if (column.loading) {
     return (
@@ -553,11 +611,21 @@ function OptionValueList({
     );
   }
 
+  if (column.type === "option") {
+    return (
+      <MultiOptionValueList
+        options={options}
+        value={value}
+        operator={operator}
+        onApply={onApply}
+      />
+    );
+  }
+
   return (
     <div className="grid max-h-64 gap-1 overflow-y-auto">
       {options.map((option) => {
-        const rawValue =
-          column.type === "boolean" ? option.value === "true" : option.value;
+        const rawValue = option.value === "true";
         const checked =
           isDataTableTokenFilterValue(value) &&
           value.operator === operator &&
@@ -587,6 +655,167 @@ function OptionValueList({
   );
 }
 
+function MultiOptionValueList({
+  options,
+  value,
+  operator,
+  onApply,
+}: {
+  options: DataTableTokenFilterOption[];
+  value?: DataTableTokenFilterValue;
+  operator: DataTableTokenFilterOperator;
+  onApply: (value: DataTableTokenFilterValue) => void;
+}) {
+  const [selectedValues, setSelectedValues] = React.useState<string[]>(() =>
+    selectedOptionValues(value),
+  );
+  const [searchValue, setSearchValue] = React.useState("");
+
+  React.useEffect(() => {
+    setSelectedValues(selectedOptionValues(value));
+  }, [value?.value]);
+
+  const selectedSet = new Set(selectedValues);
+  const filteredOptions = options.filter((option) =>
+    option.label.toLocaleLowerCase().includes(searchValue.toLocaleLowerCase()),
+  );
+  const commitSelection = React.useCallback(
+    (nextValues: string[]) => {
+      setSelectedValues(nextValues);
+      onApply({ operator, value: nextValues });
+    },
+    [onApply, operator],
+  );
+
+  return (
+    <div className="grid gap-2">
+      <label className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label="Search filter values"
+          className="h-9 pl-9"
+          placeholder="Search..."
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+        />
+      </label>
+      <div className="grid max-h-64 gap-1 overflow-y-auto">
+        {filteredOptions.map((option) => {
+          const checked = selectedSet.has(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="checkbox"
+              aria-checked={checked}
+              disabled={option.disabled}
+              className="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => {
+                const nextValues = checked
+                  ? selectedValues.filter((item) => item !== option.value)
+                  : [...selectedValues, option.value];
+                commitSelection(nextValues);
+              }}
+            >
+              <CheckboxIndicator checked={checked} />
+              {option.icon ? (
+                <span className="text-muted-foreground">{option.icon}</span>
+              ) : null}
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              {option.disabledReason ? (
+                <span className="max-w-32 truncate text-xs text-muted-foreground">
+                  {option.disabledReason}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+        {filteredOptions.length === 0 ? (
+          <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            No matching values.
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function OperatorList({
+  column,
+  value,
+  onSelect,
+}: {
+  column: DataTableTokenFilterColumn;
+  value: DataTableTokenFilterValue;
+  onSelect: (operator: DataTableTokenFilterOperator) => void;
+}) {
+  const operators = operatorsFor(column);
+  const [searchValue, setSearchValue] = React.useState("");
+  const filteredOperators = operators.filter((operator) =>
+    operatorLabels[operator]
+      .toLocaleLowerCase()
+      .includes(searchValue.toLocaleLowerCase()),
+  );
+
+  return (
+    <div className="grid gap-2">
+      <label className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          aria-label="Search filter operators"
+          className="h-9 pl-9"
+          placeholder="Search..."
+          value={searchValue}
+          onChange={(event) => setSearchValue(event.target.value)}
+        />
+      </label>
+      <PopoverHeader className="px-1 pb-0">
+        <PopoverTitle className="text-xs text-muted-foreground">
+          Operators
+        </PopoverTitle>
+      </PopoverHeader>
+      <div className="grid gap-1">
+        {filteredOperators.map((operator) => (
+          <button
+            key={operator}
+            type="button"
+            className={cn(
+              "flex min-h-8 w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted",
+              value.operator === operator && "bg-muted",
+            )}
+            aria-pressed={value.operator === operator}
+            onClick={() => onSelect(operator)}
+          >
+            <span>{operatorLabels[operator]}</span>
+            {value.operator === operator ? (
+              <Check className="h-4 w-4" aria-hidden="true" />
+            ) : null}
+          </button>
+        ))}
+        {filteredOperators.length === 0 ? (
+          <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            No matching operators.
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CheckboxIndicator({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex h-4 w-4 shrink-0 items-center justify-center rounded border border-input",
+        checked && "border-primary bg-primary text-primary-foreground",
+      )}
+    >
+      {checked ? <Check className="h-3 w-3" /> : null}
+    </span>
+  );
+}
+
 function OptionStateMessage({ children }: { children: React.ReactNode }) {
   return (
     <>
@@ -601,15 +830,17 @@ function OptionStateMessage({ children }: { children: React.ReactNode }) {
 function operatorsFor(
   column: DataTableTokenFilterColumn,
 ): DataTableTokenFilterOperator[] {
-  return column.type === "text"
-    ? ["contains", "does_not_contain"]
-    : ["is", "is_not"];
+  if (column.type === "text") return ["contains", "does_not_contain"];
+  if (column.type === "option") return ["is_any_of", "is_none_of"];
+  return ["is", "is_not"];
 }
 
 function defaultOperatorFor(
   column: DataTableTokenFilterColumn,
 ): DataTableTokenFilterOperator {
-  return column.type === "text" ? "contains" : "is";
+  if (column.type === "text") return "contains";
+  if (column.type === "option") return "is_any_of";
+  return "is";
 }
 
 function getFilterValue<TData extends RowData>(
@@ -626,7 +857,63 @@ function getValueLabel(
   column: DataTableTokenFilterColumn,
   value: DataTableTokenFilterValue["value"],
 ): string {
+  if (Array.isArray(value)) {
+    if (value.length === 1) return getValueLabel(column, value[0]);
+    return `${value.length} ${pluralize(column.label)}`;
+  }
   if (column.type === "boolean") return value === true ? "True" : "False";
   const option = column.options?.find((item) => item.value === value);
   return option?.label ?? String(value);
+}
+
+function getSelectedOptionIcons(
+  column: DataTableTokenFilterColumn,
+  value: DataTableTokenFilterValue["value"],
+) {
+  if (column.type !== "option") return [];
+  const selectedValues = filterValueList(value).map(String);
+  return selectedValues
+    .map(
+      (selectedValue) =>
+        column.options?.find((option) => option.value === selectedValue)?.icon,
+    )
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
+function pluralize(label: string) {
+  const normalized = label.trim().toLocaleLowerCase();
+  if (normalized.endsWith("status")) return `${normalized}es`;
+  return normalized.endsWith("s") ? normalized : `${normalized}s`;
+}
+
+function isEmptyFilterValue(value: DataTableTokenFilterValue) {
+  if (Array.isArray(value.value)) return value.value.length === 0;
+  if (typeof value.value === "string") return value.value.trim().length === 0;
+  return false;
+}
+
+function isValidFilterValue(
+  value: Partial<DataTableTokenFilterValue>["value"],
+) {
+  if (typeof value === "string" || typeof value === "boolean") return true;
+  return (
+    Array.isArray(value) &&
+    value.every((item) => typeof item === "string" || typeof item === "boolean")
+  );
+}
+
+function firstFilterValue(value: DataTableTokenFilterValue["value"]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function filterValueList(value: DataTableTokenFilterValue["value"]) {
+  return Array.isArray(value) ? value : [value];
+}
+
+function selectedOptionValues(value?: DataTableTokenFilterValue) {
+  if (!isDataTableTokenFilterValue(value)) return [];
+  return filterValueList(value.value)
+    .filter((item): item is string => typeof item === "string")
+    .map(String);
 }
