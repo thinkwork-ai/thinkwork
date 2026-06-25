@@ -259,6 +259,14 @@ export async function recordCostEvents(
   const values: Array<typeof costEvents.$inferInsert> = [];
 
   const source = params.source || "wakeup_processor";
+  const runtimeSourceEvidence = (eventType: string) => ({
+    source_type: "runtime",
+    source_system: source,
+    request_id: params.requestId,
+    event_type: eventType,
+    ...(params.traceId ? { trace_id: params.traceId } : {}),
+    ...(params.runtimeType ? { runtime_type: params.runtimeType } : {}),
+  });
 
   if (llmCost > 0 || estimated) {
     values.push({
@@ -276,6 +284,9 @@ export async function recordCostEvents(
       cached_read_tokens: params.cachedReadTokens,
       thread_id: params.threadId || undefined,
       trace_id: params.traceId || undefined,
+      reconciliation_source: "runtime",
+      reconciliation_at: new Date(),
+      source_evidence_ref: runtimeSourceEvidence("llm"),
       metadata: {
         source,
         ...(params.metadata ?? {}),
@@ -300,6 +311,9 @@ export async function recordCostEvents(
       duration_ms: params.durationMs,
       thread_id: params.threadId || undefined,
       trace_id: params.traceId || undefined,
+      reconciliation_source: "runtime",
+      reconciliation_at: new Date(),
+      source_evidence_ref: runtimeSourceEvidence("agentcore_compute"),
       metadata: {
         source,
         ...(params.metadata ?? {}),
