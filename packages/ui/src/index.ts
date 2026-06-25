@@ -22,6 +22,7 @@ export * from "./components/ui/copyable-row.js";
 export * from "./components/ui/data-table.js";
 export * from "./components/ui/data-table-column-header.js";
 export * from "./components/ui/data-table-filter-bar.js";
+export * from "./components/ui/data-table-token-filter.js";
 export * from "./components/ui/data-table-pagination.js";
 export * from "./components/ui/dialog.js";
 export * from "./components/ui/display-view-control.js";
