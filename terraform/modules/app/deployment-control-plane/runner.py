@@ -154,11 +154,7 @@ def patch_downloaded_customer_domain_module():
         line_end = block.find("\n", insert_after)
         if line_end == -1:
             return source
-        patched_block = (
-            block[: line_end + 1]
-            + "  allow_overwrite = true\n"
-            + block[line_end + 1 :]
-        )
+        patched_block = block[: line_end + 1] + "  allow_overwrite = true\n" + block[line_end + 1 :]
         return source[:start] + patched_block + source[end:]
 
     patched = ensure_allow_overwrite("app_alias_a", "A", text)
@@ -243,8 +239,12 @@ def require_string(value, path):
 
 
 def assert_time_window(now, not_before, expires_at, label):
-    start = datetime.fromisoformat(require_string(not_before, f"{label}.notBefore").replace("Z", "+00:00"))
-    end = datetime.fromisoformat(require_string(expires_at, f"{label}.expiresAt").replace("Z", "+00:00"))
+    start = datetime.fromisoformat(
+        require_string(not_before, f"{label}.notBefore").replace("Z", "+00:00")
+    )
+    end = datetime.fromisoformat(
+        require_string(expires_at, f"{label}.expiresAt").replace("Z", "+00:00")
+    )
     if now < start:
         raise RuntimeError(f"{label} is not valid before {not_before}")
     if now > end:
@@ -343,7 +343,9 @@ def enforce_release_manifest_trust(manifest, manifest_digest, manifest_url):
         return evidence
 
     if configured_signature_url:
-        evidence.update(verify_release_manifest_signature(manifest, manifest_digest, configured_signature_url))
+        evidence.update(
+            verify_release_manifest_signature(manifest, manifest_digest, configured_signature_url)
+        )
         return evidence
 
     if not is_canary_release(manifest):
@@ -726,8 +728,7 @@ def refresh_outputs_after_targeted_apply(payload):
         }
         TERRAFORM_EVIDENCE["outputRefresh"] = detail
         print(
-            "[runner] managed-app output refresh failed after targeted apply "
-            f"(non-fatal): {error}"
+            f"[runner] managed-app output refresh failed after targeted apply (non-fatal): {error}"
         )
         return detail
     detail = {"status": "succeeded", "command": [str(part) for part in command]}
@@ -864,7 +865,9 @@ def validate_environment_plan_scope(payload, plan_json):
         before = change.get("change", {}).get("before") or {}
         after = change.get("change", {}).get("after") or {}
 
-        if address.startswith("module.thinkwork.module.customer_domain.") and destructive_plan_actions(actions):
+        if address.startswith(
+            "module.thinkwork.module.customer_domain."
+        ) and destructive_plan_actions(actions):
             unsafe_changes.append({"address": address, "actions": actions})
             continue
 
@@ -1232,8 +1235,7 @@ def required_config_value(
     if isinstance(value, str) and value:
         return value
     raise RuntimeError(
-        f"{app_label} managed app operation is missing required desired-state field: "
-        f"{label}."
+        f"{app_label} managed app operation is missing required desired-state field: {label}."
     )
 
 
@@ -1318,9 +1320,7 @@ def normalize_n8n_package_config(desired_config):
             r"(?:\+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?",
             version,
         ):
-            raise RuntimeError(
-                f'n8n custom package "{raw_spec}" must pin an exact semver version.'
-            )
+            raise RuntimeError(f'n8n custom package "{raw_spec}" must pin an exact semver version.')
         existing = by_name.get(name)
         if existing and existing["version"] != version:
             raise RuntimeError(
@@ -1332,9 +1332,7 @@ def normalize_n8n_package_config(desired_config):
     packages = sorted(by_name.values(), key=lambda entry: entry["name"])
     digest_payload = {
         "schemaVersion": 1,
-        "packages": [
-            {"name": entry["name"], "version": entry["version"]} for entry in packages
-        ],
+        "packages": [{"name": entry["name"], "version": entry["version"]} for entry in packages],
     }
     digest = hashlib.sha256(canonical_json(digest_payload).encode()).hexdigest()
     return {
@@ -1351,9 +1349,7 @@ def assert_optional_digest(expected, actual, label):
     if not re.fullmatch(r"[a-fA-F0-9]{64}", expected):
         raise RuntimeError(f"{label} must be a sha256 hex digest.")
     if expected.lower() != actual.lower():
-        raise RuntimeError(
-            f"{label} must match normalized n8n package config digest {actual}."
-        )
+        raise RuntimeError(f"{label} must match normalized n8n package config digest {actual}.")
 
 
 def n8n_expected_package_digest(desired_config, key, env_name):
@@ -1432,9 +1428,7 @@ def n8n_terraform_overrides(
         "THINKWORK_N8N_PACKAGE_IMAGE_URI",
     )
     if package_image_uri and not package_specs:
-        raise RuntimeError(
-            "n8n packageImageUri requires at least one custom package spec."
-        )
+        raise RuntimeError("n8n packageImageUri requires at least one custom package spec.")
     if package_specs and not package_image_uri:
         raise RuntimeError("n8n custom package specs require n8n packageImageUri.")
     resolved_image_uri = package_image_uri if package_specs else base_image_uri
@@ -1947,9 +1941,7 @@ def managed_app_terraform_overrides(payload, stage, account_id, current_outputs,
         "deployment_control_plane_create_secret_placeholders": False,
         "cloudflare_zone_id": state_cloudflare_zone_id(current_state),
         "n8n_provisioned": bool(state_output(current_outputs, "n8n_provisioned", False)),
-        "n8n_runtime_enabled": bool(
-            state_output(current_outputs, "n8n_runtime_enabled", False)
-        ),
+        "n8n_runtime_enabled": bool(state_output(current_outputs, "n8n_runtime_enabled", False)),
         "n8n_image_uri": n8n_guardrails.get("n8n_image_uri", ""),
         "n8n_database_admin_secret_arn": n8n_guardrails.get(
             "n8n_database_admin_secret_arn",
@@ -2681,11 +2673,15 @@ def first_admin_tenant_slug(payload, runner_secrets, vars_json):
     customer domain is configured (KTD8: email-inbound resolves the tenant from
     the recipient subdomain), so the domain label outranks everything except an
     explicit override."""
-    explicit = safe_get(
-        runner_secrets,
-        "tenantSlug",
-        default=safe_get(payload, "tenantSlug", default=""),
-    ).strip().lower()
+    explicit = (
+        safe_get(
+            runner_secrets,
+            "tenantSlug",
+            default=safe_get(payload, "tenantSlug", default=""),
+        )
+        .strip()
+        .lower()
+    )
     domain = (vars_json.get("customer_domain") or "").strip().lower()
     domain_label = domain.split(".")[0] if domain else ""
     candidate = explicit or domain_label or vars_json["stage"]
@@ -2876,10 +2872,13 @@ def ensure_first_admin(outputs_path, vars_json, payload, runner_secrets):
         region = vars_json.get("region") or os.environ.get("AWS_REGION") or "us-east-1"
         sub, created = ensure_first_admin_cognito_user(user_pool_id, email, region)
         local_part = email.split("@")[0]
-        folder = "".join(
-            ch if (ch.isascii() and (ch.islower() or ch.isdigit())) else "-"
-            for ch in local_part.lower()
-        ).strip("-") or "user"
+        folder = (
+            "".join(
+                ch if (ch.isascii() and (ch.islower() or ch.isdigit())) else "-"
+                for ch in local_part.lower()
+            ).strip("-")
+            or "user"
+        )
         psql(
             database_url,
             sql=FIRST_ADMIN_PROVISION_SQL,
@@ -2936,15 +2935,14 @@ def pg_literal(value):
 def push_database_schema(outputs_path, vars_json):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
     checkout_source(
-        os.environ["THINKWORK_TERRAFORM_MODULE_SOURCE"],
+        vars_json.get("deployment_terraform_module_source")
+        or os.environ["THINKWORK_TERRAFORM_MODULE_SOURCE"],
         os.environ.get("THINKWORK_RELEASE_VERSION", "main"),
     )
     database_url = database_url_from_outputs(outputs)
     fresh = not psql_output(database_url, "SELECT to_regclass('public.tenants')").strip()
     ledger_present = bool(
-        psql_output(
-            database_url, "SELECT to_regclass('public.platform_schema_migrations')"
-        ).strip()
+        psql_output(database_url, "SELECT to_regclass('public.platform_schema_migrations')").strip()
     )
     if fresh:
         initialize_greenfield_database(database_url, outputs, vars_json)
@@ -4041,8 +4039,7 @@ def sync_twenty_thinkwork_app(outputs_path, vars_json, payload, runner_secrets, 
     archive = artifacts.get("twenty-thinkwork-app")
     if not archive or not archive.is_file():
         raise RuntimeError(
-            "Twenty managed app ENABLE/UPGRADE requires release artifact "
-            "twenty-thinkwork-app."
+            "Twenty managed app ENABLE/UPGRADE requires release artifact twenty-thinkwork-app."
         )
 
     target = RELEASE / "extract-twenty-thinkwork-app"
@@ -4193,7 +4190,9 @@ def write_controller_release_selection_to_ssm(vars_json):
         "selected-release-version": vars_json.get("deployment_release_version"),
         "selected-release-manifest-url": vars_json.get("deployment_release_manifest_url"),
         "selected-release-manifest-sha256": vars_json.get("deployment_release_manifest_sha256"),
-        "selected-release-signature-url": vars_json.get("deployment_release_manifest_signature_url"),
+        "selected-release-signature-url": vars_json.get(
+            "deployment_release_manifest_signature_url"
+        ),
         "selected-release-trust-policy": vars_json.get("deployment_release_manifest_trust_policy"),
         "selected-release-trusted-keys-json": vars_json.get(
             "deployment_release_manifest_trusted_keys_json"
@@ -4470,9 +4469,9 @@ def write_deployment_status_pointer(status, vars_json=None, terraform_exit_code=
     )
     if status in {"succeeded", "failed"}:
         timestamp = recorded_at.replace("-", "").replace(":", "").split(".")[0] + "Z"
-        version = (
-            pointer.get("activeRelease") or pointer.get("targetRelease") or {}
-        ).get("version") or "unknown"
+        version = (pointer.get("activeRelease") or pointer.get("targetRelease") or {}).get(
+            "version"
+        ) or "unknown"
         pointer["historyKey"] = f"deployment/status/history/{timestamp}-{version}.json"
     body = Path("deployment-status-pointer.json")
     body.write_text(json.dumps(pointer, indent=2, sort_keys=True) + "\n", encoding="utf-8")

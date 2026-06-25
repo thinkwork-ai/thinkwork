@@ -86,6 +86,7 @@ export interface ControllerDeployInput {
   // Required at the top level: the orchestrator state machine resolves
   // $.terraformModuleVersion via a JsonPath parameter, so an input without it
   // fails the execution before CodeBuild ever starts.
+  terraformModuleSource: string;
   terraformModuleVersion: string;
   // The runner only reads runner secrets (customerDomain gates, adminEmail,
   // cognitoEmailSourceArn, ...) from the secret named here; omitting it makes
@@ -319,6 +320,7 @@ export function buildControllerDeployInput(options: {
   const evidencePrefix = `sessions/${options.sessionId}/${options.action}`;
   // Registry module versions are unprefixed ("0.1.0-canary.178") while release
   // tags carry a "v"; derive the module pin from the release when not given.
+  const terraformModuleSource = "thinkwork-ai/thinkwork/aws";
   const terraformModuleVersion =
     options.terraformModuleVersion ?? options.releaseVersion.replace(/^v/, "");
   const operationKind = options.action === "web" ? "web" : "foundation";
@@ -347,6 +349,7 @@ export function buildControllerDeployInput(options: {
     releaseVersion: options.releaseVersion,
     releaseManifestUrl: options.manifestUrl,
     releaseManifestSha256: options.manifestSha256,
+    terraformModuleSource,
     terraformModuleVersion,
     runnerSecretArn: `/thinkwork/${options.stage}/deployment/runner-secrets`,
     release: {
