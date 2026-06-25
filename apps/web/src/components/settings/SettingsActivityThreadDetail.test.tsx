@@ -774,7 +774,7 @@ describe("SettingsActivityThreadDetail", () => {
     expect(screen.getByTitle("Input / Output tokens").textContent).toContain(
       "15.0K cached",
     );
-    expect(screen.getByText("Mixed")).toBeTruthy();
+    expect(screen.queryByText("Mixed")).toBeNull();
     expect(
       screen.getAllByText((_content, node) =>
         Boolean(node?.textContent?.replace(/\s+/g, "").includes("100→207")),
