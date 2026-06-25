@@ -23,6 +23,7 @@ export * from "./inbox-items";
 export * from "./heartbeats";
 export * from "./runtime";
 export * from "./cost-events";
+export * from "./trace-ledger";
 export * from "./scheduled-jobs";
 export * from "./thread-idle-learning";
 export * from "./knowledge-bases";

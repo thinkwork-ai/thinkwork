@@ -14,6 +14,11 @@ type CostEvent {
   outputTokens: Int
   cachedReadTokens: Int
   durationMs: Int
+  traceEventId: ID
+  reconciliationState: String
+  reconciliationSource: String
+  reconciliationAt: AWSDateTime
+  sourceEvidenceRef: AWSJSON
   createdAt: AWSDateTime!
 }
 

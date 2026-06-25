@@ -34,9 +34,55 @@ type TraceEvent {
   reviewerRole: Boolean
   loopEvidence: AWSJSON
   modelRoutingStatus: String
+  reconciliationState: String
+  reconciliationSource: String
+  sourceEvidence: [TraceSourceEvidence!]
   ruleSource: AWSJSON
   match: AWSJSON
   metadata: AWSJSON
+  createdAt: AWSDateTime!
+}
+
+type TraceSourceEvidence {
+  id: ID!
+  traceRunId: ID
+  traceEventId: ID
+  sourceType: String!
+  sourceSystem: String!
+  sourceId: String
+  uri: String
+  observedAt: AWSDateTime
+  summary: AWSJSON!
+  redactionState: String!
+  retentionExpiresAt: AWSDateTime
+  metadata: AWSJSON!
+  createdAt: AWSDateTime!
+}
+
+type TraceCostReconciliationFact {
+  id: ID!
+  traceRunId: ID
+  traceEventId: ID
+  costEventId: ID
+  sourceEvidenceId: ID
+  reconciliationState: String!
+  reconciliationScope: String!
+  provider: String
+  model: String
+  requestId: String
+  attributionLevel: String
+  runtimeInputTokens: Int
+  runtimeOutputTokens: Int
+  runtimeCachedReadTokens: Int
+  providerInputTokens: Int
+  providerOutputTokens: Int
+  providerCachedReadTokens: Int
+  runtimeAmountUsd: Float
+  providerAmountUsd: Float
+  billedAmountUsd: Float
+  varianceUsd: Float
+  metadata: AWSJSON!
+  reconciledAt: AWSDateTime!
   createdAt: AWSDateTime!
 }
 
