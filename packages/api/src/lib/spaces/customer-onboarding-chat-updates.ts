@@ -15,7 +15,10 @@ import {
 } from "./customer-onboarding-workflow.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "./customer-onboarding-goal-md.js";
 import type { LinkedTaskStatus } from "../linked-tasks/status.js";
-import { syncWorkItemFromLinkedTask } from "../work-items/customer-onboarding.js";
+import {
+  syncWorkItemAssignmentFromLinkedTask,
+  syncWorkItemFromLinkedTask,
+} from "../work-items/customer-onboarding.js";
 
 interface ApplyCustomerOnboardingChatUpdateInput {
   tenantId: string;
@@ -519,6 +522,20 @@ export async function applyCustomerOnboardingChatUpdate(
           previousAssignee: task.assignee_display,
           nextAssignee: assignment.assigneeDisplay,
         });
+        await syncWorkItemAssignmentFromLinkedTask(
+          {
+            tenantId: input.tenantId,
+            linkedTaskId: task.id,
+            assigneeDisplay: assignment.assigneeDisplay,
+            note: assignment.note,
+            actorUserId: input.senderUserId ?? null,
+            metadata: {
+              source: "customer_onboarding_chat_update",
+              checklistItemKey: key,
+            },
+          },
+          { database: tx as never, now: () => now },
+        );
       }
     }
 
@@ -1345,12 +1362,19 @@ function assignmentDisplayFromSegment(segment: string): string | null {
   );
   const mentionedAssignee = match?.[1]?.trim();
   if (mentionedAssignee) return mentionedAssignee;
+  if (ASSIGNMENT_WORDS.test(segment) && /\b(?:me|myself)\b/i.test(segment)) {
+    return "me";
+  }
   if (
     ASSIGNMENT_WORDS.test(segment) &&
     /\b(?:agent|thinkwork|computer)\b/i.test(segment)
   ) {
     return "Agent";
   }
+  const namedAssignee = segment.match(
+    /\b(?:assign(?:ed)?|owner|owns?|responsible)\b[^.;\n]*?\bto\s+([A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*)?)(?=\s*(?:[.;,]|$))/i,
+  )?.[1];
+  if (namedAssignee) return namedAssignee.trim();
   return null;
 }
 

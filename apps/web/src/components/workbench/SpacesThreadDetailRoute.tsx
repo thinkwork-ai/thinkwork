@@ -69,7 +69,10 @@ import {
   ThreadTurnStepSubscription,
   RefreshThreadProgressMutation,
   ReviewGoalMutation,
+  UpdateWorkItemMutation,
+  UpdateWorkItemStatusMutation,
   UpdateThreadMutation,
+  WorkItemStatusesQuery,
 } from "@/lib/graphql-queries";
 import { TenantSkillCatalogQuery } from "@/lib/skill-catalog-queries";
 import type { SkillOption } from "@/components/spaces/SkillMenu";
@@ -96,10 +99,17 @@ import {
   writeStoredModelId,
   type ApprovedModelOption,
 } from "@/lib/approved-model-selection";
-import { SettingsAgentProfilesQuery } from "@/lib/settings-queries";
 import {
+  SettingsAgentProfilesQuery,
+  SettingsTenantMembersQuery,
+} from "@/lib/settings-queries";
+import {
+  categoryStatuses,
+  sortWorkItemStatuses,
+  type WorkItemAssigneeSummary,
+  type WorkItemStatusSummary,
   type WorkItemSummary,
-  workItemOwnerLabel,
+  workItemAssigneeLabel,
   workItemStatusCategory,
 } from "@/components/work-items/work-item-display";
 
@@ -288,6 +298,25 @@ interface ThreadWorkItemsResult {
   threadWorkItems?: WorkItemSummary[] | null;
 }
 
+interface WorkItemStatusesResult {
+  workItemStatuses?: WorkItemStatusSummary[] | null;
+}
+
+interface TenantMemberSummary {
+  principalType: string;
+  principalId: string;
+  status?: string | null;
+  user?: {
+    id?: string | null;
+    name?: string | null;
+    email?: string | null;
+  } | null;
+}
+
+interface TenantMembersResult {
+  tenantMembers?: TenantMemberSummary[] | null;
+}
+
 interface ThreadProgressMarkdownResult {
   threadProgressMarkdown?: {
     threadId: string;
@@ -410,6 +439,9 @@ export function SpacesThreadDetailRoute({
   >(null);
   const [manualRefreshObservedFetching, setManualRefreshObservedFetching] =
     useState(false);
+  const [updatingProgressWorkItemId, setUpdatingProgressWorkItemId] = useState<
+    string | null
+  >(null);
   const [threadTurnEventsByRun, setThreadTurnEventsByRun] = useState<
     Map<string, TaskThreadEvent[]>
   >(new Map());
@@ -609,6 +641,21 @@ export function SpacesThreadDetailRoute({
     pause: !tenantId || !threadId,
     requestPolicy: "cache-and-network",
   });
+  const [{ data: workItemStatusesData }] = useQuery<WorkItemStatusesResult>({
+    query: WorkItemStatusesQuery,
+    variables: {
+      tenantId: tenantId ?? "",
+      spaceId: routeThread?.spaceId ?? "",
+    },
+    pause: !tenantId || !routeThread?.spaceId,
+    requestPolicy: "cache-and-network",
+  });
+  const [{ data: tenantMembersData }] = useQuery<TenantMembersResult>({
+    query: SettingsTenantMembersQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
   const [
     {
       data: progressMarkdownData,
@@ -645,6 +692,11 @@ export function SpacesThreadDetailRoute({
     useMutation(ReviewGoalMutation);
   const [{ fetching: refreshingProgress }, refreshThreadProgress] = useMutation(
     RefreshThreadProgressMutation,
+  );
+  const [{ fetching: progressStatusUpdating }, updateWorkItemStatus] =
+    useMutation(UpdateWorkItemStatusMutation);
+  const [{ fetching: progressAssigneeUpdating }, updateWorkItem] = useMutation(
+    UpdateWorkItemMutation,
   );
   const {
     chunks,
@@ -1074,6 +1126,65 @@ export function SpacesThreadDetailRoute({
     tenantId,
     threadId,
   ]);
+  const handleProgressStatusChange = useCallback(
+    async (task: ThreadInfoChecklistTask, status: WorkItemStatusSummary) => {
+      if (!tenantId || progressStatusUpdating || task.source !== "work_item") {
+        return;
+      }
+      setUpdatingProgressWorkItemId(task.id);
+      const result = await updateWorkItemStatus({
+        input: {
+          tenantId,
+          workItemId: task.id,
+          statusId: status.spaceId ? status.id : undefined,
+          statusCategory: status.spaceId ? undefined : status.category,
+        },
+      });
+      setUpdatingProgressWorkItemId(null);
+      if (result.error) {
+        toast.error(`Couldn't update status: ${result.error.message}`);
+        return;
+      }
+      reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
+    },
+    [
+      progressStatusUpdating,
+      reexecuteWorkItemsQuery,
+      tenantId,
+      updateWorkItemStatus,
+    ],
+  );
+  const handleProgressAssigneeChange = useCallback(
+    async (task: ThreadInfoChecklistTask, ownerUserId: string | null) => {
+      if (
+        !tenantId ||
+        progressAssigneeUpdating ||
+        task.source !== "work_item"
+      ) {
+        return;
+      }
+      setUpdatingProgressWorkItemId(task.id);
+      const result = await updateWorkItem({
+        input: {
+          tenantId,
+          workItemId: task.id,
+          ownerUserId,
+        },
+      });
+      setUpdatingProgressWorkItemId(null);
+      if (result.error) {
+        toast.error(`Couldn't update assignee: ${result.error.message}`);
+        return;
+      }
+      reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
+    },
+    [
+      progressAssigneeUpdating,
+      reexecuteWorkItemsQuery,
+      tenantId,
+      updateWorkItem,
+    ],
+  );
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
   const latestMessageAwaitsAssistant =
     latestMessageRole(visibleThread) === "USER" && !hasDurableAssistant;
@@ -1133,9 +1244,22 @@ export function SpacesThreadDetailRoute({
       ),
     [progressMarkdownData?.threadProgressMarkdown?.content],
   );
+  const workItemStatuses = useMemo(() => {
+    const spaceStatuses = sortWorkItemStatuses(
+      workItemStatusesData?.workItemStatuses ?? [],
+    );
+    return spaceStatuses.length > 0 ? spaceStatuses : categoryStatuses();
+  }, [workItemStatusesData?.workItemStatuses]);
+  const workItemAssignees = useMemo(
+    () => workItemAssigneesFromMembers(tenantMembersData?.tenantMembers ?? []),
+    [tenantMembersData?.tenantMembers],
+  );
   const nativeChecklistTasks = useMemo(
-    () => nativeWorkItems.map(toThreadInfoWorkItem),
-    [nativeWorkItems],
+    () =>
+      nativeWorkItems.map((workItem) =>
+        toThreadInfoWorkItem(workItem, workItemAssignees),
+      ),
+    [nativeWorkItems, workItemAssignees],
   );
   const infoPanelChecklistTasks =
     nativeChecklistTasks.length > 0
@@ -1401,7 +1525,18 @@ export function SpacesThreadDetailRoute({
                 : null,
             isCompleting: completingThread,
             isRefreshing: refreshingProgress || manualRefreshStartedAt !== null,
+            workItemStatuses,
+            workItemAssignees,
+            updatingTaskId: updatingProgressWorkItemId,
             onRefreshProgress: handleRefreshThread,
+            onTaskStatusChange:
+              nativeWorkItems.length > 0
+                ? handleProgressStatusChange
+                : undefined,
+            onTaskAssigneeChange:
+              nativeWorkItems.length > 0
+                ? handleProgressAssigneeChange
+                : undefined,
             onCompleteThread: goalReviewRequired(goal?.reviewPolicy)
               ? undefined
               : handleCompleteThread,
@@ -1416,6 +1551,8 @@ export function SpacesThreadDetailRoute({
       goalRecords,
       goalReviewError,
       goalReadiness.readyForReview,
+      handleProgressAssigneeChange,
+      handleProgressStatusChange,
       handleRefreshThread,
       handleReviewGoal,
       data?.n8nAgentStepRuns,
@@ -1434,7 +1571,11 @@ export function SpacesThreadDetailRoute({
       threadId,
       threadInfoOpen,
       completingThread,
+      nativeWorkItems.length,
+      updatingProgressWorkItemId,
       userId,
+      workItemAssignees,
+      workItemStatuses,
     ],
   );
 
@@ -1974,6 +2115,7 @@ function toThreadInfoChecklistTask(
   return {
     id: task.id,
     title: task.title,
+    source: "linked_task",
     status: task.status,
     required: task.required,
     roleKey: task.roleKey,
@@ -1983,18 +2125,47 @@ function toThreadInfoChecklistTask(
   };
 }
 
-function toThreadInfoWorkItem(item: WorkItemSummary): ThreadInfoChecklistTask {
+function toThreadInfoWorkItem(
+  item: WorkItemSummary,
+  assignees: WorkItemAssigneeSummary[],
+): ThreadInfoChecklistTask {
   return {
     id: item.id,
     title: item.title,
+    source: "work_item",
     status: threadStatusFromWorkItem(item),
+    statusId: item.status?.id ?? item.statusId,
+    statusCategory: workItemStatusCategory(item),
+    statusColor: item.status?.color,
     required: item.required,
     roleKey: stringValue(objectValue(item.metadata)?.roleKey),
-    assigneeDisplay: workItemOwnerLabel(item),
+    assigneeDisplay: workItemAssigneeLabel(item, assignees),
+    ownerUserId: item.ownerUserId,
     blocked: item.blocked,
     notes: item.notes,
     updatedAt: item.updatedAt,
   };
+}
+
+function workItemAssigneesFromMembers(
+  members: TenantMemberSummary[],
+): WorkItemAssigneeSummary[] {
+  return members
+    .filter(
+      (member) =>
+        member.principalType?.toUpperCase() === "USER" &&
+        member.status?.toLowerCase() !== "removed",
+    )
+    .map((member) => {
+      const name = member.user?.name?.trim();
+      const email = member.user?.email?.trim();
+      return {
+        id: member.user?.id ?? member.principalId,
+        name: name || email || member.principalId,
+        email,
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function threadStatusFromWorkItem(item: WorkItemSummary) {
@@ -2236,6 +2407,7 @@ function parseProgressMarkdownTasks(
     tasks.push({
       id: `progress:${tasks.length}:${title}`,
       title: displayProgressTaskTitle(title, subject),
+      source: "progress",
       status,
       assigneeDisplay: owner || null,
       required: !/^no$/i.test(required),

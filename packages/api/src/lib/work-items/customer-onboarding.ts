@@ -2,6 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   linkedTasks,
+  spaceMembers,
+  users,
   workItemEvents,
   workItemExternalRefs,
   workItems,
@@ -47,6 +49,15 @@ export interface SyncWorkItemFromLinkedTaskInput {
   note?: string | null;
   actorUserId?: string | null;
   actorAgentId?: string | null;
+  metadata?: JsonRecord | null;
+}
+
+export interface SyncWorkItemAssignmentFromLinkedTaskInput {
+  tenantId: string;
+  linkedTaskId: string;
+  assigneeDisplay: string;
+  note?: string | null;
+  actorUserId?: string | null;
   metadata?: JsonRecord | null;
 }
 
@@ -278,6 +289,100 @@ export async function syncWorkItemFromLinkedTask(
   return { id: item.id };
 }
 
+export async function syncWorkItemAssignmentFromLinkedTask(
+  input: SyncWorkItemAssignmentFromLinkedTaskInput,
+  deps: CustomerOnboardingWorkItemDeps = {},
+): Promise<{ id: string; ownerUserId: string | null } | null> {
+  const database = deps.database ?? getDb();
+  const now = deps.now?.() ?? new Date();
+  const [task] = await database
+    .select()
+    .from(linkedTasks)
+    .where(
+      and(
+        eq(linkedTasks.tenant_id, input.tenantId),
+        eq(linkedTasks.id, input.linkedTaskId),
+      ),
+    )
+    .limit(1);
+  if (!task) return null;
+
+  const taskMetadata = objectRecord(task.metadata);
+  const nativeWorkItem = objectRecord(taskMetadata.nativeWorkItem);
+  const workItemId =
+    stringValue(taskMetadata.nativeWorkItemId) ??
+    stringValue(nativeWorkItem.id);
+  if (!workItemId) return null;
+
+  const [item] = await database
+    .select()
+    .from(workItems)
+    .where(
+      and(
+        eq(workItems.tenant_id, input.tenantId),
+        eq(workItems.id, workItemId),
+      ),
+    )
+    .limit(1);
+  if (!item) return null;
+
+  const ownerUserId = await resolveWorkItemAssigneeUserId(database, {
+    tenantId: input.tenantId,
+    spaceId: item.space_id,
+    assigneeDisplay: input.assigneeDisplay,
+    actorUserId: input.actorUserId ?? null,
+  });
+  const nextMetadata = compactObject({
+    ...objectRecord(item.metadata),
+    assigneeDisplay: input.assigneeDisplay,
+    assignee: compactObject({
+      ...objectRecord(objectRecord(item.metadata).assignee),
+      displayName: input.assigneeDisplay,
+      ownerUserId: ownerUserId ?? undefined,
+      lastSyncedAt: now.toISOString(),
+    }),
+    lastCompatibilitySync: {
+      source: "linked_tasks",
+      kind: "assignment",
+      linkedTaskId: task.id,
+      syncedAt: now.toISOString(),
+      note: input.note ?? undefined,
+      metadata: input.metadata ?? undefined,
+    },
+  });
+
+  await database
+    .update(workItems)
+    .set({
+      owner_user_id: ownerUserId,
+      metadata: nextMetadata,
+      updated_at: now,
+    })
+    .where(
+      and(eq(workItems.tenant_id, input.tenantId), eq(workItems.id, item.id)),
+    );
+
+  await database.insert(workItemEvents).values({
+    tenant_id: input.tenantId,
+    space_id: item.space_id,
+    work_item_id: item.id,
+    thread_id: task.thread_id,
+    actor_user_id: input.actorUserId ?? null,
+    event_type: "assigned",
+    message: `${item.title} assigned to ${input.assigneeDisplay} from Customer Onboarding chat.`,
+    metadata: compactObject({
+      source: "linked_tasks",
+      linkedTaskId: task.id,
+      assigneeDisplay: input.assigneeDisplay,
+      ownerUserId: ownerUserId ?? undefined,
+      note: input.note ?? undefined,
+      metadata: input.metadata ?? undefined,
+    }),
+  });
+
+  return { id: item.id, ownerUserId };
+}
+
 export function workItemStatusCategoryForLinkedTaskStatus(
   status: LinkedTaskStatus,
 ): "todo" | "active" | "blocked" | "done" | "skipped" {
@@ -296,6 +401,86 @@ export function workItemStatusCategoryForLinkedTaskStatus(
     default:
       return "todo";
   }
+}
+
+async function resolveWorkItemAssigneeUserId(
+  database: WorkItemDatabase,
+  input: {
+    tenantId: string;
+    spaceId: string;
+    assigneeDisplay: string;
+    actorUserId: string | null;
+  },
+): Promise<string | null> {
+  const normalizedAssignee = normalizeAssigneeForMatch(input.assigneeDisplay);
+  if (!normalizedAssignee) return null;
+  if (normalizedAssignee === "me" || normalizedAssignee === "myself") {
+    return input.actorUserId;
+  }
+  if (
+    normalizedAssignee === "agent" ||
+    normalizedAssignee === "thinkwork" ||
+    normalizedAssignee === "computer"
+  ) {
+    return null;
+  }
+
+  const spaceCandidates = await database
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+    })
+    .from(spaceMembers)
+    .innerJoin(users, eq(users.id, spaceMembers.user_id))
+    .where(
+      and(
+        eq(spaceMembers.tenant_id, input.tenantId),
+        eq(spaceMembers.space_id, input.spaceId),
+      ),
+    );
+  const match = uniqueAssigneeMatch(spaceCandidates, normalizedAssignee);
+  if (match) return match.id;
+
+  const tenantCandidates = await database
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+    })
+    .from(users)
+    .where(eq(users.tenant_id, input.tenantId));
+  return uniqueAssigneeMatch(tenantCandidates, normalizedAssignee)?.id ?? null;
+}
+
+function uniqueAssigneeMatch(
+  candidates: Array<{
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  }>,
+  normalizedAssignee: string,
+) {
+  const matches = candidates.filter((candidate) => {
+    const normalizedName = normalizeAssigneeForMatch(candidate.name);
+    const normalizedEmail = normalizeAssigneeForMatch(candidate.email);
+    const firstName = normalizedName?.split(" ")[0] ?? "";
+    return (
+      normalizedAssignee === normalizedEmail ||
+      normalizedAssignee === normalizedName ||
+      (firstName.length > 1 && normalizedAssignee === firstName)
+    );
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function normalizeAssigneeForMatch(value?: string | null): string {
+  return String(value ?? "")
+    .replace(/^@+/, "")
+    .replace(/[<>()]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 async function findExistingWorkItem(
