@@ -155,6 +155,10 @@ interface SpacesResult {
 interface SidebarWorkItemSummary {
   id: string;
   ownerUserId?: string | null;
+  completedAt?: string | null;
+  status?: {
+    category?: string | null;
+  } | null;
 }
 
 interface WorkItemsResult {
@@ -282,7 +286,7 @@ export function ChatSidebar() {
   const assignedWorkItemCount = useMemo(() => {
     if (!userId) return 0;
     return (workItemsData?.workItems ?? []).filter(
-      (item) => item.ownerUserId === userId,
+      (item) => item.ownerUserId === userId && isOpenSidebarWorkItem(item),
     ).length;
   }, [userId, workItemsData?.workItems]);
 
@@ -2299,6 +2303,11 @@ function threadIdFromThreadPath(pathname: string) {
 function spaceIdFromThreadPath(pathname: string) {
   const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
   return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function isOpenSidebarWorkItem(item: SidebarWorkItemSummary) {
+  const category = item.status?.category?.toUpperCase();
+  return category !== "DONE" && category !== "SKIPPED" && !item.completedAt;
 }
 
 function threadPinsStorageKey(tenantId: string | null, userId: string | null) {
