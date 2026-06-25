@@ -29,7 +29,8 @@ import {
   workItemRouteSearchToParams,
   type WorkItemRouteSearch,
 } from "./work-item-filters";
-import { WorkItemDisplayPopover } from "./WorkItemDisplayPopover";
+import type { WorkItemDisplaySort } from "./work-item-view-display";
+import { WorkItemDisplayHeader } from "./WorkItemDisplayHeader";
 import {
   NewWorkItemSheet,
   type NewWorkItemFormInput,
@@ -109,10 +110,7 @@ export function WorkItemsPage({
   }, [reexecuteItems, tenantId]);
 
   const spaces = spacesData?.spaces ?? [];
-  const workItems = useMemo(
-    () => sortWorkItems(data?.workItems ?? [], state.sort),
-    [data?.workItems, state.sort],
-  );
+  const workItems = data?.workItems ?? [];
   const statuses = useMemo(() => {
     const spaceStatuses = sortWorkItemStatuses(
       statusesData?.workItemStatuses ?? [],
@@ -166,11 +164,7 @@ export function WorkItemsPage({
 
   const updateState = useCallback(
     (next: WorkItemRouteSearch) => {
-      onStateChange({
-        ...next,
-        view: next.view ?? "list",
-        sort: next.sort ?? "updated",
-      });
+      onStateChange(next);
     },
     [onStateChange],
   );
@@ -191,7 +185,7 @@ export function WorkItemsPage({
         >
           <Plus className="size-4" />
         </Button>
-        <WorkItemDisplayPopover state={state} onChange={updateState} />
+        <WorkItemDisplayHeader state={state} onChange={updateState} />
         <Button
           type="button"
           variant="ghost"
@@ -231,6 +225,7 @@ export function WorkItemsPage({
               items={workItems}
               spaces={spaces}
               statuses={statuses}
+              display={state.board}
               updatingItemId={updatingItemId}
               onStatusChange={handleStatusChange}
             />
@@ -239,6 +234,7 @@ export function WorkItemsPage({
               items={workItems}
               spaces={spaces}
               statuses={statuses}
+              display={state.list}
               includeSpace={!state.spaceId}
               updatingItemId={updatingItemId}
               onStatusChange={handleStatusChange}
@@ -279,7 +275,7 @@ export function summarizeWorkItems(items: WorkItemSummary[]) {
 
 export function sortWorkItems(
   items: WorkItemSummary[],
-  sort: WorkItemRouteSearch["sort"] = "updated",
+  sort: WorkItemDisplaySort = "updated",
 ) {
   return [...items].sort((left, right) => {
     if (sort === "title") return left.title.localeCompare(right.title);

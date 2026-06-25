@@ -78,6 +78,11 @@ import {
   SidebarMenuItem,
 } from "@thinkwork/ui";
 import { isDefaultSpace } from "@/components/spaces/space-utils";
+import {
+  DEFAULT_WORK_ITEM_SEARCH,
+  workItemRouteSearchToParams,
+  type WorkItemRouteSearch,
+} from "@/components/work-items/work-item-filters";
 import { useTenant } from "@/context/TenantContext";
 import { useThreadNotifications } from "@/hooks/useThreadNotifications";
 import { useThreadNotificationsEnabled } from "@/lib/thread-notifications-pref";
@@ -154,6 +159,9 @@ const SECTION_THREAD_LIMIT = 5;
 // page) instead of bucketing the tenant-wide RECENT_LIMIT list, which starved
 // busy-tenant spaces. 40 mirrors the detail page's limit.
 const SPACE_SECTION_FETCH_LIMIT = 40;
+const WORK_ITEMS_NAV_SEARCH = workItemRouteSearchToParams(
+  DEFAULT_WORK_ITEM_SEARCH,
+) as unknown as WorkItemRouteSearch;
 
 export function ChatSidebar() {
   const { tenantId, userId } = useTenant();
@@ -855,10 +863,7 @@ export function ChatSidebar() {
                 isActive={isWorkItemsRoute}
                 tooltip="Work Items"
               >
-                <Link
-                  to="/work-items"
-                  search={{ view: "list", sort: "updated" }}
-                >
+                <Link to="/work-items" search={WORK_ITEMS_NAV_SEARCH}>
                   <ListChecks />
                   <span>Work Items</span>
                 </Link>

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWorkItemsInput,
   parseWorkItemRouteSearch,
+  routeViewToGraphql,
   workItemRouteSearchToParams,
 } from "./work-item-filters";
 
@@ -12,15 +13,28 @@ describe("work item route display state", () => {
       view: "board",
       spaceId: "space-1",
       threadId: "thread-1",
-      sort: "due",
       search: " contract ",
+      statusCategory: "blocked",
+      priority: "high",
+      due: "due_soon",
+      boardColumn: "priority",
+      boardRow: "owner",
+      boardSort: "due",
+      boardDir: "asc",
+      boardProps: "priority,owner,source",
     });
 
-    expect(state).toEqual({
+    expect(state).toMatchObject({
       view: "board",
       spaceId: "space-1",
       threadId: "thread-1",
-      sort: "due",
+      board: {
+        column: "priority",
+        row: "owner",
+        sort: "due",
+        dir: "asc",
+        properties: ["priority", "owner", "source"],
+      },
     });
     expect(buildWorkItemsInput("tenant-1", state)).toEqual({
       tenantId: "tenant-1",
@@ -43,21 +57,54 @@ describe("work item route display state", () => {
         applicable: "false",
         search: "contract",
       }),
-    ).toEqual({
+    ).toMatchObject({
       view: "list",
       spaceId: undefined,
       threadId: undefined,
-      sort: "updated",
+      list: {
+        sort: "updated",
+        dir: "desc",
+      },
     });
   });
 
-  it("omits default values when writing route params", () => {
+  it("omits default display values when writing route params", () => {
     expect(
-      workItemRouteSearchToParams({
-        view: "list",
-        sort: "updated",
-        spaceId: "space-1",
-      }),
+      workItemRouteSearchToParams(
+        parseWorkItemRouteSearch({
+          view: "list",
+          spaceId: "space-1",
+        }),
+      ),
     ).toEqual({ spaceId: "space-1" });
+  });
+
+  it("serializes non-default display params", () => {
+    const state = parseWorkItemRouteSearch({
+      view: "board",
+      spaceId: "space-1",
+      boardColumn: "priority",
+      boardRow: "owner",
+      boardSort: "due",
+      boardDir: "asc",
+      boardShowEmptyColumns: "false",
+      boardProps: "priority,owner,source",
+    });
+
+    expect(workItemRouteSearchToParams(state)).toEqual({
+      view: "board",
+      spaceId: "space-1",
+      boardColumn: "priority",
+      boardRow: "owner",
+      boardSort: "due",
+      boardDir: "asc",
+      boardShowEmptyColumns: false,
+      boardProps: "priority,owner,source",
+    });
+  });
+
+  it("maps route view to GraphQL view type", () => {
+    expect(routeViewToGraphql("list")).toBe("LIST");
+    expect(routeViewToGraphql("board")).toBe("BOARD");
   });
 });

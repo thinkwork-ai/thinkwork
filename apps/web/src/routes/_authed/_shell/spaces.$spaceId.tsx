@@ -38,6 +38,11 @@ import {
   isWorkItemOpen,
   type WorkItemSummary,
 } from "@/components/work-items/work-item-display";
+import {
+  DEFAULT_WORK_ITEM_SEARCH,
+  workItemRouteSearchToParams,
+  type WorkItemRouteSearch,
+} from "@/components/work-items/work-item-filters";
 
 export const Route = createFileRoute("/_authed/_shell/spaces/$spaceId")({
   component: SpaceWorkroomPage,
@@ -246,7 +251,13 @@ function SpaceWorkroomHome() {
           >
             <Link
               to="/work-items"
-              search={{ view: "board", sort: "updated", spaceId }}
+              search={
+                workItemRouteSearchToParams({
+                  ...DEFAULT_WORK_ITEM_SEARCH,
+                  view: "board",
+                  spaceId,
+                }) as unknown as WorkItemRouteSearch
+              }
             >
               <ListTodo className="size-4" />
               <span>Open board</span>
