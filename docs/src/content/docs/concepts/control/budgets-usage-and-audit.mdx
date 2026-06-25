@@ -1,6 +1,6 @@
 ---
 title: Budgets, Usage, and Audit
-description: Per-turn cost capture via OTel spans, tenant and user budget enforcement, and the append-only audit log that makes incident reconstruction possible.
+description: Per-turn trace and cost evidence, tenant and user budget enforcement, and the audit records that make incident reconstruction possible.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -11,21 +11,38 @@ The second half of Control is about knowing what happened and bounding how much 
 - **Budgets** — tenant defaults and user-specific spend limits that can pause new work when thresholds hit, not just warn. Efficiency as enforcement: the harness pauses execution before a runaway loop compounds into real money.
 - **Audit** — the durable, append-only record of every invocation that makes "what did the agent see, decide, and do?" answerable months later. Traceability at full fidelity: stored in the customer's S3 bucket with no delete permission on the Lambda role, partitioned by tenant + date, queryable for a single operation.
 
-They share one spine: every turn has an id, and every cost record, budget check, and audit entry references that same id.
+They share one spine: every turn has an id, and every trace event, cost event,
+budget check, and audit entry references that same id.
 
 ## How per-turn cost is captured
 
-AgentCore instruments every turn with OpenTelemetry spans. When a turn runs:
+AgentCore and the ThinkWork API now write a canonical trace and accounting
+ledger. When a turn runs:
 
-1. A root span opens when the invocation starts.
-2. Child spans wrap each model call (`converse`), each tool call, and each memory operation.
-3. Every model-call span records `input_tokens`, `output_tokens`, and the model id.
-4. Every tool-call span records the tool name, arguments size, and execution latency.
-5. The root span closes when the turn finishes; the full span tree is emitted to CloudWatch.
+1. Runtime/finalize records create `trace_runs` and `trace_events` for the turn,
+   model calls, tool calls, workspace hydration, profile lanes, and response
+   finalization.
+2. Each event stores a summary payload and a source-evidence reference. Raw
+   provider payloads stay in their owning systems; eval snapshots and UI
+   projections retain safe summaries and source ids.
+3. Runtime token and cost observations link to `cost_events` as
+   `runtime-reported`.
+4. Bedrock invocation logs can upgrade individual invocations to
+   `invocation-reconciled` or mark mismatches.
+5. AWS billing exports can upgrade accounting to `bill-reconciled` at the level
+   the bill actually proves. Account-only or delayed bill evidence stays
+   aggregate-only until tenant-level attribution exists.
 
-A cost reducer — running async off the span stream — converts each span into a dollar figure using per-model, per-region pricing tables, and writes a `thread_turn_costs` row for the turn. The row includes the breakdown (`model_cost_usd`, `tool_cost_usd`, `total_cost_usd`) plus the span ids so a spot-check can walk back to the raw OTel data.
+The admin app, CLI trace commands, analytics, and eval snapshots project from
+that ledger instead of treating CloudWatch or the AWS bill as the primary user
+interface. Historical `cost_events` and `thread_turns.usage_json` rows that
+predate the ledger are backfilled as `backfill` source evidence with
+`unreconciled/error` reconciliation state. They remain visible, but they are not
+silently promoted to provider- or bill-grade data.
 
-The admin app's analytics surface reads from this table and caches results in the `useCostStore` — a Zustand store that the dashboard and analytics pages share so neither re-fetches cost data on navigation.
+The admin app's analytics surface reads server-side summaries of this ledger and
+caches results in the `useCostStore` — a Zustand store that the dashboard and
+analytics pages share so neither re-fetches cost data on navigation.
 
 <Aside type="tip">
   Per-turn cost is the granularity that matters for debugging a runaway agent.
@@ -43,9 +60,16 @@ Budgets are configured at the tenant baseline and can be scoped to individual us
 
 Foreground user work is checked before dispatch when a user budget is already exceeded. Cost recording also updates budget status after spend is written so the turn that crosses a limit can pause user-owned background work. The budget reset job clears budget pauses at the next billing period without re-enabling work an admin disabled manually.
 
+Budget enforcement distinguishes visible spend from enforced spend. Operators
+can see runtime-estimated, invocation-reconciled, bill-reconciled, mismatch, and
+unreconciled totals. Strict budget decisions use the configured reconciliation
+confidence threshold, so historical or mismatched data can be reviewed without
+pretending it has invoice-grade confidence.
+
 The reconciler and runtime checks:
 
-1. Compute month-to-date spend by `cost_events.user_id` and by tenant.
+1. Compute month-to-date spend by `cost_events.user_id` and by tenant, grouped
+   by reconciliation confidence.
 2. Compare against enabled user and tenant caps.
 3. Block foreground work for users already over budget before invoking paid runtime work.
 4. Mark user-owned scheduled/background work as budget-paused when that user's cap is exceeded.
@@ -91,7 +115,15 @@ Worth being honest about:
 - **The crossing turn can exceed the cap.** A user already over budget is blocked before new paid work starts, but the turn that pushes a user over the limit is only known after cost is recorded. Set caps with headroom.
 - **No user self-service budget management.** User budgets are operator-managed today.
 - **No budget alerts pre-enforcement.** The reconciler pauses agents; it doesn't warn operators at 80%. A Slack/email notification path is a planned follow-up.
-- **Cost numbers are estimates.** Per-turn cost uses published Bedrock pricing, which doesn't account for cross-region overages, on-demand vs. provisioned throughput, or reserved capacity. The numbers are directionally correct for budgeting; the canonical cost record is the AWS bill.
+- **Runtime cost numbers are estimates.** Runtime-reported per-turn cost uses
+  observed tokens and pricing tables. Treat `runtime-reported` and historical
+  `backfill` rows as useful operational estimates, not bill-grade accounting.
+- **Bedrock log gaps are explicit.** If provider invocation logs are delayed,
+  unavailable, or ambiguous, the reconciliation state remains
+  `unreconciled/error` or `mismatch`; the UI should not hide that gap.
+- **Billing exports lag.** AWS billing export delivery is delayed and aggregate.
+  Until a line item has tenant-level attribution, it should inform aggregate
+  review without upgrading individual turns to `bill-reconciled`.
 
 ## Related pages
 
@@ -103,8 +135,16 @@ Worth being honest about:
 
 ## Under the hood
 
-- **Cost capture.** The AgentCore Pi runtime instruments every turn with OpenTelemetry spans. A downstream reducer turns those spans into per-turn cost rows in the operational database.
-- **Budget enforcement.** Runtime gates and budget helpers compute month-to-date spend against configured caps, then block or pause over-budget user-owned work.
+- **Cost capture.** The AgentCore Pi runtime and finalize path write
+  runtime-observed trace events and cost events. Bedrock invocation logs and AWS
+  billing exports add later reconciliation facts when they are available.
+- **Trace ledger.** `trace_runs`, `trace_events`, `trace_source_evidence`, and
+  `trace_cost_reconciliation_facts` hold canonical execution and accounting
+  evidence. `cost_events` remains the compatibility projection for existing cost
+  APIs.
+- **Budget enforcement.** Runtime gates and budget helpers compute
+  confidence-aware month-to-date spend against configured caps, then block or
+  pause over-budget user-owned work.
 - **Pause mechanism.** User-owned scheduled work stores explicit budget pause state so monthly reset and manual admin disable remain distinct. Tenant-level budget state remains tenant-scoped.
 - **Audit storage.** NDJSON records land in an append-only S3 bucket provisioned by the ThinkWork Terraform module, with IAM denying deletes on the writer role. Lifecycle + retention is configurable per deployment.
 

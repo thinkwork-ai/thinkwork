@@ -14,6 +14,10 @@
  *   cases/<case_id>/payload/traces.json     — tool traces extracted from
  *                                             the message rows
  *                                             (tool_calls/tool_results)
+ *   cases/<case_id>/payload/trace-evidence.json
+ *                                           — safe summaries and source
+ *                                             references from the canonical
+ *                                             trace ledger
  *
  * KTD: snapshots are self-contained and degrade gracefully. A
  * pre-THNK-10 thread (no workspace_projection) flags as a badged
@@ -109,12 +113,68 @@ export interface SnapshotTracesPayload {
   dropped_oldest_count: number;
 }
 
+export interface SnapshotTraceEvidenceSourceRef {
+  id: string;
+  source_type: string;
+  source_system: string;
+  source_id: string | null;
+  uri: string | null;
+  observed_at: string | null;
+  redaction_state: string;
+  safe_summary: Record<string, unknown>;
+}
+
+export interface SnapshotTraceEvidenceEvent {
+  id: string;
+  trace_run_id: string | null;
+  event_type: string;
+  event_status: string | null;
+  request_id: string | null;
+  parent_request_id: string | null;
+  observed_at: string | null;
+  duration_ms: number | null;
+  safe_summary: Record<string, unknown>;
+  reconciliation_state: string | null;
+  reconciliation_source: string | null;
+  source_references: SnapshotTraceEvidenceSourceRef[];
+}
+
+export interface SnapshotTraceEvidenceGap {
+  code: "missing" | "lookup_failed" | "truncated";
+  message: string;
+  source: "trace_ledger";
+}
+
+export interface SnapshotTraceEvidenceRow {
+  id: string;
+  trace_run_id?: string | null;
+  event_type: string;
+  event_status?: string | null;
+  request_id?: string | null;
+  parent_request_id?: string | null;
+  observed_at?: Date | string | null;
+  duration_ms?: number | null;
+  payload_summary?: unknown;
+  metadata?: unknown;
+  reconciliation_state?: string | null;
+  reconciliation_source?: string | null;
+  source_evidence?: unknown;
+}
+
+export interface SnapshotTraceEvidencePayload {
+  source: "trace_ledger";
+  events: SnapshotTraceEvidenceEvent[];
+  gaps: SnapshotTraceEvidenceGap[];
+  dropped_oldest_count: number;
+}
+
 export interface ThreadSnapshot {
   /** The flagged turn's user message text — becomes the case `query`. */
   query: string;
   history: SnapshotHistoryPayload;
   workspace: Record<string, unknown> | null;
   traces: SnapshotTracesPayload | null;
+  traceEvidence: SnapshotTraceEvidencePayload | null;
   completeness: EvalCaseCompleteness;
 }
 
@@ -180,6 +240,171 @@ function byteLength(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
 }
 
+function safeNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function safeString(value: unknown, max = 160): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.length > max ? `${trimmed.slice(0, max)}...` : trimmed;
+}
+
+function addIfPresent(
+  target: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): void {
+  if (value == null) return;
+  target[key] = value;
+}
+
+function safePayloadSummary(
+  payloadValue: unknown,
+  metadataValue: unknown,
+): Record<string, unknown> {
+  const payload = isRecord(payloadValue) ? payloadValue : {};
+  const metadata = isRecord(metadataValue) ? metadataValue : {};
+  const summary: Record<string, unknown> = {};
+  for (const key of [
+    "model",
+    "provider",
+    "tool_name",
+    "name",
+    "phase",
+    "runtime_type",
+    "status",
+    "attribution_level",
+    "billing_attribution_level",
+    "billing_service_code",
+    "billing_operation",
+  ]) {
+    addIfPresent(summary, key, safeString(payload[key] ?? metadata[key]));
+  }
+  for (const key of [
+    "input_tokens",
+    "output_tokens",
+    "cached_read_tokens",
+    "cost_usd",
+    "amount_usd",
+    "runtime_amount_usd",
+    "provider_amount_usd",
+    "billed_amount_usd",
+    "duration_ms",
+    "response_length",
+  ]) {
+    addIfPresent(summary, key, safeNumber(payload[key] ?? metadata[key]));
+  }
+  addIfPresent(summary, "tool_call_id", safeString(payload.tool_call_id));
+  addIfPresent(
+    summary,
+    "profile_run_id",
+    safeString(metadata.profile_run_id ?? payload.profile_run_id),
+  );
+  addIfPresent(
+    summary,
+    "profile_slug",
+    safeString(metadata.profile_slug ?? payload.profile_slug),
+  );
+  addIfPresent(
+    summary,
+    "lane_key",
+    safeString(metadata.lane_key ?? payload.lane_key),
+  );
+  if (payload.runtime_reported_zero_tokens === true) {
+    summary.runtime_reported_zero_tokens = true;
+  }
+  const bedrockRequestIds = Array.isArray(payload.bedrock_request_ids)
+    ? payload.bedrock_request_ids.filter((id) => typeof id === "string")
+    : [];
+  if (bedrockRequestIds.length > 0) {
+    summary.bedrock_request_ids = bedrockRequestIds.slice(0, 10);
+  }
+  const omittedKeys = Object.keys(payload).filter(
+    (key) => !(key in summary) && key !== "bedrock_request_ids",
+  );
+  if (omittedKeys.length > 0) {
+    summary.omitted_payload_keys = omittedKeys.sort();
+  }
+  return summary;
+}
+
+function mapSourceRef(value: unknown): SnapshotTraceEvidenceSourceRef | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  return {
+    id: value.id,
+    source_type: safeString(value.sourceType ?? value.source_type) ?? "unknown",
+    source_system:
+      safeString(value.sourceSystem ?? value.source_system) ?? "unknown",
+    source_id: safeString(value.sourceId ?? value.source_id),
+    uri: safeString(value.uri, 260),
+    observed_at: toIso(
+      (value.observedAt ?? value.observed_at ?? null) as Date | string | null,
+    ),
+    redaction_state:
+      safeString(value.redactionState ?? value.redaction_state) ??
+      "summary_only",
+    safe_summary: safePayloadSummary(value.summary, value.metadata),
+  };
+}
+
+export function buildTraceEvidencePayload(opts: {
+  rows?: SnapshotTraceEvidenceRow[];
+  gap?: SnapshotTraceEvidenceGap | null;
+  capBytes?: number;
+}): SnapshotTraceEvidencePayload | null {
+  const rows = opts.rows ?? [];
+  const gaps: SnapshotTraceEvidenceGap[] = [];
+  if (opts.gap) gaps.push(opts.gap);
+  if (rows.length === 0 && gaps.length === 0) return null;
+
+  let events = rows.map((row) => ({
+    id: row.id,
+    trace_run_id: row.trace_run_id ?? null,
+    event_type: row.event_type,
+    event_status: row.event_status ?? null,
+    request_id: row.request_id ?? null,
+    parent_request_id: row.parent_request_id ?? null,
+    observed_at: toIso(row.observed_at ?? null),
+    duration_ms: safeNumber(row.duration_ms),
+    safe_summary: safePayloadSummary(row.payload_summary, row.metadata),
+    reconciliation_state: row.reconciliation_state ?? null,
+    reconciliation_source: row.reconciliation_source ?? null,
+    source_references: Array.isArray(row.source_evidence)
+      ? row.source_evidence.map(mapSourceRef).filter((ref) => ref != null)
+      : [],
+  }));
+
+  let dropped = 0;
+  const capBytes = opts.capBytes ?? SNAPSHOT_PAYLOAD_CAP_BYTES;
+  while (
+    events.length > 1 &&
+    byteLength({
+      source: "trace_ledger",
+      events,
+      gaps,
+      dropped_oldest_count: dropped,
+    }) > capBytes
+  ) {
+    events = events.slice(1);
+    dropped += 1;
+  }
+  if (dropped > 0) {
+    gaps.push({
+      code: "truncated",
+      source: "trace_ledger",
+      message: `${dropped} oldest trace evidence event(s) were dropped at the snapshot size cap.`,
+    });
+  }
+  return {
+    source: "trace_ledger",
+    events,
+    gaps,
+    dropped_oldest_count: dropped,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Snapshot builder
 // ---------------------------------------------------------------------------
@@ -188,6 +413,8 @@ export function buildThreadSnapshot(opts: {
   /** All thread messages, ordered ascending by created_at. */
   messages: ThreadMessageRow[];
   turn: FlaggedTurnRow;
+  traceEvidenceRows?: SnapshotTraceEvidenceRow[];
+  traceEvidenceGap?: SnapshotTraceEvidenceGap | null;
   capBytes?: number;
 }): ThreadSnapshot {
   const capBytes = opts.capBytes ?? SNAPSHOT_PAYLOAD_CAP_BYTES;
@@ -284,6 +511,12 @@ export function buildThreadSnapshot(opts: {
         }
       : null;
 
+  const traceEvidence = buildTraceEvidencePayload({
+    rows: opts.traceEvidenceRows ?? [],
+    gap: opts.traceEvidenceGap ?? null,
+    capBytes,
+  });
+
   // Workspace projection (THNK-10): degrade gracefully when absent —
   // pre-THNK-10 threads flag as badged history-only cases, never blocked.
   let contextSnapshot: unknown = opts.turn.context_snapshot;
@@ -314,11 +547,16 @@ export function buildThreadSnapshot(opts: {
     history,
     workspace,
     traces,
+    traceEvidence,
     completeness: {
       history: normalized.length > 0,
       workspace: workspace != null,
-      traces: traces != null,
-      truncated: droppedHistory > 0 || droppedTraces > 0 || workspaceDropped,
+      traces: traces != null || (traceEvidence?.events.length ?? 0) > 0,
+      truncated:
+        droppedHistory > 0 ||
+        droppedTraces > 0 ||
+        workspaceDropped ||
+        (traceEvidence?.dropped_oldest_count ?? 0) > 0,
     },
   };
 }
@@ -340,7 +578,7 @@ export async function writeFlaggedCasePayloads(
 ): Promise<string[]> {
   const written: string[] = [];
   const write = async (
-    name: "history" | "workspace" | "traces",
+    name: "history" | "workspace" | "traces" | "trace-evidence",
     payload: unknown,
   ) => {
     const key = evalDatasetCasePayloadKey(
@@ -359,6 +597,9 @@ export async function writeFlaggedCasePayloads(
   await write("history", snapshot.history);
   if (snapshot.workspace != null) await write("workspace", snapshot.workspace);
   if (snapshot.traces != null) await write("traces", snapshot.traces);
+  if (snapshot.traceEvidence != null) {
+    await write("trace-evidence", snapshot.traceEvidence);
+  }
   return written;
 }
 

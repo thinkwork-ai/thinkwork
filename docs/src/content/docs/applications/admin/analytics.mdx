@@ -30,23 +30,29 @@ Because activity is computed client-side, it's fast on small tenants and slower 
 ## Cost view
 
 The Cost view is the money conversation. It's backed by **server-side aggregation** — the GraphQL resolvers pre-compute cost summaries and time series so the UI doesn't have to re-aggregate from per-turn rows.
+Those summaries are confidence-aware projections from `cost_events` and the
+canonical trace ledger. Operators should read total spend, verified spend, and
+review/mismatch totals together rather than treating every historical estimate
+as invoice-grade cost.
 
 ### Metric cards
 
 Six cards across the top:
 
-| Card             | Value                                                               |
-| ---------------- | ------------------------------------------------------------------- |
-| **Total Spend**  | Sum across LLM, infrastructure, and tools for the period            |
-| **LLM**          | Spend on model inference                                            |
-| **Infra**        | Spend on underlying compute (Lambda, Aurora, S3)                    |
-| **Tools**        | Spend on tool invocations (MCP calls, built-in tools, integrations) |
-| **Invocations**  | Count of turn events in the period                                  |
-| **Cost / Event** | Total spend divided by invocations                                  |
+| Card               | Value                                                                 |
+| ------------------ | --------------------------------------------------------------------- |
+| **Total Spend**    | Visible spend across runtime, provider, bill, and historical evidence |
+| **Verified Spend** | Spend at or above the configured reconciliation confidence threshold  |
+| **Review**         | Mismatch or unreconciled spend that needs operator attention          |
+| **LLM**            | Spend on model inference                                              |
+| **Infra**          | Spend on underlying runtime/compute                                   |
+| **Invocations**    | Count of cost events in the period                                    |
 
 ### Trend chart
 
-A stacked bar chart across the last 30 days, split into LLM / Infra / Tools bands. The chart uses `CostTimeSeriesQuery` with `$days: 30`.
+A stacked bar chart across the last 30 days, split into LLM / Infra / Tools
+bands and reconciliation confidence buckets where available. The chart uses
+`CostTimeSeriesQuery` with `$days: 30`.
 
 ### Budget table
 
@@ -58,18 +64,37 @@ The primary chargeback table is **Cost by User**: user name, email, event count,
 
 ### Cost by model
 
-A breakdown table: model name, total spend, input tokens, output tokens. Model names are resolved to human-readable labels through `ModelCatalogQuery` so the UI shows "Claude Sonnet 4.6" rather than `anthropic.claude-sonnet-4-6-v1:0`.
+A breakdown table: model name, total spend, verified spend, input tokens, output
+tokens, and reconciliation review state. Model names are resolved to
+human-readable labels through `ModelCatalogQuery` so the UI shows "Claude
+Sonnet 4.6" rather than `anthropic.claude-sonnet-4-6-v1:0`.
 
 ### Queries
 
 | Query                                   | Purpose                             |
 | --------------------------------------- | ----------------------------------- |
-| `CostSummaryQuery($tenantId)`           | Top-of-page metric cards            |
+| `CostSummaryQuery($tenantId)`           | Top-of-page confidence-aware cards  |
 | `CostByUserQuery($tenantId)`            | User chargeback and system spend    |
-| `CostByModelQuery($tenantId)`           | Cost by model table                 |
+| `CostByModelQuery($tenantId)`           | Cost by model and confidence table  |
 | `CostTimeSeriesQuery($tenantId, $days)` | Trend chart                         |
 | `BudgetStatusQuery($tenantId)`          | Budget percent used / status badges |
 | `ModelCatalogQuery`                     | Human-readable model labels         |
+
+### Reconciliation states
+
+Analytics uses the same state vocabulary as the trace ledger:
+
+| State                   | Meaning                                                                 |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `runtime-reported`      | Runtime/finalize observed tokens or cost; useful estimate, not invoice. |
+| `invocation-reconciled` | Bedrock invocation logs matched the model request.                      |
+| `bill-reconciled`       | AWS billing export evidence supports the cost at the attributed level.  |
+| `mismatch`              | Runtime, provider, or bill evidence disagree and need review.           |
+| `unreconciled/error`    | Evidence is missing, delayed, ambiguous, historical, or failed to load. |
+
+Historical backfill rows intentionally land as `unreconciled/error` with
+`source_type: "backfill"`. They keep old analytics visible without upgrading old
+estimates to provider- or bill-grade truth.
 
 ### Zustand caching
 
@@ -85,16 +110,21 @@ The page may take an agent or runtime-scope selector first. Pick the tenant plat
 - Token usage (input and output) over time
 - Error rate
 
-Queries for performance pull from thread traces or the audit log's cost events depending on implementation. The exact query set is light in the current release — the Performance view is the thinnest of the three and leans on ad-hoc queries more than on dedicated resolvers.
+Queries for performance pull from canonical `threadTraces` projections where
+available, including trace events, source evidence, and reconciliation state.
+When older turns only have backfilled cost observations, the view should render
+an unreconciled diagnostic rather than implying full trace detail exists.
 
 ## Workflows
 
 ### Answer "are we on budget this month?"
 
 1. Open Analytics → Cost
-2. Look at the Total Spend metric card and compare to the tenant's monthly budget
-3. Check the user budget table for any row in `warning` or `exceeded` status
-4. If a user is over budget, raise that user's budget or wait for the billing-period reset before resuming user-owned scheduled work; if the tenant baseline is over budget, review tenant-level budget policy.
+2. Compare Verified Spend to the tenant's monthly budget threshold
+3. Check Total Spend and Review totals for runtime-only, historical, or mismatch
+   rows that may still require investigation
+4. Check the user budget table for any row in `warning` or `exceeded` status
+5. If a user is over budget, raise that user's budget or wait for the billing-period reset before resuming user-owned scheduled work; if the tenant baseline is over budget, review tenant-level budget policy.
 
 ### Answer "which user is eating tokens?"
 
@@ -114,7 +144,8 @@ Queries for performance pull from thread traces or the audit log's cost events d
 
 ## Data sources
 
-- **Cost aggregates** — computed server-side from a `cost_events` or similar per-turn table, rolled up into `cost_aggregates` materialized views. The UI never sees raw cost rows.
+- **Cost aggregates** — computed server-side from `cost_events` plus trace-ledger reconciliation facts. The UI receives summaries and confidence buckets, not raw provider or billing payloads.
+- **Trace evidence** — `trace_runs`, `trace_events`, `trace_source_evidence`, and `trace_cost_reconciliation_facts` provide source references for Activity, Performance, CLI trace commands, and eval snapshots.
 - **Activity counts** — client-side aggregation from the thread and turn queries
 - **Budget status** — derived server-side from user and tenant budget policies where available
 - **Model catalog** — a static catalog maintained alongside the tenant configuration
@@ -124,6 +155,10 @@ Queries for performance pull from thread traces or the audit log's cost events d
 - **Activity is client-computed.** For tenants with tens of thousands of daily turns, the Activity view can be slow to render. A server-side activity aggregate is on the [Roadmap](/roadmap/).
 - **Performance view is shallow.** It shows one scope at a time and lacks a full cross-Space comparison. A fuller performance dashboard is a future improvement.
 - **Cost attribution is still evolving.** System and historical spend without a deterministic user owner appears as system/unattributed cost instead of being assigned speculatively.
+- **Billing confidence lags reality.** Billing exports arrive after runtime work
+  completes. Until AWS billing evidence is present and attributable, Analytics
+  should show the spend as runtime/provider/historical evidence rather than
+  `bill-reconciled`.
 - **No custom date ranges.** The trend chart is fixed to 30 days; longer or shorter windows aren't exposed in the UI.
 
 ## Related pages

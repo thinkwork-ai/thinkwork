@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   selectQueue,
+  traceSelectQueue,
   selectWheres,
   mockResolveCallerTenantId,
   mockRequireTenantAdmin,
@@ -23,10 +24,12 @@ const {
   mockListIndexedSkills,
   resetState,
 } = vi.hoisted(() => {
-  const selectQueue: unknown[][] = [];
+  const selectQueue: Array<unknown[] | Error> = [];
+  const traceSelectQueue: Array<unknown[] | Error> = [];
   const selectWheres: unknown[] = [];
   return {
     selectQueue,
+    traceSelectQueue,
     selectWheres,
     mockResolveCallerTenantId: vi.fn(),
     mockRequireTenantAdmin: vi.fn(),
@@ -38,13 +41,14 @@ const {
     mockListIndexedSkills: vi.fn(),
     resetState: () => {
       selectQueue.length = 0;
+      traceSelectQueue.length = 0;
       selectWheres.length = 0;
     },
   };
 });
 
 vi.mock("../../utils.js", () => {
-  const makeSelectChain = () => {
+  const makeSelectChain = (selection?: Record<string, unknown>) => {
     const chain: any = {};
     for (const method of ["from", "orderBy", "limit"]) {
       chain[method] = () => chain;
@@ -56,14 +60,29 @@ vi.mock("../../utils.js", () => {
     chain.then = (
       resolve: (rows: unknown[]) => unknown,
       reject: (err: unknown) => unknown,
-    ) => Promise.resolve(selectQueue.shift() ?? []).then(resolve, reject);
+    ) => {
+      const isTraceEvidenceSelect =
+        selection != null &&
+        "trace_run_id" in selection &&
+        "event_type" in selection &&
+        "payload_summary" in selection;
+      const queue = isTraceEvidenceSelect ? traceSelectQueue : selectQueue;
+      const next = queue.shift() ?? [];
+      return (
+        next instanceof Error ? Promise.reject(next) : Promise.resolve(next)
+      ).then(resolve, reject);
+    };
     return chain;
   };
   const column = (table: string, name: string) => `${table}.${name}`;
   return {
-    db: { select: () => makeSelectChain() },
+    db: {
+      select: (selection?: Record<string, unknown>) =>
+        makeSelectChain(selection),
+    },
     eq: (...args: unknown[]) => ({ eq: args }),
     and: (...args: unknown[]) => ({ and: args }),
+    sql: vi.fn(() => "sql"),
     asc: (arg: unknown) => ({ asc: arg }),
     desc: (arg: unknown) => ({ desc: arg }),
     isNull: (arg: unknown) => ({ isNull: arg }),
@@ -206,6 +225,40 @@ const messageRows = [
     created_at: new Date("2026-06-01T00:02:30Z"),
   },
 ];
+const traceRows = [
+  {
+    id: "trace-event-1",
+    trace_run_id: "trace-run-1",
+    event_type: "model_invocation",
+    event_status: "succeeded",
+    request_id: "bedrock-request-1",
+    parent_request_id: "turn-1",
+    observed_at: new Date("2026-06-01T00:02:20Z"),
+    duration_ms: 240,
+    payload_summary: {
+      model: "anthropic.claude-haiku",
+      input_tokens: 12,
+      output_tokens: 4,
+      raw_prompt: "do not snapshot this prompt",
+    },
+    metadata: { source: "bedrock_invocation_log" },
+    reconciliation_state: "invocation-reconciled",
+    reconciliation_source: "invocation",
+    source_evidence: [
+      {
+        id: "source-1",
+        sourceType: "bedrock_invocation_log",
+        sourceSystem: "aws.bedrock",
+        sourceId: "bedrock-request-1",
+        uri: "cloudwatch://group/stream",
+        observedAt: new Date("2026-06-01T00:02:20Z"),
+        summary: { model: "anthropic.claude-haiku" },
+        redactionState: "summary_only",
+        metadata: { requestId: "bedrock-request-1" },
+      },
+    ],
+  },
+];
 const datasetRow = {
   id: "ds-1",
   tenant_id: "tenant-1",
@@ -245,7 +298,7 @@ const baseInput = {
 };
 
 function queueHappyPathSelects() {
-  // Order: thread → turn → tenant slug → dataset row → messages →
+  // Order: thread → turn → tenant slug → dataset row → messages → trace rows →
   // dataset row (return) → case row (return).
   selectQueue.push(
     [threadRow],
@@ -275,6 +328,7 @@ beforeEach(() => {
   mockGetCase.mockResolvedValue(null);
   mockWritePayloads.mockResolvedValue([]);
   mockListIndexedSkills.mockResolvedValue([]);
+  traceSelectQueue.push(traceRows);
 });
 
 describe("flagThreadForEval — input validation (AE3)", () => {
@@ -424,6 +478,27 @@ describe("flagThreadForEval — happy path (F2)", () => {
       "m2",
     ]);
     expect(snapshot.workspace).toEqual(projection);
+    expect(snapshot.traceEvidence).toMatchObject({
+      source: "trace_ledger",
+      events: [
+        {
+          id: "trace-event-1",
+          event_type: "model_invocation",
+          reconciliation_state: "invocation-reconciled",
+          source_references: [
+            {
+              id: "source-1",
+              source_type: "bedrock_invocation_log",
+              source_system: "aws.bedrock",
+              source_id: "bedrock-request-1",
+            },
+          ],
+        },
+      ],
+    });
+    expect(JSON.stringify(snapshot.traceEvidence)).not.toContain(
+      "do not snapshot this prompt",
+    );
 
     const [caseCtx, core] = mockPutCase.mock.calls[0];
     expect(caseCtx).toEqual(payloadCtx);
@@ -488,6 +563,36 @@ describe("flagThreadForEval — happy path (F2)", () => {
       workspace: false,
     });
     expect(result.completeness.workspace).toBe(false);
+  });
+
+  it("trace evidence lookup failure is saved as explicit gap metadata", async () => {
+    traceSelectQueue.length = 0;
+    traceSelectQueue.push(new Error("trace table unavailable"));
+    selectQueue.push(
+      [threadRow],
+      [turnRow],
+      [tenantSlugRow],
+      [datasetRow],
+      messageRows,
+      [datasetRow],
+      [caseRow],
+    );
+    await flag({}, { input: baseInput }, adminCtx);
+    const snapshot = mockWritePayloads.mock.calls[0][2];
+    expect(snapshot.traceEvidence).toEqual({
+      source: "trace_ledger",
+      events: [],
+      gaps: [
+        {
+          code: "lookup_failed",
+          source: "trace_ledger",
+          message:
+            "Trace ledger evidence lookup failed at flag time: trace table unavailable",
+        },
+      ],
+      dropped_oldest_count: 0,
+    });
+    expect(mockPutCase.mock.calls[0][1].completeness.traces).toBe(true);
   });
 
   it("very long thread → truncated payload with marker, case remains valid", async () => {

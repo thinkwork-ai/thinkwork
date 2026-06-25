@@ -27,10 +27,12 @@ import {
   db,
   eq,
   and,
+  sql,
   messages,
   threadTurns,
   threads,
 } from "../../utils.js";
+import { traceEvents } from "@thinkwork/database-pg/schema";
 import { requireTenantAdmin } from "../core/authz.js";
 import { resolveCallerTenantId } from "../core/resolve-auth-user.js";
 import {
@@ -53,6 +55,8 @@ import {
   flaggedCaseIdBase,
   writeFlaggedCasePayloads,
   type FlaggedTurnRow,
+  type SnapshotTraceEvidenceGap,
+  type SnapshotTraceEvidenceRow,
   type ThreadMessageRow,
 } from "../../../lib/evals/thread-snapshot.js";
 import {
@@ -98,6 +102,18 @@ const DATASET_SLUG_BASE_MAX = 60;
  * picked an `active`-source candidate (high confidence).
  */
 const ATTRIBUTION_FALLBACK_TAG = "attribution:fallback";
+
+type TraceSourceEvidenceSnapshotRow = {
+  id: string;
+  sourceType: string;
+  sourceSystem: string;
+  sourceId: string | null;
+  uri: string | null;
+  observedAt: string | Date | null;
+  summary: Record<string, unknown>;
+  redactionState: string;
+  metadata: Record<string, unknown>;
+};
 
 export function slugifyDatasetName(name: string): string {
   const base = name
@@ -341,9 +357,16 @@ const flagThreadForEval = async (
     )
     .orderBy(asc(messages.created_at))) as ThreadMessageRow[];
 
+  const traceEvidence = await loadTraceEvidenceForEvalSnapshot({
+    tenantId,
+    turnId: turn.id,
+  });
+
   const snapshot = buildThreadSnapshot({
     messages: messageRows,
     turn: turn as FlaggedTurnRow,
+    traceEvidenceRows: traceEvidence.rows,
+    traceEvidenceGap: traceEvidence.gap,
   });
 
   // Stable-ish case id from (thread, turn); suffix on collision.
@@ -391,6 +414,96 @@ const flagThreadForEval = async (
     completeness: snapshot.completeness,
   };
 };
+
+async function loadTraceEvidenceForEvalSnapshot(input: {
+  tenantId: string;
+  turnId: string;
+}): Promise<{
+  rows: SnapshotTraceEvidenceRow[];
+  gap: SnapshotTraceEvidenceGap | null;
+}> {
+  try {
+    const rows = (await db
+      .select({
+        id: traceEvents.id,
+        trace_run_id: traceEvents.trace_run_id,
+        event_type: traceEvents.event_type,
+        event_status: traceEvents.event_status,
+        request_id: traceEvents.request_id,
+        parent_request_id: traceEvents.parent_request_id,
+        observed_at: traceEvents.observed_at,
+        duration_ms: traceEvents.duration_ms,
+        payload_summary: traceEvents.payload_summary,
+        metadata: traceEvents.metadata,
+        reconciliation_state: sql<string | null>`(
+          SELECT f.reconciliation_state
+          FROM trace_cost_reconciliation_facts f
+          WHERE f.trace_event_id = ${traceEvents.id}
+          ORDER BY f.reconciled_at DESC, f.id DESC
+          LIMIT 1
+        )`,
+        reconciliation_source: sql<string | null>`(
+          SELECT f.reconciliation_scope
+          FROM trace_cost_reconciliation_facts f
+          WHERE f.trace_event_id = ${traceEvents.id}
+          ORDER BY f.reconciled_at DESC, f.id DESC
+          LIMIT 1
+        )`,
+        source_evidence: sql<TraceSourceEvidenceSnapshotRow[]>`COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', se.id,
+                'sourceType', se.source_type,
+                'sourceSystem', se.source_system,
+                'sourceId', se.source_id,
+                'uri', se.uri,
+                'observedAt', se.observed_at,
+                'summary', se.summary,
+                'redactionState', se.redaction_state,
+                'metadata', se.metadata
+              )
+              ORDER BY se.created_at
+            )
+            FROM trace_source_evidence se
+            WHERE se.trace_event_id = ${traceEvents.id}
+          ),
+          '[]'::jsonb
+        )`,
+      })
+      .from(traceEvents)
+      .where(
+        and(
+          eq(traceEvents.tenant_id, input.tenantId),
+          eq(traceEvents.thread_turn_id, input.turnId),
+        ),
+      )
+      .orderBy(asc(traceEvents.observed_at))) as SnapshotTraceEvidenceRow[];
+    if (rows.length === 0) {
+      return {
+        rows,
+        gap: {
+          code: "missing",
+          source: "trace_ledger",
+          message:
+            "No canonical trace ledger evidence was found for this turn at flag time.",
+        },
+      };
+    }
+    return { rows, gap: null };
+  } catch (err) {
+    return {
+      rows: [],
+      gap: {
+        code: "lookup_failed",
+        source: "trace_ledger",
+        message: `Trace ledger evidence lookup failed at flag time: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      },
+    };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // flaggedTurnSkillCandidates — attribution suggestions (Skill Tests & Evals U8)
