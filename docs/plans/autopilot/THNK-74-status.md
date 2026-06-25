@@ -508,3 +508,9 @@ Local verification:
 - `pnpm dlx prettier@3.6.2 --check` on touched TS/Markdown/generated files
   passed.
 - `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `83cd5716f` (`feat(trace): project traces from canonical ledger`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2962
+- 2026-06-25 12:11 CDT: PR opened; waiting for required CI.
