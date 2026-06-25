@@ -1,5 +1,6 @@
 import { type GroupedListGroup } from "@thinkwork/ui";
 import {
+  type WorkItemAssigneeSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
@@ -15,6 +16,7 @@ interface WorkItemsBoardViewProps {
   items: WorkItemSummary[];
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
+  assignees?: WorkItemAssigneeSummary[];
   display: WorkItemDisplayState["board"];
   updatingItemId?: string | null;
   onStatusChange: (
@@ -27,6 +29,7 @@ export function WorkItemsBoardView({
   items,
   spaces,
   statuses,
+  assignees = [],
   display,
   updatingItemId,
   onStatusChange,
@@ -42,6 +45,7 @@ export function WorkItemsBoardView({
     dir: display.dir,
     showEmptyGroups: display.showEmptyColumns,
     showEmptySubgroups: false,
+    assignees,
   });
 
   if (columns.length === 0) {
@@ -79,6 +83,7 @@ export function WorkItemsBoardView({
                     spaces={spaces}
                     statuses={sortedStatuses}
                     properties={display.properties}
+                    assignees={assignees}
                     compact
                     updating={updatingItemId === item.id}
                     onStatusChange={onStatusChange}
@@ -90,6 +95,7 @@ export function WorkItemsBoardView({
                   display,
                   spaces,
                   statuses: sortedStatuses,
+                  assignees,
                 }).map((rowGroup) => (
                   <div key={rowGroup.id} className="grid gap-2">
                     <div className="flex items-center justify-between gap-2 px-1 text-xs font-medium text-muted-foreground">
@@ -111,6 +117,7 @@ export function WorkItemsBoardView({
                                 spaces={spaces}
                                 statuses={sortedStatuses}
                                 properties={display.properties}
+                                assignees={assignees}
                                 compact
                                 updating={updatingItemId === item.id}
                                 onStatusChange={onStatusChange}
@@ -125,6 +132,7 @@ export function WorkItemsBoardView({
                             spaces={spaces}
                             statuses={sortedStatuses}
                             properties={display.properties}
+                            assignees={assignees}
                             compact
                             updating={updatingItemId === item.id}
                             onStatusChange={onStatusChange}
@@ -146,11 +154,13 @@ function rowGroupsForColumn({
   display,
   spaces,
   statuses,
+  assignees,
 }: {
   column: GroupedListGroup<WorkItemSummary>;
   display: WorkItemDisplayState["board"];
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
+  assignees: WorkItemAssigneeSummary[];
 }) {
   return groupWorkItemsForDisplay({
     items: column.rows,
@@ -162,6 +172,7 @@ function rowGroupsForColumn({
     dir: display.dir,
     showEmptyGroups: display.showEmptyRows,
     showEmptySubgroups: display.showEmptyRows,
+    assignees,
   });
 }
 

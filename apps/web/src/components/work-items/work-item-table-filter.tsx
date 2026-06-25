@@ -20,10 +20,11 @@ import {
 import {
   WORK_ITEM_CATEGORY_ORDER,
   WORK_ITEM_PRIORITY_ORDER,
+  type WorkItemAssigneeSummary,
   type WorkItemSpaceSummary,
   type WorkItemSummary,
   isWorkItemDueSoon,
-  workItemOwnerLabel,
+  workItemAssigneeLabel,
   workItemPriorityLabel,
   workItemSpaceLabel,
   workItemStatusCategory,
@@ -126,20 +127,20 @@ export function buildWorkItemTokenFilterColumns(
     },
     {
       id: WORK_ITEM_FILTER_COLUMNS.owner,
-      label: "Owner",
+      label: "Assignee",
       type: "text",
       icon: <UserRound className="size-4" />,
     },
   ];
 }
 
-export function buildWorkItemFilterColumnDefs(): Array<
-  ColumnDef<WorkItemSummary, unknown>
-> {
+export function buildWorkItemFilterColumnDefs(
+  assignees: WorkItemAssigneeSummary[] = [],
+): Array<ColumnDef<WorkItemSummary, unknown>> {
   return [
     {
       id: WORK_ITEM_FILTER_COLUMNS.search,
-      accessorFn: workItemSearchFilterValue,
+      accessorFn: (item) => workItemSearchFilterValue(item, assignees),
       filterFn: dataTableTokenFilterFns.text,
     },
     {
@@ -179,20 +180,23 @@ export function buildWorkItemFilterColumnDefs(): Array<
     },
     {
       id: WORK_ITEM_FILTER_COLUMNS.owner,
-      accessorFn: (item) => workItemOwnerLabel(item),
+      accessorFn: (item) => workItemAssigneeLabel(item, assignees),
       filterFn: dataTableTokenFilterFns.text,
     },
   ];
 }
 
-export function workItemSearchFilterValue(item: WorkItemSummary) {
+export function workItemSearchFilterValue(
+  item: WorkItemSummary,
+  assignees: WorkItemAssigneeSummary[] = [],
+) {
   return [
     item.title,
     item.notes,
     item.status?.name,
     workItemStatusCategoryLabel(workItemStatusCategory(item)),
     workItemPriorityLabel(item.priority),
-    workItemOwnerLabel(item),
+    workItemAssigneeLabel(item, assignees),
   ]
     .filter(Boolean)
     .join(" ");

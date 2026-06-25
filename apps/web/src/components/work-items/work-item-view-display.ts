@@ -4,12 +4,13 @@ import {
   WORK_ITEM_PRIORITY_ORDER,
   isWorkItemDueSoon,
   type WorkItemPriority,
+  type WorkItemAssigneeSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusCategory,
   type WorkItemStatusSummary,
   type WorkItemSummary,
   workItemDueLabel,
-  workItemOwnerLabel,
+  workItemAssigneeLabel,
   workItemPriorityLabel,
   workItemSpaceLabel,
   workItemStatusCategory,
@@ -104,7 +105,7 @@ export const WORK_ITEM_GROUP_OPTIONS = [
   { value: "none", label: "No grouping" },
   { value: "status", label: "Status" },
   { value: "priority", label: "Priority" },
-  { value: "owner", label: "Owner" },
+  { value: "owner", label: "Assignee" },
   { value: "space", label: "Space" },
   { value: "dueState", label: "Due state" },
   { value: "required", label: "Required" },
@@ -130,7 +131,7 @@ export const WORK_ITEM_SORT_OPTIONS = [
 export const WORK_ITEM_PROPERTY_OPTIONS = [
   { value: "status", label: "Status" },
   { value: "priority", label: "Priority" },
-  { value: "owner", label: "Owner" },
+  { value: "owner", label: "Assignee" },
   { value: "due", label: "Due date" },
   { value: "space", label: "Space" },
   { value: "source", label: "Source" },
@@ -301,6 +302,7 @@ export function groupWorkItemsForDisplay({
   showEmptySubgroups,
   spaces,
   statuses,
+  assignees = [],
 }: {
   items: WorkItemSummary[];
   group: WorkItemDisplayGroup;
@@ -311,13 +313,21 @@ export function groupWorkItemsForDisplay({
   showEmptySubgroups: boolean;
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
+  assignees?: WorkItemAssigneeSummary[];
 }): GroupedListGroup<WorkItemSummary>[] {
   const sortedItems = sortWorkItemsForDisplay(items, sort, dir);
   if (group === "none") {
     return [{ id: "all", label: "All Work Items", rows: sortedItems }];
   }
 
-  return groupBuckets(group, items, spaces, statuses, showEmptyGroups)
+  return groupBuckets(
+    group,
+    items,
+    spaces,
+    statuses,
+    showEmptyGroups,
+    assignees,
+  )
     .map((bucket) => {
       const bucketItems = sortedItems.filter((item) => bucket.matches(item));
       const subgroups =
@@ -329,6 +339,7 @@ export function groupWorkItemsForDisplay({
               spaces,
               statuses,
               showEmptySubgroups,
+              assignees,
             )
               .map((subBucket) => ({
                 id: subBucket.id,
@@ -477,6 +488,7 @@ function groupBuckets(
   spaces: WorkItemSpaceSummary[],
   statuses: WorkItemStatusSummary[],
   includeEmpty: boolean,
+  assignees: WorkItemAssigneeSummary[] = [],
 ): Bucket[] {
   if (group === "status") {
     const statusBuckets = statuses.length
@@ -576,7 +588,7 @@ function groupBuckets(
 
   const labelFor =
     group === "owner"
-      ? workItemOwnerLabel
+      ? (item: WorkItemSummary) => workItemAssigneeLabel(item, assignees)
       : group === "source"
         ? workItemSourceLabel
         : workItemStatusLabel;

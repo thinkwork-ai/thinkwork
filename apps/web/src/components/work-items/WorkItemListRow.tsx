@@ -3,15 +3,16 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Asterisk,
-  Building2,
   CalendarDays,
   Check,
   CheckCircle2,
   Circle,
   MessageSquareText,
   Search,
+  UserRound,
   X,
 } from "lucide-react";
+import { IconPlanet } from "@tabler/icons-react";
 import {
   Badge,
   Button,
@@ -30,11 +31,13 @@ import { cn } from "@/lib/utils";
 import {
   WORK_ITEM_PRIORITY_ORDER,
   type WorkItemPriority,
+  type WorkItemAssigneeSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusCategory,
   type WorkItemStatusSummary,
   type WorkItemSummary,
-  workItemOwnerLabel,
+  workItemAssigneeColorClass,
+  workItemAssigneeLabel,
   workItemPriorityLabel,
   workItemSourceLabel,
   workItemSpaceLabel,
@@ -46,8 +49,10 @@ import type { WorkItemDisplayProperty } from "./work-item-view-display";
 
 interface WorkItemListRowProps {
   item: WorkItemSummary;
+  sequenceNumber?: number;
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
+  assignees?: WorkItemAssigneeSummary[];
   properties: WorkItemDisplayProperty[];
   includeSpace: boolean;
   updating: boolean;
@@ -57,32 +62,53 @@ interface WorkItemListRowProps {
   ) => void;
   onItemUpdate?: (
     item: WorkItemSummary,
-    patch: { priority?: WorkItemPriority; dueAt?: string | null },
+    patch: {
+      priority?: WorkItemPriority;
+      dueAt?: string | null;
+      ownerUserId?: string | null;
+    },
   ) => void;
+  onItemOpen?: (item: WorkItemSummary) => void;
 }
 
 export function WorkItemListRow({
   item,
+  sequenceNumber,
   spaces,
   statuses,
+  assignees = [],
   properties,
   includeSpace,
   updating,
   onStatusChange,
   onItemUpdate,
+  onItemOpen,
 }: WorkItemListRowProps) {
   const selected = new Set(properties);
   const primaryThreadId = item.threadLinks?.[0]?.threadId;
   const labels = workItemLabels(item);
   const progress = workItemProgress(item);
+  const showDueAndThreadBadges = false;
 
   return (
     <div
+      role="button"
+      tabIndex={onItemOpen ? 0 : undefined}
       className={cn(
-        "flex h-10 w-full min-w-0 items-center justify-between gap-3 px-1",
+        "flex h-10 w-full min-w-0 items-center justify-between gap-3 rounded-md px-1 outline-none",
+        onItemOpen &&
+          "cursor-pointer hover:bg-muted/25 focus-visible:ring-1 focus-visible:ring-ring",
         updating && "opacity-60",
       )}
       data-testid="work-item-list-row"
+      onClick={() => onItemOpen?.(item)}
+      onKeyDown={(event) => {
+        if (!onItemOpen) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onItemOpen(item);
+        }
+      }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
         {selected.has("priority") ? (
@@ -93,8 +119,8 @@ export function WorkItemListRow({
           />
         ) : null}
 
-        <span className="w-[72px] shrink-0 truncate font-mono text-xs font-medium text-muted-foreground">
-          {shortWorkItemKey(item)}
+        <span className="shrink-0 font-mono text-xs font-medium text-muted-foreground">
+          {sequenceNumber ? `WI-${sequenceNumber}` : shortWorkItemKey(item)}
         </span>
 
         {selected.has("status") ? (
@@ -106,27 +132,17 @@ export function WorkItemListRow({
           />
         ) : null}
 
-        {primaryThreadId ? (
-          <Link
-            to="/threads/$id"
-            params={{ id: primaryThreadId }}
-            className="min-w-0 flex-1 truncate rounded-sm py-0.5 text-sm font-semibold leading-none text-foreground hover:text-primary"
-          >
-            {item.title}
-          </Link>
-        ) : (
-          <span className="min-w-0 flex-1 truncate rounded-sm py-0.5 text-sm font-semibold leading-none text-foreground">
-            {item.title}
-          </span>
-        )}
+        <span className="min-w-0 flex-1 truncate rounded-sm py-0.5 text-sm font-semibold leading-none text-foreground">
+          {item.title}
+        </span>
 
         {progress ? <ProgressBadge label={progress} /> : null}
       </div>
 
-      <div className="flex shrink-0 items-center justify-end gap-2">
+      <div className="flex shrink-0 items-center justify-end gap-1.5">
         {labels.length > 0 ? <LabelsBadge labels={labels} /> : null}
 
-        {selected.has("due") ? (
+        {showDueAndThreadBadges && selected.has("due") ? (
           <DueDateBadgeSelector
             dueAt={item.dueAt}
             disabled={updating || !onItemUpdate}
@@ -134,22 +150,14 @@ export function WorkItemListRow({
           />
         ) : null}
 
-        {selected.has("source") ? (
+        {showDueAndThreadBadges && selected.has("source") ? (
           <ThreadBadge item={item} primaryThreadId={primaryThreadId} />
         ) : null}
 
         {includeSpace && selected.has("space") ? (
           <PillBadge
-            icon={<Building2 className="size-3.5 text-primary" />}
+            icon={<IconPlanet className="size-3.5 text-primary" />}
             label={workItemSpaceLabel(item.spaceId, spaces)}
-          />
-        ) : null}
-
-        {selected.has("created") ? (
-          <PillBadge
-            icon={<Asterisk className="size-3.5" />}
-            label={shortDate(item.createdAt)}
-            title={longDateTitle("Created", item.createdAt)}
           />
         ) : null}
 
@@ -169,10 +177,23 @@ export function WorkItemListRow({
           />
         ) : null}
 
-        {selected.has("owner") ? <OwnerAvatar item={item} /> : null}
+        {selected.has("owner") ? (
+          <AssigneeSelector
+            item={item}
+            assignees={assignees}
+            disabled={updating || !onItemUpdate}
+            onChange={(ownerUserId) => onItemUpdate?.(item, { ownerUserId })}
+          />
+        ) : null}
+
+        <CreatedDate value={item.createdAt} />
       </div>
     </div>
   );
+}
+
+function stopPropagation(event: React.MouseEvent) {
+  event.stopPropagation();
 }
 
 function StatusIconSelector({
@@ -203,6 +224,7 @@ function StatusIconSelector({
           className="size-6 shrink-0 rounded-full p-0 hover:bg-muted"
           aria-label={`Change status for ${item.title}`}
           disabled={disabled || statuses.length === 0}
+          onClick={stopPropagation}
         >
           <StatusGlyph
             category={workItemStatusCategory(item)}
@@ -275,6 +297,7 @@ function PriorityBadgeSelector({
           className="h-6 shrink-0 rounded-md border border-border bg-muted/10 px-1.5 hover:bg-muted/40"
           aria-label={`Priority: ${workItemPriorityLabel(item.priority)}`}
           disabled={disabled}
+          onClick={stopPropagation}
         >
           <PriorityBars priority={item.priority} />
         </Button>
@@ -343,6 +366,7 @@ function DueDateBadgeSelector({
           )}
           aria-label={`Due date: ${dueAt ? shortDate(dueAt) : "No due date"}`}
           disabled={disabled}
+          onClick={stopPropagation}
         >
           <CalendarDays className="size-3.5" />
           {dueAt ? shortDate(dueAt) : "No date"}
@@ -396,6 +420,7 @@ function LabelsBadge({ labels }: { labels: WorkItemLabel[] }) {
           size="sm"
           className="h-6 shrink-0 gap-1.5 rounded-full border border-border bg-muted/10 px-2 text-xs font-medium hover:bg-muted/40"
           aria-label={`Labels: ${labels.map((label) => label.name).join(", ")}`}
+          onClick={stopPropagation}
         >
           <span className="flex items-center gap-1">
             {visibleDots.map((label) => (
@@ -458,7 +483,11 @@ function ThreadBadge({
       size="sm"
       className="h-6 shrink-0 gap-1 rounded-full border border-border bg-muted/10 px-2 text-xs font-medium text-muted-foreground hover:bg-muted/40"
     >
-      <Link to="/threads/$id" params={{ id: primaryThreadId }}>
+      <Link
+        to="/threads/$id"
+        params={{ id: primaryThreadId }}
+        onClick={stopPropagation}
+      >
         <MessageSquareText className="size-3.5" />
         <span>{label}</span>
       </Link>
@@ -487,16 +516,113 @@ function PillBadge({
   );
 }
 
-function OwnerAvatar({ item }: { item: WorkItemSummary }) {
-  const label = workItemOwnerLabel(item);
+function AssigneeSelector({
+  item,
+  assignees,
+  disabled,
+  onChange,
+}: {
+  item: WorkItemSummary;
+  assignees: WorkItemAssigneeSummary[];
+  disabled?: boolean;
+  onChange: (ownerUserId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = workItemAssigneeLabel(item, assignees);
+  const selectedId = item.ownerUserId ?? null;
+  const assigneeSeed = selectedId
+    ? (assignees.find((assignee) => assignee.id === selectedId)?.id ??
+      selectedId)
+    : null;
 
   return (
-    <span
-      title={label}
-      className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
-    >
-      {initials(label)}
-    </span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          title={`Assignee: ${label}`}
+          aria-label={`Assignee: ${label}`}
+          disabled={disabled}
+          className={cn(
+            "size-6 shrink-0 rounded-full p-0 text-[11px] font-semibold hover:opacity-90",
+            workItemAssigneeColorClass(assigneeSeed),
+          )}
+          onClick={stopPropagation}
+        >
+          {selectedId ? initials(label) : <UserRound className="size-3" />}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-[260px] gap-0 rounded-lg p-0"
+        onClick={stopPropagation}
+      >
+        <Command>
+          <CommandInput
+            placeholder="Search team members..."
+            className="text-sm"
+          />
+          <CommandList>
+            <CommandEmpty>No team members found.</CommandEmpty>
+            <CommandGroup className="max-h-[320px] overflow-y-auto p-1">
+              <CommandItem
+                value="Unassigned"
+                className="flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm"
+                onClick={stopPropagation}
+                onSelect={() => {
+                  onChange(null);
+                  setOpen(false);
+                }}
+              >
+                <Check
+                  className={cn(
+                    "size-4 shrink-0",
+                    selectedId === null ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <UserRound className="size-3.5" />
+                </span>
+                <span className="truncate">Unassigned</span>
+              </CommandItem>
+              {assignees.map((assignee) => (
+                <CommandItem
+                  key={assignee.id}
+                  value={`${assignee.name} ${assignee.email ?? ""}`}
+                  className="flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm"
+                  onClick={stopPropagation}
+                  onSelect={() => {
+                    onChange(assignee.id);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "size-4 shrink-0",
+                      selectedId === assignee.id ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
+                      workItemAssigneeColorClass(assignee.id),
+                    )}
+                  >
+                    {initials(assignee.name || assignee.email || "User")}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {assignee.name || assignee.email || "User"}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -509,6 +635,17 @@ function ProgressBadge({ label }: { label: string }) {
       <Circle className="size-3" />
       {label}
     </Badge>
+  );
+}
+
+function CreatedDate({ value }: { value?: string | null }) {
+  return (
+    <span
+      title={longDateTitle("Created", value)}
+      className="shrink-0 text-right text-xs font-medium tabular-nums text-muted-foreground"
+    >
+      {shortMonthDate(value)}
+    </span>
   );
 }
 
@@ -627,6 +764,15 @@ function shortDate(value?: string | null) {
   if (!date) return "-";
   return date.toLocaleDateString(undefined, {
     month: "numeric",
+    day: "numeric",
+  });
+}
+
+function shortMonthDate(value?: string | null) {
+  const date = parseDate(value);
+  if (!date) return "-";
+  return date.toLocaleDateString(undefined, {
+    month: "short",
     day: "numeric",
   });
 }

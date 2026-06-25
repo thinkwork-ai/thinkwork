@@ -17,9 +17,11 @@ import {
 } from "@thinkwork/ui";
 import {
   type WorkItemPriority,
+  type WorkItemAssigneeSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
+  buildWorkItemSequenceNumbers,
   sortWorkItemStatuses,
 } from "./work-item-display";
 import {
@@ -43,14 +45,21 @@ interface WorkItemsListViewProps {
   display: WorkItemDisplayState["list"];
   includeSpace: boolean;
   updatingItemId?: string | null;
+  assignees?: WorkItemAssigneeSummary[];
+  sequenceNumbers?: Map<string, number>;
   onStatusChange: (
     item: WorkItemSummary,
     status: WorkItemStatusSummary,
   ) => void;
   onItemUpdate?: (
     item: WorkItemSummary,
-    patch: { priority?: WorkItemPriority; dueAt?: string | null },
+    patch: {
+      priority?: WorkItemPriority;
+      dueAt?: string | null;
+      ownerUserId?: string | null;
+    },
   ) => void;
+  onItemOpen?: (item: WorkItemSummary) => void;
 }
 
 export function WorkItemsListView({
@@ -60,8 +69,11 @@ export function WorkItemsListView({
   display,
   includeSpace,
   updatingItemId,
+  assignees = [],
+  sequenceNumbers,
   onStatusChange,
   onItemUpdate,
+  onItemOpen,
 }: WorkItemsListViewProps) {
   const sortedStatuses = useMemo(
     () => sortWorkItemStatuses(statuses),
@@ -74,10 +86,17 @@ export function WorkItemsListView({
       ),
     [spaces],
   );
-  const filterColumns = useMemo(() => buildWorkItemFilterColumnDefs(), []);
+  const filterColumns = useMemo(
+    () => buildWorkItemFilterColumnDefs(assignees),
+    [assignees],
+  );
   const sortedItems = useMemo(
     () => sortWorkItemsForDisplay(items, display.sort, display.dir),
     [display.dir, display.sort, items],
+  );
+  const sequenceNumberById = useMemo(
+    () => sequenceNumbers ?? buildWorkItemSequenceNumbers(items),
+    [items, sequenceNumbers],
   );
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const filterTable = useReactTable({
@@ -96,18 +115,24 @@ export function WorkItemsListView({
     () =>
       buildListColumns({
         displayProperties: display.properties,
+        assignees,
         includeSpace,
         onItemUpdate,
+        onItemOpen,
         onStatusChange,
+        sequenceNumberById,
         spaces,
         statuses: sortedStatuses,
         updatingItemId,
       }),
     [
       display.properties,
+      assignees,
       includeSpace,
       onItemUpdate,
+      onItemOpen,
       onStatusChange,
+      sequenceNumberById,
       sortedStatuses,
       spaces,
       updatingItemId,
@@ -125,6 +150,7 @@ export function WorkItemsListView({
       dir: display.dir,
       showEmptyGroups: display.showEmptyGroups,
       showEmptySubgroups: display.showEmptySubgroups,
+      assignees,
     });
 
     return (
@@ -144,13 +170,16 @@ export function WorkItemsListView({
             renderRow={(item) => (
               <WorkItemListRow
                 item={item}
+                sequenceNumber={sequenceNumberById.get(item.id)}
                 spaces={spaces}
                 statuses={sortedStatuses}
                 properties={display.properties}
                 includeSpace={includeSpace}
+                assignees={assignees}
                 updating={updatingItemId === item.id}
                 onStatusChange={onStatusChange}
                 onItemUpdate={onItemUpdate}
+                onItemOpen={onItemOpen}
               />
             )}
           />
@@ -268,7 +297,7 @@ function WorkItemsToolbarSearch({
         ref={inputRef}
         aria-label="Search work items"
         placeholder="Search work items..."
-        className="h-8 rounded-md pl-8 pr-8"
+        className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
         value={searchValue}
         onBlur={() => {
           if (!searchValue) setExpanded(false);
@@ -309,14 +338,18 @@ function isTextFilterValue(
 
 function buildListColumns({
   displayProperties,
+  assignees,
   includeSpace,
   onItemUpdate,
+  onItemOpen,
   onStatusChange,
+  sequenceNumberById,
   spaces,
   statuses,
   updatingItemId,
 }: {
   displayProperties: WorkItemDisplayProperty[];
+  assignees: WorkItemAssigneeSummary[];
   includeSpace: boolean;
   onStatusChange: (
     item: WorkItemSummary,
@@ -324,14 +357,20 @@ function buildListColumns({
   ) => void;
   onItemUpdate?: (
     item: WorkItemSummary,
-    patch: { priority?: WorkItemPriority; dueAt?: string | null },
+    patch: {
+      priority?: WorkItemPriority;
+      dueAt?: string | null;
+      ownerUserId?: string | null;
+    },
   ) => void;
+  onItemOpen?: (item: WorkItemSummary) => void;
+  sequenceNumberById: Map<string, number>;
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
   updatingItemId?: string | null;
 }): Array<ColumnDef<WorkItemSummary, unknown>> {
   const columns: Array<ColumnDef<WorkItemSummary, unknown> | false> = [
-    ...buildWorkItemFilterColumnDefs(),
+    ...buildWorkItemFilterColumnDefs(assignees),
     {
       id: "item",
       header: "",
@@ -343,13 +382,16 @@ function buildListColumns({
       cell: ({ row }) => (
         <WorkItemListRow
           item={row.original}
+          sequenceNumber={sequenceNumberById.get(row.original.id)}
           spaces={spaces}
           statuses={statuses}
           properties={displayProperties}
           includeSpace={includeSpace}
+          assignees={assignees}
           updating={updatingItemId === row.original.id}
           onStatusChange={onStatusChange}
           onItemUpdate={onItemUpdate}
+          onItemOpen={onItemOpen}
         />
       ),
     },

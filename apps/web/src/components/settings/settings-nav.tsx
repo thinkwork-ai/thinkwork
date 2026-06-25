@@ -10,10 +10,14 @@ import {
   Sparkles,
   Users,
   Webhook,
-  Workflow,
   Wrench,
 } from "lucide-react";
-import { IconFlask, IconPlanet, IconPlug } from "@tabler/icons-react";
+import {
+  IconBrandStackshare,
+  IconFlask,
+  IconPlanet,
+  IconPlug,
+} from "@tabler/icons-react";
 import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
 export interface SettingsNavItem {
@@ -108,7 +112,7 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   {
     label: "Workflows",
     to: "/settings/workflows",
-    icon: Workflow,
+    icon: IconBrandStackshare,
     operatorOnly: true,
   },
   {
