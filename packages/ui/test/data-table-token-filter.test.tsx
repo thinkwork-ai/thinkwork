@@ -103,6 +103,27 @@ describe("matchesDataTableTokenFilter", () => {
       matchesDataTableTokenFilter(null, { operator: "is_not", value: true }),
     ).toBe(true);
   });
+
+  it("matches option filters against any selected value", () => {
+    expect(
+      matchesDataTableTokenFilter("DONE", {
+        operator: "is_any_of",
+        value: ["TODO", "DONE"],
+      }),
+    ).toBe(true);
+    expect(
+      matchesDataTableTokenFilter("ACTIVE", {
+        operator: "is_any_of",
+        value: ["TODO", "DONE"],
+      }),
+    ).toBe(false);
+    expect(
+      matchesDataTableTokenFilter("ACTIVE", {
+        operator: "is_none_of",
+        value: ["TODO", "DONE"],
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("DataTableTokenFilter", () => {
@@ -111,37 +132,61 @@ describe("DataTableTokenFilter", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
     fireEvent.click(screen.getByRole("button", { name: "Status" }));
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Done" }));
 
     expect(screen.getByTestId("filters").textContent).toContain(
-      '"operator":"is"',
+      '"operator":"is_any_of"',
     );
     expect(screen.getByTestId("filters").textContent).toContain(
-      '"value":"DONE"',
+      '"value":["DONE"]',
     );
     expect(screen.getByTestId("page-index").textContent).toBe("0");
     expect(screen.getByTestId("row-count").textContent).toBe("1");
 
     const token = screen.getByLabelText("Status filter");
     expect(token.textContent).toContain("Status");
-    expect(token.textContent).toContain("is");
+    expect(token.textContent).toContain("is any of");
     expect(token.textContent).toContain("Done");
   });
 
-  it("edits an existing token instead of duplicating the field", () => {
+  it("supports selecting multiple option values", () => {
     render(<TokenFilterHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
     fireEvent.click(screen.getByRole("button", { name: "Status" }));
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Done" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Todo" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
-    fireEvent.click(screen.getByRole("button", { name: "Status" }));
-    fireEvent.click(screen.getByRole("button", { name: "Todo" }));
+    expect(screen.getByTestId("filters").textContent).toContain(
+      '"value":["DONE","TODO"]',
+    );
+    expect(screen.getByTestId("row-count").textContent).toBe("2");
+
+    const token = screen.getByLabelText("Status filter");
+    expect(token.textContent).toContain("2 statuses");
+  });
+
+  it("keeps one token when adding another value to the same field", () => {
+    render(
+      <TokenFilterHarness
+        initialFilters={[
+          {
+            id: "status",
+            value: { operator: "is_any_of", value: ["DONE"] },
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Status values" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Todo" }));
 
     const filters = JSON.parse(screen.getByTestId("filters").textContent ?? "");
     expect(filters).toEqual([
-      { id: "status", value: { operator: "is", value: "TODO" } },
+      {
+        id: "status",
+        value: { operator: "is_any_of", value: ["DONE", "TODO"] },
+      },
     ]);
   });
 
@@ -149,7 +194,7 @@ describe("DataTableTokenFilter", () => {
     render(
       <TokenFilterHarness
         initialFilters={[
-          { id: "status", value: { operator: "is", value: "DONE" } },
+          { id: "status", value: { operator: "is_any_of", value: ["DONE"] } },
           { id: "blocked", value: { operator: "is", value: true } },
         ]}
       />,
