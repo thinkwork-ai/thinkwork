@@ -65,6 +65,7 @@ import {
 import { finalizeN8nAgentStepRun } from "../n8n-agent-step/finalize.js";
 import { projectAgentLoopFinalize } from "../agent-loops/finalize-projection.js";
 import { autoSubmitSkillCreatorDraft } from "../skill-creator/auto-submit-draft.js";
+import { recordTraceEvidence } from "../trace-ledger/record-trace-evidence.js";
 import { recordGuardrailBlock } from "./record-guardrail-block.js";
 import {
   GENERIC_AGENT_ERROR_MESSAGE,
@@ -265,6 +266,11 @@ export async function processFinalize(
   }
 
   if (status === "failed") {
+    const failedDiagnostics = diagnosticsWithWorkspaceReconcile(
+      diagnosticsFromFinalizePayload(payload),
+      reconcileReport,
+      reconcileDurationMs,
+    );
     await handleFailedTurn({
       turnId,
       tenantId,
@@ -284,6 +290,25 @@ export async function processFinalize(
       responseText: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
       turnStatus: "failed",
       errorMessage,
+    });
+    await recordTraceEvidenceSafely({
+      tenantId,
+      agentId,
+      userId: costOwnerUserId,
+      threadId,
+      threadTurnId: turnId,
+      traceId,
+      runtimeType: payloadRuntimeType || claimed[0]?.runtimeType || null,
+      status: "failed",
+      durationMs,
+      responseText: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
+      errorMessage: errorMessage ?? GENERIC_AGENT_ERROR_MESSAGE,
+      usage: usageEvidenceFromFinalizePayload(payload, agentModel, null),
+      diagnostics: failedDiagnostics,
+      reconcile: reconcileReport,
+      toolInvocations: [],
+      modelRoutedToolCalls: [],
+      agentProfileRuns: [],
     });
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId);
@@ -573,6 +598,32 @@ export async function processFinalize(
   } catch (turnErr) {
     console.error(`[chat-finalize] Failed to update thread_turn:`, turnErr);
   }
+
+  await recordTraceEvidenceSafely({
+    tenantId,
+    agentId,
+    userId: costOwnerUserId,
+    threadId,
+    threadTurnId: turnId,
+    traceId,
+    runtimeType,
+    status: "completed",
+    durationMs,
+    responseText,
+    usage: {
+      model: usage.model || agentModel || null,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cachedReadTokens: usage.cachedReadTokens,
+      costUsd: parentCostUsd,
+    },
+    diagnostics,
+    reconcile: reconcileReport,
+    toolInvocations,
+    modelRoutedToolCalls,
+    agentProfileRuns,
+    bedrockRequestIds,
+  });
 
   await projectAgentLoopFinalizeSafely({
     tenantId,
@@ -877,6 +928,52 @@ async function projectAgentLoopFinalizeSafely(
   } catch (err) {
     console.error("[chat-finalize] AgentLoop finalize projection failed:", err);
   }
+}
+
+async function recordTraceEvidenceSafely(
+  input: Parameters<typeof recordTraceEvidence>[0],
+): Promise<void> {
+  try {
+    await recordTraceEvidence(input);
+  } catch (err) {
+    console.error("[chat-finalize] Trace ledger write failed:", err);
+    try {
+      await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
+        tenantId: input.tenantId,
+        runId: input.threadTurnId,
+        agentId: input.agentId,
+        eventType: "trace_ledger_write_failed",
+        stream: "step",
+        level: "warn",
+        color: "amber",
+        message: "Trace ledger write failed; existing projections preserved",
+        payload: {
+          error: err instanceof Error ? err.message : String(err),
+          trace_id: input.traceId ?? input.threadTurnId,
+        },
+      });
+    } catch {}
+  }
+}
+
+function usageEvidenceFromFinalizePayload(
+  payload: Pick<FinalizePayload, "usage">,
+  agentModel: string | null,
+  costUsd: number | null,
+): {
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  costUsd: number | null;
+} {
+  return {
+    model: payload.usage?.model ?? agentModel ?? null,
+    inputTokens: payload.usage?.input_tokens ?? 0,
+    outputTokens: payload.usage?.output_tokens ?? 0,
+    cachedReadTokens: payload.usage?.cached_read_tokens ?? 0,
+    costUsd,
+  };
 }
 
 /** Tool name the ask-user-question Pi extension registers (U5). */

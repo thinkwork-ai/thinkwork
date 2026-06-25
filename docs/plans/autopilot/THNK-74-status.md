@@ -132,3 +132,72 @@ Local verification:
 - `pnpm dlx prettier@3.6.2 --check` on authored TS/GraphQL/Markdown files
   passed.
 - `git diff --check` passed.
+
+PR / merge:
+
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2955
+- Merge commit: `5d50ab85ee0862a5473e2ea62b49eefc2ba06f77`
+- Dev migration `0189_trace_cost_substrate.sql` was applied and drift-verified.
+
+### U2: Ingest Runtime And Finalize Evidence Into The Ledger
+
+Objective: dual-write runtime/finalize evidence into the canonical trace ledger
+while preserving existing `thread_turns.usage_json` and `cost_events`
+projections.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u2-runtime-ledger-ingest`
+- Worktree: `.Codex/worktrees/thnk-74-u2-runtime-ledger-ingest`
+- Base: `origin/main` at `ee5617b44` (includes U1 merge plus PR #2956).
+
+Planned local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/trace-ledger/record-trace-evidence.test.ts`
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts`
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/cost-recording.extract-usage.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 08:57 CDT: cleaned stale aborted U2 worktree and reset duplicate
+  U1 scratch changes from `/Users/ericodom/.codex/worktrees/536d/thinkwork`.
+- 2026-06-25 08:57 CDT: created fresh U2 branch/worktree from `origin/main`.
+- Added `packages/api/src/lib/trace-ledger/record-trace-evidence.ts` with a
+  pure trace event-plan builder plus a best-effort DB writer that:
+  - upserts one `trace_runs` row for the turn;
+  - appends root turn, parent model, runtime compute/phase, workspace
+    reconcile, tool, model-routed tool, agent profile, and finalization events;
+  - appends runtime source-evidence rows;
+  - links matching `cost_events` rows to trace events as `runtime-reported`;
+  - appends runtime-scope `trace_cost_reconciliation_facts` for linked cost
+    rows.
+- Wired `processFinalize` to call the trace-ledger writer after existing
+  `usage_json` and cost projections are computed. The write is best-effort:
+  failures log a `trace_ledger_write_failed` thread-turn event and do not block
+  assistant-message insertion, turn finalization, or existing cost/thread
+  projections.
+- Added failed-turn trace ledger ingestion with failed status, error summary,
+  workspace reconcile diagnostics, and zero/available runtime usage evidence.
+- Added runtime source evidence metadata to new `cost_events` rows while keeping
+  their existing projection shape and reconciliation state at
+  `runtime-reported`.
+
+Local verification:
+
+- `pnpm install` passed; local `canvas` native build still logs a non-fatal
+  missing `pkg-config` warning under Node 25.6.0.
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/trace-ledger/record-trace-evidence.test.ts src/lib/chat-finalize/process-finalize.test.ts src/lib/cost-recording.extract-usage.test.ts src/__tests__/cost-recording.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm dlx prettier@3.6.2 --check packages/api/src/lib/trace-ledger/record-trace-evidence.ts packages/api/src/lib/trace-ledger/record-trace-evidence.test.ts packages/api/src/lib/chat-finalize/process-finalize.ts packages/api/src/lib/chat-finalize/process-finalize.test.ts packages/api/src/lib/cost-recording.ts docs/plans/autopilot/THNK-74-status.md`
+  passed.
+- `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `79eebd594` (`feat(trace-ledger): ingest finalize evidence`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2958
+- 2026-06-25 09:08 CDT: PR opened; waiting for required CI.
+- 2026-06-25 09:18 CDT: PR CI passed: CLA, lint, test, typecheck, and verify.
