@@ -573,3 +573,9 @@ Local verification:
   `lint` script.
 - `pnpm dlx prettier@3.6.2 --check` on touched TS/Markdown files passed.
 - `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `84a1500cc` (`feat(evals): snapshot trace evidence for flagged turns`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2963
+- 2026-06-25 12:40 CDT: PR opened; waiting for required CI.
