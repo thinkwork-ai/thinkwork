@@ -62,6 +62,8 @@ on U3; U5 verifies and polishes the integrated result.
 - 2026-06-25T00:29Z: Moved THNK-72 to `In Progress`, added a Linear
   implementation-start comment, and began U1 on branch
   `codex/thnk-72-token-filter` from fresh `origin/main`.
+- 2026-06-25T00:38Z: Opened U1 PR #2945 and added Linear progress comment with
+  local verification evidence.
 
 ## Unit Log
 
@@ -104,6 +106,10 @@ Local verification:
   because `prettier` is not installed in the workspace dependency graph.
 
 Status: locally verified; ready for commit/PR.
+
+PR:
+
+- https://github.com/thinkwork-ai/thinkwork/pull/2945
 
 ### U2: DataTable Hidden Filter Columns
 
