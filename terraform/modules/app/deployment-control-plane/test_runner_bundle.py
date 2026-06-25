@@ -481,8 +481,12 @@ class FakeLedgerDb:
     """In-memory stand-in for the psql/psql_output pair: tracks the migration
     ledger and records which migration files were applied."""
 
-    def __init__(self, tenants_exist: bool, ledger: set[str] | None = None,
-                 present_objects: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        tenants_exist: bool,
+        ledger: set[str] | None = None,
+        present_objects: set[str] | None = None,
+    ) -> None:
         self.tenants_exist = tenants_exist
         self.ledger: dict[str, str] = {name: "preexisting" for name in (ledger or set())}
         self.ledger_table_exists = ledger is not None
@@ -527,6 +531,7 @@ def run_push_database_schema(
     db: FakeLedgerDb,
     migration_names: list[str],
     migration_bodies: dict[str, str] | None = None,
+    vars_json: dict | None = None,
 ) -> list[tuple[str, str]]:
     source_dir = tmp_path / "source"
     outputs_path = tmp_path / "outputs.json"
@@ -553,8 +558,57 @@ def run_push_database_schema(
         lambda _database_url: db.events.append(("seed", "")),
     )
 
-    runner.push_database_schema(outputs_path, {"stage": "tei-e2e"})
+    runner.push_database_schema(outputs_path, vars_json or {"stage": "tei-e2e"})
     return db.events
+
+
+def test_push_database_schema_checks_out_release_selected_module_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    db = FakeLedgerDb(tenants_exist=True, ledger={"0155_tenant_model_catalog.sql"})
+    checkout_args: list[tuple[str, str]] = []
+
+    source_dir = tmp_path / "source"
+    outputs_path = tmp_path / "outputs.json"
+    outputs_path.write_text("{}", encoding="utf-8")
+    write_drizzle_files(source_dir, ["0155_tenant_model_catalog.sql"])
+
+    monkeypatch.setattr(runner, "SOURCE", source_dir)
+    monkeypatch.setenv(
+        "THINKWORK_TERRAFORM_MODULE_SOURCE",
+        "git::https://github.com/thinkwork-ai/thinkwork.git"
+        "//terraform/modules/thinkwork?ref=v0.1.0-canary.249",
+    )
+    monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.270")
+    monkeypatch.setattr(runner, "checkout_source", lambda *args: checkout_args.append(args))
+    monkeypatch.setattr(runner, "database_url_from_outputs", lambda _outputs: "postgres://db")
+    monkeypatch.setattr(runner, "psql", db.psql)
+    monkeypatch.setattr(runner, "psql_output", db.psql_output)
+    monkeypatch.setattr(
+        runner,
+        "seed_platform_bootstrap_defaults",
+        lambda _database_url: db.events.append(("seed", "")),
+    )
+
+    runner.push_database_schema(
+        outputs_path,
+        {
+            "stage": "tei-e2e",
+            "deployment_terraform_module_source": (
+                "git::https://github.com/thinkwork-ai/thinkwork.git"
+                "//terraform/modules/thinkwork?ref=09d199cc68afdbfc5f34e9cd1fb38448f20205d0"
+            ),
+        },
+    )
+
+    assert checkout_args == [
+        (
+            "git::https://github.com/thinkwork-ai/thinkwork.git"
+            "//terraform/modules/thinkwork?ref=09d199cc68afdbfc5f34e9cd1fb38448f20205d0",
+            "v0.1.0-canary.270",
+        )
+    ]
 
 
 def test_push_database_schema_applies_only_unrecorded_migrations(
@@ -869,7 +923,10 @@ def test_write_runner_files_persists_selected_release_to_controller_module(
     monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
     monkeypatch.setenv("THINKWORK_RELEASE_VERSION", "v0.1.0-canary.145")
     monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_URL", old_manifest_url)
-    monkeypatch.setenv("THINKWORK_RELEASE_MANIFEST_SHA256", "f0a149db34d59e290fc4a43bc098a57539dcae508445e0fb626b8ce45f9eaf1c")
+    monkeypatch.setenv(
+        "THINKWORK_RELEASE_MANIFEST_SHA256",
+        "f0a149db34d59e290fc4a43bc098a57539dcae508445e0fb626b8ce45f9eaf1c",
+    )
     monkeypatch.setenv(
         "THINKWORK_RELEASE_MANIFEST_TRUSTED_KEYS_JSON",
         '[{"keyId":"test-key","publicKeyPem":"-----BEGIN PUBLIC KEY-----\\nabc\\n-----END PUBLIC KEY-----"}]',
@@ -911,9 +968,7 @@ def test_write_runner_files_persists_selected_release_to_controller_module(
     assert "deployment_terraform_module_source" in main_tf
 
 
-def _cognito_email_runner_env(
-    runner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Path:
+def _cognito_email_runner_env(runner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     tf_dir = tmp_path / "terraform"
     manifest_path = tmp_path / "thinkwork-release.json"
     manifest_sha = write_manifest(
@@ -1363,8 +1418,7 @@ def test_n8n_managed_app_overrides_complete_sparse_live_install_payload(
                                 "value": {
                                     "twenty_public_url": "https://crm.thinkwork.ai",
                                     "twenty_certificate_arn": (
-                                        "arn:aws:acm:us-east-1:"
-                                        "487219502366:certificate/www"
+                                        "arn:aws:acm:us-east-1:487219502366:certificate/www"
                                     ),
                                 }
                             }
@@ -1466,8 +1520,7 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
                                     "n8n_storage_prefix": "managed-apps/n8n",
                                     "n8n_public_url": "https://n8n.thinkwork.ai",
                                     "n8n_certificate_arn": (
-                                        "arn:aws:acm:us-east-1:"
-                                        "487219502366:certificate/n8n"
+                                        "arn:aws:acm:us-east-1:487219502366:certificate/n8n"
                                     ),
                                     "n8n_main_desired_count": 2,
                                     "n8n_worker_desired_count": 3,
@@ -1487,10 +1540,7 @@ def test_unrelated_managed_app_overrides_preserve_existing_n8n_guardrails() -> N
             "appKey": "twenty",
             "operation": "UPGRADE",
             "desiredConfig": {
-                "certificateArn": (
-                    "arn:aws:acm:us-east-1:"
-                    "487219502366:certificate/twenty"
-                ),
+                "certificateArn": ("arn:aws:acm:us-east-1:487219502366:certificate/twenty"),
                 "publicUrl": "https://twenty.thinkwork.ai",
             },
             "manifestImages": {
@@ -1585,9 +1635,7 @@ def test_twenty_managed_app_overrides_enable_sparse_payload_from_customer_domain
             "operation": "ENABLE",
             "desiredConfig": {},
             "customerDomain": "tei.thinkwork.ai",
-            "appCertificateArn": (
-                "arn:aws:acm:us-east-1:487219502366:certificate/crm"
-            ),
+            "appCertificateArn": ("arn:aws:acm:us-east-1:487219502366:certificate/crm"),
         },
         "dev",
         "487219502366",
@@ -1600,8 +1648,7 @@ def test_twenty_managed_app_overrides_enable_sparse_payload_from_customer_domain
     assert overrides["twenty_image_uri"] == twenty_image_uri
     assert overrides["twenty_public_url"] == "https://crm.tei.thinkwork.ai"
     assert (
-        overrides["twenty_certificate_arn"]
-        == "arn:aws:acm:us-east-1:487219502366:certificate/crm"
+        overrides["twenty_certificate_arn"] == "arn:aws:acm:us-east-1:487219502366:certificate/crm"
     )
     assert overrides["deployment_control_plane_create_secret_placeholders"] is True
 
@@ -1630,14 +1677,20 @@ def test_twenty_managed_app_stages_native_app_seed_artifact(
             "artifact_names": {"twenty-thinkwork-app"},
         }
     ]
-    assert runner.stage_managed_app_release_artifacts(
-        "update",
-        {"appKey": "twenty", "operation": "PARK"},
-    ) == {}
-    assert runner.stage_managed_app_release_artifacts(
-        "plan",
-        {"appKey": "twenty", "operation": "ENABLE"},
-    ) == {}
+    assert (
+        runner.stage_managed_app_release_artifacts(
+            "update",
+            {"appKey": "twenty", "operation": "PARK"},
+        )
+        == {}
+    )
+    assert (
+        runner.stage_managed_app_release_artifacts(
+            "plan",
+            {"appKey": "twenty", "operation": "ENABLE"},
+        )
+        == {}
+    )
 
 
 def test_twenty_post_install_sync_uses_release_artifact_and_secret_env(
@@ -1854,8 +1907,7 @@ def test_validate_environment_plan_scope_allows_reviewed_domain_removal() -> Non
             "resource_changes": [
                 {
                     "address": (
-                        "module.thinkwork.module.customer_domain."
-                        "aws_route53_record.app_alias_a[0]"
+                        "module.thinkwork.module.customer_domain.aws_route53_record.app_alias_a[0]"
                     ),
                     "change": {"actions": ["delete"]},
                 }
@@ -1874,8 +1926,7 @@ def test_validate_environment_plan_scope_rejects_cloudfront_alias_removal() -> N
                 "resource_changes": [
                     {
                         "address": (
-                            "module.thinkwork.module.computer_site."
-                            "aws_cloudfront_distribution.site"
+                            "module.thinkwork.module.computer_site.aws_cloudfront_distribution.site"
                         ),
                         "change": {
                             "actions": ["update"],
@@ -2926,7 +2977,9 @@ def test_ensure_first_admin_provisions_fresh_environment(
     monkeypatch.setattr(runner, "ensure_first_admin_cognito_user", fake_ensure_user)
     monkeypatch.setattr(runner, "cognito_idp", fake_cognito_idp)
     monkeypatch.setattr(
-        runner, "seed_platform_bootstrap_defaults", lambda _url: state.__setitem__("seeded", state["seeded"] + 1)
+        runner,
+        "seed_platform_bootstrap_defaults",
+        lambda _url: state.__setitem__("seeded", state["seeded"] + 1),
     )
 
     runner.ensure_first_admin(

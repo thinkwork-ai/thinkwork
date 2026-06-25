@@ -16,6 +16,7 @@ import { createHash, randomUUID } from "node:crypto";
 const GITHUB_RELEASES_API =
   "https://api.github.com/repos/thinkwork-ai/thinkwork/releases";
 const MANIFEST_FILE_NAME = "thinkwork-release.json";
+const THINKWORK_REGISTRY_MODULE_SOURCE = "thinkwork-ai/thinkwork/aws";
 
 export interface ReleaseSummary {
   /** Tag name, e.g. `v0.1.0-canary.173`. */
@@ -270,6 +271,7 @@ export function buildControllerUpdateInput(options: {
     releaseVersion: release.version,
     releaseManifestUrl: release.manifestUrl,
     releaseManifestSha256: release.manifestSha256,
+    terraformModuleSource: THINKWORK_REGISTRY_MODULE_SOURCE,
     terraformModuleVersion: release.version.replace(/^v/, ""),
     release: releasePin,
     ...(prior.agentcorePiSourceImageUri
