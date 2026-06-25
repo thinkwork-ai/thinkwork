@@ -579,3 +579,20 @@ PR / CI:
 - Commit: `84a1500cc` (`feat(evals): snapshot trace evidence for flagged turns`)
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2963
 - 2026-06-25 12:40 CDT: PR opened; waiting for required CI.
+- 2026-06-25 12:56 CDT: required CI passed: CLA, lint, test, typecheck, and
+  verify.
+- 2026-06-25 12:58 CDT: PR merged.
+- Merge commit: `f1f4614659f1c063edae969b2748c57d48d92d8a`.
+- U7 worktree, remote branch, and local branch cleanup completed.
+
+## Final Closeout
+
+All THNK-74 implementation units are merged:
+
+- U1: canonical trace/cost schema and reconciliation helpers.
+- U2: runtime/finalize trace-ledger ingestion.
+- U3: per-invocation Bedrock reconciliation.
+- U4: bill export import and aggregate reconciliation.
+- U5: reconciliation-confidence-aware cost and budget APIs.
+- U6: canonical trace projections for API, CLI, and web surfaces.
+- U7: eval trace-evidence snapshots, truthful historical backfill, and docs.
