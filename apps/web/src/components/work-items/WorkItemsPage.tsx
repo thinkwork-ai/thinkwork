@@ -14,12 +14,15 @@ import {
   WorkItemStatusesQuery,
   WorkItemsQuery,
 } from "@/lib/graphql-queries";
+import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import {
   WORK_ITEM_PRIORITY_ORDER,
+  buildWorkItemSequenceNumbers,
   categoryStatuses,
   isWorkItemDueSoon,
   isWorkItemOpen,
   sortWorkItemStatuses,
+  type WorkItemAssigneeSummary,
   type WorkItemSpaceSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
@@ -37,6 +40,7 @@ import {
   NewWorkItemSheet,
   type NewWorkItemFormInput,
 } from "./NewWorkItemSheet";
+import { WorkItemDetailSheet } from "./WorkItemDetailSheet";
 import { WorkItemsBoardView } from "./WorkItemsBoardView";
 import { WorkItemsListView } from "./WorkItemsListView";
 
@@ -52,6 +56,21 @@ interface SpacesResult {
   spaces?: WorkItemSpaceSummary[] | null;
 }
 
+interface TenantMemberSummary {
+  principalType: string;
+  principalId: string;
+  status?: string | null;
+  user?: {
+    id?: string | null;
+    name?: string | null;
+    email?: string | null;
+  } | null;
+}
+
+interface TenantMembersResult {
+  tenantMembers?: TenantMemberSummary[] | null;
+}
+
 interface WorkItemsPageProps {
   tenantId: string | null;
   state: WorkItemRouteSearch;
@@ -65,6 +84,7 @@ export function WorkItemsPage({
 }: WorkItemsPageProps) {
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [newWorkItemOpen, setNewWorkItemOpen] = useState(false);
+  const [detailItemId, setDetailItemId] = useState<string | null>(null);
   const input = useMemo(
     () => (tenantId ? buildWorkItemsInput(tenantId, state) : undefined),
     [state, tenantId],
@@ -87,6 +107,12 @@ export function WorkItemsPage({
     query: WorkItemStatusesQuery,
     variables: { tenantId: tenantId ?? "", spaceId: state.spaceId ?? "" },
     pause: !tenantId || !state.spaceId,
+    requestPolicy: "cache-and-network",
+  });
+  const [{ data: membersData }] = useQuery<TenantMembersResult>({
+    query: SettingsTenantMembersQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
     requestPolicy: "cache-and-network",
   });
   const [{ fetching: statusUpdating }, executeStatusUpdate] = useMutation(
@@ -116,6 +142,15 @@ export function WorkItemsPage({
 
   const spaces = spacesData?.spaces ?? [];
   const workItems = data?.workItems ?? [];
+  const sequenceNumbers = useMemo(
+    () => buildWorkItemSequenceNumbers(workItems),
+    [workItems],
+  );
+  const assignees = useMemo(
+    () => workItemAssigneesFromMembers(membersData?.tenantMembers ?? []),
+    [membersData?.tenantMembers],
+  );
+  const detailItem = workItems.find((item) => item.id === detailItemId) ?? null;
   const statuses = useMemo(() => {
     const spaceStatuses = sortWorkItemStatuses(
       statusesData?.workItemStatuses ?? [],
@@ -150,7 +185,11 @@ export function WorkItemsPage({
   const handleWorkItemUpdate = useCallback(
     async (
       item: WorkItemSummary,
-      patch: { priority?: WorkItemPriority; dueAt?: string | null },
+      patch: {
+        priority?: WorkItemPriority;
+        dueAt?: string | null;
+        ownerUserId?: string | null;
+      },
     ) => {
       if (!tenantId || workItemUpdating) return;
       setUpdatingItemId(item.id);
@@ -255,6 +294,7 @@ export function WorkItemsPage({
               items={workItems}
               spaces={spaces}
               statuses={statuses}
+              assignees={assignees}
               display={state.board}
               updatingItemId={updatingItemId}
               onStatusChange={handleStatusChange}
@@ -267,8 +307,11 @@ export function WorkItemsPage({
               display={state.list}
               includeSpace={!state.spaceId}
               updatingItemId={updatingItemId}
+              assignees={assignees}
+              sequenceNumbers={sequenceNumbers}
               onStatusChange={handleStatusChange}
               onItemUpdate={handleWorkItemUpdate}
+              onItemOpen={(item) => setDetailItemId(item.id)}
             />
           )}
         </div>
@@ -281,8 +324,45 @@ export function WorkItemsPage({
         onOpenChange={setNewWorkItemOpen}
         onCreate={handleCreateWorkItem}
       />
+      <WorkItemDetailSheet
+        item={detailItem}
+        sequenceNumber={
+          detailItem ? sequenceNumbers.get(detailItem.id) : undefined
+        }
+        spaces={spaces}
+        statuses={statuses}
+        assignees={assignees}
+        updating={Boolean(detailItem && updatingItemId === detailItem.id)}
+        open={Boolean(detailItemId)}
+        onOpenChange={(open) => {
+          if (!open) setDetailItemId(null);
+        }}
+        onStatusChange={handleStatusChange}
+        onItemUpdate={handleWorkItemUpdate}
+      />
     </main>
   );
+}
+
+function workItemAssigneesFromMembers(
+  members: TenantMemberSummary[],
+): WorkItemAssigneeSummary[] {
+  return members
+    .filter(
+      (member) =>
+        member.principalType?.toUpperCase() === "USER" &&
+        member.status?.toLowerCase() !== "removed",
+    )
+    .map((member) => {
+      const name = member.user?.name?.trim();
+      const email = member.user?.email?.trim();
+      return {
+        id: member.user?.id ?? member.principalId,
+        name: name || email || member.principalId,
+        email,
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function summarizeWorkItems(items: WorkItemSummary[]) {

@@ -254,7 +254,9 @@ function ModeButton({
       variant="outline"
       className={cn(
         "h-auto flex-1 flex-col gap-0.5 rounded-md px-4 py-1 text-xs",
-        active && "border-primary/50 bg-muted",
+        active
+          ? "border-primary/50 bg-muted text-foreground"
+          : "border-border/60 bg-transparent text-muted-foreground opacity-55 hover:opacity-80",
       )}
       aria-pressed={active}
       onClick={onClick}

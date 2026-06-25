@@ -1,5 +1,11 @@
 import type React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkItemsListView } from "./WorkItemsListView";
 import type {
@@ -40,6 +46,7 @@ describe("WorkItemsListView", () => {
       />,
     );
 
+    expect(screen.getByText("WI-1")).toBeTruthy();
     expect(screen.getByText("work-1")).toBeTruthy();
     expect(screen.getByLabelText("Priority: Normal")).toBeTruthy();
     expect(screen.queryByText(/Jun 30/)).toBeNull();
@@ -119,6 +126,83 @@ describe("WorkItemsListView", () => {
     ).toBeNull();
     expect(screen.getByText("Customer onboarding")).toBeTruthy();
     expect(screen.getByText("Billing cleanup")).toBeTruthy();
+  });
+
+  it("opens detail from the row and updates assignee from the assignee control", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const onItemOpen = vi.fn();
+    const onItemUpdate = vi.fn();
+    const assigned = item({
+      id: "assigned",
+      title: "Assigned task",
+      ownerUserId: "user-1",
+    });
+
+    render(
+      <WorkItemsListView
+        items={[assigned]}
+        spaces={spaces}
+        statuses={statuses}
+        assignees={[
+          { id: "user-1", name: "Becky Moon" },
+          { id: "user-2", name: "Eric Odom" },
+        ]}
+        display={{
+          ...DEFAULT_WORK_ITEM_SEARCH.list,
+          group: "none",
+          subgroup: "none",
+          properties: ["status", "priority", "owner"],
+        }}
+        includeSpace
+        onStatusChange={vi.fn()}
+        onItemOpen={onItemOpen}
+        onItemUpdate={onItemUpdate}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Assigned task"));
+    expect(onItemOpen).toHaveBeenCalledWith(assigned);
+
+    onItemOpen.mockClear();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Assignee: Becky Moon" }),
+    );
+    expect(onItemOpen).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByText("Eric Odom"));
+
+    await waitFor(() =>
+      expect(onItemUpdate).toHaveBeenCalledWith(assigned, {
+        ownerUserId: "user-2",
+      }),
+    );
+    expect(onItemOpen).not.toHaveBeenCalled();
+  });
+
+  it("renders the created date at the row end", () => {
+    render(
+      <WorkItemsListView
+        items={[
+          item({
+            id: "created-date",
+            title: "Created date task",
+            createdAt: "2026-06-12T12:00:00Z",
+          }),
+        ]}
+        spaces={spaces}
+        statuses={statuses}
+        display={{
+          ...DEFAULT_WORK_ITEM_SEARCH.list,
+          group: "none",
+          subgroup: "none",
+          properties: ["status", "priority"],
+        }}
+        includeSpace
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Jun 12")).toBeTruthy();
   });
 });
 

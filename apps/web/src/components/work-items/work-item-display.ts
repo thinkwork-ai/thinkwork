@@ -60,6 +60,12 @@ export interface WorkItemSummary {
   archivedAt?: string | null;
 }
 
+export interface WorkItemAssigneeSummary {
+  id: string;
+  name: string;
+  email?: string | null;
+}
+
 export interface WorkItemSavedViewSummary {
   id: string;
   name: string;
@@ -205,16 +211,50 @@ export function workItemPriorityTone(
 }
 
 export function workItemOwnerLabel(item: WorkItemSummary) {
+  return workItemAssigneeLabel(item);
+}
+
+export function workItemAssigneeLabel(
+  item: WorkItemSummary,
+  assignees: WorkItemAssigneeSummary[] = [],
+) {
+  const assignee = item.ownerUserId
+    ? assignees.find((user) => user.id === item.ownerUserId)
+    : undefined;
+  if (assignee) return assignee.name.trim() || assignee.email || "Assignee";
+
   const metadata = objectRecord(item.metadata);
-  const assignee = objectRecord(metadata.assignee);
+  const metadataAssignee = objectRecord(metadata.assignee);
   const display =
-    stringValue(assignee.displayName) ??
+    stringValue(metadataAssignee.displayName) ??
     stringValue(metadata.assigneeDisplay) ??
     stringValue(metadata.ownerDisplay);
   if (display) return display;
   if (item.ownerUserId) return "User";
   if (item.ownerAgentId) return "Agent";
   return "Unassigned";
+}
+
+const assigneeColorClasses = [
+  "bg-sky-500 text-white",
+  "bg-violet-500 text-white",
+  "bg-emerald-500 text-white",
+  "bg-amber-500 text-white",
+  "bg-rose-500 text-white",
+  "bg-cyan-500 text-white",
+  "bg-fuchsia-500 text-white",
+  "bg-lime-600 text-white",
+];
+
+export function workItemAssigneeColorClass(seed?: string | null) {
+  if (!seed) return "bg-muted text-muted-foreground";
+
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  }
+
+  return assigneeColorClasses[hash % assigneeColorClasses.length];
 }
 
 export function workItemSpaceLabel(
@@ -272,6 +312,19 @@ export function sortWorkItemStatuses(statuses: WorkItemStatusSummary[]) {
   });
 }
 
+export function buildWorkItemSequenceNumbers(items: WorkItemSummary[]) {
+  return new Map(
+    [...items]
+      .sort((left, right) => {
+        const createdDelta =
+          sequenceDate(left.createdAt) - sequenceDate(right.createdAt);
+        if (createdDelta !== 0) return createdDelta;
+        return left.id.localeCompare(right.id);
+      })
+      .map((item, index) => [item.id, index + 1]),
+  );
+}
+
 export function categoryStatuses(): WorkItemStatusSummary[] {
   return WORK_ITEM_CATEGORY_ORDER.map((category, index) => ({
     id: category,
@@ -297,6 +350,12 @@ function formatProvider(value: string) {
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(" ");
+}
+
+function sequenceDate(value?: string | null) {
+  if (!value) return Number.MAX_SAFE_INTEGER;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
 }
 
 function startOfToday(now: Date) {

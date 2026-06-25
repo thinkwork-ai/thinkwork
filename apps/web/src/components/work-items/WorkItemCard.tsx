@@ -9,11 +9,12 @@ import { Badge, Button } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
 import {
   type WorkItemSpaceSummary,
+  type WorkItemAssigneeSummary,
   type WorkItemStatusSummary,
   type WorkItemSummary,
   isWorkItemDueSoon,
   workItemDueLabel,
-  workItemOwnerLabel,
+  workItemAssigneeLabel,
   workItemPriorityLabel,
   workItemPriorityTone,
   workItemSourceLabel,
@@ -28,6 +29,7 @@ interface WorkItemCardProps {
   item: WorkItemSummary;
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
+  assignees?: WorkItemAssigneeSummary[];
   properties?: WorkItemDisplayProperty[];
   compact?: boolean;
   updating?: boolean;
@@ -41,6 +43,7 @@ export function WorkItemCard({
   item,
   spaces,
   statuses,
+  assignees = [],
   properties = ["status", "priority", "owner", "due", "space", "source"],
   compact = false,
   updating,
@@ -117,7 +120,9 @@ export function WorkItemCard({
           {selected.has("owner") ? (
             <div className="flex min-w-0 items-center gap-1.5">
               <UserRound className="size-3.5 shrink-0" />
-              <span className="truncate">{workItemOwnerLabel(item)}</span>
+              <span className="truncate">
+                {workItemAssigneeLabel(item, assignees)}
+              </span>
             </div>
           ) : null}
           {selected.has("source") ? (

@@ -19,7 +19,9 @@ describe("WorkItemDisplayHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: "Display" }));
 
     expect(screen.getByRole("button", { name: "List" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Board" })).toBeTruthy();
+    const boardButton = screen.getByRole("button", { name: "Board" });
+    expect(boardButton).toBeTruthy();
+    expect(boardButton.className).toContain("opacity-55");
     expect(screen.queryByText("Table")).toBeNull();
     expect(screen.queryByText("Map")).toBeNull();
     expect(screen.queryByText("Calendar")).toBeNull();
