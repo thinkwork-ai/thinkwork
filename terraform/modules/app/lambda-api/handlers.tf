@@ -203,6 +203,9 @@ locals {
       EXTENSION_PROXY_BACKENDS_JSON  = var.extension_proxy_backends_json
       EXTENSION_PROXY_SIGNING_SECRET = var.extension_proxy_signing_secret
     }
+    "trace-invocation-reconciler" = {
+      BEDROCK_INVOCATION_LOG_GROUP = aws_cloudwatch_log_group.bedrock_model_invocations.name
+    }
     "job-schedule-manager" = {
       JOB_TRIGGER_ARN      = "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-trigger"
       JOB_TRIGGER_ROLE_ARN = var.job_scheduler_role_arn
@@ -1551,6 +1554,115 @@ resource "aws_scheduler_schedule" "trace_invocation_reconciler" {
     arn      = aws_lambda_function.handler["trace-invocation-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
+}
+
+# Bedrock model invocation logs are the provider-observed evidence source for
+# trace invocation reconciliation. The Bedrock setting is account/region scoped,
+# so keep the destination stage-neutral and let each stage's reconciler match
+# only rows present in its own database.
+resource "aws_cloudwatch_log_group" "bedrock_model_invocations" {
+  name              = "/thinkwork/bedrock/model-invocations"
+  retention_in_days = 30
+
+  tags = {
+    Name      = "thinkwork-bedrock-model-invocations"
+    Stage     = var.stage
+    Component = "bedrock-model-invocation-logging"
+  }
+}
+
+resource "aws_iam_role" "bedrock_model_invocation_logging" {
+  name = "thinkwork-${var.stage}-bedrock-model-invocation-logging"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "bedrock.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = var.account_id
+          }
+        }
+      },
+    ]
+  })
+
+  tags = {
+    Name      = "thinkwork-${var.stage}-bedrock-model-invocation-logging"
+    Stage     = var.stage
+    Component = "bedrock-model-invocation-logging"
+  }
+}
+
+resource "aws_iam_role_policy" "bedrock_model_invocation_logging" {
+  name = "write-bedrock-model-invocation-logs"
+  role = aws_iam_role.bedrock_model_invocation_logging.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "WriteCloudWatchInvocationLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:DescribeLogStreams",
+          "logs:PutLogEvents",
+        ]
+        Resource = [
+          aws_cloudwatch_log_group.bedrock_model_invocations.arn,
+          "${aws_cloudwatch_log_group.bedrock_model_invocations.arn}:log-stream:aws/bedrock/modelinvocations",
+          "${aws_cloudwatch_log_group.bedrock_model_invocations.arn}:log-stream:aws/bedrock/modelinvocations*",
+        ]
+      },
+      {
+        Sid    = "WriteLargeInvocationPayloads"
+        Effect = "Allow"
+        Action = [
+          "s3:GetBucketLocation",
+          "s3:ListBucket",
+        ]
+        Resource = var.bucket_arn
+      },
+      {
+        Sid      = "PutLargeInvocationPayloads"
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "${var.bucket_arn}/bedrock/model-invocation-logs/*"
+      },
+    ]
+  })
+}
+
+resource "aws_bedrock_model_invocation_logging_configuration" "this" {
+  logging_config {
+    text_data_delivery_enabled      = true
+    image_data_delivery_enabled     = false
+    embedding_data_delivery_enabled = false
+    video_data_delivery_enabled     = false
+
+    cloudwatch_config {
+      log_group_name = aws_cloudwatch_log_group.bedrock_model_invocations.name
+      role_arn       = aws_iam_role.bedrock_model_invocation_logging.arn
+
+      large_data_delivery_s3_config {
+        bucket_name = var.bucket_name
+        key_prefix  = "bedrock/model-invocation-logs/large/"
+      }
+    }
+
+    s3_config {
+      bucket_name = var.bucket_name
+      key_prefix  = "bedrock/model-invocation-logs/"
+    }
+  }
+
+  depends_on = [aws_iam_role_policy.bedrock_model_invocation_logging]
 }
 
 # ---------------------------------------------------------------------------

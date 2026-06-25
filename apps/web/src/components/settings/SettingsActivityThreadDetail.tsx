@@ -603,115 +603,154 @@ function ThreadTraces({ traces }: { traces: ThreadTrace[] }) {
       </button>
       {open ? (
         traces.length > 0 ? (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full table-fixed text-sm">
-              <thead className="border-b border-border text-xs text-muted-foreground">
-                <tr>
-                  <th className="w-24 px-3 py-2 text-left font-medium">Time</th>
-                  <th className="w-32 px-3 py-2 text-left font-medium">
-                    Agent
-                  </th>
-                  <th className="w-24 px-3 py-2 text-left font-medium">
-                    Runtime
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium">Model</th>
-                  <th className="w-20 px-3 py-2 text-right font-medium">In</th>
-                  <th className="w-20 px-3 py-2 text-right font-medium">Out</th>
-                  <th className="w-24 px-3 py-2 text-right font-medium">
-                    Latency
-                  </th>
-                  <th className="w-24 px-3 py-2 text-right font-medium">
-                    Cost
-                  </th>
-                  <th className="w-36 px-3 py-2 text-left font-medium">
-                    State
-                  </th>
-                  <th className="w-28 px-3 py-2 text-left font-medium">
-                    Source
-                  </th>
-                  <th className="w-16 px-3 py-2 text-right font-medium">
-                    Trace
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {traces.map((trace, index) => (
-                  <tr
-                    key={`${trace.traceId ?? "trace"}-${index}`}
-                    className="border-b border-border last:border-b-0"
-                  >
-                    <td className="truncate px-3 py-2 text-xs text-muted-foreground">
-                      {trace.createdAt ? relativeTime(trace.createdAt) : "--"}
-                    </td>
-                    <td className="truncate px-3 py-2 text-xs font-medium">
-                      {trace.profileName || trace.agentName || "--"}
-                      {trace.laneKey ? (
-                        <Badge
-                          variant="outline"
-                          className="ml-1 px-1 text-[10px] text-muted-foreground"
-                        >
-                          {trace.laneKey}
-                        </Badge>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2 text-xs">
-                      <Badge
-                        variant="outline"
-                        className="font-mono text-[10px]"
-                      >
-                        {runtimeLabel(trace.runtimeType)}
-                      </Badge>
-                    </td>
-                    <td className="truncate px-3 py-2 text-xs text-muted-foreground">
-                      {shortenModel(trace.model)}
-                      {trace.estimated ? (
-                        <Badge
-                          variant="outline"
-                          className="ml-1 px-1 text-[10px]"
-                        >
-                          est
-                        </Badge>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums">
-                      {formatTokens(trace.inputTokens)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums">
-                      {formatTokens(trace.outputTokens)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums">
-                      {formatDuration(trace.durationMs)}
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums">
-                      {formatUsd(trace.costUsd)}
-                    </td>
-                    <td className="truncate px-3 py-2 text-xs text-muted-foreground">
-                      {trace.reconciliationState ?? "--"}
-                    </td>
-                    <td className="truncate px-3 py-2 text-xs text-muted-foreground">
-                      {trace.sourceEvidence?.[0]?.sourceType ??
-                        trace.source ??
-                        "--"}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {trace.traceId ? (
-                        <a
-                          href={xrayTraceUrl(trace.traceId)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground"
-                          aria-label="Open trace"
-                        >
-                          <ExternalLink className="inline h-3.5 w-3.5" />
-                        </a>
-                      ) : (
-                        "--"
-                      )}
-                    </td>
+          <div>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Flattened trace events; parent links show nesting. Row costs are
+              observations or rollups, not an additive ledger.
+            </p>
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full table-fixed text-sm">
+                <thead className="border-b border-border text-xs text-muted-foreground">
+                  <tr>
+                    <th className="w-24 px-3 py-2 text-left font-medium">
+                      Time
+                    </th>
+                    <th className="w-36 px-3 py-2 text-left font-medium">
+                      Event
+                    </th>
+                    <th className="w-24 px-3 py-2 text-left font-medium">
+                      Parent
+                    </th>
+                    <th className="w-32 px-3 py-2 text-left font-medium">
+                      Agent
+                    </th>
+                    <th className="w-24 px-3 py-2 text-left font-medium">
+                      Runtime
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium">Model</th>
+                    <th className="w-20 px-3 py-2 text-right font-medium">
+                      In
+                    </th>
+                    <th className="w-20 px-3 py-2 text-right font-medium">
+                      Out
+                    </th>
+                    <th className="w-24 px-3 py-2 text-right font-medium">
+                      Latency
+                    </th>
+                    <th className="w-24 px-3 py-2 text-right font-medium">
+                      Row cost
+                    </th>
+                    <th className="w-36 px-3 py-2 text-left font-medium">
+                      State
+                    </th>
+                    <th className="w-28 px-3 py-2 text-left font-medium">
+                      Source
+                    </th>
+                    <th className="w-16 px-3 py-2 text-right font-medium">
+                      Trace
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {traces.map((trace, index) => (
+                    <tr
+                      key={`${trace.requestId ?? trace.traceId ?? "trace"}-${index}`}
+                      className="border-b border-border last:border-b-0"
+                    >
+                      <td className="truncate px-3 py-2 text-xs text-muted-foreground">
+                        {trace.createdAt ? relativeTime(trace.createdAt) : "--"}
+                      </td>
+                      <td className="truncate px-3 py-2 text-xs font-medium">
+                        <span
+                          className={cn(
+                            "block truncate",
+                            trace.parentRequestId &&
+                              "border-l border-border pl-2",
+                          )}
+                          title={trace.eventType ?? undefined}
+                        >
+                          {traceEventLabel(trace)}
+                        </span>
+                      </td>
+                      <td
+                        className="truncate px-3 py-2 font-mono text-[11px] text-muted-foreground"
+                        title={trace.parentRequestId ?? undefined}
+                      >
+                        {shortTraceId(trace.parentRequestId)}
+                      </td>
+                      <td className="truncate px-3 py-2 text-xs font-medium">
+                        {trace.profileName || trace.agentName || "--"}
+                        {trace.laneKey ? (
+                          <Badge
+                            variant="outline"
+                            className="ml-1 px-1 text-[10px] text-muted-foreground"
+                          >
+                            {trace.laneKey}
+                          </Badge>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-[10px]"
+                        >
+                          {runtimeLabel(trace.runtimeType)}
+                        </Badge>
+                      </td>
+                      <td className="truncate px-3 py-2 text-xs text-muted-foreground">
+                        {shortenModel(trace.model)}
+                        {trace.estimated ? (
+                          <Badge
+                            variant="outline"
+                            className="ml-1 px-1 text-[10px]"
+                          >
+                            est
+                          </Badge>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs tabular-nums">
+                        {formatTokens(trace.inputTokens)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs tabular-nums">
+                        {formatTokens(trace.outputTokens)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs tabular-nums">
+                        {formatDuration(trace.durationMs)}
+                      </td>
+                      <td
+                        className="px-3 py-2 text-right text-xs tabular-nums"
+                        title={traceCostTitle(trace)}
+                      >
+                        {formatUsd(trace.costUsd)}
+                      </td>
+                      <td className="truncate px-3 py-2 text-xs text-muted-foreground">
+                        {trace.reconciliationState ?? "--"}
+                      </td>
+                      <td className="truncate px-3 py-2 text-xs text-muted-foreground">
+                        {trace.sourceEvidence?.[0]?.sourceType ??
+                          trace.source ??
+                          "--"}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {trace.traceId ? (
+                          <a
+                            href={xrayTraceUrl(trace.traceId)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label="Open trace"
+                          >
+                            <ExternalLink className="inline h-3.5 w-3.5" />
+                          </a>
+                        ) : (
+                          "--"
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <p className="rounded-lg border border-border py-6 text-center text-sm text-muted-foreground">
@@ -765,6 +804,34 @@ function normalizeStatus(status?: string | null): string {
 function runtimeLabel(runtimeType?: string | null): string {
   const trimmed = runtimeType?.trim();
   return trimmed ? trimmed.toUpperCase() : "--";
+}
+
+function traceEventLabel(trace: ThreadTrace): string {
+  const raw = trace.eventType?.trim();
+  if (raw) {
+    return raw
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+  if (trace.toolName) return "Tool route";
+  if (trace.profileRunId || trace.profileSlug) return "Profile run";
+  if (trace.model) return "Model call";
+  return "Trace event";
+}
+
+function shortTraceId(value?: string | null): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return "--";
+  if (trimmed.length <= 10) return trimmed;
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
+}
+
+function traceCostTitle(trace: ThreadTrace): string {
+  const state = trace.reconciliationState?.trim();
+  if (state) {
+    return `${state} row cost observation; parent and child rows may overlap.`;
+  }
+  return "Row cost observation; parent and child rows may overlap and should not be summed.";
 }
 
 function formatTokens(value?: number | null): string {

@@ -1190,7 +1190,12 @@ function ToolRouteDetail({
     <span className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
       {tokenLabel ? <span className="tabular-nums">{tokenLabel}</span> : null}
       {event.routeCostUsd != null ? (
-        <span className="tabular-nums">{formatCost(event.routeCostUsd)}</span>
+        <span
+          className="tabular-nums"
+          title="Tool route row cost; it may already be included in the turn total."
+        >
+          {formatCost(event.routeCostUsd)}
+        </span>
       ) : null}
       <ModelNameBadge
         modelId={event.routeModelId}
@@ -1873,7 +1878,10 @@ function ExecutionTimeline({
                     {formatDuration(ev.durationMs)}
                   </span>
                 ) : null}
-                <span className="tabular-nums">
+                <span
+                  className="tabular-nums"
+                  title="LLM row cost observation; parent and child rows may overlap."
+                >
                   {formatCost(ev.costUsd || 0)}
                 </span>
                 {ev.reconciliationState ? (
@@ -2269,7 +2277,7 @@ function TurnRow({
             {turn.totalCost != null && turn.totalCost > 0 && (
               <span
                 className="flex min-w-0 items-center gap-0.5 truncate font-medium"
-                title="Cost"
+                title="Turn total cost; child rows below may already be included."
               >
                 <DollarSign className="h-3 w-3" />
                 {formatCost(turn.totalCost)}
