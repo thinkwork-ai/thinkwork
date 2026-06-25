@@ -95,12 +95,28 @@ function makeTurn(seed: TurnSeed) {
   };
 }
 
-function mockUrql(turns: ReturnType<typeof makeTurn>[]) {
+function mockUrql(
+  turns: ReturnType<typeof makeTurn>[],
+  options: {
+    invocationLogsByTurnId?: Record<string, unknown[]>;
+    modelCatalog?: Array<{ modelId: string; displayName: string }>;
+  } = {},
+) {
   (useQuery as unknown as ReturnType<typeof vi.fn>).mockImplementation(
     (args: { variables?: Record<string, unknown> }) => {
       const vars = args?.variables ?? {};
       if ("turnId" in vars) {
-        return [{ data: { turnInvocationLogs: [] }, fetching: false }, vi.fn()];
+        const turnId = String(vars.turnId);
+        return [
+          {
+            data: {
+              turnInvocationLogs:
+                options.invocationLogsByTurnId?.[turnId] ?? [],
+            },
+            fetching: false,
+          },
+          vi.fn(),
+        ];
       }
       if ("runId" in vars) {
         return [{ data: { threadTurnEvents: [] }, fetching: false }, vi.fn()];
@@ -109,7 +125,15 @@ function mockUrql(turns: ReturnType<typeof makeTurn>[]) {
         return [{ data: { threadTurns: turns }, fetching: false }, vi.fn()];
       }
       // model catalog or anything else
-      return [{ data: undefined, fetching: false }, vi.fn()];
+      return [
+        {
+          data: options.modelCatalog
+            ? { tenantModelCatalog: options.modelCatalog }
+            : undefined,
+          fetching: false,
+        },
+        vi.fn(),
+      ];
     },
   );
   (useSubscription as unknown as ReturnType<typeof vi.fn>).mockReturnValue([
@@ -274,6 +298,70 @@ describe("ExecutionTrace — non-redundant turn metadata", () => {
     expect(
       container.querySelectorAll('[data-timeline-event-type="llm"]').length,
     ).toBeGreaterThan(0);
+  });
+
+  it("shows reconciled provider row tokens and hides unmatched provider noise", () => {
+    mockUrql(
+      [
+        makeTurn({
+          id: "turn-provider",
+          systemPrompt: "P",
+          contextSnapshot: {
+            requested_model: "anthropic.claude-fable-5",
+          },
+          usageJson: JSON.stringify({
+            model: "anthropic.claude-fable-5",
+            input_tokens: 10,
+            output_tokens: 59,
+            duration_ms: 9200,
+          }),
+        }),
+      ],
+      {
+        modelCatalog: [
+          {
+            modelId: "anthropic.claude-fable-5",
+            displayName: "Claude Fable 5",
+          },
+        ],
+        invocationLogsByTurnId: {
+          "turn-provider": [
+            {
+              requestId: "provider-1",
+              modelId: "claude-sonnet-4-5",
+              timestamp: "2026-06-11T10:00:20Z",
+              inputTokenCount: 4300,
+              outputTokenCount: 59,
+              costUsd: 0.0129,
+              toolUses: [],
+              reconciliationState: "invocation-reconciled",
+              reconciliationRuntimeRequestId: "turn-provider",
+            },
+            {
+              requestId: "provider-2",
+              modelId: "openai.gpt-oss-20b-1:0",
+              timestamp: "2026-06-11T10:00:21Z",
+              inputTokenCount: 2200,
+              outputTokenCount: 424,
+              costUsd: 0.0129,
+              toolUses: [],
+            },
+          ],
+        },
+      },
+    );
+
+    const { container } = render(
+      <ExecutionTrace threadId="thread-1" tenantId="tenant-1" />,
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("4.3K→59");
+    expect(text).toContain("Claude Fable 5 -> claude-sonnet-4-5");
+    expect(text).not.toContain("2.2K→424");
+    expect(text).not.toContain("provider-observed");
+    expect(text).not.toContain("openai.gpt-oss-20b-1:0");
+    expect(text).not.toContain("Mixed");
   });
 });
 

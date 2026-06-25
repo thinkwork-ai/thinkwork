@@ -206,6 +206,7 @@ type TimelineEvent = {
   branch: string; // "parent" | "sub-agent:<name>" | "profile:<slug>"
   // LLM fields
   modelId?: string;
+  requestedModelId?: string | null;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
@@ -390,6 +391,66 @@ function ModelNameBadge({
       className="max-w-36 truncate px-1.5 py-0 text-[9px] text-muted-foreground"
     >
       {badgeLabel}
+    </Badge>
+  );
+}
+
+function sameModelIdentity(
+  left: string | null | undefined,
+  right: string | null | undefined,
+  modelDisplayNames?: ModelDisplayNames,
+): boolean {
+  if (!left?.trim() || !right?.trim()) return false;
+  const leftKeys = modelCatalogKeys(left);
+  const rightKeys = modelCatalogKeys(right);
+  if (leftKeys.some((key) => rightKeys.includes(key))) return true;
+  const leftDisplay = displayModelName(left, modelDisplayNames);
+  const rightDisplay = displayModelName(right, modelDisplayNames);
+  return Boolean(leftDisplay && rightDisplay && leftDisplay === rightDisplay);
+}
+
+function modelSelectionLabel(
+  modelId: string | null | undefined,
+  requestedModelId: string | null | undefined,
+  modelDisplayNames?: ModelDisplayNames,
+): { label: string | null; title: string | null } {
+  const actual = displayModelName(modelId, modelDisplayNames);
+  const requested = displayModelName(requestedModelId, modelDisplayNames);
+  if (
+    actual &&
+    requested &&
+    !sameModelIdentity(requestedModelId, modelId, modelDisplayNames)
+  ) {
+    return {
+      label: `${requested} -> ${actual}`,
+      title: `Requested ${requested}; provider ran ${actual}.`,
+    };
+  }
+  return { label: actual, title: modelId ?? actual };
+}
+
+function ModelSelectionBadge({
+  modelId,
+  requestedModelId,
+  modelDisplayNames,
+}: {
+  modelId?: string | null;
+  requestedModelId?: string | null;
+  modelDisplayNames?: ModelDisplayNames;
+}) {
+  const { label, title } = modelSelectionLabel(
+    modelId,
+    requestedModelId,
+    modelDisplayNames,
+  );
+  if (!label) return null;
+  return (
+    <Badge
+      variant="outline"
+      title={title ?? undefined}
+      className="max-w-56 truncate px-1.5 py-0 text-[9px] text-muted-foreground"
+    >
+      {label}
     </Badge>
   );
 }
@@ -733,24 +794,6 @@ function profileLoopPhaseLines(
       feedback ? ` Feedback: ${feedback}` : "",
     ].join("");
   });
-}
-
-function collectTimelineModelNames(
-  events: TimelineEvent[],
-  modelDisplayNames?: ModelDisplayNames,
-): string[] {
-  const names = new Set<string>();
-  for (const event of events) {
-    const modelIds = [
-      event.modelId,
-      event.routeModelId,
-      event.profileModelId,
-    ].filter((modelId): modelId is string => Boolean(modelId?.trim()));
-    for (const modelId of modelIds) {
-      names.add(displayModelName(modelId, modelDisplayNames) ?? modelId);
-    }
-  }
-  return [...names];
 }
 
 function extractToolModelEvidence(
@@ -1231,6 +1274,7 @@ function buildTimelineFromUsage(
   turnEvents?: any[],
   modelRouteTraces?: ExecutionTraceModelRouteTrace[],
   turnId?: string,
+  requestedModelId?: string | null,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
@@ -1241,6 +1285,7 @@ function buildTimelineFromUsage(
       timestamp: "",
       branch: "parent",
       modelId: model,
+      requestedModelId,
       inputTokens: inputTokens || 0,
       outputTokens: outputTokens || 0,
       durationMs,
@@ -1397,10 +1442,17 @@ function buildTimeline(
   turnEvents?: any[],
   modelRouteTraces?: ExecutionTraceModelRouteTrace[],
   turnId?: string,
+  requestedModelId?: string | null,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
+  const hasReconciledProviderRecord = invocations.some(
+    (inv) => inv.reconciliationState,
+  );
+  const timelineInvocations = hasReconciledProviderRecord
+    ? invocations.filter((inv) => inv.reconciliationState)
+    : invocations;
 
-  for (const inv of invocations) {
+  for (const inv of timelineInvocations) {
     const branch: string = inv.branch || "parent";
 
     events.push({
@@ -1408,6 +1460,9 @@ function buildTimeline(
       timestamp: inv.timestamp,
       branch,
       modelId: inv.modelId,
+      requestedModelId: inv.reconciliationRuntimeRequestId
+        ? requestedModelId
+        : null,
       inputTokens: inv.inputTokenCount,
       outputTokens: inv.outputTokenCount,
       cacheReadTokens: inv.cacheReadTokenCount,
@@ -1636,6 +1691,7 @@ function ExecutionTimeline({
   modelRouteTraces,
   modelRoutedToolCalls = [],
   agentProfileRuns = [],
+  requestedModelId,
   systemPrompt,
   onViewDetail,
   onViewSystemPrompt,
@@ -1655,6 +1711,7 @@ function ExecutionTimeline({
   modelDisplayNames?: ModelDisplayNames;
   modelRouteTraces?: ExecutionTraceModelRouteTrace[];
   modelRoutedToolCalls?: Record<string, unknown>[];
+  requestedModelId?: string | null;
   /** Captured system prompt for this turn; shown when the Agent (llm) row is clicked. */
   systemPrompt?: string | null;
   onViewDetail: (title: string, content: string) => void;
@@ -1693,6 +1750,7 @@ function ExecutionTimeline({
         turnEvents,
         modelRouteTraces,
         turnId,
+        requestedModelId,
       )
     : buildTimelineFromUsage(
         toolInvocations,
@@ -1707,15 +1765,11 @@ function ExecutionTimeline({
         turnEvents,
         modelRouteTraces,
         turnId,
+        requestedModelId,
       );
 
   if (events.length === 0) return null;
 
-  const timelineModelNames = collectTimelineModelNames(
-    events,
-    modelDisplayNames,
-  );
-  const hasMixedModels = timelineModelNames.length > 1;
   const svgHeight = events.length * ROW_H;
 
   const branches = buildBranches(events);
@@ -1855,9 +1909,17 @@ function ExecutionTimeline({
           let clickContent = "";
 
           if (ev.type === "llm") {
-            const eventInputTokens = summaryInputTokens ?? ev.inputTokens ?? 0;
+            const eventInputTokens = ev.inputTokens ?? summaryInputTokens ?? 0;
             const eventOutputTokens =
-              summaryOutputTokens ?? ev.outputTokens ?? 0;
+              ev.outputTokens ?? summaryOutputTokens ?? 0;
+            const modelSelection = modelSelectionLabel(
+              ev.modelId,
+              ev.requestedModelId,
+              modelDisplayNames,
+            );
+            const reconciliationLabel =
+              ev.reconciliationState ??
+              (ev.requestId ? "provider-observed" : null);
             icon = (
               <Bot className="h-3.5 w-3.5" style={{ color: RESPONSE_COLOR }} />
             );
@@ -1884,26 +1946,21 @@ function ExecutionTimeline({
                 >
                   {formatCost(ev.costUsd || 0)}
                 </span>
-                {ev.reconciliationState ? (
+                {reconciliationLabel ? (
                   <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-normal text-muted-foreground">
-                    {ev.reconciliationState}
+                    {reconciliationLabel}
                   </span>
                 ) : null}
-                <ModelNameBadge
+                <ModelSelectionBadge
                   modelId={ev.modelId}
-                  label={hasMixedModels ? "Mixed" : undefined}
-                  title={
-                    hasMixedModels
-                      ? `Models: ${timelineModelNames.join(", ")}`
-                      : undefined
-                  }
+                  requestedModelId={ev.requestedModelId}
                   modelDisplayNames={modelDisplayNames}
                 />
               </span>
             );
             const parts: string[] = [];
             parts.push(
-              `Request: ${ev.requestId}  ·  ${ev.timestamp}  ·  ${eventInputTokens} in → ${eventOutputTokens} out  ·  ${ev.durationMs != null ? `${formatDuration(ev.durationMs)}  ·  ` : ""}${formatCost(ev.costUsd || 0)}  ·  ${hasMixedModels ? `Mixed (${timelineModelNames.join(", ")})` : (displayModelName(ev.modelId, modelDisplayNames) ?? "--")}`,
+              `Request: ${ev.requestId}  ·  ${ev.timestamp}  ·  ${eventInputTokens} in → ${eventOutputTokens} out  ·  ${ev.durationMs != null ? `${formatDuration(ev.durationMs)}  ·  ` : ""}${formatCost(ev.costUsd || 0)}  ·  ${modelSelection.label ?? "--"}`,
             );
             if (ev.inputPreview)
               parts.push(`── INPUT ──\n\n${ev.inputPreview}`);
@@ -2167,6 +2224,7 @@ function TurnRow({
   } | null>(null);
   const usage = parseJsonField(turn.usageJson);
   const result = parseJsonField(turn.resultJson);
+  const contextSnapshot = parseJsonField(turn.contextSnapshot);
   const resultResponse =
     result?.response && typeof result.response === "object"
       ? (result.response as Record<string, unknown>)
@@ -2208,6 +2266,9 @@ function TurnRow({
   // Per-turn workspace projection (plan 2026-06-12-002 U9); null on
   // pre-feature turns → no panel.
   const workspaceProjection = parseWorkspaceProjection(turn.contextSnapshot);
+  const requestedModelId = stringValue(
+    contextSnapshot?.requested_model ?? contextSnapshot?.requestedModel,
+  );
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -2338,6 +2399,7 @@ function TurnRow({
               modelRouteTraces={modelRouteTraces}
               modelRoutedToolCalls={modelRoutedToolCalls}
               agentProfileRuns={agentProfileRuns}
+              requestedModelId={requestedModelId}
               systemPrompt={turn.systemPrompt}
               onViewDetail={(t, c) => setDetailDialog({ title: t, content: c })}
               onViewSystemPrompt={(p) => setSystemPromptDialog({ prompt: p })}
