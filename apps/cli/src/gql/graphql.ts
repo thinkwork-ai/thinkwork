@@ -43,35 +43,56 @@ export type AccountUsage = {
 
 export type AccountUsageDay = {
   __typename?: "AccountUsageDay";
+  billReconciledUsd: Scalars["Float"]["output"];
   computeUsd: Scalars["Float"]["output"];
   day: Scalars["String"]["output"];
+  enforcedUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
   eventCount: Scalars["Int"]["output"];
   inputTokens: Scalars["Int"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
   llmUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   outputTokens: Scalars["Int"]["output"];
   toolsUsd: Scalars["Float"]["output"];
   totalUsd: Scalars["Float"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
 };
 
 export type AccountUsageModel = {
   __typename?: "AccountUsageModel";
+  billReconciledUsd: Scalars["Float"]["output"];
   displayName: Scalars["String"]["output"];
+  enforcedUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
   inputTokens: Scalars["Int"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   model: Scalars["String"]["output"];
   outputTokens: Scalars["Int"]["output"];
   totalUsd: Scalars["Float"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
   usageShare: Scalars["Float"]["output"];
 };
 
 export type AccountUsageSummary = {
   __typename?: "AccountUsageSummary";
+  billReconciledUsd: Scalars["Float"]["output"];
   computeUsd: Scalars["Float"]["output"];
+  enforcedUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
   eventCount: Scalars["Int"]["output"];
   inputTokens: Scalars["Int"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
   llmUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   outputTokens: Scalars["Int"]["output"];
   toolsUsd: Scalars["Float"]["output"];
   totalUsd: Scalars["Float"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
 };
 
 export type ActivatePluginInput = {
@@ -979,11 +1000,18 @@ export type BudgetPolicy = {
 
 export type BudgetStatus = {
   __typename?: "BudgetStatus";
+  billReconciledUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   percentUsed: Scalars["Float"]["output"];
   policy: BudgetPolicy;
   remainingUsd: Scalars["Float"]["output"];
   spentUsd: Scalars["Float"]["output"];
   status: Scalars["String"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
+  visibleSpendUsd: Scalars["Float"]["output"];
 };
 
 export type CheckoutThreadInput = {
@@ -1329,16 +1357,23 @@ export type CostRecordedEvent = {
 
 export type CostSummary = {
   __typename?: "CostSummary";
+  billReconciledUsd: Scalars["Float"]["output"];
   computeUsd: Scalars["Float"]["output"];
+  enforcedUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
   evalUsd?: Maybe<Scalars["Float"]["output"]>;
   eventCount: Scalars["Int"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
   llmUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   periodEnd: Scalars["AWSDateTime"]["output"];
   periodStart: Scalars["AWSDateTime"]["output"];
   toolsUsd: Scalars["Float"]["output"];
   totalInputTokens: Scalars["Int"]["output"];
   totalOutputTokens: Scalars["Int"]["output"];
   totalUsd: Scalars["Float"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
 };
 
 export type CreateArtifactInput = {
