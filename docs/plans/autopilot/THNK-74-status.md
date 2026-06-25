@@ -201,3 +201,71 @@ PR / CI:
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2958
 - 2026-06-25 09:08 CDT: PR opened; waiting for required CI.
 - 2026-06-25 09:18 CDT: PR CI passed: CLA, lint, test, typecheck, and verify.
+- 2026-06-25 10:34 CDT: PR merged.
+- Merge commit: `972caebe7fbe313d275347c681cee0374315682c`.
+- Required CI passed: CLA, lint, test, typecheck, and verify.
+- U2 worktree and local branch cleanup completed before U3 start.
+
+### U3: Reconcile Bedrock Invocations Per Invocation
+
+Objective: match runtime/model usage observations to Bedrock provider-observed
+invocation logs and record provider-observed usage, mismatches, ambiguous
+matches, or retryable unreconciled diagnostics without treating runtime-only
+usage as invocation- or bill-reconciled.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u3-bedrock-invocation-reconciliation`
+- Worktree: `/Users/ericodom/.codex/worktrees/e08f/thinkwork`
+- Base: `origin/main` at `972caebe7fbe313d275347c681cee0374315682c`.
+
+Planned local verification:
+
+- Focused Bedrock invocation reconciler tests.
+- Existing and expanded `turnInvocationLogs` resolver tests.
+- `pnpm --filter @thinkwork/api typecheck`
+- Terraform validation/build checks if handler or IAM wiring changes.
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 10:43 CDT: U3 started from `origin/main` at
+  `972caebe7fbe313d275347c681cee0374315682c`.
+- Added `packages/api/src/lib/trace-ledger/bedrock-invocation-reconciler.ts`
+  with:
+  - Bedrock invocation log normalization for request/model/timestamp/token/cache
+    fields, request metadata, previews, source log references, and estimated
+    provider cost.
+  - Pure runtime-vs-provider reconciliation rules that match by Bedrock request
+    ID first, request metadata next, and bounded model/time fallback only when
+    unambiguous.
+  - Explicit `invocation-reconciled`, `mismatch`, and `unreconciled/error`
+    outcomes with token/amount variance and operator-readable reasons.
+  - Idempotent persistence into `trace_source_evidence`,
+    `trace_cost_reconciliation_facts`, and current `cost_events` compatibility
+    state.
+- Refactored `turnInvocationLogs` to reuse the adapter/reconciliation library
+  and expose nullable reconciliation diagnostics on `ModelInvocation`.
+- Added scheduled/direct handler
+  `packages/api/src/handlers/trace-invocation-reconciler.ts`.
+- Registered the handler in `scripts/build-lambdas.sh` and
+  `terraform/modules/app/lambda-api/handlers.tf`; existing CloudWatch
+  model-invocation log IAM was sufficient.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/trace-ledger/bedrock-invocation-reconciler.test.ts src/graphql/resolvers/observability/turnInvocationLogs.query.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm schema:build` passed with no Terraform subscription schema diff.
+- `pnpm --filter @thinkwork/web codegen` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm --filter @thinkwork/mobile codegen` passed.
+- `bash scripts/build-lambdas.sh trace-invocation-reconciler` passed.
+- `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf` passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm dlx prettier@3.6.2 --check` on touched TS/GraphQL/Markdown files
+  passed.
+- `git diff --check` passed.

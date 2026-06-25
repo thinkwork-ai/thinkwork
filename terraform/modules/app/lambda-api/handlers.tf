@@ -525,6 +525,9 @@ resource "aws_lambda_function" "handler" {
     "eval-runner",
     "eval-worker",
     "eval-runs-reconciler",
+    # THNK-74 U3 — reconciles runtime-reported model usage against Bedrock
+    # model invocation logs and appends invocation-scope trace ledger facts.
+    "trace-invocation-reconciler",
     # AgentCore Code Sandbox narrow REST endpoints (plan Unit 10 + Unit 11).
     # Both are service-endpoint shape: the runtime POSTs with
     # Bearer API_AUTH_SECRET. No GraphQL resolver involvement, no extra IAM.
@@ -1512,6 +1515,29 @@ resource "aws_scheduler_schedule" "eval_runs_reconciler" {
 
   target {
     arn      = aws_lambda_function.handler["eval-runs-reconciler"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# trace_invocation_reconciler — reconciles runtime LLM usage against Bedrock
+# invocation logs every 5 min. Idempotent at the source-evidence/fact level.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "trace_invocation_reconciler" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-trace-invocation-reconciler"
+  group_name          = "default"
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["trace-invocation-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }
