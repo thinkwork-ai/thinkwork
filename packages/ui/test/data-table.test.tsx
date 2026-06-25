@@ -1,6 +1,11 @@
+// @vitest-environment jsdom
+
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { DataTable } from "../src/index.js";
+
+afterEach(() => cleanup());
 
 describe("DataTable", () => {
   it("renders generated-app column definitions", () => {
@@ -66,9 +71,7 @@ describe("DataTable", () => {
     for (const row of bodyRowClasses) {
       expect(row).toContain("h-10");
       expect(row).toContain("border-b-0");
-      expect(row).toContain(
-        "shadow-[inset_0_-1px_0_var(--color-border)]",
-      );
+      expect(row).toContain("shadow-[inset_0_-1px_0_var(--color-border)]");
       expect(row).toContain("[&amp;&gt;td]:py-0");
       expect(row).toContain("[&amp;&gt;td]:overflow-hidden");
     }
@@ -88,11 +91,66 @@ describe("DataTable", () => {
     const tbodyHtml = html.slice(tbodyStart);
     expect(tbodyHtml).toContain("h-10");
     expect(tbodyHtml).toContain("border-b-0");
-    expect(tbodyHtml).toContain(
-      "shadow-[inset_0_-1px_0_var(--color-border)]",
-    );
+    expect(tbodyHtml).toContain("shadow-[inset_0_-1px_0_var(--color-border)]");
     expect(tbodyHtml).toContain("[&amp;&gt;td]:py-0");
     expect(tbodyHtml).toContain("[&amp;&gt;td]:overflow-hidden");
     expect(tbodyHtml).not.toContain("h-24");
+  });
+
+  it("hides initial filter-only columns from headers, cells, colgroup, and empty colSpan", () => {
+    const columns = [
+      { key: "name", header: "Name", width: 320 },
+      { key: "searchText", header: "Search Text", width: 900 },
+    ];
+
+    const html = renderToStaticMarkup(
+      <DataTable
+        columns={columns}
+        data={[]}
+        pageSize={0}
+        tableClassName="table-fixed"
+        initialColumnVisibility={{ searchText: false }}
+      />,
+    );
+
+    expect(html).toContain("Name");
+    expect(html).not.toContain("Search Text");
+    expect(html).not.toContain("900px");
+    expect(html).toContain("320px");
+    expect(html).toContain('colSpan="1"');
+  });
+
+  it("filters rows through an initially hidden column without rendering the column", async () => {
+    render(
+      <DataTable
+        columns={[
+          { key: "name", header: "Name" },
+          {
+            accessorKey: "searchText",
+            header: "Search Text",
+            filterFn: (row, columnId, filterValue) =>
+              String(row.getValue(columnId))
+                .toLocaleLowerCase()
+                .includes(String(filterValue).toLocaleLowerCase()),
+          },
+        ]}
+        data={[
+          { name: "Alpha", searchText: "customer onboarding" },
+          { name: "Beta", searchText: "platform cleanup" },
+        ]}
+        pageSize={0}
+        filterColumn="searchText"
+        filterValue="onboarding"
+        initialColumnVisibility={{ searchText: false }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha")).toBeTruthy();
+      expect(screen.queryByText("Beta")).toBeNull();
+    });
+
+    expect(screen.queryByText("Search Text")).toBeNull();
+    expect(screen.queryByText("customer onboarding")).toBeNull();
   });
 });

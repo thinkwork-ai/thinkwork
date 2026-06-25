@@ -86,6 +86,8 @@ interface DataTableProps<TData, TValue> {
   hideHeader?: boolean;
   /** Enable row selection with checkboxes */
   enableRowSelection?: boolean;
+  /** Initial TanStack column visibility. Use false for filter-only hidden columns. */
+  initialColumnVisibility?: VisibilityState;
   /** Render prop for toolbar content above the table */
   toolbar?: (table: ReturnType<typeof useReactTable<TData>>) => React.ReactNode;
   /** Additional className for the <table> element */
@@ -118,6 +120,7 @@ export function DataTable<TData, TValue>({
   pageSize = 10,
   hideHeader = false,
   enableRowSelection = false,
+  initialColumnVisibility,
   toolbar,
   tableClassName,
   allowHorizontalScroll = true,
@@ -138,7 +141,7 @@ export function DataTable<TData, TValue>({
     [],
   );
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<VisibilityState>(() => initialColumnVisibility ?? {});
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
 
   // Sync external filter → internal column filter
@@ -207,7 +210,7 @@ export function DataTable<TData, TValue>({
 
   const colgroup = tableClassName?.includes("table-fixed") ? (
     <colgroup>
-      {table.getAllColumns().map((col) => {
+      {table.getVisibleLeafColumns().map((col) => {
         const size = col.columnDef.size;
         const hasExplicitSize = size !== undefined && size !== 150;
         return (
@@ -219,6 +222,8 @@ export function DataTable<TData, TValue>({
       })}
     </colgroup>
   ) : null;
+
+  const visibleColumnCount = Math.max(table.getVisibleLeafColumns().length, 1);
 
   const headerRow = !hideHeader ? (
     <TableHeader
@@ -278,7 +283,7 @@ export function DataTable<TData, TValue>({
       ) : (
         <TableRow className={ROW_HEIGHT_40PX_CLASSES}>
           <TableCell
-            colSpan={columns.length}
+            colSpan={visibleColumnCount}
             className="text-center text-muted-foreground"
           >
             {emptyState}
