@@ -13,12 +13,14 @@ import {
   buildToolAllowlist,
   buildTurnPrompt,
   preparePiAgentDirectory,
+  resolveRequiredBedrockModel,
   runAgentLoop,
   toToolDefinition,
   type AgentSessionLike,
   type OpenSessionInputs,
 } from "../src/agent-loop.js";
 import { SessionConflictError } from "../src/durable-session-manager.js";
+import { UnsupportedModelError } from "../src/model-provider.js";
 import type { RunAgentLoopArgs } from "../src/types.js";
 
 function userMessage(text: string): AgentMessage {
@@ -175,6 +177,30 @@ describe("toToolDefinition", () => {
     const def = toToolDefinition(rich);
     expect(def.prepareArguments).toBe(prepare);
     expect(def.executionMode).toBe("sequential");
+  });
+});
+
+describe("resolveRequiredBedrockModel", () => {
+  it("returns the requested Bedrock model when it is registered", () => {
+    const model = { id: "anthropic.claude-haiku" };
+    const find = vi.fn(() => model);
+
+    expect(resolveRequiredBedrockModel({ find }, model.id)).toBe(model);
+    expect(find).toHaveBeenCalledWith("amazon-bedrock", model.id);
+    expect(find).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws for an unregistered model without looking up a default", () => {
+    const find = vi.fn(() => undefined);
+
+    expect(() =>
+      resolveRequiredBedrockModel({ find }, "anthropic.claude-fable-5"),
+    ).toThrow(UnsupportedModelError);
+    expect(find).toHaveBeenCalledWith(
+      "amazon-bedrock",
+      "anthropic.claude-fable-5",
+    );
+    expect(find).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1009,18 +1035,15 @@ describe("runAgentLoop", () => {
     expect(result.content).toBe("final");
   });
 
-  it("falls back to the default model id when none is provided", async () => {
-    let captured: OpenSessionInputs | undefined;
+  it("rejects a missing model id instead of selecting a default", async () => {
+    const openSession = vi.fn();
     const session = makeFakeSession({ messages: [assistantMessage("ok")] });
-    await runAgentLoop(baseArgs({ modelId: undefined }), {
-      openSession: async (inputs) => {
-        captured = inputs;
-        return { session, modelId: inputs.modelId };
-      },
-    });
-    expect(captured?.modelId).toBe(
-      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    );
+    openSession.mockResolvedValue({ session, modelId: "unused" });
+
+    await expect(
+      runAgentLoop(baseArgs({ modelId: undefined }), { openSession }),
+    ).rejects.toThrow(UnsupportedModelError);
+    expect(openSession).not.toHaveBeenCalled();
   });
 
   it("passes the session store + threadId + seedHistory through to openSession", async () => {

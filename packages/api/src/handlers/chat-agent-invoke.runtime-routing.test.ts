@@ -514,11 +514,16 @@ describe("chat-agent-invoke runtime routing", () => {
           context_snapshot: expect.objectContaining({
             model: "anthropic.claude-haiku",
             requested_model: "anthropic.claude-haiku",
-            fallback_model: "moonshotai.kimi-k2.5",
           }),
         }),
       ]),
     );
+    const selectedTurn = mocks.insertValues.find(
+      (row) =>
+        (row.context_snapshot as Record<string, unknown> | undefined)?.model ===
+        "anthropic.claude-haiku",
+    );
+    expect(selectedTurn?.context_snapshot).not.toHaveProperty("fallback_model");
     const command = mocks.lambdaSend.mock.calls[0][0] as {
       input: { Payload: Uint8Array };
     };
