@@ -61,6 +61,16 @@ export interface SyncWorkItemAssignmentFromLinkedTaskInput {
   metadata?: JsonRecord | null;
 }
 
+export interface AssignCustomerOnboardingWorkItemInput {
+  tenantId: string;
+  threadId: string;
+  checklistItemKey: string;
+  assigneeDisplay: string;
+  note?: string | null;
+  actorUserId?: string | null;
+  metadata?: JsonRecord | null;
+}
+
 export interface CustomerOnboardingWorkItemDeps {
   database?: WorkItemDatabase;
   now?: () => Date;
@@ -381,6 +391,97 @@ export async function syncWorkItemAssignmentFromLinkedTask(
   });
 
   return { id: item.id, ownerUserId };
+}
+
+export async function assignCustomerOnboardingWorkItem(
+  input: AssignCustomerOnboardingWorkItemInput,
+  deps: CustomerOnboardingWorkItemDeps = {},
+): Promise<{ id: string; title: string; ownerUserId: string | null } | null> {
+  const database = deps.database ?? getDb();
+  const now = deps.now?.() ?? new Date();
+  const rows = await database
+    .select({
+      id: workItems.id,
+      spaceId: workItems.space_id,
+      title: workItems.title,
+      metadata: workItems.metadata,
+    })
+    .from(workItems)
+    .innerJoin(
+      workItemThreadLinks,
+      and(
+        eq(workItemThreadLinks.work_item_id, workItems.id),
+        eq(workItemThreadLinks.tenant_id, workItems.tenant_id),
+      ),
+    )
+    .where(
+      and(
+        eq(workItems.tenant_id, input.tenantId),
+        eq(workItemThreadLinks.thread_id, input.threadId),
+      ),
+    );
+  const item = rows.find(
+    (row) =>
+      stringValue(objectRecord(row.metadata).checklistItemKey) ===
+      input.checklistItemKey,
+  );
+  if (!item) return null;
+
+  const ownerUserId = await resolveWorkItemAssigneeUserId(database, {
+    tenantId: input.tenantId,
+    spaceId: item.spaceId,
+    assigneeDisplay: input.assigneeDisplay,
+    actorUserId: input.actorUserId ?? null,
+  });
+  const nextMetadata = compactObject({
+    ...objectRecord(item.metadata),
+    assigneeDisplay: input.assigneeDisplay,
+    assignee: compactObject({
+      ...objectRecord(objectRecord(item.metadata).assignee),
+      displayName: input.assigneeDisplay,
+      ownerUserId: ownerUserId ?? undefined,
+      lastSyncedAt: now.toISOString(),
+    }),
+    lastChatAssignment: {
+      source: "customer_onboarding_chat_update",
+      checklistItemKey: input.checklistItemKey,
+      syncedAt: now.toISOString(),
+      note: input.note ?? undefined,
+      metadata: input.metadata ?? undefined,
+    },
+  });
+
+  await database
+    .update(workItems)
+    .set({
+      owner_user_id: ownerUserId,
+      owner_agent_id: null,
+      metadata: nextMetadata,
+      updated_at: now,
+    })
+    .where(
+      and(eq(workItems.tenant_id, input.tenantId), eq(workItems.id, item.id)),
+    );
+
+  await database.insert(workItemEvents).values({
+    tenant_id: input.tenantId,
+    space_id: item.spaceId,
+    work_item_id: item.id,
+    thread_id: input.threadId,
+    actor_user_id: input.actorUserId ?? null,
+    event_type: "assigned",
+    message: `${item.title} assigned to ${input.assigneeDisplay} from Customer Onboarding chat.`,
+    metadata: compactObject({
+      source: "customer_onboarding_chat_update",
+      checklistItemKey: input.checklistItemKey,
+      assigneeDisplay: input.assigneeDisplay,
+      ownerUserId: ownerUserId ?? undefined,
+      note: input.note ?? undefined,
+      metadata: input.metadata ?? undefined,
+    }),
+  });
+
+  return { id: item.id, title: item.title, ownerUserId };
 }
 
 export function workItemStatusCategoryForLinkedTaskStatus(

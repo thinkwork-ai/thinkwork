@@ -424,6 +424,9 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     const assignedToName = extractCustomerOnboardingChatUpdate(
       "Assign collect tax exemption forms to Eric",
     );
+    const assignedQuestion = extractCustomerOnboardingChatUpdate(
+      "Can you assign the tax exemption forms collection task to Eric?",
+    );
 
     expect(assignedToMe.taskAssignments).toEqual([
       {
@@ -437,6 +440,13 @@ describe("extractCustomerOnboardingChatUpdate", () => {
         key: "tax_exemption_forms",
         assigneeDisplay: "Eric",
         note: "Assign collect tax exemption forms to Eric",
+      },
+    ]);
+    expect(assignedQuestion.taskAssignments).toEqual([
+      {
+        key: "tax_exemption_forms",
+        assigneeDisplay: "Eric",
+        note: "Can you assign the tax exemption forms collection task to Eric?",
       },
     ]);
   });
@@ -507,9 +517,10 @@ describe("sendMessage customer onboarding hook", () => {
       "utf8",
     );
 
+    expect(source).toContain("assignCustomerOnboardingWorkItem");
     expect(source).toContain("syncWorkItemAssignmentFromLinkedTask");
     expect(source.indexOf("assignmentChanges.push")).toBeLessThan(
-      source.indexOf("await syncWorkItemAssignmentFromLinkedTask"),
+      source.indexOf("await assignCustomerOnboardingWorkItem"),
     );
   });
 });

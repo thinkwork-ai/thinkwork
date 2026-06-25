@@ -16,6 +16,7 @@ import {
 import { refreshCustomerOnboardingGoalFolderSafely } from "./customer-onboarding-goal-md.js";
 import type { LinkedTaskStatus } from "../linked-tasks/status.js";
 import {
+  assignCustomerOnboardingWorkItem,
   syncWorkItemAssignmentFromLinkedTask,
   syncWorkItemFromLinkedTask,
 } from "../work-items/customer-onboarding.js";
@@ -212,6 +213,7 @@ export async function applyCustomerOnboardingChatUpdate(
         assignment,
       ]),
     );
+    const directAssignmentSyncedKeys = new Set<string>();
 
     for (const addition of extracted.taskAdditions) {
       if (findTaskByTitle(activeTaskRows, addition.title)) continue;
@@ -522,10 +524,11 @@ export async function applyCustomerOnboardingChatUpdate(
           previousAssignee: task.assignee_display,
           nextAssignee: assignment.assigneeDisplay,
         });
-        await syncWorkItemAssignmentFromLinkedTask(
+        const directAssignment = await assignCustomerOnboardingWorkItem(
           {
             tenantId: input.tenantId,
-            linkedTaskId: task.id,
+            threadId: input.threadId,
+            checklistItemKey: key,
             assigneeDisplay: assignment.assigneeDisplay,
             note: assignment.note,
             actorUserId: input.senderUserId ?? null,
@@ -536,7 +539,59 @@ export async function applyCustomerOnboardingChatUpdate(
           },
           { database: tx as never, now: () => now },
         );
+        if (directAssignment) {
+          directAssignmentSyncedKeys.add(key);
+        } else {
+          await syncWorkItemAssignmentFromLinkedTask(
+            {
+              tenantId: input.tenantId,
+              linkedTaskId: task.id,
+              assigneeDisplay: assignment.assigneeDisplay,
+              note: assignment.note,
+              actorUserId: input.senderUserId ?? null,
+              metadata: {
+                source: "customer_onboarding_chat_update",
+                checklistItemKey: key,
+              },
+            },
+            { database: tx as never, now: () => now },
+          );
+        }
       }
+    }
+
+    for (const assignment of extracted.taskAssignments) {
+      if (directAssignmentSyncedKeys.has(assignment.key)) continue;
+      const directAssignment = await assignCustomerOnboardingWorkItem(
+        {
+          tenantId: input.tenantId,
+          threadId: input.threadId,
+          checklistItemKey: assignment.key,
+          assigneeDisplay: assignment.assigneeDisplay,
+          note: assignment.note,
+          actorUserId: input.senderUserId ?? null,
+          metadata: {
+            source: "customer_onboarding_chat_update",
+            checklistItemKey: assignment.key,
+          },
+        },
+        { database: tx as never, now: () => now },
+      );
+      if (!directAssignment) continue;
+      directAssignmentSyncedKeys.add(assignment.key);
+      if (
+        assignmentChanges.some(
+          (change) => change.checklistItemKey === assignment.key,
+        )
+      ) {
+        continue;
+      }
+      assignmentChanges.push({
+        checklistItemKey: assignment.key,
+        title: directAssignment.title,
+        previousAssignee: null,
+        nextAssignee: assignment.assigneeDisplay,
+      });
     }
 
     const shouldHandle =
@@ -1372,7 +1427,7 @@ function assignmentDisplayFromSegment(segment: string): string | null {
     return "Agent";
   }
   const namedAssignee = segment.match(
-    /\b(?:assign(?:ed)?|owner|owns?|responsible)\b[^.;\n]*?\bto\s+([A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*)?)(?=\s*(?:[.;,]|$))/i,
+    /\b(?:assign(?:ed)?|owner|owns?|responsible)\b[^.;\n]*?\bto\s+([A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*)?)(?=\s*(?:[.;,?!]|$))/i,
   )?.[1];
   if (namedAssignee) return namedAssignee.trim();
   return null;
