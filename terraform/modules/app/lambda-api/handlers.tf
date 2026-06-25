@@ -361,6 +361,14 @@ locals {
       EVAL_LLM_JUDGE      = "1"
       EVAL_JUDGE_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     }
+    # THNK-74 U4 — optional AWS billing export importer. Missing bucket/key is
+    # a healthy no-op so stages can ship the reconciler before CUR/Data Export
+    # delivery is configured out-of-band in the AWS billing account.
+    "cost-bill-reconciler" = {
+      BILLING_EXPORT_BUCKET                = var.billing_export_bucket_name
+      BILLING_EXPORT_MANIFEST_KEY          = var.billing_export_manifest_key
+      BILLING_RECONCILIATION_TOLERANCE_USD = tostring(var.billing_reconciliation_tolerance_usd)
+    }
     # job-trigger's thinkwork-<stage>-api-* worker function names are
     # derived from STAGE at call time (runtimeFunctionName — R7), and
     # AWS_ACCOUNT_ID already rides common_env, so it needs no extras.
@@ -525,6 +533,9 @@ resource "aws_lambda_function" "handler" {
     "eval-runner",
     "eval-worker",
     "eval-runs-reconciler",
+    # THNK-74 U4 — imports AWS Data Exports/CUR bill evidence and reconciles
+    # aggregate spend against ThinkWork accounting rows.
+    "cost-bill-reconciler",
     # THNK-74 U3 — reconciles runtime-reported model usage against Bedrock
     # model invocation logs and appends invocation-scope trace ledger facts.
     "trace-invocation-reconciler",
@@ -1538,6 +1549,29 @@ resource "aws_scheduler_schedule" "trace_invocation_reconciler" {
 
   target {
     arn      = aws_lambda_function.handler["trace-invocation-reconciler"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# ---------------------------------------------------------------------------
+# cost_bill_reconciler — imports AWS billing export evidence daily. Targeted
+# operator invokes can reconcile a specific manifest/import immediately.
+# ---------------------------------------------------------------------------
+
+resource "aws_scheduler_schedule" "cost_bill_reconciler" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-cost-bill-reconciler"
+  group_name          = "default"
+  schedule_expression = "cron(30 5 * * ? *)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["cost-bill-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

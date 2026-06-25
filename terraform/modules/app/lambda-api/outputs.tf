@@ -73,6 +73,16 @@ output "brain_artifacts_bucket_arn" {
   value       = aws_s3_bucket.brain_artifacts.arn
 }
 
+output "billing_export_bucket_name" {
+  description = "Configured AWS billing export bucket consumed by the THNK-74 bill reconciler, or empty when not configured."
+  value       = var.billing_export_bucket_name
+}
+
+output "billing_export_manifest_key" {
+  description = "Configured AWS billing export manifest key consumed by the THNK-74 bill reconciler, or empty when not configured."
+  value       = var.billing_export_manifest_key
+}
+
 output "email_inbound_fn_arn" {
   description = "email-inbound Lambda ARN. Used by the SES module to wire the receipt rule Lambda action."
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["email-inbound"].arn : ""

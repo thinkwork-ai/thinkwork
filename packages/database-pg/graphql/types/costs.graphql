@@ -19,6 +19,12 @@ type CostEvent {
   reconciliationSource: String
   reconciliationAt: AWSDateTime
   sourceEvidenceRef: AWSJSON
+  billingAccountId: String
+  billingServiceCode: String
+  billingOperation: String
+  billingPeriodStart: AWSDateTime
+  billingPeriodEnd: AWSDateTime
+  billingAttributionLevel: String
   createdAt: AWSDateTime!
 }
 

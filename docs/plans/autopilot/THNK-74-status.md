@@ -273,5 +273,88 @@ Local verification:
 PR / CI:
 
 - Commit: `91fefc807` (`feat(trace-ledger): reconcile bedrock invocation logs`)
+- Commit: `490c4784b` (`docs: update thnk-74 u3 status`)
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2959
 - 2026-06-25 10:55 CDT: PR opened; waiting for required CI.
+- 2026-06-25 11:05 CDT: PR merged.
+- Merge commit: `a653a163a39068ca086445dfe437f0fe9111edc9`.
+- Required CI passed: CLA, lint, test, typecheck, and verify.
+- U3 worktree, remote branch, and local branch cleanup completed before U4
+  start.
+
+### U4: Reconcile Aggregate Spend Against AWS Billing Exports
+
+Objective: import AWS Data Exports/CUR 2.0 billing rows and reconcile aggregate
+bill spend against ThinkWork runtime/invocation accounting rows without implying
+exact per-turn billing proof when the export only supports account/service/window
+attribution.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u4-bill-reconciliation`
+- Worktree: `/Users/ericodom/.codex/worktrees/e19b/thinkwork`
+- Base: `origin/main` at `a653a163a39068ca086445dfe437f0fe9111edc9`.
+
+Planned local verification:
+
+- Focused CUR import and bill aggregate reconciliation tests.
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/database-pg typecheck`
+- `pnpm schema:build`
+- GraphQL consumer codegen for web, CLI, and mobile if cost schema changes.
+- `bash scripts/build-lambdas.sh cost-bill-reconciler`
+- Terraform formatting/checks for touched lambda-api and thinkwork module files.
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 11:08 CDT: U4 started from `origin/main` at
+  `a653a163a39068ca086445dfe437f0fe9111edc9`.
+- Added `packages/api/src/lib/billing-reconciliation/aws-cur-import.ts` with:
+  - AWS export manifest parsing for billing period and data-file locations.
+  - CUR/Data Export CSV parsing for both CUR 2.0 underscore-style and legacy
+    slash-style column names.
+  - Normalization of Bedrock service/model/operation/account, tenant tag
+    attribution, account-only attribution, S3 source URI, and malformed-row
+    diagnostics.
+- Added `packages/api/src/lib/billing-reconciliation/bill-reconciler.ts` with:
+  - Pure aggregate reconciliation decisions for tenant-level, account-level,
+    matching, mismatched, and missing-bill-evidence cases.
+  - Persistence for billing export imports and line items.
+  - Aggregate `trace_source_evidence` / `trace_cost_reconciliation_facts`
+    writes for bill evidence.
+  - Current `cost_events` compatibility updates only when bill rows carry
+    tenant-level attribution; account-only evidence remains aggregate-only and
+    does not mark per-event rows bill-reconciled.
+- Added migration `0190_billing_export_reconciliation.sql` and Drizzle schema
+  for `billing_export_imports`, `billing_export_line_items`, and nullable
+  billing attribution columns on `cost_events`.
+- Added scheduled/targeted handler
+  `packages/api/src/handlers/cost-bill-reconciler.ts`.
+- Registered the handler in `scripts/build-lambdas.sh` and Terraform, added a
+  daily EventBridge Scheduler schedule, optional billing export bucket/manifest
+  variables, outputs, and narrow S3 read IAM for the configured export bucket.
+- Added nullable billing fields to GraphQL `CostEvent` and regenerated/manual
+  minimized generated GraphQL type surfaces for web, CLI, and mobile.
+
+Local verification:
+
+- `pnpm install` passed; local `canvas` native build still logs the known
+  non-fatal missing `pkg-config` warning under Node 25.6.0.
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/billing-reconciliation/aws-cur-import.test.ts src/lib/billing-reconciliation/bill-reconciler.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/database-pg typecheck` passed.
+- `pnpm schema:build` passed.
+- `pnpm --filter @thinkwork/web codegen` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm --filter @thinkwork/mobile codegen` passed.
+- `bash scripts/build-lambdas.sh cost-bill-reconciler` passed.
+- `terraform fmt -check` on touched lambda-api and thinkwork module files
+  passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm dlx prettier@3.6.2 --check` on authored TS/GraphQL/Markdown files
+  passed.
+- `git diff --check` passed.
