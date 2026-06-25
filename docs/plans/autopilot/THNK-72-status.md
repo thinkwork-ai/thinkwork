@@ -2,9 +2,9 @@
 linear_issue: THNK-72
 plan: "docs/plans/2026-06-25-001-feat-data-table-filter-work-items-plan.md"
 requirements: "docs/brainstorms/2026-06-25-data-table-filter-work-items-requirements.md"
-status: followup-ready
+status: complete
 started_at: 2026-06-25T00:28:34Z
-completed_at:
+completed_at: 2026-06-25T02:12:39Z
 ---
 
 # THNK-72 Autopilot Status
@@ -51,10 +51,11 @@ are the execution units.
 2. U2: Extend `DataTable` for hidden filter columns.
 3. U3: Create Work Items filter adapter and table columns.
 4. U4: Remove Work Items saved-view and old filter UI from the page.
-5. U5: Polish visual fit and verification coverage.
+5. U5: Initial polish visual fit and verification coverage.
+6. U6: Bazza-exact multi-value option filters from product review.
 
-Dependency order is linear: U2 depends on U1; U3 depends on U1/U2; U4 depends
-on U3; U5 verifies and polishes the integrated result.
+Dependency order was linear through U5, with U6 added after product review of
+the local pilot build.
 
 ## Linear State Changes
 
@@ -87,6 +88,11 @@ on U3; U5 verifies and polishes the integrated result.
 - 2026-06-25T01:53Z: Verified the follow-up locally on
   `http://localhost:5174/work-items?view=list&sort=updated` and added Linear
   progress comment with evidence.
+- 2026-06-25T01:56Z: Opened U6 PR #2950 and added Linear progress comment.
+- 2026-06-25T02:05Z: Rebased U6 after GitHub reported the branch behind
+  `main`, force-with-lease pushed, and added Linear progress comment.
+- 2026-06-25T02:12Z: U6 PR #2950 passed CI and merged via squash merge
+  (`77a9debae7265c874aee1da6a190ea1017a4ce44`).
 
 ## Unit Log
 
@@ -349,8 +355,17 @@ Local verification:
   checked, the red `Clear` action appears, and the token operator segment opens
   a separate searchable operators menu with `is any of` and `is none of`.
 
-Status: local verification passed; PR pending.
+CI verification:
+
+- 2026-06-25T02:12Z: PR #2950 passed GitHub `cla`, `lint`, `verify`,
+  `typecheck`, and `test` after rebasing onto current `main`.
+
+Status: merged.
+
+PR:
+
+- https://github.com/thinkwork-ai/thinkwork/pull/2950
 
 ## Current Blockers
 
-None. U6 is ready for PR/CI/merge.
+None. THNK-72 implementation is complete.
