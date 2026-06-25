@@ -751,7 +751,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       computerId: event.computerId,
       computerTaskId: event.computerTaskId,
     });
-    const fallbackAgentModel = runtimeConfig.templateModel;
+    const configuredAgentModel = runtimeConfig.templateModel;
     const requestedParentModel =
       normalizeRequestedModelId(event.modelId) ??
       normalizeRequestedModelId(event.requestedModelId);
@@ -815,7 +815,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         throw err;
       }
     }
-    const agentModel = requestedParentModel ?? fallbackAgentModel;
+    const agentModel = requestedParentModel ?? configuredAgentModel;
     const tenantSlug = runtimeConfig.tenantSlug;
     const agentSlug = runtimeConfig.agentSlug;
     const humanName = runtimeConfig.humanName ?? "";
@@ -942,7 +942,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               ...(requestedParentModel
                 ? {
                     requested_model: requestedParentModel,
-                    fallback_model: fallbackAgentModel,
                   }
                 : {}),
               agent_slug: agentSlug || undefined,

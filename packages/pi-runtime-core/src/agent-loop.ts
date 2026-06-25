@@ -40,6 +40,7 @@ import type {
   RunAgentLoopResult,
 } from "./types.js";
 import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
+import { UnsupportedModelError } from "./model-provider.js";
 
 /**
  * Full Pi built-in tool set. We pass an explicit allowlist so all seven are
@@ -58,7 +59,6 @@ export const BUILTIN_TOOL_NAMES = [
   "ls",
 ] as const;
 
-const DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
 const PI_AGENT_DIR = ".thinkwork-pi";
 
 type PiCodingAgentModule = typeof import("@earendil-works/pi-coding-agent");
@@ -176,9 +176,10 @@ export interface OpenSessionInputs {
 }
 
 function resolveModelIdString(modelId: unknown): string {
-  return typeof modelId === "string" && modelId.trim()
-    ? modelId.trim()
-    : DEFAULT_BEDROCK_MODEL_ID;
+  if (typeof modelId === "string" && modelId.trim()) {
+    return modelId.trim();
+  }
+  throw new UnsupportedModelError("missing model id");
 }
 
 /** Flatten a pi-ai message to plain text (user content is a string; assistant
@@ -531,6 +532,21 @@ function primeBedrockRuntimeAuth(authStorage: {
   );
 }
 
+interface BedrockModelRegistryLike<TModel extends { id?: string }> {
+  find(provider: "amazon-bedrock", modelId: string): TModel | undefined;
+}
+
+export function resolveRequiredBedrockModel<TModel extends { id?: string }>(
+  modelRegistry: BedrockModelRegistryLike<TModel>,
+  modelId: string,
+): TModel {
+  const model = modelRegistry.find("amazon-bedrock", modelId);
+  if (!model) {
+    throw new UnsupportedModelError(modelId);
+  }
+  return model;
+}
+
 async function defaultOpenSession(
   inputs: OpenSessionInputs,
 ): Promise<OpenedSession> {
@@ -546,9 +562,7 @@ async function defaultOpenSession(
   const authStorage = AuthStorage.create();
   primeBedrockRuntimeAuth(authStorage);
   const modelRegistry = ModelRegistry.create(authStorage);
-  const model =
-    modelRegistry.find("amazon-bedrock", inputs.modelId) ??
-    modelRegistry.find("amazon-bedrock", DEFAULT_BEDROCK_MODEL_ID);
+  const model = resolveRequiredBedrockModel(modelRegistry, inputs.modelId);
 
   // System-prompt source: when the host passes a prebuilt `systemPrompt`,
   // override the resource loader's default with it (the transitional /
@@ -604,7 +618,7 @@ async function defaultOpenSession(
     sessionManager,
     authStorage,
     modelRegistry,
-    ...(model ? { model } : {}),
+    model,
   });
 
   // Surface extension load failures loudly. The SDK collects factory/register
@@ -622,7 +636,7 @@ async function defaultOpenSession(
 
   return {
     session,
-    modelId: model?.id ?? inputs.modelId,
+    modelId: model.id ?? inputs.modelId,
     durable: Boolean(durable),
     persistSession: durable ? () => durable.persist() : undefined,
     readSessionEntries: () =>
