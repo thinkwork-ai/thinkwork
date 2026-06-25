@@ -48,6 +48,8 @@ vi.mock("../../utils.js", () => ({
     agent_id: "cost_events.agent_id",
     user_id: "cost_events.user_id",
     created_at: "cost_events.created_at",
+    amount_usd: "cost_events.amount_usd",
+    reconciliation_state: "cost_events.reconciliation_state",
   },
   and: (...args: unknown[]) => ({ _and: args }),
   eq: (...args: unknown[]) => {
@@ -136,5 +138,45 @@ describe("budgetStatus", () => {
       { spentUsd: 3, status: "normal" },
       { spentUsd: 25, status: "exceeded" },
     ]);
+  });
+
+  it("keeps runtime-only budget usage visible without enforcing it by default", async () => {
+    mocks.rows = [
+      [
+        {
+          totalUsd: 12,
+          estimatedUsd: 12,
+          invocationReconciledUsd: 0,
+          billReconciledUsd: 0,
+          mismatchUsd: 0,
+          unreconciledUsd: 0,
+        },
+      ],
+    ];
+
+    await expect(
+      budgetStatusForPolicy(
+        {
+          id: "policy-user",
+          tenant_id: "tenant-1",
+          scope: "user",
+          user_id: "user-1",
+          agent_id: null,
+          period: "monthly",
+          limit_usd: "10.00",
+          action_on_exceed: "pause",
+          enabled: true,
+        },
+        "tenant-1",
+      ),
+    ).resolves.toMatchObject({
+      spentUsd: 0,
+      visibleSpendUsd: 12,
+      estimatedUsd: 12,
+      minimumReconciliationState: "bill-reconciled",
+      remainingUsd: 10,
+      percentUsed: 0,
+      status: "normal",
+    });
   });
 });

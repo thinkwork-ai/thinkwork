@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   selectRows: [] as Array<Record<string, unknown>>,
   reconcileChangedFiles: vi.fn(),
   recordCostEvents: vi.fn(),
+  recordTraceEvidence: vi.fn(),
   checkBudgetAndPause: vi.fn(),
   notifyCostRecorded: vi.fn(),
   notifyThreadTurnUpdate: vi.fn(),
@@ -67,6 +68,10 @@ vi.mock("../cost-recording.js", async (importOriginal) => {
     notifyCostRecorded: mocks.notifyCostRecorded,
   };
 });
+
+vi.mock("../trace-ledger/record-trace-evidence.js", () => ({
+  recordTraceEvidence: mocks.recordTraceEvidence,
+}));
 
 vi.mock("../thread-turn-events.js", () => ({
   appendThreadTurnEvent: mocks.appendThreadTurnEvent,
@@ -176,6 +181,12 @@ beforeEach(() => {
     totalUsd: 1.23,
     llmUsd: 1.23,
     computeUsd: 0,
+  });
+  mocks.recordTraceEvidence.mockReset();
+  mocks.recordTraceEvidence.mockResolvedValue({
+    traceRunId: "trace-run-1",
+    traceEventIds: {},
+    costEventIds: [],
   });
   mocks.checkBudgetAndPause.mockResolvedValue(undefined);
   mocks.notifyCostRecorded.mockResolvedValue(undefined);
@@ -719,6 +730,160 @@ describe("processFinalize reconcile seam", () => {
         agentId: AGENT_ID,
         userId: "55555555-5555-5555-5555-555555555555",
         amountUsd: 1.23,
+      }),
+    );
+  });
+
+  it("dual-writes normalized finalize evidence to the trace ledger", async () => {
+    mocks.reconcileChangedFiles.mockResolvedValueOnce({
+      status: "partial_success",
+      files: [
+        {
+          path: "README.md",
+          op: "modify",
+          owner: "agent",
+          status: "written",
+          sourceKey: "tenants/acme/README.md",
+          etag: "etag-1",
+        },
+      ],
+    });
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        trace_id: "trace-1",
+        cost_owner_user_id: "55555555-5555-5555-5555-555555555555",
+        runtime_type: "pi",
+        duration_ms: 25,
+        status: "completed",
+        response: {
+          content: "done",
+          diagnostics: {
+            agentcore_phases: [
+              {
+                phase: "runtime.workspace_bootstrap",
+                status: "completed",
+                duration_ms: 42,
+              },
+            ],
+          },
+          tool_invocations: [
+            {
+              id: "tool-1",
+              tool_name: "web_search",
+              input_preview: '{"query":"trace ledger"}',
+              output_preview: "Search results",
+            },
+          ],
+          model_routed_tool_calls: [
+            {
+              toolCallId: "tool-1",
+              toolName: "web_search",
+              match: { slug: "research" },
+              model: "anthropic.claude-haiku",
+              status: "completed",
+              inputTokens: 100,
+              outputTokens: 20,
+              cachedReadTokens: 5,
+              durationMs: 250,
+              ruleSource: { owner: "user", path: "User/TOOLS.md" },
+            },
+          ],
+        },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 1000,
+          output_tokens: 200,
+          cached_read_tokens: 15,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.recordTraceEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+        userId: "55555555-5555-5555-5555-555555555555",
+        threadId: THREAD_ID,
+        threadTurnId: TURN_ID,
+        traceId: "trace-1",
+        runtimeType: "pi",
+        status: "completed",
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          inputTokens: 1000,
+          outputTokens: 200,
+          cachedReadTokens: 15,
+          costUsd: 1.23,
+        },
+        diagnostics: expect.objectContaining({
+          agentcore_phases: [
+            {
+              phase: "runtime.workspace_bootstrap",
+              status: "completed",
+              duration_ms: 42,
+            },
+          ],
+          workspace_diagnostics: expect.objectContaining({
+            reconcile_status: "partial_success",
+            changed_files: 1,
+            persisted_files: 1,
+          }),
+        }),
+        toolInvocations: [
+          expect.objectContaining({
+            id: "tool-1",
+            tool_name: "web_search",
+          }),
+        ],
+        modelRoutedToolCalls: [
+          expect.objectContaining({
+            toolCallId: "tool-1",
+            model: "anthropic.claude-haiku",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("keeps existing finalize projections when trace ledger writing fails", async () => {
+    mocks.recordTraceEvidence.mockRejectedValueOnce(
+      new Error("ledger unavailable"),
+    );
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: { content: "Still finalize the turn." },
+      }),
+    ).resolves.toMatchObject({ finalized: true });
+
+    expect(mocks.insertAssistantMessage).toHaveBeenCalledWith(
+      THREAD_ID,
+      TENANT_ID,
+      AGENT_ID,
+      "Still finalize the turn.",
+      [],
+      undefined,
+      undefined,
+    );
+    expect(mocks.appendThreadTurnEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: "trace_ledger_write_failed",
+        level: "warn",
+        payload: expect.objectContaining({
+          error: "ledger unavailable",
+        }),
       }),
     );
   });

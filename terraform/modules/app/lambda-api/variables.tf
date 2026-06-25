@@ -61,6 +61,24 @@ variable "bucket_arn" {
   type        = string
 }
 
+variable "billing_export_bucket_name" {
+  description = "Optional S3 bucket containing AWS Data Exports/CUR 2.0 manifests for bill reconciliation. Empty leaves the scheduled reconciler in no-op mode; targeted invokes can still pass a manifest bucket."
+  type        = string
+  default     = ""
+}
+
+variable "billing_export_manifest_key" {
+  description = "Optional S3 key for the latest AWS billing export manifest to import on the scheduled bill reconciler run."
+  type        = string
+  default     = ""
+}
+
+variable "billing_reconciliation_tolerance_usd" {
+  description = "Absolute USD tolerance used when comparing ThinkWork projected aggregate spend to AWS billing export spend."
+  type        = number
+  default     = 0.01
+}
+
 variable "plugin_catalog_github_token_secret_arn" {
   description = "Optional Secrets Manager ARN/name containing a GitHub token for plugin catalog release-asset fetches. Empty uses unauthenticated GitHub requests."
   type        = string

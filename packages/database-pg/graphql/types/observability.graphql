@@ -121,6 +121,12 @@ type ModelInvocation {
   toolUses: [String!]
   hasToolResult: Boolean
   branch: String
+  cacheWriteTokenCount: Int
+  reconciliationState: String
+  reconciliationReason: String
+  reconciliationConfidence: String
+  reconciliationRuntimeRequestId: String
+  reconciliationDiagnostic: String
 }
 
 extend type Query {

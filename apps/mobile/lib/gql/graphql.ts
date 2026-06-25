@@ -43,35 +43,56 @@ export type AccountUsage = {
 
 export type AccountUsageDay = {
   __typename?: "AccountUsageDay";
+  billReconciledUsd: Scalars["Float"]["output"];
   computeUsd: Scalars["Float"]["output"];
   day: Scalars["String"]["output"];
+  enforcedUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
   eventCount: Scalars["Int"]["output"];
   inputTokens: Scalars["Int"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
   llmUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   outputTokens: Scalars["Int"]["output"];
   toolsUsd: Scalars["Float"]["output"];
   totalUsd: Scalars["Float"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
 };
 
 export type AccountUsageModel = {
   __typename?: "AccountUsageModel";
+  billReconciledUsd: Scalars["Float"]["output"];
   displayName: Scalars["String"]["output"];
+  enforcedUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
   inputTokens: Scalars["Int"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   model: Scalars["String"]["output"];
   outputTokens: Scalars["Int"]["output"];
   totalUsd: Scalars["Float"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
   usageShare: Scalars["Float"]["output"];
 };
 
 export type AccountUsageSummary = {
   __typename?: "AccountUsageSummary";
+  billReconciledUsd: Scalars["Float"]["output"];
   computeUsd: Scalars["Float"]["output"];
+  enforcedUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
   eventCount: Scalars["Int"]["output"];
   inputTokens: Scalars["Int"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
   llmUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   outputTokens: Scalars["Int"]["output"];
   toolsUsd: Scalars["Float"]["output"];
   totalUsd: Scalars["Float"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
 };
 
 export type ActivatePluginInput = {
@@ -979,11 +1000,18 @@ export type BudgetPolicy = {
 
 export type BudgetStatus = {
   __typename?: "BudgetStatus";
+  billReconciledUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   percentUsed: Scalars["Float"]["output"];
   policy: BudgetPolicy;
   remainingUsd: Scalars["Float"]["output"];
   spentUsd: Scalars["Float"]["output"];
   status: Scalars["String"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
+  visibleSpendUsd: Scalars["Float"]["output"];
 };
 
 export type CheckoutThreadInput = {
@@ -1288,6 +1316,12 @@ export type CostEvent = {
   __typename?: "CostEvent";
   agentId?: Maybe<Scalars["ID"]["output"]>;
   amountUsd: Scalars["Float"]["output"];
+  billingAccountId?: Maybe<Scalars["String"]["output"]>;
+  billingAttributionLevel?: Maybe<Scalars["String"]["output"]>;
+  billingOperation?: Maybe<Scalars["String"]["output"]>;
+  billingPeriodEnd?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  billingPeriodStart?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  billingServiceCode?: Maybe<Scalars["String"]["output"]>;
   cachedReadTokens?: Maybe<Scalars["Int"]["output"]>;
   createdAt: Scalars["AWSDateTime"]["output"];
   durationMs?: Maybe<Scalars["Int"]["output"]>;
@@ -1323,16 +1357,23 @@ export type CostRecordedEvent = {
 
 export type CostSummary = {
   __typename?: "CostSummary";
+  billReconciledUsd: Scalars["Float"]["output"];
   computeUsd: Scalars["Float"]["output"];
+  enforcedUsd: Scalars["Float"]["output"];
+  estimatedUsd: Scalars["Float"]["output"];
   evalUsd?: Maybe<Scalars["Float"]["output"]>;
   eventCount: Scalars["Int"]["output"];
+  invocationReconciledUsd: Scalars["Float"]["output"];
   llmUsd: Scalars["Float"]["output"];
+  minimumReconciliationState: Scalars["String"]["output"];
+  mismatchUsd: Scalars["Float"]["output"];
   periodEnd: Scalars["AWSDateTime"]["output"];
   periodStart: Scalars["AWSDateTime"]["output"];
   toolsUsd: Scalars["Float"]["output"];
   totalInputTokens: Scalars["Int"]["output"];
   totalOutputTokens: Scalars["Int"]["output"];
   totalUsd: Scalars["Float"]["output"];
+  unreconciledUsd: Scalars["Float"]["output"];
 };
 
 export type CreateArtifactInput = {
@@ -3228,6 +3269,7 @@ export type ModelInvocation = {
   __typename?: "ModelInvocation";
   branch?: Maybe<Scalars["String"]["output"]>;
   cacheReadTokenCount: Scalars["Int"]["output"];
+  cacheWriteTokenCount?: Maybe<Scalars["Int"]["output"]>;
   costUsd?: Maybe<Scalars["Float"]["output"]>;
   hasToolResult?: Maybe<Scalars["Boolean"]["output"]>;
   inputPreview?: Maybe<Scalars["String"]["output"]>;
@@ -3235,6 +3277,11 @@ export type ModelInvocation = {
   modelId: Scalars["String"]["output"];
   outputPreview?: Maybe<Scalars["String"]["output"]>;
   outputTokenCount: Scalars["Int"]["output"];
+  reconciliationConfidence?: Maybe<Scalars["String"]["output"]>;
+  reconciliationDiagnostic?: Maybe<Scalars["String"]["output"]>;
+  reconciliationReason?: Maybe<Scalars["String"]["output"]>;
+  reconciliationRuntimeRequestId?: Maybe<Scalars["String"]["output"]>;
+  reconciliationState?: Maybe<Scalars["String"]["output"]>;
   requestId: Scalars["String"]["output"];
   timestamp: Scalars["AWSDateTime"]["output"];
   toolCount?: Maybe<Scalars["Int"]["output"]>;

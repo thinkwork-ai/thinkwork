@@ -53,6 +53,16 @@ export const costEvents = pgTable(
     reconciliation_source: text("reconciliation_source"),
     reconciliation_at: timestamp("reconciliation_at", { withTimezone: true }),
     source_evidence_ref: jsonb("source_evidence_ref"),
+    billing_account_id: text("billing_account_id"),
+    billing_service_code: text("billing_service_code"),
+    billing_operation: text("billing_operation"),
+    billing_period_start: timestamp("billing_period_start", {
+      withTimezone: true,
+    }),
+    billing_period_end: timestamp("billing_period_end", {
+      withTimezone: true,
+    }),
+    billing_attribution_level: text("billing_attribution_level"),
     metadata: jsonb("metadata"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -82,9 +92,133 @@ export const costEvents = pgTable(
       table.reconciliation_state,
       table.created_at,
     ),
+    index("idx_cost_events_billing_period").on(
+      table.tenant_id,
+      table.billing_service_code,
+      table.billing_period_start,
+    ),
     check(
       "cost_events_reconciliation_state_check",
       sql`${table.reconciliation_state} IN ('runtime-reported', 'invocation-reconciled', 'bill-reconciled', 'mismatch', 'unreconciled/error')`,
+    ),
+  ],
+);
+
+export const billingExportImports = pgTable(
+  "billing_export_imports",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    provider: text("provider").notNull().default("aws"),
+    source_type: text("source_type").notNull().default("aws_cur"),
+    manifest_bucket: text("manifest_bucket").notNull(),
+    manifest_key: text("manifest_key").notNull(),
+    billing_period_start: timestamp("billing_period_start", {
+      withTimezone: true,
+    }).notNull(),
+    billing_period_end: timestamp("billing_period_end", {
+      withTimezone: true,
+    }).notNull(),
+    status: text("status").notNull().default("imported"),
+    row_count: integer("row_count").notNull().default(0),
+    error_count: integer("error_count").notNull().default(0),
+    error_summary: text("error_summary"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    imported_at: timestamp("imported_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("billing_export_imports_manifest_uidx").on(
+      table.provider,
+      table.manifest_bucket,
+      table.manifest_key,
+    ),
+    index("billing_export_imports_period_idx").on(
+      table.provider,
+      table.billing_period_start,
+      table.billing_period_end,
+    ),
+    check(
+      "billing_export_imports_status_check",
+      sql`${table.status} IN ('imported', 'imported_with_errors', 'failed')`,
+    ),
+  ],
+);
+
+export const billingExportLineItems = pgTable(
+  "billing_export_line_items",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    import_id: uuid("import_id")
+      .notNull()
+      .references(() => billingExportImports.id, { onDelete: "cascade" }),
+    tenant_id: uuid("tenant_id").references(() => tenants.id, {
+      onDelete: "set null",
+    }),
+    provider: text("provider").notNull().default("aws"),
+    line_item_id: text("line_item_id").notNull(),
+    usage_account_id: text("usage_account_id"),
+    service_code: text("service_code").notNull(),
+    operation: text("operation").notNull(),
+    line_item_type: text("line_item_type"),
+    usage_start: timestamp("usage_start", { withTimezone: true }).notNull(),
+    usage_end: timestamp("usage_end", { withTimezone: true }).notNull(),
+    billing_period_start: timestamp("billing_period_start", {
+      withTimezone: true,
+    }).notNull(),
+    billing_period_end: timestamp("billing_period_end", {
+      withTimezone: true,
+    }).notNull(),
+    amount_usd: numeric("amount_usd", { precision: 12, scale: 6 }).notNull(),
+    usage_amount: numeric("usage_amount", { precision: 20, scale: 6 }),
+    currency: text("currency").notNull().default("USD"),
+    model: text("model").notNull().default("unknown"),
+    region: text("region"),
+    resource_id: text("resource_id"),
+    attribution_level: text("attribution_level").notNull(),
+    attribution_key: text("attribution_key").notNull(),
+    source_uri: text("source_uri").notNull(),
+    raw_row: jsonb("raw_row")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("billing_export_line_items_import_line_uidx").on(
+      table.import_id,
+      table.line_item_id,
+    ),
+    index("billing_export_line_items_period_idx").on(
+      table.provider,
+      table.billing_period_start,
+      table.billing_period_end,
+    ),
+    index("billing_export_line_items_tenant_idx").on(
+      table.tenant_id,
+      table.service_code,
+      table.billing_period_start,
+    ),
+    index("billing_export_line_items_attribution_idx").on(
+      table.provider,
+      table.attribution_level,
+      table.attribution_key,
+    ),
+    check(
+      "billing_export_line_items_attribution_check",
+      sql`${table.attribution_level} IN ('tenant', 'account', 'service_window')`,
     ),
   ],
 );
@@ -149,6 +283,27 @@ export const costEventsRelations = relations(costEvents, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+export const billingExportImportsRelations = relations(
+  billingExportImports,
+  ({ many }) => ({
+    lineItems: many(billingExportLineItems),
+  }),
+);
+
+export const billingExportLineItemsRelations = relations(
+  billingExportLineItems,
+  ({ one }) => ({
+    import: one(billingExportImports, {
+      fields: [billingExportLineItems.import_id],
+      references: [billingExportImports.id],
+    }),
+    tenant: one(tenants, {
+      fields: [billingExportLineItems.tenant_id],
+      references: [tenants.id],
+    }),
+  }),
+);
 
 export const budgetPoliciesRelations = relations(budgetPolicies, ({ one }) => ({
   tenant: one(tenants, {

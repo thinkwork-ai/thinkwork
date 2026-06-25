@@ -4,10 +4,10 @@ const mocks = vi.hoisted(() => ({
   rows: [] as unknown[],
 }));
 
-vi.mock("../../utils.js", () => ({
-  db: {
-    select: () => ({
-      from: () => ({
+function queryChain() {
+  return {
+    from: () => ({
+      innerJoin: () => ({
         leftJoin: () => ({
           where: () => ({
             orderBy: () => ({
@@ -17,25 +17,16 @@ vi.mock("../../utils.js", () => ({
         }),
       }),
     }),
+  };
+}
+
+vi.mock("../../utils.js", () => ({
+  db: {
+    select: () => queryChain(),
   },
   eq: vi.fn((column, value) => ({ column, value })),
   and: vi.fn((...conditions) => ({ conditions })),
   sql: vi.fn(() => "sql"),
-  costEvents: {
-    trace_id: "cost_events.trace_id",
-    request_id: "cost_events.request_id",
-    event_type: "cost_events.event_type",
-    thread_id: "cost_events.thread_id",
-    agent_id: "cost_events.agent_id",
-    runtime_type: "cost_events.runtime_type",
-    model: "cost_events.model",
-    input_tokens: "cost_events.input_tokens",
-    output_tokens: "cost_events.output_tokens",
-    duration_ms: "cost_events.duration_ms",
-    metadata: "cost_events.metadata",
-    created_at: "cost_events.created_at",
-    tenant_id: "cost_events.tenant_id",
-  },
   agents: {
     id: "agents.id",
     name: "agents.name",
@@ -45,49 +36,87 @@ vi.mock("../../utils.js", () => ({
 import { threadTraces } from "./threadTraces.query";
 
 describe("threadTraces", () => {
-  it("exposes parent and child model route metadata separately", async () => {
+  it("projects canonical trace events with reconciliation and source evidence", async () => {
     const createdAt = new Date("2026-06-06T12:00:00.000Z");
     mocks.rows = [
       {
         traceId: "trace-1",
         requestId: "turn-1:tool:tool-1:model",
-        eventType: "llm",
+        parentRequestId: "turn-1",
+        eventType: "model_invocation",
+        eventStatus: "completed",
         threadId: "thread-1",
+        threadTurnId: "turn-1",
         agentId: "agent-1",
         agentName: "Agent",
         runtimeType: "pi",
-        model: "anthropic.claude-haiku",
-        inputTokens: 100,
-        outputTokens: 20,
         durationMs: null,
-        costUsd: 0.001,
-        metadata: {
-          source: "pi_tool_model_route",
-          parent_request_id: "turn-1",
+        payloadSummary: {
+          model: "anthropic.claude-haiku",
+          input_tokens: 100,
+          output_tokens: 20,
+          cost_usd: 0.001,
           tool_call_id: "tool-1",
           tool_name: "workspace_skill",
+        },
+        sourceEvidenceRef: {},
+        metadata: {
+          source: "pi_tool_model_route",
           model_routing_status: "completed",
           rule_source: { owner: "user", path: "User/TOOLS.md" },
           match: { slug: "research" },
         },
+        observedAt: createdAt,
         createdAt,
+        costEventModel: null,
+        costEventInputTokens: null,
+        costEventOutputTokens: null,
+        costEventAmountUsd: null,
+        costEventReconciliationState: null,
+        reconciliationState: "invocation-reconciled",
+        reconciliationSource: "invocation",
+        factModel: "anthropic.claude-haiku",
+        factInputTokens: 100,
+        factOutputTokens: 20,
+        factAmountUsd: 0.0011,
+        sourceEvidence: [
+          {
+            id: "source-1",
+            traceRunId: "run-1",
+            traceEventId: "event-1",
+            sourceType: "bedrock_invocation_log",
+            sourceSystem: "aws.bedrock",
+            sourceId: "bedrock-request-1",
+            uri: "cloudwatch://group/stream",
+            observedAt: createdAt,
+            summary: { model: "anthropic.claude-haiku" },
+            redactionState: "summary_only",
+            retentionExpiresAt: null,
+            metadata: { requestId: "bedrock-request-1" },
+            createdAt,
+          },
+        ],
       },
       {
         traceId: "trace-1",
         requestId: "turn-1:profile:profile-run-1:model",
-        eventType: "llm",
+        parentRequestId: "turn-1",
+        eventType: "agent_profile_run",
+        eventStatus: "completed",
         threadId: "thread-1",
+        threadTurnId: "turn-1",
         agentId: "agent-1",
         agentName: "Agent",
         runtimeType: "pi",
-        model: "anthropic.claude-haiku",
-        inputTokens: 120,
-        outputTokens: 40,
         durationMs: 900,
-        costUsd: 0.002,
+        payloadSummary: {
+          model: "anthropic.claude-haiku",
+          input_tokens: 120,
+          output_tokens: 40,
+        },
+        sourceEvidenceRef: { source_type: "runtime" },
         metadata: {
           source: "pi_agent_profile",
-          parent_request_id: "turn-1",
           profile_run_id: "profile-run-1",
           profile_id: "profile-research",
           profile_slug: "research",
@@ -115,23 +144,50 @@ describe("threadTraces", () => {
             ],
           },
         },
+        observedAt: createdAt,
         createdAt,
+        costEventModel: null,
+        costEventInputTokens: null,
+        costEventOutputTokens: null,
+        costEventAmountUsd: null,
+        costEventReconciliationState: "runtime-reported",
+        reconciliationState: null,
+        reconciliationSource: null,
+        factModel: null,
+        factInputTokens: null,
+        factOutputTokens: null,
+        factAmountUsd: null,
+        sourceEvidence: [],
       },
       {
         traceId: "trace-1",
         requestId: "turn-1",
-        eventType: "llm",
+        parentRequestId: null,
+        eventType: "model_invocation",
+        eventStatus: "succeeded",
         threadId: "thread-1",
+        threadTurnId: "turn-1",
         agentId: "agent-1",
         agentName: "Agent",
         runtimeType: "pi",
-        model: "moonshotai.kimi-k2.5",
-        inputTokens: 1000,
-        outputTokens: 200,
         durationMs: 5000,
-        costUsd: 0.01,
+        payloadSummary: {},
+        sourceEvidenceRef: { source_type: "runtime" },
         metadata: { source: "agent_invoke", estimated: false },
+        observedAt: createdAt,
         createdAt,
+        costEventModel: "moonshotai.kimi-k2.5",
+        costEventInputTokens: 1000,
+        costEventOutputTokens: 200,
+        costEventAmountUsd: 0.01,
+        costEventReconciliationState: "runtime-reported",
+        reconciliationState: null,
+        reconciliationSource: null,
+        factModel: null,
+        factInputTokens: null,
+        factOutputTokens: null,
+        factAmountUsd: null,
+        sourceEvidence: [],
       },
     ];
 
@@ -144,13 +200,28 @@ describe("threadTraces", () => {
     ).resolves.toEqual([
       expect.objectContaining({
         requestId: "turn-1:tool:tool-1:model",
+        eventType: "model_invocation",
         source: "pi_tool_model_route",
         parentRequestId: "turn-1",
         toolCallId: "tool-1",
         toolName: "workspace_skill",
         modelRoutingStatus: "completed",
+        model: "anthropic.claude-haiku",
+        inputTokens: 100,
+        outputTokens: 20,
+        costUsd: 0.001,
+        reconciliationState: "invocation-reconciled",
+        reconciliationSource: "invocation",
         ruleSource: { owner: "user", path: "User/TOOLS.md" },
         match: { slug: "research" },
+        sourceEvidence: [
+          expect.objectContaining({
+            sourceType: "bedrock_invocation_log",
+            sourceSystem: "aws.bedrock",
+            sourceId: "bedrock-request-1",
+            observedAt: "2026-06-06T12:00:00.000Z",
+          }),
+        ],
         createdAt: "2026-06-06T12:00:00.000Z",
       }),
       expect.objectContaining({
@@ -171,6 +242,7 @@ describe("threadTraces", () => {
         loopStatus: "completed",
         loopVerdict: "pass",
         reviewerRole: false,
+        reconciliationState: "runtime-reported",
         loopEvidence: {
           loopId: "loop-research-1",
           ownerType: "profile",
@@ -186,6 +258,10 @@ describe("threadTraces", () => {
       expect.objectContaining({
         requestId: "turn-1",
         source: "agent_invoke",
+        model: "moonshotai.kimi-k2.5",
+        inputTokens: 1000,
+        outputTokens: 200,
+        costUsd: 0.01,
         toolCallId: null,
       }),
     ]);

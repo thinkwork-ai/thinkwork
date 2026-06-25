@@ -132,3 +132,467 @@ Local verification:
 - `pnpm dlx prettier@3.6.2 --check` on authored TS/GraphQL/Markdown files
   passed.
 - `git diff --check` passed.
+
+PR / merge:
+
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2955
+- Merge commit: `5d50ab85ee0862a5473e2ea62b49eefc2ba06f77`
+- Dev migration `0189_trace_cost_substrate.sql` was applied and drift-verified.
+
+### U2: Ingest Runtime And Finalize Evidence Into The Ledger
+
+Objective: dual-write runtime/finalize evidence into the canonical trace ledger
+while preserving existing `thread_turns.usage_json` and `cost_events`
+projections.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u2-runtime-ledger-ingest`
+- Worktree: `.Codex/worktrees/thnk-74-u2-runtime-ledger-ingest`
+- Base: `origin/main` at `ee5617b44` (includes U1 merge plus PR #2956).
+
+Planned local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/trace-ledger/record-trace-evidence.test.ts`
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/chat-finalize/process-finalize.test.ts`
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/cost-recording.extract-usage.test.ts`
+- `pnpm --filter @thinkwork/api typecheck`
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 08:57 CDT: cleaned stale aborted U2 worktree and reset duplicate
+  U1 scratch changes from `/Users/ericodom/.codex/worktrees/536d/thinkwork`.
+- 2026-06-25 08:57 CDT: created fresh U2 branch/worktree from `origin/main`.
+- Added `packages/api/src/lib/trace-ledger/record-trace-evidence.ts` with a
+  pure trace event-plan builder plus a best-effort DB writer that:
+  - upserts one `trace_runs` row for the turn;
+  - appends root turn, parent model, runtime compute/phase, workspace
+    reconcile, tool, model-routed tool, agent profile, and finalization events;
+  - appends runtime source-evidence rows;
+  - links matching `cost_events` rows to trace events as `runtime-reported`;
+  - appends runtime-scope `trace_cost_reconciliation_facts` for linked cost
+    rows.
+- Wired `processFinalize` to call the trace-ledger writer after existing
+  `usage_json` and cost projections are computed. The write is best-effort:
+  failures log a `trace_ledger_write_failed` thread-turn event and do not block
+  assistant-message insertion, turn finalization, or existing cost/thread
+  projections.
+- Added failed-turn trace ledger ingestion with failed status, error summary,
+  workspace reconcile diagnostics, and zero/available runtime usage evidence.
+- Added runtime source evidence metadata to new `cost_events` rows while keeping
+  their existing projection shape and reconciliation state at
+  `runtime-reported`.
+
+Local verification:
+
+- `pnpm install` passed; local `canvas` native build still logs a non-fatal
+  missing `pkg-config` warning under Node 25.6.0.
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/trace-ledger/record-trace-evidence.test.ts src/lib/chat-finalize/process-finalize.test.ts src/lib/cost-recording.extract-usage.test.ts src/__tests__/cost-recording.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm dlx prettier@3.6.2 --check packages/api/src/lib/trace-ledger/record-trace-evidence.ts packages/api/src/lib/trace-ledger/record-trace-evidence.test.ts packages/api/src/lib/chat-finalize/process-finalize.ts packages/api/src/lib/chat-finalize/process-finalize.test.ts packages/api/src/lib/cost-recording.ts docs/plans/autopilot/THNK-74-status.md`
+  passed.
+- `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `79eebd594` (`feat(trace-ledger): ingest finalize evidence`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2958
+- 2026-06-25 09:08 CDT: PR opened; waiting for required CI.
+- 2026-06-25 09:18 CDT: PR CI passed: CLA, lint, test, typecheck, and verify.
+- 2026-06-25 10:34 CDT: PR merged.
+- Merge commit: `972caebe7fbe313d275347c681cee0374315682c`.
+- Required CI passed: CLA, lint, test, typecheck, and verify.
+- U2 worktree and local branch cleanup completed before U3 start.
+
+### U3: Reconcile Bedrock Invocations Per Invocation
+
+Objective: match runtime/model usage observations to Bedrock provider-observed
+invocation logs and record provider-observed usage, mismatches, ambiguous
+matches, or retryable unreconciled diagnostics without treating runtime-only
+usage as invocation- or bill-reconciled.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u3-bedrock-invocation-reconciliation`
+- Worktree: `/Users/ericodom/.codex/worktrees/e08f/thinkwork`
+- Base: `origin/main` at `972caebe7fbe313d275347c681cee0374315682c`.
+
+Planned local verification:
+
+- Focused Bedrock invocation reconciler tests.
+- Existing and expanded `turnInvocationLogs` resolver tests.
+- `pnpm --filter @thinkwork/api typecheck`
+- Terraform validation/build checks if handler or IAM wiring changes.
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 10:43 CDT: U3 started from `origin/main` at
+  `972caebe7fbe313d275347c681cee0374315682c`.
+- Added `packages/api/src/lib/trace-ledger/bedrock-invocation-reconciler.ts`
+  with:
+  - Bedrock invocation log normalization for request/model/timestamp/token/cache
+    fields, request metadata, previews, source log references, and estimated
+    provider cost.
+  - Pure runtime-vs-provider reconciliation rules that match by Bedrock request
+    ID first, request metadata next, and bounded model/time fallback only when
+    unambiguous.
+  - Explicit `invocation-reconciled`, `mismatch`, and `unreconciled/error`
+    outcomes with token/amount variance and operator-readable reasons.
+  - Idempotent persistence into `trace_source_evidence`,
+    `trace_cost_reconciliation_facts`, and current `cost_events` compatibility
+    state.
+- Refactored `turnInvocationLogs` to reuse the adapter/reconciliation library
+  and expose nullable reconciliation diagnostics on `ModelInvocation`.
+- Added scheduled/direct handler
+  `packages/api/src/handlers/trace-invocation-reconciler.ts`.
+- Registered the handler in `scripts/build-lambdas.sh` and
+  `terraform/modules/app/lambda-api/handlers.tf`; existing CloudWatch
+  model-invocation log IAM was sufficient.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/trace-ledger/bedrock-invocation-reconciler.test.ts src/graphql/resolvers/observability/turnInvocationLogs.query.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm schema:build` passed with no Terraform subscription schema diff.
+- `pnpm --filter @thinkwork/web codegen` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm --filter @thinkwork/mobile codegen` passed.
+- `bash scripts/build-lambdas.sh trace-invocation-reconciler` passed.
+- `terraform fmt -check terraform/modules/app/lambda-api/handlers.tf` passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm dlx prettier@3.6.2 --check` on touched TS/GraphQL/Markdown files
+  passed.
+- `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `91fefc807` (`feat(trace-ledger): reconcile bedrock invocation logs`)
+- Commit: `490c4784b` (`docs: update thnk-74 u3 status`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2959
+- 2026-06-25 10:55 CDT: PR opened; waiting for required CI.
+- 2026-06-25 11:05 CDT: PR merged.
+- Merge commit: `a653a163a39068ca086445dfe437f0fe9111edc9`.
+- Required CI passed: CLA, lint, test, typecheck, and verify.
+- U3 worktree, remote branch, and local branch cleanup completed before U4
+  start.
+
+### U4: Reconcile Aggregate Spend Against AWS Billing Exports
+
+Objective: import AWS Data Exports/CUR 2.0 billing rows and reconcile aggregate
+bill spend against ThinkWork runtime/invocation accounting rows without implying
+exact per-turn billing proof when the export only supports account/service/window
+attribution.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u4-bill-reconciliation`
+- Worktree: `/Users/ericodom/.codex/worktrees/e19b/thinkwork`
+- Base: `origin/main` at `a653a163a39068ca086445dfe437f0fe9111edc9`.
+
+Planned local verification:
+
+- Focused CUR import and bill aggregate reconciliation tests.
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/database-pg typecheck`
+- `pnpm schema:build`
+- GraphQL consumer codegen for web, CLI, and mobile if cost schema changes.
+- `bash scripts/build-lambdas.sh cost-bill-reconciler`
+- Terraform formatting/checks for touched lambda-api and thinkwork module files.
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 11:08 CDT: U4 started from `origin/main` at
+  `a653a163a39068ca086445dfe437f0fe9111edc9`.
+- Added `packages/api/src/lib/billing-reconciliation/aws-cur-import.ts` with:
+  - AWS export manifest parsing for billing period and data-file locations.
+  - CUR/Data Export CSV parsing for both CUR 2.0 underscore-style and legacy
+    slash-style column names.
+  - Normalization of Bedrock service/model/operation/account, tenant tag
+    attribution, account-only attribution, S3 source URI, and malformed-row
+    diagnostics.
+- Added `packages/api/src/lib/billing-reconciliation/bill-reconciler.ts` with:
+  - Pure aggregate reconciliation decisions for tenant-level, account-level,
+    matching, mismatched, and missing-bill-evidence cases.
+  - Persistence for billing export imports and line items.
+  - Aggregate `trace_source_evidence` / `trace_cost_reconciliation_facts`
+    writes for bill evidence.
+  - Current `cost_events` compatibility updates only when bill rows carry
+    tenant-level attribution; account-only evidence remains aggregate-only and
+    does not mark per-event rows bill-reconciled.
+- Added migration `0190_billing_export_reconciliation.sql` and Drizzle schema
+  for `billing_export_imports`, `billing_export_line_items`, and nullable
+  billing attribution columns on `cost_events`.
+- Added scheduled/targeted handler
+  `packages/api/src/handlers/cost-bill-reconciler.ts`.
+- Registered the handler in `scripts/build-lambdas.sh` and Terraform, added a
+  daily EventBridge Scheduler schedule, optional billing export bucket/manifest
+  variables, outputs, and narrow S3 read IAM for the configured export bucket.
+- Added nullable billing fields to GraphQL `CostEvent` and regenerated/manual
+  minimized generated GraphQL type surfaces for web, CLI, and mobile.
+
+Local verification:
+
+- `pnpm install` passed; local `canvas` native build still logs the known
+  non-fatal missing `pkg-config` warning under Node 25.6.0.
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/billing-reconciliation/aws-cur-import.test.ts src/lib/billing-reconciliation/bill-reconciler.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/database-pg typecheck` passed.
+- `pnpm schema:build` passed.
+- `pnpm --filter @thinkwork/web codegen` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm --filter @thinkwork/mobile codegen` passed.
+- `bash scripts/build-lambdas.sh cost-bill-reconciler` passed.
+- `terraform fmt -check` on touched lambda-api and thinkwork module files
+  passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm dlx prettier@3.6.2 --check` on authored TS/GraphQL/Markdown files
+  passed.
+- `git diff --check` passed.
+
+Dev migration:
+
+- Applied `packages/database-pg/drizzle/0190_billing_export_reconciliation.sql`
+  to dev.
+- Scoped `scripts/db-migrate-manual.sh packages/database-pg/drizzle/0190_billing_export_reconciliation.sql`
+  drift verification showed all declared objects present.
+
+PR / CI:
+
+- Commit: `94b0a4e60` (`feat(cost): reconcile aws billing exports`)
+- Commit: `74dfcb622` (`docs: update thnk-74 u4 status`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2960
+- 2026-06-25 11:21 CDT: PR opened; waiting for required CI.
+- 2026-06-25 11:32 CDT: PR merged.
+- Merge commit: `778cc0937d089741d1590106fd7e8a85d76d7476`.
+- Required CI passed: CLA, lint, test, typecheck, verify, and the rerun
+  Migration Drift Precheck after the dev manual migration was applied.
+- U4 worktree, remote branch, and local branch cleanup completed before U5
+  start.
+
+### U5: Make Budgets And Cost APIs Confidence-Aware
+
+Objective: make cost summaries, account usage, and budget enforcement expose
+visible runtime/provider/bill/mismatch state while strict budget decisions use
+the configured reconciliation confidence threshold.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u5-confidence-aware-costs`
+- Worktree: `/Users/ericodom/.codex/worktrees/e21c/thinkwork`
+- Base: `origin/main` at `778cc0937d089741d1590106fd7e8a85d76d7476`.
+
+Planned local verification:
+
+- Focused confidence-aware budget enforcement and cost resolver tests.
+- Web account usage component test.
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/database-pg typecheck`
+- `pnpm schema:build`
+- GraphQL consumer codegen for web, CLI, and mobile.
+- `pnpm --filter @thinkwork/web typecheck`
+- `pnpm --filter thinkwork-cli typecheck`
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 11:35 CDT: U5 started from `origin/main` at
+  `778cc0937d089741d1590106fd7e8a85d76d7476`.
+- Added `packages/api/src/lib/cost-confidence.ts` with shared reconciliation
+  confidence vocabulary, environment-driven budget confidence threshold, and
+  enforced/visible/mismatch bucket mapping.
+- Updated user budget enforcement so `spentUsd` is the threshold-enforced
+  amount while `visibleSpendUsd`, runtime-estimated, invocation-reconciled,
+  bill-reconciled, mismatch, and unreconciled totals remain visible.
+- Updated `budgetStatus`, `userBudgetStatus`, `costSummary`, and
+  `accountUsage` resolvers to expose confidence buckets without removing
+  existing total fields.
+- Added GraphQL fields for confidence buckets and minimum reconciliation state
+  on cost summaries, account usage summaries/days/models, and budget statuses.
+- Updated the web account usage panel to show Total Spend, Verified Spend, and
+  Review totals, plus verified spend in the model breakdown.
+- Regenerated GraphQL client types for web, CLI, and mobile; formatted
+  CLI/mobile generated files to keep diffs minimal and left compact web
+  generated artifacts in their existing style.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/user-budget-enforcement.test.ts src/graphql/resolvers/costs/accountUsage.query.test.ts src/graphql/resolvers/costs/budgetStatus.query.test.ts src/graphql/resolvers/costs/userBudgetStatus.query.test.ts src/graphql/resolvers/costs/agentBudgetStatus.query.test.ts src/graphql/resolvers/costs/costSummary.query.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/web exec vitest run src/components/profile/AccountUsageSection.test.tsx`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/database-pg typecheck` passed.
+- `pnpm schema:build` passed.
+- `pnpm --filter @thinkwork/web codegen` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm --filter @thinkwork/mobile codegen` passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm --filter @thinkwork/mobile typecheck` reported that the mobile package
+  does not define a `typecheck` script.
+- `pnpm dlx prettier@3.6.2 --check` on touched TS/GraphQL/Markdown/generated
+  files passed.
+- `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `b3d9f7a74` (`feat(cost): make budgets confidence-aware`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2961
+- 2026-06-25 11:51 CDT: PR opened; waiting for required CI.
+- 2026-06-25 12:00 CDT: PR merged.
+- Merge commit: `faf51c72b4bca30adcb96f8fd38509d575ad3a3e`.
+- Required CI passed: CLA, lint, test, typecheck, and verify.
+- U5 worktree, remote branch, and local branch cleanup completed before U6
+  start.
+
+### U6: Move Trace Detail GraphQL, Web, And CLI Projections Onto The Substrate
+
+Objective: replace ad hoc trace joins with canonical trace projections for
+operators, CLI users, Activity, thread detail, and analytics-adjacent views while
+preserving compatibility fields used by existing clients.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u6-trace-projections`
+- Worktree: `/Users/ericodom/.codex/worktrees/e22c/thinkwork`
+- Base: `origin/main` at `faf51c72b4bca30adcb96f8fd38509d575ad3a3e`.
+
+Planned local verification:
+
+- Focused `threadTraces` and `turnInvocationLogs` resolver tests.
+- CLI `trace` command tests.
+- Web Activity execution/thread detail tests.
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter thinkwork-cli typecheck`
+- `pnpm --filter @thinkwork/web typecheck`
+- CLI GraphQL codegen after command query changes.
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 12:01 CDT: U6 started from `origin/main` at
+  `faf51c72b4bca30adcb96f8fd38509d575ad3a3e`.
+- `pnpm install` passed; local `canvas` native build still logs the known
+  non-fatal missing `pkg-config` warning under Node 25.6.0.
+- Moved `threadTraces` from a `cost_events`-filtered projection to canonical
+  `trace_runs` / `trace_events` projection with compatibility fields,
+  source-evidence arrays, and latest reconciliation state/source.
+- Updated CLI `trace thread` and `trace turn` queries/output to include
+  reconciliation state, confidence, diagnostics, and source evidence.
+- Updated Activity execution/thread detail queries and timeline/table displays
+  to show reconciliation state and source evidence.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/graphql/resolvers/observability/threadTraces.query.test.ts src/graphql/resolvers/observability/turnInvocationLogs.query.test.ts`
+  passed.
+- `pnpm --filter thinkwork-cli exec vitest run __tests__/trace.test.ts` passed.
+- `pnpm --filter @thinkwork/web exec vitest run src/components/settings/SettingsActivityExecutionTrace.test.tsx src/components/settings/SettingsActivityThreadDetail.test.tsx`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm dlx prettier@3.6.2 --check` on touched TS/Markdown/generated files
+  passed.
+- `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `83cd5716f` (`feat(trace): project traces from canonical ledger`)
+- Commit: `0445716c8` (`docs: update thnk-74 u6 status`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2962
+- 2026-06-25 12:11 CDT: PR opened; waiting for required CI.
+- 2026-06-25 12:20 CDT: PR merged.
+- Merge commit: `29376b897a44aff9589917f6fab0e2d5a5f9a6ba`.
+- Required CI passed: CLA, lint, test, typecheck, and verify.
+- U6 worktree, remote branch, and local branch cleanup completed before U7
+  start.
+
+### U7: Snapshot Trace Evidence For Evals And Roll Out Safely
+
+Objective: include canonical trace evidence in eval snapshots, backfill existing
+cost-only data truthfully as unreconciled historical observations, and update
+operator docs/runbooks for reconciliation-state interpretation.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u7-eval-snapshots-rollout`
+- Worktree: `/Users/ericodom/.codex/worktrees/e23c/thinkwork`
+- Base: `origin/main` at `29376b897a44aff9589917f6fab0e2d5a5f9a6ba`.
+
+Planned local verification:
+
+- Focused flag-thread and thread snapshot tests.
+- Focused historical backfill helper tests.
+- `pnpm --filter @thinkwork/api typecheck`
+- Documentation formatting checks for touched docs.
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 12:22 CDT: U7 started from `origin/main` at
+  `29376b897a44aff9589917f6fab0e2d5a5f9a6ba`.
+- Extended flagged eval snapshots with a new guarded `trace-evidence` payload
+  object containing safe trace-ledger event summaries, source references,
+  reconciliation state/source, and explicit gap metadata for missing or failed
+  trace lookups.
+- Kept eval case core compatibility stable while adding `trace-evidence` to the
+  shared payload allowlist so run snapshots copy and hash it alongside history,
+  workspace, and message trace payloads.
+- Added historical backfill helpers for old `cost_events` and
+  `thread_turns.usage_json` observations. Backfilled records use
+  `source_type: backfill` and `unreconciled/error` reconciliation facts; they do
+  not infer provider or bill reconciliation.
+- Updated Control and Analytics docs to describe runtime, invocation, bill,
+  mismatch, and historical backfill confidence states.
+- Added `docs/solutions/observability/trusted-trace-cost-accounting-substrate.md`
+  with the evidence-first projection pattern and runbook.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/evals/thread-snapshot.test.ts src/graphql/resolvers/evaluations/flag-thread.test.ts src/lib/trace-ledger/backfill-existing-cost-events.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/evals/thread-snapshot.test.ts src/graphql/resolvers/evaluations/flag-thread.test.ts src/lib/trace-ledger/backfill-existing-cost-events.test.ts src/lib/evals/run-launch.test.ts src/handlers/eval-worker-integration.test.ts src/handlers/eval-worker.test.ts src/handlers/eval-runner.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/api lint` reported that the API package has no
+  `lint` script.
+- `pnpm dlx prettier@3.6.2 --check` on touched TS/Markdown files passed.
+- `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `84a1500cc` (`feat(evals): snapshot trace evidence for flagged turns`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2963
+- 2026-06-25 12:40 CDT: PR opened; waiting for required CI.
+- 2026-06-25 12:56 CDT: required CI passed: CLA, lint, test, typecheck, and
+  verify.
+- 2026-06-25 12:58 CDT: PR merged.
+- Merge commit: `f1f4614659f1c063edae969b2748c57d48d92d8a`.
+- U7 worktree, remote branch, and local branch cleanup completed.
+
+## Final Closeout
+
+All THNK-74 implementation units are merged:
+
+- U1: canonical trace/cost schema and reconciliation helpers.
+- U2: runtime/finalize trace-ledger ingestion.
+- U3: per-invocation Bedrock reconciliation.
+- U4: bill export import and aggregate reconciliation.
+- U5: reconciliation-confidence-aware cost and budget APIs.
+- U6: canonical trace projections for API, CLI, and web surfaces.
+- U7: eval trace-evidence snapshots, truthful historical backfill, and docs.

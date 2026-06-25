@@ -66,6 +66,13 @@ const activeUsage = {
     periodEnd: "2026-06-21T12:00:00.000Z",
     summary: {
       totalUsd: 8,
+      enforcedUsd: 4.75,
+      estimatedUsd: 2,
+      invocationReconciledUsd: 2.75,
+      billReconciledUsd: 4.75,
+      mismatchUsd: 0.5,
+      unreconciledUsd: 0.25,
+      minimumReconciliationState: "bill-reconciled",
       llmUsd: 7,
       computeUsd: 0.75,
       toolsUsd: 0.25,
@@ -77,6 +84,13 @@ const activeUsage = {
       {
         day: "2026-06-19",
         totalUsd: 1.25,
+        enforcedUsd: 0.75,
+        estimatedUsd: 0.5,
+        invocationReconciledUsd: 0,
+        billReconciledUsd: 0.75,
+        mismatchUsd: 0,
+        unreconciledUsd: 0,
+        minimumReconciliationState: "bill-reconciled",
         llmUsd: 1.25,
         computeUsd: 0,
         toolsUsd: 0,
@@ -87,6 +101,13 @@ const activeUsage = {
       {
         day: "2026-06-20",
         totalUsd: 3.5,
+        enforcedUsd: 2,
+        estimatedUsd: 0.75,
+        invocationReconciledUsd: 0.75,
+        billReconciledUsd: 2,
+        mismatchUsd: 0,
+        unreconciledUsd: 0,
+        minimumReconciliationState: "bill-reconciled",
         llmUsd: 3,
         computeUsd: 0.5,
         toolsUsd: 0,
@@ -97,6 +118,13 @@ const activeUsage = {
       {
         day: "2026-06-21",
         totalUsd: 3.25,
+        enforcedUsd: 2,
+        estimatedUsd: 0.75,
+        invocationReconciledUsd: 2,
+        billReconciledUsd: 2,
+        mismatchUsd: 0.5,
+        unreconciledUsd: 0.25,
+        minimumReconciliationState: "bill-reconciled",
         llmUsd: 2.75,
         computeUsd: 0.25,
         toolsUsd: 0.25,
@@ -110,6 +138,7 @@ const activeUsage = {
         model: "anthropic.claude-3-haiku-20240307-v1:0",
         displayName: "Haiku",
         totalUsd: 1.25,
+        enforcedUsd: 0.75,
         inputTokens: 500,
         outputTokens: 750,
         usageShare: 0.18,
@@ -118,6 +147,7 @@ const activeUsage = {
         model: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
         displayName: "Claude 3.5 Sonnet",
         totalUsd: 5.75,
+        enforcedUsd: 4,
         inputTokens: 1300,
         outputTokens: 2950,
         usageShare: 0.82,
@@ -146,6 +176,10 @@ describe("AccountUsageSection", () => {
     expect(screen.getByText("Account Usage")).toBeTruthy();
     expect(screen.getByText("Total Spend")).toBeTruthy();
     expect(screen.getByText("$8.00")).toBeTruthy();
+    expect(screen.getByText("Verified Spend")).toBeTruthy();
+    expect(screen.getByText("$4.75")).toBeTruthy();
+    expect(screen.getByText("Review")).toBeTruthy();
+    expect(screen.getAllByText("$0.75")[0]).toBeTruthy();
     expect(screen.getByText("5.5k")).toBeTruthy();
     expect(screen.getByText("12")).toBeTruthy();
     expect(screen.getAllByText("3")[0]).toBeTruthy();
@@ -181,7 +215,7 @@ describe("AccountUsageSection", () => {
     const sonnet = screen.getByText("Claude 3.5 Sonnet");
     const haiku = screen.getByText("Haiku");
     expect(screen.getAllByTestId("model-row")[0].className).toContain(
-      "grid-cols-[minmax(12rem,1fr)_8rem_7rem_5rem]",
+      "grid-cols-[minmax(12rem,1fr)_8rem_7rem_7rem_5rem]",
     );
     expect(
       sonnet.compareDocumentPosition(haiku) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -203,6 +237,13 @@ describe("AccountUsageSection", () => {
           ...activeUsage.accountUsage,
           summary: {
             totalUsd: 0,
+            enforcedUsd: 0,
+            estimatedUsd: 0,
+            invocationReconciledUsd: 0,
+            billReconciledUsd: 0,
+            mismatchUsd: 0,
+            unreconciledUsd: 0,
+            minimumReconciliationState: "bill-reconciled",
             llmUsd: 0,
             computeUsd: 0,
             toolsUsd: 0,
@@ -242,6 +283,13 @@ describe("AccountUsageSection", () => {
             {
               day: "2026-06-20",
               totalUsd: 0,
+              enforcedUsd: 0,
+              estimatedUsd: 0,
+              invocationReconciledUsd: 0,
+              billReconciledUsd: 0,
+              mismatchUsd: 0,
+              unreconciledUsd: 0,
+              minimumReconciliationState: "bill-reconciled",
               llmUsd: 0,
               computeUsd: 0,
               toolsUsd: 0,
@@ -252,6 +300,13 @@ describe("AccountUsageSection", () => {
             {
               day: "2026-06-21",
               totalUsd: 0,
+              enforcedUsd: 0,
+              estimatedUsd: 0,
+              invocationReconciledUsd: 0,
+              billReconciledUsd: 0,
+              mismatchUsd: 0,
+              unreconciledUsd: 0,
+              minimumReconciliationState: "bill-reconciled",
               llmUsd: 0,
               computeUsd: 0,
               toolsUsd: 0,

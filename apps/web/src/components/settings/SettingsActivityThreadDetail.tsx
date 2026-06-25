@@ -154,6 +154,15 @@ interface ThreadTrace {
   laneKey?: string | null;
   profileStatus?: string | null;
   modelRoutingStatus?: string | null;
+  reconciliationState?: string | null;
+  reconciliationSource?: string | null;
+  sourceEvidence?: Array<{
+    sourceType?: string | null;
+    sourceSystem?: string | null;
+    sourceId?: string | null;
+    uri?: string | null;
+    observedAt?: string | null;
+  }> | null;
   ruleSource?: unknown;
   match?: unknown;
   metadata?: unknown;
@@ -614,6 +623,12 @@ function ThreadTraces({ traces }: { traces: ThreadTrace[] }) {
                   <th className="w-24 px-3 py-2 text-right font-medium">
                     Cost
                   </th>
+                  <th className="w-36 px-3 py-2 text-left font-medium">
+                    State
+                  </th>
+                  <th className="w-28 px-3 py-2 text-left font-medium">
+                    Source
+                  </th>
                   <th className="w-16 px-3 py-2 text-right font-medium">
                     Trace
                   </th>
@@ -669,6 +684,14 @@ function ThreadTraces({ traces }: { traces: ThreadTrace[] }) {
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums">
                       {formatUsd(trace.costUsd)}
+                    </td>
+                    <td className="truncate px-3 py-2 text-xs text-muted-foreground">
+                      {trace.reconciliationState ?? "--"}
+                    </td>
+                    <td className="truncate px-3 py-2 text-xs text-muted-foreground">
+                      {trace.sourceEvidence?.[0]?.sourceType ??
+                        trace.source ??
+                        "--"}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {trace.traceId ? (

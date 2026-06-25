@@ -141,6 +141,7 @@ export const EVAL_CASE_PAYLOAD_NAMES = [
   "history",
   "workspace",
   "traces",
+  "trace-evidence",
 ] as const;
 
 export type EvalCasePayloadName = (typeof EVAL_CASE_PAYLOAD_NAMES)[number];

@@ -6,6 +6,11 @@ import {
   scheduledJobs,
   users,
 } from "@thinkwork/database-pg/schema";
+import {
+  budgetMinimumReconciliationStateFromEnv,
+  mapConfidenceBreakdown,
+  type BudgetMinimumReconciliationState,
+} from "./cost-confidence.js";
 
 const db = getDb();
 
@@ -24,9 +29,16 @@ export interface UserBudgetCheckResult {
   policyId: string | null;
   limitUsd: number;
   spentUsd: number;
+  visibleSpendUsd: number;
   remainingUsd: number;
   percentUsed: number;
   overBudget: boolean;
+  minimumReconciliationState: BudgetMinimumReconciliationState;
+  estimatedUsd: number;
+  invocationReconciledUsd: number;
+  billReconciledUsd: number;
+  mismatchUsd: number;
+  unreconciledUsd: number;
 }
 
 export interface UserBudgetPauseResult {
@@ -36,9 +48,16 @@ export interface UserBudgetPauseResult {
   policyId: string | null;
   limitUsd: number;
   spentUsd: number;
+  visibleSpendUsd: number;
   remainingUsd: number;
   percentUsed: number;
   overBudget: boolean;
+  minimumReconciliationState: BudgetMinimumReconciliationState;
+  estimatedUsd: number;
+  invocationReconciledUsd: number;
+  billReconciledUsd: number;
+  mismatchUsd: number;
+  unreconciledUsd: number;
   pausedScheduledJobCount: number;
   pauseReason: string | null;
 }
@@ -50,6 +69,9 @@ export interface ScheduledJobOwnerRow {
 }
 
 type DbClient = typeof db;
+
+const DEFAULT_USER_BUDGET_MINIMUM_RECONCILIATION_STATE =
+  budgetMinimumReconciliationStateFromEnv();
 
 function getStartOfMonth(): Date {
   const now = new Date();
@@ -68,9 +90,17 @@ function toNormalState(
     policyId: null,
     limitUsd: 0,
     spentUsd: 0,
+    visibleSpendUsd: 0,
     remainingUsd: 0,
     percentUsed: 0,
     overBudget: false,
+    minimumReconciliationState:
+      DEFAULT_USER_BUDGET_MINIMUM_RECONCILIATION_STATE,
+    estimatedUsd: 0,
+    invocationReconciledUsd: 0,
+    billReconciledUsd: 0,
+    mismatchUsd: 0,
+    unreconciledUsd: 0,
   };
 }
 
@@ -134,6 +164,7 @@ export async function getUserBudgetStatus(args: {
   userId?: string | null;
   db?: DbClient;
   monthStart?: Date;
+  minimumReconciliationState?: BudgetMinimumReconciliationState;
 }): Promise<UserBudgetCheckResult> {
   const database = args.db ?? db;
   const userId = args.userId ?? null;
@@ -164,7 +195,12 @@ export async function getUserBudgetStatus(args: {
 
   const [spend] = await database
     .select({
-      total: sql<number>`COALESCE(SUM(amount_usd), 0)::float`,
+      totalUsd: sql<number>`COALESCE(SUM(${costEvents.amount_usd}), 0)::float`,
+      estimatedUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'runtime-reported' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      invocationReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'invocation-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      billReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'bill-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      mismatchUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'mismatch' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
     })
     .from(costEvents)
     .where(
@@ -176,7 +212,23 @@ export async function getUserBudgetStatus(args: {
     );
 
   const limitUsd = Number(policy.limit_usd);
-  const spentUsd = Number(spend?.total ?? 0);
+  const minimumReconciliationState =
+    args.minimumReconciliationState ??
+    DEFAULT_USER_BUDGET_MINIMUM_RECONCILIATION_STATE;
+  const legacyTotal = (spend as { total?: unknown } | undefined)?.total;
+  const confidence = mapConfidenceBreakdown(
+    {
+      totalUsd: spend?.totalUsd ?? legacyTotal,
+      enforcedUsd: legacyTotal,
+      estimatedUsd: spend?.estimatedUsd,
+      invocationReconciledUsd: spend?.invocationReconciledUsd,
+      billReconciledUsd: spend?.billReconciledUsd,
+      mismatchUsd: spend?.mismatchUsd,
+      unreconciledUsd: spend?.unreconciledUsd,
+    },
+    minimumReconciliationState,
+  );
+  const spentUsd = confidence.enforcedUsd;
   const remainingUsd = Math.max(0, limitUsd - spentUsd);
   const percentUsed = limitUsd > 0 ? (spentUsd / limitUsd) * 100 : 0;
   const state = toStatus(percentUsed);
@@ -188,9 +240,16 @@ export async function getUserBudgetStatus(args: {
     policyId: policy.id,
     limitUsd,
     spentUsd,
+    visibleSpendUsd: confidence.totalUsd,
     remainingUsd,
     percentUsed,
     overBudget: state === "exceeded",
+    minimumReconciliationState,
+    estimatedUsd: confidence.estimatedUsd,
+    invocationReconciledUsd: confidence.invocationReconciledUsd,
+    billReconciledUsd: confidence.billReconciledUsd,
+    mismatchUsd: confidence.mismatchUsd,
+    unreconciledUsd: confidence.unreconciledUsd,
   };
 }
 

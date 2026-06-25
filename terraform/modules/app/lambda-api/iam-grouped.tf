@@ -268,6 +268,19 @@ locals {
         ]
       },
     ] : [],
+    var.billing_export_bucket_name != "" ? [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:ListBucket",
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.billing_export_bucket_name}",
+          "arn:aws:s3:::${var.billing_export_bucket_name}/*",
+        ]
+      },
+    ] : [],
     # SQS grants live here rather than in the orchestration group purely for
     # size balance: with every conditional on, orchestration's rendered JSON
     # would exceed IAM's 6,144-char per-managed-policy cap (R9 rebalance).

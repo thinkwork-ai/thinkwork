@@ -55,6 +55,16 @@ output "bucket_name" {
   value = module.s3.bucket_name
 }
 
+output "billing_export_bucket_name" {
+  description = "Configured AWS billing export bucket consumed by the bill reconciler, or empty when not configured."
+  value       = module.api.billing_export_bucket_name
+}
+
+output "billing_export_manifest_key" {
+  description = "Configured AWS billing export manifest key consumed by the bill reconciler, or empty when not configured."
+  value       = module.api.billing_export_manifest_key
+}
+
 output "backups_bucket_name" {
   description = "S3 bucket for operational backups (pre-drop snapshots from destructive migrations, via the aws_s3 Aurora extension)."
   value       = module.s3_backups.bucket_name
