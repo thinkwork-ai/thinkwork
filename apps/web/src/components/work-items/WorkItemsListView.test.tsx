@@ -1,5 +1,5 @@
 import type React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkItemsListView } from "./WorkItemsListView";
 import type {
@@ -41,7 +41,7 @@ describe("WorkItemsListView", () => {
     );
 
     expect(screen.getByText("work-1")).toBeTruthy();
-    expect(screen.getByText("Normal")).toBeTruthy();
+    expect(screen.getByLabelText("Priority: Normal")).toBeTruthy();
     expect(screen.queryByText(/Jun 30/)).toBeNull();
   });
 
@@ -66,8 +66,59 @@ describe("WorkItemsListView", () => {
 
     expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Normal").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Search work items" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Filter" })).toBeTruthy();
     expect(screen.getByText("urgent")).toBeTruthy();
     expect(screen.getByText("normal")).toBeTruthy();
+  });
+
+  it("expands the toolbar search, focuses it, filters rows, and clears search", () => {
+    render(
+      <WorkItemsListView
+        items={[
+          item({ id: "customer-onboarding", title: "Customer onboarding" }),
+          item({ id: "billing-cleanup", title: "Billing cleanup" }),
+        ]}
+        spaces={spaces}
+        statuses={statuses}
+        display={{
+          ...DEFAULT_WORK_ITEM_SEARCH.list,
+          group: "none",
+          subgroup: "none",
+          properties: ["status", "priority"],
+        }}
+        includeSpace
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("textbox", { name: "Search work items" }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search work items" }));
+
+    const searchInput = screen.getByRole("textbox", {
+      name: "Search work items",
+    });
+    expect(document.activeElement).toBe(searchInput);
+
+    fireEvent.change(searchInput, { target: { value: "billing" } });
+
+    expect(screen.queryByText("Customer onboarding")).toBeNull();
+    expect(screen.getByText("Billing cleanup")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clear work item search" }),
+    );
+
+    expect(
+      screen.queryByRole("textbox", { name: "Search work items" }),
+    ).toBeNull();
+    expect(screen.getByText("Customer onboarding")).toBeTruthy();
+    expect(screen.getByText("Billing cleanup")).toBeTruthy();
   });
 });
 
