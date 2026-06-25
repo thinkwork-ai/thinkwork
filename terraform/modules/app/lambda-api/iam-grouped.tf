@@ -790,9 +790,12 @@ locals {
   api_observability_statements = [
     # (was inline policy "cloudwatch-logs-read")
     {
-      Effect   = "Allow"
-      Action   = ["logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogGroups"]
-      Resource = "arn:aws:logs:${var.region}:${var.account_id}:log-group:*model-invocations*"
+      Effect = "Allow"
+      Action = ["logs:FilterLogEvents", "logs:GetLogEvents", "logs:DescribeLogGroups"]
+      Resource = [
+        aws_cloudwatch_log_group.bedrock_model_invocations.arn,
+        "${aws_cloudwatch_log_group.bedrock_model_invocations.arn}:*",
+      ]
     },
     # (was the EvalSpansRead statement of inline policy
     # "eval-runner-bedrock-agentcore")
