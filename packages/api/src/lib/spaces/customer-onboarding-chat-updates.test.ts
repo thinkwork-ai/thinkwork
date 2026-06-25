@@ -130,6 +130,17 @@ describe("extractCustomerOnboardingChatUpdate", () => {
         note: "Collect tax exemption forms: not applicable",
       },
     ]);
+    const inProgress = extractCustomerOnboardingChatUpdate(
+      "Collect tax exemption forms: in progress",
+    );
+    expect(inProgress.taskStatusUpdates).toEqual([
+      {
+        key: "tax_exemption_forms",
+        status: "in_progress",
+        note: "Collect tax exemption forms: in progress",
+      },
+    ]);
+    expect(inProgress.statusRequest).toBe(false);
   });
 
   it("treats natural credit approval replies as credit-check completion evidence", () => {
@@ -417,6 +428,40 @@ describe("extractCustomerOnboardingChatUpdate", () => {
     ]);
   });
 
+  it("maps natural Work Item assignment commands without an @mention", () => {
+    const assignedToMe = extractCustomerOnboardingChatUpdate(
+      "Assign collect tax exemption forms to me",
+    );
+    const assignedToName = extractCustomerOnboardingChatUpdate(
+      "Assign collect tax exemption forms to Eric",
+    );
+    const assignedQuestion = extractCustomerOnboardingChatUpdate(
+      "Can you assign the tax exemption forms collection task to Eric?",
+    );
+
+    expect(assignedToMe.taskAssignments).toEqual([
+      {
+        key: "tax_exemption_forms",
+        assigneeDisplay: "me",
+        note: "Assign collect tax exemption forms to me",
+      },
+    ]);
+    expect(assignedToName.taskAssignments).toEqual([
+      {
+        key: "tax_exemption_forms",
+        assigneeDisplay: "Eric",
+        note: "Assign collect tax exemption forms to Eric",
+      },
+    ]);
+    expect(assignedQuestion.taskAssignments).toEqual([
+      {
+        key: "tax_exemption_forms",
+        assigneeDisplay: "Eric",
+        note: "Can you assign the tax exemption forms collection task to Eric?",
+      },
+    ]);
+  });
+
   it("recognizes task assignment questions as onboarding workflow requests", () => {
     const result = extractCustomerOnboardingChatUpdate(
       "whose assigned to the docusign task?",
@@ -474,6 +519,23 @@ describe("sendMessage customer onboarding hook", () => {
     expect(source).toContain("handled: false");
     expect(source.indexOf("if (!shouldHandle)")).toBeLessThan(
       source.indexOf("const assistantContent"),
+    );
+  });
+
+  it("syncs chat assignment changes into native Work Item owners", () => {
+    const source = readFileSync(
+      new URL("./customer-onboarding-chat-updates.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("assignCustomerOnboardingWorkItem");
+    expect(source).toContain("updateCustomerOnboardingWorkItemStatus");
+    expect(source).toContain("syncWorkItemAssignmentFromLinkedTask");
+    expect(source.indexOf("assignmentChanges.push")).toBeLessThan(
+      source.indexOf("await assignCustomerOnboardingWorkItem"),
+    );
+    expect(source.indexOf("statusChanges.push")).toBeLessThan(
+      source.indexOf("await updateCustomerOnboardingWorkItemStatus"),
     );
   });
 });

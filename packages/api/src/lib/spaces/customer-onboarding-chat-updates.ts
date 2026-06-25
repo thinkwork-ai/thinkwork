@@ -15,7 +15,12 @@ import {
 } from "./customer-onboarding-workflow.js";
 import { refreshCustomerOnboardingGoalFolderSafely } from "./customer-onboarding-goal-md.js";
 import type { LinkedTaskStatus } from "../linked-tasks/status.js";
-import { syncWorkItemFromLinkedTask } from "../work-items/customer-onboarding.js";
+import {
+  assignCustomerOnboardingWorkItem,
+  syncWorkItemAssignmentFromLinkedTask,
+  syncWorkItemFromLinkedTask,
+  updateCustomerOnboardingWorkItemStatus,
+} from "../work-items/customer-onboarding.js";
 
 interface ApplyCustomerOnboardingChatUpdateInput {
   tenantId: string;
@@ -209,6 +214,8 @@ export async function applyCustomerOnboardingChatUpdate(
         assignment,
       ]),
     );
+    const directAssignmentSyncedKeys = new Set<string>();
+    const directStatusSyncedKeys = new Set<string>();
 
     for (const addition of extracted.taskAdditions) {
       if (findTaskByTitle(activeTaskRows, addition.title)) continue;
@@ -476,10 +483,11 @@ export async function applyCustomerOnboardingChatUpdate(
           previousStatus,
           nextStatus,
         });
-        await syncWorkItemFromLinkedTask(
+        const directStatus = await updateCustomerOnboardingWorkItemStatus(
           {
             tenantId: input.tenantId,
-            linkedTaskId: task.id,
+            threadId: input.threadId,
+            checklistItemKey: key,
             status: nextStatus,
             required: nextRequired,
             blocked: nextStatus === "blocked",
@@ -493,6 +501,27 @@ export async function applyCustomerOnboardingChatUpdate(
           },
           { database: tx as never, now: () => now },
         );
+        if (directStatus) {
+          directStatusSyncedKeys.add(key);
+        } else {
+          await syncWorkItemFromLinkedTask(
+            {
+              tenantId: input.tenantId,
+              linkedTaskId: task.id,
+              status: nextStatus,
+              required: nextRequired,
+              blocked: nextStatus === "blocked",
+              note: explicitStatusByKey.get(key)?.note,
+              actorUserId: input.senderUserId ?? null,
+              metadata: {
+                source: "customer_onboarding_chat_update",
+                checklistItemKey: key,
+                extractedFacts: extracted.facts,
+              },
+            },
+            { database: tx as never, now: () => now },
+          );
+        }
       }
       if (assignment && assigneeChanged) {
         await tx.insert(linkedTaskEvents).values({
@@ -519,7 +548,108 @@ export async function applyCustomerOnboardingChatUpdate(
           previousAssignee: task.assignee_display,
           nextAssignee: assignment.assigneeDisplay,
         });
+        const directAssignment = await assignCustomerOnboardingWorkItem(
+          {
+            tenantId: input.tenantId,
+            threadId: input.threadId,
+            checklistItemKey: key,
+            assigneeDisplay: assignment.assigneeDisplay,
+            note: assignment.note,
+            actorUserId: input.senderUserId ?? null,
+            metadata: {
+              source: "customer_onboarding_chat_update",
+              checklistItemKey: key,
+            },
+          },
+          { database: tx as never, now: () => now },
+        );
+        if (directAssignment) {
+          directAssignmentSyncedKeys.add(key);
+        } else {
+          await syncWorkItemAssignmentFromLinkedTask(
+            {
+              tenantId: input.tenantId,
+              linkedTaskId: task.id,
+              assigneeDisplay: assignment.assigneeDisplay,
+              note: assignment.note,
+              actorUserId: input.senderUserId ?? null,
+              metadata: {
+                source: "customer_onboarding_chat_update",
+                checklistItemKey: key,
+              },
+            },
+            { database: tx as never, now: () => now },
+          );
+        }
       }
+    }
+
+    for (const update of extracted.taskStatusUpdates) {
+      if (directStatusSyncedKeys.has(update.key)) continue;
+      const directStatus = await updateCustomerOnboardingWorkItemStatus(
+        {
+          tenantId: input.tenantId,
+          threadId: input.threadId,
+          checklistItemKey: update.key,
+          status: update.status,
+          blocked: update.status === "blocked",
+          note: update.note,
+          actorUserId: input.senderUserId ?? null,
+          metadata: {
+            source: "customer_onboarding_chat_update",
+            checklistItemKey: update.key,
+            extractedFacts: extracted.facts,
+          },
+        },
+        { database: tx as never, now: () => now },
+      );
+      if (!directStatus) continue;
+      directStatusSyncedKeys.add(update.key);
+      if (
+        statusChanges.some((change) => change.checklistItemKey === update.key)
+      ) {
+        continue;
+      }
+      statusChanges.push({
+        checklistItemKey: update.key,
+        title: directStatus.title,
+        previousStatus: directStatus.previousStatus,
+        nextStatus: directStatus.nextStatus,
+      });
+    }
+
+    for (const assignment of extracted.taskAssignments) {
+      if (directAssignmentSyncedKeys.has(assignment.key)) continue;
+      const directAssignment = await assignCustomerOnboardingWorkItem(
+        {
+          tenantId: input.tenantId,
+          threadId: input.threadId,
+          checklistItemKey: assignment.key,
+          assigneeDisplay: assignment.assigneeDisplay,
+          note: assignment.note,
+          actorUserId: input.senderUserId ?? null,
+          metadata: {
+            source: "customer_onboarding_chat_update",
+            checklistItemKey: assignment.key,
+          },
+        },
+        { database: tx as never, now: () => now },
+      );
+      if (!directAssignment) continue;
+      directAssignmentSyncedKeys.add(assignment.key);
+      if (
+        assignmentChanges.some(
+          (change) => change.checklistItemKey === assignment.key,
+        )
+      ) {
+        continue;
+      }
+      assignmentChanges.push({
+        checklistItemKey: assignment.key,
+        title: directAssignment.title,
+        previousAssignee: null,
+        nextAssignee: assignment.assigneeDisplay,
+      });
     }
 
     const shouldHandle =
@@ -834,7 +964,10 @@ export function extractCustomerOnboardingChatUpdate(content: string): {
     taskAssignments: [...taskAssignments.values()],
     taskAdditions: [...taskAdditions.values()],
     taskRemovals: [...taskRemovals.values()],
-    statusRequest: isStatusRequest(whole),
+    statusRequest:
+      taskStatusUpdates.size === 0 &&
+      completedTaskKeys.size === 0 &&
+      isStatusRequest(whole),
     assignmentRequest: isAssignmentRequest(whole),
     assignmentTaskKey: taskKeyFromContent(whole),
   };
@@ -1345,12 +1478,19 @@ function assignmentDisplayFromSegment(segment: string): string | null {
   );
   const mentionedAssignee = match?.[1]?.trim();
   if (mentionedAssignee) return mentionedAssignee;
+  if (ASSIGNMENT_WORDS.test(segment) && /\b(?:me|myself)\b/i.test(segment)) {
+    return "me";
+  }
   if (
     ASSIGNMENT_WORDS.test(segment) &&
     /\b(?:agent|thinkwork|computer)\b/i.test(segment)
   ) {
     return "Agent";
   }
+  const namedAssignee = segment.match(
+    /\b(?:assign(?:ed)?|owner|owns?|responsible)\b[^.;\n]*?\bto\s+([A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*)?)(?=\s*(?:[.;,?!]|$))/i,
+  )?.[1];
+  if (namedAssignee) return namedAssignee.trim();
   return null;
 }
 

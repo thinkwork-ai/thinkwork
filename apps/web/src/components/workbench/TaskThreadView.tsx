@@ -72,6 +72,14 @@ import {
   GoalModeToggle,
 } from "@/components/workbench/GoalModeControls";
 import {
+  WorkItemAssigneeSelector,
+  WorkItemStatusIconSelector,
+} from "@/components/work-items/WorkItemInlineControls";
+import type {
+  WorkItemAssigneeSummary,
+  WorkItemStatusSummary,
+} from "@/components/work-items/work-item-display";
+import {
   resolveStartGoalModeSubmission,
   type ComposerGoalModeIntent,
 } from "@/components/workbench/goal-mode";
@@ -367,17 +375,33 @@ export interface ThreadInfoChecklistState {
   completedAt?: string | null;
   isCompleting?: boolean;
   isRefreshing?: boolean;
+  workItemStatuses?: WorkItemStatusSummary[];
+  workItemAssignees?: WorkItemAssigneeSummary[];
+  updatingTaskId?: string | null;
   onRefreshProgress?: () => Promise<void> | void;
   onCompleteThread?: () => Promise<void> | void;
+  onTaskStatusChange?: (
+    task: ThreadInfoChecklistTask,
+    status: WorkItemStatusSummary,
+  ) => Promise<void> | void;
+  onTaskAssigneeChange?: (
+    task: ThreadInfoChecklistTask,
+    ownerUserId: string | null,
+  ) => Promise<void> | void;
 }
 
 export interface ThreadInfoChecklistTask {
   id: string;
   title: string;
   status?: string | null;
+  statusId?: string | null;
+  statusCategory?: string | null;
+  statusColor?: string | null;
+  source?: "work_item" | "linked_task" | "progress";
   required?: boolean | null;
   roleKey?: string | null;
   assigneeDisplay?: string | null;
+  ownerUserId?: string | null;
   blocked?: boolean | null;
   notes?: string | null;
   updatedAt?: string | null;
@@ -1309,6 +1333,7 @@ function ThreadInfoChecklist({
             <ThreadInfoChecklistRow
               key={task.id}
               task={task}
+              checklist={checklist}
               onTaskPrompt={onTaskPrompt}
             />
           ))}
@@ -1332,32 +1357,42 @@ function ThreadInfoChecklist({
 
 function ThreadInfoChecklistRow({
   task,
+  checklist,
   onTaskPrompt,
 }: {
   task: ThreadInfoChecklistTask;
+  checklist: ThreadInfoChecklistState;
   onTaskPrompt: (task: ThreadInfoChecklistTask) => void;
 }) {
   const status = normalizeInfoStatus(task.status);
   const isComplete = status === "completed";
   const isBlocked = task.blocked || status === "blocked";
-  const assignee = task.assigneeDisplay?.trim() ?? "";
-  const statusLabel =
-    task.status && task.status.trim() ? formatInfoStatus(task.status) : "";
-  const hasSublabel = Boolean(assignee) || Boolean(statusLabel);
-  const sublabel =
-    assignee && statusLabel
-      ? `${assignee} · ${statusLabel}`
-      : assignee || statusLabel;
+  const isWorkItem = task.source === "work_item";
+  const assignee = task.assigneeDisplay?.trim() || "Unassigned";
+  const isUpdating = checklist.updatingTaskId === task.id;
+  const canEditStatus =
+    isWorkItem &&
+    Boolean(checklist.onTaskStatusChange) &&
+    (checklist.workItemStatuses?.length ?? 0) > 0;
+  const canEditAssignee = isWorkItem && Boolean(checklist.onTaskAssigneeChange);
 
   return (
-    <button
-      type="button"
-      className="block w-full rounded-md text-left text-sm transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
-      onClick={() => onTaskPrompt(task)}
-      aria-label={`Update ${task.title}`}
-    >
+    <div className="block w-full rounded-md text-left text-sm">
       <div className="flex items-start gap-2">
-        {isComplete ? (
+        {canEditStatus ? (
+          <WorkItemStatusIconSelector
+            title={task.title}
+            currentStatusId={task.statusId}
+            currentCategory={task.statusCategory}
+            currentColor={task.statusColor}
+            statuses={checklist.workItemStatuses ?? []}
+            disabled={isUpdating}
+            triggerClassName="mt-0.5 size-5 text-white/70 hover:bg-white/10"
+            onChange={(nextStatus) =>
+              void checklist.onTaskStatusChange?.(task, nextStatus)
+            }
+          />
+        ) : isComplete ? (
           <IconCircleCheckFilled
             className="mt-1 size-3.5 shrink-0 text-white/55"
             aria-hidden
@@ -1377,15 +1412,34 @@ function ThreadInfoChecklistRow({
           />
         )}
         <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-white/80">{task.title}</p>
-          {hasSublabel ? (
+          <button
+            type="button"
+            className="line-clamp-2 text-left text-white/80 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+            onClick={() => onTaskPrompt(task)}
+            aria-label={`Update ${task.title}`}
+          >
+            {task.title}
+          </button>
+          {canEditAssignee ? (
+            <WorkItemAssigneeSelector
+              label={assignee}
+              selectedId={task.ownerUserId ?? null}
+              assignees={checklist.workItemAssignees ?? []}
+              disabled={isUpdating}
+              variant="text"
+              triggerClassName="mt-1 max-w-full text-[10px] text-white/55 hover:text-white/85"
+              onChange={(ownerUserId) =>
+                void checklist.onTaskAssigneeChange?.(task, ownerUserId)
+              }
+            />
+          ) : assignee ? (
             <p className="mt-0.5 truncate text-[10px] text-white/55">
-              {sublabel}
+              {assignee}
             </p>
           ) : null}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
