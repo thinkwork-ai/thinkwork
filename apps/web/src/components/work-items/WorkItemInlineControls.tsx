@@ -261,7 +261,7 @@ export function StatusGlyph({
 
   if (normalizedCategory === "DONE") {
     return (
-      <IconCircleCheckFilled className="size-[18px] shrink-0 text-green-600" />
+      <IconCircleCheckFilled className="size-[22px] shrink-0 text-green-600" />
     );
   }
 
