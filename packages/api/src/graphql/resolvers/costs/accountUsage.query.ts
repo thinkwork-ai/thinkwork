@@ -13,6 +13,11 @@ import {
 } from "../../utils.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCaller } from "../core/resolve-auth-user.js";
+import {
+  budgetMinimumReconciliationStateFromEnv,
+  mapConfidenceBreakdown,
+  type BudgetMinimumReconciliationState,
+} from "../../../lib/cost-confidence.js";
 
 type AccountUsageArgs = {
   tenantId: string;
@@ -25,6 +30,12 @@ type UsageSummaryRow = {
   llmUsd: number | string | null;
   computeUsd: number | string | null;
   toolsUsd: number | string | null;
+  enforcedUsd: number | string | null;
+  estimatedUsd: number | string | null;
+  invocationReconciledUsd: number | string | null;
+  billReconciledUsd: number | string | null;
+  mismatchUsd: number | string | null;
+  unreconciledUsd: number | string | null;
   inputTokens: number | string | null;
   outputTokens: number | string | null;
   eventCount: number | string | null;
@@ -35,6 +46,12 @@ type UsageModelRow = {
   tenantDisplayName: string | null;
   catalogDisplayName: string | null;
   totalUsd: number | string | null;
+  enforcedUsd: number | string | null;
+  estimatedUsd: number | string | null;
+  invocationReconciledUsd: number | string | null;
+  billReconciledUsd: number | string | null;
+  mismatchUsd: number | string | null;
+  unreconciledUsd: number | string | null;
   inputTokens: number | string | null;
   outputTokens: number | string | null;
 };
@@ -63,25 +80,55 @@ function toInt(value: number | string | null | undefined): number {
   return Math.trunc(toNumber(value));
 }
 
-function emptySummary() {
+function emptySummary(
+  minimumReconciliationState: BudgetMinimumReconciliationState,
+) {
   return {
     totalUsd: 0,
     llmUsd: 0,
     computeUsd: 0,
     toolsUsd: 0,
+    enforcedUsd: 0,
+    estimatedUsd: 0,
+    invocationReconciledUsd: 0,
+    billReconciledUsd: 0,
+    mismatchUsd: 0,
+    unreconciledUsd: 0,
+    minimumReconciliationState,
     inputTokens: 0,
     outputTokens: 0,
     eventCount: 0,
   };
 }
 
-function mapSummary(row: UsageSummaryRow | undefined) {
-  if (!row) return emptySummary();
+function mapSummary(
+  row: UsageSummaryRow | undefined,
+  minimumReconciliationState: BudgetMinimumReconciliationState,
+) {
+  if (!row) return emptySummary(minimumReconciliationState);
+  const confidence = mapConfidenceBreakdown(
+    {
+      totalUsd: row.totalUsd,
+      estimatedUsd: row.estimatedUsd,
+      invocationReconciledUsd: row.invocationReconciledUsd,
+      billReconciledUsd: row.billReconciledUsd,
+      mismatchUsd: row.mismatchUsd,
+      unreconciledUsd: row.unreconciledUsd,
+    },
+    minimumReconciliationState,
+  );
   return {
     totalUsd: toNumber(row.totalUsd),
     llmUsd: toNumber(row.llmUsd),
     computeUsd: toNumber(row.computeUsd),
     toolsUsd: toNumber(row.toolsUsd),
+    enforcedUsd: confidence.enforcedUsd,
+    estimatedUsd: confidence.estimatedUsd,
+    invocationReconciledUsd: confidence.invocationReconciledUsd,
+    billReconciledUsd: confidence.billReconciledUsd,
+    mismatchUsd: confidence.mismatchUsd,
+    unreconciledUsd: confidence.unreconciledUsd,
+    minimumReconciliationState,
     inputTokens: toInt(row.inputTokens),
     outputTokens: toInt(row.outputTokens),
     eventCount: toInt(row.eventCount),
@@ -110,6 +157,7 @@ export const accountUsage = async (
   }
 
   const days = normalizeDays(args.days);
+  const minimumReconciliationState = budgetMinimumReconciliationStateFromEnv();
   const periodEnd = new Date();
   const periodStart = new Date(periodEnd.getTime() - days * DAY_MS);
   const scopedUsage = and(
@@ -125,6 +173,11 @@ export const accountUsage = async (
       llmUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.event_type} = 'llm' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       computeUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.event_type} = 'agentcore_compute' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       toolsUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.event_type} NOT IN ('llm', 'agentcore_compute', 'eval') THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      estimatedUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'runtime-reported' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      invocationReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'invocation-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      billReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'bill-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      mismatchUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'mismatch' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       inputTokens: sql<number>`COALESCE(SUM(${costEvents.input_tokens}), 0)::int`,
       outputTokens: sql<number>`COALESCE(SUM(${costEvents.output_tokens}), 0)::int`,
       eventCount: sql<number>`COUNT(*)::int`,
@@ -140,6 +193,11 @@ export const accountUsage = async (
       llmUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.event_type} = 'llm' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       computeUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.event_type} = 'agentcore_compute' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       toolsUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.event_type} NOT IN ('llm', 'agentcore_compute', 'eval') THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      estimatedUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'runtime-reported' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      invocationReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'invocation-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      billReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'bill-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      mismatchUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'mismatch' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       inputTokens: sql<number>`COALESCE(SUM(${costEvents.input_tokens}), 0)::int`,
       outputTokens: sql<number>`COALESCE(SUM(${costEvents.output_tokens}), 0)::int`,
       eventCount: sql<number>`COUNT(*)::int`,
@@ -155,6 +213,11 @@ export const accountUsage = async (
       tenantDisplayName: tenantModelCatalog.display_name,
       catalogDisplayName: modelCatalog.display_name,
       totalUsd: sql<number>`COALESCE(SUM(${costEvents.amount_usd}), 0)::float`,
+      estimatedUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'runtime-reported' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      invocationReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'invocation-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      billReconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'bill-reconciled' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      mismatchUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'mismatch' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
+      unreconciledUsd: sql<number>`COALESCE(SUM(CASE WHEN ${costEvents.reconciliation_state} = 'unreconciled/error' THEN ${costEvents.amount_usd} ELSE 0 END), 0)::float`,
       inputTokens: sql<number>`COALESCE(SUM(${costEvents.input_tokens}), 0)::int`,
       outputTokens: sql<number>`COALESCE(SUM(${costEvents.output_tokens}), 0)::int`,
     })
@@ -174,31 +237,48 @@ export const accountUsage = async (
       modelCatalog.display_name,
     );
 
-  const summary = mapSummary(summaryRow as UsageSummaryRow | undefined);
+  const summary = mapSummary(
+    summaryRow as UsageSummaryRow | undefined,
+    minimumReconciliationState,
+  );
   const llmUsd = summary.llmUsd;
 
   return {
     periodStart: periodStart.toISOString(),
     periodEnd: periodEnd.toISOString(),
     summary,
-    daily: dailyRows.map((row) => ({
-      day: row.day,
-      totalUsd: toNumber(row.totalUsd),
-      llmUsd: toNumber(row.llmUsd),
-      computeUsd: toNumber(row.computeUsd),
-      toolsUsd: toNumber(row.toolsUsd),
-      inputTokens: toInt(row.inputTokens),
-      outputTokens: toInt(row.outputTokens),
-      eventCount: toInt(row.eventCount),
-    })),
+    daily: (dailyRows as Array<UsageSummaryRow & { day: string }>).map(
+      (row) => ({
+        day: row.day,
+        ...mapSummary(row, minimumReconciliationState),
+      }),
+    ),
     models: (modelRows as UsageModelRow[])
       .map((row) => {
         const model = row.model || "unknown";
         const totalUsd = toNumber(row.totalUsd);
+        const confidence = mapConfidenceBreakdown(
+          {
+            totalUsd: row.totalUsd,
+            estimatedUsd: row.estimatedUsd,
+            invocationReconciledUsd: row.invocationReconciledUsd,
+            billReconciledUsd: row.billReconciledUsd,
+            mismatchUsd: row.mismatchUsd,
+            unreconciledUsd: row.unreconciledUsd,
+          },
+          minimumReconciliationState,
+        );
         return {
           model,
           displayName: row.tenantDisplayName || row.catalogDisplayName || model,
           totalUsd,
+          enforcedUsd: confidence.enforcedUsd,
+          estimatedUsd: confidence.estimatedUsd,
+          invocationReconciledUsd: confidence.invocationReconciledUsd,
+          billReconciledUsd: confidence.billReconciledUsd,
+          mismatchUsd: confidence.mismatchUsd,
+          unreconciledUsd: confidence.unreconciledUsd,
+          minimumReconciliationState,
           inputTokens: toInt(row.inputTokens),
           outputTokens: toInt(row.outputTokens),
           usageShare: llmUsd > 0 ? totalUsd / llmUsd : 0,

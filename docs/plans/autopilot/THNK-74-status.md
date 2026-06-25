@@ -358,3 +358,95 @@ Local verification:
 - `pnpm dlx prettier@3.6.2 --check` on authored TS/GraphQL/Markdown files
   passed.
 - `git diff --check` passed.
+
+Dev migration:
+
+- Applied `packages/database-pg/drizzle/0190_billing_export_reconciliation.sql`
+  to dev.
+- Scoped `scripts/db-migrate-manual.sh packages/database-pg/drizzle/0190_billing_export_reconciliation.sql`
+  drift verification showed all declared objects present.
+
+PR / CI:
+
+- Commit: `94b0a4e60` (`feat(cost): reconcile aws billing exports`)
+- Commit: `74dfcb622` (`docs: update thnk-74 u4 status`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2960
+- 2026-06-25 11:21 CDT: PR opened; waiting for required CI.
+- 2026-06-25 11:32 CDT: PR merged.
+- Merge commit: `778cc0937d089741d1590106fd7e8a85d76d7476`.
+- Required CI passed: CLA, lint, test, typecheck, verify, and the rerun
+  Migration Drift Precheck after the dev manual migration was applied.
+- U4 worktree, remote branch, and local branch cleanup completed before U5
+  start.
+
+### U5: Make Budgets And Cost APIs Confidence-Aware
+
+Objective: make cost summaries, account usage, and budget enforcement expose
+visible runtime/provider/bill/mismatch state while strict budget decisions use
+the configured reconciliation confidence threshold.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u5-confidence-aware-costs`
+- Worktree: `/Users/ericodom/.codex/worktrees/e21c/thinkwork`
+- Base: `origin/main` at `778cc0937d089741d1590106fd7e8a85d76d7476`.
+
+Planned local verification:
+
+- Focused confidence-aware budget enforcement and cost resolver tests.
+- Web account usage component test.
+- `pnpm --filter @thinkwork/api typecheck`
+- `pnpm --filter @thinkwork/database-pg typecheck`
+- `pnpm schema:build`
+- GraphQL consumer codegen for web, CLI, and mobile.
+- `pnpm --filter @thinkwork/web typecheck`
+- `pnpm --filter thinkwork-cli typecheck`
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 11:35 CDT: U5 started from `origin/main` at
+  `778cc0937d089741d1590106fd7e8a85d76d7476`.
+- Added `packages/api/src/lib/cost-confidence.ts` with shared reconciliation
+  confidence vocabulary, environment-driven budget confidence threshold, and
+  enforced/visible/mismatch bucket mapping.
+- Updated user budget enforcement so `spentUsd` is the threshold-enforced
+  amount while `visibleSpendUsd`, runtime-estimated, invocation-reconciled,
+  bill-reconciled, mismatch, and unreconciled totals remain visible.
+- Updated `budgetStatus`, `userBudgetStatus`, `costSummary`, and
+  `accountUsage` resolvers to expose confidence buckets without removing
+  existing total fields.
+- Added GraphQL fields for confidence buckets and minimum reconciliation state
+  on cost summaries, account usage summaries/days/models, and budget statuses.
+- Updated the web account usage panel to show Total Spend, Verified Spend, and
+  Review totals, plus verified spend in the model breakdown.
+- Regenerated GraphQL client types for web, CLI, and mobile; formatted
+  CLI/mobile generated files to keep diffs minimal and left compact web
+  generated artifacts in their existing style.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/user-budget-enforcement.test.ts src/graphql/resolvers/costs/accountUsage.query.test.ts src/graphql/resolvers/costs/budgetStatus.query.test.ts src/graphql/resolvers/costs/userBudgetStatus.query.test.ts src/graphql/resolvers/costs/agentBudgetStatus.query.test.ts src/graphql/resolvers/costs/costSummary.query.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/web exec vitest run src/components/profile/AccountUsageSection.test.tsx`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/database-pg typecheck` passed.
+- `pnpm schema:build` passed.
+- `pnpm --filter @thinkwork/web codegen` passed.
+- `pnpm --filter thinkwork-cli codegen` passed.
+- `pnpm --filter @thinkwork/mobile codegen` passed.
+- `pnpm --filter @thinkwork/web typecheck` passed.
+- `pnpm --filter thinkwork-cli typecheck` passed.
+- `pnpm --filter @thinkwork/mobile typecheck` reported that the mobile package
+  does not define a `typecheck` script.
+- `pnpm dlx prettier@3.6.2 --check` on touched TS/GraphQL/Markdown/generated
+  files passed.
+- `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `b3d9f7a74` (`feat(cost): make budgets confidence-aware`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2961
+- 2026-06-25 11:51 CDT: PR opened; waiting for required CI.

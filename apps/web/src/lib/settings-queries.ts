@@ -1526,6 +1526,13 @@ export const SettingsUserBudgetStatusQuery = graphql(`
         enabled
       }
       spentUsd
+      visibleSpendUsd
+      estimatedUsd
+      invocationReconciledUsd
+      billReconciledUsd
+      mismatchUsd
+      unreconciledUsd
+      minimumReconciliationState
       remainingUsd
       percentUsed
       status
@@ -1540,6 +1547,13 @@ export const SettingsAccountUsageQuery = graphql(`
       periodEnd
       summary {
         totalUsd
+        enforcedUsd
+        estimatedUsd
+        invocationReconciledUsd
+        billReconciledUsd
+        mismatchUsd
+        unreconciledUsd
+        minimumReconciliationState
         llmUsd
         computeUsd
         toolsUsd
@@ -1550,6 +1564,13 @@ export const SettingsAccountUsageQuery = graphql(`
       daily {
         day
         totalUsd
+        enforcedUsd
+        estimatedUsd
+        invocationReconciledUsd
+        billReconciledUsd
+        mismatchUsd
+        unreconciledUsd
+        minimumReconciliationState
         llmUsd
         computeUsd
         toolsUsd
@@ -1561,6 +1582,13 @@ export const SettingsAccountUsageQuery = graphql(`
         model
         displayName
         totalUsd
+        enforcedUsd
+        estimatedUsd
+        invocationReconciledUsd
+        billReconciledUsd
+        mismatchUsd
+        unreconciledUsd
+        minimumReconciliationState
         inputTokens
         outputTokens
         usageShare
@@ -1717,6 +1745,13 @@ export const SettingsBudgetStatusQuery = graphql(`
         enabled
       }
       spentUsd
+      visibleSpendUsd
+      estimatedUsd
+      invocationReconciledUsd
+      billReconciledUsd
+      mismatchUsd
+      unreconciledUsd
+      minimumReconciliationState
       remainingUsd
       percentUsed
       status

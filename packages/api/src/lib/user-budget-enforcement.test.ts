@@ -186,6 +186,77 @@ describe("getUserBudgetStatus", () => {
       overBudget: false,
     });
   });
+
+  it("excludes runtime-only usage from the default strict budget spend", async () => {
+    const fake = createFakeDb();
+    fake.selectRows.push(
+      [{ id: "user-1" }],
+      [{ id: "policy-1", limit_usd: "10.00" }],
+      [
+        {
+          totalUsd: 12,
+          enforcedUsd: 0,
+          estimatedUsd: 12,
+          invocationReconciledUsd: 0,
+          billReconciledUsd: 0,
+          mismatchUsd: 0,
+          unreconciledUsd: 0,
+        },
+      ],
+    );
+
+    await expect(
+      getUserBudgetStatus({
+        tenantId: "tenant-1",
+        userId: "user-1",
+        monthStart: new Date("2026-06-01T00:00:00Z"),
+        db: fake.db as never,
+      }),
+    ).resolves.toMatchObject({
+      state: "normal",
+      spentUsd: 0,
+      visibleSpendUsd: 12,
+      estimatedUsd: 12,
+      minimumReconciliationState: "bill-reconciled",
+      overBudget: false,
+    });
+  });
+
+  it("can enforce invocation-reconciled usage when configured", async () => {
+    const fake = createFakeDb();
+    fake.selectRows.push(
+      [{ id: "user-1" }],
+      [{ id: "policy-1", limit_usd: "10.00" }],
+      [
+        {
+          totalUsd: 12,
+          enforcedUsd: 12,
+          estimatedUsd: 0,
+          invocationReconciledUsd: 12,
+          billReconciledUsd: 0,
+          mismatchUsd: 0,
+          unreconciledUsd: 0,
+        },
+      ],
+    );
+
+    await expect(
+      getUserBudgetStatus({
+        tenantId: "tenant-1",
+        userId: "user-1",
+        monthStart: new Date("2026-06-01T00:00:00Z"),
+        minimumReconciliationState: "invocation-reconciled",
+        db: fake.db as never,
+      }),
+    ).resolves.toMatchObject({
+      state: "exceeded",
+      spentUsd: 12,
+      visibleSpendUsd: 12,
+      invocationReconciledUsd: 12,
+      minimumReconciliationState: "invocation-reconciled",
+      overBudget: true,
+    });
+  });
 });
 
 describe("checkUserBudgetAndPauseWork", () => {

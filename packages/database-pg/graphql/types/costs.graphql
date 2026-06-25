@@ -30,6 +30,13 @@ type CostEvent {
 
 type CostSummary {
   totalUsd: Float!
+  enforcedUsd: Float!
+  estimatedUsd: Float!
+  invocationReconciledUsd: Float!
+  billReconciledUsd: Float!
+  mismatchUsd: Float!
+  unreconciledUsd: Float!
+  minimumReconciliationState: String!
   llmUsd: Float!
   computeUsd: Float!
   toolsUsd: Float!
@@ -75,6 +82,13 @@ type DailyCostPoint {
 
 type AccountUsageSummary {
   totalUsd: Float!
+  enforcedUsd: Float!
+  estimatedUsd: Float!
+  invocationReconciledUsd: Float!
+  billReconciledUsd: Float!
+  mismatchUsd: Float!
+  unreconciledUsd: Float!
+  minimumReconciliationState: String!
   llmUsd: Float!
   computeUsd: Float!
   toolsUsd: Float!
@@ -86,6 +100,13 @@ type AccountUsageSummary {
 type AccountUsageDay {
   day: String!
   totalUsd: Float!
+  enforcedUsd: Float!
+  estimatedUsd: Float!
+  invocationReconciledUsd: Float!
+  billReconciledUsd: Float!
+  mismatchUsd: Float!
+  unreconciledUsd: Float!
+  minimumReconciliationState: String!
   llmUsd: Float!
   computeUsd: Float!
   toolsUsd: Float!
@@ -98,6 +119,13 @@ type AccountUsageModel {
   model: String!
   displayName: String!
   totalUsd: Float!
+  enforcedUsd: Float!
+  estimatedUsd: Float!
+  invocationReconciledUsd: Float!
+  billReconciledUsd: Float!
+  mismatchUsd: Float!
+  unreconciledUsd: Float!
+  minimumReconciliationState: String!
   inputTokens: Int!
   outputTokens: Int!
   usageShare: Float!
@@ -128,6 +156,13 @@ type BudgetPolicy {
 type BudgetStatus {
   policy: BudgetPolicy!
   spentUsd: Float!
+  visibleSpendUsd: Float!
+  estimatedUsd: Float!
+  invocationReconciledUsd: Float!
+  billReconciledUsd: Float!
+  mismatchUsd: Float!
+  unreconciledUsd: Float!
+  minimumReconciliationState: String!
   remainingUsd: Float!
   percentUsed: Float!
   status: String!

@@ -1,6 +1,13 @@
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "urql";
-import { Activity, Coins, Cpu, Hash } from "lucide-react";
+import {
+  Activity,
+  Coins,
+  Cpu,
+  Hash,
+  ShieldCheck,
+  TriangleAlert,
+} from "lucide-react";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@thinkwork/ui";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { SettingsAccountUsageQuery } from "@/lib/settings-queries";
@@ -14,6 +21,9 @@ type AccountUsageSectionProps = {
 type UsageDay = {
   day: string;
   totalUsd: number;
+  enforcedUsd: number;
+  mismatchUsd: number;
+  unreconciledUsd: number;
   inputTokens: number;
   outputTokens: number;
   eventCount: number;
@@ -23,6 +33,7 @@ type UsageModel = {
   model: string;
   displayName: string;
   totalUsd: number;
+  enforcedUsd: number;
   inputTokens: number;
   outputTokens: number;
   usageShare: number;
@@ -87,12 +98,11 @@ export function AccountUsageSection({
   const activeDayCount = (usage?.daily ?? []).filter(
     (day) => day.eventCount > 0,
   ).length;
+  const reviewUsd =
+    (summary?.mismatchUsd ?? 0) + (summary?.unreconciledUsd ?? 0);
 
   return (
-    <section
-      aria-labelledby="account-usage-heading"
-      className="mb-8"
-    >
+    <section aria-labelledby="account-usage-heading" className="mb-8">
       <h2
         className="mb-3 text-base font-medium text-foreground"
         id="account-usage-heading"
@@ -110,17 +120,26 @@ export function AccountUsageSection({
           <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5">
             <p className="text-sm font-medium text-foreground">No usage yet</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Activity will appear here after this account runs agents or
-              tools.
+              Activity will appear here after this account runs agents or tools.
             </p>
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <UsageMetric
             icon={<Coins className="size-4" />}
             label="Total Spend"
             value={formatUsd(summary?.totalUsd ?? 0)}
+          />
+          <UsageMetric
+            icon={<ShieldCheck className="size-4" />}
+            label="Verified Spend"
+            value={formatUsd(summary?.enforcedUsd ?? 0)}
+          />
+          <UsageMetric
+            icon={<TriangleAlert className="size-4" />}
+            label="Review"
+            value={formatUsd(reviewUsd)}
           />
           <UsageMetric
             icon={<Hash className="size-4" />}
@@ -303,7 +322,7 @@ function ModelBreakdown({ models }: { models: UsageModel[] }) {
             const totalTokens = model.inputTokens + model.outputTokens;
             return (
               <div
-                className="grid min-w-[38rem] grid-cols-[minmax(12rem,1fr)_8rem_7rem_5rem] items-center gap-4 border-b border-border bg-background px-3 py-3 last:border-b-0"
+                className="grid min-w-[45rem] grid-cols-[minmax(12rem,1fr)_8rem_7rem_7rem_5rem] items-center gap-4 border-b border-border bg-background px-3 py-3 last:border-b-0"
                 data-testid="model-row"
                 key={model.model}
               >
@@ -318,6 +337,9 @@ function ModelBreakdown({ models }: { models: UsageModel[] }) {
                 </p>
                 <p className="text-right text-sm font-semibold tabular-nums text-foreground">
                   {formatUsd(model.totalUsd)}
+                </p>
+                <p className="text-right text-sm tabular-nums text-muted-foreground">
+                  {formatUsd(model.enforcedUsd)}
                 </p>
                 <p className="text-right text-sm tabular-nums text-muted-foreground">
                   {formatPercent(model.usageShare)}
