@@ -128,6 +128,51 @@ describe("WorkItemsListView", () => {
     expect(screen.getByText("Billing cleanup")).toBeTruthy();
   });
 
+  it("defaults to filtering work items assigned to the current user", async () => {
+    render(
+      <WorkItemsListView
+        items={[
+          item({
+            id: "mine",
+            title: "My assigned work",
+            ownerUserId: "user-1",
+          }),
+          item({
+            id: "theirs",
+            title: "Someone else's work",
+            ownerUserId: "user-2",
+          }),
+          item({
+            id: "unassigned",
+            title: "Unassigned work",
+            ownerUserId: null,
+          }),
+        ]}
+        spaces={spaces}
+        statuses={statuses}
+        assignees={[
+          { id: "user-1", name: "Eric Odom" },
+          { id: "user-2", name: "Becky Moon" },
+        ]}
+        currentUserId="user-1"
+        display={{
+          ...DEFAULT_WORK_ITEM_SEARCH.list,
+          group: "none",
+          subgroup: "none",
+          properties: ["status", "priority"],
+        }}
+        includeSpace
+        onStatusChange={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("My assigned work")).toBeTruthy();
+      expect(screen.queryByText("Someone else's work")).toBeNull();
+      expect(screen.queryByText("Unassigned work")).toBeNull();
+    });
+  });
+
   it("opens detail from the row and updates assignee from the assignee control", async () => {
     Element.prototype.scrollIntoView = vi.fn();
     const onItemOpen = vi.fn();

@@ -46,6 +46,7 @@ interface WorkItemsListViewProps {
   includeSpace: boolean;
   updatingItemId?: string | null;
   assignees?: WorkItemAssigneeSummary[];
+  currentUserId?: string | null;
   sequenceNumbers?: Map<string, number>;
   onStatusChange: (
     item: WorkItemSummary,
@@ -70,6 +71,7 @@ export function WorkItemsListView({
   includeSpace,
   updatingItemId,
   assignees = [],
+  currentUserId,
   sequenceNumbers,
   onStatusChange,
   onItemUpdate,
@@ -81,10 +83,10 @@ export function WorkItemsListView({
   );
   const tokenFilterColumns = useMemo(
     () =>
-      buildWorkItemTokenFilterColumns(spaces).filter(
+      buildWorkItemTokenFilterColumns(spaces, assignees).filter(
         (column) => column.id !== WORK_ITEM_FILTER_COLUMNS.search,
       ),
-    [spaces],
+    [assignees, spaces],
   );
   const filterColumns = useMemo(
     () => buildWorkItemFilterColumnDefs(assignees),
@@ -99,6 +101,27 @@ export function WorkItemsListView({
     [items, sequenceNumbers],
   );
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const defaultAssigneeFilterAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (!currentUserId || defaultAssigneeFilterAppliedRef.current) return;
+    defaultAssigneeFilterAppliedRef.current = true;
+    setColumnFilters((current) => {
+      if (
+        current.some((filter) => filter.id === WORK_ITEM_FILTER_COLUMNS.owner)
+      ) {
+        return current;
+      }
+      return [
+        ...current,
+        {
+          id: WORK_ITEM_FILTER_COLUMNS.owner,
+          value: { operator: "is_any_of", value: [currentUserId] },
+        },
+      ];
+    });
+  }, [currentUserId]);
+
   const filterTable = useReactTable({
     data: sortedItems,
     columns: filterColumns,

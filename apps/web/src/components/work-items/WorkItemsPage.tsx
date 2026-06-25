@@ -73,12 +73,14 @@ interface TenantMembersResult {
 
 interface WorkItemsPageProps {
   tenantId: string | null;
+  userId?: string | null;
   state: WorkItemRouteSearch;
   onStateChange: (next: WorkItemRouteSearch) => void;
 }
 
 export function WorkItemsPage({
   tenantId,
+  userId,
   state,
   onStateChange,
 }: WorkItemsPageProps) {
@@ -308,6 +310,7 @@ export function WorkItemsPage({
               includeSpace={!state.spaceId}
               updatingItemId={updatingItemId}
               assignees={assignees}
+              currentUserId={userId}
               sequenceNumbers={sequenceNumbers}
               onStatusChange={handleStatusChange}
               onItemUpdate={handleWorkItemUpdate}

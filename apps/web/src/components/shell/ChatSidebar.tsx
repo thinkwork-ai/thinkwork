@@ -98,6 +98,7 @@ import {
   ThreadUpdatedSubscription,
   UnpinThreadMutation,
   UpdateThreadMutation,
+  WorkItemsQuery,
 } from "@/lib/graphql-queries";
 import {
   setSectionUnreadFilter,
@@ -149,6 +150,15 @@ interface SpaceNavSummary {
 
 interface SpacesResult {
   spaces?: SpaceNavSummary[] | null;
+}
+
+interface SidebarWorkItemSummary {
+  id: string;
+  ownerUserId?: string | null;
+}
+
+interface WorkItemsResult {
+  workItems?: SidebarWorkItemSummary[] | null;
 }
 
 const RECENT_LIMIT = 60;
@@ -253,6 +263,29 @@ export function ChatSidebar() {
     [spaces],
   );
 
+  const [{ data: workItemsData }, reexecuteWorkItemsQuery] =
+    useQuery<WorkItemsResult>({
+      query: WorkItemsQuery,
+      variables: {
+        input: tenantId
+          ? {
+              tenantId,
+              includeArchived: false,
+              limit: 200,
+            }
+          : undefined,
+      },
+      pause: !tenantId || !userId,
+      requestPolicy: "cache-and-network",
+    });
+
+  const assignedWorkItemCount = useMemo(() => {
+    if (!userId) return 0;
+    return (workItemsData?.workItems ?? []).filter(
+      (item) => item.ownerUserId === userId,
+    ).length;
+  }, [userId, workItemsData?.workItems]);
+
   const [
     { data: recentData, fetching: recentFetching, error: recentError },
     reexecuteRecentThreadsQuery,
@@ -310,10 +343,12 @@ export function ChatSidebar() {
     reexecuteRecentThreadsQuery({ requestPolicy: "network-only" });
     reexecutePinnedThreadsQuery({ requestPolicy: "network-only" });
     reexecuteSpacesQuery({ requestPolicy: "network-only" });
+    reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
   }, [
     reexecuteRecentThreadsQuery,
     reexecutePinnedThreadsQuery,
     reexecuteSpacesQuery,
+    reexecuteWorkItemsQuery,
   ]);
   const sidebarHasError = Boolean(recentError || pinnedError || spacesError);
   useEffect(() => {
@@ -865,7 +900,13 @@ export function ChatSidebar() {
               >
                 <Link to="/work-items" search={WORK_ITEMS_NAV_SEARCH}>
                   <ListChecks />
-                  <span>Work Items</span>
+                  <span className="min-w-0 truncate">Work Items</span>
+                  {assignedWorkItemCount > 0 ? (
+                    <SidebarCountBadge
+                      count={assignedWorkItemCount}
+                      className="border border-transparent transition-colors group-hover/menu-button:border-white/35 group-data-[active=true]/menu-button:border-white/45"
+                    />
+                  ) : null}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -1138,8 +1179,23 @@ function orderPinnedThreads(
 /** Unread-count chip, rendered immediately after a section's label. */
 function SectionUnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null;
+  return <SidebarCountBadge count={count} />;
+}
+
+function SidebarCountBadge({
+  count,
+  className,
+}: {
+  count: number;
+  className?: string;
+}) {
   return (
-    <span className="shrink-0 rounded-full bg-sidebar-accent px-1.5 text-[10px] leading-5 text-sidebar-accent-foreground">
+    <span
+      className={cn(
+        "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-sidebar-accent px-1.5 text-xs font-medium text-sidebar-accent-foreground",
+        className,
+      )}
+    >
       {formatCompactCount(count)}
     </span>
   );

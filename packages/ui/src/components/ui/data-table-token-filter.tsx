@@ -413,7 +413,7 @@ function FilterToken({
             <span
               // eslint-disable-next-line react/no-array-index-key
               key={index}
-              className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
+              className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground"
             >
               {icon}
             </span>
@@ -709,7 +709,10 @@ function MultiOptionValueList({
               role="checkbox"
               aria-checked={checked}
               disabled={option.disabled}
-              className="flex min-h-8 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className={cn(
+                "flex min-h-8 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+                checked && "bg-accent/30",
+              )}
               onClick={() => {
                 const nextValues = checked
                   ? selectedValues.filter((item) => item !== option.value)
@@ -719,7 +722,9 @@ function MultiOptionValueList({
             >
               <CheckboxIndicator checked={checked} />
               {option.icon ? (
-                <span className="text-muted-foreground">{option.icon}</span>
+                <span className="shrink-0 text-muted-foreground">
+                  {option.icon}
+                </span>
               ) : null}
               <span className="min-w-0 flex-1 truncate">{option.label}</span>
               {option.disabledReason ? (
