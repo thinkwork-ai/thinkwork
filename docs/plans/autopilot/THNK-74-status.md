@@ -444,3 +444,9 @@ Local verification:
 - `pnpm dlx prettier@3.6.2 --check` on touched TS/GraphQL/Markdown/generated
   files passed.
 - `git diff --check` passed.
+
+PR / CI:
+
+- Commit: `b3d9f7a74` (`feat(cost): make budgets confidence-aware`)
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2961
+- 2026-06-25 11:51 CDT: PR opened; waiting for required CI.
