@@ -3216,6 +3216,7 @@ export type ModelInvocation = {
   __typename?: 'ModelInvocation';
   branch?: Maybe<Scalars['String']['output']>;
   cacheReadTokenCount: Scalars['Int']['output'];
+  cacheWriteTokenCount?: Maybe<Scalars['Int']['output']>;
   costUsd?: Maybe<Scalars['Float']['output']>;
   hasToolResult?: Maybe<Scalars['Boolean']['output']>;
   inputPreview?: Maybe<Scalars['String']['output']>;
@@ -3223,6 +3224,11 @@ export type ModelInvocation = {
   modelId: Scalars['String']['output'];
   outputPreview?: Maybe<Scalars['String']['output']>;
   outputTokenCount: Scalars['Int']['output'];
+  reconciliationConfidence?: Maybe<Scalars['String']['output']>;
+  reconciliationDiagnostic?: Maybe<Scalars['String']['output']>;
+  reconciliationReason?: Maybe<Scalars['String']['output']>;
+  reconciliationRuntimeRequestId?: Maybe<Scalars['String']['output']>;
+  reconciliationState?: Maybe<Scalars['String']['output']>;
   requestId: Scalars['String']['output'];
   timestamp: Scalars['AWSDateTime']['output'];
   toolCount?: Maybe<Scalars['Int']['output']>;
