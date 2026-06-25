@@ -512,5 +512,64 @@ Local verification:
 PR / CI:
 
 - Commit: `83cd5716f` (`feat(trace): project traces from canonical ledger`)
+- Commit: `0445716c8` (`docs: update thnk-74 u6 status`)
 - PR: https://github.com/thinkwork-ai/thinkwork/pull/2962
 - 2026-06-25 12:11 CDT: PR opened; waiting for required CI.
+- 2026-06-25 12:20 CDT: PR merged.
+- Merge commit: `29376b897a44aff9589917f6fab0e2d5a5f9a6ba`.
+- Required CI passed: CLA, lint, test, typecheck, and verify.
+- U6 worktree, remote branch, and local branch cleanup completed before U7
+  start.
+
+### U7: Snapshot Trace Evidence For Evals And Roll Out Safely
+
+Objective: include canonical trace evidence in eval snapshots, backfill existing
+cost-only data truthfully as unreconciled historical observations, and update
+operator docs/runbooks for reconciliation-state interpretation.
+
+Planned branch/worktree:
+
+- Branch: `codex/thnk-74-u7-eval-snapshots-rollout`
+- Worktree: `/Users/ericodom/.codex/worktrees/e23c/thinkwork`
+- Base: `origin/main` at `29376b897a44aff9589917f6fab0e2d5a5f9a6ba`.
+
+Planned local verification:
+
+- Focused flag-thread and thread snapshot tests.
+- Focused historical backfill helper tests.
+- `pnpm --filter @thinkwork/api typecheck`
+- Documentation formatting checks for touched docs.
+- `pnpm dlx prettier@3.6.2 --check` on touched files.
+- `git diff --check`
+
+Implementation status:
+
+- 2026-06-25 12:22 CDT: U7 started from `origin/main` at
+  `29376b897a44aff9589917f6fab0e2d5a5f9a6ba`.
+- Extended flagged eval snapshots with a new guarded `trace-evidence` payload
+  object containing safe trace-ledger event summaries, source references,
+  reconciliation state/source, and explicit gap metadata for missing or failed
+  trace lookups.
+- Kept eval case core compatibility stable while adding `trace-evidence` to the
+  shared payload allowlist so run snapshots copy and hash it alongside history,
+  workspace, and message trace payloads.
+- Added historical backfill helpers for old `cost_events` and
+  `thread_turns.usage_json` observations. Backfilled records use
+  `source_type: backfill` and `unreconciled/error` reconciliation facts; they do
+  not infer provider or bill reconciliation.
+- Updated Control and Analytics docs to describe runtime, invocation, bill,
+  mismatch, and historical backfill confidence states.
+- Added `docs/solutions/observability/trusted-trace-cost-accounting-substrate.md`
+  with the evidence-first projection pattern and runbook.
+
+Local verification:
+
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/evals/thread-snapshot.test.ts src/graphql/resolvers/evaluations/flag-thread.test.ts src/lib/trace-ledger/backfill-existing-cost-events.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api exec vitest run src/lib/evals/thread-snapshot.test.ts src/graphql/resolvers/evaluations/flag-thread.test.ts src/lib/trace-ledger/backfill-existing-cost-events.test.ts src/lib/evals/run-launch.test.ts src/handlers/eval-worker-integration.test.ts src/handlers/eval-worker.test.ts src/handlers/eval-runner.test.ts`
+  passed.
+- `pnpm --filter @thinkwork/api typecheck` passed.
+- `pnpm --filter @thinkwork/api lint` reported that the API package has no
+  `lint` script.
+- `pnpm dlx prettier@3.6.2 --check` on touched TS/Markdown files passed.
+- `git diff --check` passed.

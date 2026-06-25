@@ -27,7 +27,10 @@ import {
   createEvalDatasetStorageFromConfig,
   type RunSnapshot,
 } from "../lib/evals/run-launch.js";
-import type { DatasetStorage } from "../lib/evals/dataset-store.js";
+import type {
+  DatasetStorage,
+  EvalCasePayloadName,
+} from "../lib/evals/dataset-store.js";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 // Read per-invocation, not at module load (vitest env capture timing —
@@ -64,7 +67,7 @@ export interface EvalWorkerMessage {
    * its run-prefix payload fetch against these before replaying the
    * recorded history.
    */
-  payloadShas?: Partial<Record<"history" | "workspace" | "traces", string>>;
+  payloadShas?: Partial<Record<EvalCasePayloadName, string>>;
 }
 
 const DIRECT_AGENTCORE_MESSAGE_SHARDS = Math.max(

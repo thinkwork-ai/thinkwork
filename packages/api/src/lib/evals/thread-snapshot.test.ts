@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  buildTraceEvidencePayload,
   buildFlaggedCaseCore,
   buildThreadSnapshot,
   flaggedCaseIdBase,
@@ -311,6 +312,110 @@ describe("buildThreadSnapshot — tool trace extraction", () => {
   });
 });
 
+describe("buildTraceEvidencePayload", () => {
+  it("stores safe canonical trace summaries and source references without raw payload fields", () => {
+    const payload = buildTraceEvidencePayload({
+      rows: [
+        {
+          id: "trace-event-1",
+          trace_run_id: "trace-run-1",
+          event_type: "model_invocation",
+          event_status: "succeeded",
+          request_id: "bedrock-request-1",
+          parent_request_id: "turn-1",
+          observed_at: "2026-06-01T00:02:00.000Z",
+          duration_ms: 250,
+          payload_summary: {
+            model: "anthropic.claude-haiku",
+            input_tokens: 12,
+            output_tokens: 4,
+            raw_prompt: "secret customer prompt",
+            tool_input: { cardNumber: "4111" },
+          },
+          metadata: {
+            source: "bedrock_invocation_log",
+          },
+          reconciliation_state: "invocation-reconciled",
+          reconciliation_source: "invocation",
+          source_evidence: [
+            {
+              id: "source-1",
+              sourceType: "bedrock_invocation_log",
+              sourceSystem: "aws.bedrock",
+              sourceId: "bedrock-request-1",
+              uri: "cloudwatch://group/stream",
+              observedAt: "2026-06-01T00:02:00.000Z",
+              redactionState: "summary_only",
+              summary: {
+                model: "anthropic.claude-haiku",
+                raw_payload: "should not be copied",
+              },
+              metadata: { requestId: "bedrock-request-1" },
+            },
+          ],
+        },
+      ],
+    });
+    expect(payload).toMatchObject({
+      source: "trace_ledger",
+      gaps: [],
+      dropped_oldest_count: 0,
+      events: [
+        {
+          id: "trace-event-1",
+          event_type: "model_invocation",
+          request_id: "bedrock-request-1",
+          safe_summary: {
+            model: "anthropic.claude-haiku",
+            input_tokens: 12,
+            output_tokens: 4,
+            omitted_payload_keys: ["raw_prompt", "tool_input"],
+          },
+          reconciliation_state: "invocation-reconciled",
+          reconciliation_source: "invocation",
+          source_references: [
+            {
+              id: "source-1",
+              source_type: "bedrock_invocation_log",
+              source_system: "aws.bedrock",
+              source_id: "bedrock-request-1",
+              safe_summary: {
+                model: "anthropic.claude-haiku",
+                omitted_payload_keys: ["raw_payload"],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(JSON.stringify(payload)).not.toContain("secret customer prompt");
+    expect(JSON.stringify(payload)).not.toContain("4111");
+    expect(JSON.stringify(payload)).not.toContain("should not be copied");
+  });
+
+  it("captures explicit trace lookup gaps without pretending evidence exists", () => {
+    const payload = buildTraceEvidencePayload({
+      gap: {
+        code: "lookup_failed",
+        source: "trace_ledger",
+        message: "Trace ledger evidence lookup failed at flag time: timeout",
+      },
+    });
+    expect(payload).toEqual({
+      source: "trace_ledger",
+      events: [],
+      gaps: [
+        {
+          code: "lookup_failed",
+          source: "trace_ledger",
+          message: "Trace ledger evidence lookup failed at flag time: timeout",
+        },
+      ],
+      dropped_oldest_count: 0,
+    });
+  });
+});
+
 describe("writeFlaggedCasePayloads", () => {
   function makeStorage() {
     const objects = new Map<string, string>();
@@ -389,6 +494,43 @@ describe("writeFlaggedCasePayloads", () => {
         ),
       ).toBe(true);
     }
+  });
+
+  it("writes trace-evidence when canonical trace evidence was captured", async () => {
+    const { storage, objects } = makeStorage();
+    const snapshot = buildThreadSnapshot({
+      messages: [msg({ id: "m1" })],
+      turn: baseTurn,
+      traceEvidenceRows: [
+        {
+          id: "trace-event-1",
+          event_type: "model_invocation",
+          event_status: "succeeded",
+          request_id: "turn-1",
+          payload_summary: { model: "anthropic.claude-haiku" },
+        },
+      ],
+    });
+    const keys = await writeFlaggedCasePayloads(
+      ctx,
+      "case-1",
+      snapshot,
+      storage,
+    );
+    expect(keys).toEqual([
+      evalDatasetCasePayloadKey("acme", "flags", "case-1", "history"),
+      evalDatasetCasePayloadKey("acme", "flags", "case-1", "trace-evidence"),
+    ]);
+    expect(objects.size).toBe(2);
+    const traceEvidence = JSON.parse(objects.get(keys[1]) as string) as Record<
+      string,
+      unknown
+    >;
+    expect(traceEvidence).toMatchObject({
+      source: "trace_ledger",
+      events: [{ id: "trace-event-1" }],
+    });
+    expect(snapshot.completeness.traces).toBe(true);
   });
 });
 

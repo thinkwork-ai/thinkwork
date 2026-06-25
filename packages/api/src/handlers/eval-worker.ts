@@ -79,12 +79,14 @@ import { resolveTenantPlatformAgent } from "../lib/agents/tenant-platform-agent.
 import { notifyEvalRunUpdate } from "../lib/eval-notify.js";
 import {
   caseIdFromRunSnapshotKey,
+  EVAL_CASE_PAYLOAD_NAMES,
   evalRunSnapshotCasePayloadKey,
   FLAGGED_THREAD_CATEGORY,
   isEvalRunSnapshotKeyForRun,
   parseEvalDatasetCase,
   sha256Hex,
   type DatasetStorage,
+  type EvalCasePayloadName,
 } from "../lib/evals/dataset-store.js";
 import { createEvalDatasetStorageFromConfig } from "../lib/evals/run-launch.js";
 
@@ -108,7 +110,7 @@ export interface EvalWorkerMessage {
    * replaying recorded history — payloads aren't in the dataset
    * manifest, so the launch's read-once hash is the integrity anchor.
    */
-  payloadShas?: Partial<Record<"history" | "workspace" | "traces", string>>;
+  payloadShas?: Partial<Record<EvalCasePayloadName, string>>;
 }
 
 /**
@@ -161,7 +163,7 @@ interface CaseOutcome {
   threadTurnId: string | null;
 }
 
-const PAYLOAD_SHA_NAMES = ["history", "workspace", "traces"] as const;
+const PAYLOAD_SHA_NAMES = EVAL_CASE_PAYLOAD_NAMES;
 
 function parsePayloadShas(
   value: unknown,
