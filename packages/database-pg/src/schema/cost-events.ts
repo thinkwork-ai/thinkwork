@@ -46,6 +46,13 @@ export const costEvents = pgTable(
     cached_read_tokens: integer("cached_read_tokens"),
     duration_ms: integer("duration_ms"),
     trace_id: text("trace_id"),
+    trace_event_id: uuid("trace_event_id"),
+    reconciliation_state: text("reconciliation_state")
+      .notNull()
+      .default("runtime-reported"),
+    reconciliation_source: text("reconciliation_source"),
+    reconciliation_at: timestamp("reconciliation_at", { withTimezone: true }),
+    source_evidence_ref: jsonb("source_evidence_ref"),
     metadata: jsonb("metadata"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -69,6 +76,16 @@ export const costEvents = pgTable(
     index("idx_cost_events_thread").on(table.thread_id),
     index("idx_cost_events_runtime").on(table.tenant_id, table.runtime_type),
     index("idx_cost_events_trace").on(table.trace_id),
+    index("idx_cost_events_trace_event").on(table.trace_event_id),
+    index("idx_cost_events_reconciliation_state").on(
+      table.tenant_id,
+      table.reconciliation_state,
+      table.created_at,
+    ),
+    check(
+      "cost_events_reconciliation_state_check",
+      sql`${table.reconciliation_state} IN ('runtime-reported', 'invocation-reconciled', 'bill-reconciled', 'mismatch', 'unreconciled/error')`,
+    ),
   ],
 );
 

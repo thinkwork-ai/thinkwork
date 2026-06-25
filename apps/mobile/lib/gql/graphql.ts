@@ -1297,8 +1297,13 @@ export type CostEvent = {
   model?: Maybe<Scalars["String"]["output"]>;
   outputTokens?: Maybe<Scalars["Int"]["output"]>;
   provider?: Maybe<Scalars["String"]["output"]>;
+  reconciliationAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  reconciliationSource?: Maybe<Scalars["String"]["output"]>;
+  reconciliationState?: Maybe<Scalars["String"]["output"]>;
   requestId: Scalars["String"]["output"];
+  sourceEvidenceRef?: Maybe<Scalars["AWSJSON"]["output"]>;
   tenantId: Scalars["ID"]["output"];
+  traceEventId?: Maybe<Scalars["ID"]["output"]>;
   userId?: Maybe<Scalars["ID"]["output"]>;
 };
 
@@ -8584,6 +8589,34 @@ export type ThreadsPage = {
   totalCount: Scalars["Int"]["output"];
 };
 
+export type TraceCostReconciliationFact = {
+  __typename?: "TraceCostReconciliationFact";
+  attributionLevel?: Maybe<Scalars["String"]["output"]>;
+  billedAmountUsd?: Maybe<Scalars["Float"]["output"]>;
+  costEventId?: Maybe<Scalars["ID"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  metadata: Scalars["AWSJSON"]["output"];
+  model?: Maybe<Scalars["String"]["output"]>;
+  provider?: Maybe<Scalars["String"]["output"]>;
+  providerAmountUsd?: Maybe<Scalars["Float"]["output"]>;
+  providerCachedReadTokens?: Maybe<Scalars["Int"]["output"]>;
+  providerInputTokens?: Maybe<Scalars["Int"]["output"]>;
+  providerOutputTokens?: Maybe<Scalars["Int"]["output"]>;
+  reconciledAt: Scalars["AWSDateTime"]["output"];
+  reconciliationScope: Scalars["String"]["output"];
+  reconciliationState: Scalars["String"]["output"];
+  requestId?: Maybe<Scalars["String"]["output"]>;
+  runtimeAmountUsd?: Maybe<Scalars["Float"]["output"]>;
+  runtimeCachedReadTokens?: Maybe<Scalars["Int"]["output"]>;
+  runtimeInputTokens?: Maybe<Scalars["Int"]["output"]>;
+  runtimeOutputTokens?: Maybe<Scalars["Int"]["output"]>;
+  sourceEvidenceId?: Maybe<Scalars["ID"]["output"]>;
+  traceEventId?: Maybe<Scalars["ID"]["output"]>;
+  traceRunId?: Maybe<Scalars["ID"]["output"]>;
+  varianceUsd?: Maybe<Scalars["Float"]["output"]>;
+};
+
 export type TraceEvent = {
   __typename?: "TraceEvent";
   agentId?: Maybe<Scalars["ID"]["output"]>;
@@ -8614,15 +8647,35 @@ export type TraceEvent = {
   profileRunId?: Maybe<Scalars["String"]["output"]>;
   profileSlug?: Maybe<Scalars["String"]["output"]>;
   profileStatus?: Maybe<Scalars["String"]["output"]>;
+  reconciliationSource?: Maybe<Scalars["String"]["output"]>;
+  reconciliationState?: Maybe<Scalars["String"]["output"]>;
   requestId?: Maybe<Scalars["String"]["output"]>;
   reviewerRole?: Maybe<Scalars["Boolean"]["output"]>;
   ruleSource?: Maybe<Scalars["AWSJSON"]["output"]>;
   runtimeType?: Maybe<Scalars["String"]["output"]>;
   source?: Maybe<Scalars["String"]["output"]>;
+  sourceEvidence?: Maybe<Array<TraceSourceEvidence>>;
   threadId?: Maybe<Scalars["ID"]["output"]>;
   toolCallId?: Maybe<Scalars["String"]["output"]>;
   toolName?: Maybe<Scalars["String"]["output"]>;
   traceId: Scalars["String"]["output"];
+};
+
+export type TraceSourceEvidence = {
+  __typename?: "TraceSourceEvidence";
+  createdAt: Scalars["AWSDateTime"]["output"];
+  id: Scalars["ID"]["output"];
+  metadata: Scalars["AWSJSON"]["output"];
+  observedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  redactionState: Scalars["String"]["output"];
+  retentionExpiresAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  sourceId?: Maybe<Scalars["String"]["output"]>;
+  sourceSystem: Scalars["String"]["output"];
+  sourceType: Scalars["String"]["output"];
+  summary: Scalars["AWSJSON"]["output"];
+  traceEventId?: Maybe<Scalars["ID"]["output"]>;
+  traceRunId?: Maybe<Scalars["ID"]["output"]>;
+  uri?: Maybe<Scalars["String"]["output"]>;
 };
 
 export type TriggerAgentLoopRunInput = {
