@@ -62,6 +62,8 @@ export interface DataTableTokenFilterProps<TData extends RowData> {
   table: TanStackTable<TData>;
   columns: DataTableTokenFilterColumn[];
   className?: string;
+  popoverClassName?: string;
+  flattenToolbar?: boolean;
   align?: "start" | "center" | "end";
   addLabel?: string;
   showAddLabel?: boolean;
@@ -162,6 +164,8 @@ export function DataTableTokenFilter<TData extends RowData>({
   table,
   columns,
   className,
+  popoverClassName,
+  flattenToolbar = false,
   align = "start",
   addLabel = "Add filter",
   showAddLabel = true,
@@ -216,7 +220,14 @@ export function DataTableTokenFilter<TData extends RowData>({
   const draftColumn = columns.find((column) => column.id === draftColumnId);
 
   return (
-    <div className={cn("flex min-w-0 flex-wrap items-center gap-2", className)}>
+    <div
+      className={cn(
+        flattenToolbar
+          ? "contents"
+          : "flex min-w-0 flex-wrap items-center gap-2",
+        className,
+      )}
+    >
       <Popover
         open={addOpen}
         onOpenChange={(open) => {
@@ -238,7 +249,10 @@ export function DataTableTokenFilter<TData extends RowData>({
         </PopoverTrigger>
         <PopoverContent
           align={align}
-          className="w-[min(22rem,calc(100vw-2rem))] p-2"
+          className={cn(
+            "w-[min(22rem,calc(100vw-2rem))] p-2",
+            popoverClassName,
+          )}
         >
           {draftColumn ? (
             <FilterValueEditor
@@ -353,13 +367,15 @@ function FilterToken({
   return (
     <div
       aria-label={`${column.label} filter`}
-      className="flex h-8 min-w-0 max-w-full items-stretch overflow-hidden rounded-full border bg-background shadow-sm"
+      data-token-filter-token
+      className="flex h-8 max-w-full items-stretch overflow-hidden rounded-full border bg-background shadow-sm"
     >
       <Popover open={valueOpen} onOpenChange={setValueOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex min-w-0 items-center gap-1.5 px-3 text-sm font-medium hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            data-token-filter-subject
+            className="flex min-w-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm font-medium hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
             aria-label={`Edit ${column.label} filter`}
           >
             {column.icon ? (
@@ -385,7 +401,8 @@ function FilterToken({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="border-l px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+            data-token-filter-operator
+            className="whitespace-nowrap border-l px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
             aria-label={`Edit ${column.label} operator`}
           >
             {operatorLabels[value.operator]}
@@ -404,7 +421,8 @@ function FilterToken({
       </Popover>
       <button
         type="button"
-        className="min-w-0 max-w-56 border-l px-3 text-sm font-medium hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+        data-token-filter-value
+        className="min-w-0 max-w-56 whitespace-nowrap border-l px-3 text-sm font-medium hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
         onClick={() => setValueOpen(true)}
         aria-label={`Edit ${column.label} values`}
       >

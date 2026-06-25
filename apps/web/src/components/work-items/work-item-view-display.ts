@@ -148,8 +148,8 @@ export const DEFAULT_WORK_ITEM_DISPLAY_STATE: WorkItemDisplayState = {
   list: {
     group: "none",
     subgroup: "none",
-    sort: "updated",
-    dir: "desc",
+    sort: "title",
+    dir: "asc",
     showEmptyGroups: false,
     showEmptySubgroups: false,
     properties: ["status", "priority", "owner", "due", "space", "source"],
@@ -201,8 +201,14 @@ export function normalizeWorkItemDisplayState(
     list: {
       group: listGroup,
       subgroup: listSubgroup,
-      sort: parseSort(search.listSort) ?? legacySort ?? "updated",
-      dir: parseDirection(search.listDir),
+      sort:
+        parseSort(search.listSort) ??
+        legacySort ??
+        DEFAULT_WORK_ITEM_DISPLAY_STATE.list.sort,
+      dir: parseDirection(
+        search.listDir,
+        DEFAULT_WORK_ITEM_DISPLAY_STATE.list.dir,
+      ),
       showEmptyGroups: booleanParam(search.listShowEmptyGroups) ?? false,
       showEmptySubgroups: booleanParam(search.listShowEmptySubgroups) ?? false,
       properties: parseProperties(
@@ -214,8 +220,14 @@ export function normalizeWorkItemDisplayState(
       column: boardColumn,
       row: boardRow,
       subgroup: boardSubgroup,
-      sort: parseSort(search.boardSort) ?? legacySort ?? "updated",
-      dir: parseDirection(search.boardDir),
+      sort:
+        parseSort(search.boardSort) ??
+        legacySort ??
+        DEFAULT_WORK_ITEM_DISPLAY_STATE.board.sort,
+      dir: parseDirection(
+        search.boardDir,
+        DEFAULT_WORK_ITEM_DISPLAY_STATE.board.dir,
+      ),
       showEmptyColumns: booleanParam(search.boardShowEmptyColumns) ?? true,
       showEmptyRows: booleanParam(search.boardShowEmptyRows) ?? false,
       properties: parseProperties(
@@ -398,8 +410,13 @@ function parseSort(value: unknown): WorkItemDisplaySort | undefined {
     : undefined;
 }
 
-function parseDirection(value: unknown): WorkItemDisplayDirection {
-  return value === "asc" ? "asc" : "desc";
+function parseDirection(
+  value: unknown,
+  fallback: WorkItemDisplayDirection,
+): WorkItemDisplayDirection {
+  if (value === "asc") return "asc";
+  if (value === "desc") return "desc";
+  return fallback;
 }
 
 function normalizeSubgroup(

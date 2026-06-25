@@ -22,6 +22,7 @@ import {
   type WorkItemStatusSummary,
   type WorkItemSummary,
   buildWorkItemSequenceNumbers,
+  isWorkItemOpen,
   sortWorkItemStatuses,
 } from "./work-item-display";
 import {
@@ -38,12 +39,15 @@ import {
   type WorkItemDisplayState,
 } from "./work-item-view-display";
 
+const WORK_ITEM_LIST_PAGE_SIZE = 50;
+
 interface WorkItemsListViewProps {
   items: WorkItemSummary[];
   spaces: WorkItemSpaceSummary[];
   statuses: WorkItemStatusSummary[];
   display: WorkItemDisplayState["list"];
   includeSpace: boolean;
+  showDoneItems?: boolean;
   updatingItemId?: string | null;
   assignees?: WorkItemAssigneeSummary[];
   currentUserId?: string | null;
@@ -69,6 +73,7 @@ export function WorkItemsListView({
   statuses,
   display,
   includeSpace,
+  showDoneItems = false,
   updatingItemId,
   assignees = [],
   currentUserId,
@@ -83,9 +88,9 @@ export function WorkItemsListView({
   );
   const tokenFilterColumns = useMemo(
     () =>
-      buildWorkItemTokenFilterColumns(spaces, assignees).filter(
-        (column) => column.id !== WORK_ITEM_FILTER_COLUMNS.search,
-      ),
+      buildWorkItemTokenFilterColumns(spaces, assignees)
+        .filter((column) => column.id !== WORK_ITEM_FILTER_COLUMNS.search)
+        .sort((left, right) => left.label.localeCompare(right.label)),
     [assignees, spaces],
   );
   const filterColumns = useMemo(
@@ -134,6 +139,9 @@ export function WorkItemsListView({
   const filteredItems = filterTable
     .getFilteredRowModel()
     .rows.map((row) => row.original);
+  const visibleItems = showDoneItems
+    ? filteredItems
+    : filteredItems.filter(isWorkItemOpen);
   const columns = useMemo<Array<ColumnDef<WorkItemSummary, unknown>>>(
     () =>
       buildListColumns({
@@ -164,7 +172,7 @@ export function WorkItemsListView({
 
   if (display.group !== "none" || display.subgroup !== "none") {
     const groups = groupWorkItemsForDisplay({
-      items: filteredItems,
+      items: visibleItems,
       spaces,
       statuses: sortedStatuses,
       group: display.group,
@@ -220,8 +228,8 @@ export function WorkItemsListView({
       <div className="min-h-0 flex-1">
         <DataTable
           columns={columns}
-          data={filteredItems}
-          pageSize={0}
+          data={visibleItems}
+          pageSize={WORK_ITEM_LIST_PAGE_SIZE}
           scrollable
           allowHorizontalScroll={false}
           hideHeader
@@ -247,10 +255,18 @@ function WorkItemsListToolbar({
         <WorkItemsToolbarSearch table={table} />
         <DataTableTokenFilter
           table={table}
-          columns={tokenFilterColumns}
+          columns={tokenFilterColumns.filter(
+            (column) =>
+              column.id !== WORK_ITEM_FILTER_COLUMNS.required &&
+              column.id !== WORK_ITEM_FILTER_COLUMNS.blocked &&
+              column.id !== WORK_ITEM_FILTER_COLUMNS.applicable,
+          )}
           addLabel="Filter"
           showAddLabel={false}
           clearLabel="Clear filters"
+          flattenToolbar
+          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
         />
       </div>
     </div>

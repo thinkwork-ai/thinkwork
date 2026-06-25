@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { CircleCheck, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "urql";
-import { Button } from "@thinkwork/ui";
+import { Button, cn } from "@thinkwork/ui";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
@@ -87,6 +87,7 @@ export function WorkItemsPage({
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [newWorkItemOpen, setNewWorkItemOpen] = useState(false);
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
+  const [showDoneItems, setShowDoneItems] = useState(false);
   const input = useMemo(
     () => (tenantId ? buildWorkItemsInput(tenantId, state) : undefined),
     [state, tenantId],
@@ -243,6 +244,7 @@ export function WorkItemsPage({
   usePageHeaderActions({
     title: "Work Items",
     documentTitle: "Work Items",
+    actionKey: `work-items:${showDoneItems ? "done-visible" : "done-hidden"}:${JSON.stringify(state)}`,
     action: (
       <div className="flex items-center gap-1">
         <Button
@@ -256,6 +258,26 @@ export function WorkItemsPage({
         >
           <Plus className="size-4" />
         </Button>
+        {state.view === "list" ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-8 w-8 text-muted-foreground hover:text-foreground",
+              showDoneItems &&
+                "text-white hover:text-white [&_svg]:text-white",
+            )}
+            aria-label={
+              showDoneItems ? "Hide Done Work Items" : "Show Done Work Items"
+            }
+            aria-pressed={showDoneItems}
+            title="Done"
+            onClick={() => setShowDoneItems((current) => !current)}
+          >
+            <CircleCheck className="size-4" />
+          </Button>
+        ) : null}
         <WorkItemDisplayHeader state={state} onChange={updateState} />
         <Button
           type="button"
@@ -270,7 +292,6 @@ export function WorkItemsPage({
         </Button>
       </div>
     ),
-    actionKey: `work-items:${JSON.stringify(state)}`,
   });
 
   if (!tenantId || (fetching && !data)) {
@@ -308,6 +329,7 @@ export function WorkItemsPage({
               statuses={statuses}
               display={state.list}
               includeSpace={!state.spaceId}
+              showDoneItems={showDoneItems}
               updatingItemId={updatingItemId}
               assignees={assignees}
               currentUserId={userId}

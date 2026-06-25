@@ -27,8 +27,8 @@ describe("work item display state", () => {
       view: "list",
       list: {
         group: "none",
-        sort: "updated",
-        dir: "desc",
+        sort: "title",
+        dir: "asc",
         properties: ["priority"],
       },
       board: {

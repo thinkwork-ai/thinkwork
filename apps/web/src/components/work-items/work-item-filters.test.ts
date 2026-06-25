@@ -62,8 +62,8 @@ describe("work item route display state", () => {
       spaceId: undefined,
       threadId: undefined,
       list: {
-        sort: "updated",
-        dir: "desc",
+        sort: "title",
+        dir: "asc",
       },
     });
   });
