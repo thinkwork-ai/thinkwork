@@ -113,7 +113,7 @@ No Linear child issues exist, so the plan units are the implementation units:
 - U1 branch: `codex/thnk-79-u1-memory-scope`
 - U1 PR: `https://github.com/thinkwork-ai/thinkwork/pull/2988` merged
 - U2 branch: `codex/thnk-79-u2-cognee-user-memory`
-- U2 PR: pending
+- U2 PR: `https://github.com/thinkwork-ai/thinkwork/pull/2989`
 
 ## Verification Log
 
