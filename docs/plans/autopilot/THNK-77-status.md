@@ -90,7 +90,8 @@ target_branch: main
 - Worktree:
   `/Users/ericodom/.codex/worktrees/thnk-77-u1-json-render-carrier`
 - Linear state: In Progress
-- PR: pending
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2972
+- Commit: `a093ba284`
 - Verification:
   - `pnpm install` completed after moving `@json-render/core` and
     `@json-render/react` to production web dependencies, adding
