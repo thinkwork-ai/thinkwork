@@ -38,7 +38,8 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
-import { GenUIRenderer } from "@/components/workbench/genui/GenUIRenderer";
+import { ThreadJsonRenderFallback } from "@/components/workbench/json-render/ThreadJsonRenderFallback";
+import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
 import {
   GoalRunCard,
   normalizeGoalRunEvidence,
@@ -198,15 +199,23 @@ export function renderTypedPart(
         />
       );
     }
-    if (part.type === "data-genui") {
+    if (part.type === "data-json-render") {
       return (
-        <GenUIRenderer
+        <ThreadJsonRenderRenderer
           key={key}
           data={part.data}
           live={live}
           partId={part.id}
-          sourceMessageId={sourceMessageId}
-          threadId={threadId}
+        />
+      );
+    }
+    if (part.type === "data-genui") {
+      return (
+        <ThreadJsonRenderFallback
+          key={key}
+          component={legacyGenUIRootComponent(part.data)}
+          fallback={legacyGenUIFallback(part.data)}
+          legacy
         />
       );
     }
@@ -238,6 +247,34 @@ function recordData(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function legacyGenUIFallback(value: unknown) {
+  const data = recordData(value);
+  const fallback = recordData(data.mobileFallback);
+  const title = typeof fallback.title === "string" ? fallback.title : undefined;
+  const summary =
+    typeof fallback.summary === "string" ? fallback.summary : undefined;
+  const lines = Array.isArray(fallback.lines)
+    ? fallback.lines.filter((line): line is string => typeof line === "string")
+    : undefined;
+
+  return title && summary
+    ? {
+        title,
+        summary,
+        lines,
+      }
+    : undefined;
+}
+
+function legacyGenUIRootComponent(value: unknown): string | undefined {
+  const data = recordData(value);
+  const spec = recordData(data.spec);
+  const root = typeof spec.root === "string" ? spec.root : undefined;
+  const elements = recordData(spec.elements);
+  const element = root ? recordData(elements[root]) : {};
+  return typeof element.component === "string" ? element.component : undefined;
 }
 
 /**

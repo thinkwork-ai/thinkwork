@@ -1,10 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { createCrmOpportunityValueByOwnerFixture } from "@thinkwork/analytics-display";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  createAnalyticsDisplayGenUIPart,
-  createTaskReviewGenUIFixture,
-} from "@thinkwork/genui";
+  createAnalyticsJsonRenderFixture,
+  createTaskReviewJsonRenderFixture,
+} from "@/components/workbench/json-render/fixtures";
 import { ThreadConversation } from "./ThreadConversation";
 
 vi.mock("urql", async () => {
@@ -110,8 +109,8 @@ describe("ThreadConversation", () => {
     expect(onDownloadAttachment).toHaveBeenCalledWith("attachment-1");
   });
 
-  it("renders persisted data-genui parts through the shared Thread renderer", () => {
-    const part = createTaskReviewGenUIFixture();
+  it("renders persisted data-json-render parts through the shared Thread renderer", () => {
+    const part = createTaskReviewJsonRenderFixture();
 
     render(
       <ThreadConversation
@@ -131,11 +130,8 @@ describe("ThreadConversation", () => {
     expect(screen.getByText("Review onboarding task")).toBeTruthy();
   });
 
-  it("renders a persisted analytics GenUI chart inside a Thread message", () => {
-    const part = createAnalyticsDisplayGenUIPart({
-      id: "genui:analytics:crm-owner-value",
-      payload: createCrmOpportunityValueByOwnerFixture(),
-    });
+  it("renders a persisted analytics json-render domain part inside a Thread message", () => {
+    const part = createAnalyticsJsonRenderFixture();
 
     render(
       <ThreadConversation
@@ -151,15 +147,8 @@ describe("ThreadConversation", () => {
       />,
     );
 
-    expect(screen.getByTestId("analytics-display-part")).toBeTruthy();
-    expect(screen.getByText("Opportunity Value by Owner")).toBeTruthy();
-    expect(screen.getByText("$184,000")).toBeTruthy();
-    expect(screen.getByText("Open Opportunity Value")).toBeTruthy();
-    expect(
-      screen
-        .getByTestId("analytics-display-element-chart")
-        .querySelector("[data-slot='chart']"),
-    ).toBeTruthy();
-    expect(screen.getByText(/Source: Twenty CRM/)).toBeTruthy();
+    expect(screen.getByTestId("json-render-analytics-display")).toBeTruthy();
+    expect(screen.getByText("Support volume")).toBeTruthy();
+    expect(screen.getByText(/ThinkWork analytics adapter/)).toBeTruthy();
   });
 });
