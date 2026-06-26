@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   updateSets: [] as unknown[],
   updateReturning: [] as Array<unknown[]>,
   selectRows: [] as Array<Record<string, unknown>>,
+  threadOwnerRows: [] as Array<Array<Record<string, unknown>>>,
   reconcileChangedFiles: vi.fn(),
   recordCostEvents: vi.fn(),
   recordTraceEvidence: vi.fn(),
@@ -38,16 +39,21 @@ vi.mock("@thinkwork/database-pg", () => ({
         };
       },
     }),
-    // Used only by the asking-turn pending-question preview lookup.
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          orderBy: () => ({
-            limit: async () => mocks.selectRows,
-          }),
-        }),
-      }),
-    }),
+    select: (selection?: Record<string, unknown>) => {
+      const rows = () =>
+        Promise.resolve(
+          selection && "userId" in selection
+            ? (mocks.threadOwnerRows.shift() ?? [])
+            : mocks.selectRows,
+        );
+      const chain = {
+        from: () => chain,
+        where: () => chain,
+        orderBy: () => chain,
+        limit: rows,
+      };
+      return chain;
+    },
   }),
 }));
 
@@ -163,6 +169,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.updateSets = [];
   mocks.selectRows = [];
+  mocks.threadOwnerRows = [];
   mocks.updateReturning = [
     [
       {
@@ -731,6 +738,59 @@ describe("processFinalize reconcile seam", () => {
         userId: "55555555-5555-5555-5555-555555555555",
         amountUsd: 1.23,
       }),
+    );
+  });
+
+  it("falls back to the thread owner for cost attribution when the runtime omits a cost owner", async () => {
+    const threadOwnerUserId = "88888888-8888-8888-8888-888888888888";
+    mocks.threadOwnerRows = [[{ userId: threadOwnerUserId }]];
+    mocks.updateReturning = [
+      [
+        {
+          id: TURN_ID,
+          runtimeType: "pi",
+          contextSnapshot: {
+            desktop_managed_delegation: { visibility: "hidden" },
+          },
+        },
+      ],
+    ];
+
+    await expect(
+      processFinalize({
+        thread_turn_id: TURN_ID,
+        tenant_id: TENANT_ID,
+        agent_id: AGENT_ID,
+        thread_id: THREAD_ID,
+        duration_ms: 25,
+        status: "completed",
+        response: { content: "done" },
+        usage: {
+          model: "moonshotai.kimi-k2.5",
+          input_tokens: 100,
+          output_tokens: 10,
+        },
+      }),
+    ).resolves.toMatchObject({ finalized: true, messageId: null });
+
+    expect(mocks.recordCostEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+        userId: threadOwnerUserId,
+      }),
+    );
+    expect(mocks.recordTraceEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        agentId: AGENT_ID,
+        userId: threadOwnerUserId,
+      }),
+    );
+    expect(mocks.checkBudgetAndPause).toHaveBeenCalledWith(
+      TENANT_ID,
+      AGENT_ID,
+      threadOwnerUserId,
     );
   });
 

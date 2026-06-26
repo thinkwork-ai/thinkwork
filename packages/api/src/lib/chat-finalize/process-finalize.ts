@@ -135,7 +135,7 @@ export async function processFinalize(
     agent_id: agentId,
     thread_id: threadId,
     trace_id: traceId,
-    cost_owner_user_id: costOwnerUserId = null,
+    cost_owner_user_id: payloadCostOwnerUserId = null,
     user_message: userMessage = "",
     agent_model: agentModel = null,
     runtime_type: payloadRuntimeType = null,
@@ -188,6 +188,12 @@ export async function processFinalize(
     );
     return { finalized: false, messageId: null };
   }
+
+  const costOwnerUserId = await resolveFinalizeCostOwnerUserId({
+    tenantId,
+    threadId,
+    payloadCostOwnerUserId,
+  });
 
   // ---- Failed-turn fast path ------------------------------------------
   const hiddenDesktopDelegation = isHiddenDesktopDelegation(
@@ -2267,6 +2273,27 @@ async function resolveSkillCreatorRequesterUserId(input: {
     .orderBy(desc(messages.created_at), desc(messages.id))
     .limit(1);
   return message?.senderId ?? null;
+}
+
+async function resolveFinalizeCostOwnerUserId(input: {
+  tenantId: string;
+  threadId: string;
+  payloadCostOwnerUserId: string | null;
+}): Promise<string | null> {
+  if (input.payloadCostOwnerUserId) return input.payloadCostOwnerUserId;
+
+  const [thread] = await db
+    .select({ userId: threads.user_id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.id, input.threadId),
+        eq(threads.tenant_id, input.tenantId),
+      ),
+    )
+    .limit(1);
+
+  return thread?.userId ?? null;
 }
 
 async function markTurnFinalized(turnId: string): Promise<void> {
