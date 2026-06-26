@@ -97,6 +97,7 @@ target_branch: main
 - Branch: `codex/thnk-78-u1-contract`
 - Worktree: `/Users/ericodom/.codex/worktrees/thnk-78-u1-contract`
 - Base: `origin/main` at `057c88bebfe9c702f2ab9cf29d04f2816a74bc2b`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2980
 - Added shared package files, fixtures, and contract tests.
 - Verification:
   - `pnpm --filter @thinkwork/thread-json-render test` passed.
