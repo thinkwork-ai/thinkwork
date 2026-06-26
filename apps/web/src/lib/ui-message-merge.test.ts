@@ -17,14 +17,36 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  createTaskReviewGenUIFixture,
-  createThreadGenUISpecHash,
-} from "@thinkwork/genui";
-import {
   emptyState,
   mergeUIMessageChunk,
   mergeUIMessageChunks,
 } from "./ui-message-merge";
+
+function createLegacyGenUIFixture() {
+  return {
+    type: "data-genui",
+    id: "genui:task-review:123",
+    data: {
+      spec: {
+        root: "review",
+        elements: {
+          review: {
+            component: "TaskReviewCard",
+            props: {
+              title: "Review deployment plan",
+              status: "pending",
+            },
+          },
+        },
+      },
+      mobileFallback: {
+        title: "Review deployment plan",
+        summary: "Status: pending",
+        lines: ["Status: pending"],
+      },
+    },
+  };
+}
 
 describe("mergeUIMessageChunk — per-part-id append cursor", () => {
   it("text-start → text-delta × N → text-end produces a single done text part", () => {
@@ -262,11 +284,10 @@ describe("mergeUIMessageChunk — data-${name} parts", () => {
   });
 
   it("data-genui parts with the same id replace the whole spec", () => {
-    const first = createTaskReviewGenUIFixture();
-    const second = createTaskReviewGenUIFixture();
+    const first = createLegacyGenUIFixture();
+    const second = createLegacyGenUIFixture();
     second.data.spec.elements.review.props.status = "approved";
     second.data.mobileFallback.lines = ["Status: approved"];
-    second.data.specHash = createThreadGenUISpecHash(second.data.spec);
 
     const out = mergeUIMessageChunks([first, second]);
     const dataParts = out.parts.filter((p) => p.type === "data-genui");
@@ -279,7 +300,7 @@ describe("mergeUIMessageChunk — data-${name} parts", () => {
   });
 
   it("data-genui with same id does not corrupt a different data part type", () => {
-    const fixture = createTaskReviewGenUIFixture();
+    const fixture = createLegacyGenUIFixture();
     const out = mergeUIMessageChunks([
       { type: "data-progress", id: fixture.id, data: { percent: 0.5 } },
       fixture,

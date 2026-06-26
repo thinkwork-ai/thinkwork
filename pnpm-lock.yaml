@@ -455,9 +455,6 @@ importers:
       '@thinkwork/desktop-ipc':
         specifier: workspace:*
         version: link:../../packages/desktop-ipc
-      '@thinkwork/genui':
-        specifier: workspace:*
-        version: link:../../packages/genui
       '@thinkwork/graph':
         specifier: workspace:*
         version: link:../../packages/graph

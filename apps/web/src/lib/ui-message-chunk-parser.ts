@@ -24,11 +24,6 @@ import type {
   ParsedChunk,
   UIMessageChunk,
 } from "./ui-message-types";
-import {
-  THREAD_GENUI_PART_TYPE,
-  createAnalyticsDisplayGenUIValidationContext,
-  validateThreadGenUIPart,
-} from "@thinkwork/genui";
 
 /**
  * Wire-format chunk types that legitimately carry no `id` field. Maintained
@@ -122,16 +117,6 @@ export function parseChunkPayload(raw: unknown): ParsedChunk {
 
   if (!KNOWN_PROTOCOL_TYPES.has(type) && !type.startsWith(DATA_PART_PREFIX)) {
     return { kind: "drop", reason: "UNKNOWN_TYPE", raw };
-  }
-
-  if (
-    type === THREAD_GENUI_PART_TYPE &&
-    !validateThreadGenUIPart(
-      obj,
-      createAnalyticsDisplayGenUIValidationContext(),
-    ).ok
-  ) {
-    return { kind: "drop", reason: "MALFORMED_PROTOCOL_FIELDS", raw };
   }
 
   if (ID_REQUIRED_PROTOCOL_TYPES.has(type) && typeof obj.id !== "string") {

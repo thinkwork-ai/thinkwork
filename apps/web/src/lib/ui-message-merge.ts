@@ -15,7 +15,6 @@
 
 import { parseChunkPayload } from "./ui-message-chunk-parser";
 import type { ParsedChunk, UIMessagePart } from "./ui-message-types";
-import type { ThreadGenUIData } from "@thinkwork/genui";
 
 /**
  * One part record on the consumer side. Discriminator subset of
@@ -51,7 +50,7 @@ export type AccumulatedPart =
   | {
       type: "data-genui";
       id: string;
-      data: ThreadGenUIData;
+      data: unknown;
     }
   | {
       type: `data-${string}`;
