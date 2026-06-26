@@ -2,8 +2,8 @@
 title: "Thread json-render data-json-render Contract v1"
 date: 2026-06-26
 status: active
-issue: THNK-77
-plan: docs/plans/2026-06-26-001-refactor-json-render-shadcn-cutover-plan.md
+issue: THNK-78
+plan: docs/plans/2026-06-26-002-feat-thread-json-render-ui-emission-plan.md
 origin: docs/brainstorms/2026-06-26-thnk-77-json-render-shadcn-foundation-requirements.md
 supersedes:
   - docs/specs/thread-genui-json-render-contract-v1.md
@@ -12,10 +12,16 @@ supersedes:
 # Thread json-render `data-json-render` Contract v1
 
 This contract freezes the THNK-77 hard cutover from ThinkWork's proprietary
-`data-genui` payload to an upstream json-render-shaped Thread part. ThinkWork
+`data-genui` payload to an upstream json-render-shaped Thread part and is the
+runtime emission target for THNK-78. ThinkWork
 owns the Thread carrier, persistence, tenant visibility, action authorization,
 promotion policy, fallback requirements, and safety checks. The rendered UI tree
 uses the upstream json-render spec shape and upstream json-render packages.
+
+The canonical shared implementation lives in `@thinkwork/thread-json-render`.
+That package is deliberately React-free so the AgentCore runtime, API
+finalization path, web renderer, and mobile fallback parser can validate the
+same wire shape without importing client renderer code.
 
 Future incompatible changes create a sibling spec at
 `docs/specs/thread-json-render-contract-v2.md`. Downstream units must not
@@ -179,7 +185,9 @@ bounded summary rather than crashing or blanking the conversation. Unsupported
 web clients may use the same fallback.
 
 Old `data-genui` parts are not migrated, converted, or read through. They may
-be ignored or shown as unsupported legacy generated UI.
+be ignored or shown as unsupported legacy generated UI. Runtime work must emit
+complete `data-json-render` parts directly rather than translating
+well-known json-render examples into a ThinkWork-only grammar.
 
 ## Promotion
 
@@ -193,8 +201,9 @@ artifact readers show them, but THNK-77 does not add compatibility rendering.
 
 ## Package Gate
 
-U1 installs `@json-render/core`, `@json-render/react`, and
-`@json-render/shadcn` as production web dependencies. The package gate must
-verify that the lockfile resolves a React/React DOM version satisfying the
-installed json-render peer dependencies and that the static renderer path does
-not rely on json-render streaming hooks or remote executable code.
+U1 installs the shared `@thinkwork/thread-json-render` package with
+`@json-render/core` and `@json-render/shadcn` catalog dependencies. The package
+gate must verify that validation uses upstream json-render catalog definitions,
+that domain catalog entries extend that catalog without bypassing it, and that
+the shared contract path does not rely on json-render streaming hooks, React
+renderers, or remote executable code.
