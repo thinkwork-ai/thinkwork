@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createAnalyticsJsonRenderFixture,
   createPrimitiveJsonRenderFixture,
+  createResultListJsonRenderFixture,
   createTaskReviewJsonRenderFixture,
 } from "./fixtures";
 import {
@@ -30,6 +31,15 @@ describe("Thread json-render web validation", () => {
       workItemId: "77777777-7777-7777-7777-777777777777",
       statusCategory: "DONE",
     });
+
+    const resultList = createResultListJsonRenderFixture();
+
+    expect(validateThreadJsonRenderPart(resultList).ok).toBe(true);
+    expect(resultList.data.spec.elements.results.type).toBe("result.list");
+    expect(resultList.data.durableActions?.map((action) => action.id)).toEqual([
+      "complete-work-item",
+      "skip-question",
+    ]);
   });
 
   it("accepts the analytics.display adapter boundary", () => {

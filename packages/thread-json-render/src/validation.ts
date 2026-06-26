@@ -10,6 +10,7 @@ import {
   THREAD_JSON_RENDER_SCHEMA_VERSION,
   type ThreadJsonRenderData,
   type ThreadJsonRenderDiagnostic,
+  type ThreadJsonRenderDurableActionDescriptor,
   type ThreadJsonRenderPart,
   type ThreadJsonRenderSpec,
 } from "./spec.js";
@@ -173,6 +174,11 @@ export function validateThreadJsonRenderData(
     } else {
       validateSpecGraph(catalogValidation.data, limits, diagnostics);
       validateComponentProps(catalogValidation.data, limits, diagnostics);
+      validateResultListActionReferences(
+        catalogValidation.data,
+        input.durableActions,
+        diagnostics,
+      );
     }
   }
 
@@ -350,7 +356,7 @@ function collectForbiddenProps(
 ) {
   for (const [key, value] of Object.entries(props)) {
     const childPath = `${path}.${key}`;
-    if (FORBIDDEN_NON_NULL_PROP_KEYS.has(key) && value != null) {
+    if (isForbiddenPropKey(key) && value != null) {
       diagnostics.push(
         error(
           "JSON_RENDER_FORBIDDEN_PROP",
@@ -374,8 +380,30 @@ function collectForbiddenProps(
     }
     if (isRecord(value)) {
       collectForbiddenProps(value, childPath, diagnostics);
+    } else if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        if (isRecord(item)) {
+          collectForbiddenProps(item, `${childPath}[${index}]`, diagnostics);
+        }
+      });
     }
   }
+}
+
+function isForbiddenPropKey(key: string): boolean {
+  const lowerKey = key.toLowerCase();
+  return (
+    FORBIDDEN_NON_NULL_PROP_KEYS.has(key) ||
+    /^on[A-Z_:.-]/.test(key) ||
+    lowerKey.includes("callback") ||
+    lowerKey.includes("import") ||
+    lowerKey.includes("password") ||
+    lowerKey.includes("secret") ||
+    lowerKey.includes("token") ||
+    lowerKey.includes("apikey") ||
+    lowerKey.includes("api_key") ||
+    lowerKey.includes("route")
+  );
 }
 
 function validateSpecGraph(
@@ -474,6 +502,88 @@ function validateComponentProps(
         ),
       );
     }
+  }
+}
+
+function validateResultListActionReferences(
+  spec: ThreadJsonRenderSpec,
+  inputActions: unknown,
+  diagnostics: ThreadJsonRenderDiagnostic[],
+) {
+  const actionMap = new Map<string, ThreadJsonRenderDurableActionDescriptor>();
+  if (Array.isArray(inputActions)) {
+    for (const action of inputActions) {
+      if (!isRecord(action) || typeof action.id !== "string") continue;
+      actionMap.set(
+        action.id,
+        action as unknown as ThreadJsonRenderDurableActionDescriptor,
+      );
+    }
+  }
+
+  const referencedBy = new Map<string, string>();
+  for (const [elementId, element] of Object.entries(spec.elements)) {
+    if (element.type !== "result.list") continue;
+    const props = element.props;
+    if (!isRecord(props) || !Array.isArray(props.items)) continue;
+
+    props.items.forEach((item, itemIndex) => {
+      if (!isRecord(item)) return;
+      const itemId =
+        typeof item.id === "string" && item.id.length > 0
+          ? item.id
+          : `item-${itemIndex}`;
+      for (const field of ["primaryActionId", "secondaryActionId"] as const) {
+        const actionId = item[field];
+        if (actionId == null) continue;
+        const actionPath = `$.spec.elements.${elementId}.props.items[${itemIndex}].${field}`;
+        if (typeof actionId !== "string" || actionId.trim().length === 0) {
+          diagnostics.push(
+            error(
+              "JSON_RENDER_ACTION_REFERENCE_INVALID",
+              "Result list action references must be non-empty strings.",
+              actionPath,
+            ),
+          );
+          continue;
+        }
+
+        const action = actionMap.get(actionId);
+        if (!action) {
+          diagnostics.push(
+            error(
+              "JSON_RENDER_ACTION_REFERENCE_MISSING",
+              `Result list action ${actionId} must reference a durable action.`,
+              actionPath,
+            ),
+          );
+          continue;
+        }
+        if (action.disabled === true) {
+          diagnostics.push(
+            error(
+              "JSON_RENDER_ACTION_REFERENCE_DISABLED",
+              `Result list action ${actionId} cannot reference a disabled durable action.`,
+              actionPath,
+            ),
+          );
+        }
+
+        const previousReference = referencedBy.get(actionId);
+        const currentReference = `${elementId}:${itemId}:${field}`;
+        if (previousReference && previousReference !== currentReference) {
+          diagnostics.push(
+            error(
+              "JSON_RENDER_ACTION_REFERENCE_DUPLICATE",
+              `Result list action ${actionId} cannot be shared by multiple result rows.`,
+              actionPath,
+            ),
+          );
+        } else {
+          referencedBy.set(actionId, currentReference);
+        }
+      }
+    });
   }
 }
 
