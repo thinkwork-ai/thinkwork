@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-78
-status: u8-fixtures-docs-in-progress
+status: e2e-closeout-in-progress
 target_branch: main
 ---
 
@@ -110,6 +110,14 @@ target_branch: main
 - U7 branch and worktree were cleaned up after merge.
 - U8 worktree created from updated `origin/main` at
   `b84da5705ab63424e97f21aa25bc757d8bf905f4`.
+- U8 PR merged to `main`: https://github.com/thinkwork-ai/thinkwork/pull/2985
+  at `3f9ef6e262a4dafd27ae7fe608939d1bd635c9ae`.
+- U8 branch and worktree were cleaned up after merge.
+- E2E closeout worktree created from updated `origin/main` at
+  `3f9ef6e262a4dafd27ae7fe608939d1bd635c9ae`.
+- Browser E2E verification completed against a temporary local Vite harness
+  that mounted the production `ThreadJsonRenderRenderer` with primitive and
+  ThinkWork domain catalog fixtures.
 
 ## Unit Log
 
@@ -288,4 +296,47 @@ target_branch: main
   - `pnpm dlx prettier@3.6.2 --check <changed U8 files>` passed; root
     `pnpm format:check` is currently unavailable because `prettier` is not
     declared in the workspace dev dependencies.
-- Status: PR ready.
+- GitHub PR checks passed: CLA Assistant, Lint, Verify, Typecheck, and Test.
+- Status: merged.
+
+### End-to-end UI verification
+
+- Objective: verify the web Thread UI renders `data-json-render` parts for
+  several upstream shadcn primitives and all current ThinkWork domain catalog
+  components before closing THNK-78.
+- Branch: `codex/thnk-78-e2e-closeout`
+- Worktree: `/Users/ericodom/.codex/worktrees/thnk-78-e2e-closeout`
+- Base: `origin/main` at `3f9ef6e262a4dafd27ae7fe608939d1bd635c9ae`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2986
+- Verification setup:
+  - Copied `apps/web/.env` from the main checkout per worktree guidance.
+  - Linked dependencies with `pnpm install --ignore-scripts`.
+  - Started `pnpm --filter @thinkwork/web dev`; Vite served the temporary
+    browser harness at `http://localhost:5174/index-json-render-e2e.html`.
+  - The temporary harness was removed after browser verification and is not part
+    of the closeout branch.
+- Browser matrix:
+  - Primitive shadcn composition: `Card`, `Stack`, `Heading`, `Text`, and
+    `Button` rendered visible `Pipeline health`, `All checks are ready.`, and
+    `Approve`.
+  - `task.review` rendered one `genui-task-review` card with task review copy.
+  - `workflow.status` rendered one `genui-workflow-status` card with
+    `Onboarding workflow`, `Contract packet`, and `Kickoff scheduling`.
+  - `keyValue.list` rendered one `genui-key-value-list` card with key facts.
+  - `form.action` rendered one `genui-action-form` card with `Request approval`,
+    `Approval note`, `Priority`, and disabled `Submit approval`.
+  - `analytics.display` rendered one `json-render-analytics-display` adapter
+    with `Support volume` and the ThinkWork analytics adapter copy.
+- Browser assertions:
+  - Desktop/default viewport: all six catalog cases rendered, `json-render-fallback`
+    count was `0`, `json-render-legacy-fallback` count was `0`, and browser
+    console error count was `0`.
+  - Mobile-width viewport `390x900`: all six catalog cases rendered, no
+    horizontal overflow (`scrollWidth === clientWidth === 390`), fallback count
+    was `0`, and browser console error count was `0`.
+  - Desktop and mobile-width screenshots were captured in the Codex thread.
+- Additional web smoke:
+  - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed.
+  - Smoke bundle evidence: baseline `194039` raw / `60591` gzip; renderer
+    `604649` raw / `181943` gzip; delta `410610` raw / `121352` gzip.
+- Status: verification passed.
