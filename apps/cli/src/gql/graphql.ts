@@ -3335,6 +3335,7 @@ export type Mutation = {
   cancelSkillRun: SkillRun;
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
+  captureSpaceMemory: MemoryRecord;
   checkoutThread: Thread;
   /**
    * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
@@ -3798,6 +3799,14 @@ export type MutationCaptureMobileMemoryArgs = {
   metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   userId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type MutationCaptureSpaceMemoryArgs = {
+  clientCaptureId?: InputMaybe<Scalars["ID"]["input"]>;
+  content: Scalars["String"]["input"];
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  spaceId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationCheckoutThreadArgs = {
@@ -5722,6 +5731,7 @@ export type Query = {
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
   space?: Maybe<Space>;
+  spaceMemorySearch: MemorySearchResult;
   spaces: Array<Space>;
   tenant?: Maybe<Tenant>;
   tenantAgent: Agent;
@@ -6424,6 +6434,13 @@ export type QuerySlackWorkspacesArgs = {
 
 export type QuerySpaceArgs = {
   id: Scalars["ID"]["input"];
+};
+
+export type QuerySpaceMemorySearchArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  query: Scalars["String"]["input"];
+  spaceId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QuerySpacesArgs = {

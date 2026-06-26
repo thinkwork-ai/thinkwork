@@ -65,7 +65,10 @@ export const memorySearch = async (
   };
 };
 
-function toSearchRow(hit: RecallResult, fallbackNamespace: string): SearchRow {
+export function toSearchRow(
+  hit: RecallResult,
+  fallbackNamespace: string,
+): SearchRow {
   const meta = (hit.record.metadata || {}) as Record<string, any>;
   const namespace =
     (meta.namespace as string | undefined) ||
