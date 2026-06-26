@@ -206,6 +206,8 @@ export function renderTypedPart(
           data={part.data}
           live={live}
           partId={part.id}
+          sourceMessageId={sourceMessageId}
+          threadId={threadId}
         />
       );
     }

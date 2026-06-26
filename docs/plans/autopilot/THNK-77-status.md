@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: u4-mobile-cleanup-in-progress
+status: u5-actions-promotion-in-progress
 target_branch: main
 ---
 
@@ -266,3 +266,56 @@ just to prove the render path; it should consume persisted/fixture
     `TabHeaderProps.rightElement`, missing `@react-navigation/native` types,
     stale GraphQL operation variable shapes, and unrelated `never` inference
     errors.
+- Final PR CI:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2975
+  - Merge commit: `1634c730903fd43917a673e8b0739f3b4c78cb92`
+  - `cla`, `lint`, `verify`, `typecheck`, and `test` passed before merge.
+
+### U5 durable actions + promotion
+
+- Objective: rebase durable generated UI action dispatch and artifact promotion
+  on persisted `data-json-render` parts without implementing THNK-78 runtime
+  emission/finalize behavior.
+- Branch: `codex/thnk-77-u5-actions-promotion`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-77-u5-actions-promotion`
+- Base: `origin/main` at `1634c730903fd43917a673e8b0739f3b4c78cb92`
+- Implemented so far:
+  - Added an API-local persisted `data-json-render` validator/hash helper for
+    host action/promotion flows. This intentionally avoids a shared runtime
+    contract package, which belongs to THNK-78.
+  - Rebased `handleGenUIAction` behavior onto `data-json-render`
+    `durableActions`, `jsonRenderAction` metadata, spec-hash binding,
+    idempotency, and rate limiting.
+  - Rebased `promoteGenUIArtifact` behavior onto `data-json-render`
+    snapshots with `thread-json-render-artifact-snapshot/v1`,
+    `json_render_snapshot`, `jsonRenderSnapshot` metadata, and `jsonRender`
+    payload content.
+  - Added json-render web action and promotion helpers/hooks while continuing
+    to call the existing GraphQL mutation names to avoid schema/codegen churn
+    in this unit.
+  - Wired `ThreadJsonRenderRenderer` to enable durable actions and explicit
+    promotion only for persisted parts with thread/source-message context.
+    Live or incomplete contexts stay read-only and do not instantiate GraphQL
+    mutations.
+  - Passed thread/source context from `renderTypedPart` into the json-render
+    renderer.
+- THNK-78 boundary:
+  - U5 does not add `emit_json_render_ui`, agent/runtime emission, generic
+    tool-result extraction, finalize normalization, activity event contracts, or
+    shared React-free runtime contract packaging.
+  - Remaining `@thinkwork/genui` references in runtime/finalize/legacy web
+    surfaces should be handled in a follow-up slice coordinated with THNK-78
+    rather than backdooring runtime emission into THNK-77.
+- Verification so far:
+  - `pnpm install` completed. It emitted the known optional `canvas@2.11.2`
+    native-build warning under Node 25 because `pkg-config` is unavailable, but
+    exited 0.
+  - `pnpm --filter @thinkwork/api test -- src/graphql/resolvers/messages/handleGenUIAction.test.ts src/graphql/resolvers/artifacts/promoteGenUIArtifact.test.ts`
+    passed: 2 files, 10 tests.
+  - `pnpm --filter @thinkwork/web test -- src/components/workbench/json-render/actions.test.ts src/components/workbench/json-render/promote.test.ts src/components/workbench/json-render/ThreadJsonRenderRenderer.test.tsx src/components/workbench/render-typed-part.test.tsx src/components/spaces/ThreadConversation.test.tsx src/components/workbench/TaskThreadView.test.tsx`
+    passed: 6 files, 148 tests.
+  - `pnpm --filter @thinkwork/web test -- src/components/workbench/genui/GenUIRenderer.test.tsx src/components/workbench/genui/use-genui-action.test.tsx src/components/workbench/genui/use-promote-genui.test.tsx src/components/workbench/genui/actions.test.ts src/components/workbench/genui/PromoteGenUIButton.test.tsx`
+    passed: 5 files, 18 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.

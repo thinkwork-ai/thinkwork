@@ -1,15 +1,17 @@
 import { Check, ExternalLink, Send, X } from "lucide-react";
 import { Button } from "@thinkwork/ui";
-import type { ThreadGenUIActionDescriptor } from "@thinkwork/genui";
-import type { GenUIActionStatus } from "../use-genui-action";
+import type { ThreadJsonRenderDurableActionDescriptor } from "../../json-render/validation";
+import type { JsonRenderActionStatus } from "../../json-render/use-json-render-action";
 
 export interface DecisionPanelProps {
-  actions?: ThreadGenUIActionDescriptor[];
+  actions?: ThreadJsonRenderDurableActionDescriptor[];
   primaryActionId?: string;
   disabled?: boolean;
   pendingLabel?: string;
-  onAction?: (action: ThreadGenUIActionDescriptor) => void;
-  statusForAction?: (action: ThreadGenUIActionDescriptor) => GenUIActionStatus;
+  onAction?: (action: ThreadJsonRenderDurableActionDescriptor) => void;
+  statusForAction?: (
+    action: ThreadJsonRenderDurableActionDescriptor,
+  ) => JsonRenderActionStatus;
 }
 
 export function DecisionPanel({
@@ -75,7 +77,7 @@ export function DecisionPanel({
   );
 }
 
-function iconForAction(kind: ThreadGenUIActionDescriptor["kind"]) {
+function iconForAction(kind: ThreadJsonRenderDurableActionDescriptor["kind"]) {
   switch (kind) {
     case "approve":
       return Check;

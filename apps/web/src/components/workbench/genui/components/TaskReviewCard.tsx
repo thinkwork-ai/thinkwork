@@ -5,9 +5,9 @@ import {
   UserRound,
 } from "lucide-react";
 import { Badge } from "@thinkwork/ui";
-import type { ThreadGenUIActionDescriptor } from "@thinkwork/genui";
 import { DecisionPanel } from "./DecisionPanel";
-import type { GenUIActionStatus } from "../use-genui-action";
+import type { ThreadJsonRenderDurableActionDescriptor } from "../../json-render/validation";
+import type { JsonRenderActionStatus } from "../../json-render/use-json-render-action";
 
 export interface TaskReviewCardProps {
   title: string;
@@ -16,10 +16,12 @@ export interface TaskReviewCardProps {
   priority?: string;
   assigneeLabel?: string;
   primaryActionId?: string;
-  actions?: ThreadGenUIActionDescriptor[];
+  actions?: ThreadJsonRenderDurableActionDescriptor[];
   actionsDisabled?: boolean;
-  onAction?: (action: ThreadGenUIActionDescriptor) => void;
-  statusForAction?: (action: ThreadGenUIActionDescriptor) => GenUIActionStatus;
+  onAction?: (action: ThreadJsonRenderDurableActionDescriptor) => void;
+  statusForAction?: (
+    action: ThreadJsonRenderDurableActionDescriptor,
+  ) => JsonRenderActionStatus;
 }
 
 export function TaskReviewCard({

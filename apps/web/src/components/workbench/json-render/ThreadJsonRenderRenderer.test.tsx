@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createPrimitiveJsonRenderFixture,
@@ -7,6 +7,14 @@ import {
 } from "./fixtures";
 import { ThreadJsonRenderFallback } from "./ThreadJsonRenderFallback";
 import { ThreadJsonRenderRenderer } from "./ThreadJsonRenderRenderer";
+
+vi.mock("urql", () => ({
+  useMutation: () => [undefined, vi.fn()],
+}));
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("ThreadJsonRenderRenderer", () => {
   it("renders nested upstream shadcn primitive specs through json-render", () => {
@@ -24,10 +32,37 @@ describe("ThreadJsonRenderRenderer", () => {
   it("renders ThinkWork domain entries through json-render registry adapters", () => {
     const fixture = createTaskReviewJsonRenderFixture();
 
-    render(<ThreadJsonRenderRenderer data={fixture.data} />);
+    render(
+      <ThreadJsonRenderRenderer
+        data={fixture.data}
+        partId={fixture.id}
+        sourceMessageId="message-1"
+        threadId="thread-1"
+      />,
+    );
 
     expect(screen.getByTestId("genui-task-review")).toBeTruthy();
     expect(screen.getByText("Review onboarding task")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Approve" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("keeps durable actions disabled before a source message exists", () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+
+    render(
+      <ThreadJsonRenderRenderer
+        data={fixture.data}
+        partId={fixture.id}
+        live
+        threadId="thread-1"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Approve" }).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("fails closed to compact fallback for invalid data", () => {

@@ -1,4 +1,10 @@
-import { Component, useRef, type ErrorInfo, type ReactNode } from "react";
+import {
+  Component,
+  useMemo,
+  useRef,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import {
   defineRegistry,
   JSONUIProvider,
@@ -15,18 +21,25 @@ import {
 import { TaskReviewCard } from "@/components/workbench/genui/components/TaskReviewCard";
 import { TaskStatusSummary } from "@/components/workbench/genui/components/TaskStatusSummary";
 import { WorkflowListPreview } from "@/components/workbench/genui/components/WorkflowListPreview";
+import { PromoteGenUIButton } from "@/components/workbench/genui/PromoteGenUIButton";
 
 import {
   threadJsonRenderCatalog,
   threadJsonRenderPrimitiveComponents,
 } from "./catalog";
 import { ThreadJsonRenderFallback } from "./ThreadJsonRenderFallback";
+import { canSubmitJsonRenderAction } from "./actions";
 import {
   validateThreadJsonRenderData,
   type ThreadJsonRenderData,
+  type ThreadJsonRenderDurableActionDescriptor,
 } from "./validation";
+import {
+  useJsonRenderAction,
+  type JsonRenderActionStatus,
+} from "./use-json-render-action";
+import { usePromoteJsonRender } from "./use-promote-json-render";
 
-type ActionFormProps = Parameters<typeof ActionForm>[0];
 type ThreadJsonRenderComponentFn<
   K extends keyof Components<typeof threadJsonRenderCatalog>,
 > = ComponentFn<typeof threadJsonRenderCatalog, K>;
@@ -35,65 +48,67 @@ export interface ThreadJsonRenderRendererProps {
   data: unknown;
   partId?: string;
   live?: boolean;
+  sourceMessageId?: string | null;
+  threadId?: string | null;
 }
 
-const readOnlyStatus = () => ({ state: "idle" as const });
+interface DurableActionState {
+  actions: ThreadJsonRenderDurableActionDescriptor[];
+  actionsDisabled: boolean;
+  onAction: (action: ThreadJsonRenderDurableActionDescriptor) => void;
+  statusForAction: (
+    action: ThreadJsonRenderDurableActionDescriptor,
+  ) => JsonRenderActionStatus;
+}
 
-const domainComponents = {
-  "task.review": (({ props }) => (
-    <TaskReviewCard
-      {...props}
-      assigneeLabel={props.assigneeLabel ?? undefined}
-      priority={props.priority ?? undefined}
-      primaryActionId={props.primaryActionId ?? undefined}
-      actionsDisabled
-      onAction={undefined}
-      statusForAction={readOnlyStatus}
-    />
-  )) satisfies ThreadJsonRenderComponentFn<"task.review">,
-  "workflow.status": (({ props }) => (
-    <TaskStatusSummary {...props} />
-  )) satisfies ThreadJsonRenderComponentFn<"workflow.status">,
-  "keyValue.list": (({ props }) => (
-    <WorkflowListPreview {...props} />
-  )) satisfies ThreadJsonRenderComponentFn<"keyValue.list">,
-  "form.action": (({ props }) => (
-    <ActionForm
-      {...props}
-      fields={normalizeActionFormFields(props.fields)}
-      submitActionId={props.submitActionId ?? undefined}
-      actions={[]}
-      actionsDisabled
-      onAction={undefined}
-      statusForAction={readOnlyStatus}
-    />
-  )) satisfies ThreadJsonRenderComponentFn<"form.action">,
-  "analytics.display": (({ props }) => (
-    <section
-      aria-label={analyticsTitle(props)}
-      className="grid gap-2 rounded-md border border-border bg-card p-3 text-sm shadow-sm"
-      data-testid="json-render-analytics-display"
-    >
-      <h3 className="text-sm font-semibold text-foreground">
-        {analyticsTitle(props)}
-      </h3>
-      <p className="text-sm text-muted-foreground">
-        Analytical display rendering is handled by the ThinkWork analytics
-        adapter.
-      </p>
-    </section>
-  )) satisfies ThreadJsonRenderComponentFn<"analytics.display">,
-} satisfies Partial<Components<typeof threadJsonRenderCatalog>>;
-
-const { registry: threadJsonRenderRegistry } = defineRegistry(
-  threadJsonRenderCatalog,
-  {
-    components: {
-      ...threadJsonRenderPrimitiveComponents,
-      ...domainComponents,
-    },
-  },
-);
+function createDomainComponents(actionState: DurableActionState) {
+  return {
+    "task.review": (({ props }) => (
+      <TaskReviewCard
+        {...props}
+        assigneeLabel={props.assigneeLabel ?? undefined}
+        priority={props.priority ?? undefined}
+        primaryActionId={props.primaryActionId ?? undefined}
+        actions={actionState.actions}
+        actionsDisabled={actionState.actionsDisabled}
+        onAction={actionState.onAction}
+        statusForAction={actionState.statusForAction}
+      />
+    )) satisfies ThreadJsonRenderComponentFn<"task.review">,
+    "workflow.status": (({ props }) => (
+      <TaskStatusSummary {...props} />
+    )) satisfies ThreadJsonRenderComponentFn<"workflow.status">,
+    "keyValue.list": (({ props }) => (
+      <WorkflowListPreview {...props} />
+    )) satisfies ThreadJsonRenderComponentFn<"keyValue.list">,
+    "form.action": (({ props }) => (
+      <ActionForm
+        {...props}
+        fields={normalizeActionFormFields(props.fields)}
+        submitActionId={props.submitActionId ?? undefined}
+        actions={actionState.actions}
+        actionsDisabled={actionState.actionsDisabled}
+        onAction={actionState.onAction}
+        statusForAction={actionState.statusForAction}
+      />
+    )) satisfies ThreadJsonRenderComponentFn<"form.action">,
+    "analytics.display": (({ props }) => (
+      <section
+        aria-label={analyticsTitle(props)}
+        className="grid gap-2 rounded-md border border-border bg-card p-3 text-sm shadow-sm"
+        data-testid="json-render-analytics-display"
+      >
+        <h3 className="text-sm font-semibold text-foreground">
+          {analyticsTitle(props)}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Analytical display rendering is handled by the ThinkWork analytics
+          adapter.
+        </p>
+      </section>
+    )) satisfies ThreadJsonRenderComponentFn<"analytics.display">,
+  } satisfies Partial<Components<typeof threadJsonRenderCatalog>>;
+}
 
 function normalizeActionFormFields(
   fields:
@@ -133,6 +148,8 @@ export function ThreadJsonRenderRenderer({
   data,
   partId,
   live = false,
+  sourceMessageId,
+  threadId,
 }: ThreadJsonRenderRendererProps) {
   const lastGood = useRef<ThreadJsonRenderData | null>(null);
   const result = validateThreadJsonRenderData(data);
@@ -142,7 +159,13 @@ export function ThreadJsonRenderRenderer({
       return (
         <div className="grid gap-2" data-testid="json-render-last-good">
           <ThreadJsonRenderErrorBoundary fallbackData={lastGood.current}>
-            <ValidatedThreadJsonRenderRenderer data={lastGood.current} />
+            <ValidatedThreadJsonRenderRenderer
+              data={lastGood.current}
+              live={live}
+              partId={partId}
+              sourceMessageId={sourceMessageId}
+              threadId={threadId}
+            />
           </ThreadJsonRenderErrorBoundary>
           <ThreadJsonRenderFallback
             component={rootComponentName(data)}
@@ -167,24 +190,144 @@ export function ThreadJsonRenderRenderer({
   return wrapPart(
     partId,
     <ThreadJsonRenderErrorBoundary fallbackData={result.data}>
-      <ValidatedThreadJsonRenderRenderer data={result.data} />
+      <ValidatedThreadJsonRenderRenderer
+        data={result.data}
+        live={live}
+        partId={partId}
+        sourceMessageId={sourceMessageId}
+        threadId={threadId}
+      />
     </ThreadJsonRenderErrorBoundary>,
   );
 }
 
 function ValidatedThreadJsonRenderRenderer({
   data,
+  live,
+  partId,
+  sourceMessageId,
+  threadId,
+}: {
+  data: ThreadJsonRenderData;
+  live: boolean;
+  partId?: string;
+  sourceMessageId?: string | null;
+  threadId?: string | null;
+}) {
+  if (live || !partId || !threadId || !sourceMessageId) {
+    return <ReadOnlyThreadJsonRenderRenderer data={data} />;
+  }
+
+  return (
+    <InteractiveThreadJsonRenderRenderer
+      data={data}
+      partId={partId}
+      sourceMessageId={sourceMessageId}
+      threadId={threadId}
+    />
+  );
+}
+
+function ReadOnlyThreadJsonRenderRenderer({
+  data,
 }: {
   data: ThreadJsonRenderData;
 }) {
+  const registry = useMemo(() => {
+    const { registry: generatedRegistry } = defineRegistry(
+      threadJsonRenderCatalog,
+      {
+        components: {
+          ...threadJsonRenderPrimitiveComponents,
+          ...createDomainComponents({
+            actions: data.durableActions ?? [],
+            actionsDisabled: true,
+            onAction: () => undefined,
+            statusForAction: () => ({ state: "idle" }),
+          }),
+        },
+      },
+    );
+    return generatedRegistry;
+  }, [data.durableActions]);
+
   return (
-    <JSONUIProvider registry={threadJsonRenderRegistry}>
+    <JSONUIProvider registry={registry}>
       <Renderer
         fallback={rendererFallback}
-        registry={threadJsonRenderRegistry}
+        registry={registry}
         spec={data.spec as never}
       />
     </JSONUIProvider>
+  );
+}
+
+function InteractiveThreadJsonRenderRenderer({
+  data,
+  partId,
+  sourceMessageId,
+  threadId,
+}: {
+  data: ThreadJsonRenderData;
+  partId: string;
+  sourceMessageId: string;
+  threadId: string;
+}) {
+  const { submitAction, statusForAction } = useJsonRenderAction({
+    data,
+    partId,
+    sourceMessageId,
+    threadId,
+  });
+  const promotion = usePromoteJsonRender({
+    data,
+    partId,
+    sourceMessageId,
+    threadId,
+  });
+  const actions = data.durableActions ?? [];
+  const actionsDisabled =
+    actions.length === 0 ||
+    !canSubmitJsonRenderAction({ data, partId, sourceMessageId, threadId });
+  const registry = useMemo(() => {
+    const { registry: generatedRegistry } = defineRegistry(
+      threadJsonRenderCatalog,
+      {
+        components: {
+          ...threadJsonRenderPrimitiveComponents,
+          ...createDomainComponents({
+            actions,
+            actionsDisabled,
+            onAction: submitAction,
+            statusForAction,
+          }),
+        },
+      },
+    );
+    return generatedRegistry;
+  }, [actions, actionsDisabled, statusForAction, submitAction]);
+
+  const rendered = (
+    <JSONUIProvider registry={registry}>
+      <Renderer
+        fallback={rendererFallback}
+        registry={registry}
+        spec={data.spec as never}
+      />
+    </JSONUIProvider>
+  );
+
+  return (
+    <div className="group/json-render relative min-w-0 w-full">
+      <div className="absolute right-1 top-1 z-10 opacity-0 transition-opacity group-hover/json-render:opacity-100 group-focus-within/json-render:opacity-100">
+        <PromoteGenUIButton
+          disabled={!promotion.canPromote}
+          onPromote={promotion.promote}
+          status={promotion.status}
+        />
+      </div>
+      {rendered}
+    </div>
   );
 }
 

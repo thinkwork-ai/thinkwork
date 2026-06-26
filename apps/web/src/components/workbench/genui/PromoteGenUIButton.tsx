@@ -7,11 +7,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@thinkwork/ui";
-import type { GenUIPromotionStatus } from "./use-promote-genui";
+import type { JsonRenderPromotionStatus } from "../json-render/use-promote-json-render";
 
 export interface PromoteGenUIButtonProps {
   disabled?: boolean;
-  status: GenUIPromotionStatus;
+  status: JsonRenderPromotionStatus;
   onPromote: () => void;
 }
 

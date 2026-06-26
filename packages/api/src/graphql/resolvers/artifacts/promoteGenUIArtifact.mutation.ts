@@ -1,10 +1,9 @@
 import { GraphQLError } from "graphql";
 import {
-  createAnalyticsDisplayGenUIValidationContext,
   stableStringify,
-  validateThreadGenUIPart,
-  type ThreadGenUIPart,
-} from "@thinkwork/genui";
+  validateThreadJsonRenderPersistedPart,
+  type ThreadJsonRenderPart,
+} from "../../../lib/thread-json-render/persisted-parts.js";
 import type { GraphQLContext } from "../../context.js";
 import {
   and,
@@ -24,8 +23,8 @@ import {
   persistArtifactContentPayload,
 } from "./payload.js";
 
-const SNAPSHOT_SCHEMA_VERSION = "thread-genui-artifact-snapshot/v1";
-const SNAPSHOT_KIND = "genui_snapshot";
+const SNAPSHOT_SCHEMA_VERSION = "thread-json-render-artifact-snapshot/v1";
+const SNAPSHOT_KIND = "json_render_snapshot";
 
 export const promoteGenUIArtifact = async (
   _parent: unknown,
@@ -119,9 +118,12 @@ function parseInput(input: PromoteGenUIArtifactInput | undefined) {
     idempotencyKey: requiredString(input.idempotencyKey, "idempotencyKey"),
   };
   if (parsed.idempotencyKey.length > 160) {
-    throw new GraphQLError("Generated UI promotion idempotency key is too long", {
-      extensions: { code: "BAD_USER_INPUT" },
-    });
+    throw new GraphQLError(
+      "Generated UI promotion idempotency key is too long",
+      {
+        extensions: { code: "BAD_USER_INPUT" },
+      },
+    );
   }
   return parsed;
 }
@@ -141,7 +143,7 @@ async function loadValidatedSourcePart(input: {
   input: PromoteGenUIArtifactInput;
 }): Promise<{
   thread: { id: string; agent_id: string | null };
-  part: ThreadGenUIPart;
+  part: ThreadJsonRenderPart;
 }> {
   const [visibleThread] = await db
     .select({ id: threads.id, agent_id: threads.agent_id })
@@ -191,10 +193,7 @@ async function loadValidatedSourcePart(input: {
       extensions: { code: "NOT_FOUND" },
     });
   }
-  const validation = validateThreadGenUIPart(
-    rawPart,
-    createAnalyticsDisplayGenUIValidationContext(),
-  );
+  const validation = validateThreadJsonRenderPersistedPart(rawPart);
   if (!validation.ok) {
     throw new GraphQLError("Generated UI source part is invalid", {
       extensions: {
@@ -222,7 +221,7 @@ function findSourcePart(parts: unknown, partId: string): unknown {
   if (!Array.isArray(parsed)) return null;
   return parsed.find(
     (part) =>
-      isRecord(part) && part.type === "data-genui" && part.id === partId,
+      isRecord(part) && part.type === "data-json-render" && part.id === partId,
   );
 }
 
@@ -248,7 +247,7 @@ async function findDuplicatePromotion(input: {
         eq(artifacts.tenant_id, input.tenantId),
         eq(artifacts.thread_id, input.threadId),
         sql`${artifacts.metadata}->>'kind' = ${SNAPSHOT_KIND}`,
-        sql`${artifacts.metadata}->'genuiSnapshot'->>'idempotencyKey' = ${input.idempotencyKey}`,
+        sql`${artifacts.metadata}->'jsonRenderSnapshot'->>'idempotencyKey' = ${input.idempotencyKey}`,
       ),
     )
     .limit(1);
@@ -256,7 +255,7 @@ async function findDuplicatePromotion(input: {
 }
 
 function buildSnapshotPayload(input: {
-  part: ThreadGenUIPart;
+  part: ThreadJsonRenderPart;
   input: PromoteGenUIArtifactInput;
   promotedAt: string;
   promotedByUserId: string;
@@ -274,12 +273,12 @@ function buildSnapshotPayload(input: {
       promotedAt: input.promotedAt,
       promotedByUserId: input.promotedByUserId,
     },
-    genui: input.part,
+    jsonRender: input.part,
   };
 }
 
 function buildArtifactMetadata(input: {
-  part: ThreadGenUIPart;
+  part: ThreadJsonRenderPart;
   input: PromoteGenUIArtifactInput;
   promotedAt: string;
   promotedByUserId: string;
@@ -287,7 +286,7 @@ function buildArtifactMetadata(input: {
   return {
     kind: SNAPSHOT_KIND,
     schemaVersion: SNAPSHOT_SCHEMA_VERSION,
-    genuiSnapshot: {
+    jsonRenderSnapshot: {
       sourceMessageId: input.input.sourceMessageId,
       partId: input.input.partId,
       specHash: input.input.specHash,
@@ -300,20 +299,16 @@ function buildArtifactMetadata(input: {
   };
 }
 
-function artifactTitle(part: ThreadGenUIPart): string {
+function artifactTitle(part: ThreadJsonRenderPart): string {
   return boundedText(
-    part.data.promotion?.artifactTitle ||
-      part.data.mobileFallback.title ||
-      "Generated UI snapshot",
+    part.data.mobileFallback.title || "Generated UI snapshot",
     160,
   );
 }
 
-function artifactSummary(part: ThreadGenUIPart): string {
+function artifactSummary(part: ThreadJsonRenderPart): string {
   return boundedText(
-    part.data.promotion?.artifactSummary ||
-      part.data.mobileFallback.summary ||
-      "Snapshot of a generated Thread UI.",
+    part.data.mobileFallback.summary || "Snapshot of a generated Thread UI.",
     500,
   );
 }

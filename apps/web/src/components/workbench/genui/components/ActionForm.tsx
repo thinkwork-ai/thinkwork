@@ -1,8 +1,8 @@
 import { Send } from "lucide-react";
 import { Button } from "@thinkwork/ui";
-import type { ThreadGenUIActionDescriptor } from "@thinkwork/genui";
 import { DecisionPanel } from "./DecisionPanel";
-import type { GenUIActionStatus } from "../use-genui-action";
+import type { ThreadJsonRenderDurableActionDescriptor } from "../../json-render/validation";
+import type { JsonRenderActionStatus } from "../../json-render/use-json-render-action";
 
 export interface ActionFormField {
   id: string;
@@ -17,10 +17,12 @@ export interface ActionFormProps {
   description?: string;
   fields?: ActionFormField[];
   submitActionId?: string;
-  actions?: ThreadGenUIActionDescriptor[];
+  actions?: ThreadJsonRenderDurableActionDescriptor[];
   actionsDisabled?: boolean;
-  onAction?: (action: ThreadGenUIActionDescriptor) => void;
-  statusForAction?: (action: ThreadGenUIActionDescriptor) => GenUIActionStatus;
+  onAction?: (action: ThreadJsonRenderDurableActionDescriptor) => void;
+  statusForAction?: (
+    action: ThreadJsonRenderDurableActionDescriptor,
+  ) => JsonRenderActionStatus;
 }
 
 export function ActionForm({
