@@ -75,6 +75,16 @@ export interface CogneeDocumentIngestArgs {
   customPrompt?: string | null;
 }
 
+export interface CogneeSearchArgs {
+  query: string;
+  searchType?: string;
+  datasets?: string[];
+  datasetIds?: string[];
+  nodeNames?: string[];
+  includeReferences?: boolean;
+  systemPrompt?: string | null;
+}
+
 export class CogneeClientError extends Error {
   /** HTTP status when the error originated from a non-2xx Cognee response. */
   readonly status?: number;
@@ -169,6 +179,28 @@ export class CogneeClient {
       { retryTransient: true },
     );
     return parseGraphPayload(payload);
+  }
+
+  async search(args: CogneeSearchArgs): Promise<unknown> {
+    return this.requestJson(
+      "/api/v1/search",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: args.query,
+          search_type: args.searchType ?? "GRAPH_COMPLETION",
+          ...(args.datasets?.length ? { datasets: args.datasets } : {}),
+          ...(args.datasetIds?.length ? { dataset_ids: args.datasetIds } : {}),
+          ...(args.nodeNames?.length ? { node_name: args.nodeNames } : {}),
+          ...(args.includeReferences !== undefined
+            ? { include_references: args.includeReferences }
+            : {}),
+          ...(args.systemPrompt ? { system_prompt: args.systemPrompt } : {}),
+        }),
+      },
+      { retryTransient: true },
+    );
   }
 
   /** List datasets currently known to Cognee (id + name pairs). */

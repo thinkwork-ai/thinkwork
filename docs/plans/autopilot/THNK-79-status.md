@@ -78,6 +78,8 @@ No Linear child issues exist, so the plan units are the implementation units:
 
 - 2026-06-26: Discovery found `THNK-79` already in `In Progress`; no state
   change made during context discovery.
+- 2026-06-26: Commented on `THNK-79` when U1 PR opened.
+- 2026-06-26: Commented on `THNK-79` when U1 merged and cleanup completed.
 
 ## Work Log
 
@@ -98,11 +100,20 @@ No Linear child issues exist, so the plan units are the implementation units:
     sets for cross-scope discovery without merging ownership.
 - U1 made `MEMORY_ENGINE=cognee` a valid memory configuration mode requiring
   `COGNEE_ENDPOINT`; adapter wiring remains a later unit.
+- U1 PR merged into `main` at
+  `5a3dd68e91ce104228633e7e9d53ef0005277d60`; remote branch and local U1
+  worktree/branch cleaned up.
+- U2 implementation started in worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-79-u2-cognee-user-memory`.
+- U2 adds the Cognee memory adapter and routes user requester-memory document
+  writes through Cognee when `MEMORY_ENGINE=cognee`.
 
 ## Branches / PRs
 
 - U1 branch: `codex/thnk-79-u1-memory-scope`
-- U1 PR: `https://github.com/thinkwork-ai/thinkwork/pull/2988`
+- U1 PR: `https://github.com/thinkwork-ai/thinkwork/pull/2988` merged
+- U2 branch: `codex/thnk-79-u2-cognee-user-memory`
+- U2 PR: `https://github.com/thinkwork-ai/thinkwork/pull/2989`
 
 ## Verification Log
 
@@ -115,6 +126,18 @@ No Linear child issues exist, so the plan units are the implementation units:
   passed: 1 file, 3 tests.
 - `pnpm --filter @thinkwork/plugin-company-brain typecheck` passed.
 - `pnpm --filter @thinkwork/api typecheck` passed.
+- U1 GitHub CI passed: CLA, lint, typecheck, test, verify, signed catalog
+  validation.
+- `pnpm --filter @thinkwork/plugin-company-brain test -- test/api/cognee-client.test.ts test/api/cognee-memory-scope.test.ts`
+  passed for U2: 2 files, 16 tests.
+- `pnpm --filter @thinkwork/api test -- src/lib/memory/adapters/cognee-adapter.test.ts src/lib/memory/config.test.ts src/lib/requester-memory/hindsight-primary.test.ts src/lib/requester-memory/hindsight-sync.test.ts src/lib/memory/recall-service.test.ts`
+  passed for U2: 5 files, 15 tests.
+- `pnpm --filter @thinkwork/plugin-company-brain typecheck` passed for U2.
+- `pnpm --filter @thinkwork/api typecheck` passed for U2.
+- `git diff --check` passed for U2.
+- U2 CI lint initially failed on the plugin-source boundary guard for the
+  shared Cognee memory adapter; added documented shared-platform allowlist
+  entries and verified `pnpm lint` passes locally.
 
 ## Blockers
 
