@@ -19,7 +19,7 @@ import {
   useThread,
 } from "@thinkwork/react-native-sdk";
 import { useMessages as useLocalMessages } from "@/lib/hooks/use-messages";
-import { parseThreadJsonRenderMobileFallbacks } from "@/lib/genui-registry";
+import { parseThreadJsonRenderFallbacks } from "@/lib/genui-registry";
 import { useMe } from "@/lib/hooks/use-users";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
@@ -99,7 +99,7 @@ export default function ThreadConversationScreen() {
         content: (m.content ?? "").trim(),
         durableArtifact: m.durableArtifact ?? null,
         toolResults,
-        genuiFallbacks: parseThreadJsonRenderMobileFallbacks(m.parts),
+        genuiFallbacks: parseThreadJsonRenderFallbacks(m.parts),
         timestamp: new Date(m.createdAt).getTime(),
         isStreaming: false,
       };

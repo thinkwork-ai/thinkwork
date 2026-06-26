@@ -178,6 +178,9 @@ importers:
       '@thinkwork/react-native-sdk':
         specifier: workspace:*
         version: link:../../packages/react-native-sdk
+      '@thinkwork/thread-json-render':
+        specifier: workspace:*
+        version: link:../../packages/thread-json-render
       '@urql/exchange-graphcache':
         specifier: ^8.0.0
         version: 8.1.0(@urql/core@5.2.0(graphql@16.13.2))(graphql@16.13.2)
@@ -464,6 +467,9 @@ importers:
       '@thinkwork/pricing-config':
         specifier: workspace:*
         version: link:../../packages/pricing-config
+      '@thinkwork/thread-json-render':
+        specifier: workspace:*
+        version: link:../../packages/thread-json-render
       '@thinkwork/ui':
         specifier: workspace:*
         version: link:../../packages/ui

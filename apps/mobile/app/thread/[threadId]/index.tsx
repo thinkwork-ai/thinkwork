@@ -99,7 +99,7 @@ import {
 } from "@/components/genui/SaveRecipeSheet";
 import { CreateRecipeMutation } from "@/lib/graphql-queries";
 import { useAppMode } from "@/lib/hooks/use-app-mode";
-import { parseThreadJsonRenderMobileFallbacks } from "@/lib/genui-registry";
+import { parseThreadJsonRenderFallbacks } from "@/lib/genui-registry";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useQuery, useMutation } from "urql";
@@ -562,7 +562,7 @@ export default function ThreadDetailRoute() {
       return {
         ...m,
         toolResults,
-        genuiFallbacks: parseThreadJsonRenderMobileFallbacks(m.parts),
+        genuiFallbacks: parseThreadJsonRenderFallbacks(m.parts),
       };
     });
   }, [messagesData]);
