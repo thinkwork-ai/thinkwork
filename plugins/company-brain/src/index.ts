@@ -56,6 +56,7 @@ export const companyBrainPluginPackage = {
 export { companyBrainManifest };
 export { cogneeAdapter } from "./deployment/cognee-managed-app";
 export * from "./api/cognee-client";
+export * from "./api/cognee-memory-scope";
 export * from "./api/cognee-cluster-identity";
 export * from "./api/context-engine-provider";
 export * from "./api/migration";

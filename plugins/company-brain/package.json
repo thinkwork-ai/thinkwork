@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./manifest": "./src/manifest.ts",
     "./api/cognee-client": "./src/api/cognee-client.ts",
+    "./api/cognee-memory-scope": "./src/api/cognee-memory-scope.ts",
     "./api/cognee-cluster-identity": "./src/api/cognee-cluster-identity.ts",
     "./api/context-engine-provider": "./src/api/context-engine-provider.ts",
     "./api/migration": "./src/api/migration.ts",
