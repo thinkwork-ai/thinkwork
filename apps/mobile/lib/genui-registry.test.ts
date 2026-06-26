@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 
 import {
@@ -23,6 +25,22 @@ describe("mobile GenUI registry", () => {
         lines: ["Status: pending"],
       }),
     ]);
+  });
+
+  it("renders the checked-in valid-card fixture as a mobile fallback summary", () => {
+    const fixture = readJsonRenderFixture("valid-card.json");
+
+    const [fallback] = parseThreadJsonRenderFallbacks([fixture]);
+
+    expect(fallback).toEqual(
+      expect.objectContaining({
+        id: "json-render:primitive:review",
+        title: "Pipeline health",
+        summary: "All checks are ready.",
+        status: "ready",
+        component: "Card",
+      }),
+    );
   });
 
   it("renders analytics.display json-render parts from the required mobile fallback", () => {
@@ -111,6 +129,14 @@ describe("mobile GenUI registry", () => {
     ).toContain("JSON_RENDER_LEGACY_GENUI_UNSUPPORTED");
   });
 
+  it("does not parse legacy component JSON or markdown fences as json-render fallbacks", () => {
+    const legacy = readJsonRenderFixture("invalid-legacy-component.json");
+    const fenced = readMarkdownFixture("invalid-fenced-markdown.md");
+
+    expect(parseThreadJsonRenderFallbacks([legacy])).toEqual([]);
+    expect(parseThreadJsonRenderFallbacks(fenced)).toEqual([]);
+  });
+
   it("ignores malformed parts JSON without crashing", () => {
     expect(parseThreadJsonRenderFallbacks("{not-json")).toEqual([]);
   });
@@ -139,3 +165,19 @@ describe("mobile GenUI registry", () => {
     );
   });
 });
+
+function readJsonRenderFixture(name: string): unknown {
+  return JSON.parse(
+    readFileSync(
+      resolve(process.cwd(), "../../docs/fixtures/thread-json-render", name),
+      "utf8",
+    ),
+  );
+}
+
+function readMarkdownFixture(name: string): string {
+  return readFileSync(
+    resolve(process.cwd(), "../../docs/fixtures/thread-json-render", name),
+    "utf8",
+  );
+}

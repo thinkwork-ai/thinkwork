@@ -1,0 +1,15 @@
+{
+  "component": "Card",
+  "props": {
+    "title": "Legacy component shape",
+    "description": "This looks like the retired ThinkWork GenUI object shape."
+  },
+  "children": [
+    {
+      "component": "Text",
+      "props": {
+        "text": "It must stay ordinary JSON, never trusted UI."
+      }
+    }
+  ]
+}

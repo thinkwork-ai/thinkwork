@@ -49,6 +49,11 @@ Persisted Thread GenUI parts use the canonical `data-json-render` envelope:
 
 The `mobileFallback` object is required. It is the compatibility contract for native mobile and any other consumer that cannot render the full web catalog.
 
+Reviewable fixtures are checked in at `docs/fixtures/thread-json-render/`. Use
+`valid-card.json` for a known-good primitive card, and use
+`invalid-legacy-component.json` plus `invalid-fenced-markdown.md` to verify that
+legacy objects and markdown fences are not trusted as generated UI.
+
 ## Catalog Ownership
 
 Thread GenUI uses a two-layer catalog. Layer one is upstream
@@ -66,6 +71,10 @@ Analytical charts and tables use the reserved `analytics.display` adapter from `
 
 The web Thread renderer accepts persisted message `parts` and validates `data-json-render` through the shared `@thinkwork/thread-json-render` validator before rendering. Unsupported or malformed parts fail closed to the fallback copy rather than executing arbitrary payloads.
 
+The renderer does not scan assistant markdown for UI payloads. A model must use
+the platform-owned `emit_json_render_ui` tool so the runtime and API can validate
+the complete spec before persistence.
+
 Component props must be bounded data, not code. References to external dashboards or datasets are rejected for inline analytical payloads; the inline part must include the bounded render payload needed for the current Thread view.
 
 ## Actions
@@ -73,6 +82,11 @@ Component props must be bounded data, not code. References to external dashboard
 Actions are declared by the envelope and executed by server-side resolvers. Clients send the action id and constrained params back to the API; the server validates thread visibility, source message, source part, action registration, and rate limits before invoking any effect.
 
 Clients must not treat payload-provided tool names, URLs, or arbitrary params as executable authority.
+
+Durable action submissions go through `handleJsonRenderAction`, not legacy GenUI
+mutation names. The server reloads the source message and source part, checks
+the current `specHash`, validates the action descriptor, and only then appends a
+normal follow-up Thread message.
 
 ## Promotion
 

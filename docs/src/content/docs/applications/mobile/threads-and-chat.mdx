@@ -80,6 +80,11 @@ The web Thread surface can render validated `data-json-render` parts inline, inc
 
 Mobile renders each part's required fallback title, summary, and lines. If a `data-json-render` part is malformed or omits the fallback, the timeline shows a stable unsupported generated-view state instead of a blank message. Legacy `data-genui`, `_type` GenUI cards, and fenced `genui` message blocks are not converted into json-render specs.
 
+Mobile uses the same shared `@thinkwork/thread-json-render` validator as web
+and the API. It reads persisted `data-json-render` parts only; assistant
+markdown, fenced JSON, `_type` blocks, and legacy `{ component, props }` objects
+remain ordinary message content or unsupported legacy data.
+
 See [Web — Thread Generative UI](/applications/web/thread-generative-ui/) for the envelope, catalog ownership, action security, and artifact promotion contract.
 
 ## Human-in-the-loop confirmations

@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-78
-status: u7-action-governance-in-progress
+status: u8-fixtures-docs-in-progress
 target_branch: main
 ---
 
@@ -105,8 +105,11 @@ target_branch: main
 - U6 PR merged to `main`: https://github.com/thinkwork-ai/thinkwork/pull/2983
   at `9de726ac663adbcd35551bc27c7748ff0cccac59`.
 - U6 branch and worktree were cleaned up after merge.
-- U7 worktree created from updated `origin/main` at
-  `9de726ac663adbcd35551bc27c7748ff0cccac59`.
+- U7 PR merged to `main`: https://github.com/thinkwork-ai/thinkwork/pull/2984
+  at `b84da5705ab63424e97f21aa25bc757d8bf905f4`.
+- U7 branch and worktree were cleaned up after merge.
+- U8 worktree created from updated `origin/main` at
+  `b84da5705ab63424e97f21aa25bc757d8bf905f4`.
 
 ## Unit Log
 
@@ -255,4 +258,34 @@ target_branch: main
   - `pnpm --filter @thinkwork/api typecheck` passed.
   - `pnpm --filter @thinkwork/web typecheck` passed.
   - `git diff --check` passed.
+- Status: merged.
+
+### U8 docs, fixtures, and evaluation coverage
+
+- Objective: make the runtime contract easy to review and prevent regressions
+  back to markdown parsing or legacy payload trust.
+- Branch: `codex/thnk-78-u8-fixtures`
+- Worktree: `/Users/ericodom/.codex/worktrees/thnk-78-u8-fixtures`
+- Base: `origin/main` at `b84da5705ab63424e97f21aa25bc757d8bf905f4`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2985
+- Added checked-in valid and invalid Thread json-render fixtures under
+  `docs/fixtures/thread-json-render/`.
+- Updated web, mobile, and contract docs to point at the fixtures and clarify
+  that markdown fences and legacy `{ component, props }` payloads are never
+  trusted UI.
+- Added runtime, web Thread, and mobile fallback regression tests that consume
+  the checked-in fixtures.
+- Verification:
+  - `pnpm --filter @thinkwork/pi-runtime-core test -- json-render-runtime`
+    passed.
+  - `pnpm --filter @thinkwork/web test -- ThreadConversation` passed.
+  - `pnpm --filter @thinkwork/mobile test -- genui-registry` passed.
+  - `pnpm --filter @thinkwork/thread-json-render test` passed.
+  - `pnpm --filter @thinkwork/pi-runtime-core typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/thread-json-render typecheck` passed.
+  - `git diff --check` passed.
+  - `pnpm dlx prettier@3.6.2 --check <changed U8 files>` passed; root
+    `pnpm format:check` is currently unavailable because `prettier` is not
+    declared in the workspace dev dependencies.
 - Status: PR ready.
