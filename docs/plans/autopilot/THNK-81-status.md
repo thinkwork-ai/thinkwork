@@ -53,7 +53,8 @@ message contract.
 
 | Unit | Branch | PR | State |
 | --- | --- | --- | --- |
-| U1/U2 | `codex/thnk-81-json-render-actions-u1-u2` | [#2997](https://github.com/thinkwork-ai/thinkwork/pull/2997) | Review/CI |
+| U1/U2 | `codex/thnk-81-json-render-actions-u1-u2` | [#2997](https://github.com/thinkwork-ai/thinkwork/pull/2997) | Merged |
+| U3 | `codex/thnk-81-json-render-actions-u3` | TBD | In progress |
 
 ## U1/U2 Objective
 
@@ -78,6 +79,37 @@ continuation.
 - 2026-06-26 U1/U2 PR opened:
   <https://github.com/thinkwork-ai/thinkwork/pull/2997>. Post-rebase focused
   test `pnpm --filter @thinkwork/api test -- handleJsonRenderAction` passed.
+- 2026-06-26 U1/U2 CI passed after rebase: CLA, lint, verify, typecheck, and
+  test.
+- 2026-06-26 U1/U2 merged via squash commit
+  `43a994717e624667d714ea10fb4cd6df532a63cd`; remote branch was already
+  removed by GitHub and local worktree/branch cleanup completed.
+
+## U3 Objective
+
+Update generated UI fixtures, runtime tool description, and system prompt
+guidance so actionable Work Item approval UI includes both component action
+references and matching `durableActions` descriptors. Keep shared
+json-render validation target-agnostic and preserve display-only generated UI.
+
+## U3 Verification
+
+- 2026-06-26 focused tests passed:
+  `pnpm --filter @thinkwork/thread-json-render test -- actions validation`
+  (14 tests).
+- 2026-06-26 focused tests passed:
+  `pnpm --filter @thinkwork/pi-runtime-core test -- json-render-runtime`
+  (8 tests).
+- 2026-06-26 focused tests passed:
+  `pnpm --filter @thinkwork/pi-extensions test -- system-prompt` (13 tests).
+- 2026-06-26 focused tests passed:
+  `pnpm --filter @thinkwork/web test -- json-render/validation` (7 tests).
+- 2026-06-26 typechecks passed for `@thinkwork/thread-json-render`,
+  `@thinkwork/pi-runtime-core`, `@thinkwork/pi-extensions`, and
+  `@thinkwork/web`.
+- 2026-06-26 install note: `pnpm install` completed, with the same optional
+  `canvas` native build warning seen in U1/U2 (`pkg-config` unavailable under
+  local Node 25); focused tests and typechecks were unaffected.
 - 2026-06-26 formatting attempt:
   `pnpm exec prettier --write ...` failed because `prettier` is not installed
   in this workspace (`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "prettier" not

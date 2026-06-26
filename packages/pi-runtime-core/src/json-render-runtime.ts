@@ -42,7 +42,11 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
     description:
       "Emit a complete, bounded json-render UI part for the current Thread. " +
       "Use this only when structured UI is clearly better than prose. Provide " +
-      "a full spec using root/elements/type/props/children plus mobileFallback.",
+      "a full spec using root/elements/type/props/children plus mobileFallback. " +
+      "For actionable approval or review UI, pair component action references " +
+      "such as task.review.primaryActionId or form.action.submitActionId with " +
+      "matching durableActions descriptors. Work Item approval actions should " +
+      'use params target "work_item_status", workItemId, and statusCategory or statusId.',
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -71,7 +75,7 @@ export function buildEmitJsonRenderUiTool(): AgentTool<any> {
         durableActions: {
           type: "array",
           description:
-            "Optional ThinkWork durable action descriptors. Do not include arbitrary callbacks or URLs.",
+            "Optional ThinkWork durable action descriptors. Required for actionable approval/review UI whose components reference action ids. Do not include arbitrary callbacks or URLs.",
           items: { type: "object", additionalProperties: true },
         },
       },

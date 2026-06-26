@@ -199,6 +199,13 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     );
     expect(prompt).toContain("Do not write UI JSON in prose, markdown fences");
     expect(prompt).toContain("Always include a concise mobile fallback");
+    expect(prompt).toContain("matching `durableActions` descriptor");
+    expect(prompt).toContain("`task.review.primaryActionId`");
+    expect(prompt).toContain("`form.action.submitActionId`");
+    expect(prompt).toContain('`target: "work_item_status"`');
+    expect(prompt).toContain("`workItemId`");
+    expect(prompt).toContain("either `statusCategory` or `statusId`");
+    expect(prompt).toContain("Display-only generated UI can omit");
     expect(prompt).toContain("ThinkWork domain components:");
     expect(prompt).toContain("task.review");
     expect(prompt).toContain("workflow.status");

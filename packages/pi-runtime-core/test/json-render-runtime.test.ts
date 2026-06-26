@@ -197,6 +197,11 @@ describe("runtime Thread json-render helper", () => {
     const tool = buildEmitJsonRenderUiTool();
 
     expect(tool.name).toBe(EMIT_JSON_RENDER_UI_TOOL_NAME);
+    expect(tool.description).toContain("matching durableActions descriptors");
+    expect(tool.description).toContain('target "work_item_status"');
+    expect(
+      tool.parameters.properties.durableActions.description,
+    ).toContain("Required for actionable approval/review UI");
 
     const result = await tool.execute("call-1", {
       spec: fixture.data.spec,

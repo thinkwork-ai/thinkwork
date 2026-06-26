@@ -25,6 +25,11 @@ describe("Thread json-render web validation", () => {
     expect(validateThreadJsonRenderPart(fixture).ok).toBe(true);
     expect(fixture.data.spec.elements.review.type).toBe("task.review");
     expect(fixture.data.durableActions?.[0]?.kind).toBe("approve");
+    expect(fixture.data.durableActions?.[0]?.params).toMatchObject({
+      target: "work_item_status",
+      workItemId: "77777777-7777-7777-7777-777777777777",
+      statusCategory: "DONE",
+    });
   });
 
   it("accepts the analytics.display adapter boundary", () => {
