@@ -99,7 +99,7 @@ import {
 } from "@/components/genui/SaveRecipeSheet";
 import { CreateRecipeMutation } from "@/lib/graphql-queries";
 import { useAppMode } from "@/lib/hooks/use-app-mode";
-import { parseThreadGenUIMobileFallbacks } from "@/lib/genui-registry";
+import { parseThreadJsonRenderMobileFallbacks } from "@/lib/genui-registry";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useQuery, useMutation } from "urql";
@@ -562,7 +562,7 @@ export default function ThreadDetailRoute() {
       return {
         ...m,
         toolResults,
-        genuiFallbacks: parseThreadGenUIMobileFallbacks(m.parts),
+        genuiFallbacks: parseThreadJsonRenderMobileFallbacks(m.parts),
       };
     });
   }, [messagesData]);
@@ -834,7 +834,7 @@ export default function ThreadDetailRoute() {
   const visibleTurns = turns;
   const isOptimisticStartRunning = Boolean(
     pendingThreadStart?.expectAssistantResponse &&
-    !hasPendingStartAssistantMessage,
+      !hasPendingStartAssistantMessage,
   );
   useEffect(() => {
     if (!pendingThreadStart) return;

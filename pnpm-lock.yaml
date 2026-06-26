@@ -172,9 +172,6 @@ importers:
       '@thinkwork/deployment-profile':
         specifier: workspace:*
         version: link:../../packages/deployment-profile
-      '@thinkwork/genui':
-        specifier: workspace:*
-        version: link:../../packages/genui
       '@thinkwork/pricing-config':
         specifier: workspace:*
         version: link:../../packages/pricing-config

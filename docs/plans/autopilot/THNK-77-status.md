@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: u3-web-renderer-in-progress
+status: u4-mobile-cleanup-in-progress
 target_branch: main
 ---
 
@@ -223,3 +223,46 @@ just to prove the render path; it should consume persisted/fixture
   - `pnpm --filter @thinkwork/web lint` reported that no selected package has
     a `lint` script.
   - `pnpm --filter @thinkwork/web test` passed: 205 files, 1546 tests.
+- Final PR CI:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2974
+  - Merge commit: `8066a92f567c3bf3bd3d3ac0912015a8b2480a62`
+  - `cla`, `lint`, `verify`, `typecheck`, and `test` passed before merge.
+
+### U4 mobile fallback + package cleanup
+
+- Objective: make mobile parse `data-json-render` fallback summaries without
+  depending on `@thinkwork/genui`, and treat legacy `data-genui` as unsupported
+  instead of validating the old package contract.
+- Branch: `codex/thnk-77-u4-mobile-cleanup`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-77-u4-mobile-cleanup`
+- Base: `origin/main` at `8066a92f567c3bf3bd3d3ac0912015a8b2480a62`
+- Implemented so far:
+  - Replaced mobile fallback parsing with a self-contained
+    `data-json-render` parser that reads the required `mobileFallback` fields,
+    status, root component type, spec hash, and diagnostics.
+  - Added unsupported fallback handling for legacy `data-genui` parts.
+  - Renamed mobile Thread fallback APIs and timeline item labels toward
+    json-render (`parseThreadJsonRenderMobileFallbacks`,
+    `MobileJsonRenderFallback`, `data-json-render-fallback`).
+  - Removed `@thinkwork/genui` from `apps/mobile/package.json` and lockfile
+    mobile importer.
+  - Left `_type` and fenced `genui` mobile message-block cards intact because
+    they are a separate mobile content parser, not the Thread
+    `data-json-render` contract.
+- Verification so far:
+  - `pnpm install` completed and updated the lockfile. It emitted the known
+    optional `canvas@2.11.2` native-build warning under Node 25 because
+    `pkg-config` is unavailable, but exited 0.
+  - `pnpm --filter @thinkwork/mobile test` passed: 32 files, 155 tests.
+  - `pnpm dlx prettier@3.6.2 --check <touched U4 files>` passed.
+  - `git diff --check` passed.
+  - `pnpm --filter @thinkwork/mobile lint` reported that no selected package
+    has a `lint` script.
+  - `rg "@thinkwork/genui|parseThreadGenUIMobileFallbacks|MobileGenUIFallback|data-genui-fallback|MobileGenUIFallbackCard|DataGenUIFallbackContent|Thread GenUI/data-genui" apps/mobile -n`
+    returns no matches.
+  - `pnpm --filter @thinkwork/mobile exec tsc --noEmit` is not a usable U4 gate
+    right now: it fails on many pre-existing unrelated mobile errors, including
+    `TabHeaderProps.rightElement`, missing `@react-navigation/native` types,
+    stale GraphQL operation variable shapes, and unrelated `never` inference
+    errors.

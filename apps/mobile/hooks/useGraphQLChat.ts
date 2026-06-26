@@ -10,7 +10,7 @@ import {
 // Message shape doesn't expose. The SDK's useMessages returns the common
 // subset; this hook needs the superset.
 import { useMessages } from "@/lib/hooks/use-messages";
-import { parseThreadGenUIMobileFallbacks } from "@/lib/genui-registry";
+import { parseThreadJsonRenderMobileFallbacks } from "@/lib/genui-registry";
 import type { ChatMessage } from "./useGatewayChat";
 
 export interface CallerIdentity {
@@ -100,7 +100,7 @@ export function useGraphQLChat(
           console.log("[GenUI] No toolResults on assistant message:", m.id);
         }
       }
-      const genuiFallbacks = parseThreadGenUIMobileFallbacks(m.parts);
+      const genuiFallbacks = parseThreadJsonRenderMobileFallbacks(m.parts);
 
       return {
         id: m.id,

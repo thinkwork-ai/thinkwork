@@ -11,12 +11,6 @@
  */
 
 import React from "react";
-import {
-  createAnalyticsDisplayGenUIValidationContext,
-  validateThreadGenUIPart,
-  type ThreadGenUIDiagnostic,
-  type ThreadGenUIPart,
-} from "@thinkwork/genui";
 
 export interface GenUIProps {
   data: Record<string, unknown>;
@@ -122,10 +116,17 @@ export function getGenUIComponent(
 }
 
 // ---------------------------------------------------------------------------
-// Thread GenUI mobile fallback parser
+// Thread generated UI mobile fallback parser
 // ---------------------------------------------------------------------------
 
-export interface MobileGenUIFallback {
+export interface MobileGeneratedUIDiagnostic {
+  code: string;
+  message: string;
+  path?: string;
+  severity: "error" | "warning";
+}
+
+export interface MobileJsonRenderFallback {
   id: string;
   title: string;
   summary: string;
@@ -133,19 +134,24 @@ export interface MobileGenUIFallback {
   status: "ready" | "streaming" | "invalid" | "stale" | "unsupported";
   component?: string;
   specHash?: string;
-  diagnostics?: ThreadGenUIDiagnostic[];
+  diagnostics?: MobileGeneratedUIDiagnostic[];
 }
 
-const GENERIC_MOBILE_FALLBACK: Omit<MobileGenUIFallback, "id" | "diagnostics"> =
-  {
-    title: "Generated view",
-    summary: "Open this thread on web to view the generated interface.",
-    lines: [],
-    status: "unsupported",
-  };
+const GENERIC_MOBILE_FALLBACK: Omit<
+  MobileJsonRenderFallback,
+  "id" | "diagnostics"
+> = {
+  title: "Generated view",
+  summary: "Open this thread on web to view the generated interface.",
+  lines: [],
+  status: "unsupported",
+};
 
-const analyticsValidationContext =
-  createAnalyticsDisplayGenUIValidationContext();
+const THREAD_JSON_RENDER_PART_TYPE = "data-json-render";
+const LEGACY_THREAD_GENUI_PART_TYPE = "data-genui";
+const THREAD_JSON_RENDER_SCHEMA_VERSION = "thread-json-render/v1";
+const THREAD_JSON_RENDER_CATALOG_VERSION = "thread-json-render-catalog/v1";
+const STATUS_VALUES = new Set(["ready", "streaming", "invalid", "stale"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -162,46 +168,164 @@ function parseParts(parts: unknown): unknown[] {
   }
 }
 
-function rootComponent(part: ThreadGenUIPart): string | undefined {
-  const root = part.data.spec.root;
-  const element = part.data.spec.elements[root];
-  return typeof element?.component === "string" ? element.component : undefined;
+function rootComponent(data: Record<string, unknown>): string | undefined {
+  const spec = data.spec;
+  if (!isRecord(spec)) return undefined;
+  const root = typeof spec.root === "string" ? spec.root : undefined;
+  const elements = spec.elements;
+  if (!root || !isRecord(elements)) return undefined;
+  const element = elements[root];
+  if (!isRecord(element)) return undefined;
+  return typeof element.type === "string" ? element.type : undefined;
 }
 
 function fallbackId(part: unknown, index: number): string {
   if (isRecord(part) && typeof part.id === "string" && part.id.length > 0) {
     return part.id;
   }
-  return `data-genui:${index}`;
+  return `data-json-render:${index}`;
 }
 
-function toMobileGenUIFallback(part: ThreadGenUIPart): MobileGenUIFallback {
+function diagnostic(
+  code: string,
+  message: string,
+  path?: string,
+): MobileGeneratedUIDiagnostic {
+  return { code, message, path, severity: "error" };
+}
+
+function normalizeDiagnostics(value: unknown): MobileGeneratedUIDiagnostic[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const code = typeof item.code === "string" ? item.code : undefined;
+    const message = typeof item.message === "string" ? item.message : undefined;
+    const severity =
+      item.severity === "warning" || item.severity === "error"
+        ? item.severity
+        : "error";
+    if (!code || !message) return [];
+    return [
+      {
+        code,
+        message,
+        path: typeof item.path === "string" ? item.path : undefined,
+        severity,
+      },
+    ];
+  });
+}
+
+function normalizeLines(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((line): line is string => typeof line === "string")
+    : [];
+}
+
+function unsupportedFallback(
+  part: unknown,
+  index: number,
+  diagnostics: MobileGeneratedUIDiagnostic[] = [],
+): MobileJsonRenderFallback {
   return {
-    id: part.id,
-    title: part.data.mobileFallback.title,
-    summary: part.data.mobileFallback.summary,
-    lines: part.data.mobileFallback.lines ?? [],
-    status: part.data.status,
-    component: rootComponent(part),
-    specHash: part.data.specHash,
-    diagnostics: part.data.diagnostics,
+    id: fallbackId(part, index),
+    ...GENERIC_MOBILE_FALLBACK,
+    diagnostics,
   };
 }
 
-export function parseThreadGenUIMobileFallbacks(
+export function parseThreadJsonRenderMobileFallbacks(
   parts: unknown,
-): MobileGenUIFallback[] {
+): MobileJsonRenderFallback[] {
   return parseParts(parts).flatMap((part, index) => {
-    if (!isRecord(part) || part.type !== "data-genui") return [];
+    if (!isRecord(part)) return [];
 
-    const result = validateThreadGenUIPart(part, analyticsValidationContext);
-    if (result.ok) return [toMobileGenUIFallback(result.part)];
+    if (part.type === LEGACY_THREAD_GENUI_PART_TYPE) {
+      return [
+        {
+          id: fallbackId(part, index),
+          title: "Legacy generated UI unsupported",
+          summary: "This generated view uses the retired data-genui contract.",
+          lines: [],
+          status: "unsupported",
+          diagnostics: [
+            diagnostic(
+              "JSON_RENDER_LEGACY_GENUI_UNSUPPORTED",
+              "Legacy data-genui payloads are not rendered on mobile.",
+              "$.type",
+            ),
+          ],
+        },
+      ];
+    }
+
+    if (part.type !== THREAD_JSON_RENDER_PART_TYPE) return [];
+
+    const data = isRecord(part.data) ? part.data : {};
+    const diagnostics: MobileGeneratedUIDiagnostic[] = [];
+    if (data.schemaVersion !== THREAD_JSON_RENDER_SCHEMA_VERSION) {
+      diagnostics.push(
+        diagnostic(
+          "JSON_RENDER_SCHEMA_VERSION_UNSUPPORTED",
+          `Expected ${THREAD_JSON_RENDER_SCHEMA_VERSION}.`,
+          "$.data.schemaVersion",
+        ),
+      );
+    }
+    if (data.catalogVersion !== THREAD_JSON_RENDER_CATALOG_VERSION) {
+      diagnostics.push(
+        diagnostic(
+          "JSON_RENDER_CATALOG_VERSION_UNSUPPORTED",
+          `Expected ${THREAD_JSON_RENDER_CATALOG_VERSION}.`,
+          "$.data.catalogVersion",
+        ),
+      );
+    }
+    if (!STATUS_VALUES.has(String(data.status))) {
+      diagnostics.push(
+        diagnostic(
+          "JSON_RENDER_STATUS_INVALID",
+          "Unsupported generated UI status.",
+          "$.data.status",
+        ),
+      );
+    }
+
+    const mobileFallback = isRecord(data.mobileFallback)
+      ? data.mobileFallback
+      : {};
+    const title =
+      typeof mobileFallback.title === "string"
+        ? mobileFallback.title
+        : undefined;
+    const summary =
+      typeof mobileFallback.summary === "string"
+        ? mobileFallback.summary
+        : undefined;
+    if (!title || !summary) {
+      diagnostics.push(
+        diagnostic(
+          "JSON_RENDER_MOBILE_FALLBACK_REQUIRED",
+          "Generated UI mobile fallback requires title and summary.",
+          "$.data.mobileFallback",
+        ),
+      );
+    }
+
+    if (diagnostics.length > 0 || !title || !summary) {
+      return [unsupportedFallback(part, index, diagnostics)];
+    }
 
     return [
       {
         id: fallbackId(part, index),
-        ...GENERIC_MOBILE_FALLBACK,
-        diagnostics: result.diagnostics,
+        title,
+        summary,
+        lines: normalizeLines(mobileFallback.lines),
+        status: data.status as MobileJsonRenderFallback["status"],
+        component: rootComponent(data),
+        specHash: typeof data.specHash === "string" ? data.specHash : undefined,
+        diagnostics: normalizeDiagnostics(data.diagnostics),
       },
     ];
   });
