@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: u7-web-genui-cleanup-in-progress
+status: complete
 target_branch: main
 ---
 
@@ -100,6 +100,11 @@ just to prove the render path; it should consume persisted/fixture
   web render cutover, mobile fallback/package cleanup, and durable
   action/promotion rebasing where it depends on persisted `data-json-render`
   parts rather than a new emitter.
+- Completion note: U1-U7 have merged to `main`. Web and mobile no longer depend
+  on `@thinkwork/genui`; Thread render, durable action, promotion, artifact, and
+  fallback behavior are based on `data-json-render` and upstream
+  json-render/shadcn. Remaining `@thinkwork/genui` references in runtime/API/Pi
+  emission and finalize paths are intentionally left to THNK-78.
 
 ## Unit Log
 
@@ -399,3 +404,9 @@ just to prove the render path; it should consume persisted/fixture
     bundle delta: 410,610 raw / 121,352 gzip.
   - `pnpm --filter @thinkwork/web typecheck` passed.
   - `pnpm --filter @thinkwork/web test` passed: 201 files, 1532 tests.
+- Final PR CI:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2978
+  - Merge commit: `53050f38ca4ab3fbfcb22746ce51e6cb43b8c240`
+  - `cla`, `lint`, `verify`, `typecheck`, and `test` passed before merge.
+  - Post-merge cleanup removed the local U7 worktree/branch; GitHub deleted the
+    remote branch during squash merge.
