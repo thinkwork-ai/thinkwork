@@ -1,7 +1,7 @@
 ---
 title: "feat: Cognee user and space memory cutover"
 type: feat
-status: active
+status: completed
 date: 2026-06-26
 origin: docs/brainstorms/2026-06-26-thnk-79-cognee-first-memory-ladder-requirements.md
 linear: THNK-79
