@@ -3,9 +3,9 @@ title: Admin — Memory
 description: Browse, search, edit, and visualize retained memory across one agent or the whole tenant.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside } from "@astrojs/starlight/components";
 
-The Memory tab is the raw retained-record view inside [Admin — Memory](/applications/web/knowledge/). It covers both AgentCore managed memory and the optional Hindsight add-on. Use it when you need to inspect what was retained before it is routed into `query_context` or compiled into pages.
+The Memory tab is the raw retained-record view inside [Admin — Memory](/applications/web/knowledge/). In the Cognee-first memory pass, it reports the active user + space memory mode: user memory follows the requester, while space memory belongs to the current Space. Use it when you need to inspect what was retained before agents retrieve it through Context Engine.
 
 **Route:** `/knowledge/memory`
 **Route wrapper:** `apps/web/src/routes/_authed/_tenant/knowledge/memory.tsx`
@@ -15,10 +15,13 @@ The legacy `/memory` route redirects to this tab.
 
 ## Layout
 
-The page has four primary controls:
+The page has four primary controls and one operator status band:
+
+- **Memory mode** — shows the active engine. In Cognee mode, it marks user memory and space memory as enabled, and marks Hindsight as legacy if a Hindsight endpoint is still configured.
+- **Deferred layers** — company distillation and wiki projection are shown as deferred for this pass. They are follow-up work, not live proof points for user + space memory.
 
 - **Agent selector** — "All Agents" plus every agent in the tenant. Scopes the view to one agent namespace or fans out across all agents.
-- **View toggle** — Memory / Knowledge Graph. Only shown when Hindsight is enabled.
+- **View toggle** — table / graph inspection for retained memory evidence.
 - **Search bar** — semantic search across memory content, backed by `MemorySearchQuery`.
 - **Refresh** — manual re-fetch.
 
@@ -28,24 +31,27 @@ Below the controls, the page renders either a `DataTable` of memory records or a
 
 The table view shows:
 
-| Column | Notes |
-|---|---|
-| Date | When the record was created or last updated |
-| Agent | Which agent produced the record |
-| Type | Strategy badge: semantic, summary, preference, episode, reflection |
-| Memory | Truncated content preview |
+| Column | Notes                                                              |
+| ------ | ------------------------------------------------------------------ |
+| Date   | When the record was created or last updated                        |
+| Agent  | Which agent produced the record                                    |
+| Type   | Strategy badge: semantic, summary, preference, episode, reflection |
+| Memory | Truncated content preview                                          |
 
 Clicking a row opens a detail sheet with full content, metadata, edit controls, and delete controls. Editing depends on the backend:
 
 - **AgentCore managed memory** — records are immutable by default; the sheet is read-only.
-- **Hindsight** — records can be edited or deleted through `UpdateMemoryRecordMutation` and `DeleteMemoryRecordMutation`.
+- **Cognee memory** — user and space memories are retrieved through the normalized memory contract and Context Engine. Raw Cognee details stay operator evidence, not customer setup choices.
+- **Hindsight** — legacy records can be edited or deleted through `UpdateMemoryRecordMutation` and `DeleteMemoryRecordMutation` when Hindsight is the active legacy engine.
 
 ## Graph View
 
-When Hindsight is enabled, the graph view renders memory entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). It is useful for seeing clusters and relationships, but the compiled Pages tab is the better operator view for durable memory knowledge.
+When a graph-backed memory engine is enabled, the graph view renders memory entities and relationships with `MemoryGraph` (React Force Graph 3D, three.js, and d3-force). In Cognee mode, treat it as memory evidence for the user + space cutover. It is not the finished company ontology or wiki projection.
 
 <Aside type="note">
-The graph view is a memory-backend inspection tool. It is not the full compiled-memory graph: compiled pages, aliases, links, and source citations live in the Pages surface.
+  The graph view is a memory-backend inspection tool. It is not the full company
+  Brain projection: company distillation, ontology processing, wiki pages,
+  aliases, and source citations are follow-up work.
 </Aside>
 
 ## Workflows
@@ -75,14 +81,18 @@ Deletes are hard deletes. For bulk redaction, operate at the SQL layer with a re
 
 ## Data Model
 
+- **Cognee user memory** — Cognee-backed memory keyed to the requester. It can follow the user across spaces where policy allows it.
+- **Cognee space memory** — Cognee-backed memory keyed to the current Space. It stays with the space and is available to authorized members and agents.
 - **AgentCore managed memory** — Aurora `memory_records` table with strategy, namespace, content, tags, confidence, access count, and bi-temporal dates.
-- **Hindsight graph** — separate Hindsight-managed entities, relationships, and facts surfaced through `MemoryGraphQuery`.
+- **Hindsight graph** — legacy Hindsight-managed entities, relationships, and facts surfaced through `MemoryGraphQuery` when Hindsight is active.
 - **Namespaces** — records are namespaced by strategy and agent; prefixes such as `semantic_`, `preferences_`, and `episodes_` identify the retention strategy.
 
 ## Known Limits
 
 - **All-agents graph is a client-side fan-out.** It scales to dozens of agents, not thousands.
-- **AgentCore records are read-only.** Editing is only available when Hindsight is enabled.
+- **Company distillation is deferred.** This page proves Cognee user + space memory status; it does not prove company-level Brain distillation.
+- **Wiki projection is deferred.** Wiki pages remain a follow-up projection, not an upstream source of truth for this pass.
+- **AgentCore records are read-only.** Editing is only available when Hindsight is the active legacy engine.
 - **Graph view lacks drill-in.** Clicking a node does not open a detail sheet.
 - **Search is semantic-only.** It can miss exact IDs or unusual strings.
 - **No bulk edit or bulk delete.** Every mutation is one record at a time.

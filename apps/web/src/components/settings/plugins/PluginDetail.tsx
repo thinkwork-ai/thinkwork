@@ -659,13 +659,13 @@ export function PluginDetail() {
               </Button>
             </SettingsRow>
             <SettingsRow
-              label="Memory / Ontology"
-              description="Open the graph workspace powered by Company Brain."
+              label="Memory graph"
+              description="Open the Cognee-backed graph workspace for user and space memory evidence."
             >
               <Button asChild type="button" variant="outline" size="sm">
                 <Link to="/settings/memory/knowledge-graph">
                   <Brain className="size-4" />
-                  Open Ontology
+                  Open graph
                 </Link>
               </Button>
             </SettingsRow>

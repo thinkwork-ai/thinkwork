@@ -1000,7 +1000,9 @@ describe("PluginDetail", () => {
     expect(screen.getByText(/Adoption plan verifies/i)).toBeTruthy();
     const operations = screen.getByRole("link", { name: /open operations/i });
     expect(operations.getAttribute("href")).toBe("/settings/brain-operations");
-    const link = screen.getByRole("link", { name: /open ontology/i });
+    expect(screen.getByText("Memory graph")).toBeTruthy();
+    expect(screen.getByText(/user and space memory evidence/i)).toBeTruthy();
+    const link = screen.getByRole("link", { name: /open graph/i });
     expect(link.getAttribute("href")).toBe("/settings/memory/knowledge-graph");
   });
 

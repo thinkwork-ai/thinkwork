@@ -4,28 +4,46 @@
  * configuration so the admin UI can gate views (e.g. hide the Knowledge
  * Graph toggle when the active engine has no graph inspection).
  *
- * Schema is unchanged (`managedMemoryEnabled`, `hindsightEnabled`). The
- * flags are derived from the configured engine + its capabilities:
- * - managedMemoryEnabled: memory layer is enabled (always true when the
- *   engine is configured correctly).
- * - hindsightEnabled: the active engine exposes entity-graph inspection,
- *   which today is equivalent to "Hindsight is the active engine".
+ * The flags are derived from the configured engine. Keep Hindsight separate
+ * from "graph inspection": Cognee also exposes graph-backed search, but in the
+ * Cognee-first path Hindsight is legacy and should not light up as active.
  */
 
 import { getMemoryServices } from "../../../lib/memory/index.js";
 
+function emptyConfig() {
+  return {
+    activeEngine: "unavailable",
+    managedMemoryEnabled: false,
+    hindsightEnabled: false,
+    cogneeMemoryEnabled: false,
+    userMemoryEnabled: false,
+    spaceMemoryEnabled: false,
+    legacyHindsightAvailable: false,
+    companyDistillationEnabled: false,
+    wikiProjectionEnabled: false,
+  };
+}
+
 export const memorySystemConfig = async () => {
   try {
-    const { config, inspect } = getMemoryServices();
-    const capabilities = await inspect.capabilities();
+    const { config } = getMemoryServices();
+    const cogneeActive = config.enabled && config.engine === "cognee";
+    const hindsightActive = config.enabled && config.engine === "hindsight";
     return {
+      activeEngine: config.engine,
       managedMemoryEnabled: config.enabled,
-      hindsightEnabled: capabilities.inspectGraph,
+      hindsightEnabled: hindsightActive,
+      cogneeMemoryEnabled: cogneeActive,
+      userMemoryEnabled: cogneeActive,
+      spaceMemoryEnabled: cogneeActive,
+      legacyHindsightAvailable: Boolean(
+        config.backends.hindsightEndpoint && !hindsightActive,
+      ),
+      companyDistillationEnabled: false,
+      wikiProjectionEnabled: false,
     };
   } catch {
-    return {
-      managedMemoryEnabled: false,
-      hindsightEnabled: false,
-    };
+    return emptyConfig();
   }
 };

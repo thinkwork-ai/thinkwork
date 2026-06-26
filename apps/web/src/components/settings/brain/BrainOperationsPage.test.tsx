@@ -108,10 +108,15 @@ describe("BrainOperationsPage", () => {
     expect(screen.getByText("query_brain_context")).toBeTruthy();
     expect(screen.getByText("Evidence hidden")).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: /open ontology/i })
-        .getAttribute("href"),
+      screen.getByRole("link", { name: /open graph/i }).getAttribute("href"),
     ).toBe("/settings/memory/knowledge-graph");
+    expect(screen.getByText("Memory graph")).toBeTruthy();
+    expect(screen.getByText("Ontology posture")).toBeTruthy();
+    expect(screen.getByText("Projection follow-up")).toBeTruthy();
+    expect(screen.getByText("Company/wiki projections")).toBeTruthy();
+    expect(
+      screen.getByText(/company distillation and wiki projection/i),
+    ).toBeTruthy();
     expect(
       screen.getByRole("link", { name: /open tools/i }).getAttribute("href"),
     ).toBe("/settings/tools");
@@ -177,9 +182,9 @@ describe("BrainOperationsPage", () => {
 
     render(<BrainOperationsPage />);
 
-    expect(screen.getAllByText("Brain substrate failed").length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getAllByText("Brain substrate failed").length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Replay validation failed")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /mark rolled back/i }),

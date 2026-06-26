@@ -44,11 +44,11 @@ export function SettingsMemoryHome() {
   )?.install;
   const companyBrainSubstrateReady = Boolean(
     companyBrainInstall?.state === "installed" ||
-      companyBrainInstall?.components.some(
-        (component) =>
-          component.componentKey === "brain-substrate" &&
-          component.state === "provisioned",
-      ),
+    companyBrainInstall?.components.some(
+      (component) =>
+        component.componentKey === "brain-substrate" &&
+        component.state === "provisioned",
+    ),
   );
   const legacyCogneeEnabled =
     deployment?.managedApplications.find((app) => app.key === "cognee")
@@ -63,7 +63,7 @@ export function SettingsMemoryHome() {
     tabs: [
       { to: MEMORY, label: "Memory" },
       { to: KNOWLEDGE_BASES, label: "KBs" },
-      ...(ontologyEnabled ? [{ to: KNOWLEDGE_GRAPH, label: "Ontology" }] : []),
+      ...(ontologyEnabled ? [{ to: KNOWLEDGE_GRAPH, label: "Graph" }] : []),
       { to: WIKI, label: "Wiki" },
     ],
   });
