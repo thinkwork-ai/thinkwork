@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: u5-actions-promotion-in-progress
+status: u6-json-render-artifacts-in-progress
 target_branch: main
 ---
 
@@ -319,3 +319,31 @@ just to prove the render path; it should consume persisted/fixture
     passed: 5 files, 18 tests.
   - `pnpm --filter @thinkwork/web typecheck` passed.
   - `pnpm --filter @thinkwork/api typecheck` passed.
+- Final PR CI:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2976
+  - Merge commit: `996c6a40b10f81fd2782ec155674717a48bd6154`
+  - `cla`, `lint`, `verify`, `typecheck`, and `test` passed before merge.
+
+### U6 json-render artifact snapshots
+
+- Objective: make promoted `data-json-render` artifact snapshots readable by
+  the artifact detail route after U5 changed the persisted snapshot shape.
+- Branch: `codex/thnk-77-u6-json-render-artifacts`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-77-u6-json-render-artifacts`
+- Base: `origin/main` at `996c6a40b10f81fd2782ec155674717a48bd6154`
+- Implemented so far:
+  - Updated the data-view artifact route to parse
+    `thread-json-render-artifact-snapshot/v1` / `json_render_snapshot`
+    payloads.
+  - Rendered promoted snapshot content through `ThreadJsonRenderRenderer` using
+    the persisted `jsonRender` part and source thread/message context.
+  - Updated the route test to use `createTaskReviewJsonRenderFixture()` and the
+    new `jsonRender` snapshot payload shape.
+- Verification so far:
+  - `pnpm install` completed. It emitted the known optional `canvas@2.11.2`
+    native-build warning under Node 25 because `pkg-config` is unavailable, but
+    exited 0.
+  - `cd apps/web && pnpm exec vitest run 'src/routes/_authed/_shell/-artifacts.$id.test.tsx'`
+    passed: 1 file, 15 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
