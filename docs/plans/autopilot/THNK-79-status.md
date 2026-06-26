@@ -135,6 +135,9 @@ No Linear child issues exist, so the plan units are the implementation units:
 - `pnpm --filter @thinkwork/plugin-company-brain typecheck` passed for U2.
 - `pnpm --filter @thinkwork/api typecheck` passed for U2.
 - `git diff --check` passed for U2.
+- U2 CI lint initially failed on the plugin-source boundary guard for the
+  shared Cognee memory adapter; added documented shared-platform allowlist
+  entries and verified `pnpm lint` passes locally.
 
 ## Blockers
 
