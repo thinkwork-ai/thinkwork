@@ -18,6 +18,7 @@ import {
   MyApprovedModelCatalogQuery,
   RefreshThreadProgressMutation,
   ReviewGoalMutation,
+  HandleJsonRenderActionMutation,
   SettingsActivityThreadTurnsQuery,
   ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
@@ -126,6 +127,7 @@ const reexecuteGoalFilesQuery = vi.fn();
 const reexecuteTasksQuery = vi.fn();
 const reexecuteThreadTurnsQuery = vi.fn();
 const sendMessage = vi.fn();
+const jsonRenderActionMock = vi.fn();
 const updateThreadMock = vi.fn();
 const reviewGoalMock = vi.fn();
 const refreshThreadProgressMock = vi.fn();
@@ -156,6 +158,7 @@ beforeEach(() => {
   reexecuteTasksQuery.mockReset();
   reexecuteThreadTurnsQuery.mockReset();
   sendMessage.mockReset();
+  jsonRenderActionMock.mockReset();
   updateThreadMock.mockReset();
   reviewGoalMock.mockReset();
   refreshThreadProgressMock.mockReset();
@@ -208,6 +211,7 @@ beforeEach(() => {
   threadTurnsData = { threadTurns: [] };
 
   sendMessage.mockResolvedValue({});
+  jsonRenderActionMock.mockResolvedValue({});
   updateThreadMock.mockResolvedValue({});
   reviewGoalMock.mockResolvedValue({});
   refreshThreadProgressMock.mockResolvedValue({});
@@ -228,6 +232,12 @@ beforeEach(() => {
       return [
         { fetching: false, stale: false, hasNext: false },
         refreshThreadProgressMock,
+      ];
+    }
+    if (mutation === HandleJsonRenderActionMutation) {
+      return [
+        { fetching: false, stale: false, hasNext: false },
+        jsonRenderActionMock,
       ];
     }
     return [{ fetching: false, stale: false, hasNext: false }, sendMessage];
@@ -826,6 +836,64 @@ describe("SpacesThreadDetailRoute", () => {
       expect(screen.getByText("Review onboarding task")).toBeTruthy();
     });
     expect(screen.queryByText("UI Message Chunk")).toBeNull();
+  });
+
+  it("refreshes thread and Work Items after generated UI Work Item actions", async () => {
+    const part = createTaskReviewJsonRenderFixture();
+    taskData = { computerTasks: [] };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Generated UI approval",
+        lifecycleStatus: "COMPLETED",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "message-1",
+                role: "ASSISTANT",
+                content: "",
+                parts: [part],
+              },
+            },
+          ],
+        },
+      },
+    };
+    jsonRenderActionMock.mockResolvedValue({
+      data: {
+        handleJsonRenderAction: {
+          id: "audit-message-1",
+          metadata: {
+            jsonRenderAction: {
+              mutation: {
+                target: "work_item_status",
+                workItemId: "77777777-7777-7777-7777-777777777777",
+              },
+            },
+          },
+        },
+      },
+    });
+
+    render(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() => {
+      expect(jsonRenderActionMock).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(reexecuteThreadQuery).toHaveBeenCalledWith({
+        requestPolicy: "network-only",
+      });
+    });
+    expect(reexecuteWorkItemsQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+    expect(reexecuteLinkedTasksQuery).not.toHaveBeenCalled();
+    expect(reexecuteProgressMarkdownQuery).not.toHaveBeenCalled();
   });
 
   it("reconstructs goal-run cards from persisted thread turn evidence", async () => {

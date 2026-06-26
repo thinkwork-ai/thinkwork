@@ -112,6 +112,7 @@ import {
   workItemAssigneeLabel,
   workItemStatusCategory,
 } from "@/components/work-items/work-item-display";
+import type { JsonRenderActionSuccess } from "@/components/workbench/json-render/use-json-render-action";
 
 interface SpacesThreadDetailRouteProps {
   threadId: string;
@@ -1185,6 +1186,14 @@ export function SpacesThreadDetailRoute({
       updateWorkItem,
     ],
   );
+  const handleJsonRenderActionSuccess = useCallback(
+    ({ message }: JsonRenderActionSuccess) => {
+      if (!isWorkItemStatusJsonRenderActionMessage(message)) return;
+      reexecuteQuery({ requestPolicy: "network-only" });
+      reexecuteWorkItemsQuery({ requestPolicy: "network-only" });
+    },
+    [reexecuteQuery, reexecuteWorkItemsQuery],
+  );
   const hasDurableAssistant = hasDurableAssistantAfterLatestUser(visibleThread);
   const latestMessageAwaitsAssistant =
     latestMessageRole(visibleThread) === "USER" && !hasDurableAssistant;
@@ -1831,6 +1840,7 @@ export function SpacesThreadDetailRoute({
             }
           : undefined
       }
+      onJsonRenderActionSuccess={handleJsonRenderActionSuccess}
       onSendFollowUp={async (
         content,
         files,
@@ -2705,6 +2715,15 @@ function metadataObject(value: unknown): Record<string, unknown> | null {
     }
   }
   return null;
+}
+
+function isWorkItemStatusJsonRenderActionMessage(
+  message: JsonRenderActionSuccess["message"],
+): boolean {
+  const metadata = metadataObject(message?.metadata);
+  const jsonRenderAction = metadataObject(metadata?.jsonRenderAction);
+  const mutation = metadataObject(jsonRenderAction?.mutation);
+  return mutation?.target === "work_item_status";
 }
 
 function toTaskThreadTurns(
