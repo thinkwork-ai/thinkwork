@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: u1-ci-repair
+status: u2-course-corrected
 target_branch: main
 ---
 
@@ -78,6 +78,8 @@ target_branch: main
   the planning record.
 - Linear state change: moved THNK-77 from Plan Review to In Progress when U1
   implementation started.
+- U1 PR merged and local U1 worktree/branch cleaned up.
+- U2 worktree created from updated `origin/main` at U1 merge commit.
 
 ## Unit Log
 
@@ -131,3 +133,47 @@ target_branch: main
   - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed after the
     repair with the same measured shadcn bundle delta:
     410,610 raw / 121,352 gzip.
+- Final PR CI:
+  - PR: https://github.com/thinkwork-ai/thinkwork/pull/2972
+  - Merge commit: `99d60c224622bf20d0ae494e22f8952607b4c7b3`
+  - `cla`, `lint`, `verify`, `typecheck`, and `test` passed before merge.
+
+### U2 catalog + validation
+
+- Objective: establish the two-layer json-render catalog and fail-closed
+  validation boundary for web/API/runtime without extending the old
+  `@thinkwork/genui` contract.
+- Branch: `codex/thnk-77-u2-json-render-catalog`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-77-u2-json-render-catalog`
+- Base: `origin/main` at `99d60c224622bf20d0ae494e22f8952607b4c7b3`
+- Implemented:
+  - Added web `json-render/` catalog modules that source primitive definitions
+    from `@json-render/shadcn/catalog`, expose the shadcn registry path, and
+    layer ThinkWork domain entries (`task.review`, `workflow.status`,
+    `keyValue.list`, `form.action`, `analytics.display`) as json-render
+    component definitions.
+  - Added web fixtures and validation for `data-json-render` parts, nested
+    upstream shadcn specs, ThinkWork domain entries, analytics adapter boundary,
+    durable action descriptors, spec hashes, and legacy `data-genui` rejection.
+- Course correction after reviewing THNK-78:
+  - Removed the U2 runtime/API carrier helpers before merge. THNK-78 owns the
+    explicit `emit_json_render_ui` tool, trusted runtime emission path, API
+    finalize normalization, and the eventual React-free shared contract package.
+  - THNK-77 U2 is intentionally limited to the web catalog/validation boundary
+    needed for rendering and follow-on renderer cutover work.
+- Verification so far:
+  - `pnpm --filter @thinkwork/web test -- src/components/workbench/json-render/catalog.test.ts src/components/workbench/json-render/validation.test.ts`
+    passed: 10 tests.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed with the
+    same measured shadcn bundle delta: 410,610 raw / 121,352 gzip.
+  - `pnpm dlx prettier@3.6.2 --check --no-semi --trailing-comma all <touched U2 files>`
+    passed.
+  - `git diff --check` passed.
+  - After the THNK-78 overlap trim, reran:
+    `pnpm --filter @thinkwork/web test -- src/components/workbench/json-render/catalog.test.ts src/components/workbench/json-render/validation.test.ts`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+    `pnpm --filter @thinkwork/api typecheck`, and
+    `pnpm --filter @thinkwork/web verify:json-render-smoke`; all passed.
