@@ -31,9 +31,13 @@ describe("thread json-render validation", () => {
   });
 
   it("accepts ThinkWork domain catalog components", () => {
-    expect(
-      validateThreadJsonRenderPart(createTaskReviewJsonRenderFixture()).ok,
-    ).toBe(true);
+    const taskReview = createTaskReviewJsonRenderFixture();
+    expect(validateThreadJsonRenderPart(taskReview).ok).toBe(true);
+    expect(taskReview.data.durableActions?.[0]?.params).toMatchObject({
+      target: "work_item_status",
+      workItemId: "77777777-7777-7777-7777-777777777777",
+      statusCategory: "DONE",
+    });
     expect(
       validateThreadJsonRenderPart(createAnalyticsJsonRenderFixture()).ok,
     ).toBe(true);

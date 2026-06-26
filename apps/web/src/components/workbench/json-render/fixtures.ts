@@ -87,7 +87,12 @@ export function createTaskReviewJsonRenderFixture(): ThreadJsonRenderPart {
         id: "approve-task",
         label: "Approve",
         kind: "approve",
-        params: { taskId: "task-123" },
+        params: {
+          target: "work_item_status",
+          workItemId: "77777777-7777-7777-7777-777777777777",
+          statusCategory: "DONE",
+          note: "Approved from generated UI",
+        },
       },
     ],
   )
