@@ -56,7 +56,8 @@ message contract.
 | U1/U2 | `codex/thnk-81-json-render-actions-u1-u2` | [#2997](https://github.com/thinkwork-ai/thinkwork/pull/2997) | Merged |
 | U3 | `codex/thnk-81-json-render-actions-u3` | [#2998](https://github.com/thinkwork-ai/thinkwork/pull/2998) | Merged |
 | U4 | `codex/thnk-81-json-render-actions-u4` | [#2999](https://github.com/thinkwork-ai/thinkwork/pull/2999) | Merged |
-| U5 | `codex/thnk-81-u5-hitl-model` | Pending | In progress |
+| U5 | `codex/thnk-81-u5-hitl-model` | [#3000](https://github.com/thinkwork-ai/thinkwork/pull/3000) | Merged |
+| Final evidence | `codex/thnk-81-final-evidence` | Pending | In progress |
 
 ## U1/U2 Objective
 
@@ -192,7 +193,29 @@ falling back to the agent default.
 - 2026-06-26 U5 lint note:
   `pnpm --filter @thinkwork/api lint` reported no lint script for the selected
   package.
+- 2026-06-26 U5 PR opened:
+  <https://github.com/thinkwork-ai/thinkwork/pull/3000>.
+- 2026-06-26 U5 CI passed: CLA, lint, verify, typecheck, and test.
+- 2026-06-26 U5 merged via squash commit
+  `8b1d4d90dfdc628d47ef96e714b7c060ba7f77b7`; remote branch was removed by
+  GitHub and local worktree/branch cleanup completed.
+- 2026-06-26 dev deploy evidence:
+  main deploy run `28270987842` built Lambdas and completed Terraform Apply for
+  commit `8b1d4d90dfdc628d47ef96e714b7c060ba7f77b7`.
+- 2026-06-26 deployed HITL path verified:
+  thread `1674ea76-913d-4e87-85d6-2ca45c5573f2` (`CHAT-1174`) used selected
+  model `openai.gpt-oss-120b-1:0`, parked on question
+  `3db4e115-2fee-45a8-a844-0ee31cb0d2df`, accepted the card answer at
+  `2026-06-26T23:39:37.516Z`, resumed, and completed at
+  `2026-06-26T23:39:51.978Z`.
+- 2026-06-26 deployed HITL Work Item result:
+  Work Item `f17d4261-6f84-4eeb-a001-e0b6c5b3c378` moved TODO to DONE at
+  `2026-06-26T23:39:50.230Z`; event
+  `5bbe7cf9-873d-4dfe-a2b3-bf48501338bb` was created by
+  `set_work_item_status` with `threadTurnId`
+  `03a18cf0-aeba-4ec1-812c-dd2a5048c03d` and tool call
+  `tooluse_xPiClN6YNk8lacPBJDEpOG`.
 
 ## Blockers
 
-- Awaiting U5 PR merge/deploy before re-running the deployed HITL resume path.
+- None currently.
