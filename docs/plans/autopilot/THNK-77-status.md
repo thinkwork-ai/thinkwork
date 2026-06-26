@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: implementation-starting
+status: u1-ci-repair
 target_branch: main
 ---
 
@@ -113,3 +113,21 @@ target_branch: main
   - `pnpm dlx prettier@3.6.2 --check <touched U1 files>` passed.
   - Repo script `pnpm format:check` currently fails because the workspace does
     not install a `prettier` binary; this is unrelated to U1 file formatting.
+- CI repair:
+  - Initial PR CI passed `cla`, `lint`, `verify`, and `typecheck`; `test`
+    failed because the web test runtime resolved both React 19.2.x and React
+    19.1.x through web-adjacent workspace packages.
+  - Aligned React/React DOM dev peer usage for `@thinkwork/ui`,
+    `@thinkwork/graph`, `@thinkwork/computer-stdlib`, and
+    `@thinkwork/workspace-editor` with the web/json-render React 19.2 line
+    while leaving mobile and React Native packages on their current React
+    19.1-compatible line.
+  - Added local UI type bridges for `react-day-picker` `rootRef` and the
+    lucide spinner icon where TypeScript still saw a stale React declaration
+    identity from a third-party peer snapshot.
+  - `pnpm --filter @thinkwork/web typecheck` passed after the repair.
+  - `pnpm --filter @thinkwork/web test` passed after the repair: 202 files,
+    1532 tests.
+  - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed after the
+    repair with the same measured shadcn bundle delta:
+    410,610 raw / 121,352 gzip.
