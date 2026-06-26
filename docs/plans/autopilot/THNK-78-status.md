@@ -118,6 +118,11 @@ target_branch: main
 - Browser E2E verification completed against a temporary local Vite harness
   that mounted the production `ThreadJsonRenderRenderer` with primitive and
   ThinkWork domain catalog fixtures.
+- Live localhost Thread E2E attempted at `http://localhost:5174` using the
+  authenticated in-app browser session. The Thread UI loaded and accepted the
+  prompt, but the backing agent reported that `emit_json_render_ui` was not
+  registered in its available tool list, so no live `data-json-render` part was
+  emitted.
 
 ## Unit Log
 
@@ -339,4 +344,22 @@ target_branch: main
   - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed.
   - Smoke bundle evidence: baseline `194039` raw / `60591` gzip; renderer
     `604649` raw / `181943` gzip; delta `410610` raw / `121352` gzip.
-- Status: verification passed.
+- Live localhost Thread attempt:
+  - URL: `http://localhost:5174/threads/833b1da6-fa47-462d-9c85-c19b0ffeee21`
+  - First prompt requested a compact generated UI covering primitive and
+    ThinkWork catalog components; the turn failed after 25 seconds with the
+    generic assistant error.
+  - Retry requested a minimal `Card` / `Heading` / `Text` / `Button`
+    `emit_json_render_ui` call; the assistant completed as text and reported
+    that `emit_json_render_ui` was not registered in the current environment.
+  - DOM marker counts in the live Thread were all `0` for `data-json-render`,
+    `genui-task-review`, `genui-workflow-status`, `genui-key-value-list`,
+    `genui-action-form`, `json-render-analytics-display`, and
+    `json-render-fallback`.
+  - Browser console only showed a stale Vite HMR reload error for the removed
+    temporary harness file; no live Thread renderer exception was observed.
+  - Result: live agent-tool E2E is blocked until the dev/default backing agent
+    has the `thread-json-render-ui` capability enabled or the test targets an
+    agent that already has that capability.
+- Status: renderer verification passed; live agent-tool verification blocked by
+  current backing-agent capability configuration.
