@@ -54,7 +54,7 @@ message contract.
 | Unit | Branch | PR | State |
 | --- | --- | --- | --- |
 | U1/U2 | `codex/thnk-81-json-render-actions-u1-u2` | [#2997](https://github.com/thinkwork-ai/thinkwork/pull/2997) | Merged |
-| U3 | `codex/thnk-81-json-render-actions-u3` | TBD | In progress |
+| U3 | `codex/thnk-81-json-render-actions-u3` | [#2998](https://github.com/thinkwork-ai/thinkwork/pull/2998) | Review/CI |
 
 ## U1/U2 Objective
 
@@ -110,6 +110,8 @@ json-render validation target-agnostic and preserve display-only generated UI.
 - 2026-06-26 install note: `pnpm install` completed, with the same optional
   `canvas` native build warning seen in U1/U2 (`pkg-config` unavailable under
   local Node 25); focused tests and typechecks were unaffected.
+- 2026-06-26 U3 PR opened:
+  <https://github.com/thinkwork-ai/thinkwork/pull/2998>.
 - 2026-06-26 formatting attempt:
   `pnpm exec prettier --write ...` failed because `prettier` is not installed
   in this workspace (`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "prettier" not
