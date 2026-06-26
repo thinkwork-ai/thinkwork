@@ -39,7 +39,7 @@ describe("SettingsMemoryHome", () => {
   });
 
   it("adds a Knowledge Graph tab gated on Company Brain substrate or legacy Cognee", () => {
-    expect(source).toContain("KNOWLEDGE_GRAPH, label:");
+    expect(source).toContain('{ to: KNOWLEDGE_GRAPH, label: "Graph" }');
     expect(source).toContain("<KnowledgeGraphTab");
     expect(source).toContain("companyBrainSubstrateReady");
     expect(source).toContain("legacyCogneeEnabled");

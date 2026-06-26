@@ -25,9 +25,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
-import type {
-  SettingsCompanyBrainStatusQuery as CompanyBrainStatusQueryData,
-} from "@/gql/graphql";
+import type { SettingsCompanyBrainStatusQuery as CompanyBrainStatusQueryData } from "@/gql/graphql";
 
 type CompanyBrainStatus = CompanyBrainStatusQueryData["companyBrainStatus"];
 type CompanyBrainEvidence = NonNullable<CompanyBrainStatus["evidence"]>;
@@ -229,7 +227,7 @@ function OperationsSummary({
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {blocking
               ? blocking.description
-              : "Context Engine reads use the active backend, while migration and vault posture stay visible here for operators."}
+              : "Context Engine reads use the active backend. This pass proves Cognee user + space memory; company distillation and wiki projection are deferred."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -310,24 +308,24 @@ function IngestionSection({ status }: { status: CompanyBrainStatus }) {
 
 function OntologySection({ status }: { status: CompanyBrainStatus }) {
   return (
-    <SettingsSection label="Ontology">
+    <SettingsSection label="Memory graph">
       <SettingsRow
-        label="Ontology version"
-        description="Gate used for trusted graph facts."
+        label="Ontology posture"
+        description="Ontology processing is not part of the current user + space memory proof."
       >
-        <Value>{status.counters.ontologyVersion ?? "Not reported"}</Value>
+        <Value>{status.counters.ontologyVersion ?? "Deferred"}</Value>
       </SettingsRow>
       <SettingsRow label="Launch capabilities">
         <CapabilityList capabilities={status.capabilities.launch} />
       </SettingsRow>
       <SettingsRow
-        label="Ontology workspace"
-        description="Review entity and relationship posture."
+        label="Graph workspace"
+        description="Review Cognee-backed memory graph evidence."
       >
         <Button asChild type="button" size="sm" variant="outline">
           <Link to="/settings/memory/knowledge-graph">
             <Brain className="mr-2 size-4" />
-            Open Ontology
+            Open graph
           </Link>
         </Button>
       </SettingsRow>
@@ -364,10 +362,10 @@ function GraphVectorSection({
 
 function VaultSection({ status }: { status: CompanyBrainStatus }) {
   return (
-    <SettingsSection label="Vault">
+    <SettingsSection label="Projection follow-up">
       <SettingsRow
-        label="Vault projections"
-        description="Materialized views used for provenance and review."
+        label="Company/wiki projections"
+        description="Company distillation, ontology projection, and wiki rendering are deferred."
       >
         <Value>
           {formatNullableNumber(status.counters.vaultProjectionCount)}

@@ -3092,17 +3092,43 @@ export enum MemoryStrategy {
  */
 export type MemorySystemConfig = {
   __typename?: "MemorySystemConfig";
+  /** Active long-term memory engine selected by MEMORY_ENGINE. */
+  activeEngine: Scalars["String"]["output"];
   /**
-   * True when the optional Hindsight add-on is deployed (ECS + ALB). Gates
-   * the Knowledge Graph / entity-graph views in the admin UI.
+   * True when Cognee is the active long-term memory engine for the user and
+   * space memory cutover.
+   */
+  cogneeMemoryEnabled: Scalars["Boolean"]["output"];
+  /**
+   * Company-level distillation is intentionally deferred from the Cognee user +
+   * space memory proof.
+   */
+  companyDistillationEnabled: Scalars["Boolean"]["output"];
+  /**
+   * True when Hindsight is the active long-term memory engine. Cognee-backed
+   * graph inspection must not set this flag.
    */
   hindsightEnabled: Scalars["Boolean"]["output"];
+  /**
+   * True when a Hindsight endpoint is still configured while another engine is
+   * active. Operators should treat it as legacy in Cognee mode.
+   */
+  legacyHindsightAvailable: Scalars["Boolean"]["output"];
   /**
    * True when managed AgentCore Memory is provisioned and wired into the
    * agent container. This is the always-on baseline — when false, memory
    * features may be unavailable.
    */
   managedMemoryEnabled: Scalars["Boolean"]["output"];
+  /** True when the active engine supports current-space memory capture and recall. */
+  spaceMemoryEnabled: Scalars["Boolean"]["output"];
+  /** True when the active engine supports user-carried memory capture and recall. */
+  userMemoryEnabled: Scalars["Boolean"]["output"];
+  /**
+   * Wiki projection from Cognee-backed company memory is intentionally deferred
+   * from this pass.
+   */
+  wikiProjectionEnabled: Scalars["Boolean"]["output"];
 };
 
 export type Message = {

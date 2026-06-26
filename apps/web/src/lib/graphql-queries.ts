@@ -2000,8 +2000,15 @@ export const ComputerMemorySearchQuery = gql`
 export const ComputerMemorySystemConfigQuery = gql`
   query ComputerMemorySystemConfig {
     memorySystemConfig {
+      activeEngine
       managedMemoryEnabled
       hindsightEnabled
+      cogneeMemoryEnabled
+      userMemoryEnabled
+      spaceMemoryEnabled
+      legacyHindsightAvailable
+      companyDistillationEnabled
+      wikiProjectionEnabled
     }
   }
 `;

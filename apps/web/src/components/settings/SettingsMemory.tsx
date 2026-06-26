@@ -18,6 +18,7 @@ import {
 import {
   ComputerMemoryRecordsQuery,
   ComputerMemorySearchQuery,
+  ComputerMemorySystemConfigQuery,
   DeleteComputerMemoryRecordMutation,
 } from "@/lib/graphql-queries";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
@@ -41,6 +42,18 @@ import {
 
 type BrainView = "table" | "graph";
 const COMPACT_TABLE_CELL = "flex h-10 min-w-0 items-center px-2";
+
+type MemorySystemConfig = {
+  activeEngine?: string | null;
+  managedMemoryEnabled?: boolean | null;
+  hindsightEnabled?: boolean | null;
+  cogneeMemoryEnabled?: boolean | null;
+  userMemoryEnabled?: boolean | null;
+  spaceMemoryEnabled?: boolean | null;
+  legacyHindsightAvailable?: boolean | null;
+  companyDistillationEnabled?: boolean | null;
+  wikiProjectionEnabled?: boolean | null;
+};
 
 // Null-rendering header publisher (see SettingsContent's TablePaneHeader). Kept
 // as a child so the embedded variant can suppress it without a conditional hook.
@@ -69,6 +82,12 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
   const effectiveTenantId = tenantId ?? null;
   const requesterUserId = null;
   const namespace = "requester";
+
+  const [systemResult] = useQuery<{
+    memorySystemConfig?: MemorySystemConfig | null;
+  }>({
+    query: ComputerMemorySystemConfigQuery,
+  });
 
   const [recordsResult, refetchRecords] = useQuery<{
     memoryRecords?: any[] | null;
@@ -224,6 +243,7 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
         title="Memory"
         description="Inspect and manage what your agents remember across threads."
       />
+      <MemoryModeStatus config={systemResult.data?.memorySystemConfig} />
       <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="relative w-fit min-w-56 max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -351,6 +371,72 @@ export function SettingsMemory({ embedded }: { embedded?: boolean } = {}) {
           />
         )}
       </Sheet>
+    </div>
+  );
+}
+
+function MemoryModeStatus({ config }: { config?: MemorySystemConfig | null }) {
+  const activeEngine = config?.activeEngine ?? "unknown";
+  const cogneeActive = config?.cogneeMemoryEnabled === true;
+  const hindsightActive = config?.hindsightEnabled === true;
+
+  return (
+    <div className="mb-4 border-y border-border bg-muted/30 px-4 py-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">
+              {cogneeActive
+                ? "Cognee memory"
+                : hindsightActive
+                  ? "Hindsight legacy"
+                  : `${activeEngine} memory`}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={
+                config?.userMemoryEnabled
+                  ? "border-emerald-500/40 text-emerald-700"
+                  : "text-muted-foreground"
+              }
+            >
+              User memory
+            </Badge>
+            <Badge
+              variant="outline"
+              className={
+                config?.spaceMemoryEnabled
+                  ? "border-emerald-500/40 text-emerald-700"
+                  : "text-muted-foreground"
+              }
+            >
+              Space memory
+            </Badge>
+            {config?.legacyHindsightAvailable ? (
+              <Badge variant="outline" className="text-muted-foreground">
+                Hindsight legacy available
+              </Badge>
+            ) : null}
+          </div>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+            {cogneeActive
+              ? "Cognee is the active user + space memory substrate. User memory follows the requester; space memory belongs to the current Space."
+              : hindsightActive
+                ? "Hindsight is the active legacy memory engine for this deployment."
+                : "Memory status is reported by the selected deployment engine."}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="text-muted-foreground">
+            Company distillation{" "}
+            {config?.companyDistillationEnabled ? "enabled" : "deferred"}
+          </Badge>
+          <Badge variant="outline" className="text-muted-foreground">
+            Wiki projection{" "}
+            {config?.wikiProjectionEnabled ? "enabled" : "deferred"}
+          </Badge>
+        </div>
+      </div>
     </div>
   );
 }
