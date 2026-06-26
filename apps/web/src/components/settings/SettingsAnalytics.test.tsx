@@ -28,14 +28,38 @@ describe("SettingsAnalytics user cost reporting", () => {
     expect(componentSource).not.toContain("No budget");
     expect(componentSource).toContain("Unlimited");
     expect(componentSource).toContain("BudgetProgress");
+    expect(componentSource).toContain("visibleSpendUsd");
+    expect(componentSource).toContain(
+      "budget.visibleSpendUsd / budget.policy.limitUsd",
+    );
+    expect(componentSource).toContain("formatUsd(budget.visibleSpendUsd)");
   });
 
   it("queries costByUser and user budget status fields", () => {
     expect(querySource).toContain("query SettingsCostByUser");
-    expect(querySource).toContain("costByUser(tenantId: $tenantId)");
+    expect(querySource).toContain(
+      "costByUser(tenantId: $tenantId, from: $from, to: $to)",
+    );
     expect(querySource).toContain("query SettingsBudgetStatus");
     expect(querySource).toContain("userId");
     expect(querySource).not.toContain("query SettingsCostByAgent");
+  });
+
+  it("uses a consistent 30-day range for analytics totals and trends", () => {
+    expect(componentSource).toContain("const ANALYTICS_DAYS = 30");
+    expect(componentSource).toContain("getAnalyticsRange(ANALYTICS_DAYS)");
+    expect(componentSource).toContain("...analyticsVars");
+    expect(componentSource).toContain("days: ANALYTICS_DAYS");
+    expect(querySource).toContain("query SettingsCostSummary(");
+    expect(querySource).toContain("$from: AWSDateTime");
+    expect(querySource).toContain("$to: AWSDateTime");
+    expect(querySource).toContain(
+      "costSummary(tenantId: $tenantId, from: $from, to: $to)",
+    );
+    expect(querySource).toContain("query SettingsCostByModel(");
+    expect(querySource).toContain(
+      "costByModel(tenantId: $tenantId, from: $from, to: $to)",
+    );
   });
 
   it("keeps profile account usage separate from tenant analytics", () => {

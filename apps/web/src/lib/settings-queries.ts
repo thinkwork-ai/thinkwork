@@ -1705,8 +1705,12 @@ export const SettingsSetTenantMemberPasswordMutation = graphql(`
 // ─── Analytics (usage cost, operator-only) ───────────────────────────────
 
 export const SettingsCostSummaryQuery = graphql(`
-  query SettingsCostSummary($tenantId: ID!) {
-    costSummary(tenantId: $tenantId) {
+  query SettingsCostSummary(
+    $tenantId: ID!
+    $from: AWSDateTime
+    $to: AWSDateTime
+  ) {
+    costSummary(tenantId: $tenantId, from: $from, to: $to) {
       totalUsd
       llmUsd
       computeUsd
@@ -1719,8 +1723,12 @@ export const SettingsCostSummaryQuery = graphql(`
 `);
 
 export const SettingsCostByUserQuery = graphql(`
-  query SettingsCostByUser($tenantId: ID!) {
-    costByUser(tenantId: $tenantId) {
+  query SettingsCostByUser(
+    $tenantId: ID!
+    $from: AWSDateTime
+    $to: AWSDateTime
+  ) {
+    costByUser(tenantId: $tenantId, from: $from, to: $to) {
       userId
       userName
       userEmail
@@ -1760,8 +1768,12 @@ export const SettingsBudgetStatusQuery = graphql(`
 `);
 
 export const SettingsCostByModelQuery = graphql(`
-  query SettingsCostByModel($tenantId: ID!) {
-    costByModel(tenantId: $tenantId) {
+  query SettingsCostByModel(
+    $tenantId: ID!
+    $from: AWSDateTime
+    $to: AWSDateTime
+  ) {
+    costByModel(tenantId: $tenantId, from: $from, to: $to) {
       model
       totalUsd
       inputTokens
