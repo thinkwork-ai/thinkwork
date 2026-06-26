@@ -169,7 +169,6 @@ export function WorkItemsListView({
       updatingItemId,
     ],
   );
-
   if (display.group !== "none" || display.subgroup !== "none") {
     const groups = groupWorkItemsForDisplay({
       items: visibleItems,
@@ -235,6 +234,7 @@ export function WorkItemsListView({
           hideHeader
           tableClassName="w-full table-fixed"
           emptyState={<EmptyWorkItemsState />}
+          emptyStatePlacement="container"
           initialColumnVisibility={WORK_ITEM_FILTER_COLUMN_VISIBILITY}
         />
       </div>
@@ -441,7 +441,10 @@ function buildListColumns({
 
 function EmptyWorkItemsState() {
   return (
-    <div className="flex min-h-48 items-center justify-center px-6 text-center">
+    <div
+      className="flex min-h-80 items-center justify-center px-6 text-center"
+      data-testid="work-items-list-empty"
+    >
       <div className="max-w-sm">
         <CircleDashed className="mx-auto mb-3 size-8 text-muted-foreground" />
         <h2 className="text-sm font-semibold">No work items in this view</h2>
