@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-78
-status: u4-u5-client-consumption-in-progress
+status: u6-prompt-assembly-in-progress
 target_branch: main
 ---
 
@@ -97,6 +97,11 @@ target_branch: main
 - U2+U3 branch and worktree were cleaned up after merge.
 - U4+U5 worktree created from updated `origin/main` at
   `7aa42ded6ed2da25d11f392ed64c5d4ddbff4fb3`.
+- U4+U5 PR merged to `main`: https://github.com/thinkwork-ai/thinkwork/pull/2982
+  at `81e31aeb460e9bee395c7d33907a19d4bf5b7624`.
+- U4+U5 branch and worktree were cleaned up after merge.
+- U6 worktree created from updated `origin/main` at
+  `81e31aeb460e9bee395c7d33907a19d4bf5b7624`.
 
 ## Unit Log
 
@@ -171,7 +176,7 @@ target_branch: main
   keep the old helper name as a compatibility alias for existing callers.
 - Added web and mobile workspace dependencies on
   `@thinkwork/thread-json-render`.
-- Verification so far:
+- Verification:
   - `pnpm --filter @thinkwork/web test -- validation ThreadJsonRenderRenderer render-typed-part ThreadConversation` passed.
   - `pnpm --filter @thinkwork/mobile test -- genui-registry genui-contract` passed.
   - `pnpm --filter @thinkwork/web typecheck` passed.
@@ -180,5 +185,33 @@ target_branch: main
   - Direct `pnpm --filter @thinkwork/mobile exec tsc --noEmit` still reports
     pre-existing app-wide errors; a touched-file filtered compiler scan showed
     no THNK-78 client errors.
+  - `git diff --check` passed.
+  - GitHub PR checks passed: CLA Assistant, Lint, Verify, Typecheck, and Test.
+- Status: merged.
+
+### U6 prompt assembly
+
+- Objective: give runtime models catalog-aware guidance for
+  `emit_json_render_ui` only when that tool is registered for the turn, while
+  keeping upstream json-render developer skills out of workspace defaults.
+- Branch: `codex/thnk-78-u6-prompt`
+- Worktree: `/Users/ericodom/.codex/worktrees/thnk-78-u6-prompt`
+- Base: `origin/main` at `81e31aeb460e9bee395c7d33907a19d4bf5b7624`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2983
+- Added a dynamic `Generated Thread UI` runtime prompt block that appears only
+  when `emit_json_render_ui` is in the available tool list.
+- The prompt block uses shared `@thinkwork/thread-json-render` catalog
+  vocabulary for ThinkWork domain components and upstream shadcn primitives.
+- Updated default `AGENTS.md` with a static guardrail that upstream json-render
+  developer skills are not runtime workspace skills, and bumped
+  `DEFAULTS_VERSION` to 27.
+- Added tests proving the prompt block is gated by tool availability and
+  workspace defaults do not materialize upstream json-render runtime skills.
+- Verification:
+  - `pnpm --filter @thinkwork/pi-extensions test -- system-prompt` passed.
+  - `pnpm --filter @thinkwork/workspace-defaults test` passed.
+  - `pnpm --filter @thinkwork/pi-extensions typecheck` passed.
+  - `pnpm --filter @thinkwork/workspace-defaults typecheck` passed.
+  - `pnpm --filter @thinkwork/agentcore-pi test -- system-prompt` passed.
   - `git diff --check` passed.
 - Status: PR ready.

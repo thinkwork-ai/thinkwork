@@ -389,6 +389,11 @@ results. The structured data is automatically rendered as rich UI components in
 the client — you do NOT need to include the raw JSON in your response. Focus on
 providing context, recommendations, and follow-up questions in plain text.
 
+Upstream json-render developer skills are not runtime workspace skills. Do not
+install, copy, or invoke those skills from this workspace; generated UI
+instructions are injected dynamically only when the platform exposes a
+turn-scoped UI emission capability.
+
 ### Date Context
 
 Current date and timezone are provided at the top of your context. Use this for
@@ -1185,7 +1190,7 @@ selected model is approved for the user before a routed tool call runs.
  *     `backfill-user-md.ts` (or a targeted
  *     accept-template-update flow) to refresh them.
  */
-export const DEFAULTS_VERSION = 26;
+export const DEFAULTS_VERSION = 27;
 
 // ---------------------------------------------------------------------------
 // Aggregator
