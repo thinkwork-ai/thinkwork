@@ -10,7 +10,7 @@
  * Defined per `.prds/memory-implementation-plan.md` §8–9.
  */
 
-export type MemoryEngineType = "hindsight" | "agentcore";
+export type MemoryEngineType = "hindsight" | "agentcore" | "cognee";
 
 export type MemoryOwnerRef = {
   tenantId: string;

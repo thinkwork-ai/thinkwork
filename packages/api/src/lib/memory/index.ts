@@ -79,6 +79,9 @@ function buildAdapter(config: MemoryConfig): MemoryAdapter {
       region: config.backends.awsRegion,
     });
   }
+  if (config.engine === "cognee") {
+    throw new Error("Cognee memory engine selected but adapter is not wired");
+  }
   throw new Error(`Unknown MEMORY_ENGINE: ${String(config.engine)}`);
 }
 

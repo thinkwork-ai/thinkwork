@@ -56,9 +56,17 @@ export interface CogneeDatasetWaitResult {
   samples: CogneeDatasetStatusSnapshot[];
 }
 
+export type CogneeDocumentSourceKind =
+  | "thread"
+  | "wiki"
+  | "brain"
+  | "observations"
+  | "user_memory"
+  | "space_memory";
+
 export interface CogneeDocumentIngestArgs {
   tenantId: string;
-  sourceKind: "thread" | "wiki" | "brain" | "observations";
+  sourceKind: CogneeDocumentSourceKind;
   sourceRef: string;
   datasetName: string;
   document: string;
@@ -339,7 +347,7 @@ export class CogneeClient {
 
   private async remember(args: {
     tenantId: string;
-    sourceKind: "thread" | "wiki" | "brain" | "observations";
+    sourceKind: CogneeDocumentSourceKind;
     sourceRef: string;
     datasetName: string;
     document: string;
@@ -363,7 +371,7 @@ export class CogneeClient {
 
   private async addAndCognify(args: {
     tenantId: string;
-    sourceKind: "thread" | "wiki" | "brain" | "observations";
+    sourceKind: CogneeDocumentSourceKind;
     sourceRef: string;
     datasetName: string;
     document: string;
@@ -479,7 +487,7 @@ export class CogneeClient {
 function buildDocumentForm(
   args: {
     tenantId: string;
-    sourceKind: "thread" | "wiki" | "brain" | "observations";
+    sourceKind: CogneeDocumentSourceKind;
     sourceRef: string;
     datasetName: string;
     document: string;
@@ -513,18 +521,29 @@ function buildDocumentForm(
 
 function buildNodeSets(
   tenantId: string,
-  sourceKind: "thread" | "wiki" | "brain" | "observations",
+  sourceKind: CogneeDocumentSourceKind,
   sourceRef: string,
 ): string[] {
+  if (sourceKind === "user_memory" || sourceKind === "space_memory") {
+    const scopeKind = sourceKind === "user_memory" ? "user" : "space";
+    return [
+      "thinkwork_memory",
+      "thinkwork_memory_v1",
+      `thinkwork_${scopeKind}_memory`,
+      `tenant_${scopeToken(tenantId)}`,
+      `${scopeKind}_${scopeToken(sourceRef)}`,
+    ];
+  }
+
   return [
     `thinkwork_${sourceKind}`,
-    `tenant_${tenantId.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase()}`,
-    `${sourceKind}_${sourceRef.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase()}`,
+    `tenant_${scopeToken(tenantId)}`,
+    `${sourceKind}_${scopeToken(sourceRef)}`,
   ];
 }
 
 function buildCustomPrompt(args: {
-  sourceKind: "thread" | "wiki" | "brain" | "observations";
+  sourceKind: CogneeDocumentSourceKind;
   ontology: KnowledgeGraphOntologyExport;
   customPrompt?: string | null;
 }): string {
@@ -541,6 +560,14 @@ function buildCustomPrompt(args: {
   return [args.ontology.customPrompt, args.customPrompt, sourcePrompt]
     .filter(Boolean)
     .join("\n\n");
+}
+
+function scopeToken(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function parseGraphPayload(payload: unknown): CogneeGraphPayload {

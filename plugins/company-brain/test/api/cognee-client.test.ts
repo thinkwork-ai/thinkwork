@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CogneeClient } from "../../src/api/cognee-client.js";
+import { buildCogneeMemoryScope } from "../../src/api/cognee-memory-scope.js";
 
 const ontology = {
   mechanism: "cognee_owl_ontology" as const,
@@ -107,6 +108,75 @@ describe("CogneeClient", () => {
         type: "Company",
         properties: {},
       },
+    ]);
+  });
+
+  it("posts user and space memory documents into separate Cognee scopes", async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(200, { [ontology.ontologyKey]: {} }))
+      .mockResolvedValueOnce(
+        response(200, { dataset_id: "11111111-1111-4111-8111-111111111111" }),
+      )
+      .mockResolvedValueOnce(response(200, { [ontology.ontologyKey]: {} }))
+      .mockResolvedValueOnce(
+        response(200, { dataset_id: "22222222-2222-4222-8222-222222222222" }),
+      );
+    const client = new CogneeClient({
+      endpoint: "http://cognee.local",
+      fetchFn,
+    });
+    const userScope = buildCogneeMemoryScope({
+      tenantId: "tenant-1",
+      kind: "user",
+      userId: "user-1",
+    });
+    const spaceScope = buildCogneeMemoryScope({
+      tenantId: "tenant-1",
+      kind: "space",
+      spaceId: "space-1",
+    });
+
+    await client.ingestDocument({
+      tenantId: userScope.tenantId,
+      sourceKind: userScope.sourceKind,
+      sourceRef: userScope.sourceRef,
+      datasetName: userScope.datasetName,
+      document: "User memory",
+      filename: "thinkwork-user-memory.md",
+      ontology,
+    });
+    await client.ingestDocument({
+      tenantId: spaceScope.tenantId,
+      sourceKind: spaceScope.sourceKind,
+      sourceRef: spaceScope.sourceRef,
+      datasetName: spaceScope.datasetName,
+      document: "Space memory",
+      filename: "thinkwork-space-memory.md",
+      ontology,
+    });
+
+    const userBody = fetchFn.mock.calls[1]?.[1]?.body as FormData;
+    const spaceBody = fetchFn.mock.calls[3]?.[1]?.body as FormData;
+    expect(userBody.get("datasetName")).toBe(
+      "thinkwork:memory:v1:tenant:tenant_1:user:user_1",
+    );
+    expect(userBody.getAll("node_set")).toEqual([
+      "thinkwork_memory",
+      "thinkwork_memory_v1",
+      "thinkwork_user_memory",
+      "tenant_tenant_1",
+      "user_user_1",
+    ]);
+    expect(spaceBody.get("datasetName")).toBe(
+      "thinkwork:memory:v1:tenant:tenant_1:space:space_1",
+    );
+    expect(spaceBody.getAll("node_set")).toEqual([
+      "thinkwork_memory",
+      "thinkwork_memory_v1",
+      "thinkwork_space_memory",
+      "tenant_tenant_1",
+      "space_space_1",
     ]);
   });
 
