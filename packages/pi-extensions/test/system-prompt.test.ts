@@ -181,6 +181,53 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
     expect(prompt).not.toContain(" (Recommended)");
   });
 
+  it("adds json-render catalog guidance only when emit_json_render_ui is available", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["bash", "emit_json_render_ui"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+
+    expect(prompt).toContain("### Generated Thread UI");
+    expect(prompt).toContain("`emit_json_render_ui` tool is available");
+    expect(prompt).toContain("one complete json-render spec object");
+    expect(prompt).toContain("top-level `root` plus `elements`");
+    expect(prompt).toContain(
+      "every element uses `type`, `props`, and `children`",
+    );
+    expect(prompt).toContain("Do not write UI JSON in prose, markdown fences");
+    expect(prompt).toContain("Always include a concise mobile fallback");
+    expect(prompt).toContain("ThinkWork domain components:");
+    expect(prompt).toContain("task.review");
+    expect(prompt).toContain("workflow.status");
+    expect(prompt).toContain("Upstream shadcn primitive components:");
+    expect(prompt).toContain("Button");
+    expect(prompt).toContain("Card");
+    expect(prompt.indexOf("## Runtime Tool Policy")).toBeLessThan(
+      prompt.indexOf("### Generated Thread UI"),
+    );
+    expect(prompt.indexOf("### Generated Thread UI")).toBeLessThan(
+      prompt.indexOf("AGENTS BODY"),
+    );
+  });
+
+  it("omits json-render catalog guidance when emit_json_render_ui is unavailable", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: {},
+      workspaceDir: "/ws",
+      availableToolNames: ["bash", "execute_code"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "AGENTS.md": "AGENTS BODY" }),
+    });
+
+    expect(prompt).not.toContain("### Generated Thread UI");
+    expect(prompt).not.toContain("emit_json_render_ui");
+    expect(prompt).not.toContain("one complete json-render spec object");
+    expect(prompt).not.toContain("task.review");
+  });
+
   it("adds Agent Profile routing guidance when delegation is available", async () => {
     const prompt = await composeSystemPrompt({
       payload: {

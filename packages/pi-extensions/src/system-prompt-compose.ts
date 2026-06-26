@@ -1,3 +1,9 @@
+import {
+  threadJsonRenderComponentNames,
+  threadJsonRenderDomainComponentNames,
+  threadJsonRenderPrimitiveComponentNames,
+} from "@thinkwork/thread-json-render";
+
 export interface PiInvocationPayload {
   agent_name?: unknown;
   system_prompt?: unknown;
@@ -97,6 +103,7 @@ function buildRuntimeToolPolicy(
   const executeCodeAvailable = tools.has("execute_code");
   const sendEmailAvailable = tools.has("send_email");
   const askUserQuestionAvailable = tools.has("ask_user_question");
+  const jsonRenderAvailable = tools.has("emit_json_render_ui");
   const mcpAvailable =
     tools.has("mcp") || [...tools].some((name) => name.startsWith("mcp."));
 
@@ -112,6 +119,21 @@ function buildRuntimeToolPolicy(
         '- When you have a preferred default, mark exactly one option per question with a label ending " (Recommended)".',
         "- When a delegated specialist's handoff carries clarification questions: answer what you can from your own context first; consolidate the rest (plus any questions of your own) into one batch and pass the delegationContext.",
         "- After calling `ask_user_question` the turn ends; the user's answer arrives in your next turn.",
+      ]
+    : [];
+  const jsonRenderPolicy = jsonRenderAvailable
+    ? [
+        "",
+        "### Generated Thread UI",
+        "- The `emit_json_render_ui` tool is available when a compact inline UI would help the current Thread.",
+        "- Call `emit_json_render_ui` with one complete json-render spec object. Do not write UI JSON in prose, markdown fences, or `_type` payloads.",
+        "- Specs must use the upstream json-render shape: top-level `root` plus `elements`; every element uses `type`, `props`, and `children`.",
+        "- Use only catalog component `type` values from the allowed catalog below. Do not invent components, CSS classes, arbitrary code, remote fetches, or dynamic imports.",
+        "- Always include a concise mobile fallback title, summary, and optional lines in the tool input so non-web clients can render the same part.",
+        "- If the generated UI would need unsupported components or open-ended custom behavior, answer in normal prose instead of emitting UI.",
+        `- ThinkWork domain components: ${threadJsonRenderDomainComponentNames.join(", ")}.`,
+        `- Upstream shadcn primitive components: ${threadJsonRenderPrimitiveComponentNames.join(", ")}.`,
+        `- Total allowed json-render components: ${threadJsonRenderComponentNames.length}.`,
       ]
     : [];
 
@@ -137,6 +159,7 @@ function buildRuntimeToolPolicy(
       : "- The `send_email` tool is not available for this turn.",
     '- Do not treat vague phrases like "send me", "share with me", or "give me" as email permission by themselves; answer in chat unless the user specifically requests email.',
     ...askUserQuestionPolicy,
+    ...jsonRenderPolicy,
     "",
     "### Connected services",
     mcpAvailable
