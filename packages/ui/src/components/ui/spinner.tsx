@@ -1,9 +1,25 @@
+import type * as React from "react"
 import { cn } from "../../lib/utils.js"
 import { Loader2Icon } from "lucide-react"
 
-function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
+type SpinnerProps = Omit<React.ComponentPropsWithoutRef<"svg">, "ref">
+
+const StatusIcon = Loader2Icon as unknown as React.ComponentType<
+  SpinnerProps & {
+    className?: string
+    role?: string
+    "aria-label"?: string
+  }
+>
+
+function Spinner({ className, ...props }: SpinnerProps) {
   return (
-    <Loader2Icon role="status" aria-label="Loading" className={cn("size-4 animate-spin", className)} {...props} />
+    <StatusIcon
+      role="status"
+      aria-label="Loading"
+      className={cn("size-4 animate-spin", className)}
+      {...props}
+    />
   )
 }
 
