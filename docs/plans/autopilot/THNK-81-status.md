@@ -112,6 +112,13 @@ json-render validation target-agnostic and preserve display-only generated UI.
   local Node 25); focused tests and typechecks were unaffected.
 - 2026-06-26 U3 PR opened:
   <https://github.com/thinkwork-ai/thinkwork/pull/2998>.
+- 2026-06-26 U3 CI test failed because two web tests still expected the old
+  fixture params `{ taskId: "task-123" }`; updated
+  `json-render/actions.test.ts` and `ThreadJsonRenderRenderer.test.tsx` to
+  assert the new Work Item status action params.
+- 2026-06-26 U3 CI repair verification passed:
+  `pnpm --filter @thinkwork/web test -- json-render/actions json-render/ThreadJsonRenderRenderer`
+  (9 tests) and `pnpm --filter @thinkwork/web typecheck`.
 - 2026-06-26 formatting attempt:
   `pnpm exec prettier --write ...` failed because `prettier` is not installed
   in this workspace (`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "prettier" not

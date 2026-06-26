@@ -88,7 +88,12 @@ describe("ThreadJsonRenderRenderer", () => {
         idempotencyKey: expect.stringMatching(
           /^json-render-action:json-render-fnv1a:[a-f0-9]{8}$/,
         ),
-        params: { taskId: "task-123" },
+        params: {
+          target: "work_item_status",
+          workItemId: "77777777-7777-7777-7777-777777777777",
+          statusCategory: "DONE",
+          note: "Approved from generated UI",
+        },
       },
     });
   });
