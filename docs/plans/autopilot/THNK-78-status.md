@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-78
-status: u6-prompt-assembly-in-progress
+status: u7-action-governance-in-progress
 target_branch: main
 ---
 
@@ -102,6 +102,11 @@ target_branch: main
 - U4+U5 branch and worktree were cleaned up after merge.
 - U6 worktree created from updated `origin/main` at
   `81e31aeb460e9bee395c7d33907a19d4bf5b7624`.
+- U6 PR merged to `main`: https://github.com/thinkwork-ai/thinkwork/pull/2983
+  at `9de726ac663adbcd35551bc27c7748ff0cccac59`.
+- U6 branch and worktree were cleaned up after merge.
+- U7 worktree created from updated `origin/main` at
+  `9de726ac663adbcd35551bc27c7748ff0cccac59`.
 
 ## Unit Log
 
@@ -213,5 +218,41 @@ target_branch: main
   - `pnpm --filter @thinkwork/pi-extensions typecheck` passed.
   - `pnpm --filter @thinkwork/workspace-defaults typecheck` passed.
   - `pnpm --filter @thinkwork/agentcore-pi test -- system-prompt` passed.
+  - `git diff --check` passed.
+  - GitHub PR checks passed: CLA Assistant, Lint, Verify, Typecheck, and Test.
+- Status: merged.
+
+### U7 action governance
+
+- Objective: route json-render durable actions through a ThinkWork-owned,
+  schema-validated mutation instead of the legacy GenUI action name.
+- Branch: `codex/thnk-78-u7-actions`
+- Worktree: `/Users/ericodom/.codex/worktrees/thnk-78-u7-actions`
+- Base: `origin/main` at `9de726ac663adbcd35551bc27c7748ff0cccac59`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2984
+- Added shared `@thinkwork/thread-json-render` action helpers for source
+  readiness, idempotency keys, and primitive param normalization.
+- Renamed the GraphQL action mutation from `handleGenUIAction` /
+  `HandleGenUIActionInput` to `handleJsonRenderAction` /
+  `HandleJsonRenderActionInput`.
+- Reused the existing API validation boundary for tenant/thread visibility,
+  source message/part ownership, persisted spec hash, action id, params,
+  duplicate idempotency, and per-user rate limiting.
+- Updated the web action hook to call `HandleJsonRenderActionMutation`.
+- Regenerated GraphQL client types for web, mobile, and CLI, trimming
+  generator formatting churn to the actual schema rename.
+- Verification:
+  - `pnpm schema:build` passed; the AppSync subscription schema had no content
+    change for this mutation rename.
+  - `pnpm --filter @thinkwork/web codegen` passed.
+  - `pnpm --filter @thinkwork/mobile codegen` passed.
+  - `pnpm --filter thinkwork-cli codegen` passed.
+  - `pnpm --filter @thinkwork/thread-json-render test -- actions validation` passed.
+  - `pnpm --filter @thinkwork/api test -- handleJsonRenderAction` passed.
+  - `pnpm --filter @thinkwork/api test -- graphql-contract` passed.
+  - `pnpm --filter @thinkwork/web test -- ThreadJsonRenderRenderer actions` passed.
+  - `pnpm --filter @thinkwork/thread-json-render typecheck` passed.
+  - `pnpm --filter @thinkwork/api typecheck` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
   - `git diff --check` passed.
 - Status: PR ready.

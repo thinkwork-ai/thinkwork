@@ -1837,9 +1837,9 @@ export const SendMessageMutation = gql`
   }
 `;
 
-export const HandleGenUIActionMutation = gql`
-  mutation HandleGenUIAction($input: HandleGenUIActionInput!) {
-    handleGenUIAction(input: $input) {
+export const HandleJsonRenderActionMutation = gql`
+  mutation HandleJsonRenderAction($input: HandleJsonRenderActionInput!) {
+    handleJsonRenderAction(input: $input) {
       id
       threadId
       tenantId

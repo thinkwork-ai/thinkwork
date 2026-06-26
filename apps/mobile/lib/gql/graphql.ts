@@ -2295,7 +2295,7 @@ export type FlagThreadForEvalResult = {
   dataset: EvalDataset;
 };
 
-export type HandleGenUiActionInput = {
+export type HandleJsonRenderActionInput = {
   actionId: Scalars["String"]["input"];
   idempotencyKey: Scalars["String"]["input"];
   params?: InputMaybe<Scalars["AWSJSON"]["input"]>;
@@ -3441,7 +3441,7 @@ export type Mutation = {
   enableWorkflowTemplate: WorkflowTemplateBinding;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
-  handleGenUIAction: Message;
+  handleJsonRenderAction: Message;
   importN8nRoutine: Routine;
   importN8nWorkflowDraft: ImportN8nWorkflowDraftResult;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
@@ -4054,8 +4054,8 @@ export type MutationFlagThreadForEvalArgs = {
   input: FlagThreadForEvalInput;
 };
 
-export type MutationHandleGenUiActionArgs = {
-  input: HandleGenUiActionInput;
+export type MutationHandleJsonRenderActionArgs = {
+  input: HandleJsonRenderActionInput;
 };
 
 export type MutationImportN8nRoutineArgs = {

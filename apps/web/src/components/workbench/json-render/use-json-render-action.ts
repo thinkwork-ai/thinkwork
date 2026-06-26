@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation } from "urql";
-import { HandleGenUIActionMutation } from "@/lib/graphql-queries";
+import { HandleJsonRenderActionMutation } from "@/lib/graphql-queries";
 import {
   buildHandleJsonRenderActionInput,
   createJsonRenderActionIdempotencyKey,
@@ -23,7 +23,7 @@ export function useJsonRenderAction(source: {
   partId?: string | null;
   data: ThreadJsonRenderData;
 }) {
-  const [, execute] = useMutation(HandleGenUIActionMutation);
+  const [, execute] = useMutation(HandleJsonRenderActionMutation);
   const [statuses, setStatuses] = useState<
     Record<string, JsonRenderActionStatus>
   >({});

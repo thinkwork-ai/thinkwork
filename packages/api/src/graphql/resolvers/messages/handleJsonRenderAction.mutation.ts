@@ -1,5 +1,6 @@
 import { GraphQLError } from "graphql";
 import {
+  normalizeThreadJsonRenderActionParams,
   stableStringify,
   validateThreadJsonRenderPersistedPart,
   type ThreadJsonRenderDurableActionDescriptor,
@@ -24,9 +25,9 @@ import { sendMessage } from "./sendMessage.mutation.js";
 const ACTION_RATE_LIMIT_WINDOW_MS = 60_000;
 const ACTION_RATE_LIMIT_MAX = 12;
 
-export const handleGenUIAction = async (
+export const handleJsonRenderAction = async (
   _parent: unknown,
-  args: { input?: HandleGenUIActionInput },
+  args: { input?: HandleJsonRenderActionInput },
   ctx: GraphQLContext,
 ) => {
   const input = parseInput(args.input);
@@ -110,7 +111,7 @@ export const handleGenUIAction = async (
   );
 };
 
-interface HandleGenUIActionInput {
+interface HandleJsonRenderActionInput {
   threadId: string;
   sourceMessageId: string;
   partId: string;
@@ -120,13 +121,13 @@ interface HandleGenUIActionInput {
   params?: Record<string, ThreadJsonRenderPrimitive>;
 }
 
-function parseInput(input: HandleGenUIActionInput | undefined) {
+function parseInput(input: HandleJsonRenderActionInput | undefined) {
   if (!input) {
     throw new GraphQLError("Generated UI action input is required", {
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
-  const parsed: HandleGenUIActionInput = {
+  const parsed: HandleJsonRenderActionInput = {
     threadId: requiredString(input.threadId, "threadId"),
     sourceMessageId: requiredString(input.sourceMessageId, "sourceMessageId"),
     partId: requiredString(input.partId, "partId"),
@@ -155,7 +156,7 @@ function requiredString(value: unknown, field: string): string {
 async function loadValidatedSourcePart(input: {
   tenantId: string;
   userId: string;
-  input: HandleGenUIActionInput;
+  input: HandleJsonRenderActionInput;
 }): Promise<{ part: ThreadJsonRenderPart }> {
   const [visibleThread] = await db
     .select({ id: threads.id })
@@ -250,22 +251,20 @@ function normalizeParams(
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
-  const normalized: Record<string, ThreadJsonRenderPrimitive> = {};
-  for (const [key, param] of Object.entries(parsed)) {
+  for (const param of Object.values(parsed)) {
     if (
       param === null ||
       typeof param === "string" ||
       typeof param === "number" ||
       typeof param === "boolean"
     ) {
-      normalized[key] = param;
       continue;
     }
     throw new GraphQLError("Generated UI action params must be primitive", {
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
-  return normalized;
+  return normalizeThreadJsonRenderActionParams(parsed);
 }
 
 async function findDuplicateActionMessage(input: {

@@ -1,5 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createPrimitiveJsonRenderFixture,
@@ -8,12 +14,21 @@ import {
 import { ThreadJsonRenderFallback } from "./ThreadJsonRenderFallback";
 import { ThreadJsonRenderRenderer } from "./ThreadJsonRenderRenderer";
 
-vi.mock("urql", () => ({
-  useMutation: () => [undefined, vi.fn()],
+const mocks = vi.hoisted(() => ({
+  executeMutation: vi.fn(),
 }));
+
+vi.mock("urql", () => ({
+  useMutation: () => [undefined, mocks.executeMutation],
+}));
+
+beforeEach(() => {
+  mocks.executeMutation.mockResolvedValue({});
+});
 
 afterEach(() => {
   cleanup();
+  mocks.executeMutation.mockReset();
 });
 
 describe("ThreadJsonRenderRenderer", () => {
@@ -46,6 +61,36 @@ describe("ThreadJsonRenderRenderer", () => {
     expect(
       screen.getByRole("button", { name: "Approve" }).hasAttribute("disabled"),
     ).toBe(false);
+  });
+
+  it("submits durable actions through the json-render action mutation", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+
+    render(
+      <ThreadJsonRenderRenderer
+        data={fixture.data}
+        partId={fixture.id}
+        sourceMessageId="message-1"
+        threadId="thread-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() => expect(mocks.executeMutation).toHaveBeenCalledTimes(1));
+    expect(mocks.executeMutation.mock.calls[0][0]).toEqual({
+      input: {
+        threadId: "thread-1",
+        sourceMessageId: "message-1",
+        partId: fixture.id,
+        actionId: "approve-task",
+        specHash: fixture.data.specHash,
+        idempotencyKey: expect.stringMatching(
+          /^json-render-action:json-render-fnv1a:[a-f0-9]{8}$/,
+        ),
+        params: { taskId: "task-123" },
+      },
+    });
   });
 
   it("keeps durable actions disabled before a source message exists", () => {
