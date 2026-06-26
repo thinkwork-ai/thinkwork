@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import {
+  THREAD_JSON_RENDER_CATALOG_VERSION,
+  THREAD_JSON_RENDER_PART_TYPE,
+  THREAD_JSON_RENDER_SCHEMA_VERSION,
+  createThreadJsonRenderSpecHash,
+  type ThreadJsonRenderPart,
+} from "../../../lib/thread-json-render/persisted-parts.js";
 
 const THREAD_ID = "33333333-3333-3333-3333-333333333333";
 const TENANT_ID = "22222222-2222-2222-2222-222222222222";
@@ -126,8 +132,8 @@ beforeEach(() => {
 });
 
 describe("promoteGenUIArtifact", () => {
-  it("snapshots the persisted GenUI part into a DATA_VIEW artifact", async () => {
-    const fixture = createTaskReviewGenUIFixture();
+  it("snapshots the persisted json-render part into a DATA_VIEW artifact", async () => {
+    const fixture = createTaskReviewJsonRenderFixture();
     enqueueHappySource(fixture);
     mocks.selectQueue.push([]); // duplicate lookup
 
@@ -149,8 +155,8 @@ describe("promoteGenUIArtifact", () => {
       mocks.persistArtifactContentPayload.mock.calls[0][0].content,
     );
     expect(payload).toMatchObject({
-      schemaVersion: "thread-genui-artifact-snapshot/v1",
-      kind: "genui_snapshot",
+      schemaVersion: "thread-json-render-artifact-snapshot/v1",
+      kind: "json_render_snapshot",
       source: {
         threadId: THREAD_ID,
         sourceMessageId: SOURCE_MESSAGE_ID,
@@ -158,8 +164,8 @@ describe("promoteGenUIArtifact", () => {
         specHash: fixture.data.specHash,
         promotedByUserId: USER_ID,
       },
-      genui: {
-        type: "data-genui",
+      jsonRender: {
+        type: "data-json-render",
         id: fixture.id,
       },
     });
@@ -172,9 +178,9 @@ describe("promoteGenUIArtifact", () => {
       status: "final",
       source_message_id: SOURCE_MESSAGE_ID,
       metadata: {
-        kind: "genui_snapshot",
-        schemaVersion: "thread-genui-artifact-snapshot/v1",
-        genuiSnapshot: expect.objectContaining({
+        kind: "json_render_snapshot",
+        schemaVersion: "thread-json-render-artifact-snapshot/v1",
+        jsonRenderSnapshot: expect.objectContaining({
           partId: fixture.id,
           specHash: fixture.data.specHash,
           idempotencyKey: "idem-1",
@@ -184,14 +190,14 @@ describe("promoteGenUIArtifact", () => {
   });
 
   it("coalesces duplicate promotion clicks by idempotency key", async () => {
-    const fixture = createTaskReviewGenUIFixture();
+    const fixture = createTaskReviewJsonRenderFixture();
     enqueueHappySource(fixture);
     mocks.selectQueue.push([
       {
         id: "artifact-existing",
         title: "Existing",
         type: "data_view",
-        metadata: { kind: "genui_snapshot" },
+        metadata: { kind: "json_render_snapshot" },
       },
     ]);
 
@@ -207,7 +213,7 @@ describe("promoteGenUIArtifact", () => {
   });
 
   it("rejects stale promotion requests before writing artifacts", async () => {
-    const fixture = createTaskReviewGenUIFixture();
+    const fixture = createTaskReviewJsonRenderFixture();
     enqueueHappySource(fixture);
 
     await expect(
@@ -221,17 +227,20 @@ describe("promoteGenUIArtifact", () => {
     expect(mocks.insertedRows).toHaveLength(0);
   });
 
-  it("rejects non-ready GenUI parts", async () => {
+  it("rejects non-ready json-render parts", async () => {
     const fixture = {
-      ...createTaskReviewGenUIFixture(),
-      data: { ...createTaskReviewGenUIFixture().data, status: "stale" as const },
+      ...createTaskReviewJsonRenderFixture(),
+      data: {
+        ...createTaskReviewJsonRenderFixture().data,
+        status: "stale" as const,
+      },
     };
     enqueueHappySource(fixture);
 
     await expect(
       promoteGenUIArtifact(
         {},
-        { input: promotionInput(createTaskReviewGenUIFixture()) },
+        { input: promotionInput(createTaskReviewJsonRenderFixture()) },
         ctx,
       ),
     ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
@@ -239,7 +248,7 @@ describe("promoteGenUIArtifact", () => {
   });
 });
 
-function enqueueHappySource(fixture: ReturnType<typeof createTaskReviewGenUIFixture>) {
+function enqueueHappySource(fixture: ThreadJsonRenderPart) {
   mocks.selectQueue.push([{ id: THREAD_ID, agent_id: "agent-1" }]);
   mocks.selectQueue.push([
     {
@@ -252,12 +261,53 @@ function enqueueHappySource(fixture: ReturnType<typeof createTaskReviewGenUIFixt
   ]);
 }
 
-function promotionInput(fixture: ReturnType<typeof createTaskReviewGenUIFixture>) {
+function promotionInput(fixture: ThreadJsonRenderPart) {
   return {
     threadId: THREAD_ID,
     sourceMessageId: SOURCE_MESSAGE_ID,
     partId: fixture.id,
     specHash: fixture.data.specHash!,
     idempotencyKey: "idem-1",
+  };
+}
+
+function createTaskReviewJsonRenderFixture(): ThreadJsonRenderPart {
+  const spec = {
+    root: "review",
+    elements: {
+      review: {
+        type: "task.review",
+        props: {
+          title: "Review onboarding task",
+          summary: "Confirm the customer kickoff task is ready.",
+          status: "pending",
+          primaryActionId: "approve-task",
+        },
+        children: [],
+      },
+    },
+  };
+  return {
+    type: THREAD_JSON_RENDER_PART_TYPE,
+    id: "json-render:task-review:123",
+    data: {
+      schemaVersion: THREAD_JSON_RENDER_SCHEMA_VERSION,
+      catalogVersion: THREAD_JSON_RENDER_CATALOG_VERSION,
+      status: "ready",
+      spec,
+      mobileFallback: {
+        title: "Review onboarding task",
+        summary: "Confirm the customer kickoff task is ready.",
+      },
+      durableActions: [
+        {
+          id: "approve-task",
+          label: "Approve",
+          kind: "approve",
+          params: { taskId: "task-123" },
+        },
+      ],
+      specHash: createThreadJsonRenderSpecHash(spec),
+    },
   };
 }

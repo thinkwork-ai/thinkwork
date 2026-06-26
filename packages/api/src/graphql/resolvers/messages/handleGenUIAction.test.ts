@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createTaskReviewGenUIFixture } from "@thinkwork/genui";
+import {
+  THREAD_JSON_RENDER_CATALOG_VERSION,
+  THREAD_JSON_RENDER_PART_TYPE,
+  THREAD_JSON_RENDER_SCHEMA_VERSION,
+  createThreadJsonRenderSpecHash,
+  type ThreadJsonRenderPart,
+} from "../../../lib/thread-json-render/persisted-parts.js";
 
 const THREAD_ID = "33333333-3333-3333-3333-333333333333";
 const TENANT_ID = "22222222-2222-2222-2222-222222222222";
@@ -120,9 +126,9 @@ describe("handleGenUIAction", () => {
       senderType: "user",
       senderId: USER_ID,
     });
-    expect(forwarded.content).toContain("GenUI action: Approve");
-    expect(JSON.parse(forwarded.metadata).genuiAction).toMatchObject({
-      source: "genui_action",
+    expect(forwarded.content).toContain("Generated UI action: Approve");
+    expect(JSON.parse(forwarded.metadata).jsonRenderAction).toMatchObject({
+      source: "json_render_action",
       sourceMessageId: SOURCE_MESSAGE_ID,
       partId: fixture.id,
       actionId: "approve-task",
@@ -142,7 +148,7 @@ describe("handleGenUIAction", () => {
         tenant_id: TENANT_ID,
         role: "user",
         content: "GenUI action: Approve",
-        metadata: { genuiAction: { idempotencyKey: "idem-1" } },
+        metadata: { jsonRenderAction: { idempotencyKey: "idem-1" } },
         created_at: new Date("2026-06-21T00:00:00Z"),
       },
     ]);
@@ -226,16 +232,44 @@ describe("handleGenUIAction", () => {
 });
 
 function sourcePart() {
-  return {
-    ...createTaskReviewGenUIFixture(),
-    data: {
-      ...createTaskReviewGenUIFixture().data,
-      promotion: {
-        ...createTaskReviewGenUIFixture().data.promotion,
-        sourceMessageId: SOURCE_MESSAGE_ID,
+  const spec = {
+    root: "review",
+    elements: {
+      review: {
+        type: "task.review",
+        props: {
+          title: "Review onboarding task",
+          summary: "Confirm the customer kickoff task is ready.",
+          status: "pending",
+          primaryActionId: "approve-task",
+        },
+        children: [],
       },
     },
   };
+  return {
+    type: THREAD_JSON_RENDER_PART_TYPE,
+    id: "json-render:task-review:123",
+    data: {
+      schemaVersion: THREAD_JSON_RENDER_SCHEMA_VERSION,
+      catalogVersion: THREAD_JSON_RENDER_CATALOG_VERSION,
+      status: "ready",
+      spec,
+      mobileFallback: {
+        title: "Review onboarding task",
+        summary: "Confirm the customer kickoff task is ready.",
+      },
+      durableActions: [
+        {
+          id: "approve-task",
+          label: "Approve",
+          kind: "approve",
+          params: { taskId: "task-123" },
+        },
+      ],
+      specHash: createThreadJsonRenderSpecHash(spec),
+    },
+  } satisfies ThreadJsonRenderPart;
 }
 
 function enqueueHappySource(fixture: ReturnType<typeof sourcePart>) {

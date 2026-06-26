@@ -1,12 +1,11 @@
 import { GraphQLError } from "graphql";
 import {
-  createAnalyticsDisplayGenUIValidationContext,
   stableStringify,
-  validateThreadGenUIPart,
-  type ThreadGenUIActionDescriptor,
-  type ThreadGenUIPart,
-  type ThreadGenUIPrimitive,
-} from "@thinkwork/genui";
+  validateThreadJsonRenderPersistedPart,
+  type ThreadJsonRenderDurableActionDescriptor,
+  type ThreadJsonRenderPart,
+  type ThreadJsonRenderPrimitive,
+} from "../../../lib/thread-json-render/persisted-parts.js";
 import type { GraphQLContext } from "../../context.js";
 import {
   and,
@@ -43,7 +42,7 @@ export const handleGenUIAction = async (
     userId: caller.userId,
     input,
   });
-  const action = source.part.data.actions?.find(
+  const action = source.part.data.durableActions?.find(
     (candidate) => candidate.id === input.actionId,
   );
   if (!action) {
@@ -79,8 +78,8 @@ export const handleGenUIAction = async (
   });
 
   const metadata = {
-    genuiAction: {
-      source: "genui_action",
+    jsonRenderAction: {
+      source: "json_render_action",
       sourceMessageId: input.sourceMessageId,
       partId: input.partId,
       actionId: action.id,
@@ -118,7 +117,7 @@ interface HandleGenUIActionInput {
   actionId: string;
   specHash: string;
   idempotencyKey: string;
-  params?: Record<string, ThreadGenUIPrimitive>;
+  params?: Record<string, ThreadJsonRenderPrimitive>;
 }
 
 function parseInput(input: HandleGenUIActionInput | undefined) {
@@ -157,7 +156,7 @@ async function loadValidatedSourcePart(input: {
   tenantId: string;
   userId: string;
   input: HandleGenUIActionInput;
-}): Promise<{ part: ThreadGenUIPart }> {
+}): Promise<{ part: ThreadJsonRenderPart }> {
   const [visibleThread] = await db
     .select({ id: threads.id })
     .from(threads)
@@ -205,10 +204,7 @@ async function loadValidatedSourcePart(input: {
       extensions: { code: "NOT_FOUND" },
     });
   }
-  const validation = validateThreadGenUIPart(
-    rawPart,
-    createAnalyticsDisplayGenUIValidationContext(),
-  );
+  const validation = validateThreadJsonRenderPersistedPart(rawPart);
   if (!validation.ok) {
     throw new GraphQLError("Generated UI source part is invalid", {
       extensions: {
@@ -231,7 +227,7 @@ function findSourcePart(parts: unknown, partId: string): unknown {
   if (!Array.isArray(parsed)) return null;
   return parsed.find(
     (part) =>
-      isRecord(part) && part.type === "data-genui" && part.id === partId,
+      isRecord(part) && part.type === "data-json-render" && part.id === partId,
   );
 }
 
@@ -244,7 +240,9 @@ function parseJson(value: unknown): unknown {
   }
 }
 
-function normalizeParams(value: unknown): Record<string, ThreadGenUIPrimitive> {
+function normalizeParams(
+  value: unknown,
+): Record<string, ThreadJsonRenderPrimitive> {
   const parsed = parseJson(value);
   if (parsed == null) return {};
   if (!isRecord(parsed)) {
@@ -252,7 +250,7 @@ function normalizeParams(value: unknown): Record<string, ThreadGenUIPrimitive> {
       extensions: { code: "BAD_USER_INPUT" },
     });
   }
-  const normalized: Record<string, ThreadGenUIPrimitive> = {};
+  const normalized: Record<string, ThreadJsonRenderPrimitive> = {};
   for (const [key, param] of Object.entries(parsed)) {
     if (
       param === null ||
@@ -282,7 +280,7 @@ async function findDuplicateActionMessage(input: {
       and(
         eq(messages.tenant_id, input.tenantId),
         eq(messages.thread_id, input.threadId),
-        sql`${messages.metadata}->'genuiAction'->>'idempotencyKey' = ${input.idempotencyKey}`,
+        sql`${messages.metadata}->'jsonRenderAction'->>'idempotencyKey' = ${input.idempotencyKey}`,
       ),
     )
     .limit(1);
@@ -306,7 +304,7 @@ async function assertActionRateLimit(input: {
           messages.created_at,
           new Date(Date.now() - ACTION_RATE_LIMIT_WINDOW_MS),
         ),
-        sql`${messages.metadata}->'genuiAction'->>'source' = 'genui_action'`,
+        sql`${messages.metadata}->'jsonRenderAction'->>'source' = 'json_render_action'`,
       ),
     );
   const count = Number(row?.count ?? 0);
@@ -318,13 +316,13 @@ async function assertActionRateLimit(input: {
 }
 
 function actionMessageContent(
-  action: ThreadGenUIActionDescriptor,
-  part: ThreadGenUIPart,
+  action: ThreadJsonRenderDurableActionDescriptor,
+  part: ThreadJsonRenderPart,
 ): string {
   const title = part.data.mobileFallback.title.trim();
   const summary = part.data.mobileFallback.summary.trim();
   const lines = [
-    `GenUI action: ${action.label}`,
+    `Generated UI action: ${action.label}`,
     title ? `Source: ${title}` : null,
     summary ? `Summary: ${summary}` : null,
   ].filter(Boolean);
