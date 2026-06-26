@@ -137,7 +137,7 @@ export interface RuntimeEnvSnapshot {
   awsRegion: string;
   agentCoreMemoryId: string;
   hindsightEndpoint: string;
-  memoryEngine: "managed" | "hindsight";
+  memoryEngine: "managed" | "hindsight" | "cognee";
   /**
    * Name of the API's `memory-retain` Lambda
    * (`thinkwork-${stage}-api-memory-retain`). Empty string disables
@@ -166,7 +166,11 @@ export function snapshotRuntimeEnv(
 ): RuntimeEnvSnapshot {
   const memoryEngineRaw = (env.MEMORY_ENGINE || "managed").toLowerCase().trim();
   const memoryEngine: RuntimeEnvSnapshot["memoryEngine"] =
-    memoryEngineRaw === "hindsight" ? "hindsight" : "managed";
+    memoryEngineRaw === "hindsight"
+      ? "hindsight"
+      : memoryEngineRaw === "cognee"
+        ? "cognee"
+        : "managed";
 
   return {
     awsRegion: env.AWS_REGION || "us-east-1",

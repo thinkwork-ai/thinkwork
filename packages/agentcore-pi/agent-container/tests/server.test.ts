@@ -2765,6 +2765,58 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     );
   });
 
+  it("uses Context Engine memory tools instead of legacy direct tools on the cognee engine", async () => {
+    const bundle = await buildInvocationResources({
+      payload: {
+        message: "what does this space remember?",
+        context_engine_enabled: true,
+        thinkwork_api_url: "https://api.example.com",
+        thinkwork_api_secret: "secret",
+      },
+      identity: {
+        tenantId: "tenant-1",
+        userId: "user-1",
+        agentId: "agent-1",
+        threadId: "thread-1",
+        tenantSlug: "",
+        agentSlug: "",
+        traceId: "",
+      },
+      env: {
+        awsRegion: "us-east-1",
+        agentCoreMemoryId: "managed-memory-id",
+        hindsightEndpoint: "https://hindsight.dev.example.com",
+        memoryEngine: "cognee",
+        memoryRetainFnName: "",
+        dbClusterArn: "",
+        dbSecretArn: "",
+        dbName: "thinkwork",
+        workspaceBucket: "",
+        workspaceDir: "/tmp/workspace",
+        piAgentDir: "/tmp/thinkwork-pi-agent",
+        gitSha: "test",
+      },
+      agentCoreClient: fakeAgentCoreClient() as never,
+      workspaceSkills: [],
+      connectMcpServer: noopConnect,
+      sessionStoreFactory: () => ({}) as never,
+      cleanup: [],
+      handleStore: new HandleStore(),
+      mcpJsonConfig: { directTools: [] },
+      mcpRegistry: new McpToolRegistry(),
+    });
+
+    expect(bundle.extensionToolNames).toEqual(
+      expect.arrayContaining(["query_context", "query_memory_context"]),
+    );
+    expect(bundle.extensionToolNames).not.toEqual(
+      expect.arrayContaining(["recall", "reflect"]),
+    );
+    expect(bundle.tools.map((tool) => tool.name)).not.toEqual(
+      expect.arrayContaining(["remember", "recall"]),
+    );
+  });
+
   it("skips the memory extension in eval mode (user-less)", async () => {
     const bundle = await buildInvocationResources({
       payload: { message: "hi", eval_mode: true },

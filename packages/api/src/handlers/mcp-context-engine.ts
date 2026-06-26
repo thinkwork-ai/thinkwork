@@ -28,7 +28,7 @@ const TOOLS = [
   {
     name: "query_context",
     description:
-      "Search permissioned Thinkwork context across fast default providers: ontology Brain facets, wiki pages, workspace files, Bedrock Knowledge Bases, and approved context-safe MCP tools. Use query_memory_context for Hindsight Memory synthesis.",
+      "Search permissioned Thinkwork context across fast default providers: ontology Brain facets, wiki pages, workspace files, Bedrock Knowledge Bases, and approved context-safe MCP tools. Use query_memory_context for user-carried or current-space long-term memory.",
     inputSchema: {
       type: "object",
       properties: {
@@ -127,13 +127,13 @@ const TOOLS = [
   {
     name: "query_memory_context",
     description:
-      "Search only Thinkwork Hindsight Memory. The memory provider may use Hindsight reflect for synthesized agent context, which is slower than wiki/context search but produces a grounded answer-style memory summary.",
+      "Search only Thinkwork long-term memory through the host-scoped Context Engine. Use scope 'personal' for user-carried memory, scope 'team' for current-space memory, and scope 'auto' when either may be relevant. The agent cannot choose arbitrary user or space owners; identity is closed over by the host.",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string" },
         mode: { type: "string", enum: ["results", "answer"] },
-        scope: { type: "string", enum: ["personal", "auto"] },
+        scope: { type: "string", enum: ["personal", "team", "auto"] },
         depth: { type: "string", enum: ["quick", "deep"] },
         limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
         agentId: {
@@ -215,7 +215,7 @@ const TOOLS = [
   {
     name: "query_wiki_context",
     description:
-      "Search compiled wiki pages — tenant-shared pages plus your own. Use this for fast page/entity/topic lookup without waiting on Hindsight Memory. These are compiled narrative pages; for traversing raw entities and relationship edges in the knowledge graph, use knowledge_graph_search instead.",
+      "Search compiled wiki pages — tenant-shared pages plus your own. Use this for fast page/entity/topic lookup without waiting on long-term memory recall. These are compiled narrative pages; for traversing raw entities and relationship edges in the knowledge graph, use knowledge_graph_search instead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -835,9 +835,8 @@ async function resolveCaller(claims: Record<string, unknown>) {
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } = await import(
-    "../graphql/resolvers/core/resolve-auth-user.js"
-  );
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -1387,9 +1386,8 @@ async function canManageProviderSettings(
   const principalId = stringClaim(claims.sub);
   if (!principalId) return false;
   try {
-    const { requireTenantAdmin } = await import(
-      "../graphql/resolvers/core/authz.js"
-    );
+    const { requireTenantAdmin } =
+      await import("../graphql/resolvers/core/authz.js");
     await requireTenantAdmin(
       {
         auth: {

@@ -166,6 +166,13 @@ describe("snapshotRuntimeEnv", () => {
     ).toBe("hindsight");
   });
 
+  it("selects cognee when MEMORY_ENGINE=cognee (case-insensitive)", () => {
+    expect(
+      snapshotRuntimeEnv({ MEMORY_ENGINE: "Cognee" } as NodeJS.ProcessEnv)
+        .memoryEngine,
+    ).toBe("cognee");
+  });
+
   it("falls back to managed for any other MEMORY_ENGINE value", () => {
     expect(
       snapshotRuntimeEnv({ MEMORY_ENGINE: "weirdvalue" } as NodeJS.ProcessEnv)
