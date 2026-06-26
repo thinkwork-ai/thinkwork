@@ -83,7 +83,7 @@ if (!LIVE_ENABLED) {
               "Brain provider status exposes active read route, shadow migration, vault provenance, and provider-local retrieval posture",
               "Brain hits include untrusted source-data boundary metadata",
               "Brain answer is better than memory-only for the named workflow by hit count or expected-term match",
-              "query_memory_context remains a separate Hindsight path rather than an implicit fallback",
+              "query_memory_context remains a separate Cognee-backed user/space memory path rather than an implicit Brain fallback",
             ],
           },
         },

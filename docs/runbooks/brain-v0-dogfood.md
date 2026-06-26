@@ -11,6 +11,7 @@
   **Brain operations**.
 - `node plugins/company-brain/smoke/company-brain-operations-smoke.mjs` dry-run passes.
 - `node plugins/company-brain/smoke/company-brain-context-engine-smoke.mjs` dry-run passes.
+- `node plugins/company-brain/smoke/cognee-memory-cutover-smoke.mjs` dry-run passes.
 
 ## Substrate Checks
 
@@ -63,8 +64,34 @@ SMOKE_ENABLE_COMPANY_BRAIN_CONTEXT=1 \
 
 Passing live mode means `query_brain_context` returns Company Brain context
 through the Context Engine boundary, carries untrusted source-data metadata,
-reports provider-local posture, and stays separate from Hindsight
-`query_memory_context`.
+reports provider-local posture, and stays separate from Cognee-backed user and
+space `query_memory_context`.
+
+## Cognee User + Space Memory Cutover Checks
+
+Prove the session-memory cutover through ThinkWork APIs and Context Engine,
+not raw Cognee endpoints:
+
+```sh
+SMOKE_ENABLE_COGNEE_MEMORY_CUTOVER=1 \
+  SMOKE_TENANT_ID=<tenant-id> \
+  SMOKE_USER_ID=<user-id> \
+  SMOKE_SPACE_ID=<space-id> \
+  SMOKE_SPACE_THREAD_ID=<thread-id-in-space> \
+  SMOKE_OTHER_SPACE_THREAD_ID=<thread-id-in-other-allowed-space> \
+  node plugins/company-brain/smoke/cognee-memory-cutover-smoke.mjs
+```
+
+Passing live mode means `memorySystemConfig` reports Cognee as the active
+user + space memory engine, Hindsight is not required for the new path,
+`captureMobileMemory` follows the user across Spaces, and
+`captureSpaceMemory` stays attached to the Space while remaining available to
+authorized members through GraphQL search and Context Engine team memory.
+
+Set `SMOKE_UNAUTHORIZED_AUTH_TOKEN=<cognito-bearer-for-non-member>` to verify
+that a deployed Cognito caller outside the private Space cannot read the space
+memory. Add `SMOKE_REQUIRE_UNAUTHORIZED_CHECK=1` when that negative check must
+be present for the run to pass.
 
 ## Weekly Cadence
 
