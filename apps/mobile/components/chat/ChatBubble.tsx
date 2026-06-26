@@ -11,7 +11,7 @@ import {
   parseMessageBlocks,
   type MessageBlock,
   type GenUIAction,
-  type MobileGenUIFallback,
+  type MobileJsonRenderFallback,
 } from "@/lib/genui-registry";
 import {
   getRenderableMessageContent,
@@ -118,10 +118,10 @@ function BlinkingCursor() {
   );
 }
 
-function MobileGenUIFallbackCard({
+function MobileJsonRenderFallbackCard({
   fallback,
 }: {
-  fallback: MobileGenUIFallback;
+  fallback: MobileJsonRenderFallback;
 }) {
   const isUnsupported =
     fallback.status === "unsupported" || fallback.status === "invalid";
@@ -344,7 +344,7 @@ export function ChatBubble({
           {genuiFallbacks.length > 0 ? (
             <View className="gap-2 mt-2">
               {genuiFallbacks.map((fallback) => (
-                <MobileGenUIFallbackCard
+                <MobileJsonRenderFallbackCard
                   key={fallback.id}
                   fallback={fallback}
                 />

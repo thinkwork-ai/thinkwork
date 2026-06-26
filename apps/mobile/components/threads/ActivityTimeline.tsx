@@ -44,7 +44,7 @@ import { HeaderContextMenu } from "@/components/ui/header-context-menu";
 import { COLORS } from "@/lib/theme";
 import {
   getGenUIComponent,
-  type MobileGenUIFallback,
+  type MobileJsonRenderFallback,
 } from "@/lib/genui-registry";
 import {
   RefreshGenUIMutation,
@@ -108,7 +108,7 @@ interface Message {
   } | null;
   createdAt: string;
   toolResults?: Array<Record<string, unknown>> | null;
-  genuiFallbacks?: MobileGenUIFallback[] | null;
+  genuiFallbacks?: MobileJsonRenderFallback[] | null;
   metadata?: any;
   durableArtifact?: {
     id: string;
@@ -167,10 +167,10 @@ type TimelineItem =
       sortKey: number;
     }
   | {
-      kind: "data-genui-fallback";
+      kind: "data-json-render-fallback";
       data: {
         id: string;
-        fallback: MobileGenUIFallback;
+        fallback: MobileJsonRenderFallback;
         message: Message;
         createdAt: string;
       };
@@ -319,9 +319,9 @@ function mergeTimeline(
       for (let fi = 0; fi < m.genuiFallbacks.length; fi++) {
         const fallback = m.genuiFallbacks[fi];
         items.push({
-          kind: "data-genui-fallback",
+          kind: "data-json-render-fallback",
           data: {
-            id: `${m.id}-data-genui-${fallback.id}`,
+            id: `${m.id}-data-json-render-${fallback.id}`,
             fallback,
             message: m,
             createdAt: m.createdAt,
@@ -1103,11 +1103,11 @@ function GenUIContent({
   );
 }
 
-function DataGenUIFallbackContent({
+function DataJsonRenderFallbackContent({
   fallback,
   colors,
 }: {
-  fallback: MobileGenUIFallback;
+  fallback: MobileJsonRenderFallback;
   colors: (typeof COLORS)["dark"];
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -1190,7 +1190,7 @@ export function ActivityTimeline({
   const lastAgentIndex = useMemo(() => {
     for (let i = timeline.length - 1; i >= 0; i--) {
       const item = timeline[i];
-      if (item.kind === "genui" || item.kind === "data-genui-fallback")
+      if (item.kind === "genui" || item.kind === "data-json-render-fallback")
         continue; // skip generated UI blocks, find the agent message before them
       if (
         item.kind === "message" &&
@@ -1263,7 +1263,7 @@ export function ActivityTimeline({
         const { color } = getTurnStatusStyle(item.data.status, isDark);
         icon = <Brain size={16} color={color} />;
         iconBorder = color;
-      } else if (item.kind === "data-genui-fallback") {
+      } else if (item.kind === "data-json-render-fallback") {
         icon = <FileText size={16} color={RESPONSE_COLOR} />;
         iconBorder = RESPONSE_COLOR;
       } else if (item.kind === "genui") {
@@ -1320,9 +1320,9 @@ export function ActivityTimeline({
             currentUserId={currentUserId}
           />
         );
-      } else if (item.kind === "data-genui-fallback") {
+      } else if (item.kind === "data-json-render-fallback") {
         content = (
-          <DataGenUIFallbackContent
+          <DataJsonRenderFallbackContent
             fallback={item.data.fallback}
             colors={colors}
           />

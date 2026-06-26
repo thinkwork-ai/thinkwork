@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
-import {
-  createAnalyticsDisplayGenUIPart,
-  createTaskReviewGenUIFixture,
-} from "@thinkwork/genui";
 
 import {
   parseMessageBlocks,
-  parseThreadGenUIMobileFallbacks,
+  parseThreadJsonRenderMobileFallbacks,
 } from "./genui-registry";
 
 describe("mobile GenUI registry", () => {
-  it("renders persisted data-genui parts as mobile fallback summaries", () => {
-    const fixture = createTaskReviewGenUIFixture();
+  it("renders persisted data-json-render parts as mobile fallback summaries", () => {
+    const fixture = createTaskReviewJsonRenderFixture();
 
-    const fallbacks = parseThreadGenUIMobileFallbacks([fixture]);
+    const fallbacks = parseThreadJsonRenderMobileFallbacks([fixture]);
 
     expect(fallbacks).toEqual([
       expect.objectContaining({
@@ -27,53 +23,43 @@ describe("mobile GenUI registry", () => {
     ]);
   });
 
-  it("accepts analytics.display parts through the shared analytics adapter context", () => {
-    const part = createAnalyticsDisplayGenUIPart({
-      id: "genui:analytics:support-volume",
-      payload: {
-        kind: "analytics.display",
-        analyticsDisplayVersion: "analytics-display/v1",
+  it("renders analytics.display json-render parts from the required mobile fallback", () => {
+    const part = {
+      type: "data-json-render",
+      id: "json-render:analytics:support-volume",
+      data: {
+        schemaVersion: "thread-json-render/v1",
+        catalogVersion: "thread-json-render-catalog/v1",
+        status: "ready",
         spec: {
-          title: "Support Volume",
-          columns: [
-            { key: "day", label: "Day", type: "date" },
-            { key: "total", label: "Total", type: "number" },
-          ],
-          elements: [
-            {
-              type: "chart",
-              id: "volume",
-              title: "Ticket Volume",
-              chartKind: "bar",
-              categoryKey: "day",
-              series: [
-                {
-                  key: "total",
-                  label: "Total",
-                  valueKey: "total",
-                  palette: "chart-1",
-                },
-              ],
+          root: "analytics",
+          elements: {
+            analytics: {
+              type: "analytics.display",
+              props: {
+                kind: "analytics.display",
+                analyticsDisplayVersion: "analytics-display/v1",
+                title: "Support Volume",
+              },
+              children: [],
             },
-          ],
+          },
         },
-        data: { rows: [{ day: "2026-06-18", total: 59 }] },
-        freshness: {
-          takenAt: "2026-06-18T15:30:00.000Z",
-          status: "fresh",
+        mobileFallback: {
+          title: "Support Volume",
+          summary: "Ticket volume summary.",
+          lines: ["Source: Warehouse daily rollup"],
         },
-        provenance: {
-          sourceLabels: ["Warehouse daily rollup"],
-          dataSourceSlugs: ["warehouse-daily-rollup"],
-        },
-      } as never,
-    });
+      },
+    };
 
-    const [fallback] = parseThreadGenUIMobileFallbacks(JSON.stringify([part]));
+    const [fallback] = parseThreadJsonRenderMobileFallbacks(
+      JSON.stringify([part]),
+    );
 
     expect(fallback).toEqual(
       expect.objectContaining({
-        id: "genui:analytics:support-volume",
+        id: "json-render:analytics:support-volume",
         title: "Support Volume",
         component: "analytics.display",
         status: "ready",
@@ -82,11 +68,11 @@ describe("mobile GenUI registry", () => {
     expect(fallback.lines.join("\n")).toContain("Source: Warehouse");
   });
 
-  it("renders an unsupported fallback for data-genui parts without mobileFallback", () => {
-    const fixture = createTaskReviewGenUIFixture() as any;
+  it("renders an unsupported fallback for data-json-render parts without mobileFallback", () => {
+    const fixture = createTaskReviewJsonRenderFixture() as any;
     delete fixture.data.mobileFallback;
 
-    const [fallback] = parseThreadGenUIMobileFallbacks([fixture]);
+    const [fallback] = parseThreadJsonRenderMobileFallbacks([fixture]);
 
     expect(fallback).toEqual(
       expect.objectContaining({
@@ -98,11 +84,35 @@ describe("mobile GenUI registry", () => {
     );
     expect(
       fallback.diagnostics?.map((diagnostic) => diagnostic.code),
-    ).toContain("GENUI_MOBILE_FALLBACK_REQUIRED");
+    ).toContain("JSON_RENDER_MOBILE_FALLBACK_REQUIRED");
+  });
+
+  it("renders legacy data-genui parts as unsupported fallback summaries", () => {
+    const [fallback] = parseThreadJsonRenderMobileFallbacks([
+      {
+        type: "data-genui",
+        id: "genui:legacy",
+        data: {
+          schemaVersion: "thread-genui/v1",
+          catalogVersion: "thread-genui-catalog/v1",
+        },
+      },
+    ]);
+
+    expect(fallback).toEqual(
+      expect.objectContaining({
+        id: "genui:legacy",
+        title: "Legacy generated UI unsupported",
+        status: "unsupported",
+      }),
+    );
+    expect(
+      fallback.diagnostics?.map((diagnostic) => diagnostic.code),
+    ).toContain("JSON_RENDER_LEGACY_GENUI_UNSUPPORTED");
   });
 
   it("ignores malformed parts JSON without crashing", () => {
-    expect(parseThreadGenUIMobileFallbacks("{not-json")).toEqual([]);
+    expect(parseThreadJsonRenderMobileFallbacks("{not-json")).toEqual([]);
   });
 
   it("keeps existing _type GenUI message fences working", () => {
@@ -121,3 +131,35 @@ describe("mobile GenUI registry", () => {
     );
   });
 });
+
+function createTaskReviewJsonRenderFixture() {
+  return {
+    type: "data-json-render",
+    id: "json-render:task-review:123",
+    data: {
+      schemaVersion: "thread-json-render/v1",
+      catalogVersion: "thread-json-render-catalog/v1",
+      status: "ready",
+      spec: {
+        root: "review",
+        elements: {
+          review: {
+            type: "task.review",
+            props: {
+              title: "Review onboarding task",
+              summary: "Confirm the customer kickoff task is ready.",
+              status: "pending",
+            },
+            children: [],
+          },
+        },
+      },
+      mobileFallback: {
+        title: "Review onboarding task",
+        summary: "Confirm the customer kickoff task is ready.",
+        lines: ["Status: pending"],
+      },
+      specHash: "json-render-fnv1a:test",
+    },
+  };
+}
