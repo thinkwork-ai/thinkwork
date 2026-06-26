@@ -1,12 +1,19 @@
 ---
 title: "Thread GenUI data-genui Contract v1"
 date: 2026-06-20
-status: draft
+status: superseded
 issue: THNK-34
 module: "@thinkwork/genui"
+superseded_by: docs/specs/thread-json-render-contract-v1.md
 ---
 
 # Thread GenUI `data-genui` Contract v1
+
+> Superseded by THNK-77 and
+> `docs/specs/thread-json-render-contract-v1.md`. New Thread generated UI must
+> use `data-json-render` with an upstream json-render spec and the
+> `@json-render/shadcn` catalog path. Do not build new code against this
+> `data-genui` / `@thinkwork/genui` contract.
 
 This contract defines the portable Thread GenUI envelope used by agent emitters,
 Thread stream consumers, renderers, action handlers, mobile fallbacks, and

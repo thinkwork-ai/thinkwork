@@ -1,13 +1,20 @@
 ---
 title: "json-render adoption spike for Thread GenUI"
 date: 2026-06-20
-status: deferred_production_adoption
+status: superseded
 issue: THNK-34
 plan: docs/plans/2026-06-17-001-feat-thread-genui-json-render-plan.md
 unit: U1
+superseded_by: docs/plans/2026-06-26-001-refactor-json-render-shadcn-cutover-plan.md
 ---
 
 # json-render Adoption Spike
+
+> Superseded by THNK-77. The current direction is production adoption of
+> `@json-render/core`, `@json-render/react`, and `@json-render/shadcn`, with new
+> Thread generated UI carried as `data-json-render`. The old recommendation to
+> keep json-render dev-only, exclude `@json-render/shadcn`, and preserve
+> `data-genui` as the host-owned envelope no longer applies.
 
 ## Verdict
 

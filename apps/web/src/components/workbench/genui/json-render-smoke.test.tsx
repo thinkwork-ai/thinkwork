@@ -1,14 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import { defineCatalog, defineSchema } from "@json-render/core";
 import {
+  defineRegistry,
   JSONUIProvider,
   Renderer,
   type ComponentRenderer,
 } from "@json-render/react";
+import { shadcnComponents } from "@json-render/shadcn";
+import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 
-const spikeSchema = defineSchema((schema) => ({
+const shadcnSchema = defineSchema((schema) => ({
   spec: schema.object({
     root: schema.string(),
     elements: schema.record(
@@ -25,29 +27,39 @@ const spikeSchema = defineSchema((schema) => ({
   }),
 }));
 
-const spikeCatalog = defineCatalog(spikeSchema, {
-  components: {
-    TaskReviewCard: {
-      props: z.object({
-        title: z.string().min(1),
-        status: z.enum(["pending", "approved"]),
-      }),
-    },
-  },
+const shadcnCatalog = defineCatalog(shadcnSchema, {
+  components: shadcnComponentDefinitions,
   actions: {},
 });
 
-const registry = {
-  TaskReviewCard: (({ element }) => (
-    <article aria-label={element.props.title}>
-      <h2>{element.props.title}</h2>
-      <p>{element.props.status}</p>
-    </article>
-  )) satisfies ComponentRenderer<{
-    title: string;
-    status: "pending" | "approved";
-  }>,
-};
+const { registry } = defineRegistry(shadcnCatalog, {
+  components: shadcnComponents,
+});
+
+function validateShadcnSpec(spec: unknown) {
+  const catalogValidation = shadcnCatalog.validate(spec);
+
+  if (!catalogValidation.success || !catalogValidation.data) {
+    return catalogValidation;
+  }
+
+  for (const element of Object.values(catalogValidation.data.elements)) {
+    const definition =
+      shadcnComponentDefinitions[
+        element.type as keyof typeof shadcnComponentDefinitions
+      ];
+    const propsValidation = definition?.props.safeParse(element.props);
+
+    if (!propsValidation?.success) {
+      return {
+        success: false as const,
+        error: propsValidation?.error ?? new Error("Unknown shadcn component"),
+      };
+    }
+  }
+
+  return catalogValidation;
+}
 
 const fallback: ComponentRenderer = ({ element }) => (
   <p role="alert">Unsupported component: {element.type}</p>
@@ -66,33 +78,71 @@ function renderWithProviders(spec: unknown, fallbackRenderer = fallback) {
 }
 
 describe("json-render adoption smoke", () => {
-  it("validates and renders a minimal host-owned component catalog", () => {
+  it("validates and renders a nested upstream shadcn primitive catalog", () => {
     const spec = {
-      root: "review",
+      root: "card",
       elements: {
-        review: {
-          type: "TaskReviewCard",
+        card: {
+          type: "Card",
           props: {
-            title: "Review onboarding task",
-            status: "pending",
+            title: "Review queue",
+            description: "Current generated UI direction",
+            maxWidth: null,
+            centered: false,
+            className: null,
+          },
+          children: ["stack"],
+        },
+        stack: {
+          type: "Stack",
+          props: {
+            direction: "vertical",
+            gap: "sm",
+            align: null,
+            justify: null,
+            className: null,
+          },
+          children: ["heading", "summary", "approve"],
+        },
+        heading: {
+          type: "Heading",
+          props: {
+            text: "Pipeline health",
+            level: "h3",
+          },
+          children: [],
+        },
+        summary: {
+          type: "Text",
+          props: {
+            text: "All checks are ready.",
+            variant: "body",
+          },
+          children: [],
+        },
+        approve: {
+          type: "Button",
+          props: {
+            label: "Approve",
+            variant: "primary",
+            disabled: false,
           },
           children: [],
         },
       },
     };
 
-    const validation = spikeCatalog.validate(spec);
+    const validation = validateShadcnSpec(spec);
 
     expect(validation.success).toBe(true);
     renderWithProviders(spec);
-    expect(screen.getByRole("article").getAttribute("aria-label")).toBe(
-      "Review onboarding task",
-    );
-    expect(screen.getByText("pending")).toBeTruthy();
+    expect(screen.getByText("Pipeline health")).toBeTruthy();
+    expect(screen.getByText("All checks are ready.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
   });
 
   it("fails validation before render for an unknown component", () => {
-    const validation = spikeCatalog.validate({
+    const validation = validateShadcnSpec({
       root: "chart",
       elements: {
         chart: {
@@ -104,19 +154,20 @@ describe("json-render adoption smoke", () => {
     });
 
     expect(validation.success).toBe(false);
-    expect(String(validation.error)).toContain("TaskReviewCard");
+    expect(String(validation.error)).toContain("Card");
     expect(String(validation.error)).toContain("type");
   });
 
   it("fails validation before render for invalid component props", () => {
-    const validation = spikeCatalog.validate({
-      root: "review",
+    const validation = validateShadcnSpec({
+      root: "button",
       elements: {
-        review: {
-          type: "TaskReviewCard",
+        button: {
+          type: "Button",
           props: {
-            title: "",
-            status: "done",
+            label: "Approve",
+            variant: "tertiary",
+            disabled: false,
           },
           children: [],
         },
@@ -124,7 +175,23 @@ describe("json-render adoption smoke", () => {
     });
 
     expect(validation.success).toBe(false);
-    expect(String(validation.error)).toContain("status");
+    expect(String(validation.error)).toContain("variant");
+  });
+
+  it("does not treat legacy data-genui envelopes as the new contract", () => {
+    const validation = validateShadcnSpec({
+      type: "data-genui",
+      id: "legacy",
+      data: {
+        schemaVersion: "thread-genui/v1",
+        spec: {
+          root: "review",
+          elements: {},
+        },
+      },
+    });
+
+    expect(validation.success).toBe(false);
   });
 
   it("renders the configured fallback for renderer-level unknown types", () => {

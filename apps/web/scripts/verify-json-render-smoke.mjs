@@ -8,8 +8,8 @@ import { JSDOM } from "jsdom";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(scriptDir, "..");
-const maxRawDeltaBytes = 150_000;
-const maxGzipDeltaBytes = 45_000;
+const maxRawDeltaBytes = 450_000;
+const maxGzipDeltaBytes = 135_000;
 const forbiddenPatterns = [
   /fetch\(/,
   /eval\(/,
@@ -32,7 +32,12 @@ function build(entry) {
 }
 
 function readBundle(entry) {
-  const assetsDir = join(webRoot, "dist", `json-render-smoke-${entry}`, "assets");
+  const assetsDir = join(
+    webRoot,
+    "dist",
+    `json-render-smoke-${entry}`,
+    "assets",
+  );
   const fileName = readdirSync(assetsDir).find((name) => name.endsWith(".js"));
 
   if (!fileName) {
@@ -52,10 +57,13 @@ function readBundle(entry) {
 }
 
 async function executeRendererBundle(rendererBundle) {
-  const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", {
-    pretendToBeVisual: true,
-    url: "http://localhost/",
-  });
+  const dom = new JSDOM(
+    '<!doctype html><html><body><div id="root"></div></body></html>',
+    {
+      pretendToBeVisual: true,
+      url: "http://localhost/",
+    },
+  );
 
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
@@ -67,7 +75,9 @@ async function executeRendererBundle(rendererBundle) {
     value: dom.window.navigator,
   });
 
-  await import(`${pathToFileURL(rendererBundle.filePath).href}?t=${Date.now()}`);
+  await import(
+    `${pathToFileURL(rendererBundle.filePath).href}?t=${Date.now()}`
+  );
   const root = dom.window.document.getElementById("root");
   let text = root?.textContent ?? "";
 

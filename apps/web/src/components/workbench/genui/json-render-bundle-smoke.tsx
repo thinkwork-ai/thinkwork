@@ -1,11 +1,13 @@
 import { defineCatalog, defineSchema } from "@json-render/core";
 import {
+  defineRegistry,
   JSONUIProvider,
   Renderer,
   type ComponentRenderer,
 } from "@json-render/react";
+import { shadcnComponents } from "@json-render/shadcn";
+import { shadcnComponentDefinitions } from "@json-render/shadcn/catalog";
 import { createRoot } from "react-dom/client";
-import { z } from "zod";
 
 const bundleSmokeSchema = defineSchema((schema) => ({
   spec: schema.object({
@@ -25,45 +27,97 @@ const bundleSmokeSchema = defineSchema((schema) => ({
 }));
 
 const bundleSmokeCatalog = defineCatalog(bundleSmokeSchema, {
-  components: {
-    ThreadSummaryCard: {
-      props: z.object({
-        title: z.string().min(1),
-        value: z.string().min(1),
-      }),
-    },
-  },
+  components: shadcnComponentDefinitions,
   actions: {},
 });
 
+function validateBundleSmokeSpec(spec: unknown) {
+  const catalogValidation = bundleSmokeCatalog.validate(spec);
+
+  if (!catalogValidation.success || !catalogValidation.data) {
+    return catalogValidation;
+  }
+
+  for (const element of Object.values(catalogValidation.data.elements)) {
+    const definition =
+      shadcnComponentDefinitions[
+        element.type as keyof typeof shadcnComponentDefinitions
+      ];
+    const propsValidation = definition?.props.safeParse(element.props);
+
+    if (!propsValidation?.success) {
+      return {
+        success: false as const,
+        error: propsValidation?.error ?? new Error("Unknown shadcn component"),
+      };
+    }
+  }
+
+  return catalogValidation;
+}
+
 const bundleSmokeSpec = {
-  root: "summary",
+  root: "card",
   elements: {
-    summary: {
-      type: "ThreadSummaryCard",
+    card: {
+      type: "Card",
       props: {
         title: "Pipeline health",
-        value: "On track",
+        description: "On track",
+        maxWidth: null,
+        centered: false,
+        className: null,
+      },
+      children: ["content"],
+    },
+    content: {
+      type: "Stack",
+      props: {
+        direction: "vertical",
+        gap: "sm",
+        align: null,
+        justify: null,
+        className: null,
+      },
+      children: ["heading", "summary", "action"],
+    },
+    heading: {
+      type: "Heading",
+      props: {
+        text: "Pipeline health",
+        level: "h3",
+      },
+      children: [],
+    },
+    summary: {
+      type: "Text",
+      props: {
+        text: "On track",
+        variant: "body",
+      },
+      children: [],
+    },
+    action: {
+      type: "Button",
+      props: {
+        label: "Open",
+        variant: "secondary",
+        disabled: false,
       },
       children: [],
     },
   },
 };
 
-const validation = bundleSmokeCatalog.validate(bundleSmokeSpec);
+const validation = validateBundleSmokeSpec(bundleSmokeSpec);
 
 if (!validation.success) {
   throw new Error(`Invalid json-render bundle smoke spec: ${validation.error}`);
 }
 
-const registry = {
-  ThreadSummaryCard: (({ element }) => (
-    <section aria-label={element.props.title}>
-      <h1>{element.props.title}</h1>
-      <p>{element.props.value}</p>
-    </section>
-  )) satisfies ComponentRenderer<{ title: string; value: string }>,
-};
+const { registry } = defineRegistry(bundleSmokeCatalog, {
+  components: shadcnComponents,
+});
 
 const fallback: ComponentRenderer = ({ element }) => (
   <p role="alert">Unsupported component: {element.type}</p>
