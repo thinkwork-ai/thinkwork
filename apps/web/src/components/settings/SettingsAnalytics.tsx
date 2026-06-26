@@ -68,17 +68,50 @@ const trendChartConfig = {
   toolsUsd: { label: "Tools", color: "hsl(38, 92%, 50%)" },
 } satisfies ChartConfig;
 
+const ANALYTICS_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getAnalyticsRange(days: number) {
+  const to = new Date();
+  const from = new Date(to.getTime() - days * DAY_MS);
+  return { from: from.toISOString(), to: to.toISOString() };
+}
+
 export function SettingsAnalytics({ embedded }: { embedded?: boolean } = {}) {
   const { tenantId } = useTenant();
-  const vars = { variables: { tenantId: tenantId ?? "" }, pause: !tenantId };
+  const analyticsRange = useMemo(() => getAnalyticsRange(ANALYTICS_DAYS), []);
+  const tenantVars = {
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  };
+  const analyticsVars = {
+    variables: {
+      tenantId: tenantId ?? "",
+      from: analyticsRange.from,
+      to: analyticsRange.to,
+    },
+    pause: !tenantId,
+  };
 
-  const [summaryR] = useQuery({ query: SettingsCostSummaryQuery, ...vars });
-  const [userR] = useQuery({ query: SettingsCostByUserQuery, ...vars });
-  const [modelR] = useQuery({ query: SettingsCostByModelQuery, ...vars });
-  const [budgetR] = useQuery({ query: SettingsBudgetStatusQuery, ...vars });
+  const [summaryR] = useQuery({
+    query: SettingsCostSummaryQuery,
+    ...analyticsVars,
+  });
+  const [userR] = useQuery({
+    query: SettingsCostByUserQuery,
+    ...analyticsVars,
+  });
+  const [modelR] = useQuery({
+    query: SettingsCostByModelQuery,
+    ...analyticsVars,
+  });
+  const [budgetR] = useQuery({
+    query: SettingsBudgetStatusQuery,
+    ...tenantVars,
+  });
   const [seriesR] = useQuery({
     query: SettingsCostTimeSeriesQuery,
-    variables: { tenantId: tenantId ?? "", days: 30 },
+    variables: { tenantId: tenantId ?? "", days: ANALYTICS_DAYS },
     pause: !tenantId,
   });
   const [catalogR] = useQuery({
@@ -236,6 +269,7 @@ type BudgetStatusRow = {
     scope: string;
     limitUsd: number;
   };
+  visibleSpendUsd: number;
   percentUsed: number;
   status: string;
 };
@@ -329,7 +363,11 @@ function CostByUserCard({
 }
 
 function BudgetProgress({ budget }: { budget: BudgetStatusRow }) {
-  const percent = Math.min(100, Math.max(0, budget.percentUsed));
+  const visiblePercent =
+    budget.policy.limitUsd > 0
+      ? (budget.visibleSpendUsd / budget.policy.limitUsd) * 100
+      : 0;
+  const percent = Math.min(100, Math.max(0, visiblePercent));
   const barClass =
     budget.status === "exceeded"
       ? "bg-red-500"
@@ -345,7 +383,8 @@ function BudgetProgress({ budget }: { budget: BudgetStatusRow }) {
         />
       </div>
       <div className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
-        {percent.toFixed(0)}% of {formatUsd(budget.policy.limitUsd, 0)}
+        {formatUsd(budget.visibleSpendUsd)} of{" "}
+        {formatUsd(budget.policy.limitUsd, 0)}
       </div>
     </div>
   );
