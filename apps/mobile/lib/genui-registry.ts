@@ -11,6 +11,12 @@
  */
 
 import React from "react";
+import {
+  THREAD_JSON_RENDER_PART_TYPE,
+  validateThreadJsonRenderPart,
+  type ThreadJsonRenderData,
+  type ThreadJsonRenderDiagnostic,
+} from "@thinkwork/thread-json-render";
 
 export interface GenUIProps {
   data: Record<string, unknown>;
@@ -147,11 +153,7 @@ const GENERIC_MOBILE_FALLBACK: Omit<
   status: "unsupported",
 };
 
-const THREAD_JSON_RENDER_PART_TYPE = "data-json-render";
 const LEGACY_THREAD_GENUI_PART_TYPE = "data-genui";
-const THREAD_JSON_RENDER_SCHEMA_VERSION = "thread-json-render/v1";
-const THREAD_JSON_RENDER_CATALOG_VERSION = "thread-json-render-catalog/v1";
-const STATUS_VALUES = new Set(["ready", "streaming", "invalid", "stale"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -168,9 +170,8 @@ function parseParts(parts: unknown): unknown[] {
   }
 }
 
-function rootComponent(data: Record<string, unknown>): string | undefined {
+function rootComponent(data: ThreadJsonRenderData): string | undefined {
   const spec = data.spec;
-  if (!isRecord(spec)) return undefined;
   const root = typeof spec.root === "string" ? spec.root : undefined;
   const elements = spec.elements;
   if (!root || !isRecord(elements)) return undefined;
@@ -216,6 +217,17 @@ function normalizeDiagnostics(value: unknown): MobileGeneratedUIDiagnostic[] {
   });
 }
 
+function normalizeSharedDiagnostics(
+  diagnostics: readonly ThreadJsonRenderDiagnostic[],
+): MobileGeneratedUIDiagnostic[] {
+  return diagnostics.map((diagnostic) => ({
+    code: diagnostic.code,
+    message: diagnostic.message,
+    path: diagnostic.path,
+    severity: diagnostic.severity,
+  }));
+}
+
 function normalizeLines(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((line): line is string => typeof line === "string")
@@ -235,6 +247,12 @@ function unsupportedFallback(
 }
 
 export function parseThreadJsonRenderMobileFallbacks(
+  parts: unknown,
+): MobileJsonRenderFallback[] {
+  return parseThreadJsonRenderFallbacks(parts);
+}
+
+export function parseThreadJsonRenderFallbacks(
   parts: unknown,
 ): MobileJsonRenderFallback[] {
   return parseParts(parts).flatMap((part, index) => {
@@ -261,68 +279,26 @@ export function parseThreadJsonRenderMobileFallbacks(
 
     if (part.type !== THREAD_JSON_RENDER_PART_TYPE) return [];
 
-    const data = isRecord(part.data) ? part.data : {};
-    const diagnostics: MobileGeneratedUIDiagnostic[] = [];
-    if (data.schemaVersion !== THREAD_JSON_RENDER_SCHEMA_VERSION) {
-      diagnostics.push(
-        diagnostic(
-          "JSON_RENDER_SCHEMA_VERSION_UNSUPPORTED",
-          `Expected ${THREAD_JSON_RENDER_SCHEMA_VERSION}.`,
-          "$.data.schemaVersion",
+    const result = validateThreadJsonRenderPart(part);
+    if (!result.ok) {
+      return [
+        unsupportedFallback(
+          part,
+          index,
+          normalizeSharedDiagnostics(result.diagnostics),
         ),
-      );
-    }
-    if (data.catalogVersion !== THREAD_JSON_RENDER_CATALOG_VERSION) {
-      diagnostics.push(
-        diagnostic(
-          "JSON_RENDER_CATALOG_VERSION_UNSUPPORTED",
-          `Expected ${THREAD_JSON_RENDER_CATALOG_VERSION}.`,
-          "$.data.catalogVersion",
-        ),
-      );
-    }
-    if (!STATUS_VALUES.has(String(data.status))) {
-      diagnostics.push(
-        diagnostic(
-          "JSON_RENDER_STATUS_INVALID",
-          "Unsupported generated UI status.",
-          "$.data.status",
-        ),
-      );
+      ];
     }
 
-    const mobileFallback = isRecord(data.mobileFallback)
-      ? data.mobileFallback
-      : {};
-    const title =
-      typeof mobileFallback.title === "string"
-        ? mobileFallback.title
-        : undefined;
-    const summary =
-      typeof mobileFallback.summary === "string"
-        ? mobileFallback.summary
-        : undefined;
-    if (!title || !summary) {
-      diagnostics.push(
-        diagnostic(
-          "JSON_RENDER_MOBILE_FALLBACK_REQUIRED",
-          "Generated UI mobile fallback requires title and summary.",
-          "$.data.mobileFallback",
-        ),
-      );
-    }
-
-    if (diagnostics.length > 0 || !title || !summary) {
-      return [unsupportedFallback(part, index, diagnostics)];
-    }
-
+    const data = result.part.data;
+    const mobileFallback = data.mobileFallback;
     return [
       {
         id: fallbackId(part, index),
-        title,
-        summary,
+        title: mobileFallback.title,
+        summary: mobileFallback.summary,
         lines: normalizeLines(mobileFallback.lines),
-        status: data.status as MobileJsonRenderFallback["status"],
+        status: data.status,
         component: rootComponent(data),
         specHash: typeof data.specHash === "string" ? data.specHash : undefined,
         diagnostics: normalizeDiagnostics(data.diagnostics),

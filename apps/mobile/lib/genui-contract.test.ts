@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseThreadJsonRenderMobileFallbacks } from "./genui-registry";
+import { parseThreadJsonRenderFallbacks } from "./genui-registry";
 
 describe("mobile json-render fallback contract", () => {
   it("can read required fallback fields from Thread data-json-render parts", () => {
-    const [fallback] = parseThreadJsonRenderMobileFallbacks([
+    const [fallback] = parseThreadJsonRenderFallbacks([
       {
         type: "data-json-render",
         id: "json-render:task-review:123",

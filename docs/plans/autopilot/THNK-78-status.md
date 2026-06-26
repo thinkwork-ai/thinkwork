@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-78
-status: u2-u3-runtime-api-in-progress
+status: u4-u5-client-consumption-in-progress
 target_branch: main
 ---
 
@@ -92,6 +92,11 @@ target_branch: main
 - U1 branch and worktree were cleaned up after merge.
 - U2+U3 worktree created from updated `origin/main` at
   `57c92c75b2ed1666131f00ab8a66f5df3dfd22f2`.
+- U2+U3 PR merged to `main`: https://github.com/thinkwork-ai/thinkwork/pull/2981
+  at `7aa42ded6ed2da25d11f392ed64c5d4ddbff4fb3`.
+- U2+U3 branch and worktree were cleaned up after merge.
+- U4+U5 worktree created from updated `origin/main` at
+  `7aa42ded6ed2da25d11f392ed64c5d4ddbff4fb3`.
 
 ## Unit Log
 
@@ -145,4 +150,35 @@ target_branch: main
   - `pnpm --filter @thinkwork/api test -- wakeup-processor.dispatch-parity wakeup-processor` passed.
   - `pnpm --filter @thinkwork/api typecheck` passed.
   - `git diff --check` passed.
-- Status: PR open; CI pending.
+  - GitHub PR checks passed: CLA Assistant, Lint, Verify, Typecheck, and Test.
+- Status: merged.
+
+### U4+U5 client consumption
+
+- Objective: route web and mobile client parsing through the shared
+  `@thinkwork/thread-json-render` contract so emitted UI parts use the same
+  validator on every boundary, while keeping non-`data-json-render` payloads
+  untrusted.
+- Branch: `codex/thnk-78-u4-u5-clients`
+- Worktree:
+  `/Users/ericodom/.codex/worktrees/thnk-78-u4-u5-clients`
+- Base: `origin/main` at `7aa42ded6ed2da25d11f392ed64c5d4ddbff4fb3`
+- PR: https://github.com/thinkwork-ai/thinkwork/pull/2982
+- Replaced the web client duplicate validator with a thin re-export of the
+  shared package.
+- Updated mobile fallback parsing to validate typed parts with the shared
+  package, expose the canonical `parseThreadJsonRenderFallbacks` helper, and
+  keep the old helper name as a compatibility alias for existing callers.
+- Added web and mobile workspace dependencies on
+  `@thinkwork/thread-json-render`.
+- Verification so far:
+  - `pnpm --filter @thinkwork/web test -- validation ThreadJsonRenderRenderer render-typed-part ThreadConversation` passed.
+  - `pnpm --filter @thinkwork/mobile test -- genui-registry genui-contract` passed.
+  - `pnpm --filter @thinkwork/web typecheck` passed.
+  - `pnpm --filter @thinkwork/mobile typecheck` is not available in the mobile
+    package.
+  - Direct `pnpm --filter @thinkwork/mobile exec tsc --noEmit` still reports
+    pre-existing app-wide errors; a touched-file filtered compiler scan showed
+    no THNK-78 client errors.
+  - `git diff --check` passed.
+- Status: PR ready.

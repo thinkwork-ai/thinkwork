@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { createTaskReviewJsonRenderFixture } from "@thinkwork/thread-json-render";
 
 import {
   parseMessageBlocks,
+  parseThreadJsonRenderFallbacks,
   parseThreadJsonRenderMobileFallbacks,
 } from "./genui-registry";
 
@@ -9,7 +11,7 @@ describe("mobile GenUI registry", () => {
   it("renders persisted data-json-render parts as mobile fallback summaries", () => {
     const fixture = createTaskReviewJsonRenderFixture();
 
-    const fallbacks = parseThreadJsonRenderMobileFallbacks([fixture]);
+    const fallbacks = parseThreadJsonRenderFallbacks([fixture]);
 
     expect(fallbacks).toEqual([
       expect.objectContaining({
@@ -53,9 +55,7 @@ describe("mobile GenUI registry", () => {
       },
     };
 
-    const [fallback] = parseThreadJsonRenderMobileFallbacks(
-      JSON.stringify([part]),
-    );
+    const [fallback] = parseThreadJsonRenderFallbacks(JSON.stringify([part]));
 
     expect(fallback).toEqual(
       expect.objectContaining({
@@ -72,7 +72,7 @@ describe("mobile GenUI registry", () => {
     const fixture = createTaskReviewJsonRenderFixture() as any;
     delete fixture.data.mobileFallback;
 
-    const [fallback] = parseThreadJsonRenderMobileFallbacks([fixture]);
+    const [fallback] = parseThreadJsonRenderFallbacks([fixture]);
 
     expect(fallback).toEqual(
       expect.objectContaining({
@@ -84,11 +84,11 @@ describe("mobile GenUI registry", () => {
     );
     expect(
       fallback.diagnostics?.map((diagnostic) => diagnostic.code),
-    ).toContain("JSON_RENDER_MOBILE_FALLBACK_REQUIRED");
+    ).toContain("JSON_RENDER_FALLBACK_REQUIRED");
   });
 
   it("renders legacy data-genui parts as unsupported fallback summaries", () => {
-    const [fallback] = parseThreadJsonRenderMobileFallbacks([
+    const [fallback] = parseThreadJsonRenderFallbacks([
       {
         type: "data-genui",
         id: "genui:legacy",
@@ -112,7 +112,15 @@ describe("mobile GenUI registry", () => {
   });
 
   it("ignores malformed parts JSON without crashing", () => {
-    expect(parseThreadJsonRenderMobileFallbacks("{not-json")).toEqual([]);
+    expect(parseThreadJsonRenderFallbacks("{not-json")).toEqual([]);
+  });
+
+  it("keeps the previous mobile fallback parser name as a compatibility alias", () => {
+    const fixture = createTaskReviewJsonRenderFixture();
+
+    expect(parseThreadJsonRenderMobileFallbacks([fixture])).toEqual(
+      parseThreadJsonRenderFallbacks([fixture]),
+    );
   });
 
   it("keeps existing _type GenUI message fences working", () => {
@@ -131,35 +139,3 @@ describe("mobile GenUI registry", () => {
     );
   });
 });
-
-function createTaskReviewJsonRenderFixture() {
-  return {
-    type: "data-json-render",
-    id: "json-render:task-review:123",
-    data: {
-      schemaVersion: "thread-json-render/v1",
-      catalogVersion: "thread-json-render-catalog/v1",
-      status: "ready",
-      spec: {
-        root: "review",
-        elements: {
-          review: {
-            type: "task.review",
-            props: {
-              title: "Review onboarding task",
-              summary: "Confirm the customer kickoff task is ready.",
-              status: "pending",
-            },
-            children: [],
-          },
-        },
-      },
-      mobileFallback: {
-        title: "Review onboarding task",
-        summary: "Confirm the customer kickoff task is ready.",
-        lines: ["Status: pending"],
-      },
-      specHash: "json-render-fnv1a:test",
-    },
-  };
-}
