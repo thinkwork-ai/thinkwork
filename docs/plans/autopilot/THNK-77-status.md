@@ -1,7 +1,7 @@
 ---
 date: 2026-06-26
 linear_issue: THNK-77
-status: u2-implementation
+status: u2-course-corrected
 target_branch: main
 ---
 
@@ -156,21 +156,24 @@ target_branch: main
   - Added web fixtures and validation for `data-json-render` parts, nested
     upstream shadcn specs, ThinkWork domain entries, analytics adapter boundary,
     durable action descriptors, spec hashes, and legacy `data-genui` rejection.
-  - Added runtime/API json-render carrier helpers for hash, validation,
-    normalization, diagnostic fallback data, live activity event envelopes, and
-    final-part merge behavior.
+- Course correction after reviewing THNK-78:
+  - Removed the U2 runtime/API carrier helpers before merge. THNK-78 owns the
+    explicit `emit_json_render_ui` tool, trusted runtime emission path, API
+    finalize normalization, and the eventual React-free shared contract package.
+  - THNK-77 U2 is intentionally limited to the web catalog/validation boundary
+    needed for rendering and follow-on renderer cutover work.
 - Verification so far:
   - `pnpm --filter @thinkwork/web test -- src/components/workbench/json-render/catalog.test.ts src/components/workbench/json-render/validation.test.ts`
     passed: 10 tests.
-  - `pnpm --filter @thinkwork/pi-runtime-core test -- test/json-render-runtime.test.ts`
-    passed: 4 tests.
-  - `pnpm --filter @thinkwork/api test -- src/lib/thread-json-render/validation.test.ts`
-    passed: 2 tests.
   - `pnpm --filter @thinkwork/web typecheck` passed.
-  - `pnpm --filter @thinkwork/pi-runtime-core typecheck` passed.
-  - `pnpm --filter @thinkwork/api typecheck` passed.
   - `pnpm --filter @thinkwork/web verify:json-render-smoke` passed with the
     same measured shadcn bundle delta: 410,610 raw / 121,352 gzip.
   - `pnpm dlx prettier@3.6.2 --check --no-semi --trailing-comma all <touched U2 files>`
     passed.
   - `git diff --check` passed.
+  - After the THNK-78 overlap trim, reran:
+    `pnpm --filter @thinkwork/web test -- src/components/workbench/json-render/catalog.test.ts src/components/workbench/json-render/validation.test.ts`,
+    `pnpm --filter @thinkwork/web typecheck`,
+    `pnpm --filter @thinkwork/pi-runtime-core typecheck`,
+    `pnpm --filter @thinkwork/api typecheck`, and
+    `pnpm --filter @thinkwork/web verify:json-render-smoke`; all passed.
