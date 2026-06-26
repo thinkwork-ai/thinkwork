@@ -7,6 +7,7 @@ const findPageSourcesAcrossSurfacesMock = vi.hoisted(() => vi.fn());
 vi.mock("../../memory/index.js", () => ({
   getMemoryServices: () => ({
     adapter: {
+      kind: "cognee",
       reflect: reflectMock,
     },
     recall: {
@@ -161,7 +162,7 @@ describe("memory context provider", () => {
     expect(recallMock).toHaveBeenCalledTimes(1);
     expect(reflectMock).not.toHaveBeenCalled();
     expect(result.hits[0]).toMatchObject({
-      id: "memory:memory-override",
+      id: "memory:user:memory-override",
       title: "Favorite restaurant",
       snippet: "Favorite restaurant",
       provenance: {
@@ -230,6 +231,106 @@ describe("memory context provider", () => {
     });
   });
 
+  it("recalls user and space memory when auto scope has both owners", async () => {
+    recallMock
+      .mockResolvedValueOnce([
+        {
+          record: {
+            id: "user-memory",
+            tenantId: "tenant-1",
+            ownerType: "user",
+            ownerId: "user-eric",
+            kind: "unit",
+            sourceType: "thread_turn",
+            status: "active",
+            content: {
+              summary: "Brief preference",
+              text: "Eric prefers concise launch briefs.",
+            },
+            backendRefs: [{ backend: "cognee", ref: "user-dataset" }],
+            createdAt: "2026-06-26T19:00:00.000Z",
+            metadata: {},
+          },
+          score: 0.7,
+          backend: "cognee",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          record: {
+            id: "space-memory",
+            tenantId: "tenant-1",
+            ownerType: "space",
+            ownerId: "space-sales",
+            kind: "unit",
+            sourceType: "explicit_remember",
+            status: "active",
+            content: {
+              text: "The sales space uses the enterprise onboarding template.",
+            },
+            backendRefs: [{ backend: "cognee", ref: "space-dataset" }],
+            createdAt: "2026-06-26T19:01:00.000Z",
+            metadata: {},
+          },
+          score: 0.9,
+          backend: "cognee",
+        },
+      ]);
+
+    const { createMemoryContextProvider } = await import("./memory.js");
+    const provider = createMemoryContextProvider();
+    const result = await provider.query({
+      query: "launch onboarding",
+      mode: "results",
+      scope: "auto",
+      depth: "quick",
+      limit: 10,
+      providerOptions: { memory: { queryMode: "recall" } },
+      caller: {
+        tenantId: "tenant-1",
+        userId: "user-eric",
+        spaceId: "space-sales",
+      },
+    });
+
+    expect(recallMock).toHaveBeenCalledTimes(2);
+    expect(recallMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        ownerType: "user",
+        ownerId: "user-eric",
+      }),
+    );
+    expect(recallMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        ownerType: "space",
+        ownerId: "space-sales",
+        requestContext: expect.objectContaining({
+          requesterUserId: "user-eric",
+        }),
+      }),
+    );
+    expect(result.hits).toEqual([
+      expect.objectContaining({
+        id: "memory:space:space-memory",
+        title: "Space Memory",
+        provenance: expect.objectContaining({
+          label: "Space Memory",
+          metadata: expect.objectContaining({ ownerType: "space" }),
+        }),
+        metadata: expect.objectContaining({
+          ownerType: "space",
+          ownerId: "space-sales",
+        }),
+      }),
+      expect.objectContaining({
+        id: "memory:user:user-memory",
+        title: "Brief preference",
+      }),
+    ]);
+  });
+
   it("returns compiled wiki pages that cite recalled Hindsight memory units", async () => {
     recallMock.mockResolvedValueOnce([
       {
@@ -286,7 +387,7 @@ describe("memory context provider", () => {
     });
     expect(result.hits).toEqual([
       expect.objectContaining({
-        id: "memory:mem-restaurant",
+        id: "memory:user:mem-restaurant",
         family: "memory",
       }),
       expect.objectContaining({
@@ -409,7 +510,7 @@ describe("memory context provider", () => {
     });
 
     expect(result.hits).toEqual([
-      expect.objectContaining({ id: "memory:mem-no-bridge" }),
+      expect.objectContaining({ id: "memory:user:mem-no-bridge" }),
     ]);
     expect(result.status).toMatchObject({
       state: "stale",

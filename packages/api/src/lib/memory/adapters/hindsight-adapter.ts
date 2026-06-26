@@ -864,7 +864,7 @@ export class HindsightAdapter implements MemoryAdapter {
     unit: any,
     owner: {
       tenantId: string;
-      ownerType: "user" | "agent";
+      ownerType: ThinkWorkMemoryRecord["ownerType"];
       ownerId: string;
       threadId?: string;
     },
@@ -939,7 +939,7 @@ export class HindsightAdapter implements MemoryAdapter {
     row: any,
     owner: {
       tenantId: string;
-      ownerType: "user" | "agent";
+      ownerType: ThinkWorkMemoryRecord["ownerType"];
       ownerId: string;
       threadId?: string;
     },

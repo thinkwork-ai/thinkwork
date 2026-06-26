@@ -120,7 +120,109 @@ describe("CogneeAdapter", () => {
     ]);
   });
 
-  it("rejects space owners until the explicit space-memory unit wires policy", async () => {
+  it("upserts space markdown into the stable Cognee space memory scope", async () => {
+    const client = {
+      ingestDocument: vi.fn().mockResolvedValue({
+        datasetId: "dataset-space",
+        datasetName: "thinkwork:memory:v1:tenant:tenant_1:space:space_1",
+        mode: "remember",
+        pipelineRunId: null,
+        raw: {},
+      }),
+      search: vi.fn(),
+    };
+    const adapter = new CogneeAdapter({
+      endpoint: "http://cognee.local",
+      client,
+      ontology,
+    });
+
+    await adapter.upsertMarkdownMemoryDocument({
+      tenantId: "tenant-1",
+      ownerType: "space",
+      ownerId: "space-1",
+      path: "memory/SPACE.md",
+      content:
+        "# Space decisions\n\nAll onboarding runs use the enterprise template.",
+      documentId: "space_memory:space-1:memory/SPACE.md",
+      context: "thinkwork_space_memory",
+      metadata: {
+        capturedByUserId: "user-1",
+      },
+    });
+
+    expect(client.ingestDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        sourceKind: "space_memory",
+        sourceRef: "space-1",
+        datasetName: "thinkwork:memory:v1:tenant:tenant_1:space:space_1",
+        filename: "SPACE.md",
+        ontology,
+      }),
+    );
+    const call = client.ingestDocument.mock.calls[0][0];
+    expect(call.customPrompt).toContain("stays with the space");
+    expect(call.document).toContain('"owner_type":"space"');
+    expect(call.document).toContain('"capturedByUserId":"user-1"');
+  });
+
+  it("recalls from the stable Cognee space memory dataset and node sets", async () => {
+    const client = {
+      ingestDocument: vi.fn(),
+      search: vi.fn().mockResolvedValue({
+        results: [
+          {
+            id: "space-hit-1",
+            text: "All onboarding runs use the enterprise template.",
+            score: 0.88,
+          },
+        ],
+      }),
+    };
+    const adapter = new CogneeAdapter({
+      endpoint: "http://cognee.local",
+      client,
+      ontology,
+    });
+
+    const hits = await adapter.recall({
+      tenantId: "tenant-1",
+      ownerType: "space",
+      ownerId: "space-1",
+      query: "onboarding template",
+      limit: 5,
+    });
+
+    expect(client.search).toHaveBeenCalledWith({
+      query: "onboarding template",
+      searchType: "CHUNKS",
+      datasets: ["thinkwork:memory:v1:tenant:tenant_1:space:space_1"],
+      nodeNames: [
+        "thinkwork_memory",
+        "thinkwork_memory_v1",
+        "thinkwork_space_memory",
+        "tenant_tenant_1",
+        "space_space_1",
+      ],
+      includeReferences: true,
+    });
+    expect(hits[0]).toMatchObject({
+      backend: "cognee",
+      score: 0.88,
+      record: {
+        id: "space-hit-1",
+        tenantId: "tenant-1",
+        ownerType: "space",
+        ownerId: "space-1",
+        content: {
+          text: "All onboarding runs use the enterprise template.",
+        },
+      },
+    });
+  });
+
+  it("rejects agent owners until the runtime memory unit wires policy", async () => {
     const adapter = new CogneeAdapter({
       endpoint: "http://cognee.local",
       client: { ingestDocument: vi.fn(), search: vi.fn() },
@@ -130,10 +232,12 @@ describe("CogneeAdapter", () => {
     await expect(
       adapter.recall({
         tenantId: "tenant-1",
-        ownerType: "space" as "user",
-        ownerId: "space-1",
+        ownerType: "agent",
+        ownerId: "agent-1",
         query: "decision",
       }),
-    ).rejects.toThrow("Cognee recall supports user memory only in this unit");
+    ).rejects.toThrow(
+      "Cognee scope supports user and space memory only in this pass",
+    );
   });
 });

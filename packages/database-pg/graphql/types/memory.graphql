@@ -140,6 +140,12 @@ extend type Query {
     strategy: MemoryStrategy
     limit: Int
   ): MemorySearchResult!
+  spaceMemorySearch(
+    tenantId: ID
+    spaceId: ID!
+    query: String!
+    limit: Int
+  ): MemorySearchResult!
   memoryGraph(tenantId: ID, userId: ID, assistantId: ID): MemoryGraph!
   memorySystemConfig: MemorySystemConfig!
   threadIdleLearningRuns(
@@ -183,6 +189,13 @@ extend type Mutation {
     metadata: AWSJSON
     clientCaptureId: ID
   ): MobileMemoryCapture!
+  captureSpaceMemory(
+    tenantId: ID
+    spaceId: ID!
+    content: String!
+    metadata: AWSJSON
+    clientCaptureId: ID
+  ): MemoryRecord!
 }
 
 """

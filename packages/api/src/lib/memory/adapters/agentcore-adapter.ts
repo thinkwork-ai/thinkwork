@@ -305,7 +305,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
     r: MemoryRecordSummary,
     owner: {
       tenantId: string;
-      ownerType: "user" | "agent";
+      ownerType: ThinkWorkMemoryRecord["ownerType"];
       ownerId: string;
       threadId?: string;
     },

@@ -1,10 +1,12 @@
 import { getMemoryServices } from "../../memory/index.js";
+import type { RecallRequest, RecallResult } from "../../memory/index.js";
 import {
   findPageSourcesAcrossSurfaces,
   type AcrossSurfaceSourceHit,
 } from "../../brain/repository.js";
 import type {
   ContextHit,
+  ContextEngineProviderRequest,
   ContextProviderDescriptor,
   ContextProviderResult,
 } from "../types.js";
@@ -37,7 +39,7 @@ export function createMemoryContextProvider(
   return {
     id: "memory",
     family: "memory",
-    displayName: "Hindsight Memory",
+    displayName: "Memory",
     defaultEnabled: options.defaultEnabled ?? MEMORY_DEFAULT_ENABLED,
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 15_000,
     config: {
@@ -45,93 +47,84 @@ export function createMemoryContextProvider(
       timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 15_000,
       includeLegacyBanks: options.includeLegacyBanks ?? false,
     },
-    supportedScopes: ["personal", "auto"],
+    supportedScopes: ["personal", "team", "auto"],
     async query(request): Promise<ContextProviderResult> {
-      if (!request.caller.userId) {
+      const services = getMemoryServices();
+      const wantsUserMemory =
+        (request.scope === "personal" || request.scope === "auto") &&
+        Boolean(request.caller.userId);
+      const wantsSpaceMemory =
+        (request.scope === "team" || request.scope === "auto") &&
+        Boolean(request.caller.spaceId) &&
+        services.adapter.kind === "cognee";
+      if (!wantsUserMemory && !wantsSpaceMemory) {
         return {
           hits: [],
           status: {
             state: "skipped",
-            reason: "user scope is required for memory recall",
+            reason: "user or space scope is required for memory recall",
             metadata: memoryStatusMetadata(request.caller),
           },
         };
       }
 
-      const services = getMemoryServices();
-      const recallRequest = {
-        tenantId: request.caller.tenantId,
-        ownerType: "user",
-        ownerId: request.caller.userId,
-        query: request.query,
-        limit: Math.min(request.limit, MEMORY_LIMIT),
-        depth: request.depth,
-        requestContext: {
-          contextClass: request.caller.requesterContext?.contextClass,
-          computerId: request.caller.requesterContext?.computerId ?? undefined,
-          requesterUserId: request.caller.userId,
-          sourceSurface:
-            request.caller.requesterContext?.sourceSurface ?? undefined,
-          credentialSubject:
-            request.caller.requesterContext?.credentialSubject ?? undefined,
-          event: request.caller.requesterContext?.event ?? undefined,
-        },
-        hindsight: {
-          budget: request.depth === "deep" ? "mid" : "low",
-          maxTokens: request.depth === "deep" ? 2_000 : 500,
-          includeEntities: false,
-          includeLegacyBanks:
-            request.providerOptions?.memory?.includeLegacyBanks ??
-            options.includeLegacyBanks ??
-            false,
-        },
-      } as const;
       const queryMode =
         request.providerOptions?.memory?.queryMode ??
         options.queryMode ??
         MEMORY_QUERY_MODE;
-      const hits =
-        queryMode === "reflect" && services.adapter.reflect
-          ? await services.adapter.reflect(recallRequest)
-          : await services.recall.recall(recallRequest);
-      const memoryHits = hits.map((hit, index): ContextHit => {
-        const text =
-          hit.record.kind === "reflection"
-            ? hit.record.content.text || hit.record.content.summary
-            : hit.record.content.summary || hit.record.content.text;
-        return {
-          id: `memory:${hit.record.id}`,
-          providerId: "memory",
-          family: "memory",
-          title: hit.record.content.summary || "Memory",
-          snippet: text || "Memory",
-          score: hit.score ?? 1 / (index + 1),
-          scope: request.scope,
-          provenance: {
-            label: "Memory",
-            sourceId: hit.record.id,
-            metadata: {
-              backend: hit.backend,
-              whyRecalled: hit.whyRecalled,
-              createdAt: hit.record.createdAt,
-              mode: queryMode,
-            },
-          },
-          metadata: {
-            ownerType: hit.record.ownerType,
-            ownerId: hit.record.ownerId,
-            recordMetadata: hit.record.metadata,
-          },
-        };
-      });
-      const bridge = MEMORY_WIKI_BRIDGE_ENABLED
-        ? await loadWikiBridgeHits({
-            tenantId: request.caller.tenantId,
-            userId: request.caller.userId,
-            memoryHits,
-            scope: request.scope,
-          })
-        : { hits: [] };
+      const recallRequests: RecallRequest[] = [];
+      if (wantsUserMemory && request.caller.userId) {
+        recallRequests.push(
+          buildRecallRequest({
+            request,
+            ownerType: "user",
+            ownerId: request.caller.userId,
+            includeLegacyBanks:
+              request.providerOptions?.memory?.includeLegacyBanks ??
+              options.includeLegacyBanks ??
+              false,
+          }),
+        );
+      }
+      if (wantsSpaceMemory && request.caller.spaceId) {
+        recallRequests.push(
+          buildRecallRequest({
+            request,
+            ownerType: "space",
+            ownerId: request.caller.spaceId,
+            includeLegacyBanks: false,
+          }),
+        );
+      }
+
+      const hits = (
+        await Promise.all(
+          recallRequests.map((recallRequest) =>
+            queryMode === "reflect" &&
+            recallRequest.ownerType === "user" &&
+            services.adapter.reflect
+              ? services.adapter.reflect(recallRequest)
+              : services.recall.recall(recallRequest),
+          ),
+        )
+      )
+        .flat()
+        .sort((a, b) => b.score - a.score)
+        .slice(0, Math.min(request.limit, MEMORY_LIMIT));
+      const memoryHits = hits.map((hit, index) =>
+        toContextHit(hit, index, request.scope, queryMode),
+      );
+      const bridge =
+        MEMORY_WIKI_BRIDGE_ENABLED && request.caller.userId
+          ? await loadWikiBridgeHits({
+              tenantId: request.caller.tenantId,
+              userId: request.caller.userId,
+              memoryHits: memoryHits.filter(
+                (hit) => hit.metadata?.ownerType === "user",
+              ),
+              scope: request.scope,
+            })
+          : { hits: [] };
 
       return {
         hits: [...memoryHits, ...bridge.hits],
@@ -149,8 +142,80 @@ export function createMemoryContextProvider(
   };
 }
 
+function buildRecallRequest(args: {
+  request: ContextEngineProviderRequest;
+  ownerType: "user" | "space";
+  ownerId: string;
+  includeLegacyBanks: boolean;
+}): RecallRequest {
+  return {
+    tenantId: args.request.caller.tenantId,
+    ownerType: args.ownerType,
+    ownerId: args.ownerId,
+    query: args.request.query,
+    limit: Math.min(args.request.limit, MEMORY_LIMIT),
+    depth: args.request.depth,
+    requestContext: {
+      contextClass: args.request.caller.requesterContext?.contextClass,
+      computerId: args.request.caller.requesterContext?.computerId ?? undefined,
+      requesterUserId: args.request.caller.userId ?? undefined,
+      sourceSurface:
+        args.request.caller.requesterContext?.sourceSurface ?? undefined,
+      credentialSubject:
+        args.request.caller.requesterContext?.credentialSubject ?? undefined,
+      event: args.request.caller.requesterContext?.event ?? undefined,
+    },
+    hindsight: {
+      budget: args.request.depth === "deep" ? "mid" : "low",
+      maxTokens: args.request.depth === "deep" ? 2_000 : 500,
+      includeEntities: false,
+      includeLegacyBanks: args.includeLegacyBanks,
+    },
+  };
+}
+
+function toContextHit(
+  hit: RecallResult,
+  index: number,
+  scope: ContextHit["scope"],
+  queryMode: "recall" | "reflect",
+): ContextHit {
+  const text =
+    hit.record.kind === "reflection"
+      ? hit.record.content.text || hit.record.content.summary
+      : hit.record.content.summary || hit.record.content.text;
+  return {
+    id: `memory:${hit.record.ownerType}:${hit.record.id}`,
+    providerId: "memory",
+    family: "memory",
+    title:
+      hit.record.content.summary ||
+      (hit.record.ownerType === "space" ? "Space Memory" : "Memory"),
+    snippet: text || "Memory",
+    score: hit.score ?? 1 / (index + 1),
+    scope,
+    provenance: {
+      label: hit.record.ownerType === "space" ? "Space Memory" : "Memory",
+      sourceId: hit.record.id,
+      metadata: {
+        backend: hit.backend,
+        whyRecalled: hit.whyRecalled,
+        createdAt: hit.record.createdAt,
+        mode: queryMode,
+        ownerType: hit.record.ownerType,
+      },
+    },
+    metadata: {
+      ownerType: hit.record.ownerType,
+      ownerId: hit.record.ownerId,
+      recordMetadata: hit.record.metadata,
+    },
+  };
+}
+
 function memoryStatusMetadata(caller: {
   userId?: string | null;
+  spaceId?: string | null;
   requesterContext?: {
     contextClass?: string;
     computerId?: string | null;
@@ -161,6 +226,7 @@ function memoryStatusMetadata(caller: {
 }) {
   return {
     requesterUserId: caller.userId ?? null,
+    spaceId: caller.spaceId ?? null,
     contextClass:
       caller.requesterContext?.contextClass ??
       (caller.userId ? "user" : "system"),
