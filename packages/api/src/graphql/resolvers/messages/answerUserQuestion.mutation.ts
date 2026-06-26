@@ -35,10 +35,11 @@
  */
 
 import { GraphQLError } from "graphql";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agentWakeupRequests,
+  messages,
   pendingUserQuestions,
   threads,
 } from "@thinkwork/database-pg/schema";
@@ -48,6 +49,7 @@ import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { shouldDeferWakeup } from "../../../lib/wakeup-defer.js";
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
 import { finalizeN8nAgentStepRun } from "../../../lib/n8n-agent-step/finalize.js";
+import { requestedModelIdFromMetadata } from "../../../lib/turn-model-selection.js";
 import { notifyThreadUpdate } from "../../notify.js";
 import { userQuestionToGraphql } from "./user-question.shared.js";
 
@@ -207,6 +209,7 @@ export const answerUserQuestion = async (
   const effectiveAnsweredBy = recoveryRow
     ? (recoveryRow.answered_by ?? caller.userId ?? null)
     : (caller.userId ?? null);
+  const requestedModelId = await resolveQuestionResumeModelId(question);
   const wakeupPayload = {
     // TOP-LEVEL threadId — promoteNextDeferredWakeup() matches on
     // payload->>'threadId'; do not nest or rename this key.
@@ -217,6 +220,12 @@ export const answerUserQuestion = async (
     answeredVia: "card",
     answeredBy: effectiveAnsweredBy,
     delegationContext: question.delegation_context ?? null,
+    ...(requestedModelId
+      ? {
+          requestedModelId,
+          modelId: requestedModelId,
+        }
+      : {}),
   };
 
   try {
@@ -326,4 +335,26 @@ function enqueueFailedError(message: string) {
   return new GraphQLError(message, {
     extensions: { code: "WAKEUP_ENQUEUE_FAILED" },
   });
+}
+
+async function resolveQuestionResumeModelId(question: {
+  tenant_id: string;
+  thread_id: string;
+  created_at: Date;
+}): Promise<string | null> {
+  const [sourceMessage] = await db
+    .select({ metadata: messages.metadata })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.tenant_id, question.tenant_id),
+        eq(messages.thread_id, question.thread_id),
+        eq(messages.role, "user"),
+        lt(messages.created_at, question.created_at),
+      ),
+    )
+    .orderBy(desc(messages.created_at))
+    .limit(1);
+
+  return requestedModelIdFromMetadata(sourceMessage?.metadata);
 }

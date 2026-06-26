@@ -55,7 +55,8 @@ message contract.
 | --- | --- | --- | --- |
 | U1/U2 | `codex/thnk-81-json-render-actions-u1-u2` | [#2997](https://github.com/thinkwork-ai/thinkwork/pull/2997) | Merged |
 | U3 | `codex/thnk-81-json-render-actions-u3` | [#2998](https://github.com/thinkwork-ai/thinkwork/pull/2998) | Merged |
-| U4 | `codex/thnk-81-json-render-actions-u4` | Pending | In progress |
+| U4 | `codex/thnk-81-json-render-actions-u4` | [#2999](https://github.com/thinkwork-ai/thinkwork/pull/2999) | Merged |
+| U5 | `codex/thnk-81-u5-hitl-model` | Pending | In progress |
 
 ## U1/U2 Objective
 
@@ -148,7 +149,50 @@ scoped to thread and Work Item data because the backend action uses
   `pnpm --filter @thinkwork/web test -- json-render/ThreadJsonRenderRenderer SpacesThreadDetailRoute render-typed-part`
   (61 tests).
 - 2026-06-26 typecheck passed: `pnpm --filter @thinkwork/web typecheck`.
+- 2026-06-26 U4 CI passed: CLA, lint, verify, typecheck, and test.
+- 2026-06-26 U4 merged via squash commit
+  `122c297545afb9b3db23d4c7be754bdbcada9913`; remote branch was already
+  removed by GitHub and local worktree/branch cleanup completed.
+
+## U5 Objective
+
+Collect deployed evidence for both supported approval paths. During the HITL
+path, preserve the selected model across `question_answer` resume wakeups so an
+answered `ask_user_question` card resumes the same approved model instead of
+falling back to the agent default.
+
+## U5 Evidence and Verification
+
+- 2026-06-26 dev thread created for evidence:
+  `63dd4024-7d2c-43da-bd94-3b18034496af` (`TICK-1173`) in the `general` space.
+- 2026-06-26 HITL path partially verified before the U5 fix:
+  `ask_user_question` parked the thread in `AWAITING_USER`; question
+  `e952a54d-fd6a-46e5-b463-af5c10b7fdde` was answered via CARD at
+  `2026-06-26T23:06:56.108Z`.
+- 2026-06-26 HITL resume blocker found: the resumed turn
+  `3b555e86-ca76-4e29-9362-d3948e56207a` failed because the
+  `question_answer` wakeup fell back to unsupported tenant default
+  `anthropic.claude-fable-5` instead of preserving the selected
+  `openai.gpt-oss-120b-1:0` model from the asking user message.
+- 2026-06-26 generated UI approve path verified against the deployed GraphQL
+  mutation using a persisted json-render source message:
+  Work Item `11cafc99-09af-4a71-961b-79b56e0de9b3` moved TODO to DONE, audit
+  message `8ac5447f-fb25-4455-8c09-4f440cfd5c49`, Work Item event
+  `80444932-ebbf-4c8d-9b84-9d2cf6f9de50`.
+- 2026-06-26 generated UI reject path verified against the deployed GraphQL
+  mutation using a persisted json-render source message:
+  Work Item `4e9d108f-26e3-46ef-8506-d8f23b95a6ed` moved TODO to SKIPPED,
+  audit message `e65ac91a-cbeb-4de9-8618-2119feb8150f`, Work Item event
+  `fd7c4b86-0565-4652-bcb0-1ccb422a2370`.
+- 2026-06-26 U5 local fix verification passed:
+  `pnpm --filter @thinkwork/api test -- answerUserQuestion wakeup-processor.dispatch-parity`
+  (38 tests).
+- 2026-06-26 U5 typecheck passed: `pnpm --filter @thinkwork/api typecheck`.
+- 2026-06-26 U5 whitespace check passed: `git diff --check`.
+- 2026-06-26 U5 lint note:
+  `pnpm --filter @thinkwork/api lint` reported no lint script for the selected
+  package.
 
 ## Blockers
 
-- None currently.
+- Awaiting U5 PR merge/deploy before re-running the deployed HITL resume path.
